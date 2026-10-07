@@ -1,0 +1,244 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T08:32:56.153Z",
+    "duration": 63111.165,
+    "expected": 8,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--attachment-matches-the-current-surface-density-and-option-states",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 11226
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--attachment-matches-the-current-surface-density-and-option-states--antd-attachment-open.png",
+          "sha256": "705e355c7010b9b69e0a952edbaeec08b2dfb77f4d1c7d6a3343fdc7e2bd28af"
+        },
+        {
+          "file": "chromium-light-desktop--attachment-matches-the-current-surface-density-and-option-states--orbit-attachment-open.png",
+          "sha256": "b3838582ed1e0f5ac7ed071687ef9b933b10f448b699b8ad7eb15614eaabd395"
+        },
+        {
+          "file": "chromium-light-desktop--attachment-matches-the-current-surface-density-and-option-states--appearance.json",
+          "sha256": "8f2bb091a21a559aa59fd540eab207d16f90ff041334188386b80f7329ee7c07"
+        },
+        {
+          "file": "chromium-light-desktop--attachment-matches-the-current-surface-density-and-option-states--menu-glyphs.json",
+          "sha256": "7125724b498fcdb2964f337485b0eba812c65813cff96f5f66994c839f4a4077"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--attachment-matches-the-current-surface-density-and-option-states",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 9205
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--attachment-matches-the-current-surface-density-and-option-states--antd-attachment-open.png",
+          "sha256": "52fe84ea5fbbb1a8c4b6f931c7245ca2001cc703721630180d07785b4aa7442e"
+        },
+        {
+          "file": "chromium-light-phone--attachment-matches-the-current-surface-density-and-option-states--orbit-attachment-open.png",
+          "sha256": "989da4747cee6d859a75703872e4080b278124a9162e5ea6cb03d006c6db08d7"
+        },
+        {
+          "file": "chromium-light-phone--attachment-matches-the-current-surface-density-and-option-states--appearance.json",
+          "sha256": "e07f8b95fad9c075023efa6b66d7cf6734bbea21b93f2d5769ed61a3aa494ab9"
+        },
+        {
+          "file": "chromium-light-phone--attachment-matches-the-current-surface-density-and-option-states--menu-glyphs.json",
+          "sha256": "2498400dc08a98e1872a9326a02bd6fd7ea1e276ba11365a15827483910c459b"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--attachment-matches-the-current-surface-density-and-option-states",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4116
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--attachment-matches-the-current-surface-density-and-option-states--antd-attachment-open.png",
+          "sha256": "9dad9215cf93083ef6c15c6b9f9a99685b2f687248979630299b8455d3aa92dc"
+        },
+        {
+          "file": "chromium-dark-desktop--attachment-matches-the-current-surface-density-and-option-states--orbit-attachment-open.png",
+          "sha256": "04f29711e81f415690a267e9e622a9d2bc621fa1d559e53753d09cdec883a60e"
+        },
+        {
+          "file": "chromium-dark-desktop--attachment-matches-the-current-surface-density-and-option-states--appearance.json",
+          "sha256": "d13ec54a5a7fbc0c292fd6ed2636dad9854993fac6f9961a3a291879e592787d"
+        },
+        {
+          "file": "chromium-dark-desktop--attachment-matches-the-current-surface-density-and-option-states--menu-glyphs.json",
+          "sha256": "2abaf0c3f1899c5a549239a1cd098a2f87ef1e56f0b52388753fab8b0119cece"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--attachment-matches-the-current-surface-density-and-option-states",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 5320
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--attachment-matches-the-current-surface-density-and-option-states--antd-attachment-open.png",
+          "sha256": "c67ac3f079140c95f68fbc2bac705b929994176893ff735065f608532fc9d583"
+        },
+        {
+          "file": "chromium-dark-phone--attachment-matches-the-current-surface-density-and-option-states--orbit-attachment-open.png",
+          "sha256": "e3ad1aab31e63a0fa122f57f994b3e950ff03349aa7a7b83271c3010271391cd"
+        },
+        {
+          "file": "chromium-dark-phone--attachment-matches-the-current-surface-density-and-option-states--appearance.json",
+          "sha256": "5cb6b5e1c30ddbca39b6fb97e6acd7aa5a4a4b8e9261a604b4c53fe4c7c81214"
+        },
+        {
+          "file": "chromium-dark-phone--attachment-matches-the-current-surface-density-and-option-states--menu-glyphs.json",
+          "sha256": "e336d2d202add7e89e5b353fceff08bbda901130a23da9025f07341d57569e28"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--attachment-matches-the-current-surface-density-and-option-states",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3410
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--attachment-matches-the-current-surface-density-and-option-states--antd-attachment-open.png",
+          "sha256": "d35d9a35a8092fa39f8328a226efbead3e97f7abf3b15ee4caf6263d09ffa445"
+        },
+        {
+          "file": "webkit-light-desktop--attachment-matches-the-current-surface-density-and-option-states--orbit-attachment-open.png",
+          "sha256": "e87f0276985dd861936f9436817225d4270f5086b19ee41ed346884655c3b10f"
+        },
+        {
+          "file": "webkit-light-desktop--attachment-matches-the-current-surface-density-and-option-states--appearance.json",
+          "sha256": "059507482c001837a768fee0ecde1e60a87adb2acceccb835badb339b97f44fa"
+        },
+        {
+          "file": "webkit-light-desktop--attachment-matches-the-current-surface-density-and-option-states--menu-glyphs.json",
+          "sha256": "7125724b498fcdb2964f337485b0eba812c65813cff96f5f66994c839f4a4077"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--attachment-matches-the-current-surface-density-and-option-states",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4791
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--attachment-matches-the-current-surface-density-and-option-states--antd-attachment-open.png",
+          "sha256": "634df22e2fdf3069b4281cdf827e818fe244c80e8828540df09740a8ad57de86"
+        },
+        {
+          "file": "webkit-light-phone--attachment-matches-the-current-surface-density-and-option-states--orbit-attachment-open.png",
+          "sha256": "a9ff84c2138721b0d3c6803f3479138bc51913bc5e72735c1f994cc8d569e639"
+        },
+        {
+          "file": "webkit-light-phone--attachment-matches-the-current-surface-density-and-option-states--appearance.json",
+          "sha256": "dffdbecb1d3ef0cfb332103915e8a37bdf7e65c63f43da00e72005d0a18de9a8"
+        },
+        {
+          "file": "webkit-light-phone--attachment-matches-the-current-surface-density-and-option-states--menu-glyphs.json",
+          "sha256": "2498400dc08a98e1872a9326a02bd6fd7ea1e276ba11365a15827483910c459b"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--attachment-matches-the-current-surface-density-and-option-states",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 6039
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--attachment-matches-the-current-surface-density-and-option-states--antd-attachment-open.png",
+          "sha256": "85153560e2332deff9d2ca28e3f89e35eaa81421d88a981861cd3be3c5d48f9b"
+        },
+        {
+          "file": "webkit-dark-desktop--attachment-matches-the-current-surface-density-and-option-states--orbit-attachment-open.png",
+          "sha256": "412a43ae903d90b97fcb6782aba6aeaf0a571f59e000f03433ad3af185a0f065"
+        },
+        {
+          "file": "webkit-dark-desktop--attachment-matches-the-current-surface-density-and-option-states--appearance.json",
+          "sha256": "e2d8c47297ab97d910b79a45e9bc778aa42d9d6140ae8217b92d51972fdc6b8e"
+        },
+        {
+          "file": "webkit-dark-desktop--attachment-matches-the-current-surface-density-and-option-states--menu-glyphs.json",
+          "sha256": "2abaf0c3f1899c5a549239a1cd098a2f87ef1e56f0b52388753fab8b0119cece"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--attachment-matches-the-current-surface-density-and-option-states",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 8212
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--attachment-matches-the-current-surface-density-and-option-states--antd-attachment-open.png",
+          "sha256": "0c6d2840b0b6478efeabe83b33155515058050479dae6b67dd048d9c1ae0064c"
+        },
+        {
+          "file": "webkit-dark-phone--attachment-matches-the-current-surface-density-and-option-states--orbit-attachment-open.png",
+          "sha256": "90428710f03351bb47a51ad22076ae8b1ba722c1cf2ab17a7a6574711f9a4637"
+        },
+        {
+          "file": "webkit-dark-phone--attachment-matches-the-current-surface-density-and-option-states--appearance.json",
+          "sha256": "4b9cf647e1fcc934a2efe31b0df807d07e7155eda42f16b2b8f408f99fd94010"
+        },
+        {
+          "file": "webkit-dark-phone--attachment-matches-the-current-surface-density-and-option-states--menu-glyphs.json",
+          "sha256": "e336d2d202add7e89e5b353fceff08bbda901130a23da9025f07341d57569e28"
+        }
+      ]
+    }
+  ]
+}

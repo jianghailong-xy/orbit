@@ -27,19 +27,32 @@ public enum SessionGrouping {
         var running: [Session] = []
         var queued: [Session] = []
         for s in sessions {
-            // The count is the server's, and it already includes the owner items on the row
-            // (`owner-decision-signal.ts`). The second clause is not a second opinion of it: a row
-            // that carries one of the four is in this bucket even if the number arrived stale from
-            // an older snapshot, because the item itself is the evidence that somebody is waiting.
-            if ((s.pendingApprovals ?? 0) > 0 && !countsOnlyAStart(s)) || !(s.ownerItems ?? []).isEmpty {
-                needsYou.append(s)
-            } else if s.effectiveRunState == .queued {
-                queued.append(s)
-            } else if s.effectiveRunState.isLive {
-                running.append(s)
+            switch bucket(s) {
+            case .needsYou: needsYou.append(s)
+            case .running: running.append(s)
+            case .queued: queued.append(s)
+            case nil: break
             }
         }
         return SessionGroups(needsYou: needsYou, running: running, queued: queued)
+    }
+
+    /// Which of `group`'s buckets one row lands in, nil for none of them.
+    enum Bucket { case needsYou, running, queued }
+
+    static func bucket(_ s: Session) -> Bucket? {
+        // The count is the server's, and it already includes the owner items on the row
+        // (`owner-decision-signal.ts`). The second clause is not a second opinion of it: a row
+        // that carries one of the four is in this bucket even if the number arrived stale from
+        // an older snapshot, because the item itself is the evidence that somebody is waiting.
+        if ((s.pendingApprovals ?? 0) > 0 && !countsOnlyAStart(s)) || !(s.ownerItems ?? []).isEmpty {
+            return .needsYou
+        } else if s.effectiveRunState == .queued {
+            return .queued
+        } else if s.effectiveRunState.isLive {
+            return .running
+        }
+        return nil
     }
 
     /// Whether everything a row's `pendingApprovals` counts is its project waiting to be started

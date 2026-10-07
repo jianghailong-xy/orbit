@@ -70,6 +70,7 @@ public extension Session {
             agent: moved ? summaryAgent : agent ?? summaryAgent,
             projectId: summary.projectId,
             projectTitle: summary.projectTitle,
+            projectMembership: summary.projectMembership,
             // The one field here whose absence and whose null mean different things — see the
             // DTO. It travels with the status because it qualifies it: the summary that turns a
             // row FAILED is the same one that has to say the failure is being retried, and the
@@ -108,7 +109,8 @@ public extension Session {
     /// the ordinary Open-list summary merge deliberately refuses: rotation/delete still needs to
     /// remove their Coordinator badge immediately.
     func applyingProjectRelation(_ summary: ControlSessionSummary) -> Session {
-        merging(projectId: summary.projectId, projectTitle: summary.projectTitle)
+        merging(projectId: summary.projectId, projectTitle: summary.projectTitle,
+                projectMembership: summary.projectMembership)
     }
 
     /// Apply an `approval.requested` / `approval.resolved` pending count — the one field those
@@ -155,6 +157,7 @@ public extension Session {
                          // clears a relation the new server explicitly removed.
                          projectId: String?? = nil,
                          projectTitle: String?? = nil,
+                         projectMembership: SessionProjectMembership?? = nil,
                          // Doubly optional so a caller can clear it: `nil` keeps the row's value,
                          // `.some(nil)` writes null. Every other field here means "keep" by nil.
                          retryAt: String?? = nil,
@@ -215,9 +218,12 @@ public extension Session {
                 codexAccountPinned: codexAccountPinned,
                 claudeAccount: claudeAccount,
                 claudeAccountPinned: claudeAccountPinned,
+                antigravityAccount: antigravityAccount,
+                antigravityAccountPinned: antigravityAccountPinned,
                 awaitingReplyFrom: awaitingReplyFrom ?? self.awaitingReplyFrom,
                 owesReplyTo: owesReplyTo ?? self.owesReplyTo,
                 folderId: folderId ?? self.folderId,
-                confirmationUnderReview: confirmationUnderReview ?? self.confirmationUnderReview)
+                confirmationUnderReview: confirmationUnderReview ?? self.confirmationUnderReview,
+                projectMembership: projectMembership ?? self.projectMembership)
     }
 }

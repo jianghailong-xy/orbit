@@ -1,0 +1,16 @@
+.choices-fixture { padding: 24px; min-height: 1800px; }
+.choices-fixture > main { max-width: 900px; }
+.choices-fixture > button, .choices-fixture > output { margin: 0 12px 12px 0; }
+.choices-fields { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding-block: 12px; }
+.choices-fields > .orbit-select { width: 200px; }
+.choices-fields > output { display: block; width: 100%; }
+.choices-sample { padding-top: 80px; }
+.choices-sample > div { outline: none; }
+.sample-choice { width: 250px; }
+.fixture-detail { font-size: 12.5px; line-height: 1.5; color: var(--text-3); }
+/* ShareModal's existing local icon offset, using the new public slot class. */
+.fixture-access-menu .orbit-menu-icon { margin-top: 3px; }
+/* The replaced share menu's icon offset, which left index.css with the AntD menu, for the AntD reference sample. */
+.fixture-access-menu .ant-dropdown-menu-item .ant-dropdown-menu-item-icon { margin-top: 3px; }
+.fixture-command-icon { display: inline-block; width: 1em; font-size: inherit; text-align: center; }
+.fixture-mid-anchor { display: flex; justify-content: center; margin-top: 24px; }

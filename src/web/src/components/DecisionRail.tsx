@@ -237,18 +237,16 @@ export const WAITING_ON_YOU_LABEL = 'WAITING ON YOU';
  * the standing: a delivered card stays when the criteria move, and a project started at another end
  * leaves it on screen with nothing left to press. So nothing here decides when that card is drawn;
  * the page passes on what the card reported. Starting binds a version of the set and is pressed on
- * the card with that set readable above the button, so a press here scrolls to the card and asks the
- * server nothing.
+ * the card with that set readable above the button, so a press here reveals its details and asks
+ * the server nothing.
  *
- * A conversation draws at most one, so its class is the handle. Returns whether it arrived, as
+ * A conversation draws at most one; prefer its visible preview when the full card is in a dialog.
+ * Returns whether it arrived, as
  * `revealDecisionCard` does.
  */
 export function revealSettlementCard(scope: ParentNode = document): boolean {
-  const card = scope.querySelector<HTMLElement>('.settlement-card');
-  if (!card) return false;
-  card.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  markReached(card);
-  return true;
+  const card = scope.querySelector<HTMLElement>('#settlement-preview, .settlement-card');
+  return revealCard(card);
 }
 
 /**
@@ -267,10 +265,7 @@ export function settlementPointer(question: true | SettlementQuestion): string {
  *  it arrived, as `revealDecisionCard` does. */
 export function revealCriteriaCard(intentId: string, scope: Document = document): boolean {
   const card = scope.getElementById(`criteria-decision-${intentId}`);
-  if (!card) return false;
-  card.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  markReached(card);
-  return true;
+  return revealCard(card);
 }
 
 /**
@@ -287,11 +282,8 @@ export function ownerConfirmationPointer(title: string): string {
  * Returns whether it arrived, as `revealDecisionCard` does.
  */
 export function revealOwnerConfirmationCard(scope: ParentNode = document): boolean {
-  const card = scope.querySelector<HTMLElement>('[data-owner-confirmation]');
-  if (!card) return false;
-  card.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  markReached(card);
-  return true;
+  const card = scope.querySelector<HTMLElement>('#owner-confirmation-preview, [data-owner-confirmation]');
+  return revealCard(card);
 }
 
 /** One card the owner answers by pressing rather than by replying, as the page draws it. */
@@ -314,13 +306,38 @@ export function exceptionPointer(row: Pick<ProjectOpenItemRow, 'title' | 'assign
 
 /**
  * Take the reader to an exception card, which carries its item as `data-open-item` (`ItemCard` in
- * `ProjectProgressStatus.tsx`). Returns whether it arrived, as `revealDecisionCard` does.
+ * `ProjectProgressStatus.tsx`). Returns whether it arrived, as `revealDecisionCard` does. `behavior`
+ * is `auto` where the transcript is still landing under the card, which cancels a smooth scroll.
  */
-export function revealOpenItemCard(itemId: string, scope: ParentNode = document): boolean {
+export function revealOpenItemCard(
+  itemId: string,
+  scope: ParentNode = document,
+  behavior: ScrollBehavior = 'smooth',
+): boolean {
   const card = scope.querySelector<HTMLElement>(`[data-open-item="${itemId}"]`);
+  return revealCard(card, 'center', true, behavior);
+}
+
+/** A transcript pauses following its tail before a pinned bar opens one of its previews. */
+export const REVIEW_CARD_REVEALED = 'orbit-review-card-revealed';
+
+/** Navigate to a card, opening its existing preview trigger when it has one. Never press an answer. */
+export function revealCard(
+  card: HTMLElement | null | undefined,
+  block: ScrollLogicalPosition = 'center',
+  highlight = true,
+  behavior: ScrollBehavior = 'smooth',
+): boolean {
   if (!card) return false;
-  card.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  markReached(card);
+  const preview = card.matches('.review-card-preview')
+    ? card as HTMLButtonElement
+    : card.querySelector<HTMLButtonElement>('.review-card-preview');
+  const target = preview?.closest<HTMLElement>('.review-card') ?? card;
+  // Finish positioning before the dialog locks scrolling. Its return focus stays at this preview.
+  if (preview) target.dispatchEvent(new Event(REVIEW_CARD_REVEALED, { bubbles: true }));
+  target.scrollIntoView({ block, behavior: preview ? 'instant' : behavior });
+  if (highlight) markReached(target);
+  if (preview?.getAttribute('aria-expanded') === 'false') preview.click();
   return true;
 }
 
@@ -431,10 +448,7 @@ export function revealDecisionCard(
 ): boolean {
   const key = decisionRowKey(row);
   const card = scope.querySelector<HTMLElement>(`[data-decision-row="${key}"]`);
-  if (!card) return false;
-  card.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  markReached(card);
-  return true;
+  return revealCard(card);
 }
 
 /** Age as a reader reads it. Whole units only: a queue is not a stopwatch. */

@@ -24,22 +24,21 @@ import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
 import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath } from './legacy-artifact-path';
+import { isWorktreeArtifactPath, readWorktreeArtifactRequest } from './worktree-artifact';
 import { isOrbitAuthoredTurn } from './orbit-authored-turn';
-import { readSessionMessageCard } from './session-message';
+import { readSessionProjectMembership, sessionInProjectSql, sessionProjectMembershipSql } from './session-project-membership';
 import {
   closeRequestsTheRetryWillNotResend,
   isSessionReplyTurn,
   queuedRepliesContent,
   readOpenRequestPeers,
-  readTurnRequestIds,
   settleUnrunSessionRequests,
 } from './session-request';
+import { readTurnCards, type TurnCards } from './turn-cards';
 import { readConfirmationsUnderReview } from '../tasks/owner-confirmation-read';
 import {
   isConfirmationReviewContentTurn,
   queuedConfirmationReviewContent,
-  readConfirmationReturnCard,
-  readConfirmationReviewRequestCard,
 } from '../tasks/owner-confirmation-review-turn';
 
 import { createHash, randomUUID } from 'crypto';
@@ -50,6 +49,7 @@ import {
   ApprovalInfo,
   ApprovalStatus,
   AgentProvider,
+  openCodeKeyOf,
   type BgShell,
   CLAUDE_HISTORY_MAX_TRANSCRIPTS,
   deriveBackgroundShells,
@@ -60,11 +60,6 @@ import {
   type RunnerModelCatalog,
   FilePatch,
   MAX_PROMPT_CHARS,
-  type ConfirmationReturnCard,
-  type ConfirmationReviewRequestCard,
-  type OpenItemDeliveryCard,
-  type ProjectStartedCard,
-  type SessionMessageCard,
   PermissionMode,
   type PermissionRule,
   ROOT_FALLBACK_PERMISSION_MODE,
@@ -81,12 +76,15 @@ import {
   type SessionTurnPlacement,
   SessionRunState,
   SessionState,
+  type SessionProjectMembership,
   type SessionSearchHit,
   supportsMidTurnSteer,
   supportsTargetBoundCurrentWorkSteer,
   uuidToBase62,
   accountToMoveTo,
+  isAccountEngine,
   planUsageBlockedUntil,
+  withEnginePlanUsage,
   type AccountEngine,
   type PlanUsage,
 } from '@orbit/shared';
@@ -110,6 +108,8 @@ import {
   accountDefaultPermissionMode,
   resolvePermissionMode,
 } from '../common/permission-mode';
+import { refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
+import type { AuthCredential } from '../common/current-user.decorator';
 import { orchestrationEnabled } from '../common/orchestration-switch';
 import { normalizePermissionRules } from '../common/permission-rules';
 import {
@@ -127,8 +127,7 @@ import {
   sessionWaitingKind,
 } from '../projects/owner-decision-signal';
 import { decideSessionSource, type SessionSourceTaskRow } from '../projects/session-source';
-import { openItemIdOfTurn, readOpenItemDeliveryCard } from '../projects/project-open-item';
-import { projectStartOfTurn, readProjectStartedCard } from '../projects/project-started';
+import { branchName } from '../projects/project-criterion-landing';
 import {
   MERGE_RECEIPT_RESULTS,
   MergeReceiptRow,
@@ -178,10 +177,14 @@ import {
 } from '../common/runtime-provider';
 import {
   accountPoolRuntime,
+  adminOnlyProviderRefusal,
   execRuntime,
   isBuiltinProvider,
+  openCodeKeyRows,
   resolveProviderExec,
+  runsOnOpenCode,
   sessionExecRuntime,
+  usableProviderScope,
 } from '../providers/custom-provider';
 import { ownsModel } from '../providers/preset-overlay';
 import {
@@ -205,6 +208,7 @@ import {
 } from './transcript-around';
 import { EngineSignedOutConflict, engineSignInAction, signedOutEngineRefusal } from './engine-signin-preflight';
 import { antigravityState, hasGeminiEnvKey } from '../common/antigravity-readiness';
+import { DSH_RUNNER_UPGRADE_ERROR, dshRuntimeUnavailable } from '../runner-api/runner-provider-support';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 import {
   accountLabel,
@@ -213,10 +217,13 @@ import {
   automaticAccount,
   runAccount,
   workspaceLeavesAccountToOrbit,
+  type WorkspaceAccountChoices,
 } from '../providers/plan-usage-accounts';
+import { ACCOUNT_CHOICE, ACCOUNT_PINNED } from '../providers/account';
 import { namedRunnerEngines, sanitizeRunnerEngines } from '../common/runner-engines';
 import { runnerAccountPausedUntil } from '../common/account-pause';
-import { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
+import { ACCOUNT_MOVE_CAPABILITY } from '../providers/account-move-capability';
+import { sessionPoolCodexLogin } from '../providers/codex-login';
 import {
   CURRENT_WORK_INTERRUPTED,
   CURRENT_WORK_SESSION_ENDED,
@@ -224,6 +231,8 @@ import {
 } from './current-work-delivery';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { returnQueuedTurns } from '../projects/project-open-item';
+import { OpenListDeltaStore } from './open-list-delta';
+import { readOpenListVersion } from './open-list-version';
 import {
   SESSION_RUNNER_OFFLINE_AFTER_MS,
   deriveSessionCapabilities,
@@ -285,29 +294,18 @@ export type RunnerSessionScope = { assignedRunnerId: string; workspaceId?: strin
 
 type TurnPlacement = SessionTurnPlacement;
 
-interface ListedQueuedTurn {
+/** A waiting turn, with the cards the runner's echo will carry (`TurnCards`, turn-cards.ts): an
+ *  exception item's delivery (§4.4 X-D2), a task run's brief, another session's message, and every
+ *  other card a turn the control plane opened is drawn as — so the card a client paints while this
+ *  turn waits is not a different rendering of a different reading. Absent on every turn a person
+ *  typed — and on this base rather than on one view, because BOTH projections carry them and both
+ *  ends draw the queue (`listQueuedTurns`). A client taking another session's message off the queue
+ *  unrun hands none of it back to the owner's composer: the words are the sending session's. */
+interface ListedQueuedTurn extends TurnCards {
   turnId: string;
   kind: string;
   content: string;
   attachments: Array<{ id: string; mimeType: string }>;
-  /** An exception item's delivery carries the item's own fields beside its words (§4.4 X-D2): the
-   *  card the runner's echo will be drawn as, so the card a client paints while this turn waits is
-   *  not a different rendering of a different reading. Absent on every turn a person typed — and on
-   *  this base rather than on one view, because BOTH projections carry it and both ends draw the
-   *  queue (`listQueuedTurns`). */
-  openItemDelivery?: OpenItemDeliveryCard;
-  /** The same for the message telling a coordinator its project was started (project-started.ts). */
-  projectStarted?: ProjectStartedCard;
-  /** Another Orbit session's message (session-message.ts, contract §2.3): the card the runner's echo
-   *  will carry, so the queue draws "From [that session]" rather than the owner's own bubble — and a
-   *  client taking it off the queue unrun hands none of it back to the owner's composer: the words
-   *  are the sending session's. Absent on every turn nobody's session sent. */
-  sessionMessage?: SessionMessageCard;
-  /** A confirmation request handed to this session for review, and a reviewer's return handed to a
-   *  run (docs/owner-confirmation-review-contract.md D7, B3): the cards the runner's echo will carry,
-   *  for the reason `openItemDelivery` is here. Absent on every other turn. */
-  confirmationReviewRequest?: ConfirmationReviewRequestCard;
-  confirmationReturn?: ConfirmationReturnCard;
   /** The control plane wrote this turn itself (`isOrbitAuthoredTurn`): nobody typed its words, so a
    *  client taking it off the queue unrun hands none of them back to the composer. Absent on every
    *  turn somebody sent. */
@@ -632,7 +630,7 @@ export class SessionNotSendable extends ConflictException {}
 function automaticAccountOnSwitch(
   session: {
     numTurns: number;
-    workspace: { env: unknown; codexAccount: string | null; claudeAccount: string | null } | null;
+    workspace: ({ env: unknown } & WorkspaceAccountChoices) | null;
     assignedRunner: { engines: unknown; accountPauses?: unknown; planUsage: unknown; capabilities: string[] } | null;
   },
   engine: AccountEngine,
@@ -646,7 +644,7 @@ function automaticAccountOnSwitch(
 
 /** Whether `runner` carries a conversation from one of its `engine` accounts to another. */
 function runnerCarriesAccounts(runner: { capabilities: string[] }, engine: AccountEngine): boolean {
-  return (runner.capabilities ?? []).includes(engine === AgentProvider.CODEX ? CODEX_ACCOUNT_MOVE_V1 : CLAUDE_ACCOUNT_MOVE_V1);
+  return (runner.capabilities ?? []).includes(ACCOUNT_MOVE_CAPABILITY[engine]);
 }
 
 /** The account columns a provider switch writes (accountOnProviderSwitch); empty writes none. */
@@ -655,11 +653,15 @@ interface AccountSwitchWrite {
   codexAccountPinned?: boolean;
   claudeAccount?: string;
   claudeAccountPinned?: boolean;
+  antigravityAccount?: string;
+  antigravityAccountPinned?: boolean;
 }
 
 @Injectable()
 export class SessionsService {
   private readonly logger = new Logger(SessionsService.name);
+  /** The snapshots `listOpenSince` answers a cursor against — see open-list-delta.ts. */
+  private readonly openListDelta = new OpenListDeltaStore();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -810,8 +812,17 @@ export class SessionsService {
        * the canonical project title with this bit; public session creation cannot claim it.
        */
       titleManagedByProject?: boolean;
+      /**
+       * The HTTP create door's credential. A personal access token may not choose `permissionMode`
+       * at all, to any value, for the reason `updateConfig` refuses it one (§5.1 of
+       * docs/personal-access-token-design.md): a session opened in a mode that runs without asking
+       * would take approvals — which only a login may answer — out of its way. Without one the
+       * session opens in the account's default mode, as every session that names none does.
+       */
+      credential?: AuthCredential;
     },
   ) {
+    refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
     // Attachments with no words are a whole opening message, as they are on any later turn: the
     // runtime is handed the files either way. A shell command is nothing without its words.
     const attachmentsAlone =
@@ -831,6 +842,12 @@ export class SessionsService {
       (typeof dto.claudeAccount !== 'string' || !ACCOUNT_ID_PATTERN.test(dto.claudeAccount))
     ) {
       throw new BadRequestException('claudeAccount must be "default" or the id of one of the runner\'s accounts');
+    }
+    if (
+      dto.antigravityAccount != null &&
+      (typeof dto.antigravityAccount !== 'string' || !ACCOUNT_ID_PATTERN.test(dto.antigravityAccount))
+    ) {
+      throw new BadRequestException('antigravityAccount must be "default" or the id of one of the runner\'s accounts');
     }
     // The session runs on a runner. Prefer an explicit pin; otherwise derive it from
     // the chosen workspace's machine (workspaces belong to a runner) — picking a workspace is
@@ -881,7 +898,7 @@ export class SessionsService {
     // runner's engine sign-in irrelevant — see the sign-in preflight below.
     let workspaceEnv: unknown;
     // The accounts the workspace pins its sessions to, whose sign-ins the preflight below judges.
-    let accountChoices: { codexAccount?: string | null; claudeAccount?: string | null } | undefined;
+    let accountChoices: WorkspaceAccountChoices | undefined;
     if (!assignedRunnerId && dto.workspaceId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
@@ -892,6 +909,7 @@ export class SessionsService {
           env: true,
           codexAccount: true,
           claudeAccount: true,
+          antigravityAccount: true,
         },
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
@@ -910,7 +928,7 @@ export class SessionsService {
     } else if (dto.workspaceId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
-        select: { enableWorktree: true, enabled: true, env: true, codexAccount: true, claudeAccount: true },
+        select: { enableWorktree: true, enabled: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true },
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
       if (workspace.enabled === false) throw new ForbiddenException('workspace is disabled');
@@ -938,34 +956,69 @@ export class SessionsService {
       // otherwise. This test has to match the one the seed carries forward, or a session started
       // from a `kimi` predecessor would land with a different providerBuiltin than it had.
       providerBuiltin = Object.values(AgentProvider).includes(dto.provider as AgentProvider);
-      if (!providerBuiltin) {
+      // dsh is a new reserved engine name. A reachable provider or pool that already held it
+      // remains configured, fenced by the existing discriminator rather than renamed.
+      if (!providerBuiltin || provider === AgentProvider.DSH) {
         const configured = await this.prisma.modelProvider.findFirst({
-          where: { slug: dto.provider, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
-          select: { runtime: true },
+          where: {
+            slug: dto.provider,
+            ...(provider === AgentProvider.DSH ? {} : { enabled: true }),
+            ...(await usableProviderScope(this.prisma, ownerId)),
+          },
+          select: { runtime: true, enabled: true },
         });
+        if (configured?.enabled === false) {
+          throw new BadRequestException(`provider not available: "${dto.provider}"`);
+        }
         // …or one of the caller's own account pools, which the claim resolves to a member.
         borrowedRuntime = configured
           ? configured.runtime
           : await accountPoolRuntime(this.prisma, ownerId, dto.provider);
+        if (configured || borrowedRuntime) providerBuiltin = false;
         // The slug is named: a command-line caller typed it, and no picker checked it first.
-        if (!configured && !borrowedRuntime) {
-          throw new BadRequestException(`provider not available: "${dto.provider}"`);
+        if (!providerBuiltin && !configured && !borrowedRuntime) {
+          throw new BadRequestException(
+            (await adminOnlyProviderRefusal(this.prisma, ownerId, dto.provider)) ?? `provider not available: "${dto.provider}"`,
+          );
         }
-        if (!configured) await this.assertUsablePool(ownerId, dto.provider);
+        if (!configured && borrowedRuntime) await this.assertUsablePool(ownerId, dto.provider);
       }
-    } else if (!providerBuiltin) {
-      // Inherited from the workspace, so it hasn't been looked up yet. A row that has since been
-      // deleted or disabled leaves this null: dispatch falls back to Claude, and so does the
-      // runtime below. A pool is not let off that way: one with no account that can run is refused
-      // here as it is when named, or the new session would start on the runner's own login.
+    } else if (!isBuiltinProvider(provider, providerBuiltin)) {
+      providerBuiltin = false;
+      // Inherited from the workspace: a removed/disabled provider cannot substitute the runner's
+      // own Claude login for the configured endpoint the caller inherited.
       const configured = await this.prisma.modelProvider.findFirst({
-        where: { slug: provider, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
+        where: { slug: provider, enabled: true, ...(await usableProviderScope(this.prisma, ownerId)) },
         select: { runtime: true },
       });
       borrowedRuntime = configured
         ? configured.runtime
         : await accountPoolRuntime(this.prisma, ownerId, provider);
+      if (!borrowedRuntime) {
+        throw new BadRequestException(
+          (await adminOnlyProviderRefusal(this.prisma, ownerId, provider)) ?? `provider not available: "${provider}"`,
+        );
+      }
       if (!configured && borrowedRuntime) await this.assertUsablePool(ownerId, provider);
+    }
+    if (borrowedRuntime && (!Object.values(AgentProvider).includes(borrowedRuntime as AgentProvider) ||
+      borrowedRuntime === AgentProvider.OPENCODE)) {
+      throw new BadRequestException(`provider runtime not available: "${borrowedRuntime}"`);
+    }
+    // An OpenCode model on one of the caller's configured keys (shared `openCodeKeys`) has to name a
+    // key that can run there, or the claim would only refuse it later.
+    const openCodeKey = provider === AgentProvider.OPENCODE ? openCodeKeyOf(dto.model) : null;
+    if (openCodeKey) {
+      const row = await this.prisma.modelProvider.findFirst({
+        where: { slug: openCodeKey.slug, ...(await usableProviderScope(this.prisma, ownerId)) },
+        select: { enabled: true, runtime: true, apiKeyEnc: true },
+      });
+      if (!row || !runsOnOpenCode(row)) {
+        throw new BadRequestException(
+          (!row && (await adminOnlyProviderRefusal(this.prisma, ownerId, openCodeKey.slug)))
+            || `provider not available on OpenCode: "${openCodeKey.slug}"`,
+        );
+      }
     }
     await this.assertOwnedRefs(ownerId, { workspaceId: dto.workspaceId, assignedRunnerId });
     // §3.2: a session opened from a folder's page is filed in that folder, which has to be one of
@@ -983,6 +1036,14 @@ export class SessionsService {
         : null;
       if (!folder) throw new BadRequestException('folderId must be a folder of this workspace');
     }
+    // provider is the identity stored on the row; runtime is which built-in CLI actually
+    // drives it (a custom provider borrows Claude/Codex/Kimi), and decides the pre-generated
+    // session-id and effort normalization. A borrowed runtime is authoritative here: giving a
+    // Codex/Kimi session a Claude-style id it never created makes its very first spawn a resume
+    // of a conversation that doesn't exist.
+    const runtime = borrowedRuntime
+      ? normalizeRuntimeProvider(borrowedRuntime)
+      : normalizeRuntimeProvider(provider, providerBuiltin);
     // A mode the target machine cannot run at all: Bypass on a runner deployed as root, which
     // claude refuses by exiting inside its own startup — five seconds in, with the refusal on
     // stderr and a bare FAILED in every UI. Which of the two outcomes below applies turns on who
@@ -998,7 +1059,7 @@ export class SessionsService {
     // The lookup sits behind the mode test, so no caller that named a runnable mode pays for it.
     let rootRefusedFallback: PermissionMode | undefined;
     const requestedMode = dto.permissionMode ?? accountPermissionMode;
-    if (requestedMode && ROOT_REFUSED_PERMISSION_MODES.has(requestedMode)) {
+    if (runtime !== AgentProvider.DSH && requestedMode && ROOT_REFUSED_PERMISSION_MODES.has(requestedMode)) {
       const target = await this.prisma.runner.findUnique({
         where: { id: assignedRunnerId },
         select: { name: true, runsAsRoot: true },
@@ -1076,32 +1137,40 @@ export class SessionsService {
           )
         : titleFromPrompt(dto.prompt));
     let branch = enableWorktree ? makeBranchName(title) : null;
-    // provider is the identity stored on the row; runtime is which built-in CLI actually
-    // drives it (a custom provider borrows Claude/Codex/Kimi), and decides the pre-generated
-    // session-id and effort normalization. A borrowed runtime is authoritative here: giving a
-    // Codex/Kimi session a Claude-style id it never created makes its very first spawn a resume
-    // of a conversation that doesn't exist.
-    const runtime = borrowedRuntime
-      ? normalizeRuntimeProvider(borrowedRuntime)
-      : normalizeRuntimeProvider(provider, providerBuiltin);
     // Refuse now if the machine this is bound for cannot start it at all, rather than creating a
     // session (and, on the runner, a git checkout) that dies a second later with the same message.
     // Only for a runtime signed out on an online runner — see signedOutEngineRefusal for
     // everything this deliberately lets through.
     const targetRunner = await this.prisma.runner.findFirst({
       where: { id: assignedRunnerId, ownerId },
-      select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, accountNames: true, accountPauses: true, planUsage: true, capabilities: true },
+      select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, accountNames: true, accountPauses: true, planUsage: true, capabilities: true, capabilitiesReportedAt: true },
     });
-    // The Codex or Claude account this session runs on: the one picked for it — which pins it there —
-    // else, when its workspace leaves the account to Orbit, the runner's account whose quota resets
-    // soonest (automaticAccount), which Orbit may move it off when that account's usage limit stops
-    // it. Stored here; its conversation lives in that account's directory. Null runs on the
-    // workspace's.
+    if (runtime === AgentProvider.DSH) {
+      if (!targetRunner?.capabilitiesReportedAt || !targetRunner.capabilities?.includes('provider:dsh')) {
+        throw new ConflictException(DSH_RUNNER_UPGRADE_ERROR);
+      }
+      // P4 has not yet verified an Orbit permission policy for Harness. The runner upgrade
+      // refusal comes first so an older machine receives the availability action it needs.
+      normalizeBuiltinPermissionMode(
+        runtime,
+        dto.model ?? '',
+        resolvePermissionMode(dto.permissionMode ?? accountPermissionMode, null),
+      );
+      // Declaring dsh does not install it. Refused here like the upgrade, rather than creating a
+      // session the runner would claim only to fail at launch (dshRuntimeUnavailable).
+      const unavailable = dshRuntimeUnavailable(targetRunner.engines);
+      if (unavailable) throw new ConflictException(unavailable);
+    }
+    // The Codex, Claude or Antigravity account this session runs on: the one picked for it — which
+    // pins it there — else, when its workspace leaves the account to Orbit, the runner's account whose
+    // quota resets soonest (automaticAccount), which Orbit may move it off when that account's usage
+    // limit stops it. Stored here; a Codex or Claude conversation lives in that account's directory.
+    // Null runs on the workspace's.
     const automatic = (engine: AccountEngine) =>
       provider === engine && providerBuiltin && targetRunner
         ? automaticAccount(
             engine,
-            { env: workspaceEnv, codexAccount: accountChoices?.codexAccount, claudeAccount: accountChoices?.claudeAccount },
+            { env: workspaceEnv, ...accountChoices },
             targetRunner.engines,
             targetRunner.planUsage,
             new Date(),
@@ -1110,6 +1179,7 @@ export class SessionsService {
         : null;
     const codexAccount = dto.codexAccount ?? automatic(AgentProvider.CODEX);
     const claudeAccount = dto.claudeAccount ?? automatic(AgentProvider.CLAUDE);
+    const antigravityAccount = dto.antigravityAccount ?? automatic(AgentProvider.ANTIGRAVITY);
     const refusal =
       targetRunner &&
       signedOutEngineRefusal({
@@ -1121,6 +1191,7 @@ export class SessionsService {
           ...accountChoices,
           ...(codexAccount ? { codexAccount } : {}),
           ...(claudeAccount ? { claudeAccount } : {}),
+          ...(antigravityAccount ? { antigravityAccount } : {}),
         },
         runner: targetRunner,
       });
@@ -1172,6 +1243,8 @@ export class SessionsService {
         codexAccountPinned: dto.codexAccount != null,
         claudeAccount,
         claudeAccountPinned: dto.claudeAccount != null,
+        antigravityAccount,
+        antigravityAccountPinned: dto.antigravityAccount != null,
         workspaceId: dto.workspaceId,
         assignedRunnerId,
         taskId: dto.taskId,
@@ -1381,8 +1454,10 @@ export class SessionsService {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(${SessionsService.IMPORT_LOCK_NAMESPACE}, ${lockKey})`;
         // Rejection ③: a Claude transcript can be imported once — the imported session IS the
         // continuation of it. A Trashed one does not count: deleting the import frees the id.
+        // Once per account: a session of another account with this engine id is not this
+        // account's to be told about — not that it exists, nor its id or title — nor in its way.
         const claimed = await tx.session.findFirst({
-          where: { runtimeSessionId: dto.claudeSessionId, deletedAt: null },
+          where: { ownerId, runtimeSessionId: dto.claudeSessionId, deletedAt: null },
           select: { id: true, title: true },
         });
         if (claimed) {
@@ -2688,12 +2763,20 @@ export class SessionsService {
     return [...counts.values()];
   }
 
+  /** The Open list's data version; see open-list-version.ts. */
+  openListVersion(ownerId: string): Promise<string> {
+    return readOpenListVersion(this.prisma, ownerId);
+  }
+
   async list(
     ownerId: string,
     filters: {
       runnerId?: string;
       workspaceId?: string;
       tagId?: string;
+      projectId?: string;
+      /** The workspaces a token confined to them may see (`workspaceConfinement`). */
+      confinedTo?: readonly string[];
       view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system';
       limit?: number;
     },
@@ -2727,6 +2810,9 @@ export class SessionsService {
     const workspaceFilter = filters.workspaceId
       ? Prisma.sql`AND s.workspace_id = ${filters.workspaceId}::uuid`
       : Prisma.empty;
+    const confinedFilter = filters.confinedTo
+      ? Prisma.sql`AND s.workspace_id = ANY(${[...filters.confinedTo]}::uuid[])`
+      : Prisma.empty;
     // Same reasoning for the list's tag filter: narrowing a page client-side can leave too few
     // rows to fill (or scroll) the column while the matches sit in pages nobody asked for.
     const tagFilter = filters.tagId
@@ -2734,6 +2820,13 @@ export class SessionsService {
           SELECT 1 FROM session_tag_link stl
           WHERE stl.session_id = s.id AND stl.tag_id = ${filters.tagId}::uuid
         )`
+      : Prisma.empty;
+    const projectFilter = filters.projectId
+      ? Prisma.sql`AND EXISTS (
+          SELECT 1 FROM project p
+          WHERE p.id = ${filters.projectId}::uuid AND p.owner_id = ${ownerId}::uuid
+        )
+        AND ${sessionInProjectSql('s', filters.projectId)}`
       : Prisma.empty;
     // Paging is opt-in: a caller that omits `limit` (the native clients, any older web build)
     // still gets the whole list, so this can only ever shrink a response.
@@ -2754,11 +2847,52 @@ export class SessionsService {
         ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) DESC NULLS LAST, s.created_at DESC`
         : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, COALESCE(s.last_turn_at, s.created_at) DESC, s.created_at DESC`;
     return this.listRows(ownerId, {
-      scope: Prisma.sql`${runnerFilter} ${workspaceFilter} ${tagFilter}`,
+      scope: Prisma.sql`${runnerFilter} ${workspaceFilter} ${confinedFilter} ${tagFilter} ${projectFilter}`,
       visibility,
       orderBy,
       pageLimit,
     });
+  }
+
+  /**
+   * The Open list as a delta against the list the caller was last sent under `since` (see
+   * open-list-delta.ts): only the rows that changed, the ids that left Open — finished, trashed or
+   * deleted alike, since all the delta sees is that the row is no longer in the list — and the
+   * order when it moved. A cursor this process does not hold is answered `full: true` with the
+   * whole list. Every answer carries the cursor for the next read.
+   */
+  async listOpenSince(
+    ownerId: string,
+    filters: {
+      runnerId?: string;
+      workspaceId?: string;
+      tagId?: string;
+      projectId?: string;
+      confinedTo?: readonly string[];
+    },
+    since: string | undefined,
+  ) {
+    const rows = await this.list(ownerId, { ...filters, view: 'open' });
+    const scope = JSON.stringify([
+      filters.runnerId ?? null, filters.workspaceId ?? null, filters.tagId ?? null, filters.projectId ?? null,
+      filters.confinedTo ?? null,
+    ]);
+    // A runner's heartbeat restamps every row it hosts every 30 seconds; with a few runners that
+    // alone would resend most of the list on most polls. The clients that read this delta draw
+    // nothing from the raw timestamp — what it decides (the queue gate, capabilities) are fields of
+    // their own and still count — so it is left out of what counts as a change, and a row sent
+    // here may carry an older heartbeat than the plain list would.
+    const delta = this.openListDelta.answer(ownerId, scope, rows, since, (row) =>
+      row.assignedRunner ? { ...row, assignedRunner: { ...row.assignedRunner, lastHeartbeatAt: null } } : row,
+    );
+    if (delta.full) return delta;
+    // Rows have their `id` rewritten to the public spelling on the way out; bare id lists are not
+    // walked by that pass, so they are spelled here to match.
+    return {
+      ...delta,
+      removedIds: delta.removedIds.map(uuidToBase62),
+      ...(delta.order ? { order: delta.order.map(uuidToBase62) } : {}),
+    };
   }
 
   /**
@@ -2779,7 +2913,13 @@ export class SessionsService {
     });
   }
 
-  /** The row query and its mapping, shared by `list` and `listRowsByIds`. */
+  /**
+   * The row query and its mapping, shared by `list` and `listRowsByIds`.
+   *
+   * Every table read here, or by a reader called from here, must also be a source of
+   * `readOpenListVersion` (open-list-version.ts): the Open list answers 304 from that version
+   * without building this, so a source it misses is a change the clients never see.
+   */
   private async listRows(
     ownerId: string,
     { scope, visibility, orderBy, pageLimit }: {
@@ -2847,6 +2987,7 @@ export class SessionsService {
       taskTitle: string | null;
       projectId: string | null;
       projectTitle: string | null;
+      projectMembership: SessionProjectMembership | null;
       cancelRequestedAt: Date | null;
       runtimeSessionId: string | null;
       retryAt: Date | null;
@@ -2950,6 +3091,7 @@ export class SessionsService {
         t.title   AS "taskTitle",
         cp.id     AS "projectId",
         cp.title  AS "projectTitle",
+        ${sessionProjectMembershipSql('s')} AS "projectMembership",
         q.reason  AS "queuedReason",
         q.active  AS "queuedActive",
         q."limit" AS "queuedLimit"
@@ -3084,6 +3226,7 @@ export class SessionsService {
         taskTitle: r.taskTitle,
         projectId: r.projectId,
         projectTitle: r.projectTitle,
+        projectMembership: r.projectMembership,
         // Null unless the row is queued behind a cap — "waiting its turn" is not a gate.
         queuedReason: r.queuedReason,
         queuedActive: r.queuedActive == null ? null : Number(r.queuedActive),
@@ -3179,7 +3322,31 @@ export class SessionsService {
         // direction — a Session has no project column — so a client that opened the conversation
         // from a project page has no other way to find its way back. At most one row (the unique
         // index behind Project.coordinatorSessionId), reached through that index.
-        coordinatorForProject: { select: { id: true, title: true } },
+        coordinatorForProject: {
+          select: {
+            id: true,
+            title: true,
+            codebases: {
+              where: { slot: 'primary' },
+              select: { integrationRef: true },
+              take: 1,
+            },
+          },
+        },
+        task: {
+          select: {
+            codeless: true,
+            project: {
+              select: {
+                codebases: {
+                  where: { slot: 'primary' },
+                  select: { integrationRef: true },
+                  take: 1,
+                },
+              },
+            },
+          },
+        },
         // The public link, which lives in `share_link` since 0306: the one that has not ended and
         // has not run past its expiry — at most one, by that table's partial unique index. It is
         // still answered as `shareToken`/`sharedAt`, the names shipped clients read.
@@ -3229,6 +3396,16 @@ export class SessionsService {
         && session.numTurns > 0 && !session.runtimeSessionId
       ? { ...session, runtimeSessionId: SessionsService.RESUMABLE_PROJECTION, numTurns: 0 }
       : session;
+    // The ChatGPT account a login-pool session runs on, as the masked view every response names one by
+    // (providers/codex-login.ts): the composer of such a session names THE account it is on, not the
+    // pool's next one — which, with its oldest account spent, would be nobody. The raw column
+    // (migration 0324) is stripped below; this is all a response says of it.
+    const poolCodexLogin = await sessionPoolCodexLogin(
+      this.prisma,
+      ownerId,
+      projected.provider,
+      projected.poolCodexAccountId,
+    );
     // Flatten the join to a picker-ordered `tags` array (system first), matching the list payload.
     // The coordinated project is flattened the same way and for the same reason `taskTitle` is:
     // a name beside its id, so a client can label the link without a second request. Both keys are
@@ -3237,6 +3414,7 @@ export class SessionsService {
     const {
       tagLinks,
       coordinatorForProject,
+      task,
       shareLinks,
       children,
       // The retired columns (0306): never written since, so what they hold is at best stale.
@@ -3255,6 +3433,17 @@ export class SessionsService {
     const tags = tagLinks
       .map((l) => l.tag)
       .sort((a, b) => Number(b.isSystem) - Number(a.isSystem) || a.position - b.position);
+    // The project line is display metadata for the existing worktree bar. A coordinator reads
+    // its own project's line; a code task reads the line of the project it executes. Codeless
+    // tasks intentionally stay out of this path, because they have no code diff target.
+    const integrationRef = coordinatorForProject?.codebases[0]?.integrationRef
+      ?? (task && !task.codeless ? task.project?.codebases[0]?.integrationRef : null);
+    // A code task's default merge destination is its project's integration line. An explicit
+    // session target still wins, while coordinators keep the workspace target they operate on.
+    const taskIntegrationRef = task && !task.codeless ? task.project?.codebases[0]?.integrationRef : null;
+    const mergeTarget = rest.branch
+      ? mergeTargetOf(rest, session.workspace?.defaultMergeTarget, taskIntegrationRef)
+      : null;
     // The Route Decision this task run was planned with (model routing §7.5). Only a task's run
     // can have one, so no other session pays for the read.
     const route = session.taskId
@@ -3273,6 +3462,8 @@ export class SessionsService {
         antigravity: antigravityState(session.assignedRunner),
       } : null,
       route,
+      poolCodexLogin,
+      mergeTarget,
       mergeRepairSession: children[0] ? withSessionState(children[0]) : null,
       mergeRecoverySupported: session.assignedRunner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1) ?? false,
       tags,
@@ -3287,6 +3478,8 @@ export class SessionsService {
       runningBgJobCount: freshRunningBgJobs(session.runningBgJobs, runningBgJobActivity).length,
       projectId: coordinatorForProject?.id ?? null,
       projectTitle: coordinatorForProject?.title ?? null,
+      projectIntegrationRef: integrationRef ? branchName(integrationRef) : null,
+      projectMembership: await readSessionProjectMembership(this.prisma, session.id),
       shareToken: shareLinks?.[0]?.token ?? null,
       sharedAt: shareLinks?.[0]?.createdAt ?? null,
     });
@@ -3405,7 +3598,10 @@ export class SessionsService {
           FROM "session" s LEFT JOIN "task" t ON t."id" = s."task_id"
          WHERE s."id" = ${id}::uuid AND s."owner_id" = ${ownerId}::uuid
       `);
-      if (target?.taskId) {
+      // Another account's session, or none: not found, as disarming answers it — not "not waiting
+      // on a retry", which describes a session the caller has.
+      if (!target) throw new NotFoundException('session not found');
+      if (target.taskId) {
         if (target.projectId) {
           await tx.$queryRaw(Prisma.sql`
             SELECT 1 FROM "project" p WHERE p."id" = ${target.projectId}::uuid FOR NO KEY UPDATE
@@ -3443,8 +3639,8 @@ export class SessionsService {
           completedAt: null,
           // The role the refusal above was decided against, so a demotion or promotion landing
           // inside this transaction cannot leave the two disagreeing.
-          startsTaskWork: target?.startsTaskWork ?? false,
-          taskId: target?.taskId ?? null,
+          startsTaskWork: target.startsTaskWork,
+          taskId: target.taskId,
           OR: [
             { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
             { status: RunStatus.FAILED },
@@ -3987,6 +4183,81 @@ export class SessionsService {
       ORDER BY seq ASC
     `;
     return [...calls, ...results].sort((a, b) => a.seq - b.seq);
+  }
+
+  async getWorktreeFileForOwner(
+    ownerId: string,
+    id: string,
+    filePath: string | undefined,
+  ): Promise<{ data: Buffer; mimeType: string; disposition: string }> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: {
+        id: true, changedFiles: true,
+        assignedRunner: { select: { status: true, lastHeartbeatAt: true } },
+      },
+    });
+    if (!session) throw new NotFoundException('Session not found.');
+    if (!isWorktreeArtifactPath(filePath) || !Array.isArray(session.changedFiles)
+      || !session.changedFiles.some((file) => file && typeof file === 'object' && !Array.isArray(file)
+        && file.path === filePath && typeof file.status === 'string' && file.status !== 'D')) {
+      throw new NotFoundException('File is no longer available.');
+    }
+    if (!session.assignedRunner || !runnerIsOnline(session.assignedRunner)) {
+      throw new HttpException('The runner is offline. Try again when it is online.', HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    // A new request always reads fresh bytes, including two files with the same basename.
+    const content = { source: 'worktree' as const, path: filePath };
+    const turn = await this.insertTurn(id, {
+      kind: 'artifact', content: JSON.stringify(content), clientTurnId: `worktree-file-${randomUUID()}`,
+    });
+    const deadline = Date.now() + 40_000;
+    while (true) {
+      const result = await this.prisma.conversationTurn.findFirst({
+        where: { id: turn.id, sessionId: id, kind: 'artifact' },
+        select: {
+          status: true, content: true,
+          attachments: {
+            where: { ownerId, sessionId: id }, take: 1,
+            select: { id: true, data: true, mimeType: true },
+          },
+        },
+      });
+      if (!result) throw new NotFoundException('File is no longer available.');
+      if (result.status === 'ANSWERED') {
+        const receipt = readWorktreeArtifactRequest(result.content)?.result;
+        const attachment = result.attachments[0];
+        if (receipt?.status === 'uploaded' && attachment) {
+          // Preview bytes are transient; do not retain a new blob for every file opening.
+          await this.prisma.attachment.deleteMany({
+            where: { id: attachment.id, turnId: turn.id, ownerId, sessionId: id },
+          });
+          return {
+            data: Buffer.from(attachment.data), mimeType: attachment.mimeType,
+            disposition: legacyArtifactDisposition(path.posix.basename(filePath)),
+          };
+        }
+        if (receipt?.status === 'missing') throw new NotFoundException('File is no longer available.');
+        if (receipt?.status === 'error' && receipt.errorCode === 'too_large') {
+          throw new HttpException('This file is too large to preview or download.', HttpStatus.PAYLOAD_TOO_LARGE);
+        }
+        throw new HttpException('The runner could not read this file. Please try again.', HttpStatus.BAD_GATEWAY);
+      }
+      if (Date.now() >= deadline) {
+        // A late callback cannot restart the request. If a result won this race, read it.
+        const expired = await this.prisma.conversationTurn.updateMany({
+          where: { id: turn.id, sessionId: id, kind: 'artifact', status: 'PENDING' },
+          data: {
+            status: 'ANSWERED', answeredAt: new Date(),
+            content: JSON.stringify({ ...content, result: { status: 'timeout' } }),
+          },
+        });
+        if (expired.count === 0) continue;
+        throw new HttpException('The file request timed out. Please try again.', HttpStatus.GATEWAY_TIMEOUT);
+      }
+      await sleep(1_000);
+    }
   }
 
   async getLegacyArtifactForOwner(
@@ -4637,8 +4908,7 @@ export class SessionsService {
     session: Session,
   ): Promise<Prisma.SessionUncheckedUpdateInput | null> {
     if (session.status !== RunStatus.AWAITING_INPUT || !session.assignedRunnerId) return null;
-    const engine: AccountEngine | null =
-      session.provider === AgentProvider.CODEX || session.provider === AgentProvider.CLAUDE ? session.provider : null;
+    const engine: AccountEngine | null = isAccountEngine(session.provider) ? session.provider : null;
     if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin)) return null;
     const runner = await tx.runner.findUnique({
       where: { id: session.assignedRunnerId },
@@ -4648,13 +4918,12 @@ export class SessionsService {
     const workspace = session.workspaceId
       ? await tx.workspace.findUnique({
           where: { id: session.workspaceId },
-          select: { env: true, codexAccount: true, claudeAccount: true },
+          select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true },
         })
       : null;
-    const codex = engine === AgentProvider.CODEX;
     const move = accountBeforeDispatch(
       engine,
-      { account: codex ? session.codexAccount : session.claudeAccount, pinned: codex ? session.codexAccountPinned : session.claudeAccountPinned },
+      { account: session[ACCOUNT_CHOICE[engine]], pinned: session[ACCOUNT_PINNED[engine]] },
       workspace,
       runner.engines,
       runner.planUsage,
@@ -4668,7 +4937,7 @@ export class SessionsService {
       clientTurnId: randomUUID(),
     });
     return {
-      ...(codex ? { codexAccount: move.to } : { claudeAccount: move.to }),
+      [ACCOUNT_CHOICE[engine]]: move.to,
       // Said on the `resumed` that reload earns, unless another line is already owed.
       ...(session.poolSwitchNotice ? {} : { poolSwitchNotice: accountSwitchNotice(engine, move, runner) }),
     };
@@ -4710,7 +4979,9 @@ export class SessionsService {
        * answered under the same Session lock in the same transaction — and as the NEXT_TURN message
        * it was otherwise. A route, never a refusal: nothing here answers 409 for a turn that cannot
        * steer. An option of this call and never a field of `dto`, so no request body can ask for it;
-       * a background job's exit is its one caller (runner-api `backgroundWake`).
+       * its callers are the platform's own deliveries: a background job's exit (runner-api
+       * `backgroundWake`) and a session request's outcome handed back to its asker
+       * (`SessionRequestService.handOff`).
        */
       steerIfLive?: boolean;
       /**
@@ -5347,10 +5618,10 @@ export class SessionsService {
    *  placement — PENDING queued successors and steers, never the accepted head or IN_FLIGHT rows.
    *  `!cmd` shell turns queue and cross that handoff like messages do, so they're classified too.
    *
-   *  Both projections carry the same exception-item card for the rows they return (`openItemDelivery`,
-   *  §4.4 X-D2), because both ends draw the queued tail: the native one reads THIS projection, and a
-   *  delivery whose card only came with the `active` view would be prose on a phone and a card in a
-   *  browser for as long as it waits.
+   *  Both projections carry the same cards for the rows they return (`TurnCards`, turn-cards.ts — an
+   *  exception item's delivery among them, §4.4 X-D2), because both ends draw the queued tail: the
+   *  native one reads THIS projection, and a delivery whose card only came with the `active` view
+   *  would be prose on a phone and a card in a browser for as long as it waits.
    *
    *  A still-PENDING `steer` is listed for the same reason and NOT for the same purpose: it
    *  is not waiting its turn, it is on its way into the one already running, and the runner
@@ -5375,7 +5646,9 @@ export class SessionsService {
   ): Promise<ListedQueuedTurn[] | ListedActiveTurn[]> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
-      select: { id: true },
+      // What the cards are read against (turn-cards.ts): whose rows they may name, and the task a
+      // run's brief was built from.
+      select: { id: true, ownerId: true, taskId: true, runSource: true },
     });
     if (!session) throw new NotFoundException('session not found');
     const turns = await this.prisma.conversationTurn.findMany({
@@ -5442,21 +5715,14 @@ export class SessionsService {
     if (view !== 'active') {
       const queued = classified
         .filter(({ turn, placement }) => turn.status === 'PENDING' && placement !== 'accepted');
-      // The card, for the same reason the active view carries it and by the same two calls: the
+      // The cards, for the same reason the active view carries them and by the same read: the
       // narrow projection is what the installed native client draws its queue from, and a delivery
       // it cannot see the card on is 30 lines of prose in the reader's own bubble until the runner
       // takes the turn — the reading this row's whole shape exists to avoid (web parity: the
-      // queue tail, `WorkspaceView`). Read after the filter, so neither an ordinary message nor an
-      // accepted head the native client will not see costs a query.
-      const deliveryCards = await this.openItemDeliveryCards(queued.map(({ turn }) => turn));
-      const startedCards = await this.projectStartedCards(ownerId, queued.map(({ turn }) => turn));
-      const messageCards = await this.sessionMessageCards(ownerId, id, queued.map(({ turn }) => turn));
-      const reviewCards = await this.confirmationReviewCards(queued.map(({ turn }) => turn));
+      // queue tail, `WorkspaceView`). Read after the filter, so an accepted head the native client
+      // will not see costs no card read.
+      const cards = await readTurnCards(this.prisma, session, queued.map(({ turn }) => turn));
       return queued.map(({ turn, content }) => {
-        const card = deliveryCards.get(turn.id);
-        const started = startedCards.get(turn.id);
-        const message = messageCards.get(turn.id);
-        const review = reviewCards.get(turn.id);
         return {
           turnId: turn.id,
           kind: turn.kind,
@@ -5465,10 +5731,7 @@ export class SessionsService {
             id: attachment.id,
             mimeType: attachment.mimeType,
           })),
-          ...(card ? { openItemDelivery: card } : {}),
-          ...(started ? { projectStarted: started } : {}),
-          ...(message ? { sessionMessage: message } : {}),
-          ...review,
+          ...cards.get(turn.id),
           ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
         };
       });
@@ -5518,17 +5781,10 @@ export class SessionsService {
         if (turn.deliveryStatus === 'UNCONFIRMED') return true;
         return !announcedTurnIds.has(turn.id);
       });
-    // The card an exception item's delivery is, for the rows this snapshot actually returns.
-    const deliveryCards = await this.openItemDeliveryCards(activeRows.map(({ turn }) => turn));
-    const startedCards = await this.projectStartedCards(ownerId, activeRows.map(({ turn }) => turn));
-    const messageCards = await this.sessionMessageCards(ownerId, id, activeRows.map(({ turn }) => turn));
-    const reviewCards = await this.confirmationReviewCards(activeRows.map(({ turn }) => turn));
+    // The cards these turns are drawn as, for the rows this snapshot actually returns.
+    const cards = await readTurnCards(this.prisma, session, activeRows.map(({ turn }) => turn));
     const activeTurns: ListedActiveTurn[] = activeRows
       .map(({ turn, placement, content }) => {
-        const card = deliveryCards.get(turn.id);
-        const started = startedCards.get(turn.id);
-        const message = messageCards.get(turn.id);
-        const review = reviewCards.get(turn.id);
         return {
           turnId: turn.id,
           kind: turn.kind,
@@ -5544,10 +5800,7 @@ export class SessionsService {
                   : {}),
               }
             : {}),
-          ...(card ? { openItemDelivery: card } : {}),
-          ...(started ? { projectStarted: started } : {}),
-          ...(message ? { sessionMessage: message } : {}),
-          ...review,
+          ...cards.get(turn.id),
           ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
           content,
           createdAt: turn.createdAt.toISOString(),
@@ -5561,91 +5814,6 @@ export class SessionsService {
     // unrelated UUID would reorder the executable head behind its queued successor in a recovered
     // snapshot.
     return [...activeTurns].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  }
-
-  /** The card each of these turns carries, by turn id — for the ones that ARE an exception item's
-   *  delivery, and nothing at all for a batch of ordinary messages.
-   *
-   *  The same two calls the ingest path makes for the runner's echo (`openItemIdOfTurn` and
-   *  `readOpenItemDeliveryCard`, runner-api.controller.ts), for the same reason `queuedWakeContent`
-   *  below calls the very functions delivery calls: a client that draws this turn while it waits
-   *  must draw what it is about to be replaced by. Two listeners asking the same function on the
-   *  same rows is what makes the replacement invisible — a second derivation of the same fields is
-   *  what would show it. The reading is re-taken at each of those moments by design (the card is a
-   *  snapshot of what the platform knows, and a row that MOVED between them is the one case where
-   *  the two differ, which is the row having changed rather than the reading drifting).
-   *
-   *  Read after the announced/terminal filter rather than before it, so a row already represented by
-   *  a durable event costs no query. */
-  private async openItemDeliveryCards(
-    turns: ReadonlyArray<{ id: string; clientTurnId: string | null }>,
-  ): Promise<Map<string, OpenItemDeliveryCard>> {
-    const cards = new Map<string, OpenItemDeliveryCard>();
-    for (const turn of turns) {
-      const itemId = openItemIdOfTurn(turn.clientTurnId);
-      if (!itemId) continue;
-      const card = await readOpenItemDeliveryCard(this.prisma, itemId);
-      if (card) cards.set(turn.id, card);
-    }
-    return cards;
-  }
-
-  /** The confirmation-review card each of these turns is drawn as, by turn id — a review handed to
-   *  its reviewer or a return handed to the run, read by the same functions the ingest path records
-   *  the echo's with, and for those turns only. */
-  private async confirmationReviewCards(
-    turns: ReadonlyArray<{ id: string; clientTurnId: string | null }>,
-  ): Promise<Map<string, Pick<ListedQueuedTurn, 'confirmationReviewRequest' | 'confirmationReturn'>>> {
-    const cards = new Map<string, Pick<ListedQueuedTurn, 'confirmationReviewRequest' | 'confirmationReturn'>>();
-    for (const turn of turns) {
-      if (!isConfirmationReviewContentTurn(turn.clientTurnId)) continue;
-      const requested = await readConfirmationReviewRequestCard(this.prisma, turn.clientTurnId);
-      if (requested) cards.set(turn.id, { confirmationReviewRequest: requested });
-      const returned = await readConfirmationReturnCard(this.prisma, turn.clientTurnId);
-      if (returned) cards.set(turn.id, { confirmationReturn: returned });
-    }
-    return cards;
-  }
-
-  /** The card each project-start turn among these is drawn as, by turn id — read for those turns
-   *  and nothing else, by the same function the ingest path records the echo's with. */
-  private async projectStartedCards(
-    ownerId: string,
-    turns: ReadonlyArray<{ id: string; clientTurnId: string | null }>,
-  ): Promise<Map<string, ProjectStartedCard>> {
-    const cards = new Map<string, ProjectStartedCard>();
-    for (const turn of turns) {
-      const start = projectStartOfTurn(turn.clientTurnId);
-      if (!start) continue;
-      const card = await readProjectStartedCard(this.prisma, ownerId, start);
-      if (card) cards.set(turn.id, card);
-    }
-    return cards;
-  }
-
-  /** The "From [that session]" card each of these turns carries, by turn id — for the ones another
-   *  Orbit session sent, and nothing at all for a batch of the owner's own messages.
-   *
-   *  Read by the same two calls the ingest path records the runner's echo with
-   *  (`readTurnRequestIds` and `readSessionMessageCard`, runner-api.controller.ts), off the turn's
-   *  sender column, so the card a client draws while the message waits is the one the echo will be
-   *  drawn as — the request it carries included (contract §2.3). */
-  private async sessionMessageCards(
-    ownerId: string,
-    sessionId: string,
-    turns: ReadonlyArray<{ id: string; senderSessionId: string | null }>,
-  ): Promise<Map<string, SessionMessageCard>> {
-    const cards = new Map<string, SessionMessageCard>();
-    const signed = turns.filter((turn) => turn.senderSessionId);
-    if (signed.length === 0) return cards;
-    const requestOfTurn = await readTurnRequestIds(this.prisma, sessionId, signed.map((turn) => turn.id));
-    for (const turn of signed) {
-      const card = await readSessionMessageCard(
-        this.prisma, ownerId, turn.senderSessionId!, requestOfTurn.get(turn.id),
-      );
-      if (card) cards.set(turn.id, card);
-    }
-    return cards;
   }
 
   /** What each of the session's still-queued wake turns has to say, by turn id.
@@ -5672,7 +5840,8 @@ export class SessionsService {
     for (const turn of turns) {
       if (!turn.clientTurnId || turn.status !== 'PENDING') continue;
       if (isSessionReplyTurn(turn.clientTurnId)) {
-        const replies = await queuedRepliesContent(this.prisma, sessionId, turn.clientTurnId);
+        // In the turn's own kind too: a reply steer's blocks say which turn they join.
+        const replies = await queuedRepliesContent(this.prisma, sessionId, turn.clientTurnId, turn.kind);
         if (replies) wakeContent.set(turn.id, replies);
         continue;
       }
@@ -5807,11 +5976,12 @@ export class SessionsService {
    * Queue a "merge this session's worktree branch into main" for the runner that ran it.
    * Worktree-isolated sessions only, whose `branch` holds committed work (auto-committed at
    * /complete for a finished session, or via {@link commitWorktree} for a live one) and whose
-   * `assignedRunnerId` still points at the machine whose local repo holds it. The runner
-   * picks the request up on its next heartbeat (≤30s), merges its branch's committed state
-   * into main (the live checkout, if any, is a separate worktree and is undisturbed), and
-   * reports the outcome back into `mergeStatus`/`mergeError`/`mergedAt`. Idempotent while a
-   * merge is already pending; re-requesting a merged/conflicted session re-queues it.
+   * `assignedRunnerId` still points at the machine whose local repo holds it. The runner is
+   * woken to pick the request up at once (else on its next heartbeat, ≤30s), merges its branch's
+   * committed state into main (the live checkout, if any, is a separate worktree and is
+   * undisturbed), and reports the outcome back into `mergeStatus`/`mergeError`/`mergedAt`.
+   * Idempotent while a merge is already pending; re-requesting a merged/conflicted session
+   * re-queues it.
    *
    * `targetBranch` is the branch to merge INTO, picked from the status bar's dropdown; it's
    * stored on `mergeTarget` and relayed to the runner. Omitted/empty → the default (the runner
@@ -5845,10 +6015,13 @@ export class SessionsService {
     // The operation this call is about, for a caller that asked to wait on it. Assigned inside the
     // closure because `withTransactionRetry` may run it again, and each run re-derives it.
     let operationId: string | null = null;
+    // The runner a merge this call queued is waiting on, re-derived by each run like the id above.
+    let queuedOn: string | null = null;
     // Retried whole. The worktree-operation claim is taken under the Session row lock inside the
     // closure, so a re-run competes for it from the state that exists. The runner is only told
     // about the operation after this returns.
     const workspaceId = await withTransactionRetry(this.prisma, async (tx) => {
+      queuedOn = null;
       // Queueing, heartbeat claim, new-turn enqueue, Adopt, and terminal Resume
       // all linearize on this row. An old click therefore cannot create a fresh
       // operation after the session has already entered a new turn epoch.
@@ -5959,8 +6132,12 @@ export class SessionsService {
           } : {}),
         },
       });
+      queuedOn = session.assignedRunnerId;
       return session.workspaceId;
     }, loggedRetry(this.logger, 'sessions.mergeToMain'));
+    // Have that runner heartbeat now instead of at its next 30s tick: whoever pressed Merge is
+    // watching a spinner. Only a nudge; a lost wake leaves the merge to that tick.
+    if (queuedOn) this.realtime.notifyRunnerWake(queuedOn);
     if (workspaceId && typeof workspaceId === 'object' && 'alreadyLanded' in workspaceId) {
       // Nothing was queued and nothing will be executed: the receipt that already says this landed
       // IS the answer. Handing it back rather than re-running the merge is the whole of CP4's
@@ -6004,9 +6181,10 @@ export class SessionsService {
 
   /**
    * The longest a caller may hold the request open waiting for a merge, and how often the wait
-   * looks. Five minutes because the floor is a heartbeat — `runloop.go`'s ticker is 30 seconds, so
-   * the runner does not even READ the command before then — and a ceiling below a few multiples of
-   * that would make the parameter useless for the one merge it exists for.
+   * looks. Five minutes because the floor can be a heartbeat — when the wake is lost,
+   * `runloop.go`'s ticker is 30 seconds, so the runner does not even READ the command before
+   * then — and a ceiling below a few multiples of that would make the parameter useless for the
+   * one merge it exists for.
    */
   private static readonly MERGE_WAIT_MAX_SECONDS = 300;
   private static readonly MERGE_WAIT_POLL_MS = 250;
@@ -6139,9 +6317,10 @@ export class SessionsService {
    * clear and gating on them disabled Commit permanently for that session. A commit racing a
    * background writer is re-committable; a permanently blocked one isn't.
    *
-   * The runner picks the request up on its next heartbeat (≤30s), commits, and reports the
-   * outcome back into `commitStatus`/`commitError` (clearing `worktreeDirty` on success, so the
-   * bar flips to Merge). Idempotent while a commit is already pending.
+   * The runner is woken to pick the request up at once (else on its next heartbeat, ≤30s),
+   * commits, and reports the outcome back into `commitStatus`/`commitError` (clearing
+   * `worktreeDirty` on success, so the bar flips to Merge). Idempotent while a commit is already
+   * pending.
    *
    * An ENDED session is admitted on one condition: its checkout still reports uncommitted changes.
    * This endpoint used to refuse every finished session with "its work is already committed",
@@ -6232,6 +6411,8 @@ export class SessionsService {
         'the session is no longer idle — wait for its current work to finish',
       );
     }
+    // As for a merge: have the runner heartbeat now rather than at its next 30s tick.
+    this.realtime.notifyRunnerWake(session.assignedRunnerId);
     return { ok: true };
   }
 
@@ -7022,8 +7203,15 @@ export class SessionsService {
        * they keep the refusal, and the person's door gets the routing.
        */
       routeToCurrentRun?: boolean;
+      /**
+       * The HTTP resume door's credential. A personal access token may not re-apply `permissionMode`
+       * on the way back in, for the reason `updateConfig` refuses it one (§5 of
+       * docs/personal-access-token-design.md): reviving a session is another way of setting its mode.
+       */
+      credential?: AuthCredential;
     },
   ): Promise<SessionResumeAnswer> {
+    refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
     assertPromptSize(dto.content, 'message');
     const requestFingerprint = resumeRequestFingerprint(dto);
     const session = await this.prisma.session.findFirst({
@@ -7229,7 +7417,7 @@ export class SessionsService {
       const current = await tx.session.findUniqueOrThrow({
         where: { id },
         include: {
-          assignedRunner: { select: { id: true, status: true, lastHeartbeatAt: true } },
+          assignedRunner: { select: { id: true, status: true, lastHeartbeatAt: true, capabilities: true, capabilitiesReportedAt: true, engines: true } },
         },
       });
       // Everything was locked in the order project → task → session, but the SESSION was the last
@@ -7351,6 +7539,27 @@ export class SessionsService {
         dto.attachmentIds,
         tx,
       );
+      // A revive keeps its runtime and durable id. Resolve that boundary and the still-unverified
+      // Harness permission policy before accepting the next turn.
+      const next = await this.resolveProviderSwitch(tx, current, dto.provider);
+      const resumeRuntime = execRuntime({
+        declaredProvider: next.provider,
+        declaredProviderBuiltin: next.providerBuiltin,
+        customRow: next.customRow,
+      });
+      if (resumeRuntime === AgentProvider.DSH) {
+        if (!current.assignedRunner?.capabilitiesReportedAt || !current.assignedRunner.capabilities?.includes('provider:dsh')) {
+          throw new ConflictException(DSH_RUNNER_UPGRADE_ERROR);
+        }
+        normalizeBuiltinPermissionMode(
+          resumeRuntime,
+          dto.model ?? current.model ?? '',
+          resolvePermissionMode(dto.permissionMode ?? current.permissionMode, null),
+        );
+        // Nothing is written: the session stays as it was and revives once the CLI is installed.
+        const unavailable = dshRuntimeUnavailable(current.assignedRunner.engines);
+        if (unavailable) throw new ConflictException(unavailable);
+      }
       // The orchestration charge, in the same place createTurn puts it: past idempotency and
       // every refusal above, before the row it is paying for. A revive that is refused after
       // this — or a transaction retried whole — rolls the charge back with the turn.
@@ -7379,7 +7588,6 @@ export class SessionsService {
       // switch there is no process to reload: the row goes PENDING and the claim below resolves
       // the environment from it, which is also why a model the new provider doesn't serve is
       // simply cleared — claim re-resolves an unset model against the provider it is claiming for.
-      const next = await this.resolveProviderSwitch(tx, current, dto.provider);
       // …and onto one of the runner's accounts when it moves onto the built-in Codex or Claude engine,
       // as a live switch does (updateConfig). The claim that picks the revive up carries the
       // conversation there.
@@ -7387,7 +7595,9 @@ export class SessionsService {
       const normalizedEffort =
         dto.effort !== undefined
           ? normalizeEffortForProvider(
-              normalizeRuntimeProvider(next.provider, next.providerBuiltin),
+              resumeRuntime === AgentProvider.DSH
+                ? resumeRuntime
+                : normalizeRuntimeProvider(next.provider, next.providerBuiltin),
               dto.effort,
             )
           : undefined;
@@ -7643,14 +7853,10 @@ export class SessionsService {
     account: string | undefined,
   ): Promise<AccountSwitchWrite> {
     const engine: AccountEngine | null =
-      next.changed &&
-      next.providerBuiltin &&
-      (next.provider === AgentProvider.CODEX || next.provider === AgentProvider.CLAUDE)
-        ? next.provider
-        : null;
+      next.changed && next.providerBuiltin && isAccountEngine(next.provider) ? next.provider : null;
     if (account !== undefined && !engine) {
       throw new BadRequestException(
-        "an account goes with a switch onto the built-in Codex or Claude engine — a session already there moves with PATCH /sessions/:id/account",
+        "an account goes with a switch onto the built-in Codex, Claude or Antigravity engine — a session already there moves with PATCH /sessions/:id/account",
       );
     }
     if (!engine) return {};
@@ -7663,27 +7869,24 @@ export class SessionsService {
         numTurns: true,
         codexAccountPinned: true,
         claudeAccountPinned: true,
-        workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
+        antigravityAccountPinned: true,
+        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true } },
         assignedRunner: { select: { engines: true, accountPauses: true, planUsage: true, capabilities: true } },
       },
     });
     const write = (to: string, pinned: boolean): AccountSwitchWrite =>
-      engine === AgentProvider.CODEX
-        ? { codexAccount: to, codexAccountPinned: pinned }
-        : { claudeAccount: to, claudeAccountPinned: pinned };
+      ({ [ACCOUNT_CHOICE[engine]]: to, [ACCOUNT_PINNED[engine]]: pinned });
     const runner = session.assignedRunner;
     if (account === undefined || account === AUTOMATIC_ACCOUNT) {
       if (account === AUTOMATIC_ACCOUNT && !workspaceLeavesAccountToOrbit(engine, session.workspace, runner?.engines)) {
         throw new BadRequestException("this session's workspace decides its account");
       }
-      const pinned = engine === AgentProvider.CODEX ? session.codexAccountPinned : session.claudeAccountPinned;
+      const pinned = session[ACCOUNT_PINNED[engine]];
       if (account === undefined && pinned) return {};
       const to = automaticAccountOnSwitch(session, engine, new Date());
       if (to) return write(to, false);
       // Asked for by name, Automatic unpins even when it has nowhere to move the session yet.
-      if (account === AUTOMATIC_ACCOUNT) {
-        return engine === AgentProvider.CODEX ? { codexAccountPinned: false } : { claudeAccountPinned: false };
-      }
+      if (account === AUTOMATIC_ACCOUNT) return { [ACCOUNT_PINNED[engine]]: false };
       return {};
     }
     const row = sanitizeRunnerEngines(runner?.engines)
@@ -7716,9 +7919,18 @@ export class SessionsService {
     const currentRow = isBuiltinProvider(declared, session.providerBuiltin)
       ? null
       : await tx.modelProvider.findFirst({
-          where: { slug: declared, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
+          where: { slug: declared, ...(await usableProviderScope(tx, session.ownerId)) },
         });
+    const fromPool = isBuiltinProvider(declared, session.providerBuiltin) || currentRow
+      ? null
+      : await accountPoolRuntime(tx, session.ownerId, declared);
+    if (!isBuiltinProvider(declared, session.providerBuiltin) && !currentRow && !fromPool) {
+      throw new BadRequestException(
+        (await adminOnlyProviderRefusal(tx, session.ownerId, declared)) ?? `provider not available: "${declared}"`,
+      );
+    }
     if (requested === undefined || requested === declared) {
+      if (currentRow?.enabled === false) throw new BadRequestException('provider is disabled');
       return {
         provider: declared,
         providerBuiltin: session.providerBuiltin,
@@ -7729,30 +7941,32 @@ export class SessionsService {
     }
     // Mirrors create(): membership of the enum, deliberately not isBuiltinProvider(), so a
     // session moved onto the built-in `kimi` slug keeps the discriminator that slug means.
-    const providerBuiltin = Object.values(AgentProvider).includes(requested as AgentProvider);
-    const targetRow = providerBuiltin
+    let providerBuiltin = Object.values(AgentProvider).includes(requested as AgentProvider);
+    const targetRow = providerBuiltin && requested !== AgentProvider.DSH
       ? null
       : await tx.modelProvider.findFirst({
           where: {
             slug: requested,
-            enabled: true,
-            OR: [{ ownerId: null }, { ownerId: session.ownerId }],
+            ...(requested === AgentProvider.DSH ? {} : { enabled: true }),
+            ...(await usableProviderScope(tx, session.ownerId)),
           },
         });
+    if (targetRow?.enabled === false) throw new BadRequestException('provider not available');
     // One of the owner's own account pools has no row: the claim and the reload resolve it to the
     // member they choose, whose model space is Claude's own.
     const poolRuntime =
-      providerBuiltin || targetRow ? null : await accountPoolRuntime(tx, session.ownerId, requested);
+      targetRow || (providerBuiltin && requested !== AgentProvider.DSH)
+        ? null
+        : await accountPoolRuntime(tx, session.ownerId, requested);
+    if (targetRow || poolRuntime) providerBuiltin = false;
     if (!providerBuiltin && !targetRow && !poolRuntime) {
-      throw new BadRequestException('provider not available');
+      throw new BadRequestException(
+        (await adminOnlyProviderRefusal(tx, session.ownerId, requested)) ?? 'provider not available',
+      );
     }
     if (poolRuntime) await this.assertUsablePool(session.ownerId, requested, tx);
     // A session already on a pool has no row either, and runs on that pool's engine — a shared pool's
     // on Codex, which the Claude a slug nothing holds falls back to would misread.
-    const fromPool =
-      isBuiltinProvider(declared, session.providerBuiltin) || currentRow
-        ? null
-        : await accountPoolRuntime(tx, session.ownerId, declared);
     const from =
       fromPool ??
       execRuntime({
@@ -7806,8 +8020,13 @@ export class SessionsService {
    * did — see `acceptsLiveConfig` below.
    *
    * A not-yet-claimed (PENDING) session needs neither: the claim reads the new values.
+   *
+   * `credential` is the user door's. A personal access token may not change the permission mode at
+   * all, to any value: a mode that runs without asking would take approvals — which only a login may
+   * answer — out of the session's way (docs/personal-access-token-design.md §5). The rest is a token's.
    */
-  async updateConfig(ownerId: string, id: string, dto: SessionConfigDto) {
+  async updateConfig(ownerId: string, id: string, dto: SessionConfigDto, credential?: AuthCredential) {
+    refuseOwnerFieldsToToken(credential, { permissionMode: dto.permissionMode });
     if (
       dto.model === undefined &&
       dto.permissionMode === undefined &&
@@ -7835,7 +8054,7 @@ export class SessionsService {
         include: {
           workspace: true,
           assignedRunner: {
-            select: { runtimeDefaultModels: true, modelCatalog: true, runsAsRoot: true, engines: true },
+            select: { runtimeDefaultModels: true, modelCatalog: true, runsAsRoot: true, engines: true, capabilities: true, capabilitiesReportedAt: true },
           },
           // The account-level permission default, which replaced the per-workspace one.
           owner: { select: { preferences: true } },
@@ -7846,10 +8065,18 @@ export class SessionsService {
       }
       const next = await this.resolveProviderSwitch(tx, session, dto.provider);
       const accounts = await this.accountOnProviderSwitch(tx, id, next, dto.account);
+      const poolRuntime = isBuiltinProvider(next.provider, next.providerBuiltin) || next.customRow
+        ? null
+        : await accountPoolRuntime(tx, ownerId, next.provider);
       const exec = resolveProviderExec({
-        declaredProvider: next.provider,
-        declaredProviderBuiltin: next.providerBuiltin,
+        declaredProvider: poolRuntime ?? next.provider,
+        declaredProviderBuiltin: poolRuntime ? true : next.providerBuiltin,
         customRow: next.customRow,
+        // A model naming a configured key is refused here, with its reason, when the key cannot run.
+        openCodeKeys:
+          next.provider === AgentProvider.OPENCODE && openCodeKeyOf(dto.model ?? session.model)
+            ? await openCodeKeyRows(tx, ownerId)
+            : undefined,
         sessionModel: dto.model ?? (next.keepsModel ? session.model : null),
         usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
         runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,
@@ -7858,8 +8085,14 @@ export class SessionsService {
         workspaceEnv: session.workspace?.env as Record<string, string> | null,
         codexAccount: accounts.codexAccount ?? session.codexAccount ?? session.workspace?.codexAccount,
         claudeAccount: accounts.claudeAccount ?? session.claudeAccount ?? session.workspace?.claudeAccount,
+        antigravityAccount:
+          accounts.antigravityAccount ?? session.antigravityAccount ?? session.workspace?.antigravityAccount,
         runnerEngines: session.assignedRunner?.engines,
       });
+      if (exec.provider === AgentProvider.DSH && (!session.assignedRunner?.capabilitiesReportedAt ||
+        !session.assignedRunner.capabilities?.includes('provider:dsh'))) {
+        throw new ConflictException(DSH_RUNNER_UPGRADE_ERROR);
+      }
       const requestedPermissionMode =
         (dto.permissionMode as PermissionMode | undefined) ??
         resolvePermissionMode(session.permissionMode, session.owner);
@@ -7957,6 +8190,10 @@ export class SessionsService {
       // — so it joins the provider on the spawn-only side even on the runtime that HAS a control
       // channel. (On Codex `acceptsLiveConfig` is false, so this term changes nothing there.)
       const respawns = !acceptsLiveConfig || next.changed || fastModeMoved;
+      // The key an OpenCode model names lives in the process environment (resolveProviderExec).
+      const openCodeKeyMoved =
+        exec.provider === AgentProvider.OPENCODE &&
+        openCodeKeyOf(exec.model)?.slug !== openCodeKeyOf(session.model)?.slug;
       // A switch that re-resolves the MODEL must not be said to the running engine, whatever else
       // moved beside it. Every value on this PATCH was resolved against the provider the session
       // is moving TO, while the process a control frame reaches is still talking to the one it is
@@ -8018,7 +8255,9 @@ export class SessionsService {
             // The identity only. It tells the runner its process environment is stale — the
             // credential behind it is resolved when the inbox delivers this turn, so a decrypted
             // provider key never lands in conversation_turn.
-            provider: next.changed ? next.provider : undefined,
+            // An OpenCode session moving between keys (or onto its machine's own config) needs a new
+            // OPENCODE_CONFIG_CONTENT just as a provider switch does, so it names its provider too.
+            provider: next.changed || openCodeKeyMoved ? next.provider : undefined,
           }),
           clientTurnId: randomUUID(),
         });
@@ -8064,25 +8303,26 @@ export class SessionsService {
           codexAccountPinned: true,
           claudeAccount: true,
           claudeAccountPinned: true,
-          workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
+          antigravityAccount: true,
+          antigravityAccountPinned: true,
+          workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true } },
           assignedRunner: { select: { engines: true, accountNames: true, accountPauses: true, planUsage: true, capabilities: true } },
         },
       });
-      const engine: AccountEngine | null =
-        session.provider === AgentProvider.CODEX || session.provider === AgentProvider.CLAUDE
-          ? session.provider
-          : null;
+      const engine: AccountEngine | null = isAccountEngine(session.provider) ? session.provider : null;
       if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin) || !session.assignedRunner) {
-        throw new BadRequestException("only a session on the built-in Codex or Claude engine runs on one of its runner's accounts");
+        throw new BadRequestException(
+          "only a session on the built-in Codex, Claude or Antigravity engine runs on one of its runner's accounts",
+        );
       }
       const runner = session.assignedRunner;
-      const own = engine === AgentProvider.CODEX ? session.codexAccount : session.claudeAccount;
-      const workspacePick = engine === AgentProvider.CODEX ? session.workspace?.codexAccount : session.workspace?.claudeAccount;
-      const choice = engine === AgentProvider.CODEX ? { codexAccount: own ?? workspacePick } : { claudeAccount: own ?? workspacePick };
+      const column = ACCOUNT_CHOICE[engine];
+      const choice = { [column]: session[column] ?? session.workspace?.[column] };
       const current = runAccount(engine, session.workspace?.env, choice, runner.engines);
       if (!current) throw new BadRequestException("this session spends a key of its own, not one of its runner's accounts");
       const accounts = namedRunnerEngines(runner)?.find((entry) => entry.engine === engine)?.accounts;
-      const usage = runner.planUsage as PlanUsage | null;
+      // Antigravity's quota travels with its engine health, and is weighed with the rest here.
+      const usage = withEnginePlanUsage(runner.planUsage as PlanUsage | null, sanitizeRunnerEngines(runner.engines));
       const now = new Date();
       let to = current;
       let pinned = true;
@@ -8110,7 +8350,7 @@ export class SessionsService {
         if (to !== current) notice = `Switched to ${accountLabel(engine, to, runner)}`;
       }
       const moves = to !== current;
-      if (moves && !runner.capabilities.includes(engine === AgentProvider.CODEX ? CODEX_ACCOUNT_MOVE_V1 : CLAUDE_ACCOUNT_MOVE_V1)) {
+      if (moves && !runnerCarriesAccounts(runner, engine)) {
         throw new ConflictException(
           "this session's runner cannot move a conversation to another account yet — it updates itself when no turn is running",
         );
@@ -8119,9 +8359,8 @@ export class SessionsService {
       await tx.session.update({
         where: { id },
         data: {
-          ...(engine === AgentProvider.CODEX
-            ? { codexAccount: to, codexAccountPinned: pinned }
-            : { claudeAccount: to, claudeAccountPinned: pinned }),
+          [column]: to,
+          [ACCOUNT_PINNED[engine]]: pinned,
           ...(notice ? { poolSwitchNotice: notice } : {}),
           // A session waiting out the old account's reset goes now, on the one with room.
           ...(moves && session.retryAt && session.retryAt > now ? { retryAt: now } : {}),
@@ -8479,6 +8718,20 @@ export class SessionsService {
     // At most one, by the unique index behind Project.coordinatorSessionId. Nothing in the database
     // keeps a coordinator in its workspace since 0164, so the move is what has to.
     coordinatorForProject: { select: { id: true } },
+    task: {
+      select: {
+        codeless: true,
+        project: {
+          select: {
+            codebases: {
+              where: { slot: 'primary' },
+              select: { integrationRef: true },
+              take: 1,
+            },
+          },
+        },
+      },
+    },
     workspace: {
       select: { env: true, claudeAccount: true, codexAccount: true, enableWorktree: true, defaultMergeTarget: true },
     },
@@ -8582,7 +8835,13 @@ export class SessionsService {
       branch: session.branch,
       changedFiles,
       unmergedFiles: branchIsMerged(session) ? 0 : changedFiles,
-      mergeTarget: session.branch ? mergeTargetOf(session, session.workspace?.defaultMergeTarget) : null,
+      mergeTarget: session.branch
+        ? mergeTargetOf(
+            session,
+            session.workspace?.defaultMergeTarget,
+            session.task && !session.task.codeless ? session.task.project?.codebases[0]?.integrationRef : null,
+          )
+        : null,
       targets: others.map((w): SessionMoveTarget => {
         const sameRunner = w.runnerId != null && w.runnerId === session.assignedRunnerId;
         return {

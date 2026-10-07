@@ -18,7 +18,8 @@ vi.mock('../api', async (importOriginal) => ({
 }));
 
 /**
- * The status line as the Wiki page draws it, for every case of `src/shared/src/wiki-health.fixture.json`:
+ * The status line as the Wiki draws it — under Activity's title since the home became its content (design
+ * §12.3.2) — for every case of `src/shared/src/wiki-health.fixture.json`:
  * the whole line in the fixture's words (the phone's line — the desktop's adds the review count, which
  * the phone hides), coloured the look's way, and its two links going where the mocks say. OrbitKit's
  * `WikiHealthCopyParityTests` holds iOS to the same `line`.
@@ -51,7 +52,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** The Wiki home with the fixture's space and a health read, as the page's own route tree draws it. */
+/** Activity with the fixture's space and a health read, as the page's own route tree draws it. */
 function paint(health: WikiSpaceHealth | undefined): string {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const { space } = shared;
@@ -60,9 +61,9 @@ function paint(health: WikiSpaceHealth | undefined): string {
   if (health) client.setQueryData(['wiki', 'space', space.id, 'health'], health);
   return renderToStaticMarkup(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[`/wiki/${space.slug}`]}>
+      <MemoryRouter initialEntries={[`/wiki/${space.slug}/activity`]}>
         <Routes>
-          <Route path="/wiki/:space" element={<WikiPage route="home" />} />
+          <Route path="/wiki/:space/activity" element={<WikiPage route="activity" />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -86,7 +87,7 @@ function phoneText(row: string): string {
     .trim();
 }
 
-describe('the Wiki home’s status line', () => {
+describe('Activity’s status line', () => {
   for (const one of shared.cases) {
     it(`says the fixture’s line: ${one.name}`, () => {
       const row = statusRow(paint(one.health));

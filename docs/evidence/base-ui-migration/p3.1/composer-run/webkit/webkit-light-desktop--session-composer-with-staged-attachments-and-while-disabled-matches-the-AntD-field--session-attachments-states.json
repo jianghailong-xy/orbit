@@ -1,0 +1,671 @@
+{
+  "states": {
+    "ant": [
+      {
+        "name": "attachments-idle",
+        "state": {
+          "value": "",
+          "focused": false,
+          "field": {
+            "x": 321.5,
+            "y": 794,
+            "width": 637,
+            "height": 38
+          },
+          "content": {
+            "left": 344.5,
+            "top": 806,
+            "width": 591
+          },
+          "inline": {
+            "height": "38px",
+            "minHeight": "38px",
+            "maxHeight": "302px",
+            "overflowY": "hidden",
+            "overflowX": "",
+            "resize": "none"
+          },
+          "computed": {
+            "display": "inline-block",
+            "boxSizing": "border-box",
+            "width": "637px",
+            "height": "38px",
+            "minHeight": "38px",
+            "maxHeight": "302px",
+            "overflowX": "auto",
+            "overflowY": "hidden",
+            "resize": "none",
+            "verticalAlign": "bottom",
+            "paddingTop": "12px",
+            "paddingRight": "23px",
+            "paddingBottom": "2px",
+            "paddingLeft": "23px",
+            "marginTop": "0px",
+            "marginBottom": "0px",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "borderTopColor": "rgba(0, 0, 0, 0)",
+            "borderBottomWidth": "0px",
+            "borderLeftColor": "rgba(0, 0, 0, 0)",
+            "borderRadius": "6px",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgba(0, 0, 0, 0)",
+            "webkitTextFillColor": "rgba(0, 0, 0, 0)",
+            "caretColor": "rgb(31, 35, 41)",
+            "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "15px",
+            "fontWeight": "400",
+            "fontStyle": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "wordSpacing": "0px",
+            "textIndent": "0px",
+            "textTransform": "none",
+            "textRendering": "auto",
+            "fontVariant": "normal",
+            "whiteSpace": "pre-wrap",
+            "wordBreak": "break-word",
+            "overflowWrap": "break-word",
+            "tabSize": "8",
+            "boxShadow": "none",
+            "outlineStyle": "none",
+            "outlineWidth": "3px",
+            "outlineColor": "rgba(0, 0, 0, 0)",
+            "outlineOffset": "0px",
+            "cursor": "auto",
+            "textOverflow": "ellipsis",
+            "position": "relative",
+            "zIndex": "auto",
+            "opacity": "1",
+            "transform": "none",
+            "flexGrow": "0",
+            "flexShrink": "1",
+            "flexBasis": "auto"
+          },
+          "placeholder": {
+            "color": "rgba(0, 0, 0, 0.25)",
+            "webkitTextFillColor": "rgba(0, 0, 0, 0.25)",
+            "opacity": "1",
+            "fontSize": "15px",
+            "lineHeight": "24px"
+          },
+          "scroll": {
+            "scrollHeight": 38,
+            "clientHeight": 38,
+            "clientWidth": 637,
+            "scrollTop": 0
+          },
+          "box": {
+            "x": 320.5,
+            "y": 733,
+            "width": 639,
+            "height": 143
+          },
+          "composerField": {
+            "x": 321.5,
+            "y": 794,
+            "width": 637,
+            "height": 38
+          },
+          "mirror": {
+            "x": 321.5,
+            "y": 794,
+            "width": 637,
+            "height": 38,
+            "scrollTop": 0,
+            "scrollHeight": 38,
+            "computed": {
+              "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+              "fontSize": "15px",
+              "lineHeight": "24px",
+              "paddingTop": "12px",
+              "paddingLeft": "23px",
+              "paddingRight": "23px",
+              "whiteSpace": "pre-wrap",
+              "wordBreak": "break-word",
+              "overflowWrap": "break-word"
+            }
+          },
+          "attachments": {
+            "x": 321.5,
+            "y": 734,
+            "width": 637,
+            "height": 60
+          },
+          "thumbnails": [
+            {
+              "x": 344.5,
+              "y": 746,
+              "width": 48,
+              "height": 48
+            },
+            {
+              "x": 400.5,
+              "y": 746,
+              "width": 175.75,
+              "height": 48
+            }
+          ],
+          "toolbar": {
+            "x": 321.5,
+            "y": 832,
+            "width": 637,
+            "height": 43
+          },
+          "menu": null,
+          "handle": false,
+          "textareas": 2
+        }
+      },
+      {
+        "name": "attachments-two-lines",
+        "state": {
+          "value": "With a staged screenshot and file\nsecond line",
+          "focused": true,
+          "field": {
+            "x": 321.5,
+            "y": 770,
+            "width": 637,
+            "height": 62
+          },
+          "content": {
+            "left": 344.5,
+            "top": 782,
+            "width": 591
+          },
+          "inline": {
+            "height": "62px",
+            "minHeight": "38px",
+            "maxHeight": "302px",
+            "overflowY": "hidden",
+            "overflowX": "",
+            "resize": "none"
+          },
+          "computed": {
+            "display": "inline-block",
+            "boxSizing": "border-box",
+            "width": "637px",
+            "height": "62px",
+            "minHeight": "38px",
+            "maxHeight": "302px",
+            "overflowX": "auto",
+            "overflowY": "hidden",
+            "resize": "none",
+            "verticalAlign": "bottom",
+            "paddingTop": "12px",
+            "paddingRight": "23px",
+            "paddingBottom": "2px",
+            "paddingLeft": "23px",
+            "marginTop": "0px",
+            "marginBottom": "0px",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "borderTopColor": "rgba(0, 0, 0, 0)",
+            "borderBottomWidth": "0px",
+            "borderLeftColor": "rgba(0, 0, 0, 0)",
+            "borderRadius": "6px",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgba(0, 0, 0, 0)",
+            "webkitTextFillColor": "rgba(0, 0, 0, 0)",
+            "caretColor": "rgb(31, 35, 41)",
+            "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "15px",
+            "fontWeight": "400",
+            "fontStyle": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "wordSpacing": "0px",
+            "textIndent": "0px",
+            "textTransform": "none",
+            "textRendering": "auto",
+            "fontVariant": "normal",
+            "whiteSpace": "pre-wrap",
+            "wordBreak": "break-word",
+            "overflowWrap": "break-word",
+            "tabSize": "8",
+            "boxShadow": "none",
+            "outlineStyle": "none",
+            "outlineWidth": "3px",
+            "outlineColor": "rgba(0, 0, 0, 0)",
+            "outlineOffset": "-1px",
+            "cursor": "auto",
+            "textOverflow": "clip",
+            "position": "relative",
+            "zIndex": "auto",
+            "opacity": "1",
+            "transform": "none",
+            "flexGrow": "0",
+            "flexShrink": "1",
+            "flexBasis": "auto"
+          },
+          "placeholder": {
+            "color": "rgba(0, 0, 0, 0.25)",
+            "webkitTextFillColor": "rgba(0, 0, 0, 0.25)",
+            "opacity": "1",
+            "fontSize": "15px",
+            "lineHeight": "24px"
+          },
+          "scroll": {
+            "scrollHeight": 62,
+            "clientHeight": 62,
+            "clientWidth": 637,
+            "scrollTop": 0
+          },
+          "box": {
+            "x": 320.5,
+            "y": 709,
+            "width": 639,
+            "height": 167
+          },
+          "composerField": {
+            "x": 321.5,
+            "y": 770,
+            "width": 637,
+            "height": 62
+          },
+          "mirror": {
+            "x": 321.5,
+            "y": 770,
+            "width": 637,
+            "height": 62,
+            "scrollTop": 0,
+            "scrollHeight": 62,
+            "computed": {
+              "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+              "fontSize": "15px",
+              "lineHeight": "24px",
+              "paddingTop": "12px",
+              "paddingLeft": "23px",
+              "paddingRight": "23px",
+              "whiteSpace": "pre-wrap",
+              "wordBreak": "break-word",
+              "overflowWrap": "break-word"
+            }
+          },
+          "attachments": {
+            "x": 321.5,
+            "y": 710,
+            "width": 637,
+            "height": 60
+          },
+          "thumbnails": [
+            {
+              "x": 344.5,
+              "y": 722,
+              "width": 48,
+              "height": 48
+            },
+            {
+              "x": 400.5,
+              "y": 722,
+              "width": 175.75,
+              "height": 48
+            }
+          ],
+          "toolbar": {
+            "x": 321.5,
+            "y": 832,
+            "width": 637,
+            "height": 43
+          },
+          "menu": null,
+          "handle": false,
+          "textareas": 2
+        }
+      }
+    ],
+    "orbit": [
+      {
+        "name": "attachments-idle",
+        "state": {
+          "value": "",
+          "focused": false,
+          "field": {
+            "x": 321.5,
+            "y": 794,
+            "width": 637,
+            "height": 38
+          },
+          "content": {
+            "left": 344.5,
+            "top": 806,
+            "width": 591
+          },
+          "inline": {
+            "height": "38px",
+            "minHeight": "38px",
+            "maxHeight": "302px",
+            "overflowY": "hidden",
+            "overflowX": "",
+            "resize": "none"
+          },
+          "computed": {
+            "display": "inline-block",
+            "boxSizing": "border-box",
+            "width": "637px",
+            "height": "38px",
+            "minHeight": "38px",
+            "maxHeight": "302px",
+            "overflowX": "auto",
+            "overflowY": "hidden",
+            "resize": "none",
+            "verticalAlign": "bottom",
+            "paddingTop": "12px",
+            "paddingRight": "23px",
+            "paddingBottom": "2px",
+            "paddingLeft": "23px",
+            "marginTop": "0px",
+            "marginBottom": "0px",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "borderTopColor": "rgba(0, 0, 0, 0)",
+            "borderBottomWidth": "0px",
+            "borderLeftColor": "rgba(0, 0, 0, 0)",
+            "borderRadius": "6px",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgba(0, 0, 0, 0)",
+            "webkitTextFillColor": "rgba(0, 0, 0, 0)",
+            "caretColor": "rgb(31, 35, 41)",
+            "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "15px",
+            "fontWeight": "400",
+            "fontStyle": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "wordSpacing": "0px",
+            "textIndent": "0px",
+            "textTransform": "none",
+            "textRendering": "auto",
+            "fontVariant": "normal",
+            "whiteSpace": "pre-wrap",
+            "wordBreak": "break-word",
+            "overflowWrap": "break-word",
+            "tabSize": "8",
+            "boxShadow": "none",
+            "outlineStyle": "none",
+            "outlineWidth": "3px",
+            "outlineColor": "rgba(0, 0, 0, 0)",
+            "outlineOffset": "0px",
+            "cursor": "auto",
+            "textOverflow": "ellipsis",
+            "position": "relative",
+            "zIndex": "auto",
+            "opacity": "1",
+            "transform": "none",
+            "flexGrow": "0",
+            "flexShrink": "1",
+            "flexBasis": "auto"
+          },
+          "placeholder": {
+            "color": "rgba(0, 0, 0, 0.25)",
+            "webkitTextFillColor": "rgba(0, 0, 0, 0.25)",
+            "opacity": "1",
+            "fontSize": "15px",
+            "lineHeight": "24px"
+          },
+          "scroll": {
+            "scrollHeight": 38,
+            "clientHeight": 38,
+            "clientWidth": 637,
+            "scrollTop": 0
+          },
+          "box": {
+            "x": 320.5,
+            "y": 733,
+            "width": 639,
+            "height": 143
+          },
+          "composerField": {
+            "x": 321.5,
+            "y": 794,
+            "width": 637,
+            "height": 38
+          },
+          "mirror": {
+            "x": 321.5,
+            "y": 794,
+            "width": 637,
+            "height": 38,
+            "scrollTop": 0,
+            "scrollHeight": 38,
+            "computed": {
+              "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+              "fontSize": "15px",
+              "lineHeight": "24px",
+              "paddingTop": "12px",
+              "paddingLeft": "23px",
+              "paddingRight": "23px",
+              "whiteSpace": "pre-wrap",
+              "wordBreak": "break-word",
+              "overflowWrap": "break-word"
+            }
+          },
+          "attachments": {
+            "x": 321.5,
+            "y": 734,
+            "width": 637,
+            "height": 60
+          },
+          "thumbnails": [
+            {
+              "x": 344.5,
+              "y": 746,
+              "width": 48,
+              "height": 48
+            },
+            {
+              "x": 400.5,
+              "y": 746,
+              "width": 175.75,
+              "height": 48
+            }
+          ],
+          "toolbar": {
+            "x": 321.5,
+            "y": 832,
+            "width": 637,
+            "height": 43
+          },
+          "menu": null,
+          "handle": false,
+          "textareas": 1
+        }
+      },
+      {
+        "name": "attachments-two-lines",
+        "state": {
+          "value": "With a staged screenshot and file\nsecond line",
+          "focused": true,
+          "field": {
+            "x": 321.5,
+            "y": 770,
+            "width": 637,
+            "height": 62
+          },
+          "content": {
+            "left": 344.5,
+            "top": 782,
+            "width": 591
+          },
+          "inline": {
+            "height": "62px",
+            "minHeight": "38px",
+            "maxHeight": "302px",
+            "overflowY": "hidden",
+            "overflowX": "",
+            "resize": "none"
+          },
+          "computed": {
+            "display": "inline-block",
+            "boxSizing": "border-box",
+            "width": "637px",
+            "height": "62px",
+            "minHeight": "38px",
+            "maxHeight": "302px",
+            "overflowX": "auto",
+            "overflowY": "hidden",
+            "resize": "none",
+            "verticalAlign": "bottom",
+            "paddingTop": "12px",
+            "paddingRight": "23px",
+            "paddingBottom": "2px",
+            "paddingLeft": "23px",
+            "marginTop": "0px",
+            "marginBottom": "0px",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "borderTopColor": "rgba(0, 0, 0, 0)",
+            "borderBottomWidth": "0px",
+            "borderLeftColor": "rgba(0, 0, 0, 0)",
+            "borderRadius": "6px",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "color": "rgba(0, 0, 0, 0)",
+            "webkitTextFillColor": "rgba(0, 0, 0, 0)",
+            "caretColor": "rgb(31, 35, 41)",
+            "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "15px",
+            "fontWeight": "400",
+            "fontStyle": "normal",
+            "lineHeight": "24px",
+            "letterSpacing": "normal",
+            "wordSpacing": "0px",
+            "textIndent": "0px",
+            "textTransform": "none",
+            "textRendering": "auto",
+            "fontVariant": "normal",
+            "whiteSpace": "pre-wrap",
+            "wordBreak": "break-word",
+            "overflowWrap": "break-word",
+            "tabSize": "8",
+            "boxShadow": "none",
+            "outlineStyle": "none",
+            "outlineWidth": "3px",
+            "outlineColor": "rgba(0, 0, 0, 0)",
+            "outlineOffset": "-1px",
+            "cursor": "auto",
+            "textOverflow": "clip",
+            "position": "relative",
+            "zIndex": "auto",
+            "opacity": "1",
+            "transform": "none",
+            "flexGrow": "0",
+            "flexShrink": "1",
+            "flexBasis": "auto"
+          },
+          "placeholder": {
+            "color": "rgba(0, 0, 0, 0.25)",
+            "webkitTextFillColor": "rgba(0, 0, 0, 0.25)",
+            "opacity": "1",
+            "fontSize": "15px",
+            "lineHeight": "24px"
+          },
+          "scroll": {
+            "scrollHeight": 62,
+            "clientHeight": 62,
+            "clientWidth": 637,
+            "scrollTop": 0
+          },
+          "box": {
+            "x": 320.5,
+            "y": 709,
+            "width": 639,
+            "height": 167
+          },
+          "composerField": {
+            "x": 321.5,
+            "y": 770,
+            "width": 637,
+            "height": 62
+          },
+          "mirror": {
+            "x": 321.5,
+            "y": 770,
+            "width": 637,
+            "height": 62,
+            "scrollTop": 0,
+            "scrollHeight": 62,
+            "computed": {
+              "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+              "fontSize": "15px",
+              "lineHeight": "24px",
+              "paddingTop": "12px",
+              "paddingLeft": "23px",
+              "paddingRight": "23px",
+              "whiteSpace": "pre-wrap",
+              "wordBreak": "break-word",
+              "overflowWrap": "break-word"
+            }
+          },
+          "attachments": {
+            "x": 321.5,
+            "y": 710,
+            "width": 637,
+            "height": 60
+          },
+          "thumbnails": [
+            {
+              "x": 344.5,
+              "y": 722,
+              "width": 48,
+              "height": 48
+            },
+            {
+              "x": 400.5,
+              "y": 722,
+              "width": 175.75,
+              "height": 48
+            }
+          ],
+          "toolbar": {
+            "x": 321.5,
+            "y": 832,
+            "width": 637,
+            "height": 43
+          },
+          "menu": null,
+          "handle": false,
+          "textareas": 1
+        }
+      }
+    ]
+  },
+  "differences": [],
+  "pixels": {
+    "attachments-idle": {
+      "repainted": {
+        "sameSize": true,
+        "width": 648,
+        "height": 164,
+        "different": 0,
+        "maxChannelDelta": 0,
+        "box": null
+      },
+      "firstPaint": {
+        "sameSize": true,
+        "width": 648,
+        "height": 164,
+        "different": 0,
+        "maxChannelDelta": 0,
+        "box": null
+      }
+    },
+    "attachments-two-lines": {
+      "repainted": {
+        "sameSize": true,
+        "width": 648,
+        "height": 188,
+        "different": 0,
+        "maxChannelDelta": 0,
+        "box": null
+      },
+      "firstPaint": {
+        "sameSize": true,
+        "width": 648,
+        "height": 188,
+        "different": 0,
+        "maxChannelDelta": 0,
+        "box": null
+      }
+    }
+  }
+}

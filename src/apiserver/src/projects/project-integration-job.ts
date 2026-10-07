@@ -1,7 +1,13 @@
 import { Prisma, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { notifyRunnerWakeOnCommit } from '../realtime/runner-wake';
 import { LANDING_SESSION_CANDIDATES, LANDING_WORK_SESSION_SELECT, landingWorkSession } from './landing-source-branch';
 import { startOnFirstIntegration } from './project-integration-line';
+import {
+  INTEGRATION_ITEM_KINDS,
+  markOpenItemsHandling,
+  type OpenItemHandlingStart,
+} from './project-open-item';
 // Type-only, so the two modules do not import each other at run time: this one needs the two closed
 // sets a candidate is written with, and `project-promotion.ts` needs the shape a check reports.
 import type { PromotionSourceKind, PromotionState } from './project-promotion';
@@ -292,6 +298,10 @@ export const INTEGRATION_JOB_COLUMNS = {
   landedTreeSha: true,
   aheadOfUpstream: true,
   checks: true,
+  skipMergeCheck: true,
+  skipReason: true,
+  skipApprovedByUserId: true,
+  skipApprovalId: true,
   conflicts: true,
   errorCode: true,
   errorDetail: true,
@@ -322,6 +332,12 @@ export interface IntegrationJobView {
   landedTreeSha: string | null;
   aheadOfUpstream: number | null;
   checks: IntegrationCheckResult[];
+  /**
+   * Set when this landing ran with no merge check, because the account owner approved skipping it
+   * (§2.4 J-S5). An empty `checks` means nothing ran; this is what says whether that was the
+   * project having no check or somebody having decided this one did not need it.
+   */
+  skippedCheck: SkippedMergeCheckRecord | null;
   conflicts: string[];
   errorCode: IntegrationErrorCode | null;
   createdAt: Date;
@@ -346,6 +362,7 @@ export function integrationJobView(row: IntegrationJobRow): IntegrationJobView {
     landedTreeSha: row.landedTreeSha,
     aheadOfUpstream: row.aheadOfUpstream,
     checks: Array.isArray(row.checks) ? (row.checks as unknown as IntegrationCheckResult[]) : [],
+    skippedCheck: skippedMergeCheck(row),
     conflicts: row.conflicts,
     errorCode: (row.errorCode ?? null) as IntegrationErrorCode | null,
     createdAt: row.createdAt,
@@ -594,6 +611,53 @@ export async function queueLandingBehindTheWork(
   });
 }
 
+/**
+ * One landing queued with its merge check NOT RUN (`integration_skip_merge_check`, §2.4 J-S5,
+ * migration 0393), as the person who approved it and the reason they gave.
+ *
+ * It rides on the generation it was asked for and nowhere else: the project's
+ * `merge_check_command` is not touched, so the next landing and every promotion check run as they
+ * did. The check is skipped, never passed — `checksFor` hands the runner no MERGE_CHECK at all, and
+ * the row keeps this so that a landing whose checks array is empty cannot be read as a green one.
+ */
+export interface LandingSkipMergeCheck {
+  /** Why this check should not hold up this landing, in the requester's own words. */
+  reason: string;
+  /** Whose yes it is: the decider of the card, or the account owner on their own channel. */
+  approvedByUserId: string;
+  /** The confirmation card, when there was one. Null for the account owner's own press. */
+  approvalId?: string | null;
+}
+
+/** What a skipped landing's records say about it — read off the job row by everything that shows it. */
+export interface SkippedMergeCheckRecord {
+  reason: string;
+  approvedByUserId: string;
+  approvalId: string | null;
+}
+
+/**
+ * The skip this job carried, or null for the overwhelming majority of rows that ran their check.
+ *
+ * Read back rather than reconstructed, so the three facts a person needs — that the check did not
+ * run, who said it need not, and why — come off the one row that recorded them. A row whose flag is
+ * set but whose reason or approver is missing cannot exist (0393's CHECK), so this is a read and not
+ * a validation; NULL is the honest answer for a row written before the columns existed.
+ */
+export function skippedMergeCheck(job: {
+  skipMergeCheck: boolean;
+  skipReason: string | null;
+  skipApprovedByUserId: string | null;
+  skipApprovalId: string | null;
+}): SkippedMergeCheckRecord | null {
+  if (!job.skipMergeCheck || !job.skipReason || !job.skipApprovedByUserId) return null;
+  return {
+    reason: job.skipReason,
+    approvedByUserId: job.skipApprovedByUserId,
+    approvalId: job.skipApprovalId,
+  };
+}
+
 /** Why a rerun was asked for, as migration 0344 records it on the generation it queued — a task's
  *  landing, or (0368) a blocked candidate's check. */
 export interface LandingRetryRequest {
@@ -601,7 +665,9 @@ export interface LandingRetryRequest {
   ofJobId: string;
   failureClass: RetryableLandingFailureClass;
   reason: string;
-  requestedBySessionId: string;
+  /** Exactly one requester is recorded by migration 0380. */
+  requestedBySessionId?: string;
+  requestedByUserId?: string;
 }
 
 /**
@@ -621,7 +687,17 @@ export interface LandingRetryRequest {
  */
 export async function queueLandingRetry(
   tx: Prisma.TransactionClient,
-  input: { ownerId: string; projectId: string; taskId: string; retry: LandingRetryRequest },
+  input: {
+    ownerId: string;
+    projectId: string;
+    taskId: string;
+    retry: LandingRetryRequest;
+    /**
+     * Set only by `integration_skip_merge_check`: this generation runs no merge check (§2.4 J-S5,
+     * 0393). Omitted by `integration_retry`, which queues the same generation WITH the check.
+     */
+    skipMergeCheck?: LandingSkipMergeCheck;
+  },
 ): Promise<{ jobId: string; generation: number; sourceRef: string } | null> {
   const task = await tx.task.findFirst({
     where: { id: input.taskId, ownerId: input.ownerId, projectId: input.projectId },
@@ -641,6 +717,7 @@ export async function queueLandingRetry(
     codebase,
     session: { id: work.id, branch: work.branch, runnerId: work.assignedRunnerId },
     retry: input.retry,
+    skipMergeCheck: input.skipMergeCheck,
   });
   if (jobId === null) return null;
   const queued = await tx.projectIntegrationJob.findUniqueOrThrow({
@@ -689,6 +766,14 @@ export type EnqueueOutcome =
       reason: 'NOT_A_CODE_TASK' | 'ALREADY_QUEUED' | 'INTEGRATION_REPOSITORY_UNKNOWN';
       projectId: string | null;
     };
+
+/** Who caused this DONE, for the handling attribution of an older integration item. */
+export type DoneTaskSource =
+  | { sessionId: string; userId?: never }
+  | { userId: string; sessionId?: never };
+
+/** H1's reason for the generation queued after a task was reopened for delivery work. */
+export const REOPEN_LANDING_HANDLING_REASON = '退回返工后的新一代落地';
 
 /** The columns a landing needs from the task's own work session. */
 const WORK_SESSION_SELECT = LANDING_WORK_SESSION_SELECT;
@@ -771,6 +856,7 @@ export async function enqueueForDoneTask(
   tx: Prisma.TransactionClient,
   ownerId: string,
   taskId: string,
+  doneSource?: DoneTaskSource | null,
 ): Promise<EnqueueOutcome> {
   const landing = await doneTaskLandingWork(tx, ownerId, taskId);
   if (!landing.work) {
@@ -799,7 +885,29 @@ export async function enqueueForDoneTask(
   const queued = await queueLandingForWork(tx, {
     ownerId, projectId, taskId, codebase, session, line: first.line,
   });
-  if (queued === null) return { enqueued: false, reason: 'ALREADY_QUEUED', projectId };
+  if (queued === null) {
+    // The explicit reopen was already answered by an existing generation; do not let its marker
+    // leak into a later, unrelated DONE.
+    await tx.taskReopenIntent.deleteMany({ where: { taskId } });
+    return { enqueued: false, reason: 'ALREADY_QUEUED', projectId };
+  }
+
+  // A task_reopen followed by DONE is a new landing generation, not a retry of the failed row.
+  // Still, the older task landing cards are the same H1 items: keep them OPEN, point them at this
+  // generation, and retain the actor that wrote this DONE in the same transaction as the queue.
+  const reopenIntent = await tx.taskReopenIntent.findUnique({ where: { taskId } });
+  if (reopenIntent) {
+    if (queued.kind === 'LAND_TASK' && doneSource) {
+      await markEarlierLandingItemsHandling(tx, {
+        taskId,
+        jobId: queued.jobId,
+        source: doneSource,
+      });
+    }
+    // This marker describes one explicit reopen, not a standing task property. Consume it even
+    // when this DONE took the MAIN-line promotion route or had no actor to attribute.
+    await tx.taskReopenIntent.delete({ where: { taskId } });
+  }
 
   const alsoQueuedTaskIds = onTheStartingBeat
     ? await backfillFinishedCodeTasks(tx, {
@@ -816,6 +924,41 @@ export async function enqueueForDoneTask(
       alsoQueuedTaskIds,
     }
     : { enqueued: true, kind: 'LAND_TASK', jobId: queued.jobId, projectId, alsoQueuedTaskIds };
+}
+
+/** Mark the OPEN integration cards for an earlier LAND_TASK generation as H1 handling. */
+async function markEarlierLandingItemsHandling(
+  tx: Prisma.TransactionClient,
+  input: { taskId: string; jobId: string; source: DoneTaskSource },
+): Promise<void> {
+  const job = await tx.projectIntegrationJob.findUnique({
+    where: { id: input.jobId },
+    select: { generation: true },
+  });
+  if (!job) return;
+
+  const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT item."id"
+      FROM "project_open_item" item
+      JOIN "project_integration_job" failed
+        ON failed."id" = item."integration_job_id"
+     WHERE item."task_id" = ${input.taskId}::uuid
+       AND item."state" = 'OPEN'
+       AND item."kind" IN (${Prisma.join(INTEGRATION_ITEM_KINDS.map((kind) => Prisma.sql`${kind}`))})
+       AND item."assignee" = ${'userId' in input.source ? 'OWNER' : 'COORDINATOR'}
+       AND failed."kind" = 'LAND_TASK'
+       AND failed."task_id" = ${input.taskId}::uuid
+       AND failed."generation" < ${job.generation}
+     ORDER BY item."created_at", item."id"`);
+  if (rows.length === 0) return;
+
+  const handling: OpenItemHandlingStart = {
+    jobId: input.jobId,
+    sessionId: 'sessionId' in input.source ? input.source.sessionId : null,
+    userId: 'userId' in input.source ? input.source.userId : null,
+    reason: REOPEN_LANDING_HANDLING_REASON,
+  };
+  await markOpenItemsHandling(tx, rows.map((row) => row.id), handling);
 }
 
 interface CodebaseForJob {
@@ -906,6 +1049,8 @@ async function queueLandTask(
     idempotencyKey?: string;
     /** Set only for the generation `integration_retry` asked for (J-T1b, migration 0344). */
     retry?: LandingRetryRequest;
+    /** Set only for the generation `integration_skip_merge_check` asked for (0393). */
+    skipMergeCheck?: LandingSkipMergeCheck;
   },
 ): Promise<string | null> {
   const inflight = await tx.projectIntegrationJob.count({
@@ -949,14 +1094,47 @@ async function queueLandTask(
             retryOfJobId: input.retry.ofJobId,
             retryFailureClass: input.retry.failureClass,
             retryReason: input.retry.reason,
-            retryRequestedBySessionId: input.retry.requestedBySessionId,
+            retryRequestedBySessionId: input.retry.requestedBySessionId ?? null,
+            retryRequestedByUserId: input.retry.requestedByUserId ?? null,
+          }
+        : {}),
+      // All four together or none of them: 0393's CHECK refuses a skip whose reason or approver is
+      // missing, which is what keeps "the check did not run" from ever being written without the two
+      // facts that make it a decision rather than an omission.
+      ...(input.skipMergeCheck
+        ? {
+            skipMergeCheck: true,
+            skipReason: input.skipMergeCheck.reason,
+            skipApprovedByUserId: input.skipMergeCheck.approvedByUserId,
+            skipApprovalId: input.skipMergeCheck.approvalId ?? null,
           }
         : {}),
     }],
     skipDuplicates: true,
     select: { id: true },
   });
+  // Wake the machine that will run it, from this transaction (see notifyRunnerWakeOnCommit): a
+  // landing queued by a DONE otherwise sits until that runner's next 30s heartbeat before it even
+  // starts — the floor a Merge press had until sessions.service woke its runner, on the path that
+  // runs for every task the platform completes. Only when a row was really written: a duplicate
+  // (`skipDuplicates`) means the generation is already queued and already someone's to run.
+  if (created[0]?.id) await notifyRunnerWakeOnCommit(tx, await jobRunnerId(tx, input.session.id));
   return created[0]?.id ?? null;
+}
+
+/**
+ * The runner whose heartbeat carries a queued job: the one the job's session checkout lives on.
+ * integration-job-relay.ts#claimOne joins exactly this path — `project_integration_job.session_id`
+ * → `session.workspace_id` → `workspace.runner_id` — so a wake for anybody else would nudge a
+ * machine that cannot claim the job, and the job would wait out its tick regardless.
+ */
+async function jobRunnerId(tx: Prisma.TransactionClient, sessionId: string | null): Promise<string | null> {
+  if (!sessionId) return null;
+  const row = await tx.session.findUnique({
+    where: { id: sessionId },
+    select: { workspace: { select: { runnerId: true } } },
+  });
+  return row?.workspace?.runnerId ?? null;
 }
 
 /**
@@ -1198,12 +1376,16 @@ export async function queuePromotionJob(
             retryOfJobId: input.retry.ofJobId,
             retryFailureClass: input.retry.failureClass,
             retryReason: input.retry.reason,
-            retryRequestedBySessionId: input.retry.requestedBySessionId,
+            retryRequestedBySessionId: input.retry.requestedBySessionId ?? null,
+            retryRequestedByUserId: input.retry.requestedByUserId ?? null,
           }
         : {}),
     }],
     skipDuplicates: true,
     select: { id: true },
   });
+  // As for a landing: the runner that will run this check (or landing) is woken when this
+  // transaction commits, rather than up to 30s from now on its heartbeat.
+  if (created?.id) await notifyRunnerWakeOnCommit(tx, await jobRunnerId(tx, input.promotion.sessionId));
   return created?.id ?? jobId;
 }

@@ -211,6 +211,66 @@ gzip 572,612 B。
 第 2 条 → 「合并 TasksView 的两个独立轮询」那一类清理(或单独一条),改动只有把那个 `guard` 提到 fetch 之前。
 **只要去掉多余的 2 次,冷启动解压下行就从 13.2 MiB 掉到 4.4 MiB。**
 
+### 2.3 改后:`?view=open` 单飞 + 条件请求(2026-10-06)—— `实测(模拟器)`
+
+**环境**:iPhone 17 Pro 模拟器 / iOS 26.5,Debug;宿主同 §1.5 那台 Mac mini,但已升到 macOS 27.0.1 / Xcode 27.0;
+生产账号,**Open 视图此时只有 608 行**(解压后 1.61 MB,不再是 §1.2 的 2,136 行 / 4.39 MiB —— 字节数与 §2.1 不可直接比,
+只比"次数和时序")。**方法**:§9.1 的临时打点(`ORBIT_PERF=1`,`APIClient` 出口记每个请求的起止、状态码、字节、
+是否带 `If-None-Match`),把改前 `7c186a662^` 和三个提交各自构建一份,每份冷启动 3 次。打点测完已撤。
+
+| 构建 | 首份列表落地**之前**发出的 `?view=open` | 三次冷启动的实际形状 | 尾随那一发 |
+| --- | --- | --- | --- |
+| 改前 `7c186a662^` | **3 / 3 / 3**(并发,三发的起点相差 0.59–0.66 s) | 三发耗时区间重叠 —— 与 §2.2 相同 | — |
+| `7c186a662`(只改了分组) | 3 / 3 / 3(起点相差 0.45–0.54 s) | 同上,这个提交不碰网络 | — |
+| **`c0a5cac54`(单飞)** | **1 / 1 / 1** | 先 1 发;**它回来之后**才发 1 发尾随(间隔 0.04–0.17 s),从不并发 | 200(当时还不带条件) |
+| **`56881d2f5`(条件请求)** | **1 / 1 / 1** | 同上 | **带 `If-None-Match`;3 次里 1 次回 304 / 0 B**,另 2 次列表在两发之间变了,回 200 |
+
+- 单飞落地后,冷启动的**并发**整包拉取从 3 发变成 1 发,尾随那发与第一发串行。按今天 608 行的账号算,
+  首份落地前的解压下行从 3 × 1.62 MB 掉到 1 × 1.61 MB;尾随那发命中 304 时为 0 B。
+- **304 能不能命中取决于账号此刻静不静**。这次测量时账号上一直有会话在跑,两发之间列表常常变了,
+  所以尾随那发只有 1/3 回了 304。提交说明里"尾随那发回 304"是安静账号下的结果,这里如实记成"有时"。
+- 首份列表落地的时刻**没有可见改善**(四个构建的中位都在 3.0–4.8 s):单个 `?view=open` 在这条链路上要 1.0–4.2 s,
+  三次之间的波动比版本之间的差别还大。这一项要靠「session 列表冷启动本地缓存」,不是靠单飞。
+
+> 同日稍早还有一轮(模拟器被另一个会话交替使用,数据有干扰),次数与时序结论相同:改前 / `7c186a662` 每次 3 发并发,
+> `c0a5cac54` / `56881d2f5` 每次 1 发 + 1 发尾随。
+
+### 2.4 改后:冷启动快照的读取与解码移出主线程(2026-10-06)—— `实测(模拟器)`
+
+**环境**:与 §2.3 同一台 iPhone 17 Pro 模拟器 / iOS 26.5,Debug 构建,生产账号。快照文件 **765,923 B / 615 行 Open**,
+两次测量用的是**同一个文件**(装新构建不会换 data container 里的快照文件;只有 app 真进一次后台才会重写它,
+本轮测量全程用 `terminate` 杀进程,所以谁都没重写)。**方法**:§9.1 的临时打点(`ORBIT_PERF=1`:fork 用 `sysctl`
+读 `kinfo_proc.kp_proc.p_starttime`,首帧用根视图 `CADisplayLink` 的第一次回调,`LaunchSnapshotStore.load()` 前后各记一行),
+外加 `sample <pid> 5`(1 ms 间隔)数**主线程落在解码里的样本**。打点测完已撤。
+
+| 构建 | 主线程里落在 `load()` 内的样本(1 ms × 5 s 窗口) | fork → 首帧(不挂采样器) |
+| --- | --- | --- |
+| 改前(`a89149bfa`) | **20 / 22 / 22 / 23**(5 次里 4 次采到,另一次的窗口没盖住解码) | 中位 **1,770 ms**(n=10) |
+| **改后** | **0 / 0 / 0 / 0 / 0** | 中位 **1,116 ms**(n=10) |
+
+- 那一次同步解码本身是 **26.0–38.2 ms**(打点直接量的 `load()`),落在 `AppModel.init` 里、首帧之前 —— 样本数 20–23 与它吻合。
+- 改后解码只出现在后台线程(后台线程的 `load()` 样本 23 / 21 / 41 / – / 2,后两次是采样窗口没盖住它)。
+  **主线程那 5 次都是 0。**
+- **fork → 首帧**:改前 1653 / 1664 / 1705 / 1706 / 1711 / 1828 / 1861 / 1872 / 1952 / 2003;改后 1033 / 1052 / 1081 / 1085 /
+  1116 / 1116 / 1132 / 1194 / 1558 / 1975。其中各 4 次是**交替**测的(改前→改后→改前→改后,每腿 2 次,每次装回对应构建),
+  交替那一轮:改前中位 1,866 ms、改后 1,155 ms —— 排除了两轮之间机器状态漂移这个解释。
+- **降幅(≈650 ms)比解码本身(26–38 ms)大一个量级**,所以移走的不是"那 30 毫秒",而是**首帧之前那段同步路径**:
+  改前 `AppModel.init` 在首帧前同步做完"读 + 解码 + adopt(615 行的分组与派生)",改后整段都发生在首帧前后。
+  这次没有单独测"只把 `adopt` 挪走"的变体,所以解码与 adopt 各占这 650 ms 多少没有分开 —— 只能说**这一段整体**离开了首帧前。
+- **行为没变**(任务要求的三条):
+  - 先画上一轮的列表:改后一次实测的顺序是 快照列表 1,104.5 ms 上屏(rows=615)→ 首帧 1,116.0 ms →
+    服务器列表 3,419.7 ms(rows=621);缓存列表比网络答案早约 **2.3 s**。1.6 s 的截图里已经是缓存列表
+    (`Pinned` / `Today` 分区),此刻 `?view=open` 还没回来。
+  - 不出现空列表闪烁:首帧那一刻工作区列表还没进 model,`AgentsView` 走的是 loading 分支(`launchLandingPending`),
+    不是 "No sessions"。
+  - 旧快照不覆盖新网络数据:快照的三块(账号 / 工作区列表 / Open 行)只要被本轮 fetch 答过就不再采用
+    (`LaunchSnapshot.fillIn`);单测 `LaunchSnapshotTests.testFetchedOpenListIsNeverOverwrittenByASnapshotThatArrivesLater`。
+- `persistLaunchSnapshot()`(进后台时的同步编码写盘)**没动**:那一次编码花在离开前台的路上,不在冷启动路径上;
+  异步写反而会在 iOS 挂起进程时被截断(见该函数的注释)。
+
+> 与 §2.0 的 fork → 首帧(572 ms)**不可直接比**:那是 2026-08-21 的构建(当时还没有启动快照)、另一台机器状态。
+> 本节只做同一天、同一模拟器、同一账号、同一快照文件的一次 A/B。
+
 ---
 
 ## 3. 内存
@@ -448,6 +508,24 @@ JSON 的字节数(内存留存量的下界代理)。
 | `/api/runners` `/api/providers` | 焦点 console 刷新时顺带拉的 runner/provider 快照 | `ConsoleModel.swift:738`、`:757` |
 | `/api/tasks/page` `/api/task-lists` | TasksView 的**两个独立**循环(忙 5 s / 闲 15 s) | `TasksView.swift:314`(列表)、`:328`(导航) |
 | `/api/sessions?view=completed` 等 | AgentsView 的 Completed/Trash 4 s 循环(Open 已并入共享快照) | `AgentsView.swift:206` |
+
+### 4.4 改后:Open 列表条件请求(`56881d2f5`,2026-10-06)—— `实测(模拟器)`
+
+**环境与方法**同 §2.3(iPhone 17 Pro 模拟器 / iOS 26.5,Debug,生产账号 608 行,临时打点已撤)。统计的是冷启动后
+约 70 s 内、停在列表页(含 20 s 静置 + 12 s 滑动)的全部 `?view=open`。
+
+| 构建 | `?view=open` 次数 | 带 `If-None-Match` | 回 304 |
+| --- | --- | --- | --- |
+| 改前 `7c186a662^` | 16 | 0 | **0** |
+| `7c186a662` | 18 | 0 | 0 |
+| `c0a5cac54` | 16 | 0 | 0 |
+| **`56881d2f5`** | 19 | **16** | **3(304 / 0 B)** |
+
+- 条件请求**已经在发**:除了冷启动第一发(手上还没有 tag),之后的轮询都带 `If-None-Match`,服务端没变时回 304 / 0 B,
+  客户端跳过解码和 diff。§4.1 的"0/427 命中 304"这一格从此不再成立。
+- 但**在一个有会话正在跑的账号上命中率很低(3/19)**:列表几乎每两次轮询之间都会变;另外 `sessions` 被事件就地改写时
+  客户端会主动清掉 tag(提交说明里的设计,保证 304 只为它命名的那份列表作保),所以连续几次字节数相同的 200 也会出现。
+  空闲账号的命中率要另测;想在忙账号上也省流量,得靠增量读取(`?since=`,已在 main 上后续提交里),不是靠 304。
 
 ---
 
@@ -706,6 +784,59 @@ markdown 解析**。真机 Time Profiler 的主线程占比仍需按 §8 复测�
 「缓存 transcript rows」仍然值得做 —— 上限把**斜率**封住了,缓存要动的是**每帧都全量重建**这件事本身
 (capped 之后 rows 重建仍占流式 turn 的 97.7%)。
 
+### 7.2 session 列表页的主线程(2026-10-06)—— `实测(模拟器)`
+
+上面 §7 是 console 里的流式渲染;这一节是**列表页**(`AgentPanes.body`)本身。改前它每次 body 要把整个账号的 session
+重新分组 5–7 遍,滑动时 List 还会自己反复跑 content builder。三轮优化:`7c186a662`(每次 body 只分组一次)、
+`c0a5cac54`(单飞、时间解析与 id 转换缓存、分组算法)、`56881d2f5`(条件请求,304 时不 adopt 也不 diff)。
+
+**方法**:iPhone 17 Pro 模拟器 / iOS 26.5,Debug,生产账号。主线程用 `sample <pid> <秒> -file`(1 ms 间隔)采,
+再按 `(in Orbit.debug.dylib)` 的调用树统计主线程 inclusive 样本:`AgentPanes.body` = 调用树里含
+`AgentPanes.body.getter`(含其闭包)的最外层样本数之和;忙碌占比 = 1 −(停在 `__CFRunLoopServiceMachPort` 的样本 / 主线程总样本)。
+**不用 `xctrace`**(这台机器上 attach 模拟器进程会卡死不出数据)。"每次 body 的分组耗时"来自临时打点:给
+`projectListing` / `folderListing` / `timeSections` 计时,只记最外层调用,按 `body` 标记切成一次次 pass 求和。
+空闲 = 冷启动进列表页后静置 20 s;滑动 = Appium 在列表上反复上下 swipe 12 s。打点测完已撤。
+
+**第一组:当时的原始测量(2026-10-06 凌晨,Open 视图 ≈ 2.1k 行)。** 原始 `sample` 报告由当时的会话留下,
+本次用同一套统计口径**重新数了一遍**,与提交说明里的数字一致(差几个样本是因为最外层去重的细节):
+
+| 场景 | 改前 | `7c186a662` 之后 | 出处 |
+| --- | --- | --- | --- |
+| 每次 body 的主线程耗时 | ≈ 350–400 ms | **≈ 45 ms** → `c0a5cac54` 后分组中位 **15 ms** | `7c186a662` / `c0a5cac54` 提交说明 |
+| 空闲 20 s 内 `AgentPanes.body` 样本 | 943(说明里记 937) | **180**(记 176) | `sample` 原始报告复算 |
+| 空闲 20 s 主线程忙碌占比 | 14.5% | **7.8–7.9%** | 同上 |
+| 滑动 12 s 内 `AgentPanes.body` 样本 | 3,338–3,529(记 3,309) | **78**(记 74) | 同上 |
+| 滑动 12 s 主线程忙碌占比 | 72.2–81.4% | **64.8%** | 同上 |
+
+**第二组:本次重测(2026-10-06 上午,同一台模拟器独占,Open 视图 608 行,宿主 macOS 27.0.1 / Xcode 27.0)。**
+四个构建(改前 `7c186a662^` 和三个提交)各测一遍,条件相同:
+
+| 指标 | 改前 `7c186a662^` | `7c186a662` | `c0a5cac54` | `56881d2f5` |
+| --- | --- | --- | --- | --- |
+| **每次 body 的分组耗时**(中位 / p90,n≈100 次 pass) | **365.5 / 880.8 ms** | **10.3 / 20.0 ms** | **5.4 / 12.7 ms** | **6.0 / 16.7 ms** |
+| 空闲 20 s:`AgentPanes.body` 样本 / 主线程总样本 | **3,918** / 10,233 | **101** / 10,526 | **53** / 11,483 | **108** / 10,580 |
+| 空闲 20 s:主线程忙碌占比 | **49.0%** | 15.4% | **11.5%** | 15.7% |
+| 滑动 12 s:`AgentPanes.body` 样本 / 主线程总样本 | **3,003** / 6,280 | **61** / 5,605 | **27** / 6,029 | **50** / 5,895 |
+| 滑动 12 s:主线程忙碌占比 | **72.9%** | 54.9% | 46.8% | 54.0% |
+| 滑动 12 s 内 Appium 实际完成的 swipe 次数 | 5 | 10 | 11 | 12 |
+
+读这张表要注意四件事:
+
+1. **结论和第一组一致,而且换成 608 行的账号依然成立**:列表 body 的主线程成本降了**一到两个数量级**
+   (分组 365 ms → 6–10 ms;空闲时 body 样本 3,918 → ~100;滑动时 3,003 → 27–61)。第一刀 `7c186a662` 拿走了绝大部分,
+   `c0a5cac54` 再把分组压掉约一半。
+2. **改前那一列的滑动其实被"少算"了**:改前主线程太忙,Appium(WDA 要等主线程)12 s 里只滑成了 5 次,改后 10–12 次。
+   同样 12 s,改后做了两倍多的滑动,主线程忙碌占比仍从 72.9% 降到 47–55%。
+3. **`56881d2f5` 那列比 `c0a5cac54` 略高不是退化**:那个提交不碰列表 body,差别在噪声之内 —— 空闲窗口里有没有赶上
+   一次列表变化(要重新 adopt + 重绘)对样本数影响很大。同日稍早受干扰的那一轮里,`56881d2f5` 的空闲 body 样本是 269、
+   `7c186a662` 是 436,改前 2,479,排序一致、量级一致。
+4. **`sample` 的样本数不等于墙钟毫秒**:目标进程很忙时 `sample` 自己会被拖慢(同日稍早一轮里,一份"12 s"的报告有 40,889 个
+   主线程样本),所以跨报告比较请用**占比**或同一行里的相对量,不要拿样本绝对数直接换算成 ms。
+
+**剩下的主线程忙碌不在列表 body 里**:改后空闲时主线程仍有 11–16% 在忙,滑动时 47–55%,`AgentPanes.body` 只占其中很小一块
+(空闲时 53–108 / 1,324–1,657 个忙碌样本)。剩下的是 SwiftUI/UIKit 自身的布局与渲染、以及每次轮询回来的 adopt —— 后者在
+304 命中时会被跳过(§4.4),但忙账号上很少命中。
+
 ---
 
 ## 8. 仍未测到的项与补测步骤
@@ -774,6 +905,7 @@ docker run --rm -e ORBIT_PERF=1 -v "$PWD:/src" -w /src/src/macos/OrbitKit swift:
 | 进程 fork 时刻 | 任意 | `sysctl` 读 `kinfo_proc.kp_proc.p_starttime`(**别用 `main()` 起点**,会漏掉 dyld) |
 | 首帧 | `OrbitiOSApp` 根视图 `.onAppear` | `CADisplayLink` 的**第一次**回调。`CATransaction.setCompletionBlock` 会被 SwiftUI 在同一次 commit 里覆盖掉,实测拿不到 |
 | 列表有内容 | `AppModel.applySessionSnapshot` 首次 `!list.isEmpty` | 同上,再挂一次 `CADisplayLink` |
+| 快照的读取与解码 | `LaunchSnapshotStore.load()` 前后(冷启动时由 `AppModel.restoreLaunchSnapshot` 调起) | 两行的时间戳之差;要看它落在哪个线程,同时跑 `sample <pid> 5` 数样本(§2.4) |
 | 每个请求的解压字节 | `APIClient.rawSend` 的完成回调 | `data.count`(URLSession 已经解过 gzip 了) |
 | 每个请求的线上字节 | 给 `URLSession.orbitREST` 装一个 `URLSessionTaskDelegate` | `URLSessionTaskMetrics` 的 `countOfResponseBodyBytesReceived` vs `…AfterDecoding` |
 | `?view=open` 的调用来源 | `AppModel.swift:453` / `:505` / `:660`、`AgentsModel.swift:187` 各打一行 | 直接看打点顺序 |
@@ -786,15 +918,21 @@ docker run --rm -e ORBIT_PERF=1 -v "$PWD:/src" -w /src/src/macos/OrbitKit swift:
   `xcrun simctl get_app_container <dev> io.orbitd.app data` 去读,稳定可靠。
 - **这台 Mac 的 `xcode-select` 指向 CommandLineTools**,`xcodebuild`/`simctl` 直接跑会报错。
   不用 `sudo xcode-select -s`,加环境变量即可:`export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`。
+- **(2026-10-06 补)升到 Xcode 27.0 之后,`-destination 'platform=iOS Simulator,name=iPhone 17 Pro'` 按名字匹配会失败**,
+  改用 `id=<UDID>`。模拟器构建保持默认签名(别加 `CODE_SIGNING_ALLOWED=NO`,否则 Keychain 写不进,登录态留不住)。
+- **(2026-10-06 补)主线程采样用 `sample <pid> <秒> -file out.txt`,不要用 `xcrun xctrace record --attach`**(这台机器上会卡死)。
+  模拟器 app 就是宿主上的普通进程,统计口径见 §7.2。用 Appium 驱动滑动时:先建会话(`autoLaunch=false`)再用
+  `simctl launch --terminate-running-process` 拉起 app,之后别调 `activate_app`(会重启 app、pid 变掉);
+  把 `waitForIdleTimeout` / `animationCoolOffTimeout` 设成 0,否则主线程越忙 swipe 越少。
 
 跑法(以冷启动为例):
 
 ```bash
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 cd src/ios && xcodegen generate
-xcodebuild -scheme Orbit -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
-  -derivedDataPath /tmp/orbit-dd build
 S=<simulator-udid>
+xcodebuild -scheme Orbit -destination "platform=iOS Simulator,id=$S" \
+  -derivedDataPath /tmp/orbit-dd build
 xcrun simctl install $S /tmp/orbit-dd/Build/Products/Debug-iphonesimulator/Orbit.app
 DC=$(xcrun simctl get_app_container $S io.orbitd.app data)
 for i in 1 2 3 4 5; do
@@ -819,9 +957,11 @@ done
 | 图片缩略图降采样 | 源图 p50 1179×962 / 180 KB 文件;一次真实下载 1.17 MB;**实测:即使只显示 300×360,常驻的仍是全分辨率位图**(1179×2556 的截屏每张 12 MB) | §3.2、**§3.2.1** |
 | ~~收紧常驻 console 数 / items 上限~~ | **已做(2026-08-24)**:`trimOlder` 上限 1,000 items(slack 200)。快照 6.90 → 1.53 MB、rows 重建 4.59 → 1.00 ms,两者**不再随会话长度增长**;模拟器实测裁剪→翻回来 `holes=0 dup=0`。**capacity 保持 12 未改**,理由见 §3.3.2 | §3.3.2、**§6.1**、**§7.1** |
 | session 列表冷启动本地缓存 | **首帧后还有 2,225 ms 空列表(中位,模拟器);进程 fork → 列表有内容 2,790 ms**;冷启前 3 s 拉 3 次 `?view=open` = 线上 1.13 MB / **解压 13.16 MiB**,占 98% | **§2.0**、§2.1 |
-| **去掉冷启动重复的 2 次 `?view=open`** | **三个调用方并发各拉一次且无在途去重**:`startPolling` 首 tick(`AppModel.swift:453`)、控制面 `.connected`(`:505`)、`AgentsView` 首次加载(`AgentsView.swift:202`,那个 `guard view != .open` 在 fetch 之后)。去掉后冷启动解压下行 13.2 MiB → 4.4 MiB | **§2.2** |
+| ~~快照在主线程同步解码~~ | **已做(2026-10-06)**:`LaunchSnapshotStore.load()` 从 `AppModel.init` 的同步调用改成后台读、主线程 adopt;主线程解码样本 **20–23 → 0**,fork → 首帧中位 **1,770 → 1,116 ms**(n=10,其中各 4 次交替测);缓存列表仍比网络答案早 ~2.3 s | **§2.4** |
+| ~~去掉冷启动重复的 2 次 `?view=open`~~ | **已做(`c0a5cac54` 单飞 + `56881d2f5` 条件请求,2026-10-06 模拟器实测)**:首份列表落地前从 **3 发并发 → 1 发**,之后串行 1 发尾随(带 `If-None-Match`,账号静时回 304 / 0 B,实测 1/3 命中)。首份落地时刻没有改善,那要靠冷启动本地缓存。改前:三个调用方并发各拉一次且无在途去重(§2.2) | **§2.3**、§2.2 |
 | 后台暂停轮询 | `.background` 只 persist,不停任何循环;`UIBackgroundModes` 只有 remote-notification。**实测:后台 2 分钟 0 请求,但那是系统把进程冻住了(1 Hz 心跳线程也停了),不是代码停了 —— 回前台瞬间 pollTick 早于 `.active` 就开跑,并立刻拉 2 次 `?view=open` = 9.2 MiB** | **§5.0–5.1** |
-| 降低 4 s 全量列表轮询成本 | 单次 **线上 377 KB / 解压 4.39 MiB(×12.2)**、0/427 命中 304、2 分钟 26–35 次 = 9–13 MB 线上;静置 2 分钟 footprint 因此从 44.5 MB 漂到 52.3 MB | §4、**§1.3**、**§3.1** |
+| 降低 4 s 全量列表轮询成本 | **部分已做(2026-10-06)**:`56881d2f5` 让轮询带 `If-None-Match`,没变时 304 / 0 B 且跳过 adopt/diff —— 但忙账号上实测只命中 3/19(§4.4);列表 body 的主线程成本已由 `7c186a662` / `c0a5cac54` 降下来(见下一行)。改前:单次 **线上 377 KB / 解压 4.39 MiB(×12.2)**、0/427 命中 304、2 分钟 26–35 次 = 9–13 MB 线上;静置 2 分钟 footprint 因此从 44.5 MB 漂到 52.3 MB | **§4.4**、§4、§1.3、§3.1 |
+| ~~session 列表 body 每次全量重新分组~~ | **已做(`7c186a662` + `c0a5cac54`,2026-10-06 模拟器实测)**:每次 body 分组 **≈ 350–400 ms → ≈ 45 ms → 中位 15 ms**(2.1k 行);608 行账号重测 365.5 → 10.3 → 5.4 ms。空闲 20 s body 样本 937 → 176、忙碌 14.5% → 7.9%;滑动 12 s body 样本 3,309 → 74、忙碌 72–81% → 65%。剩下的主线程忙碌不在列表 body 里 | **§7.2** |
 | 合并 TasksView 两个轮询 | 两个独立循环,忙 5 s / 闲 15 s;2 分钟各 2 次,≈ 22 KB | §4.3 |
 | 减少 transcript 快照写放大 | ~~长会话单次 save 6.8 MB~~ → **items 上限之后单次 1.53 MB / ≈ 23 MB/分钟**(§6.1)。剩下的是**写入节奏和增量**的问题,不再是单次体积。**改前基准用 6,897,762 B,不是 §6 的 6,806,406** —— 原因见 §6.2 | §6、**§6.1**、**§6.2** |
 | 给 seen 设上界 | **只占快照 0.4–0.6%(41 KB / 6.8 MB)—— 优先级应下调** | §6 |

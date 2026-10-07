@@ -206,6 +206,12 @@ async function swipe(row: HTMLElement, dx: number): Promise<void> {
 
 const labels = (row: HTMLElement, side: 'leading' | 'trailing'): (string | null)[] =>
   [...row.querySelectorAll(`.session-swipe-actions.${side} button`)].map((b) => b.getAttribute('aria-label'));
+// The title under each circle, as iOS draws it (`CircleSwipeRow`), read so a button that drops its
+// label is caught the same way a button that drops its aria-label is.
+const titles = (row: HTMLElement, side: 'leading' | 'trailing'): (string | null)[] =>
+  [...row.querySelectorAll(`.session-swipe-actions.${side} button .session-swipe-title`)].map(
+    (t) => t.textContent,
+  );
 const offset = (row: HTMLElement): string => row.querySelector<HTMLElement>('.session-swipe')!.style.transform;
 const tap = async (el: Element): Promise<void> => {
   await act(async () => {
@@ -217,6 +223,7 @@ describe('session row swipes on a phone', () => {
   it('swiping right exposes Complete then Pin, and Complete completes the session', async () => {
     const row = await mountRow();
     expect(labels(row, 'leading')).toEqual(['Complete', 'Pin']);
+    expect(titles(row, 'leading')).toEqual(['Complete', 'Pin']);
     expect(labels(row, 'trailing')).toEqual(['Share', 'Move', 'Delete']);
     expect(offset(row), 'a row at rest is not slid').toBe('');
 
@@ -235,6 +242,7 @@ describe('session row swipes on a phone', () => {
     await swipe(row, -120);
     expect(offset(row)).toBe('translateX(-216px)');
     expect(row.querySelector<HTMLElement>('.session-swipe-actions.trailing')!.style.width).toBe('216px');
+    expect(titles(row, 'trailing')).toEqual(['Share', 'Move', 'Delete']);
 
     await tap(row.querySelector('[aria-label="Delete"]')!);
     await waitForUi(() => expect(deleteMock).toHaveBeenCalledWith(SESSION_PUBLIC));

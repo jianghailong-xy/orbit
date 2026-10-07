@@ -1,0 +1,348 @@
+{
+  "stats": {
+    "startTime": "2026-10-06T06:02:30.319Z",
+    "duration": 26655.855,
+    "expected": 16,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1656
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--failure-card.png",
+          "sha256": "75b9c1616b4c5b3564d84fb899212ed3ec25dfacc7cdbc51af0a9e204f458d5a"
+        },
+        {
+          "file": "chromium-light-desktop--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--attention-link.json",
+          "sha256": "8351f87eb299d99a767a74bd2453751ed6647c773c018d62699e839369103cc4"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1457
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--failure-card.png",
+          "sha256": "75b9c1616b4c5b3564d84fb899212ed3ec25dfacc7cdbc51af0a9e204f458d5a"
+        },
+        {
+          "file": "chromium-light-desktop--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--attention-link.json",
+          "sha256": "5a4c2ce753ee562f1b3bc9238032432109b54d7fa14250ac88ae47dca5dabfcd"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1498
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--failure-card.png",
+          "sha256": "b3d7fc5d6d425a8ceec2ef1b95fd1d2fff8937572002cfac87fa1d5a1d00f576"
+        },
+        {
+          "file": "chromium-light-phone--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--attention-link.json",
+          "sha256": "fd8718757f962c81251ba942b869c156cab71b090885ecf1dd9661576ee46733"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1396
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--failure-card.png",
+          "sha256": "b3d7fc5d6d425a8ceec2ef1b95fd1d2fff8937572002cfac87fa1d5a1d00f576"
+        },
+        {
+          "file": "chromium-light-phone--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--attention-link.json",
+          "sha256": "63e51b0fe1eca1cfe04c7546a776f427de28babf504ee48f5cfe099fb53596e6"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1503
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--failure-card.png",
+          "sha256": "764223e9622365151b0df9ea78d4f41e863c6530d5a78e342529db0c13d07201"
+        },
+        {
+          "file": "chromium-dark-desktop--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--attention-link.json",
+          "sha256": "8351f87eb299d99a767a74bd2453751ed6647c773c018d62699e839369103cc4"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1620
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--failure-card.png",
+          "sha256": "764223e9622365151b0df9ea78d4f41e863c6530d5a78e342529db0c13d07201"
+        },
+        {
+          "file": "chromium-dark-desktop--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--attention-link.json",
+          "sha256": "5a4c2ce753ee562f1b3bc9238032432109b54d7fa14250ac88ae47dca5dabfcd"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1531
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--failure-card.png",
+          "sha256": "ef4fc8c2488e9957434133adc3b8984bf76ebc4c489da544e8005b6594d4417d"
+        },
+        {
+          "file": "chromium-dark-phone--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--attention-link.json",
+          "sha256": "fd8718757f962c81251ba942b869c156cab71b090885ecf1dd9661576ee46733"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1511
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--failure-card.png",
+          "sha256": "ef4fc8c2488e9957434133adc3b8984bf76ebc4c489da544e8005b6594d4417d"
+        },
+        {
+          "file": "chromium-dark-phone--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--attention-link.json",
+          "sha256": "63e51b0fe1eca1cfe04c7546a776f427de28babf504ee48f5cfe099fb53596e6"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1508
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--failure-card.png",
+          "sha256": "011e4430645dc8ddad12fcbb2ab58525fc07259fb0bb2909d2361c941c297eec"
+        },
+        {
+          "file": "webkit-light-desktop--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--attention-link.json",
+          "sha256": "38330b4f26b87c1c7ae992471c9a496b4a816e944237ff80bd13bc08ced96914"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1332
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--failure-card.png",
+          "sha256": "011e4430645dc8ddad12fcbb2ab58525fc07259fb0bb2909d2361c941c297eec"
+        },
+        {
+          "file": "webkit-light-desktop--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--attention-link.json",
+          "sha256": "40798ea75931b90345b4c24b9ef2b84e87a36a26e35065776c924c1fe09cce61"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1289
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--failure-card.png",
+          "sha256": "2391a8b07af0e0de55976a685d4f93dbf7cdb0faf6fbf66fc89cf8c16cf1b061"
+        },
+        {
+          "file": "webkit-light-phone--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--attention-link.json",
+          "sha256": "213bb8d67a171a2bb6d8f0943e8c6d7cb74af81bd12f0d4b96dc1fb147cdc34d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1290
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--failure-card.png",
+          "sha256": "2391a8b07af0e0de55976a685d4f93dbf7cdb0faf6fbf66fc89cf8c16cf1b061"
+        },
+        {
+          "file": "webkit-light-phone--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--attention-link.json",
+          "sha256": "0aaf70d334ebed60d2b1d52f25e6fd3dfca6a731e80005810a671de5542eea70"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1300
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--failure-card.png",
+          "sha256": "7d46545776447265012682d5eae4cff9130faa5c58229e1a866d11ab523287d9"
+        },
+        {
+          "file": "webkit-dark-desktop--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--attention-link.json",
+          "sha256": "38330b4f26b87c1c7ae992471c9a496b4a816e944237ff80bd13bc08ced96914"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1383
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--failure-card.png",
+          "sha256": "7d46545776447265012682d5eae4cff9130faa5c58229e1a866d11ab523287d9"
+        },
+        {
+          "file": "webkit-dark-desktop--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--attention-link.json",
+          "sha256": "40798ea75931b90345b4c24b9ef2b84e87a36a26e35065776c924c1fe09cce61"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1252
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--failure-card.png",
+          "sha256": "94d17f8577398f7f216c7a5eb510be0eb1258bc3a5b9c0d9d7ce945b6d428e13"
+        },
+        {
+          "file": "webkit-dark-phone--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--attention-link.json",
+          "sha256": "213bb8d67a171a2bb6d8f0943e8c6d7cb74af81bd12f0d4b96dc1fb147cdc34d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1304
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--failure-card.png",
+          "sha256": "94d17f8577398f7f216c7a5eb510be0eb1258bc3a5b9c0d9d7ce945b6d428e13"
+        },
+        {
+          "file": "webkit-dark-phone--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--attention-link.json",
+          "sha256": "0aaf70d334ebed60d2b1d52f25e6fd3dfca6a731e80005810a671de5542eea70"
+        }
+      ]
+    }
+  ]
+}

@@ -151,11 +151,23 @@ fi
 DEPLOY_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 export ORBIT_SOURCE_SHA="${ORBIT_SOURCE_SHA:-$DEPLOY_SHA}"
 
+# The web image now serving publishes the runner release the runners run today. Hand it to the build,
+# so the image built next keeps that release downloadable at /dl/previous/ — the release the control
+# plane holds runners at during a staged rollout and rolls them back to (src/web/Dockerfile). By a
+# tag, because a build can start FROM a local image only by name, never by its id.
+PREVIOUS_RELEASE_ARG=""
+SERVING_WEB_IMAGE="$(docker inspect --format '{{.Image}}' orbit-web 2>/dev/null || true)"
+if [ -n "$SERVING_WEB_IMAGE" ] && docker tag "$SERVING_WEB_IMAGE" orbit-web:previous-release; then
+  PREVIOUS_RELEASE_ARG="PREVIOUS_RELEASE_IMAGE=orbit-web:previous-release"
+else
+  echo "warning: no orbit-web image to carry the runner release over from — the new web image keeps no previous one" >&2
+fi
+
 echo "==> Building images from source (apiserver, web)"
 if [ "$NO_CACHE" -eq 1 ]; then
-  $DC build --no-cache apiserver web
+  $DC build --no-cache ${PREVIOUS_RELEASE_ARG:+--build-arg "$PREVIOUS_RELEASE_ARG"} apiserver web
 else
-  $DC build apiserver web
+  $DC build ${PREVIOUS_RELEASE_ARG:+--build-arg "$PREVIOUS_RELEASE_ARG"} apiserver web
 fi
 
 # `up -d` only recreates containers whose image or config changed. The locally

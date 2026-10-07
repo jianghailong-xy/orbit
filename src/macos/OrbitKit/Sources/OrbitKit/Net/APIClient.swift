@@ -65,17 +65,41 @@ public final class APIClient: @unchecked Sendable {
 
     public func login(email: String, password: String) async throws -> LoginResponse {
         let res: LoginResponse = try await post("auth/login", body: LoginRequest(email: email, password: password))
+        try keepSession(res)
+        return res
+    }
+
+    /// The ways this server signs people in (`GET /auth/methods`, docs/google-sign-in-design.md §6).
+    /// A server from before Google sign-in has no such route and answers 404: password only.
+    public func signInMethods() async throws -> SignInMethods {
+        do {
+            return try await get("auth/methods")
+        } catch APIError.http(404, _) {
+            return .passwordOnly
+        }
+    }
+
+    /// Trade the ticket a Google sign-in brought back, with the verifier only this app holds, for a
+    /// session (`POST /auth/google/exchange`, §4.3). The answer is `login`'s, and kept the same way.
+    public func exchangeGoogleTicket(_ ticket: String, codeVerifier: String) async throws -> LoginResponse {
+        let res: LoginResponse = try await post("auth/google/exchange",
+                                                body: GoogleExchangeRequest(ticket: ticket, codeVerifier: codeVerifier))
+        try keepSession(res)
+        return res
+    }
+
+    /// Store a new session's tokens, then read them back: the store can drop a write without saying
+    /// so (see `TokenNotStoredError`), and half a session — an access token with no refresh token —
+    /// would fail later just as silently.
+    private func keepSession(_ res: LoginResponse) throws {
         tokenStore.setToken(res.accessToken, for: baseURL)
         tokenStore.setRefreshToken(res.refreshToken, for: baseURL)
-        // Read back: the store can drop a write without saying so (see `TokenNotStoredError`), and
-        // half a session — an access token with no refresh token — would fail later just as silently.
         guard tokenStore.token(for: baseURL) == res.accessToken,
               tokenStore.refreshToken(for: baseURL) == res.refreshToken else {
             tokenStore.setToken(nil, for: baseURL)
             tokenStore.setRefreshToken(nil, for: baseURL)
             throw TokenNotStoredError()
         }
-        return res
     }
 
     /// Revoke a refresh token server-side on sign-out. Best-effort (`try?`); takes the token
@@ -136,26 +160,63 @@ public final class APIClient: @unchecked Sendable {
 
     /// List one canonical lifecycle scope. During a rolling upgrade, retry the legacy query spelling
     /// if the new one is rejected. Older servers silently treat unknown Completed/Trash values as
-    /// Open, so a mismatched (or empty, for those two scopes) response also triggers the fallback.
+    /// Open, so a response holding rows of another scope also triggers the fallback. An empty one is
+    /// an answer: a project with nothing completed is common, and asking again under the old
+    /// spelling only doubled that read, on every poll. (A pre-Completed server with nothing Open
+    /// answers an empty list for Completed too, and keeps it.)
     public func listSessions(view: SessionView = .open,
-                             runnerId: String? = nil) async throws -> [Session] {
+                             runnerId: String? = nil, projectId: String? = nil) async throws -> [Session] {
         do {
-            let sessions = try await listSessions(queryValue: view.queryValue, runnerId: runnerId)
-            if view == .open || (!sessions.isEmpty && sessions.allSatisfy({
-                $0.effectiveLifecycleState == view.lifecycleState
-            })) {
+            let sessions = try await listSessions(queryValue: view.queryValue, runnerId: runnerId, projectId: projectId)
+            if view == .open || sessions.allSatisfy({ $0.effectiveLifecycleState == view.lifecycleState }) {
                 return sessions
             }
         } catch APIError.http(let status, _) where [400, 404, 422].contains(status) {
             // Fall through to the compatibility request.
         }
-        return try await listSessions(queryValue: view.legacyQueryValue, runnerId: runnerId)
+        return try await listSessions(queryValue: view.legacyQueryValue, runnerId: runnerId, projectId: projectId)
     }
 
-    private func listSessions(queryValue: String, runnerId: String?) async throws -> [Session] {
+    private func listSessions(queryValue: String, runnerId: String?, projectId: String?) async throws -> [Session] {
         var q = [URLQueryItem(name: "view", value: queryValue)]
         if let runnerId { q.append(URLQueryItem(name: "runnerId", value: runnerId)) }
+        if let projectId { q.append(URLQueryItem(name: "projectId", value: projectId)) }
         return try await get("sessions", query: q)
+    }
+
+    /// The Open list, asked against the tag of the copy already held: nil when the server answers
+    /// 304 — unchanged — otherwise the list and its new tag. It is the app's largest response, and
+    /// most polls of a quiet account get it back byte for byte. A server that turns the query down
+    /// gets the compatible unconditional read, with no tag.
+    public func listOpenSessions(ifNoneMatch etag: String?) async throws -> (sessions: [Session], etag: String?)? {
+        var req = try makeRequest("sessions", method: "GET",
+                                  query: [URLQueryItem(name: "view", value: SessionView.open.queryValue)],
+                                  body: Optional<Empty>.none)
+        if let etag { req.setValue(etag, forHTTPHeaderField: "If-None-Match") }
+        do {
+            let (data, response) = try await sendResponse(req)
+            if response.statusCode == 304 { return nil }
+            return (try decoder.decode([Session].self, from: data), response.value(forHTTPHeaderField: "ETag"))
+        } catch APIError.http(let status, _) where [400, 404, 422].contains(status) {
+            return (try await listSessions(view: .open), nil)
+        }
+    }
+
+    /// The Open list as a delta against `cursor` — what changed since the list the server sent
+    /// under it (`OpenListRead`). An empty cursor asks for the whole list and a first cursor. While
+    /// anything runs the list changes between almost every two polls, so the 304 above rarely
+    /// helps; this sends the rows that moved instead of all of them. nil when the server turns the
+    /// query down, which the caller answers with the conditional full read.
+    public func listOpenSessions(since cursor: String) async throws -> OpenListRead? {
+        let req = try makeRequest("sessions", method: "GET",
+                                  query: [URLQueryItem(name: "view", value: SessionView.open.queryValue),
+                                          URLQueryItem(name: "since", value: cursor)],
+                                  body: Optional<Empty>.none)
+        do {
+            return try OpenListRead.decode(try await send(req), with: decoder)
+        } catch APIError.http(let status, _) where [400, 404, 422].contains(status) {
+            return nil
+        }
     }
 
     public func session(_ id: String) async throws -> Session { try await get("sessions/\(id)") }
@@ -335,8 +396,10 @@ public final class APIClient: @unchecked Sendable {
     /// in the owner's name (docs/session-request-reply-contract.md §2.1). No key is sent: the server
     /// derives one from the failed message, so a second press — a double tap, a response lost and sent
     /// again — is the turn already queued (criterion 19). Web parity: `resendSessionRetryMessage`.
-    public func resendRetryMessage(sessionID: String) async throws -> TurnAccepted {
-        try await post("sessions/\(sessionID)/retry-message", body: RetryResendRequest())
+    public func resendRetryMessage(sessionID: String, provider: String? = nil,
+                                   account: String? = nil) async throws -> TurnAccepted {
+        try await post("sessions/\(sessionID)/retry-message",
+                       body: RetryResendRequest(provider: provider, account: account))
     }
 
     /// Turn off / put back the retry a spent quota or a transient provider error armed on this
@@ -428,6 +491,24 @@ public final class APIClient: @unchecked Sendable {
         let result: TurnOffShareLinksResult = try await post("share-links/turn-off",
                                                              body: TurnOffShareLinksRequest(shareLinkIds: ids))
         return result.count
+    }
+
+    // MARK: personal access tokens — listed and revoked here, issued only on the web
+    // (docs/personal-access-token-design.md §6.5, §9)
+
+    /// Every token this account has issued, newest first — Active, Revoked and Expired alike — for
+    /// Settings → Access tokens. Never the token itself: the server keeps only its hash. Web parity:
+    /// `listAccessTokens`.
+    public func accessTokens() async throws -> [AccessToken] {
+        let list: AccessTokenList = try await get("access-tokens")
+        return list.tokens
+    }
+
+    /// Revoke one of this account's tokens at once; anything using it gets a 401 from then on.
+    /// Idempotent. Web parity: `revokeAccessToken`.
+    @discardableResult
+    public func revokeAccessToken(_ id: String) async throws -> RevokedAccessToken {
+        try await delete("access-tokens/\(id)")
     }
 
     // MARK: approvals
@@ -580,6 +661,23 @@ public final class APIClient: @unchecked Sendable {
         try await postRaw("projects/\(projectID)/start", body: body)
     }
 
+    /// Record the project done (`POST /projects/:id/done`): the request the press answers, the seal
+    /// the owner read and the gaps accepted, in one write (`ProjectDone.body`). The owner's own
+    /// credential and no acting session — the door refuses one. A request that was superseded, or a
+    /// seal that moved, is a 409 and nothing is written.
+    public func recordProjectDone(projectID: String,
+                                  _ body: ProjectDoneRequestBody) async throws -> ProjectDoneRecord {
+        try await post("projects/\(projectID)/done", body: body)
+    }
+
+    /// "Not yet…" on the coordinator's request to record the project done: the request is ended and
+    /// the owner's note goes to the coordinator conversation with the card's facts.
+    public func declineDoneRequest(projectID: String, itemID: String,
+                                   note: String) async throws -> ProjectDoneRequestDeclined {
+        try await post("projects/\(projectID)/done-requests/\(itemID)/decline",
+                       body: ProjectDoneDeclineBody(note: note))
+    }
+
     // MARK: a project's owner items — the merge to confirm, and the coordinator's question
 
     /// What this project still owes somebody a decision about, split by who is expected to act
@@ -661,11 +759,36 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("projects/\(projectID)/promotions/\(promotionID)/cancel")
     }
 
+    // MARK: a project's crossings — work asked across its line, answered by its owner
+
+    /// What has been asked about work crossing into or out of this project, in either direction:
+    /// filings, dependencies and moves, whether answered or not (`ProjectCrossings`).
+    public func projectCrossings(projectID: String) async throws -> [ProjectCrossing] {
+        try await get("projects/\(projectID)/handoffs")
+    }
+
+    /// Answer one crossing, from this project's page. The crossing key travels with the answer, so
+    /// one given on a list that changed since it was read is refused rather than recorded against
+    /// another crossing. A yes to a move IS the move: the server moves the task and spends the
+    /// request in the same write, or refuses with nothing written. The owner's own credential —
+    /// the door refuses a personal access token. The answer is not read here: the list the press
+    /// re-reads says what it left, as the browser does.
+    public func decideProjectCrossing(projectID: String, crossing: ProjectCrossing,
+                                      _ decision: ProjectCrossingDecision) async throws {
+        try await postRaw("projects/\(projectID)/handoffs/\(ProjectCrossings.doorID(crossing))/decision",
+                          body: ProjectCrossings.request(crossing, decision))
+    }
+
     // MARK: projects — the index and one project's page
 
     /// `GET /projects`: every project this account owns, newest first; `status` narrows the read.
     public func projects(status: ProjectStatus? = nil) async throws -> [ProjectSummary] {
         try await get("projects", query: status.map { [URLQueryItem(name: "status", value: $0.rawValue)] } ?? [])
+    }
+
+    /// `GET /projects/sidebar`: open projects with the session list's activity and task progress.
+    public func sidebarProjects() async throws -> [ProjectSummary] {
+        try await get("projects/sidebar")
     }
 
     /// `GET /projects/:id`: the project's own record — goal, criteria and what the read says about
@@ -952,9 +1075,12 @@ public final class APIClient: @unchecked Sendable {
     public func wikiSpace(_ id: String) async throws -> WikiSpace {
         try await get("wiki/spaces/\(id)", query: [URLQueryItem(name: "include", value: "usage")])
     }
-    /// `GET /wiki/spaces/:id/entries`: a space's entries of every status, newest recorded first.
-    public func wikiEntries(spaceID: String, limit: Int = 200) async throws -> [WikiEntry] {
-        try await get("wiki/spaces/\(spaceID)/entries", query: [URLQueryItem(name: "limit", value: String(limit))])
+    /// `GET /wiki/spaces/:id/entries`: a space's entries of every status, newest recorded first — of one
+    /// kind when `kind` is given. The server answers 200 at most.
+    public func wikiEntries(spaceID: String, kind: WikiEntryKind? = nil, limit: Int = 200) async throws -> [WikiEntry] {
+        var query = [URLQueryItem(name: "limit", value: String(limit))]
+        if let kind { query.insert(URLQueryItem(name: "kind", value: kind.rawValue), at: 0) }
+        return try await get("wiki/spaces/\(spaceID)/entries", query: query)
     }
     /// `GET /wiki/spaces/:id/timeline`: what changed, newest first.
     public func wikiTimeline(spaceID: String) async throws -> WikiTimeline {
@@ -1212,6 +1338,36 @@ public final class APIClient: @unchecked Sendable {
         return version
     }
 
+    /// The runner for `platformKey`, fetched the way `orbit upgrade` fetches it: the manifest at
+    /// `<instance>/dl/version.json`, then `orbit-<platformKey>.gz` beside it, whose bytes must hash
+    /// to the sha256 the manifest publishes for that platform (`RunnerDownload`). Returns the
+    /// verified `.gz`; every failure is a `RunnerDownloadError`. A manifest with nothing to check
+    /// against stops it before the binary is downloaded at all.
+    public func downloadRunner(platformKey: String) async throws -> Data {
+        let manifestURL = baseURL.appendingPathComponent("dl/version.json")
+        let manifest = try await dlFile(manifestURL)
+        let expected = try RunnerDownload.expectedSHA256(manifest: manifest, platformKey: platformKey,
+                                                         manifestURL: manifestURL)
+        let asset = RunnerDownload.assetName(platformKey: platformKey)
+        let gzip = try await dlFile(baseURL.appendingPathComponent("dl/\(asset)"))
+        try RunnerDownload.verify(gzip, sha256: expected, name: asset)
+        return gzip
+    }
+
+    /// One file under /dl, never from the URL cache: a stale manifest beside a fresh binary would
+    /// fail the digest check for a reason nobody could act on.
+    private func dlFile(_ url: URL) async throws -> Data {
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue(Self.clientHeader, forHTTPHeaderField: "X-Orbit-Client")
+        guard let (data, status) = try? await rawSend(request, cancellationAware: true) else {
+            throw RunnerDownloadError.unreachable(url)
+        }
+        guard status == 200 else { throw RunnerDownloadError.http(url, status: status) }
+        return data
+    }
+
     public func startEngineUpdate(_ id: String) async throws -> RunnerInstallState {
         try await postEmpty("runners/\(id)/engine-update")
     }
@@ -1221,9 +1377,22 @@ public final class APIClient: @unchecked Sendable {
         return try await post("runners/\(runnerID)/install", body: Request())
     }
 
+    /// Install the pinned DeepSeek Harness CLI on a runner (the same relay; engine `dsh`).
+    public func installDsh(_ runnerID: String) async throws -> RunnerInstallState {
+        struct Request: Encodable { let engine = "dsh" }
+        return try await post("runners/\(runnerID)/install", body: Request())
+    }
+
     @discardableResult
     public func refreshRunnerModels(_ id: String) async throws -> RunnerModelRefresh {
         try await postEmpty("runners/\(id)/refresh-models")
+    }
+
+    /// Update Runner Now: the runner runs its release check at once rather than at its next periodic
+    /// one. Refused for a runner that is offline or too old to report its updates.
+    @discardableResult
+    public func requestRunnerSelfUpdate(_ id: String) async throws -> RunnerSelfUpdateRequest {
+        try await postEmpty("runners/\(id)/self-update")
     }
 
     // MARK: engine sign-in relay
@@ -1411,6 +1580,18 @@ public final class APIClient: @unchecked Sendable {
                                           query: query, body: Optional<Empty>.none))
     }
 
+    /// Read the current worktree file, independently of transcript attachments or their caches.
+    /// The server confines the relative path to this session's worktree and bounds the runner read.
+    public func sessionWorktreeFile(sessionID: String, path: String) async throws -> Data {
+        var request = try makeRequest("sessions/\(sessionID)/worktree-file", method: "GET",
+                                      query: [URLQueryItem(name: "path", value: path)],
+                                      body: Optional<Empty>.none)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        request.timeoutInterval = 45
+        return try await send(request, cancellationAware: true)
+    }
+
     // MARK: - request plumbing
 
     /// How far a NAMED run request is resent when no answer comes back, and how long it waits.
@@ -1517,13 +1698,23 @@ public final class APIClient: @unchecked Sendable {
     }
 
     private func send(_ original: URLRequest, cancellationAware: Bool = false) async throws -> Data {
+        try await sendResponse(original, cancellationAware: cancellationAware).data
+    }
+
+    /// `send`, keeping the response for its headers. A 304 is an answer only to a request that asked
+    /// `If-None-Match` itself; anywhere else it stays the error it always was.
+    private func sendResponse(_ original: URLRequest,
+                              cancellationAware: Bool = false) async throws -> (data: Data, response: HTTPURLResponse) {
         var req = original
         var didRefresh = false
         while true {
-            let (data, status) = try await rawSend(req, cancellationAware: cancellationAware)
+            let (data, response) = try await rawResponse(req, cancellationAware: cancellationAware)
+            let status = response.statusCode
             switch status {
             case 200..<300:
-                return data
+                return (data, response)
+            case 304 where req.value(forHTTPHeaderField: "If-None-Match") != nil:
+                return (data, response)
             case 401:
                 // Try one single-flight refresh, then retry the request with the fresh token.
                 // `.unauthorized` (→ re-login) surfaces only if that refresh also fails.
@@ -1547,19 +1738,24 @@ public final class APIClient: @unchecked Sendable {
     /// the 401 refresh-retry) lives in `send`. Page/search calls opt into URLSession's async
     /// cancellation propagation; established non-page calls keep their callback semantics.
     private func rawSend(_ req: URLRequest, cancellationAware: Bool) async throws -> (Data, Int) {
+        let (data, response) = try await rawResponse(req, cancellationAware: cancellationAware)
+        return (data, response.statusCode)
+    }
+
+    private func rawResponse(_ req: URLRequest, cancellationAware: Bool) async throws -> (Data, HTTPURLResponse) {
         if cancellationAware {
             let (data, response) = try await session.data(for: req)
             guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
-            return (data, http.statusCode)
+            return (data, http)
         }
         return try await withCheckedThrowingContinuation {
-            (cont: CheckedContinuation<(Data, Int), Error>) in
+            (cont: CheckedContinuation<(Data, HTTPURLResponse), Error>) in
             let task = session.dataTask(with: req) { data, response, error in
                 if let error { cont.resume(throwing: error); return }
                 guard let http = response as? HTTPURLResponse, let data else {
                     cont.resume(throwing: APIError.invalidResponse); return
                 }
-                cont.resume(returning: (data, http.statusCode))
+                cont.resume(returning: (data, http))
             }
             task.resume()
         }

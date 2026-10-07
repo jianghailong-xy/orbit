@@ -9,11 +9,12 @@ import {
   type PlanUsageWindow,
   type RunnerModelCatalog,
 } from '@orbit/shared';
+import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { resolvePermissionMode } from '../common/permission-mode';
 import { firstRuntimeCatalogModel, sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { normalizeEffortForProvider, normalizeRuntimeProvider } from '../common/runtime-provider';
 import type { PrismaService } from '../prisma/prisma.service';
-import { accountPoolRuntime, isBuiltinProvider } from '../providers/custom-provider';
+import { accountPoolRuntime, isBuiltinProvider, usableProviderScope } from '../providers/custom-provider';
 import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
 import { followsRuntimeCatalog } from '../providers/preset-overlay';
 import { signedOutEngineRefusal } from '../sessions/engine-signin-preflight';
@@ -87,23 +88,33 @@ async function routeEngine(
   provider: string,
   providerBuiltin: boolean,
 ): Promise<{ runtime: string; hasOwnModelSpace: boolean }> {
-  if (providerBuiltin) {
+  if (providerBuiltin && provider !== AgentProvider.DSH) {
     return { runtime: normalizeRuntimeProvider(provider, true), hasOwnModelSpace: false };
   }
   const configured = await prisma.modelProvider.findFirst({
-    where: { slug: provider, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
-    select: { runtime: true, presetSlug: true, followsPreset: true, models: true, defaultModel: true },
+    where: {
+      slug: provider,
+      ...(provider === AgentProvider.DSH ? {} : { enabled: true }),
+      ...(await usableProviderScope(prisma, ownerId)),
+    },
+    select: { runtime: true, enabled: true, presetSlug: true, followsPreset: true, models: true, defaultModel: true },
   });
+  // A disabled pre-existing dsh row is still a configured identity, never the new runtime.
+  if (configured && provider === AgentProvider.DSH && configured.enabled === false) {
+    return { runtime: AgentProvider.CLAUDE, hasOwnModelSpace: true };
+  }
   if (configured) {
     return {
       runtime: normalizeRuntimeProvider(configured.runtime),
-      hasOwnModelSpace: !followsRuntimeCatalog(configured),
+      hasOwnModelSpace: configured.runtime !== AgentProvider.DSH && !followsRuntimeCatalog(configured),
     };
   }
   // An account pool runs on the accounts of one runtime, in that runtime's model space.
   const pooled = await accountPoolRuntime(prisma, ownerId, provider);
   return pooled
     ? { runtime: pooled, hasOwnModelSpace: false }
+    : provider === AgentProvider.DSH
+      ? { runtime: normalizeRuntimeProvider(provider, providerBuiltin), hasOwnModelSpace: false }
     : { runtime: provider, hasOwnModelSpace: true };
 }
 
@@ -321,13 +332,18 @@ export interface TaskRouteSubject {
  * the run is then created on the routed provider, model and effort (§7.4). Otherwise it is the
  * shadow — the run is dispatched exactly as it was before routing existed, and the decision records
  * what routing would have picked.
+ *
+ * Null when the account has smart model selection off (common/model-routing-switch.ts): routing
+ * does not exist then, so there is no decision to record, shadow or not, and the run is dispatched
+ * as before routing whatever the Agent's own switch says.
  */
 export async function planTaskRunRoute(
   reads: TaskRouteReads,
   task: TaskRouteSubject,
   workspace: { id: string; runnerId: string },
   prompt: string,
-): Promise<TaskRunRoute> {
+): Promise<TaskRunRoute | null> {
+  if (!modelRoutingEnabled(await reads.owner())) return null;
   const { prisma, ownerId } = reads;
   const env = await routeEnvironment(reads, task, workspace.id, workspace.runnerId);
   const agent = await reads.workspace(workspace.id);

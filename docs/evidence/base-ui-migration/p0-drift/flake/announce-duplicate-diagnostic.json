@@ -1,0 +1,2044 @@
+{
+ "diag-p02": {
+  "commit": "3e1d1ca08b6c5e5dfe23da9fef58ca088878c5cb",
+  "stats": {
+   "startTime": "2026-10-06T09:24:35.265Z",
+   "duration": 19352.972,
+   "expected": 16,
+   "skipped": 0,
+   "unexpected": 0,
+   "flaky": 0
+  },
+  "records": [
+   {
+    "project": "chromium-light-desktop",
+    "status": "passed",
+    "text": "Setting saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 900,
+        "width": 1,
+        "height": 1,
+        "top": 900,
+        "right": 1,
+        "bottom": 901,
+        "left": 0
+       }
+      },
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1155.96875,
+        "y": 24,
+        "width": 91.03125,
+        "height": 20,
+        "top": 24,
+        "right": 1247,
+        "bottom": 44,
+        "left": 1155.96875
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1155.96875,
+        "y": 24,
+        "width": 91.03125,
+        "height": 20,
+        "top": 24,
+        "right": 1247,
+        "bottom": 44,
+        "left": 1155.96875
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "chromium-light-desktop",
+    "status": "passed",
+    "text": "Name saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 900,
+        "width": 1,
+        "height": 1,
+        "top": 900,
+        "right": 1,
+        "bottom": 901,
+        "left": 0
+       }
+      },
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1165.28125,
+        "y": 24,
+        "width": 81.71875,
+        "height": 20,
+        "top": 24,
+        "right": 1247,
+        "bottom": 44,
+        "left": 1165.28125
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1165.28125,
+        "y": 24,
+        "width": 81.71875,
+        "height": 20,
+        "top": 24,
+        "right": 1247,
+        "bottom": 44,
+        "left": 1165.28125
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "chromium-light-phone",
+    "status": "passed",
+    "text": "Setting saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 844,
+        "width": 1,
+        "height": 1,
+        "top": 844,
+        "right": 1,
+        "bottom": 845,
+        "left": 0
+       }
+      },
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 159.484375,
+        "y": 64,
+        "width": 91.03125,
+        "height": 20,
+        "top": 64,
+        "right": 250.515625,
+        "bottom": 84,
+        "left": 159.484375
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 159.484375,
+        "y": 64,
+        "width": 91.03125,
+        "height": 20,
+        "top": 64,
+        "right": 250.515625,
+        "bottom": 84,
+        "left": 159.484375
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "chromium-light-phone",
+    "status": "passed",
+    "text": "Name saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 844,
+        "width": 1,
+        "height": 1,
+        "top": 844,
+        "right": 1,
+        "bottom": 845,
+        "left": 0
+       }
+      },
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 164.140625,
+        "y": 64,
+        "width": 81.71875,
+        "height": 20,
+        "top": 64,
+        "right": 245.859375,
+        "bottom": 84,
+        "left": 164.140625
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 164.140625,
+        "y": 64,
+        "width": 81.71875,
+        "height": 20,
+        "top": 64,
+        "right": 245.859375,
+        "bottom": 84,
+        "left": 164.140625
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "status": "passed",
+    "text": "Setting saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 900,
+        "width": 1,
+        "height": 1,
+        "top": 900,
+        "right": 1,
+        "bottom": 901,
+        "left": 0
+       }
+      },
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1155.96875,
+        "y": 24,
+        "width": 91.03125,
+        "height": 20,
+        "top": 24,
+        "right": 1247,
+        "bottom": 44,
+        "left": 1155.96875
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1155.96875,
+        "y": 24,
+        "width": 91.03125,
+        "height": 20,
+        "top": 24,
+        "right": 1247,
+        "bottom": 44,
+        "left": 1155.96875
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "status": "passed",
+    "text": "Name saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 900,
+        "width": 1,
+        "height": 1,
+        "top": 900,
+        "right": 1,
+        "bottom": 901,
+        "left": 0
+       }
+      },
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1165.28125,
+        "y": 24,
+        "width": 81.71875,
+        "height": 20,
+        "top": 24,
+        "right": 1247,
+        "bottom": 44,
+        "left": 1165.28125
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1165.28125,
+        "y": 24,
+        "width": 81.71875,
+        "height": 20,
+        "top": 24,
+        "right": 1247,
+        "bottom": 44,
+        "left": 1165.28125
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "chromium-dark-phone",
+    "status": "passed",
+    "text": "Setting saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 844,
+        "width": 1,
+        "height": 1,
+        "top": 844,
+        "right": 1,
+        "bottom": 845,
+        "left": 0
+       }
+      },
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 159.484375,
+        "y": 64,
+        "width": 91.03125,
+        "height": 20,
+        "top": 64,
+        "right": 250.515625,
+        "bottom": 84,
+        "left": 159.484375
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 159.484375,
+        "y": 64,
+        "width": 91.03125,
+        "height": 20,
+        "top": 64,
+        "right": 250.515625,
+        "bottom": 84,
+        "left": 159.484375
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "chromium-dark-phone",
+    "status": "passed",
+    "text": "Name saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 844,
+        "width": 1,
+        "height": 1,
+        "top": 844,
+        "right": 1,
+        "bottom": 845,
+        "left": 0
+       }
+      },
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 164.140625,
+        "y": 64,
+        "width": 81.71875,
+        "height": 20,
+        "top": 64,
+        "right": 245.859375,
+        "bottom": 84,
+        "left": 164.140625
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 164.140625,
+        "y": 64,
+        "width": 81.71875,
+        "height": 20,
+        "top": 64,
+        "right": 245.859375,
+        "bottom": 84,
+        "left": 164.140625
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "webkit-light-desktop",
+    "status": "passed",
+    "text": "Setting saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 900,
+        "width": 1,
+        "height": 1,
+        "top": 900,
+        "right": 1,
+        "bottom": 901,
+        "left": 0
+       }
+      },
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1147.96875,
+        "y": 24,
+        "width": 91.03125,
+        "height": 20,
+        "top": 24,
+        "right": 1239,
+        "bottom": 44,
+        "left": 1147.96875
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1147.96875,
+        "y": 24,
+        "width": 91.03125,
+        "height": 20,
+        "top": 24,
+        "right": 1239,
+        "bottom": 44,
+        "left": 1147.96875
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "webkit-light-desktop",
+    "status": "passed",
+    "text": "Name saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 900,
+        "width": 1,
+        "height": 1,
+        "top": 900,
+        "right": 1,
+        "bottom": 901,
+        "left": 0
+       }
+      },
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1157.28125,
+        "y": 24,
+        "width": 81.71875,
+        "height": 20,
+        "top": 24,
+        "right": 1239,
+        "bottom": 44,
+        "left": 1157.28125
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1157.28125,
+        "y": 24,
+        "width": 81.71875,
+        "height": 20,
+        "top": 24,
+        "right": 1239,
+        "bottom": 44,
+        "left": 1157.28125
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "webkit-light-phone",
+    "status": "passed",
+    "text": "Setting saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 844,
+        "width": 1,
+        "height": 1,
+        "top": 844,
+        "right": 1,
+        "bottom": 845,
+        "left": 0
+       }
+      },
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 159.484375,
+        "y": 64,
+        "width": 91.03125,
+        "height": 20,
+        "top": 64,
+        "right": 250.515625,
+        "bottom": 84,
+        "left": 159.484375
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 159.484375,
+        "y": 64,
+        "width": 91.03125,
+        "height": 20,
+        "top": 64,
+        "right": 250.515625,
+        "bottom": 84,
+        "left": 159.484375
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "webkit-light-phone",
+    "status": "passed",
+    "text": "Name saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 844,
+        "width": 1,
+        "height": 1,
+        "top": 844,
+        "right": 1,
+        "bottom": 845,
+        "left": 0
+       }
+      },
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 160.140625,
+        "y": 64,
+        "width": 81.71875,
+        "height": 20,
+        "top": 64,
+        "right": 241.859375,
+        "bottom": 84,
+        "left": 160.140625
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 160.140625,
+        "y": 64,
+        "width": 81.71875,
+        "height": 20,
+        "top": 64,
+        "right": 241.859375,
+        "bottom": 84,
+        "left": 160.140625
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "status": "passed",
+    "text": "Setting saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 900,
+        "width": 1,
+        "height": 1,
+        "top": 900,
+        "right": 1,
+        "bottom": 901,
+        "left": 0
+       }
+      },
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1147.96875,
+        "y": 24,
+        "width": 91.03125,
+        "height": 20,
+        "top": 24,
+        "right": 1239,
+        "bottom": 44,
+        "left": 1147.96875
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1147.96875,
+        "y": 24,
+        "width": 91.03125,
+        "height": 20,
+        "top": 24,
+        "right": 1239,
+        "bottom": 44,
+        "left": 1147.96875
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "status": "passed",
+    "text": "Name saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 900,
+        "width": 1,
+        "height": 1,
+        "top": 900,
+        "right": 1,
+        "bottom": 901,
+        "left": 0
+       }
+      },
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1157.28125,
+        "y": 24,
+        "width": 81.71875,
+        "height": 20,
+        "top": 24,
+        "right": 1239,
+        "bottom": 44,
+        "left": 1157.28125
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1157.28125,
+        "y": 24,
+        "width": 81.71875,
+        "height": 20,
+        "top": 24,
+        "right": 1239,
+        "bottom": 44,
+        "left": 1157.28125
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "webkit-dark-phone",
+    "status": "passed",
+    "text": "Setting saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 844,
+        "width": 1,
+        "height": 1,
+        "top": 844,
+        "right": 1,
+        "bottom": 845,
+        "left": 0
+       }
+      },
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 159.484375,
+        "y": 64,
+        "width": 91.03125,
+        "height": 20,
+        "top": 64,
+        "right": 250.515625,
+        "bottom": 84,
+        "left": 159.484375
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 159.484375,
+        "y": 64,
+        "width": 91.03125,
+        "height": 20,
+        "top": 64,
+        "right": 250.515625,
+        "bottom": 84,
+        "left": 159.484375
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "webkit-dark-phone",
+    "status": "passed",
+    "text": "Name saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 844,
+        "width": 1,
+        "height": 1,
+        "top": 844,
+        "right": 1,
+        "bottom": 845,
+        "left": 0
+       }
+      },
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 160.140625,
+        "y": 64,
+        "width": 81.71875,
+        "height": 20,
+        "top": 64,
+        "right": 241.859375,
+        "bottom": 84,
+        "left": 160.140625
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 160.140625,
+        "y": 64,
+        "width": 81.71875,
+        "height": 20,
+        "top": 64,
+        "right": 241.859375,
+        "bottom": 84,
+        "left": 160.140625
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   }
+  ]
+ },
+ "diag-tip": {
+  "commit": "da13423d3e80e00a487ed91327c31d6788cc7a7a",
+  "stats": {
+   "startTime": "2026-10-06T09:24:11.157Z",
+   "duration": 19061.858,
+   "expected": 16,
+   "skipped": 0,
+   "unexpected": 0,
+   "flaky": 0
+  },
+  "records": [
+   {
+    "project": "chromium-light-desktop",
+    "status": "passed",
+    "text": "Setting saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1155.96875,
+        "y": 24,
+        "width": 91.03125,
+        "height": 20,
+        "top": 24,
+        "right": 1247,
+        "bottom": 44,
+        "left": 1155.96875
+       }
+      },
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 900,
+        "width": 1,
+        "height": 1,
+        "top": 900,
+        "right": 1,
+        "bottom": 901,
+        "left": 0
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1155.96875,
+        "y": 24,
+        "width": 91.03125,
+        "height": 20,
+        "top": 24,
+        "right": 1247,
+        "bottom": 44,
+        "left": 1155.96875
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "chromium-light-desktop",
+    "status": "passed",
+    "text": "Name saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1165.28125,
+        "y": 24,
+        "width": 81.71875,
+        "height": 20,
+        "top": 24,
+        "right": 1247,
+        "bottom": 44,
+        "left": 1165.28125
+       }
+      },
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 900,
+        "width": 1,
+        "height": 1,
+        "top": 900,
+        "right": 1,
+        "bottom": 901,
+        "left": 0
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1165.28125,
+        "y": 24,
+        "width": 81.71875,
+        "height": 20,
+        "top": 24,
+        "right": 1247,
+        "bottom": 44,
+        "left": 1165.28125
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "chromium-light-phone",
+    "status": "passed",
+    "text": "Setting saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 159.484375,
+        "y": 64,
+        "width": 91.03125,
+        "height": 20,
+        "top": 64,
+        "right": 250.515625,
+        "bottom": 84,
+        "left": 159.484375
+       }
+      },
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 844,
+        "width": 1,
+        "height": 1,
+        "top": 844,
+        "right": 1,
+        "bottom": 845,
+        "left": 0
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 159.484375,
+        "y": 64,
+        "width": 91.03125,
+        "height": 20,
+        "top": 64,
+        "right": 250.515625,
+        "bottom": 84,
+        "left": 159.484375
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "chromium-light-phone",
+    "status": "passed",
+    "text": "Name saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 164.140625,
+        "y": 64,
+        "width": 81.71875,
+        "height": 20,
+        "top": 64,
+        "right": 245.859375,
+        "bottom": 84,
+        "left": 164.140625
+       }
+      },
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 844,
+        "width": 1,
+        "height": 1,
+        "top": 844,
+        "right": 1,
+        "bottom": 845,
+        "left": 0
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 164.140625,
+        "y": 64,
+        "width": 81.71875,
+        "height": 20,
+        "top": 64,
+        "right": 245.859375,
+        "bottom": 84,
+        "left": 164.140625
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "status": "passed",
+    "text": "Setting saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1155.96875,
+        "y": 24,
+        "width": 91.03125,
+        "height": 20,
+        "top": 24,
+        "right": 1247,
+        "bottom": 44,
+        "left": 1155.96875
+       }
+      },
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 900,
+        "width": 1,
+        "height": 1,
+        "top": 900,
+        "right": 1,
+        "bottom": 901,
+        "left": 0
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1155.96875,
+        "y": 24,
+        "width": 91.03125,
+        "height": 20,
+        "top": 24,
+        "right": 1247,
+        "bottom": 44,
+        "left": 1155.96875
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "status": "passed",
+    "text": "Name saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1165.28125,
+        "y": 24,
+        "width": 81.71875,
+        "height": 20,
+        "top": 24,
+        "right": 1247,
+        "bottom": 44,
+        "left": 1165.28125
+       }
+      },
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 900,
+        "width": 1,
+        "height": 1,
+        "top": 900,
+        "right": 1,
+        "bottom": 901,
+        "left": 0
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1165.28125,
+        "y": 24,
+        "width": 81.71875,
+        "height": 20,
+        "top": 24,
+        "right": 1247,
+        "bottom": 44,
+        "left": 1165.28125
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "chromium-dark-phone",
+    "status": "passed",
+    "text": "Setting saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 159.484375,
+        "y": 64,
+        "width": 91.03125,
+        "height": 20,
+        "top": 64,
+        "right": 250.515625,
+        "bottom": 84,
+        "left": 159.484375
+       }
+      },
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 844,
+        "width": 1,
+        "height": 1,
+        "top": 844,
+        "right": 1,
+        "bottom": 845,
+        "left": 0
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 159.484375,
+        "y": 64,
+        "width": 91.03125,
+        "height": 20,
+        "top": 64,
+        "right": 250.515625,
+        "bottom": 84,
+        "left": 159.484375
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "chromium-dark-phone",
+    "status": "passed",
+    "text": "Name saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 164.140625,
+        "y": 64,
+        "width": 81.71875,
+        "height": 20,
+        "top": 64,
+        "right": 245.859375,
+        "bottom": 84,
+        "left": 164.140625
+       }
+      },
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 844,
+        "width": 1,
+        "height": 1,
+        "top": 844,
+        "right": 1,
+        "bottom": 845,
+        "left": 0
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 164.140625,
+        "y": 64,
+        "width": 81.71875,
+        "height": 20,
+        "top": 64,
+        "right": 245.859375,
+        "bottom": 84,
+        "left": 164.140625
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "webkit-light-desktop",
+    "status": "passed",
+    "text": "Setting saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1147.96875,
+        "y": 24,
+        "width": 91.03125,
+        "height": 20,
+        "top": 24,
+        "right": 1239,
+        "bottom": 44,
+        "left": 1147.96875
+       }
+      },
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 900,
+        "width": 1,
+        "height": 1,
+        "top": 900,
+        "right": 1,
+        "bottom": 901,
+        "left": 0
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1147.96875,
+        "y": 24,
+        "width": 91.03125,
+        "height": 20,
+        "top": 24,
+        "right": 1239,
+        "bottom": 44,
+        "left": 1147.96875
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "webkit-light-desktop",
+    "status": "passed",
+    "text": "Name saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1157.28125,
+        "y": 24,
+        "width": 81.71875,
+        "height": 20,
+        "top": 24,
+        "right": 1239,
+        "bottom": 44,
+        "left": 1157.28125
+       }
+      },
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 900,
+        "width": 1,
+        "height": 1,
+        "top": 900,
+        "right": 1,
+        "bottom": 901,
+        "left": 0
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1157.28125,
+        "y": 24,
+        "width": 81.71875,
+        "height": 20,
+        "top": 24,
+        "right": 1239,
+        "bottom": 44,
+        "left": 1157.28125
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "webkit-light-phone",
+    "status": "passed",
+    "text": "Setting saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 159.484375,
+        "y": 64,
+        "width": 91.03125,
+        "height": 20,
+        "top": 64,
+        "right": 250.515625,
+        "bottom": 84,
+        "left": 159.484375
+       }
+      },
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 844,
+        "width": 1,
+        "height": 1,
+        "top": 844,
+        "right": 1,
+        "bottom": 845,
+        "left": 0
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 159.484375,
+        "y": 64,
+        "width": 91.03125,
+        "height": 20,
+        "top": 64,
+        "right": 250.515625,
+        "bottom": 84,
+        "left": 159.484375
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "webkit-light-phone",
+    "status": "passed",
+    "text": "Name saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 164.140625,
+        "y": 64,
+        "width": 81.71875,
+        "height": 20,
+        "top": 64,
+        "right": 245.859375,
+        "bottom": 84,
+        "left": 164.140625
+       }
+      },
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 844,
+        "width": 1,
+        "height": 1,
+        "top": 844,
+        "right": 1,
+        "bottom": 845,
+        "left": 0
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 164.140625,
+        "y": 64,
+        "width": 81.71875,
+        "height": 20,
+        "top": 64,
+        "right": 245.859375,
+        "bottom": 84,
+        "left": 164.140625
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "status": "passed",
+    "text": "Setting saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1147.96875,
+        "y": 24,
+        "width": 91.03125,
+        "height": 20,
+        "top": 24,
+        "right": 1239,
+        "bottom": 44,
+        "left": 1147.96875
+       }
+      },
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 900,
+        "width": 1,
+        "height": 1,
+        "top": 900,
+        "right": 1,
+        "bottom": 901,
+        "left": 0
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1147.96875,
+        "y": 24,
+        "width": 91.03125,
+        "height": 20,
+        "top": 24,
+        "right": 1239,
+        "bottom": 44,
+        "left": 1147.96875
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "status": "passed",
+    "text": "Name saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1157.28125,
+        "y": 24,
+        "width": 81.71875,
+        "height": 20,
+        "top": 24,
+        "right": 1239,
+        "bottom": 44,
+        "left": 1157.28125
+       }
+      },
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 900,
+        "width": 1,
+        "height": 1,
+        "top": 900,
+        "right": 1,
+        "bottom": 901,
+        "left": 0
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 1157.28125,
+        "y": 24,
+        "width": 81.71875,
+        "height": 20,
+        "top": 24,
+        "right": 1239,
+        "bottom": 44,
+        "left": 1157.28125
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "webkit-dark-phone",
+    "status": "passed",
+    "text": "Setting saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 159.484375,
+        "y": 64,
+        "width": 91.03125,
+        "height": 20,
+        "top": 64,
+        "right": 250.515625,
+        "bottom": 84,
+        "left": 159.484375
+       }
+      },
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 844,
+        "width": 1,
+        "height": 1,
+        "top": 844,
+        "right": 1,
+        "bottom": 845,
+        "left": 0
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 159.484375,
+        "y": 64,
+        "width": 91.03125,
+        "height": 20,
+        "top": 64,
+        "right": 250.515625,
+        "bottom": 84,
+        "left": 159.484375
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   },
+   {
+    "project": "webkit-dark-phone",
+    "status": "passed",
+    "text": "Name saved",
+    "original": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 164.140625,
+        "y": 64,
+        "width": 81.71875,
+        "height": 20,
+        "top": 64,
+        "right": 245.859375,
+        "bottom": 84,
+        "left": 164.140625
+       }
+      },
+      {
+       "tag": "DIV",
+       "className": "sr-only",
+       "ariaLive": "polite",
+       "inNotifications": false,
+       "rect": {
+        "x": 0,
+        "y": 844,
+        "width": 1,
+        "height": 1,
+        "top": 844,
+        "right": 1,
+        "bottom": 845,
+        "left": 0
+       }
+      }
+     ],
+     "toBeVisible": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+    },
+    "scoped": {
+     "matches": [
+      {
+       "tag": "SPAN",
+       "className": "toast-head",
+       "ariaLive": null,
+       "inNotifications": true,
+       "rect": {
+        "x": 164.140625,
+        "y": 64,
+        "width": 81.71875,
+        "height": 20,
+        "top": 64,
+        "right": 245.859375,
+        "bottom": 84,
+        "left": 164.140625
+       }
+      }
+     ],
+     "toBeVisible": "visible"
+    }
+   }
+  ]
+ }
+}

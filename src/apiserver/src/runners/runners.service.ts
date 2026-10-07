@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import type {
   InstallEngine,
@@ -23,11 +24,14 @@ import {
   antigravityState,
 } from '../common/antigravity-readiness';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
+import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
 import { ACTIVE_TURN_STATUSES } from '../common/session-scheduling';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import {
   CLAUDE_ACCOUNT_REMOVE_V1,
+  ANTIGRAVITY_ACCOUNT_REMOVE_V1,
   CODEX_ACCOUNT_REMOVE_V1,
   LOGIN_RELAY_TIMEOUT_MS,
 } from '../runner-api/runner-api.controller';
@@ -66,7 +70,12 @@ export function isRunnerOnline(
 export class RunnersService {
   private readonly logger = new Logger(RunnersService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // Optional, and last, for the specs that build this service on a bare Prisma: without it a
+    // sign-in still reaches the runner, on its next heartbeat instead of at once.
+    @Optional() private readonly realtime?: RealtimeService,
+  ) {}
 
   private readonly deviceLookups = new Map<string, number[]>();
 
@@ -87,8 +96,19 @@ export class RunnersService {
   }
 
   async listRunners(ownerId: string) {
+    return this.runnerViews({ ownerId });
+  }
+
+  /** One of this owner's runners, in exactly the shape the list gives each of them. */
+  async getRunner(ownerId: string, id: string) {
+    const [runner] = await this.runnerViews({ ownerId, id });
+    if (!runner) throw new NotFoundException('runner not found');
+    return runner;
+  }
+
+  private async runnerViews(where: { ownerId: string; id?: string }) {
     const runners = await this.prisma.runner.findMany({
-      where: { ownerId },
+      where,
       orderBy: [
         { position: { sort: 'asc', nulls: 'last' } },
         { enrolledAt: 'asc' },
@@ -119,6 +139,9 @@ export class RunnersService {
         // Same: reported, not configured. Withdraws Bypass from this machine's Mode pickers, which
         // is the only reason clients need to know (see ROOT_REFUSED_PERMISSION_MODES).
         runsAsRoot: true,
+        // Reported too: why this runner is or isn't updating itself, for the Runners page's card
+        // and its Update Runner Now. Re-sanitized below, null for a runner that does not report it.
+        selfUpdate: true,
         // The runner page's Capacity › Keep Free reads the floor it writes (PATCH minFreeDiskMb),
         // and About › Repos Folder shows where this machine clones to (reported, not configured).
         minFreeDiskMb: true,
@@ -181,11 +204,13 @@ export class RunnersService {
       codexAccountRemoveAccount,
       codexAccountRemoveStatus,
       codexAccountRemoveMessage,
+      selfUpdate,
       ...r
     }) => ({
       ...r,
       // Never expose null or malformed JSON: clients can always index this as a provider map.
       runtimeDefaultModels: sanitizeRuntimeDefaultModels(runtimeDefaultModels),
+      selfUpdate: sanitizeRunnerSelfUpdate(selfUpdate),
       // null (not []) for a runner that has never reported: "we don't know yet" and "nothing is
       // installed" are different answers, and only one of them is ours to make up.
       engines: namedRunnerEngines({ engines, accountNames, accountPauses }),
@@ -287,7 +312,7 @@ export class RunnersService {
   async getDeviceEnrollment(ownerId: string, userCode: string) {
     this.rateLimitDeviceLookup(ownerId);
     const s = await this.prisma.deviceEnrollment.findUnique({ where: { userCode } });
-    if (!s || s.expiresAt < new Date()) {
+    if (!s || s.expiresAt < new Date() || approvedByAnother(s, ownerId)) {
       throw new NotFoundException('enrollment request not found or expired');
     }
     // Warn (don't block) if a runner with this name is already registered, so the
@@ -314,7 +339,7 @@ export class RunnersService {
   async approveDeviceEnrollment(ownerId: string, userCode: string) {
     this.rateLimitDeviceLookup(ownerId);
     const s = await this.prisma.deviceEnrollment.findUnique({ where: { userCode } });
-    if (!s || s.expiresAt < new Date()) {
+    if (!s || s.expiresAt < new Date() || approvedByAnother(s, ownerId)) {
       throw new NotFoundException('enrollment request not found or expired');
     }
     const runnerName = s.name;
@@ -453,6 +478,9 @@ export class RunnersService {
     });
     // A code still held for the sign-in this replaces belongs to nobody now.
     loginCodeRelay.drop(id);
+    // The runner picks the start up on its next heartbeat; have that be now rather than up to half a
+    // minute from now, with the person who pressed the button watching a spinner.
+    this.realtime?.notifyRunnerWake(id);
     return loginStateOf(r);
   }
 
@@ -483,6 +511,7 @@ export class RunnersService {
     if (inMemory && runner.loginAt) {
       loginCodeRelay.hold(id, runner.loginAt.toISOString(), trimmed, runner.loginAt.getTime() + LOGIN_RELAY_TIMEOUT_MS);
     }
+    this.realtime?.notifyRunnerWake(id);
     return loginStateOf(r);
   }
 
@@ -521,13 +550,14 @@ export class RunnersService {
       },
     });
     loginCodeRelay.drop(id);
+    if (stopOnRunner) this.realtime?.notifyRunnerWake(id);
     return loginStateOf(r);
   }
 
   /**
    * Ask this runner to remove one account slot of `engine`: the slot's own directory with everything
-   * the CLI keeps in it — a CODEX_HOME, a CLAUDE_CONFIG_DIR — and the record beside it. The next
-   * heartbeat picks it up and the runner reports what happened.
+   * the CLI keeps in it — a CODEX_HOME, a CLAUDE_CONFIG_DIR — and the record beside it. The runner
+   * is woken to heartbeat at once, picks it up there and reports what happened.
    *
    * `default` is refused here rather than on the runner: it is the directory the machine's own
    * environment selects, and the one the CLI typed in a terminal shares, so there is nothing to
@@ -575,6 +605,8 @@ export class RunnersService {
         codexAccountRemoveAt: new Date(),
       },
     });
+    // Delivered on the runner's next heartbeat; have that be now, as for a sign-in.
+    this.realtime?.notifyRunnerWake(id);
     return accountRemoveStateOf(r);
   }
 
@@ -755,6 +787,35 @@ export class RunnersService {
   }
 
   /**
+   * Ask this runner to check for a release of itself now — Update Runner Now — rather than at its
+   * next periodic check, up to ten minutes away.
+   *
+   * It is the runner's own check, so its rules hold: it installs the release the control plane
+   * assigns it (a staged rollout can still hold it back), and never while a turn is in flight —
+   * then it reports `waitingForIdle` and updates once a check finds it idle. As with the model
+   * catalog refresh, that state on later heartbeats is the only answer, so this writes one
+   * timestamp the next heartbeat clears as it hands the request over — and wakes the runner, so
+   * that heartbeat is now rather than up to half a minute from now.
+   *
+   * A runner that does not report its self-update state is refused: it is a release from before
+   * this request, which would take it from the heartbeat and do nothing with it.
+   */
+  async requestSelfUpdate(ownerId: string, id: string): Promise<{ requestedAt: string }> {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
+    if (!runner) throw new NotFoundException('runner not found');
+    if (runner.status === 'OFFLINE') {
+      throw new BadRequestException('Runner is offline — it can only update while connected');
+    }
+    if (!sanitizeRunnerSelfUpdate(runner.selfUpdate)) {
+      throw new BadRequestException('Runner is too old to update on request — it reports no self-update state');
+    }
+    const requestedAt = new Date();
+    await this.prisma.runner.update({ where: { id }, data: { selfUpdateRequestedAt: requestedAt } });
+    this.realtime?.notifyRunnerWake(id);
+    return { requestedAt: requestedAt.toISOString() };
+  }
+
+  /**
    * Ask this runner what local Claude Code conversations already sit under a directory.
    *
    * Only the runner can answer: `~/.claude/projects` is on its disk and the control plane never
@@ -890,12 +951,14 @@ export function installStateOf(r: {
 const ACCOUNT_REMOVE_TOO_OLD: Record<string, string> = {
   codex: 'This runner is too old to remove a Codex account — update it, then try again.',
   claude: 'This runner is too old to remove a Claude account — update it, then try again.',
+  antigravity: 'This runner is too old to remove an Antigravity account — update it, then try again.',
 };
 
 /** The capability each engine's removal needs the runner to declare. */
 const ACCOUNT_REMOVE_CAPABILITIES: Record<string, string> = {
   codex: CODEX_ACCOUNT_REMOVE_V1,
   claude: CLAUDE_ACCOUNT_REMOVE_V1,
+  antigravity: ANTIGRAVITY_ACCOUNT_REMOVE_V1,
 };
 
 /** Project a runner row onto the browser-facing account-removal view. */
@@ -934,4 +997,13 @@ function loginStateOf(r: {
     message: r.loginMessage,
     account: status ? (r.loginAccount ?? null) : null,
   };
+}
+
+/**
+ * A device enrollment nobody has approved is open to whoever holds its code — that is the device
+ * flow. Once approved it is the approver's: to every other account the code is one that names
+ * nothing, so its machine's name and host, and whether it exists at all, stay the approver's.
+ */
+function approvedByAnother(s: { status: string; approvedById: string | null }, ownerId: string): boolean {
+  return s.status === 'APPROVED' && s.approvedById !== ownerId;
 }

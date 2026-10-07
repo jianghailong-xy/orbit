@@ -19,9 +19,12 @@ const serviceFor = (
   rows: unknown[],
   captured?: { where?: unknown; poolWhere?: unknown },
   pools: unknown[] = [],
+  role = 'MEMBER',
 ) =>
   new ProvidersService(
     {
+      // Whether the caller is an admin decides whether a shared row is theirs (usableProviderScope).
+      user: { findUnique: async () => ({ role }) },
       modelProvider: {
         findMany: async (args: { where: unknown }) => {
           if (captured) captured.where = args.where;
@@ -44,12 +47,12 @@ test('every built-in engine is listed alongside the configured providers', async
 
   assert.deepEqual(
     listed.map((p) => p.slug),
-    ['claude', 'codex', 'kimi', 'opencode', 'antigravity', 'deepseek'],
+    ['claude', 'codex', 'kimi', 'opencode', 'antigravity', 'dsh', 'deepseek'],
   );
   // Which of the two a slug is, since only one of them takes a label or a model list.
   assert.deepEqual(
     listed.filter((p) => p.builtin).map((p) => p.slug),
-    ['claude', 'codex', 'kimi', 'opencode', 'antigravity'],
+    ['claude', 'codex', 'kimi', 'opencode', 'antigravity', 'dsh'],
   );
   // A built-in runs on itself: Antigravity is agy, not a provider borrowing some other CLI.
   assert.deepEqual(
@@ -73,7 +76,8 @@ test('a configured provider names the runtime it borrows and the models it offer
 });
 
 // The whole point of the list is that a slug on it is a slug the write paths accept, so it has to
-// ask the same question they do: enabled, and visible to this caller.
+// ask the same question they do: enabled, and one this caller may use — their own, and the shared
+// ones only when they are an admin.
 test('the query matches the check task and session writes run', async () => {
   const captured: { where?: unknown } = {};
   await serviceFor([], captured).listUsable('user-1');
@@ -81,7 +85,14 @@ test('the query matches the check task and session writes run', async () => {
   assert.deepEqual(captured.where, {
     // Not the compatibility rows migrations 0080 and 0367 parked on the two built-in names.
     slug: { notIn: ['opencode', 'antigravity'] },
-    enabled: true,
+    AND: [{ OR: [{ enabled: true }, { slug: 'dsh' }] }],
+    ownerId: 'user-1',
+  });
+
+  await serviceFor([], captured, [], 'ADMIN').listUsable('user-1');
+  assert.deepEqual(captured.where, {
+    slug: { notIn: ['opencode', 'antigravity'] },
+    AND: [{ OR: [{ enabled: true }, { slug: 'dsh' }] }],
     OR: [{ ownerId: null }, { ownerId: 'user-1' }],
   });
 });

@@ -1,0 +1,30 @@
+{
+  "target": "antd-sample",
+  "run": 28,
+  "before": "Never",
+  "after": "7 days\n7 days",
+  "listboxOpen": false,
+  "keys": [
+    {
+      "key": "ArrowDown",
+      "t": 7.7,
+      "target": "combobox:Sample choice",
+      "listbox": false,
+      "highlighted": null
+    },
+    {
+      "key": "ArrowDown",
+      "t": 33.2,
+      "target": "combobox:Sample choice",
+      "listbox": true,
+      "highlighted": "Never"
+    },
+    {
+      "key": "Enter",
+      "t": 41.7,
+      "target": "combobox:Sample choice",
+      "listbox": true,
+      "highlighted": "7 days"
+    }
+  ]
+}

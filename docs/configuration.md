@@ -23,10 +23,10 @@ output into a public report: expanded values can contain secrets.
 | `JWT_SECRET` | Required; no default | Signs user authentication and, by default, derives the orchestration signing key. Generate with `openssl rand -base64 32`. | Yes | Recreate API; existing signed tokens may become invalid |
 | `RUNNER_ORCHESTRATION_JWT_SECRET` | Optional; derived from `JWT_SECRET` when empty | Independent signing key for the 15-minute runner/session orchestration proofs. | Yes | Recreate API; outstanding proofs may become invalid |
 | `ACCESS_TOKEN_TTL` | Optional; `7d` | User access-token lifetime, using a duration such as `1h`, `24h`, or `7d`. Refresh tokens last 30 days. | No | Recreate API; applies to newly issued access tokens |
-| `PROVIDER_SECRET_KEY` | Required by Compose; no default | AES-256-GCM master key for stored provider credentials and account-pool logins. Generate independently with `openssl rand -base64 32`. | Yes | Recreate API only after planning key migration; replacing it makes existing encrypted credentials unreadable |
+| `PROVIDER_SECRET_KEY` | Required by Compose; no default | AES-256-GCM master key for stored provider credentials, account-pool logins and the Google sign-in client secret. Generate independently with `openssl rand -base64 32`. | Yes | Recreate API only after planning key migration; replacing it makes existing encrypted credentials unreadable |
 | `PORT` | Standalone default / example `3000`; Compose fixes `3000` | API listener port. A Compose change also needs matching gateway upstreams and health checks. | No | Recreate API and affected gateway |
 | `CORS_ORIGINS` | Compose fixes `http://localhost:2086` | Allowed cross-origin browser origins. The included gateway serves web and API from one origin. | No | Recreate API after changing its service definition |
-| `PUBLIC_ORIGIN` | Optional; `http://localhost:2086` | External origin in runner installation commands, the runner's built-in server default, and control-plane shared-pool routing. Use the external HTTPS origin for a network deployment. | No | Rebuild web and recreate API; update deployed runners as appropriate |
+| `PUBLIC_ORIGIN` | Optional; `http://localhost:2086` | External origin in runner installation commands, the runner's built-in server default, control-plane shared-pool routing, and the Google sign-in redirect URI. Use the external HTTPS origin for a network deployment. | No | Rebuild web and recreate API; update deployed runners as appropriate, and the redirect URI registered with Google |
 | `MODEL_CATALOG_URL` | Optional; `https://models.dev/api.json` | Source for twice-daily vendor model-list refreshes. Failed fetches retain the shipped lists. | No; avoid embedding credentials in URLs | Recreate API |
 | `ORBIT_WATCHES_MODE` → container `ORBIT_WATCHES` | Optional; `on` | Watch rollout: `on`, `canary`, `drain` (no new watches), or `off` (also stops evaluation/delivery on this API). | No | Recreate API; no migration or runner release |
 | `ORBIT_WATCHES_CANARY_OWNERS` | Optional; empty | Comma-separated account IDs enabled in Watch canary mode. | No; account identifiers are private diagnostic data | Recreate API |
@@ -54,6 +54,23 @@ ORBIT_SOURCE_SHA="$(git rev-parse HEAD)" docker compose up -d --build web
 Keep `JWT_SECRET` and `PROVIDER_SECRET_KEY` in a protected backup alongside the database recovery plan.
 They have different jobs; generate them independently. Consult the [security policy](../SECURITY.md)
 before changing credential storage or the runner/server trust boundary.
+
+### Google sign-in
+
+Google sign-in has no environment variables. Its settings (the switch, the Google OAuth client ID and secret,
+and who may sign in with Google) are stored in the database. An administrator enters them under
+**Admin → Sign-in** in the web UI, and a change applies from the next request, with no rebuild or restart.
+Nothing in `.env` turns it on: until an administrator does, no login page offers Google.
+
+Two deployment values matter to it:
+
+- `PUBLIC_ORIGIN` decides the redirect URI, `${PUBLIC_ORIGIN}/api/auth/google/callback`. **Admin → Sign-in**
+  shows it, and it must be registered on the Google client exactly as shown. After changing `PUBLIC_ORIGIN`,
+  register the new redirect URI with Google too.
+- `PROVIDER_SECRET_KEY` encrypts the saved client secret. After replacing the key, enter the client secret
+  again under **Admin → Sign-in**.
+
+See [Google sign-in](self-hosting.md#google-sign-in) for the Google Cloud console steps and who can sign in.
 
 ## PostgreSQL and backups
 
@@ -88,14 +105,26 @@ credential in `~/.orbit/config.json`; that file is private and must not be poste
 
 | Variable | Required / default | Purpose | Secret? | Apply change |
 | --- | --- | --- | --- | --- |
-| `ORBIT_SERVER_URL` | Context-dependent; registration persists `serverUrl` | CLI/session control-plane URL. Prefer the generated installer or `orbit register --server` when enrolling a machine. | No; redact private origin | Re-enroll for a deployment change; restart affected local processes |
 | `ORBIT_RUNNER_TOKEN` | Issued by registration; no public default | Long-lived machine credential; also available to authorized CLI/session contexts. Never invent or share it. | Yes | Re-register when revoked; registration restarts the installed service |
 | `ANTHROPIC_API_KEY` | Optional; unset uses local login | Usage-billed Claude Code authentication on the runner. | Yes | Update the service's private environment and restart it |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Optional; unset uses local login | Non-interactive subscription authentication from the runtime's token setup flow. | Yes | Update the service's private environment and restart it |
-| `ORBIT_HOME` | Optional; `~/.orbit` | Runner configuration and run scratch directory. A shell and service must use the same home. | Directory contains credentials | Update the service configuration and restart it |
+| `ORBIT_HOME` | Optional; `~/.orbit` | Runner configuration and run scratch directory, and the CLI's saved login (`user.json`). A shell and service must use the same home. | Directory contains credentials | Update the service configuration and restart it |
 | `ORBIT_NO_SELFUPDATE` | Optional; unset | Disables runner self-updates. | No | Restart runner with the setting |
 | `ORBIT_NO_ENGINE_UPDATE` | Optional; unset | Disables periodic coding-runtime updates. | No | Restart runner with the setting |
 
 An export in an interactive shell does not update an already-running systemd/launchd service. Use
 `orbit doctor` to inspect the selected runtime and service PATH; see
 [runner troubleshooting](runner-troubleshooting.md) and [CLI automation](runner-cli.md).
+
+## CLI acting as a person
+
+The `orbit` CLI can act as a user with a personal access token, on any machine and with or without a runner.
+`orbit login` (approved in the browser, or `--with-token` from stdin) saves the token and its server in
+`$ORBIT_HOME/user.json` (mode `0600`), apart from the runner's `config.json`; the runner service never reads it.
+These variables take its place where a saved login is impractical, such as CI. See
+[personal access tokens](runner-cli.md#personal-access-tokens).
+
+| Variable | Required / default | Purpose | Secret? | Apply change |
+| --- | --- | --- | --- | --- |
+| `ORBIT_USER_TOKEN` | Optional; unset uses the saved login | A personal access token (Settings → Access tokens) the CLI acts as, in place of `user.json`. Ignored inside an Orbit session and in any process the runner starts for one (both ignore `user.json` too), and never passed to agent processes. | Yes | Next CLI command |
+| `ORBIT_SERVER_URL` | Optional; the runner's server, else the server the binary was built for | The server `ORBIT_USER_TOKEN` belongs to, and the default for `orbit login --server`. A saved login always uses its own server. | No; redact private origin | Next CLI command |

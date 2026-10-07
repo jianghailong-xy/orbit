@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { TASK_ACCEPTANCE_CLIENT_TURN_PREFIX } from '../tasks/executable-acceptance-round';
 
 /**
  * The namespace the Watch delivery worker queues its wakes in: `watch:<watchId>:<generation>` for a
@@ -42,6 +43,14 @@ export const OWNER_CONFIRMATION_ANSWERS_TURN_KEY_PREFIX = 'owner-confirmation-an
  */
 export const EVIDENCE_REVIEW_TURN_KEY_PREFIX = 'evidence-review:v1:';
 
+/**
+ * The namespace an exception item is handed to its coordinator in (projects/project-open-item.ts
+ * `openItemTurnId`), and the item is read back off the key wherever the turn is drawn — the card on
+ * the queue and on the echo (sessions/turn-cards.ts). A caller naming a key in it names an item by id.
+ * Spelled here for the reason the reply prefix is.
+ */
+export const OPEN_ITEM_TURN_KEY_PREFIX = 'open-item:v1:';
+
 /** Every prefix a caller's own `clientTurnId` may not start with. */
 const RESERVED_TURN_KEY_PREFIXES = [
   WATCH_TURN_KEY_PREFIX,
@@ -51,6 +60,11 @@ const RESERVED_TURN_KEY_PREFIXES = [
   CONFIRMATION_RETURN_TURN_KEY_PREFIX,
   OWNER_CONFIRMATION_ANSWERS_TURN_KEY_PREFIX,
   EVIDENCE_REVIEW_TURN_KEY_PREFIX,
+  // A shell turn under it is delivered to the runner as the task's EXECUTABLE acceptance command
+  // (`taskAcceptance`), which the runner executes itself even where a person's `!` shell is refused
+  // (DeepSeek Harness, P5), and whose exit code is judged against the task. Only the server queues one.
+  TASK_ACCEPTANCE_CLIENT_TURN_PREFIX,
+  OPEN_ITEM_TURN_KEY_PREFIX,
 ] as const;
 
 /**
@@ -89,6 +103,16 @@ export function assertClientTurnIdNotReserved(clientTurnId: string | undefined |
   if (reserved === AUTO_RETRY_TURN_KEY_PREFIX) {
     throw new BadRequestException(
       `clientTurnId must not start with "${AUTO_RETRY_TURN_KEY_PREFIX}" — that prefix is reserved for the messages the server re-sends itself after a failed turn (docs/session-request-reply-contract.md §2.1). Choose your own key, such as a UUID.`,
+    );
+  }
+  if (reserved === TASK_ACCEPTANCE_CLIENT_TURN_PREFIX) {
+    throw new BadRequestException(
+      `clientTurnId must not start with "${TASK_ACCEPTANCE_CLIENT_TURN_PREFIX}" — that prefix is reserved for the EXECUTABLE acceptance rounds the server queues itself (docs/task-completion-criteria.md). Choose your own key, such as a UUID.`,
+    );
+  }
+  if (reserved === OPEN_ITEM_TURN_KEY_PREFIX) {
+    throw new BadRequestException(
+      `clientTurnId must not start with "${OPEN_ITEM_TURN_KEY_PREFIX}" — that prefix is reserved for the exception items the server hands to a project's coordinator itself, each read back off its key. Choose your own key, such as a UUID.`,
     );
   }
   if (reserved) {

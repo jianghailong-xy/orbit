@@ -4,7 +4,7 @@ import XCTest
 /// SwiftUI doesn't exist on Linux, so nothing here compiles the app shells. These hold the Runners
 /// list and a runner's pages to the effect mocks they were built from (ios-list.png, ios-detail.png)
 /// by reading the source they now *are*: a row whose label is the label colour and which pushes by
-/// hand, Add Runner and Edit wired under the rows, the page's sections in the mocks' order, the engine
+/// hand, Add Runner wired under the rows, the page's sections in the mocks' order, the engine
 /// and name pages one push away on whichever stack the record rides — and every word and rule taken
 /// from OrbitKit (`RunnerAttention`, `RunnerPageCopy`, `RunnerPageFormat`), where it is tested.
 /// Each check reads the slice of the file it is about, so a match somewhere else can't pass it.
@@ -176,9 +176,9 @@ final class RunnersPageWiringTests: XCTestCase {
         XCTAssertTrue(model.contains("self.api.approveDevice(userCode: userCode)"))
     }
 
-    /// ⑦ Edit: the list's own move and delete, a move saved as the web list's drag order is, and a
-    /// delete that asks first.
-    func testEditReordersAndRemovesAfterAsking() throws {
+    /// The list's own move and delete, a move saved as the web list's drag order is, and a delete
+    /// that asks first. The list does not show an Edit button.
+    func testListReordersAndRemovesAfterAsking() throws {
         let text = try runners()
         for list in try lists() {
             XCTAssertTrue(list.code.contains(".onMove { moveRunners(runners, from: $0, to: $1) }"), list.name)
@@ -187,10 +187,9 @@ final class RunnersPageWiringTests: XCTestCase {
             XCTAssertTrue(list.code.contains(".modifier(RunnerListEditing("), list.name)
         }
         let editing = try slice(text, from: "private struct RunnerListEditing: ViewModifier {", to: "/// A drag in Edit")
-        try assertInOrder(editing, ["#if os(iOS)", "ToolbarItem(placement: .topBarTrailing) { EditButton() }", "#endif"],
-                          "Edit is iOS's")
+        XCTAssertFalse(code(text).contains("EditButton("), "Runners lists do not show an Edit button")
         let asked = code(editing)
-        XCTAssertTrue(asked.contains(".confirmationDialog(removalTitle, isPresented: removalAsked"))
+        XCTAssertTrue(asked.contains(".orbitConfirmation({ _ in removalTitle },"))
         XCTAssertTrue(asked.contains("Text(RunnerPageCopy.RUNNER_REMOVE_FOOTER)"))
         XCTAssertTrue(asked.contains("await runners.delete(runner.id)"))
         let move = code(try slice(text, from: "@MainActor private func moveRunners(", to: "/// The row a delete"))
@@ -283,9 +282,11 @@ final class RunnersPageWiringTests: XCTestCase {
 
         let row = code(try slice(try appSource("Views/RunnerPageParts.swift"),
                                  from: "struct RunnerEngineRow: View {", to: "struct RunnerWorkspaceRow: View {"))
-        for piece in ["ProviderMark(provider: health.engine, size: 28", "RunnerPageFormat.engineStatus(health)",
+        for piece in ["ProviderMark(provider: health.engine, size: 28", "RunnerPageFormat.engineStatus(health, runner: runner)",
                       "RunnerPageFormat.updateFailedLine(health, now: now)", "RunnerPageFormat.needsSignIn(health)",
                       "RunnerPageFormat.engineWindows(runner, engine: health.engine)",
+                      "RunnerPageFormat.engineNextAccount(runner, engine: health.engine)",
+                      "Text(RunnerPageCopy.runnerEngineNext(account: next))",
                       "RunnerWindowRow(row: row, resets: RunnerPageFormat.resetsLine(row, now: now))"] {
             XCTAssertTrue(row.contains(piece), "the engine row lost \(piece)")
         }
@@ -343,7 +344,7 @@ final class RunnersPageWiringTests: XCTestCase {
                       ".swipeActions(edge: .trailing, allowsFullSwipe: false) {",
                       "if !line.isDefault {",
                       "Button(role: .destructive) { pendingRemoval = line } label: {",
-                      ".confirmationDialog(removalTitle, isPresented: removalAsked",
+                      ".orbitConfirmation({ _ in removalTitle },",
                       "await runners.removeAccount(id, engine: login, account: line.id)",
                       ".disabled(offline || removal?.pending == true)",
                       "Text(RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER)",
@@ -420,8 +421,10 @@ final class RunnersPageWiringTests: XCTestCase {
         let page = try detail()
         XCTAssertTrue(page.contains("Button(RunnerPageCopy.RUNNER_ROTATE_TOKEN) { confirmingRotate = true }"))
         XCTAssertTrue(page.contains("Button(role: .destructive) { confirmingRemove = true } label: {"))
-        XCTAssertTrue(page.contains("isPresented: $confirmingRotate, titleVisibility: .visible) {"))
-        XCTAssertTrue(page.contains("isPresented: $confirmingRemove, titleVisibility: .visible) {"))
+        XCTAssertTrue(page.contains("orbitConfirmation(\"Rotate token for"),
+                      "the token card asks first, in the shape the width calls for")
+        XCTAssertTrue(page.contains("orbitConfirmation(\"Remove "),
+                      "and so does the remove card")
         XCTAssertTrue(page.contains("if let token = rotatedToken {"))
         XCTAssertTrue(page.contains("Button(RunnerPageCopy.RUNNER_COPY) { copy(token) }"))
         XCTAssertFalse(code(try appSource("RunnersModel.swift")).contains("revealedToken"),

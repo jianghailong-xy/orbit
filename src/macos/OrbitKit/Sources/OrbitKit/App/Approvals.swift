@@ -41,13 +41,21 @@ public enum Approvals {
     /// the project saying it needs a person, so the agent's part is to argue the condition is gone
     /// and the owner's is to agree or not. Web keys the same tool off `isBlockerResolve`.
     public static func isBlockerResolve(toolName: String) -> Bool { toolName == "orbit_blocker_resolve" }
+    /// Changing a project's merge check — the check run on the combined tree before that project's
+    /// work lands. The one integration setting an agent may propose: where the work LANDS is the
+    /// owner's alone and the runner does not ask about it at all. Web keys it off
+    /// `isMergeCheckChange`, and draws the two commands; here it renders as the plain card, whose
+    /// body is the ask as the runner built it.
+    public static func isMergeCheckChange(toolName: String) -> Bool {
+        toolName == "orbit_project_update_integration"
+    }
     /// Every ask Orbit raises for itself. What they share is how they are answered: a refusal is a
     /// conversation rather than a press (the composer is armed with the reason), and none of them
     /// can be waived with a standing rule — what is being asked for differs each time.
     public static func isOrbitAsk(toolName: String) -> Bool {
         isTaskBatch(toolName: toolName) || isDagChange(toolName: toolName)
             || isTaskCreate(toolName: toolName) || isProjectCreate(toolName: toolName)
-            || isBlockerResolve(toolName: toolName)
+            || isBlockerResolve(toolName: toolName) || isMergeCheckChange(toolName: toolName)
     }
     /// A provider write — one of the owner's own providers created, changed or removed. Drawn and
     /// refused as a plain tool card (its input is the provider as it would be written, the key
@@ -181,6 +189,11 @@ public enum Approvals {
     /// one rule per distinct sub-command (`bashCommandRules`); other tools get a tool-wide rule (no
     /// `ruleContent`). The running session stops asking, and the control plane keeps the rules on
     /// that session's workspace so its other sessions start with them too.
+    /// Whether an approval card may offer "Allow & remember" on this runtime (web's
+    /// `approvalRememberOffered`). Harness's approval bridge answers each ask once (allow-once /
+    /// reject-once) and drops remember rules, so on `dsh` the next call would ask again.
+    public static func rememberOffered(runtime: String) -> Bool { runtime != "dsh" }
+
     public static func rememberRules(toolName: String, input: JSONValue) -> [PermissionRule] {
         // Orbit's own asks have no repeatable form. Every batch creates a different set of tasks
         // and every restructure releases a different set, so "always allow" would be a standing

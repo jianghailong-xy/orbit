@@ -204,6 +204,8 @@ class DirectoryDeviceTest {
         override fun dispatch(request: RecordedRequest): MockResponse {
             val path = request.requestUrl!!.encodedPath
             apiCalls += "${request.method} ${request.path}"
+            // The login page asks the typed instance what it offers, with no credential; this one predates Google sign-in.
+            if (path == "/api/auth/methods") return MockResponse().setResponseCode(404)
             if (path !in listOf("/api/auth/login", "/api/auth/logout")) assertEquals("Bearer a05-fixture-access", request.getHeader("Authorization"))
             if (path == "/api/workspaces" && forbiddenDirectory) return MockResponse().setResponseCode(403).setBody("{}")
             val session = """{"id":"$sessionId","title":"Review navigation","status":"ENDED","runState":"SUCCEEDED","lifecycleState":"${if (completed) "COMPLETED" else "OPEN"}","agent":{"id":"$workspaceId","name":"Field notes"},"folderId":"$folderId","createdAt":"2026-10-01T08:00:00Z","capabilities":{"canComplete":${!completed},"canRestore":$completed},"tags":[],"pendingApprovals":0,"lastAssistantText":"Same dataset across light and dark"}"""

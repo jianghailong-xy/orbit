@@ -1,0 +1,516 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T12:24:49.091Z",
+    "duration": 16876.106,
+    "expected": 24,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--close-lifecycle-control-lifecycle",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 980
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--close-lifecycle-control-lifecycle--scroll-unlock.json",
+          "sha256": "b29528289fa7f2d5a0fd0f7507065b98e24d3979844f6e1fe7ff8536d18a9cd5"
+        },
+        {
+          "file": "chromium-light-desktop--close-lifecycle-control-lifecycle--page-scroll.json",
+          "sha256": "013c1864e6b804680ea4ee84bdfa9847dfd753f75fa0d4e2323eae4bee759e50"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--close-lifecycle-control-late",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 219
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--close-lifecycle-control-late--scroll-unlock.json",
+          "sha256": "95d1bfe80cd3078023fc22e7aeeed06dec1820f27965fd93555afdf55019c127"
+        },
+        {
+          "file": "chromium-light-desktop--close-lifecycle-control-late--late-release.json",
+          "sha256": "0a74b477a32bd71f62afa727703ca13e19be45636b7d4f174f47c98b08d9f562"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--close-lifecycle-control-retained",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 419
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--close-lifecycle-control-retained--scroll-unlock.json",
+          "sha256": "bc69ee74593b9061ddc007d30423b3f2a71e06833f04459b44760b86d25e8252"
+        },
+        {
+          "file": "chromium-light-desktop--close-lifecycle-control-retained--page-scroll.json",
+          "sha256": "fed7ca5e7191aa0aafc0f51771ff5df75dcff0bcf4538f2897ec24d032026572"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--close-lifecycle-control-lifecycle",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 947
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--close-lifecycle-control-lifecycle--scroll-unlock.json",
+          "sha256": "74d9146f75358721f7e4017a10241a5a19d209f79ba3d1fec9e6584eff246a18"
+        },
+        {
+          "file": "chromium-light-phone--close-lifecycle-control-lifecycle--page-scroll.json",
+          "sha256": "ccf02b5b17759740fed191dddd3a295bafe6e7aad7ca19c48a676f3afbfefe85"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--close-lifecycle-control-late",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 216
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--close-lifecycle-control-late--scroll-unlock.json",
+          "sha256": "616690551b4a636f09a0369e875934986b983c348e492bd52ae983a1e5802002"
+        },
+        {
+          "file": "chromium-light-phone--close-lifecycle-control-late--late-release.json",
+          "sha256": "013f245c04e142c4cb824d13e3d836769706510c3107f8adffd324ca95dd0d04"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--close-lifecycle-control-retained",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 422
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--close-lifecycle-control-retained--scroll-unlock.json",
+          "sha256": "226333d61b432a8a9f3713712747afa4b29a96348d3f664650d92a9ffaeae978"
+        },
+        {
+          "file": "chromium-light-phone--close-lifecycle-control-retained--page-scroll.json",
+          "sha256": "3d9d2ec30065859f43c4bf798f6b99ec71a2ea25aa8b9e11203dd64af8ad51e0"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--close-lifecycle-control-lifecycle",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 955
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--close-lifecycle-control-lifecycle--scroll-unlock.json",
+          "sha256": "b52cb680e06d651a2136de8e271ad8a3cc6061012ead132aaa5387b6e75b28d8"
+        },
+        {
+          "file": "chromium-dark-desktop--close-lifecycle-control-lifecycle--page-scroll.json",
+          "sha256": "6ca32ba8f0b8b414df39d1f13243d2e958db97e8f778fa1d5078edcbaa583bed"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--close-lifecycle-control-late",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 220
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--close-lifecycle-control-late--scroll-unlock.json",
+          "sha256": "f57df392f307200d57490458e94244c52cb65d24c8c083d1c527d777214fac57"
+        },
+        {
+          "file": "chromium-dark-desktop--close-lifecycle-control-late--late-release.json",
+          "sha256": "013f245c04e142c4cb824d13e3d836769706510c3107f8adffd324ca95dd0d04"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--close-lifecycle-control-retained",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 425
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--close-lifecycle-control-retained--scroll-unlock.json",
+          "sha256": "fffeda70dc3d674c02a0384589873b6a14d7c49676ec5060588a839cae061d9d"
+        },
+        {
+          "file": "chromium-dark-desktop--close-lifecycle-control-retained--page-scroll.json",
+          "sha256": "5ac97f268d97ea143a172cd286ee3ed70ea8407a88d5afe047408f996efe184d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--close-lifecycle-control-lifecycle",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 970
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--close-lifecycle-control-lifecycle--scroll-unlock.json",
+          "sha256": "0a7555cf75c1fc41c3cffc5349e9ec41abe5b37c8c346ffbc1a77446a00784ac"
+        },
+        {
+          "file": "chromium-dark-phone--close-lifecycle-control-lifecycle--page-scroll.json",
+          "sha256": "507a2a675079d5227367f959751fe47a878399a9746f9202a555ac135330afb6"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--close-lifecycle-control-late",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 223
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--close-lifecycle-control-late--scroll-unlock.json",
+          "sha256": "6737ade4a4f234ec6e572972262a33a6c164b091faca5e3f8b23c79c5a2dc4d7"
+        },
+        {
+          "file": "chromium-dark-phone--close-lifecycle-control-late--late-release.json",
+          "sha256": "447a72db6dd1f39496e11bd60250d11afc5f43179c50f8d51f62f784c3bba6b5"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--close-lifecycle-control-retained",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 419
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--close-lifecycle-control-retained--scroll-unlock.json",
+          "sha256": "5d53a40d1df00b10bcea285dd87d0f3928e4961729d31c00665a9d555c7f4dd8"
+        },
+        {
+          "file": "chromium-dark-phone--close-lifecycle-control-retained--page-scroll.json",
+          "sha256": "4dcb2b7927fcc0629646b5bb72ecc7b1b4fa86bc7be3f48a445a8ea9fce188ee"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--close-lifecycle-control-lifecycle",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1036
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--close-lifecycle-control-lifecycle--scroll-unlock.json",
+          "sha256": "8dcb10d0dcfe25c96a8005c0bb270645cb1d5a9f49d0311b4b31217d6c51a5a4"
+        },
+        {
+          "file": "webkit-light-desktop--close-lifecycle-control-lifecycle--page-scroll.json",
+          "sha256": "396c15f197275a34481264305424f9c9f5b2fe238535133e7bab72b8af2ee497"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--close-lifecycle-control-late",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 298
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--close-lifecycle-control-late--scroll-unlock.json",
+          "sha256": "b6818870bae8e105eb7c0f35c28cdaaef7595129e2e7a1b4706230c1d08031fc"
+        },
+        {
+          "file": "webkit-light-desktop--close-lifecycle-control-late--late-release.json",
+          "sha256": "edf5d17f87aef2f517ac9b71ffca6b89d5e0985268fc21aa31412e76c571abd4"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--close-lifecycle-control-retained",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 524
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--close-lifecycle-control-retained--scroll-unlock.json",
+          "sha256": "acdc2fb370d2931f59218dbfe7fe47555e499b530a994624ba84825e10834590"
+        },
+        {
+          "file": "webkit-light-desktop--close-lifecycle-control-retained--page-scroll.json",
+          "sha256": "53919fe443cda737ea0203bd2694b0c24f4577edbb3dd1301817150cee5dbe56"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--close-lifecycle-control-lifecycle",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 994
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--close-lifecycle-control-lifecycle--scroll-unlock.json",
+          "sha256": "2b916fbc6a8b1e7bf97ae51cbda1670ec23db3cc536eb05965a904039abc6891"
+        },
+        {
+          "file": "webkit-light-phone--close-lifecycle-control-lifecycle--page-scroll.json",
+          "sha256": "22d547ea191fa6df49189dc299c23ae3ae71c5704816fea94e2a61b32e6eabf5"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--close-lifecycle-control-late",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 311
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--close-lifecycle-control-late--scroll-unlock.json",
+          "sha256": "7bf2da1f2eec2291a17b1571d76284b688d8bbf58116243122cfe704cfea57e6"
+        },
+        {
+          "file": "webkit-light-phone--close-lifecycle-control-late--late-release.json",
+          "sha256": "edf5d17f87aef2f517ac9b71ffca6b89d5e0985268fc21aa31412e76c571abd4"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--close-lifecycle-control-retained",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 515
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--close-lifecycle-control-retained--scroll-unlock.json",
+          "sha256": "01f5959018cbc3bd78a2e5fe62ca41e53c93dc67b49bdbff3cf8b04567a262d2"
+        },
+        {
+          "file": "webkit-light-phone--close-lifecycle-control-retained--page-scroll.json",
+          "sha256": "0f8e7b9272b56a2df7178a5bce83f20366fad2b91f8af9a6eedfa3e9600e64ac"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--close-lifecycle-control-lifecycle",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1035
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--close-lifecycle-control-lifecycle--scroll-unlock.json",
+          "sha256": "ba3154374083dd401eccac705ee5e8360492d119f21656b5beebd91569258ad3"
+        },
+        {
+          "file": "webkit-dark-desktop--close-lifecycle-control-lifecycle--page-scroll.json",
+          "sha256": "3dca01cc9ae0dfa29f5d27f5de642f0bc2b0c2957b8cac8ac4f44a252e5e049a"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--close-lifecycle-control-late",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 314
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--close-lifecycle-control-late--scroll-unlock.json",
+          "sha256": "7bf2da1f2eec2291a17b1571d76284b688d8bbf58116243122cfe704cfea57e6"
+        },
+        {
+          "file": "webkit-dark-desktop--close-lifecycle-control-late--late-release.json",
+          "sha256": "edf5d17f87aef2f517ac9b71ffca6b89d5e0985268fc21aa31412e76c571abd4"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--close-lifecycle-control-retained",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 542
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--close-lifecycle-control-retained--scroll-unlock.json",
+          "sha256": "51609d876cd4bb7b8f1b43d44b52366a4d9e68c8cfd21f380ff39030c34f071b"
+        },
+        {
+          "file": "webkit-dark-desktop--close-lifecycle-control-retained--page-scroll.json",
+          "sha256": "0ed1c8ba16020f1be35e4e5612e38e2773e09a8b9f2fea5b7ce6e5eab3880fc0"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--close-lifecycle-control-lifecycle",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1000
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--close-lifecycle-control-lifecycle--scroll-unlock.json",
+          "sha256": "0042120c146e0bc4b086fcfe938f1e29074b523f87f95128c949cda95ced9a58"
+        },
+        {
+          "file": "webkit-dark-phone--close-lifecycle-control-lifecycle--page-scroll.json",
+          "sha256": "e32c639b2793dc52a592632f6a97de82ff4e46f4e1b582439aa761efd73c5d5d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--close-lifecycle-control-late",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 316
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--close-lifecycle-control-late--scroll-unlock.json",
+          "sha256": "3e75fcd990079438c4df4b42b6729e398ca9537e2ba47e7bbaea68160349e9bd"
+        },
+        {
+          "file": "webkit-dark-phone--close-lifecycle-control-late--late-release.json",
+          "sha256": "1626cc210159fe5390a16799ec33f30586cbc299f9b666e120869405c1c0237e"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--close-lifecycle-control-retained",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 517
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--close-lifecycle-control-retained--scroll-unlock.json",
+          "sha256": "af30f9856af0f59bb811e36ce6913eac6d70112ae8b13045b15837ec5478705b"
+        },
+        {
+          "file": "webkit-dark-phone--close-lifecycle-control-retained--page-scroll.json",
+          "sha256": "0f8e7b9272b56a2df7178a5bce83f20366fad2b91f8af9a6eedfa3e9600e64ac"
+        }
+      ]
+    }
+  ]
+}

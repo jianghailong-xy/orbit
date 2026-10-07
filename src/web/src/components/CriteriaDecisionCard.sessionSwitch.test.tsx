@@ -40,6 +40,8 @@ import {
  * drawn from it, not in one still waiting for the read.
  */
 
+// These cases check the card's data/decision contract; ReviewCard.test covers the real dialog.
+vi.mock('./ReviewCard', () => import('../test/inlineReviewCard'));
 vi.mock('../api', () => ({ api: vi.fn() }));
 
 const P1 = '34MPiBgZ80YpSKt0lmTQA';

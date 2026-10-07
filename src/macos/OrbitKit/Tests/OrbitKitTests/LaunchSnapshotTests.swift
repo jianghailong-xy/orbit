@@ -82,6 +82,16 @@ final class LaunchSnapshotTests: XCTestCase {
         XCTAssertEqual(store.load(), written)
     }
 
+    /// What a cold launch reads is read off the main thread, so the two have to agree — the async
+    /// one is the shipping path (`AppModel.restoreLaunchSnapshot`) and the sync one is the tests'.
+    func testReadingOffTheMainThreadReadsWhatLoadReads() async {
+        let written = snapshot()
+        store.save(written)
+        let offMain = await store.loadOffMain()
+        XCTAssertEqual(offMain, store.load())
+        XCTAssertEqual(offMain, written)
+    }
+
     func testNothingReadableIsNoSnapshot() throws {
         // First launch: no file, nor a directory for it.
         XCTAssertNil(store.load())
@@ -145,5 +155,52 @@ final class LaunchSnapshotTests: XCTestCase {
         var snap = snapshot()
         snap.agents = []
         XCTAssertNil(snap.landingAgentID(lastAgentID: "a1"))
+    }
+
+    // MARK: What a launch that has already answered still draws from it
+
+    /// The launch restore reads its file off the main thread, so the launch can answer first. Each
+    /// piece a fetch has answered for is handed over as nil — the caller has nothing to adopt, and
+    /// so cannot put the previous run's copy over this run's answer.
+    func testFetchedOpenListIsNeverOverwrittenByASnapshotThatArrivesLater() {
+        let fetched = [Session(id: "s1", title: "Renamed on web while we were away",
+                               status: .running, agentId: "a1", assignedRunnerId: "r2",
+                               pendingApprovals: nil, branch: nil, updatedAt: "2026-10-06T10:00:00Z")]
+        var snap = snapshot()
+        snap.openSessions = [Session(id: "s1", title: "Fix the launch", status: .running,
+                                     agentId: "a1", assignedRunnerId: "r2",
+                                     pendingApprovals: nil, branch: nil,
+                                     updatedAt: "2026-09-30T10:00:00Z")]
+        let late = snap.fillIn(openListAnswered: true)
+        XCTAssertNil(late.openSessions)
+        // What `AppModel` does with a fill-in: adopt a piece only where there is one.
+        XCTAssertEqual((late.openSessions ?? fetched).map(\.title), ["Renamed on web while we were away"])
+        // The pieces nothing answered for are still the launch's to draw.
+        XCTAssertEqual(late.user, snap.user)
+        XCTAssertEqual(late.workspaces?.items, snap.agents)
+    }
+
+    func testNothingAnsweredHandsOverTheWholeSnapshot() {
+        let snap = snapshot()
+        let fillIn = snap.fillIn()
+        XCTAssertFalse(fillIn.isEmpty)
+        XCTAssertEqual(fillIn.user, snap.user)
+        XCTAssertEqual(fillIn.workspaces?.items, snap.agents)
+        XCTAssertEqual(fillIn.workspaces?.runnerNames, snap.runnerNames)
+        XCTAssertEqual(fillIn.workspaces?.runnerOrder, snap.runnerOrder)
+        XCTAssertEqual(fillIn.openSessions, snap.openSessions)
+    }
+
+    func testEachPieceIsDroppedForItsOwnAnswerAlone() {
+        let snap = snapshot()
+        XCTAssertNil(snap.fillIn(accountAnswered: true).user)
+        XCTAssertNotNil(snap.fillIn(accountAnswered: true).openSessions)
+        XCTAssertNil(snap.fillIn(workspacesAnswered: true).workspaces)
+        XCTAssertNotNil(snap.fillIn(workspacesAnswered: true).openSessions)
+    }
+
+    func testAFullyAnsweredLaunchHasNothingLeftToDraw() {
+        XCTAssertTrue(snapshot().fillIn(accountAnswered: true, workspacesAnswered: true,
+                                        openListAnswered: true).isEmpty)
     }
 }

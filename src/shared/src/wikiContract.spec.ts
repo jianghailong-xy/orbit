@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { PUBLIC_ID_FIELDS } from './codec';
 import { WIKI_IMPORT_RULES } from './wiki';
 import {
   KIND_SPECS,
@@ -43,6 +44,8 @@ import {
   WIKI_SEARCH_MATCHES,
   WIKI_SLUG_PATTERN,
   WIKI_SOURCE_KINDS,
+  WIKI_SOURCE_REFS,
+  WIKI_SOURCE_ROW_ID_KINDS,
   WIKI_SOURCE_STATES,
   WIKI_TRUST_LEVELS,
   WIKI_UNSET_REVIEW_MODE,
@@ -100,6 +103,7 @@ import {
   WIKI_DOC_CHECKERS,
   WIKI_DOC_DISPOSITION_ACTIONS,
   WIKI_DOC_FOOTNOTE_KINDS,
+  WIKI_DOC_LEAD_RULES,
   WIKI_DOC_MATERIAL_RULES,
   WIKI_DOC_MATERIAL_WEIGHTS,
   WIKI_DOC_RECORD_KINDS,
@@ -203,6 +207,18 @@ describe('wiki contract', () => {
     expect(CONTRACT.effectPolicy.decide.actions).toEqual([...WIKI_DECIDE_ACTIONS]);
     expect(CONTRACT.refusals.map((r: { code: string }) => r.code)).toEqual([...WIKI_REFUSAL_CODES]);
     expect(CONTRACT.space.slug.pattern).toBe(WIKI_SLUG_PATTERN);
+  });
+
+  it('says what the spaces list adds to a row, and holds its plan count to the vectors the clients count by', () => {
+    const list = CONTRACT.space.list;
+    expect(CONTRACT.agentSurface.doors.user.routes).toContain(list.route);
+    for (const field of ['pendingOps', 'planWaiting', 'workspaceIds', 'docs']) expect(list.row).toContain(field);
+    expect(list.planWaiting).toMatch(/web wikiPlanPending and OrbitKit WikiPlanLogic\.pending/u);
+    expect(list.planWaiting).toMatch(/src\/shared\/src\/wiki-docs\.fixture\.json plan\.states/u);
+    expect(existsSync(path.join(ROOT, 'src/shared/src/wiki-docs.fixture.json'))).toBe(true);
+    // Public ids on the user door: the codec rewrites the field only because it is on its list.
+    expect(list.workspaceIds).toMatch(/public ids/u);
+    expect(PUBLIC_ID_FIELDS.has('workspaceIds')).toBe(true);
   });
 
   it('ships the limits the contract sets, and the design set the ones it names', () => {
@@ -1229,6 +1245,9 @@ describe('wiki contract', () => {
     expect(docs.withdrawReasons).toEqual([...WIKI_DOC_WITHDRAW_REASONS]);
     expect(keysOf(docs.blockKinds)).toEqual([...WIKI_DOC_BLOCK_KINDS]);
     expect(docs.rules).toEqual(WIKI_DOC_RULES);
+    // A written document's two lines on the home, which the directory carries.
+    expect(docs.lead.rules).toEqual(WIKI_DOC_LEAD_RULES);
+    expect(docs.reads.directory).toMatch(/\blead\b/u);
     expect(docs.schema).toEqual(Object.fromEntries(Object.entries(WIKI_DOC_SCHEMA).map(([level, keys]) => [level, [...keys]])));
     // What became of each piece of a section's material is written with it, and kept (migration 0337).
     expect(keysOf(docs.dispositionActions)).toEqual([...WIKI_DOC_DISPOSITION_ACTIONS]);
@@ -1384,6 +1403,38 @@ describe('wiki contract', () => {
     expect(CONTRACT.realtime.payload).toEqual(['id']);
     expect(CONTRACT.realtime.notPublishedWhen).toContain('an idempotent replay');
     expect(CONTRACT.realtime.correctness).toMatch(/Nothing depends on it/u);
+  });
+
+  it("says what each source kind takes as its ref, and refuses a row's ref that is no id by its path", () => {
+    // One phrase per kind, the words a refusal of a ref that names nothing says too (sourceInput.refs).
+    expect(keysOf(CONTRACT.sourceInput.refs)).toEqual([...WIKI_SOURCE_KINDS]);
+    expect(CONTRACT.sourceInput.refs).toEqual(WIKI_SOURCE_REFS);
+    // The kinds whose ref can only be a row's id: a tool_call takes a tool_use_id too, and a commit is a sha.
+    expect(CONTRACT.sourceInput.rowIdKinds).toEqual([...WIKI_SOURCE_ROW_ID_KINDS]);
+    for (const kind of WIKI_SOURCE_ROW_ID_KINDS) expect(WIKI_SOURCE_KINDS).toContain(kind);
+    expect(WIKI_SOURCE_ROW_ID_KINDS).not.toContain('tool_call');
+    expect(WIKI_SOURCE_ROW_ID_KINDS).not.toContain('commit');
+    expect(WIKI_SOURCE_REFS.tool_call).toMatch(/tool_use_id/u);
+    expect(CONTRACT.sourceInput.toolUseId).toMatch(/that two sessions carry, is unresolved/u);
+
+    // A tool_use_id where a task's id goes is refused by its path, saying what goes there instead. As a
+    // tool_call's ref it is a tool_use_id, which only the lookup can judge.
+    const toolUseId = 'toolu_0195URa2d9G6F4AKQoGfVprN';
+    const errors = validateWikiSources([{ kind: 'tool_call', ref: toolUseId }, { kind: 'task', ref: toolUseId }], 'ops[0].sources');
+    expect(errors.map((e) => e.path)).toEqual(['ops[0].sources[1].ref']);
+    expect(errors[0]!.message).toContain(WIKI_SOURCE_REFS.task);
+    expect(errors[0]!.message).toMatch(/the UUID, or the short public id/u);
+    // Both spellings of an id are one id.
+    expect(validateWikiSources([
+      { kind: 'task', ref: '0199aaaa-0000-7000-8000-000000000000' },
+      { kind: 'task', ref: '34UuAT0pwUgBln9yRlAZF' },
+    ])).toEqual([]);
+
+    // A dry run is answered with the status the request itself would be.
+    expect(CONTRACT.refusalRules.dryRun).toMatch(/under the status the request would be answered with/u);
+    const status = (code: string) => CONTRACT.refusals.find((r: { code: string }) => r.code === code)?.httpStatus;
+    expect(status('WIKI_SCHEMA')).toBe(400);
+    expect(status('WIKI_SOURCE_UNRESOLVED')).toBe(422);
   });
 
   it('carries uniquely named vectors with reasons, a valid and an invalid one for every kind', () => {

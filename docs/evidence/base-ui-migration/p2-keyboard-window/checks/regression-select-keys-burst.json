@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869 && node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-select-keys/select-keys-burst.config.mjs --project chromium-dark-desktop",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_6b50a11cdcc4",
+ "cwd": "/root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869",
+ "commit": "89256103213431815c02a5e5d4dc8456ef5015c6",
+ "webTree": "1780d071a6b402eef7d34ea74185684d73db3a85",
+ "outputLastWritten": "2026-10-06T13:34:13.572908+00:00",
+ "exitCode": 0,
+ "outputSha256": "ab61f3fbd1445699f042b8e7cb4cc15b4b26a041740f35ecd0f31ba59508e24d",
+ "outputBytes": 48734,
+ "note": "276 passed: the previous task's burst probe, unchanged, on this tree; archived here as regression-select-keys-burst (the p2-select-keys directory is not touched)."
+}

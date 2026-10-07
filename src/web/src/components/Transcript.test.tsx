@@ -139,6 +139,23 @@ describe('transient provider error card', () => {
     expect(html).not.toContain('Provider unavailable');
   });
 
+  it("turns Codex's exhausted 429 into a retry card with the request id intact", () => {
+    const message = 'exceeded retry limit, last status: 429 Too Many Requests, request id: 95e00d6c-68cc-4d64-b4da-01a6252260c2';
+    const html = renderToStaticMarkup(
+      <AutoRetryCtx.Provider
+        value={{ provider: 'codex', retryAt: new Date(Date.now() + 30_000).toISOString(), attempts: 0 }}
+      >
+        <Transcript events={[errorEvent(1, message)]} />
+      </AutoRetryCtx.Provider>,
+    );
+
+    expect(html).toContain('Provider unavailable');
+    expect(html).toContain(message);
+    expect(html).toContain('Retrying');
+    expect(html).not.toContain('chat-error');
+    expect(html).not.toContain('Usage limit reached');
+  });
+
   it('counts down to the armed retry', () => {
     const html = render(OVERLOADED, {
       provider: 'claude',
@@ -282,6 +299,81 @@ describe('spent quota card', () => {
 
     expect(html).not.toContain('chat-quota');
     expect(html).toContain('All 27 failed');
+  });
+});
+
+// A limit that killed a turn nobody sent — a background job's wake, a turn the runtime started for
+// itself — leaves the sweep with nothing of anybody's to re-send, and the server says so
+// (`nothingToResend`). Every verb on the card is Continue then, and the sentence the press will
+// send is quoted beside it: it is the platform's, not the reader's, and they are told which words.
+describe('nothing to re-send — the card continues instead', () => {
+  const LIMIT = "You've hit your session limit · resets 8:20pm (Europe/Berlin)";
+  const render = (help: Partial<AutoRetryHelp>, text = LIMIT) =>
+    renderToStaticMarkup(
+      <AutoRetryCtx.Provider
+        value={{
+          provider: 'claude',
+          runnerName: 'wikova',
+          onRetry: () => {},
+          nothingToResend: true,
+          retryAt: null,
+          attempts: 0,
+          onArmAuto: () => {},
+          ...help,
+        }}
+      >
+        <Transcript events={[{ seq: 1, type: 'assistant', payload: { text } }]} />
+      </AutoRetryCtx.Provider>,
+    );
+
+  it('says why there is no Retry, and offers Continue in its place', () => {
+    const html = render({});
+
+    expect(html).toContain('Nothing to re-send — the limit landed on a turn that wasn’t yours.');
+    expect(html).toContain('Continue');
+    expect(html).not.toContain('Retry now');
+    expect(html).not.toContain('Auto-retry is off.');
+    expect(html).not.toContain('Will re-send');
+  });
+
+  // The one promise the card can make about words nobody wrote: which sentence the press sends.
+  it('quotes the sentence the press sends, under the button', () => {
+    expect(render({})).toContain('Sends “Continue where you left off.”');
+  });
+
+  it('arms the same turn at the reset, in the continue words', () => {
+    const html = render({
+      retryAt: new Date(Date.now() + 3 * 3600_000).toISOString(),
+      onCancelAuto: () => {},
+    });
+
+    expect(html).toContain('Continues');
+    expect(html).toContain('Continue when the quota resets');
+    expect(html).toContain('Continue now anyway');
+    expect(html).not.toContain('Resets');
+  });
+
+  it('keeps the switch, off, in the continue words', () => {
+    expect(render({})).toContain('Off — nothing will continue until you do.');
+  });
+
+  // A Codex-style sentence names no moment, so there is no switch to offer — but the manual
+  // continue races nothing and stays.
+  it('offers Continue even when no reset moment could be read', () => {
+    const html = render({}, "You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits.");
+
+    expect(html).not.toContain('class="sw"');
+    expect(html).toContain('Continue');
+  });
+
+  // Five continues that never got through hand the session back like any other spent retry: no
+  // switch to re-arm, and the one control left is the continue by hand.
+  it('still hands back once the attempts are spent', () => {
+    const html = render({ attempts: 5 });
+
+    expect(html).toContain('Auto-retry gave up');
+    expect(html).not.toContain('class="sw"');
+    expect(html).toContain('Continue');
   });
 });
 
@@ -1866,8 +1958,8 @@ describe('runtime authentication help', () => {
   it('takes Antigravity to the encrypted Gemini key in Providers', () => {
     const html = card('antigravity');
 
-    expect(html).toContain('Antigravity needs a Gemini API key');
-    expect(html).toContain('Orbit stores the key encrypted');
+    expect(html).toContain('Antigravity needs authentication');
+    expect(html).toContain('Update this runner to sign in with Google.');
     expect(html).not.toContain('GEMINI_API_KEY');
     expect(html).not.toContain('rsi-');
     expect(html).not.toContain('Update the API key');

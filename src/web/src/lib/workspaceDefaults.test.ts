@@ -13,6 +13,9 @@ import {
   livePinnedModel,
   mergedProviderOptions,
   modelOptionsForProvider,
+  openCodeChoiceKey,
+  openCodeKeyChoice,
+  providerChoiceFor,
   newSessionEffortForProvider,
   newSessionModelForProvider,
   normalizeEffortForProvider,
@@ -725,5 +728,37 @@ describe('contextWindowFor', () => {
 
     expect(contextWindowFor('shared-model', null, configured, 'mine')).toBe(512_000);
     expect(contextWindowFor('shared-model', null, configured, 'unconfigured')).toBeUndefined();
+  });
+});
+
+describe('a configured key run on OpenCode', () => {
+  const deepseekKey: ConfiguredProvider = {
+    slug: 'deepseek',
+    label: 'DeepSeek',
+    runtime: 'claude',
+    models: [
+      { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
+      { value: 'deepseek-flash', label: 'DeepSeek Flash' },
+    ],
+    defaultModel: 'deepseek-v4-pro',
+    runsOnOpenCode: true,
+  };
+
+  it('is run by OpenCode, on the key’s own models under the ids that name the key', () => {
+    expect(runtimeForProvider('opencode/deepseek', [deepseekKey])).toBe('opencode');
+    expect(modelOptionsForProvider('opencode/deepseek', null, [deepseekKey])).toEqual([
+      { value: 'orbit-deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
+      { value: 'orbit-deepseek/deepseek-flash', label: 'DeepSeek Flash' },
+    ]);
+    expect(defaultModelForProvider('opencode/deepseek', null, [deepseekKey])).toBe('orbit-deepseek/deepseek-v4-pro');
+  });
+
+  it('is the choice of an OpenCode session whose model names it, and of nothing else', () => {
+    expect(providerChoiceFor('opencode', 'orbit-deepseek/deepseek-flash')).toBe('opencode/deepseek');
+    expect(providerChoiceFor('opencode', 'anthropic/claude-opus-5')).toBe('opencode');
+    expect(providerChoiceFor('claude', 'orbit-deepseek/x')).toBe('claude');
+    expect(openCodeChoiceKey('opencode/deepseek')).toBe('deepseek');
+    expect(openCodeChoiceKey('opencode')).toBeNull();
+    expect(openCodeKeyChoice('glm')).toBe('opencode/glm');
   });
 });

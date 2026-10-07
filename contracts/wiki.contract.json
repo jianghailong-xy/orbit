@@ -69,6 +69,14 @@
       "unbound": "A session whose workspace is bound to no space is refused WIKI_SPACE_UNBOUND, with one sentence saying how to bind it.",
       "projects": "A project reaches its space through its codebase's canonical repository URL. There is no project-to-space table."
     },
+    "list": {
+      "route": "GET /api/wiki/spaces",
+      "row": "Every space of the owner, by slug: the space as GET /api/wiki/spaces/:id answers it, with pendingOps, planWaiting, workspaceIds and docs, which the one-space read does not carry. A client reading a server older than the last three takes them as absent.",
+      "pendingOps": "The ops of its changesets that wait in Review (decision pending). Plan proposals are not ops and are not in it. Over the owner's spaces it is what the Activity page's first banner and Review's head show.",
+      "planWaiting": "The things of its plan that wait on the owner, one each: the draft, revision or build on its way (the job plan.routes.state shows) that is held — by the server (plan.jobs.held), or made and not started while the maintenance workspace's runner is offline; the draft or revision that failed with no version stored since it was asked for; the draft waiting to be confirmed; and every proposal waiting. What is only going on (queued, drafting, writing) and a build that failed are not counted. The runner is the one the space's maintenance workspace is on, online by the runners list's own rule (isRunnerOnline); with no maintenance workspace, or one deleted or without a runner, it is unknown, and unknown is not offline. The count web wikiPlanPending and OrbitKit WikiPlanLogic.pending make, held by all three to the vectors of src/shared/src/wiki-docs.fixture.json plan.states (each case's pending). Added to pendingOps over the owner's spaces, it is the number waiting on the owner that the drawer, the web sidebar and the Wiki's Activity badge show — the sum of the Activity page's amber banners.",
+      "workspaceIds": "The workspaces bound to it (binding) that are not deleted, in the order they were bound: public ids, like every id on the user door.",
+      "docs": "{ written, total }: its confirmed plan's documents and how many are written, as docs.reads.directory counts them; null while it has no confirmed plan."
+    },
     "settings": {
       "push": {
         "type": "boolean",
@@ -382,7 +390,24 @@
   },
   "sourceInput": {
     "keys": ["kind", "ref", "session", "seq", "locator", "quote"],
-    "ref": "The cited record's id, or a commit's sha. Required, except by a turn that cites the calling session.",
+    "ref": "The cited record's id, or a commit's sha: what each kind takes is refs. An id is either spelling of one, the UUID or the short public id Orbit shows. Required, except by a turn that cites the calling session. A ref of a rowIdKinds kind that is neither spelling of an id is refused WIKI_SCHEMA, errors[] naming it by its path (ops[i].sources[j].ref), and a ref is never compared with a row's id as it came.",
+    "refs": {
+      "turn": "the turn's id; a turn of the calling session takes no ref, and is { kind: 'turn', session: 'self' }",
+      "event": "the run event's id",
+      "tool_call": "the tool call's id, or the tool_use_id its engine gave the call (toolu_…, call_…), which is the id a session reads in its own transcript and the one task_evidence_submit takes: the calling session's own call, or else the call of the one session of this owner's that made it",
+      "task": "the task's id",
+      "task_comment": "the task comment's id",
+      "approval": "the approval's id",
+      "evidence": "nothing yet: no door resolves an evidence source",
+      "owner_decision": "the id of the project blocker the owner resolved with a note",
+      "merge_receipt": "the merge receipt's id",
+      "criterion": "nothing yet: no door resolves a criterion source",
+      "commit": "the commit's full sha, as a merge receipt of this owner's carries it",
+      "note": "the note's id, as orbit wiki import registered it",
+      "url": "nothing yet: only an assumption cites a url, and assumptions are phase 3"
+    },
+    "rowIdKinds": ["turn", "event", "task", "task_comment", "approval", "owner_decision", "merge_receipt", "note"],
+    "toolUseId": "A tool_call's ref is read as the tool call's id first, and as a tool_use_id when no tool call of this owner's has that id: the calling session's own call carrying it, else the call of the one other session of this owner's that carries it. A call recorded more than once in one session is one call, read from its first row; a tool_use_id no session carries, or that two sessions carry, is unresolved. What is stored is the row's id.",
     "session": "Only the word self, and only on a turn: the calling session. Its current turn may not be stored yet, so its quote is verified when the session settles, and the Review card says whether it was.",
     "seq": "Only beside session self: the event sequence number it cites, an integer from 0.",
     "locator": "Optional object: where in the record, such as a sequence range or a field name.",
@@ -390,7 +415,7 @@
   },
   "sourceRules": {
     "firstHand": "A source is a first-hand record. A wiki entry, a topic summary or any other view is never a source: citing knowledge with knowledge is how retrieval collapses into itself.",
-    "resolution": "Every source resolves among the owner's own rows, or the op is refused WIKI_SOURCE_UNRESOLVED.",
+    "resolution": "Every source resolves among the owner's own rows, or the op is refused WIKI_SOURCE_UNRESOLVED, errors[] naming the source by its path and the message saying what its kind's ref is (sourceInput.refs).",
     "quote": "A quote, whitespace-normalized, is a substring of the text of the record it cites, or the op is refused WIKI_QUOTE_NOT_FOUND.",
     "required": "A non-owner add, amend, supersede or reinforce cites at least one source: a claim that cannot be cited is not ready (WIKI_SOURCE_UNRESOLVED). The owner's own writes may cite none.",
     "attachedTo": "A source row hangs on the revision it supports. A reinforce adds rows to the entry's current revision and changes nothing else.",
@@ -1666,13 +1691,20 @@
       "withdraw": "POST /api/runner/wiki/spaces/:id/maintenance/docs/withdrawals"
     },
     "reads": {
-      "directory": "{ spaceId, plan: { version, confirmedAt } | null, docs: { total, written }, categories }: the confirmed plan's categories in its order (number from 1), each with its documents (number <category>.<n>, title, question, written, status, updatedAt, planVersion) and each document's sections (number, title, kind, written, stale). A space with no confirmed plan has none.",
+      "directory": "{ spaceId, plan: { version, confirmedAt } | null, docs: { total, written }, categories }: the confirmed plan's categories in its order (number from 1), each with its documents (number <category>.<n>, title, question, written, status, updatedAt, planVersion, and lead: its two lines on the home, null for one not written — lead) and each document's sections (number, title, kind, written, stale). A space with no confirmed plan has none.",
       "doc": "One document of the confirmed plan: its number, title, question, audience, scope (scopeOut's documents with their number and title), category, length, status, and when, from which plan version and at which origin/main commit (repoSha) it was written; its sections in the plan's order, each with the commit it was generated at and its blocks, a block's sentences each with its status, its footnote numbers, its new tokens and, once withdrawn, why, when, and through which entry or for which repository file (entryId, path — one of the two); its footnotes, numbered by first appearance — the same original and quote cited twice is one number — each with its kind, verdict, who checked it, its quote, its location (path@sha#Lstart-end, or <kind>:<record id>#c<start>-<end>) and what the page links to (links): a repository original's path, sha, lines, section, symbol and excerpt; a record's id (recordId), character range, session (sessionId, with recordId the pair a turn's, an event's or a tool call's deep link needs) and its title, number, time and label, task and project and their titles, a note's path; and its via entry; and the via entries as they stand now, with the footnotes each carried. A document of the plan not written yet is written false with its sections unwritten; one the plan does not have is a 404. counts and unsourcedShare are its sentences' as they stand.",
       "index": "Every document of the confirmed plan, and every section whose title no other document of the plan shares — the ones every document has (known pitfalls, conventions, overview) are left out — each with its document's number and title, its category and whether it is written, in title order.",
       "writerState": "{ spaceId, planVersion, docs: [{ slug, planVersion, status, repoSha, updatedAt, sections: [{ key, materialSha256, repoSha, stale, generatedAt }] }] }: what is written, for a run to tell which sections to write again — a stale one, one whose material changed, or one whose repoSha origin/main has moved past in what it cites.",
       "writerDoc": "One document as it is written, for a maintenance run of the space: the same answer as reads.doc, on the runner door. A run reads it to write a document's overview when the sections it summarizes were left unchanged, their sentences and footnotes as they stand.",
       "material": "?section=<key>, a section of the document in the confirmed plan: { spaceId, slug, section, planVersion, condition, entries, records, unresolved } — the server's half of the section's material (material): the section's session condition as the plan states it (null when it has none, and then nothing else), the entries it picked as the way in, and every record found through them or by the condition's projects, window and keywords, each redacted and placed. A section the confirmed plan's document does not have is a 404.",
       "affected": "{ spaceId, plan: { version, confirmedAt, repoSha, draftedAt } | null, build: { jobId, state, version } | null, sections: [{ doc, key, repoSha, generatedAt, stale, entryIds }], unplaced: [{ id, kind, title, summary, topics, anchorPaths, changedAt }], unplacedMore, proposed: { entryIds, commits, paths } } (WikiDocsAffected, affected): the confirmed plan (null with none: the run writes no document), the space's build that has not ended, the written sections to write again with the entries that fit them, the entries no section fits, and what the space's proposals already name — their entries, commits and the design documents their changes cite. repoSha is the commit the plan's references were last checked at: the confirmed version's, or the newest of the versions it was made from. A maintenance run's alone."
+    },
+    "lead": {
+      "means": "A written document's lead on the directory (reads.directory): the first rules.sentences sentences of its first section — first as the confirmed plan orders its sections — in their order, withdrawn ones left out, joined as they read (a space after a Latin stop, none after a full-width one) and, past rules.maxChars characters, cut there with an ellipsis (…). The sentences' text as the document page has it, inline marks and all. Null for a document not written, and for one whose first section is not written or has no sentence that is not withdrawn.",
+      "rules": {
+        "sentences": 2,
+        "maxChars": 200
+      }
     },
     "requests": {
       "write": "{ planVersion, repoSha, model?, sections: [{ key, materialSha256, markdown, footnotes: [{ kind, path, sha, lines, section?, symbol?, quote?, excerpt?, verified, viaEntryId? } | { kind, ref, chars?, quote?, viaEntryId? }], dispositions?: [{ material, kind, ref, action, into, reason }] }] }",
@@ -1719,9 +1751,9 @@
   "refusals": [
     { "code": "WIKI_DISABLED", "httpStatus": 404, "scope": "request", "when": "The wiki is off for this account (ORBIT_WIKI rollout)." },
     { "code": "WIKI_SPACE_UNBOUND", "httpStatus": 409, "scope": "request", "when": "The calling session's workspace is bound to no space and could not be bound on first use. The message says in one sentence how the owner binds it." },
-    { "code": "WIKI_SCHEMA", "httpStatus": 400, "scope": "op", "when": "The op, its entry, its anchors or its sources do not have the shape this contract gives them: a kind's fields (KIND_SPECS), a limit, a phase-3 kind, an amend of a decision, a baseRevision where one is required or forbidden. errors[] names every field that failed." },
+    { "code": "WIKI_SCHEMA", "httpStatus": 400, "scope": "op", "when": "The op, its entry, its anchors or its sources do not have the shape this contract gives them: a kind's fields (KIND_SPECS), a limit, a phase-3 kind, an amend of a decision, a baseRevision where one is required or forbidden, a source ref of a kind in sourceInput.rowIdKinds that is neither spelling of an id. errors[] names every field that failed." },
     { "code": "WIKI_KIND_OWNER_ONLY", "httpStatus": 403, "scope": "op", "when": "A non-owner op adds, amends or supersedes a kind only the owner writes (kinds.<kind>.ownerOnlyOps)." },
-    { "code": "WIKI_SOURCE_UNRESOLVED", "httpStatus": 422, "scope": "op", "when": "A source does not resolve among the owner's own rows, cites a wiki entry or view, or an op that must cite a source cites none." },
+    { "code": "WIKI_SOURCE_UNRESOLVED", "httpStatus": 422, "scope": "op", "when": "A source does not resolve among the owner's own rows (errors[] names it by its path), cites a wiki entry or view, or an op that must cite a source cites none." },
     { "code": "WIKI_QUOTE_NOT_FOUND", "httpStatus": 422, "scope": "op", "when": "A quote, whitespace-normalized, is not a substring of the text of the record it cites." },
     { "code": "WIKI_REVISION_CONFLICT", "httpStatus": 409, "scope": "op", "when": "An amend, supersede or retire names a baseRevision that is not the entry's current revision. The answer carries the current revision and a diff." },
     { "code": "WIKI_QUOTA", "httpStatus": 429, "scope": "op", "when": "The op is past limits.opsPerChangeset in its request; or it would wait for the owner and pass limits.opsPerTurn for the request or limits.opsPerSession for the calling session (limitNotes.quota); or the review mode would apply it and the changeset would pass the circuit breaker (reviewModes.floors)." },
@@ -1745,7 +1777,7 @@
     "orderNote": "The order each op is checked in (design section 4.1); redaction, taint, effect and similar refuse nothing, they mark the op. changesetSize is limits.opsPerChangeset, read off the op's position alone. quota comes after the effect because what it counts depends on it: the review queue, the ops that wait (limitNotes.quota), and the circuit breaker, which counts what the review mode applies.",
     "perOp": "Each op is judged on its own. The ops that pass are recorded in one transaction; a refused op writes nothing.",
     "status": "A request none of whose ops was recorded answers with the HTTP status of its first refusal and every op's outcome in the body. A request that recorded something answers 200.",
-    "dryRun": "Checks every op and answers as the request would, recording nothing and publishing nothing. Its answer also carries breaker: the circuit breaker as the request found it, before any of its ops — {scope, activeAtStart, changed, remaining}: scope run for a maintenance run's changeset (maintenance.job.breaker) and changeset otherwise, activeAtStart the active entries it is counted against, changed the entries already changed through the review mode, and remaining how many more distinct entries the mode may change before an op is refused, null where no op is held to the breaker (a Manual space, the owner's own write, a space holding fewer than reviewModes.rules.breakerMinActiveEntries active entries). A request of the same ops recorded now refuses exactly the ones past remaining.",
+    "dryRun": "Checks every op and answers as the request would, recording nothing and publishing nothing: every op's outcome, under the status the request would be answered with (status) — 200 when an op would be recorded, and the first refusal's otherwise. Its answer also carries breaker: the circuit breaker as the request found it, before any of its ops — {scope, activeAtStart, changed, remaining}: scope run for a maintenance run's changeset (maintenance.job.breaker) and changeset otherwise, activeAtStart the active entries it is counted against, changed the entries already changed through the review mode, and remaining how many more distinct entries the mode may change before an op is refused, null where no op is held to the breaker (a Manual space, the owner's own write, a space holding fewer than reviewModes.rules.breakerMinActiveEntries active entries). A request of the same ops recorded now refuses exactly the ones past remaining.",
     "idempotency": "An idempotency key is the owner's: the same key with the same normalized request returns the recorded answer, marked replayed, and writes and publishes nothing.",
     "notFound": "Another owner's space, entry or changeset is a plain 404 with no wiki code, the same answer as one that does not exist.",
     "serviceToken": "A service token is refused on both doors (403), as session_search refuses it: entries derive from conversation text on other machines."
@@ -2213,6 +2245,19 @@
       ],
       "expect": { "errors": ["sources[0].kind", "sources[1].session", "sources[1].ref", "sources[2].quote", "sources[3].seq"] },
       "why": "A wiki entry is never a source; self is only a turn's; a quote is at most 300 characters; seq only sits beside session self."
+    },
+    {
+      "id": "sources-ref-not-an-id",
+      "sources": [
+        { "kind": "tool_call", "ref": "toolu_0195URa2d9G6F4AKQoGfVprN" },
+        { "kind": "task", "ref": "toolu_0195URa2d9G6F4AKQoGfVprN" },
+        { "kind": "event", "ref": "0199aaaa-0000-7000-8000-00000000000g" },
+        { "kind": "turn", "ref": "turn 3 of this session" },
+        { "kind": "approval", "ref": "34UuAT0pwUgBln9yRlAZF" },
+        { "kind": "commit", "ref": "41e75ba" }
+      ],
+      "expect": { "errors": ["sources[1].ref", "sources[2].ref", "sources[3].ref"] },
+      "why": "A row is named by either spelling of its id and nothing else: a tool_use_id is a tool_call's ref and no other kind's, a uuid with a letter past f is no id, and a commit is named by its sha."
     }
   ]
 }

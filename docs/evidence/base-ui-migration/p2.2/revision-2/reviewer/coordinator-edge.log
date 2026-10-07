@@ -1,0 +1,335 @@
+[WebServer] (node:2684176) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 12 tests using 1 worker
+
+(node:2684294) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   1 [chromium-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for attachment (3.2s)
+(node:2684605) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   2 [chromium-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for expiry (2.9s)
+(node:2685326) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   3 [chromium-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for search (2.9s)
+(node:2685923) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   4 [chromium-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for popover (2.8s)
+(node:2686102) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   5 [chromium-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for tooltip (2.9s)
+(node:2686411) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   6 [chromium-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:37:1 › Dialog Popover Select escape restores one layer at a time (1.1s)
+(node:2686595) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   7 [webkit-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for attachment (2.7s)
+(node:2687110) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   8 [webkit-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for expiry (2.5s)
+(node:2688202) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   9 [webkit-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for search (2.5s)
+(node:2688722) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  10 [webkit-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for popover (2.6s)
+(node:2689255) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  11 [webkit-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for tooltip (2.7s)
+(node:2689605) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  12 [webkit-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:37:1 › Dialog Popover Select escape restores one layer at a time (1.1s)
+
+
+  1) [chromium-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for attachment 
+
+    Error: existing popup entrance motion is retained
+
+    expect(received).not.toHaveLength(expected)
+
+    Expected length: not 0
+    Received array:      []
+
+      33 |   await info.attach('normal-motion',{body:JSON.stringify(states),contentType:'application/json'});
+      34 |   const old=states.antd.filter(a=>a.type==='CSSAnimation' && a.duration>0);
+    > 35 |   if(old.length) expect(states.orbit.filter(a=>a.duration>0),'existing popup entrance motion is retained').not.toHaveLength(0);
+         |                                                                                                                ^
+      36 | });
+      37 | test('Dialog Popover Select escape restores one layer at a time',async({page},info)=>{
+      38 |   await page.goto(fixture);await page.evaluate(()=>document.fonts.ready);
+        at /tmp/orbit-p22-coordinator-review-c41y2abt/src/web/ui-migration/coordinator-edge.browser.mjs:35:112
+
+    Error Context: src/web/.coordinator-edge-results/coordinator-edge.browser.m-b14ba--is-retained-for-attachment-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.coordinator-edge-results/coordinator-edge.browser.m-b14ba--is-retained-for-attachment-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.coordinator-edge-results/coordinator-edge.browser.m-b14ba--is-retained-for-attachment-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for expiry 
+
+    Error: existing popup entrance motion is retained
+
+    expect(received).not.toHaveLength(expected)
+
+    Expected length: not 0
+    Received array:      []
+
+      33 |   await info.attach('normal-motion',{body:JSON.stringify(states),contentType:'application/json'});
+      34 |   const old=states.antd.filter(a=>a.type==='CSSAnimation' && a.duration>0);
+    > 35 |   if(old.length) expect(states.orbit.filter(a=>a.duration>0),'existing popup entrance motion is retained').not.toHaveLength(0);
+         |                                                                                                                ^
+      36 | });
+      37 | test('Dialog Popover Select escape restores one layer at a time',async({page},info)=>{
+      38 |   await page.goto(fixture);await page.evaluate(()=>document.fonts.ready);
+        at /tmp/orbit-p22-coordinator-review-c41y2abt/src/web/ui-migration/coordinator-edge.browser.mjs:35:112
+
+    Error Context: src/web/.coordinator-edge-results/coordinator-edge.browser.m-11908-tion-is-retained-for-expiry-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.coordinator-edge-results/coordinator-edge.browser.m-11908-tion-is-retained-for-expiry-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.coordinator-edge-results/coordinator-edge.browser.m-11908-tion-is-retained-for-expiry-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for search 
+
+    Error: existing popup entrance motion is retained
+
+    expect(received).not.toHaveLength(expected)
+
+    Expected length: not 0
+    Received array:      []
+
+      33 |   await info.attach('normal-motion',{body:JSON.stringify(states),contentType:'application/json'});
+      34 |   const old=states.antd.filter(a=>a.type==='CSSAnimation' && a.duration>0);
+    > 35 |   if(old.length) expect(states.orbit.filter(a=>a.duration>0),'existing popup entrance motion is retained').not.toHaveLength(0);
+         |                                                                                                                ^
+      36 | });
+      37 | test('Dialog Popover Select escape restores one layer at a time',async({page},info)=>{
+      38 |   await page.goto(fixture);await page.evaluate(()=>document.fonts.ready);
+        at /tmp/orbit-p22-coordinator-review-c41y2abt/src/web/ui-migration/coordinator-edge.browser.mjs:35:112
+
+    Error Context: src/web/.coordinator-edge-results/coordinator-edge.browser.m-686f4-tion-is-retained-for-search-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.coordinator-edge-results/coordinator-edge.browser.m-686f4-tion-is-retained-for-search-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.coordinator-edge-results/coordinator-edge.browser.m-686f4-tion-is-retained-for-search-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for popover 
+
+    Error: existing popup entrance motion is retained
+
+    expect(received).not.toHaveLength(expected)
+
+    Expected length: not 0
+    Received array:      []
+
+      33 |   await info.attach('normal-motion',{body:JSON.stringify(states),contentType:'application/json'});
+      34 |   const old=states.antd.filter(a=>a.type==='CSSAnimation' && a.duration>0);
+    > 35 |   if(old.length) expect(states.orbit.filter(a=>a.duration>0),'existing popup entrance motion is retained').not.toHaveLength(0);
+         |                                                                                                                ^
+      36 | });
+      37 | test('Dialog Popover Select escape restores one layer at a time',async({page},info)=>{
+      38 |   await page.goto(fixture);await page.evaluate(()=>document.fonts.ready);
+        at /tmp/orbit-p22-coordinator-review-c41y2abt/src/web/ui-migration/coordinator-edge.browser.mjs:35:112
+
+    Error Context: src/web/.coordinator-edge-results/coordinator-edge.browser.m-33ef1-ion-is-retained-for-popover-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.coordinator-edge-results/coordinator-edge.browser.m-33ef1-ion-is-retained-for-popover-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.coordinator-edge-results/coordinator-edge.browser.m-33ef1-ion-is-retained-for-popover-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [chromium-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for tooltip 
+
+    Error: existing popup entrance motion is retained
+
+    expect(received).not.toHaveLength(expected)
+
+    Expected length: not 0
+    Received array:      []
+
+      33 |   await info.attach('normal-motion',{body:JSON.stringify(states),contentType:'application/json'});
+      34 |   const old=states.antd.filter(a=>a.type==='CSSAnimation' && a.duration>0);
+    > 35 |   if(old.length) expect(states.orbit.filter(a=>a.duration>0),'existing popup entrance motion is retained').not.toHaveLength(0);
+         |                                                                                                                ^
+      36 | });
+      37 | test('Dialog Popover Select escape restores one layer at a time',async({page},info)=>{
+      38 |   await page.goto(fixture);await page.evaluate(()=>document.fonts.ready);
+        at /tmp/orbit-p22-coordinator-review-c41y2abt/src/web/ui-migration/coordinator-edge.browser.mjs:35:112
+
+    Error Context: src/web/.coordinator-edge-results/coordinator-edge.browser.m-48e8c-ion-is-retained-for-tooltip-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.coordinator-edge-results/coordinator-edge.browser.m-48e8c-ion-is-retained-for-tooltip-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.coordinator-edge-results/coordinator-edge.browser.m-48e8c-ion-is-retained-for-tooltip-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [webkit-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for attachment 
+
+    Error: existing popup entrance motion is retained
+
+    expect(received).not.toHaveLength(expected)
+
+    Expected length: not 0
+    Received array:      []
+
+      33 |   await info.attach('normal-motion',{body:JSON.stringify(states),contentType:'application/json'});
+      34 |   const old=states.antd.filter(a=>a.type==='CSSAnimation' && a.duration>0);
+    > 35 |   if(old.length) expect(states.orbit.filter(a=>a.duration>0),'existing popup entrance motion is retained').not.toHaveLength(0);
+         |                                                                                                                ^
+      36 | });
+      37 | test('Dialog Popover Select escape restores one layer at a time',async({page},info)=>{
+      38 |   await page.goto(fixture);await page.evaluate(()=>document.fonts.ready);
+        at /tmp/orbit-p22-coordinator-review-c41y2abt/src/web/ui-migration/coordinator-edge.browser.mjs:35:112
+
+    Error Context: src/web/.coordinator-edge-results/coordinator-edge.browser.m-b14ba--is-retained-for-attachment-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.coordinator-edge-results/coordinator-edge.browser.m-b14ba--is-retained-for-attachment-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.coordinator-edge-results/coordinator-edge.browser.m-b14ba--is-retained-for-attachment-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [webkit-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for expiry 
+
+    Error: existing popup entrance motion is retained
+
+    expect(received).not.toHaveLength(expected)
+
+    Expected length: not 0
+    Received array:      []
+
+      33 |   await info.attach('normal-motion',{body:JSON.stringify(states),contentType:'application/json'});
+      34 |   const old=states.antd.filter(a=>a.type==='CSSAnimation' && a.duration>0);
+    > 35 |   if(old.length) expect(states.orbit.filter(a=>a.duration>0),'existing popup entrance motion is retained').not.toHaveLength(0);
+         |                                                                                                                ^
+      36 | });
+      37 | test('Dialog Popover Select escape restores one layer at a time',async({page},info)=>{
+      38 |   await page.goto(fixture);await page.evaluate(()=>document.fonts.ready);
+        at /tmp/orbit-p22-coordinator-review-c41y2abt/src/web/ui-migration/coordinator-edge.browser.mjs:35:112
+
+    Error Context: src/web/.coordinator-edge-results/coordinator-edge.browser.m-11908-tion-is-retained-for-expiry-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.coordinator-edge-results/coordinator-edge.browser.m-11908-tion-is-retained-for-expiry-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.coordinator-edge-results/coordinator-edge.browser.m-11908-tion-is-retained-for-expiry-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [webkit-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for search 
+
+    Error: existing popup entrance motion is retained
+
+    expect(received).not.toHaveLength(expected)
+
+    Expected length: not 0
+    Received array:      []
+
+      33 |   await info.attach('normal-motion',{body:JSON.stringify(states),contentType:'application/json'});
+      34 |   const old=states.antd.filter(a=>a.type==='CSSAnimation' && a.duration>0);
+    > 35 |   if(old.length) expect(states.orbit.filter(a=>a.duration>0),'existing popup entrance motion is retained').not.toHaveLength(0);
+         |                                                                                                                ^
+      36 | });
+      37 | test('Dialog Popover Select escape restores one layer at a time',async({page},info)=>{
+      38 |   await page.goto(fixture);await page.evaluate(()=>document.fonts.ready);
+        at /tmp/orbit-p22-coordinator-review-c41y2abt/src/web/ui-migration/coordinator-edge.browser.mjs:35:112
+
+    Error Context: src/web/.coordinator-edge-results/coordinator-edge.browser.m-686f4-tion-is-retained-for-search-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.coordinator-edge-results/coordinator-edge.browser.m-686f4-tion-is-retained-for-search-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.coordinator-edge-results/coordinator-edge.browser.m-686f4-tion-is-retained-for-search-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) [webkit-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for popover 
+
+    Error: existing popup entrance motion is retained
+
+    expect(received).not.toHaveLength(expected)
+
+    Expected length: not 0
+    Received array:      []
+
+      33 |   await info.attach('normal-motion',{body:JSON.stringify(states),contentType:'application/json'});
+      34 |   const old=states.antd.filter(a=>a.type==='CSSAnimation' && a.duration>0);
+    > 35 |   if(old.length) expect(states.orbit.filter(a=>a.duration>0),'existing popup entrance motion is retained').not.toHaveLength(0);
+         |                                                                                                                ^
+      36 | });
+      37 | test('Dialog Popover Select escape restores one layer at a time',async({page},info)=>{
+      38 |   await page.goto(fixture);await page.evaluate(()=>document.fonts.ready);
+        at /tmp/orbit-p22-coordinator-review-c41y2abt/src/web/ui-migration/coordinator-edge.browser.mjs:35:112
+
+    Error Context: src/web/.coordinator-edge-results/coordinator-edge.browser.m-33ef1-ion-is-retained-for-popover-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.coordinator-edge-results/coordinator-edge.browser.m-33ef1-ion-is-retained-for-popover-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.coordinator-edge-results/coordinator-edge.browser.m-33ef1-ion-is-retained-for-popover-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  10) [webkit-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for tooltip 
+
+    Error: existing popup entrance motion is retained
+
+    expect(received).not.toHaveLength(expected)
+
+    Expected length: not 0
+    Received array:      []
+
+      33 |   await info.attach('normal-motion',{body:JSON.stringify(states),contentType:'application/json'});
+      34 |   const old=states.antd.filter(a=>a.type==='CSSAnimation' && a.duration>0);
+    > 35 |   if(old.length) expect(states.orbit.filter(a=>a.duration>0),'existing popup entrance motion is retained').not.toHaveLength(0);
+         |                                                                                                                ^
+      36 | });
+      37 | test('Dialog Popover Select escape restores one layer at a time',async({page},info)=>{
+      38 |   await page.goto(fixture);await page.evaluate(()=>document.fonts.ready);
+        at /tmp/orbit-p22-coordinator-review-c41y2abt/src/web/ui-migration/coordinator-edge.browser.mjs:35:112
+
+    Error Context: src/web/.coordinator-edge-results/coordinator-edge.browser.m-48e8c-ion-is-retained-for-tooltip-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.coordinator-edge-results/coordinator-edge.browser.m-48e8c-ion-is-retained-for-tooltip-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.coordinator-edge-results/coordinator-edge.browser.m-48e8c-ion-is-retained-for-tooltip-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  10 failed
+    [chromium-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for attachment 
+    [chromium-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for expiry 
+    [chromium-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for search 
+    [chromium-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for popover 
+    [chromium-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for tooltip 
+    [webkit-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for attachment 
+    [webkit-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for expiry 
+    [webkit-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for search 
+    [webkit-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for popover 
+    [webkit-light-desktop] › src/web/ui-migration/coordinator-edge.browser.mjs:4:73 › normal motion is retained for tooltip 
+  2 passed (34.7s)

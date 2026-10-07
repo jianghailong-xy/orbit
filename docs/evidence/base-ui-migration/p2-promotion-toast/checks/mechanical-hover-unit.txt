@@ -1,0 +1,45 @@
+
+> @orbit/web@0.1.0 test
+> vitest run --maxWorkers=2 src/lib/toast.test.tsx
+
+
+ RUN  v5.0.2 /root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web
+
+ ❯ src/lib/toast.test.tsx (17 tests | 1 failed) 157ms
+   ❯ a toast leaving (5)
+     × releases a dismissed hovered result even when no mouse boundary event arrives 8ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/lib/toast.test.tsx > a toast leaving > releases a dismissed hovered result even when no mouse boundary event arrives
+AssertionError: expected [ …(1) ] to have a length of +0 but got 1
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ src/lib/toast.test.tsx:238:22
+    236|     expect(toasts().map((one) => one.textContent)).toEqual(['Unhovered…
+    237|     await act(async () => { vi.advanceTimersByTime(1); });
+    238|     expect(toasts()).toHaveLength(0);
+       |                      ^
+    239|   });
+    240|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 16 passed (17)
+   Start at  19:44:37
+   Duration  1.10s (import 36%, environment 36%, tests 15%, transform 13%)
+
+npm error Lifecycle script `test` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c vitest run --maxWorkers=2 src/lib/toast.test.tsx

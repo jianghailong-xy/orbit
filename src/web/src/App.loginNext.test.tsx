@@ -34,6 +34,8 @@ vi.mock('./components/AppShell', async () => {
 // The Tasks routes' element (TaskRoute reads the task to decide which page it opens over, and there
 // is no query client here to read it with).
 vi.mock('./pages/TaskRoute', () => ({ TaskRoute: () => <TaskPage /> }));
+// The page an `orbit login` link opens (it reads the request its code names, with no query client here).
+vi.mock('./pages/CliLoginPage', () => ({ CliLoginPage: () => <p>orbit login approval page</p> }));
 
 function TaskPage() {
   const { id } = useParams();
@@ -174,9 +176,9 @@ async function logIn(): Promise<void> {
     type(password!, PASSWORD);
   });
   const submit = [...container.querySelectorAll('button')].find(
-    (button) => (button.textContent ?? '').trim() === 'Login',
+    (button) => (button.textContent ?? '').trim() === 'Sign In',
   );
-  expect(submit, 'the Login button').toBeTruthy();
+  expect(submit, 'the Sign In button').toBeTruthy();
   await act(async () => {
     submit!.click();
   });
@@ -217,6 +219,19 @@ describe('a signed-out visitor on an in-app page', () => {
     const sentTo = recordNavigation();
     await logIn();
     expect(sentTo).toEqual([listed]);
+  });
+
+  it('opening an orbit login link, is sent to log in and comes back to approve it, code and all', async () => {
+    const approval = '/cli-login?code=WXYZ4-8K2QP';
+    await visit(approval);
+    expect(addressBar()).toBe(`/login?next=${encodeURIComponent(approval)}`);
+
+    const sentTo = recordNavigation();
+    await logIn();
+    expect(sentTo).toEqual([approval]);
+    await visit(sentTo[0]);
+    expect(addressBar()).toBe(approval);
+    expect(container.textContent).toBe('orbit login approval page');
   });
 
   it('on the bare root gets the plain login page — the root is where login lands anyway', async () => {

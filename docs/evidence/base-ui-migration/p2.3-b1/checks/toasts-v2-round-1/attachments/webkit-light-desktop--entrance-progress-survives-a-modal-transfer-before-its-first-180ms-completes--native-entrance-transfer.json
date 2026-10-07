@@ -1,0 +1,128 @@
+[
+  {
+    "t": 53,
+    "opacity": 0.789712,
+    "progress": 0.2555555555555552,
+    "owner": false,
+    "delay": "0s"
+  },
+  {
+    "t": 113,
+    "opacity": 0.971292,
+    "progress": 0.5944444444444448,
+    "owner": true,
+    "delay": "-0.046s"
+  },
+  {
+    "t": 136,
+    "opacity": 0.989117,
+    "progress": 0.7222222222222225,
+    "owner": true,
+    "delay": "-0.046s"
+  },
+  {
+    "t": 154,
+    "opacity": 0.996723,
+    "progress": 0.8277777777777776,
+    "owner": true,
+    "delay": "-0.046s"
+  },
+  {
+    "t": 170,
+    "opacity": 0.999204,
+    "progress": 0.911111111111111,
+    "owner": true,
+    "delay": "-0.046s"
+  },
+  {
+    "t": 184,
+    "opacity": 0.999997,
+    "progress": 0.9944444444444445,
+    "owner": true,
+    "delay": "-0.046s"
+  },
+  {
+    "t": 200,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.046s"
+  },
+  {
+    "t": 216,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.046s"
+  },
+  {
+    "t": 232,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.046s"
+  },
+  {
+    "t": 248,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.046s"
+  },
+  {
+    "t": 264,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.046s"
+  },
+  {
+    "t": 280,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.046s"
+  },
+  {
+    "t": 296,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.046s"
+  },
+  {
+    "t": 314,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.046s"
+  },
+  {
+    "t": 328,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.046s"
+  },
+  {
+    "t": 345,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.046s"
+  },
+  {
+    "t": 363,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.046s"
+  },
+  {
+    "t": 376,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.046s"
+  },
+  {
+    "t": 393,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.046s"
+  },
+  {
+    "t": 409,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.046s"
+  }
+]

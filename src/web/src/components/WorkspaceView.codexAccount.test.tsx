@@ -170,17 +170,6 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
   };
   // The plan gauge, not the context ring beside it (which shares the pill class).
   const usage = () => mounted().querySelector<HTMLElement>('button.composer-usage[aria-label^="Plan usage"]');
-  /** The open list's account rows (portaled out of the mount), as "name quota". Waits for the list to
-   *  paint: a portal opens some frames after the press, and a loaded host takes longer than a local run. */
-  const accountRows = async () => {
-    await act(async () => {
-      await vi.waitFor(() => expect(document.querySelector('.np-account')).not.toBeNull(), { timeout: 20_000, interval: 20 });
-    });
-    return [...document.querySelectorAll<HTMLElement>('.np-account')].map((row) =>
-      [...row.querySelectorAll('.np-row-name, .np-row-model')].map((part) => part.textContent).join(' '),
-    );
-  };
-  const pickedRow = () => document.querySelector<HTMLElement>('.np-account.picked .np-row-name')?.textContent;
   /** Which Codex account the quota gauge's popover names (portaled out of the mount), and the note
    *  under it: opened by a press, as on a phone. */
   const gaugeAccount = async () => {
@@ -292,8 +281,8 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     }
   });
 
-  const accountNamed = (name: string) =>
-    [...document.querySelectorAll('.np-account')].find((row) => row.querySelector('.np-row-name')?.textContent === name);
+  /** A draft's Provider submenu row that starts with `name`: its engine, Automatic, or an account. */
+  const draftRow = async (name: string) => (await providerMenuRows())!.find((row) => row.textContent?.startsWith(name));
 
   it('with no account picked, a new session starts on the one Automatic picks, and says which', async () => {
     await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
@@ -302,10 +291,10 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     expect(await gaugeAccount()).toEqual({ name: 'Work', note: 'Automatic — the account whose quota resets soonest' });
     composerRowNamesNoAccount();
 
-    await click(mounted().querySelector('.np-card'));
-    expect(await accountRows()).toEqual(['Automatic resets soonest', 'Default 5h 100%', 'Work Weekly 0%']);
-    expect(pickedRow()).toBe('Automatic');
-    await click(mounted().querySelector('.np-card'));
+    // The accounts are the composer's to pick, as on a session already running — and a draft needs no
+    // runner capability to start on one.
+    const rows = (await providerMenuRows())!;
+    expect(rows.map(rowText)).toEqual(['Codex', 'AutomaticSwitches to soonest reset ✓', 'Default5h 100%', 'WorkWeekly 0%']);
 
     await sendMessage('fix the flaky test');
     // Nothing is sent: the server makes the same choice when it creates the session, and stores it.
@@ -317,19 +306,15 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
 
   it('starts the new session on an account picked under Codex, and Automatic takes the pick back', async () => {
     await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
-    await click(mounted().querySelector('.np-card'));
-    await click(accountNamed('Default'));
+    await click(await draftRow('Default'));
     expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 100%');
     // Picked, so no note: it starts where the pick says.
     expect(await gaugeAccount()).toEqual({ name: 'Default', note: null });
 
-    await click(mounted().querySelector('.np-card'));
-    expect(pickedRow()).toBe('Default');
-    await click(accountNamed('Automatic'));
+    await click(await draftRow('Automatic'));
     expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 0%');
 
-    await click(mounted().querySelector('.np-card'));
-    await click(accountNamed('Default'));
+    await click(await draftRow('Default'));
     await sendMessage('fix the flaky test');
     expect(creates[0]).toMatchObject({ prompt: 'fix the flaky test', codexAccount: 'default' });
   });
@@ -338,10 +323,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     workspaceAccount = WORK;
     await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
     expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 0%');
-    await click(mounted().querySelector('.np-card'));
-    expect(await accountRows()).toEqual(['Default 5h 100%', 'Work Weekly 0%']);
-    expect(pickedRow()).toBe('Work');
-    await click(mounted().querySelector('.np-card'));
+    expect((await providerMenuRows())!.map(rowText)).toEqual(['Codex', 'Default5h 100%', 'WorkWeekly 0% ✓']);
 
     await sendMessage('hello');
     expect('codexAccount' in creates[0]).toBe(false);
@@ -414,14 +396,74 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
       ],
     } as unknown as Runner;
     await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
+    // The engine on the hero — no accounts there — then the account in the composer.
     await click(mounted().querySelector('.np-card'));
-    const claudeWorkRow = [...document.querySelectorAll('.np-account')].filter(
-      (row) => row.querySelector('.np-row-name')?.textContent === 'Work',
-    )[0];
-    await click(claudeWorkRow);
+    await render(() => document.querySelector('.np-list'));
+    expect([...document.querySelectorAll('.np-list .np-row-name')].map((row) => row.textContent)).toEqual([
+      'Claude',
+      'Codex',
+      'Kimi',
+      'Connect a provider…',
+    ]);
+    await click([...document.querySelectorAll('.np-list .np-row')].find((row) => row.textContent?.startsWith('Claude')));
+    await click(await draftRow('Work'));
     await sendMessage('fix the flaky test');
     expect(creates[0]).toMatchObject({ provider: 'claude', claudeAccount: WORK });
     expect('codexAccount' in creates[0]).toBe(false);
+  });
+
+  it("starts a new session on a key picked in the composer's Provider menu, and the hero says so", async () => {
+    const served = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(((p: string, ...rest: unknown[]) =>
+      p === '/providers'
+        ? (Promise.resolve([
+            { slug: 'orbitd', label: 'orbitd@Claude', runtime: 'claude', models: [{ value: 'claude-opus-5', label: 'Opus 5' }] },
+          ]) as Promise<never>)
+        : (served as (...args: unknown[]) => Promise<never>)(p, ...rest)) as never);
+    await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
+    await click(mounted().querySelector('.np-card'));
+    await render(() => document.querySelector('.np-list'));
+    await click([...document.querySelectorAll('.np-list .np-row')].find((row) => row.textContent?.startsWith('Claude')));
+    await click(await draftRow('orbitd@Claude'));
+    expect(mounted().querySelector('.np-card')?.getAttribute('aria-label')).toBe('Engine: Claude');
+    await sendMessage('fix the flaky test');
+    expect(creates[0]).toMatchObject({ provider: 'orbitd' });
+  });
+
+  it('runs a new session on OpenCode with a configured key, picked in the composer under OpenCode', async () => {
+    runner = {
+      ...RUNNER,
+      engines: [...(RUNNER.engines ?? []), { engine: 'opencode', installed: true, auth: 'unknown' }],
+    } as unknown as Runner;
+    const served = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(((p: string, ...rest: unknown[]) =>
+      p === '/providers'
+        ? (Promise.resolve([
+            {
+              slug: 'deepseek',
+              label: 'DeepSeek',
+              runtime: 'claude',
+              presetSlug: 'deepseek',
+              defaultModel: 'deepseek-v4-pro',
+              models: [{ value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' }],
+              runsOnOpenCode: true,
+            },
+          ]) as Promise<never>)
+        : (served as (...args: unknown[]) => Promise<never>)(p, ...rest)) as never);
+    await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
+    await click(mounted().querySelector('.np-card'));
+    await render(() => document.querySelector('.np-list'));
+    await click(
+      [...document.querySelectorAll('.np-list .np-row')].find((row) => row.querySelector('.np-row-name')?.textContent === 'OpenCode'),
+    );
+    // OpenCode's own config picks its model itself: the draft leaves Codex's model behind.
+    expect(mounted().querySelector('button.composer-model-chip')?.textContent).toContain('Managed by OpenCode');
+    // Under OpenCode: its own config, and the key — which is listed under Claude as well.
+    expect((await providerMenuRows())!.map(rowText)).toEqual(['OpenCode ✓', 'DeepSeek']);
+    await click(await draftRow('DeepSeek'));
+    expect(mounted().querySelector('.np-card')?.getAttribute('aria-label')).toBe('Engine: OpenCode');
+    await sendMessage('fix the flaky test');
+    expect(creates[0]).toMatchObject({ provider: 'opencode', model: 'orbit-deepseek/deepseek-v4-pro' });
   });
 
   /** The composer's model menu, opened, with its Provider submenu open: that submenu's rows. */
@@ -456,7 +498,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     await settlesOn('Plan usage 100%');
     const rows = (await providerMenuRows())!;
     // Nothing picked it by hand, so the tick is on Automatic, not on the account it happens to be on.
-    expect(rows.map(rowText)).toEqual(['Codex', 'AutomaticResets soonest ✓', 'Default5h 100%', 'WorkWeekly 0%']);
+    expect(rows.map(rowText)).toEqual(['Codex', 'AutomaticSwitches to soonest reset ✓', 'Default5h 100%', 'WorkWeekly 0%']);
     await click(rows.find((row) => row.textContent?.startsWith('Work')));
     expect(vi.mocked(switchSessionAccount)).toHaveBeenCalledWith(SESSION, WORK);
   });
@@ -468,7 +510,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     await mount(`/sessions/${SESSION}`, '.composer-box textarea');
     await settlesOn('Plan usage 0%');
     const rows = (await providerMenuRows())!;
-    expect(rows.map(rowText)).toEqual(['Codex', 'AutomaticResets soonest', 'Default5h 100%', 'WorkWeekly 0% ✓']);
+    expect(rows.map(rowText)).toEqual(['Codex', 'AutomaticSwitches to soonest reset', 'Default5h 100%', 'WorkWeekly 0% ✓']);
     await click(rows.find((row) => row.textContent?.startsWith('Automatic')));
     expect(vi.mocked(switchSessionAccount)).toHaveBeenCalledWith(SESSION, 'automatic');
   });
@@ -522,10 +564,46 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     });
     const rows = (await providerMenuRows())!;
     // As the New Session picker lists them — and no tick among them: the session is on the key.
-    expect(rows.map(rowText)).toEqual(['Claude', 'AutomaticResets soonest', 'DefaultWeekly 100%', 'Work5h 30%', 'orbitd@Claude ✓']);
+    expect(rows.map(rowText)).toEqual(['Claude', 'AutomaticSwitches to soonest reset', 'DefaultWeekly 100%', 'Work5h 30%', 'orbitd@Claude ✓']);
     await click(rows.find((row) => row.textContent?.startsWith('Work')));
     expect(vi.mocked(updateSessionConfig)).toHaveBeenCalledWith(SESSION, expect.objectContaining({ provider: 'claude', account: WORK }));
     expect(vi.mocked(switchSessionAccount)).not.toHaveBeenCalled();
+  });
+
+  it('a live OpenCode session on a key is ticked there, and moving to OpenCode’s own config is a model change', async () => {
+    runner = {
+      ...RUNNER,
+      engines: [...(RUNNER.engines ?? []), { engine: 'opencode', installed: true, auth: 'unknown' }],
+    } as unknown as Runner;
+    detail = { ...session(null, null), provider: 'opencode', model: 'orbit-deepseek/deepseek-v4-pro' };
+    const served = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(((p: string, ...rest: unknown[]) =>
+      p === '/providers'
+        ? (Promise.resolve([
+            {
+              slug: 'deepseek',
+              label: 'DeepSeek',
+              runtime: 'claude',
+              presetSlug: 'deepseek',
+              defaultModel: 'deepseek-v4-pro',
+              models: [{ value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' }],
+              runsOnOpenCode: true,
+            },
+          ]) as Promise<never>)
+        : (served as (...args: unknown[]) => Promise<never>)(p, ...rest)) as never);
+    vi.mocked(updateSessionConfig).mockResolvedValue({ ok: true } as never);
+    await mount(`/sessions/${SESSION}`, '.composer-box textarea');
+    await act(async () => {
+      await vi.waitFor(() => expect(mounted().querySelector('button.composer-model-chip')?.textContent).toContain('DeepSeek V4 Pro'), {
+        timeout: 20_000,
+        interval: 20,
+      });
+    });
+    const rows = (await providerMenuRows())!;
+    expect(rows.map(rowText)).toEqual(['OpenCode', 'DeepSeek ✓']);
+    await click(rows.find((row) => row.textContent === 'OpenCode'));
+    expect(vi.mocked(updateSessionConfig)).toHaveBeenCalledWith(SESSION, expect.objectContaining({ model: '' }));
+    expect(vi.mocked(updateSessionConfig)).not.toHaveBeenCalledWith(SESSION, expect.objectContaining({ provider: expect.anything() }));
   });
 
   it("a live Claude session lists its runner's Claude accounts under Claude", async () => {
@@ -560,8 +638,110 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     await settlesOn('Plan usage 100%');
     const rows = (await providerMenuRows())!;
     // The row reads the window that stops it: Default's weekly one, though its 5-hour one reads 0%.
-    expect(rows.map(rowText)).toEqual(['Claude', 'AutomaticResets soonest', 'DefaultWeekly 100% ✓', 'Work5h 30%']);
+    expect(rows.map(rowText)).toEqual(['Claude', 'AutomaticSwitches to soonest reset', 'DefaultWeekly 100% ✓', 'Work5h 30%']);
     await click(rows.find((row) => row.textContent?.startsWith('Work')));
     expect(vi.mocked(switchSessionAccount)).toHaveBeenCalledWith(SESSION, WORK);
+  });
+
+  /** Two Google accounts for Antigravity, their quota on the engine's own health (never in the
+   *  heartbeat's planUsage): Default has 90% of its 5-hour bucket left, Work 4%. */
+  const withGoogleAccounts = (capabilities: string[] = []) =>
+    ({
+      ...RUNNER,
+      capabilities,
+      antigravity: {
+        supported: true,
+        installed: true,
+        version: '1.3.0',
+        envKeyAvailable: true,
+        authSource: 'google',
+        googleLogin: 'available',
+      },
+      engines: [
+        ...(RUNNER.engines ?? []),
+        {
+          engine: 'antigravity',
+          installed: true,
+          auth: 'yes',
+          authSource: 'google',
+          version: '1.3.0',
+          accounts: [
+            { id: 'default', home: '/root/.orbit/antigravity/google', auth: 'yes' },
+            { id: WORK, name: 'Work', home: `/root/.orbit/antigravity-accounts/${WORK}`, auth: 'yes' },
+          ],
+          planUsage: {
+            provider: 'antigravity',
+            buckets: [{ id: 'gemini-5h', window: '5h', remainingFraction: 0.9, resetTime: RESETS }],
+            accounts: {
+              [WORK]: {
+                provider: 'antigravity',
+                buckets: [{ id: 'gemini-5h', window: '5h', remainingFraction: 0.04, resetTime: RESETS }],
+              },
+            },
+          },
+        },
+      ],
+    }) as unknown as Runner;
+
+  it('starts a new Antigravity session on the Google account picked under Antigravity, its gauge saying what is left', async () => {
+    runner = withGoogleAccounts();
+    await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
+    await click(mounted().querySelector('.np-card'));
+    await render(() => document.querySelector('.np-list'));
+    await click(
+      [...document.querySelectorAll('.np-list .np-row')].find((row) => row.querySelector('.np-row-name')?.textContent === 'Antigravity'),
+    );
+    // Work's 5-hour bucket is nearly spent, so Automatic would start on Default.
+    expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 90% left');
+    expect(await gaugeAccount()).toEqual({ name: 'Default', note: 'Automatic — the account whose quota resets soonest' });
+    expect((await providerMenuRows())!.map(rowText)).toEqual([
+      'AntigravityGoogle account',
+      'AutomaticSwitches to soonest reset ✓',
+      'Defaultgemini-5h 90% left',
+      'Workgemini-5h 4% left',
+    ]);
+
+    await click(await draftRow('Work'));
+    expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 4% left');
+    expect(await gaugeAccount()).toEqual({ name: 'Work', note: null });
+    await sendMessage('fix the flaky test');
+    expect(creates[0]).toMatchObject({ provider: 'antigravity', antigravityAccount: WORK });
+    expect('codexAccount' in creates[0]).toBe(false);
+    expect('claudeAccount' in creates[0]).toBe(false);
+  });
+
+  const onAntigravity = (antigravityAccount: string, pinned: boolean) => ({
+    ...session(null, null),
+    provider: 'antigravity',
+    model: 'gemini-3.8-flash',
+    antigravityAccount,
+    antigravityAccountPinned: pinned,
+    workspace: { id: WORKSPACE, codexAccount: null, claudeAccount: null, antigravityAccount: null },
+  });
+
+  it('a live Antigravity session moves to another Google account from the Provider menu', async () => {
+    runner = withGoogleAccounts(['antigravity-account-login/v1']);
+    detail = onAntigravity('default', false);
+    vi.mocked(switchSessionAccount).mockResolvedValue({ ok: true } as never);
+    await mount(`/sessions/${SESSION}`, '.composer-box textarea');
+    await settlesOn('Plan usage 90% left');
+    const rows = (await providerMenuRows())!;
+    expect(rows.map(rowText)).toEqual([
+      'AntigravityGoogle account',
+      'AutomaticSwitches to soonest reset ✓',
+      'Defaultgemini-5h 90% left',
+      'Workgemini-5h 4% left',
+    ]);
+    await click(rows.find((row) => row.textContent?.startsWith('Work')));
+    expect(vi.mocked(switchSessionAccount)).toHaveBeenCalledWith(SESSION, WORK);
+  });
+
+  it('a session pinned to a Google account shows its quota, and offers no move where the runner does not declare Antigravity accounts', async () => {
+    runner = withGoogleAccounts();
+    detail = onAntigravity(WORK, true);
+    await mount(`/sessions/${SESSION}`, '.composer-box textarea');
+    await settlesOn('Plan usage 4% left');
+    expect(await gaugeAccount()).toEqual({ name: 'Work', note: null });
+    expect(await providerMenuRows()).toBeNull();
   });
 });

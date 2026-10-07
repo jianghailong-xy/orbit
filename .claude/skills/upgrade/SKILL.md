@@ -46,6 +46,11 @@ It will, in order:
    pass `--pull`; `--no-pull` skips the pull.
 2. Resolve the checked-out commit as `ORBIT_SOURCE_SHA`, then run
    `docker compose build apiserver web` to rebuild from that exact source revision.
+   The running `orbit-web` image is tagged `orbit-web:previous-release` and passed
+   as `--build-arg PREVIOUS_RELEASE_IMAGE`, so the new web image keeps the runner
+   release it replaces at `/dl/previous/` — what a staged rollout holds runners at
+   and a rollback returns them to (docs/release-process.md, "Runner rollout and
+   rollback"). With no `orbit-web` container running, nothing is kept.
 3. `docker compose up -d --wait apiserver web gateway` — recreate only the
    services whose image or config changed (the freshly built `apiserver`/`web`,
    and `gateway` only if its image or mounted `nginx.conf` changed), and block

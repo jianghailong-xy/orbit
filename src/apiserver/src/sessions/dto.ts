@@ -51,6 +51,8 @@ export interface CreateSessionDto {
    *  `default` or one of the runner's slots. Omitted is Automatic where the workspace leaves the account
    *  to Orbit (the one whose quota resets soonest), else the workspace's. */
   claudeAccount?: string;
+  /** The Antigravity Google account, the same again for a session on the built-in Antigravity engine. */
+  antigravityAccount?: string;
   /** Ids of pre-uploaded image attachments (`POST /api/attachments` with no sessionId) to
    *  send with the seeded first turn. Each must be the caller's and not yet scoped to a
    *  session/turn — they're scoped to this session on create, then linked to the initial
@@ -130,8 +132,9 @@ export interface MergeToMainDto {
   targetBranch?: string;
   /** Hold the response until the merge has an outcome, and return that outcome inline instead of
    *  `{ ok: true }` (which only ever meant "queued"). 1..300 seconds. Omitted → the asynchronous
-   *  behaviour the Merge button uses, unchanged. The floor is a heartbeat: the runner reads the
-   *  command on its next 30s tick, so a wait under that times out even for a merge that succeeds. */
+   *  behaviour the Merge button uses, unchanged. The runner is woken to read the command at once,
+   *  but a lost wake leaves it to its next 30s tick, so a wait under that can time out even for a
+   *  merge that succeeds. */
   waitSeconds?: number;
 }
 
@@ -148,6 +151,21 @@ export interface SessionArmRetryDto {
    *  MAX_ARM_AHEAD_MS — see sessions.service.armAutoRetry for why a caller-chosen instant is
    *  not a privilege escalation. */
   retryAt: string;
+}
+
+/** Which provider identity the re-send behind `POST /sessions/:id/retry-message` runs on, when the
+ *  caller has a pick pending in its composer — the pair `SessionResumeDto` carries, under the same
+ *  rule and with the same rejection. Omitted, the re-send runs on the identity the session already
+ *  has, which is what a Retry pressed with nothing chosen must do.
+ *
+ *  Without this the button could not do what the person asking for it meant: the composer's pick is
+ *  a client-side choice that only travels on a message you SEND, while Retry re-sends the last one —
+ *  so choosing a provider and then pressing Retry ran on the provider the session was already on. */
+export interface RetryIdentityDto {
+  provider?: string;
+  /** With `provider` naming the built-in Codex or Claude engine: which of the runner's accounts of
+   *  it, as SessionResumeDto.account. Ignored without a provider, as it is there. */
+  account?: string;
 }
 
 export interface SessionRenameDto {

@@ -1,0 +1,29 @@
+Error: Cannot find module './environment.mjs'
+Require stack:
+- /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/node_modules/playwright/lib/common/index.js
+- /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/node_modules/playwright/lib/program.js
+- /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/node_modules/@playwright/test/cli.js
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1591:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1145:27)
+    at defaultResolve (node:internal/modules/cjs/loader:1226:20)
+    at nextStep (node:internal/modules/customization_hooks:189:26)
+    at resolve (/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/node_modules/playwright/lib/common/index.js:821:19)
+    at nextStep (node:internal/modules/customization_hooks:189:26)
+    at resolveWithHooks (node:internal/modules/customization_hooks:417:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1239:25)
+    at require.resolve (node:internal/modules/helpers:336:31)
+    at resolveScript (/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/node_modules/playwright/lib/common/index.js:697:18)
+    at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/node_modules/playwright/lib/common/index.js:497:128
+    at Array.map (<anonymous>)
+    at new FullConfigInternal (/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/node_modules/playwright/lib/common/index.js:497:117)
+    at loadConfig (/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/node_modules/playwright/lib/common/index.js:1277:22)
+    at Object.loadConfigFromFile (/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/node_modules/playwright/lib/common/index.js:1490:10)
+    at runTests (/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/node_modules/playwright/lib/cli/testActions.js:46:18)
+    at _Command.<anonymous> (/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/node_modules/playwright/lib/program.js:55:7) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    '/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/node_modules/playwright/lib/common/index.js',
+    '/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/node_modules/playwright/lib/program.js',
+    '/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/node_modules/@playwright/test/cli.js'
+  ]
+}

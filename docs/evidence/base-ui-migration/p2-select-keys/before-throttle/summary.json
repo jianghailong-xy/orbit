@@ -1,0 +1,165 @@
+{
+  "stats": {
+    "startTime": "2026-10-06T07:18:14.310Z",
+    "duration": 137190.018,
+    "expected": 9,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-dark-desktop--orbit-field-ArrowDown-ArrowDown-Enter-at-1x-CPU-throttling",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 12618
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-ArrowDown-ArrowDown-Enter-at-1x-CPU-throttling--select-keys.json",
+          "sha256": "42d855e4d85b8c5a7b44b11af91a696ad250d3b79d40061cb48fb7cb640ec33f"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-ArrowDown-ArrowDown-Enter-at-6x-CPU-throttling",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 13478
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-ArrowDown-ArrowDown-Enter-at-6x-CPU-throttling--select-keys.json",
+          "sha256": "be69f4654966ab30bbae6f405901e0c8cfe3b65f77707732cba0295edc337c96"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-ArrowDown-ArrowDown-Enter-at-20x-CPU-throttling",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 17323
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-ArrowDown-ArrowDown-Enter-at-20x-CPU-throttling--select-keys.json",
+          "sha256": "a1f6a6f25dfbe41abff044aa96aab748fdcc599a5d23a370d4ed7262fd28cbe9"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-ArrowDown-ArrowDown-Enter-at-1x-CPU-throttling",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 13076
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-ArrowDown-ArrowDown-Enter-at-1x-CPU-throttling--select-keys.json",
+          "sha256": "d2290118ecf081f3db35873495948cc713536c740f2d641f6c83ec90d55d9f81"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-ArrowDown-ArrowDown-Enter-at-6x-CPU-throttling",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 16071
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-ArrowDown-ArrowDown-Enter-at-6x-CPU-throttling--select-keys.json",
+          "sha256": "9330c21e90b30aaa637491e0a5736a3fc90be1728dc377619a21b30f1ac7bc32"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-ArrowDown-ArrowDown-Enter-at-20x-CPU-throttling",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 16235
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-ArrowDown-ArrowDown-Enter-at-20x-CPU-throttling--select-keys.json",
+          "sha256": "539b6a7752928a1a1a50e5277b9224a83c69d741737cabd65a44424ba8a0e648"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-ArrowDown-ArrowDown-Enter-at-1x-CPU-throttling",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 12174
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-ArrowDown-ArrowDown-Enter-at-1x-CPU-throttling--select-keys.json",
+          "sha256": "bb752a7dc3f644e3f170236040084231edf5254abf6e9d1922643c2d2dbc6c95"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-ArrowDown-ArrowDown-Enter-at-6x-CPU-throttling",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 13253
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-ArrowDown-ArrowDown-Enter-at-6x-CPU-throttling--select-keys.json",
+          "sha256": "442f614cdd1b45b6bb750a991001a6d729acd02f7df705f005a3a23180ed6c0d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-ArrowDown-ArrowDown-Enter-at-20x-CPU-throttling",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 21465
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-ArrowDown-ArrowDown-Enter-at-20x-CPU-throttling--select-keys.json",
+          "sha256": "47ddd5815c490f8a3d939a1956663311dda21a0015f5443a021612a54b6e9852"
+        }
+      ]
+    }
+  ]
+}

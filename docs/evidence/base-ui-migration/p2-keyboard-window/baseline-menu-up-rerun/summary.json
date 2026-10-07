@@ -1,0 +1,29 @@
+{
+  "stats": {
+    "startTime": "2026-10-06T21:53:45.830Z",
+    "duration": 23396.736,
+    "expected": 1,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-dark-desktop--orbit-menu-menu-up-enter-burst-sample-10",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4000
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-menu-menu-up-enter-burst-sample-10--keyboard-window.json",
+          "sha256": "60cca6a5047fafd9808840034ea0eec79abc697851c35d08ff0dfb11a563a7f2"
+        }
+      ]
+    }
+  ]
+}

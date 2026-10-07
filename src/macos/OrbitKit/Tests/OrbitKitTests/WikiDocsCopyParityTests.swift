@@ -429,6 +429,13 @@ final class WikiDocsCopyParityTests: XCTestCase {
                       "Open the session", "Open the project"] {
             assertSays(lib, "label: '\(label)'", in: Self.lib)
         }
+        // The home's (design §12.3.1): what the space holds under the head, the folded rows, a new space's card.
+        assertDeclares(lib, "WIKI_NO_DOCUMENTS_NOTE", WikiDocCopy.noDocumentsNote, in: Self.lib)
+        assertSays(lib, "wikiDocsWritten = (total: number, written: number): string => "
+                   + "`${plural(total, 'document', 'documents')} · ${wikiCount(written)} written`;", in: Self.lib)
+        assertSays(lib, "wikiNotWrittenYet = (count: number): string => `+${wikiCount(count)} not written yet`;", in: Self.lib)
+        assertSays(lib, "wikiDocsNotWrittenYet = (count: number): string => "
+                   + "`${plural(count, 'document', 'documents')} · ${WIKI_DOC_NOT_WRITTEN_SHORT}`;", in: Self.lib)
     }
 
     // MARK: the readings
@@ -574,6 +581,72 @@ final class WikiDocsCopyParityTests: XCTestCase {
             XCTAssertEqual(group.items.map { "\($0.title) | \($0.kind) | \(WikiDocLogic.indexMeta($0))" },
                            expected.rows.map { "\($0.title) | \($0.kind) | \($0.meta)" }, group.letter)
         }
+    }
+
+    /// The fixture's read with each written document given a lead, as a server that writes them answers —
+    /// and, with `planned` false, no plan confirmed — the web test's own spreads over the same read.
+    private func homeRead(_ read: WikiDocsDirectory, leads: Bool, planned: Bool = true) throws -> WikiDocsDirectory {
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(read)) as? [String: Any])
+        if !planned { object["plan"] = NSNull() }
+        if leads {
+            object["categories"] = (object["categories"] as? [[String: Any]] ?? []).map { category -> [String: Any] in
+                var category = category
+                category["docs"] = (category["docs"] as? [[String: Any]] ?? []).map { doc -> [String: Any] in
+                    var doc = doc
+                    if doc["written"] as? Bool == true { doc["lead"] = "\(doc["title"] as? String ?? "") 的头两句。" }
+                    return doc
+                }
+                return category
+            }
+        }
+        return try JSONDecoder().decode(WikiDocsDirectory.self, from: JSONSerialization.data(withJSONObject: object))
+    }
+
+    /// The home by the confirmed plan (design §12.3.1, mocks 30 ③, 31 ①) over the fixture's directory read, case
+    /// for case as the web's `lib/wikiDocs.test.ts` reads it: the line under the head, the folded rows, each
+    /// category's written documents with their leads and the rest after them, and what is new to the reader.
+    func testTheHomeByTheConfirmedPlanIsTheFixtures() throws {
+        let read = try fixture().docs.directory.read
+        let led = try homeRead(read, leads: true)
+        XCTAssertEqual(WikiDocLogic.homeLine(read, articles: 0), "5 documents · 3 written")
+        XCTAssertEqual(WikiDocCopy.docsWritten(total: 35, written: 5), "35 documents · 5 written")
+        XCTAssertEqual(WikiDocCopy.docsWritten(total: 1, written: 0), "1 document · 0 written")
+        XCTAssertEqual(WikiDocCopy.docsWritten(total: 1200, written: 1000), "1,200 documents · 1,000 written")
+        let unplanned = try homeRead(read, leads: false, planned: false)
+        XCTAssertEqual(WikiDocLogic.homeLine(unplanned, articles: 12), "12 articles")
+        XCTAssertEqual(WikiDocLogic.homeLine(unplanned, articles: 1), "1 article")
+        XCTAssertEqual(WikiDocLogic.homeLine(nil, articles: 0), WikiCopy.noDocuments)
+        XCTAssertEqual(WikiDocCopy.notWrittenYet(3), "+3 not written yet")
+        XCTAssertEqual(WikiDocCopy.docsNotWrittenYet(3), "3 documents · \(WikiDocCopy.notWrittenShort)")
+        XCTAssertEqual(WikiDocCopy.docsNotWrittenYet(1), "1 document · Not written yet")
+
+        let seen = try XCTUnwrap(RelativeTime.parse("2026-09-28T11:00:00.000Z")).timeIntervalSince1970
+        let categories = WikiDocLogic.homeCategories(led, seen: seen)
+        XCTAssertEqual(categories.map(\.number), [1, 3, 4], "a category with no document is left out")
+        XCTAssertEqual(categories.map { $0.written.map { "\($0.number) \($0.title)\($0.fresh ? " •" : "")" } },
+                       [["1.1 产品定位与使用场景"], ["3.1 会话运行模型与长连接 •", "3.2 会话状态生命周期 •"], []])
+        XCTAssertEqual(categories.map(WikiDocLogic.notWrittenRow), [nil, "+1 not written yet", "1 document · Not written yet"])
+        XCTAssertEqual(categories.map { $0.notWritten.map(\.number) }, [[], ["3.3"], ["4.1"]])
+        XCTAssertEqual(categories[1].written[0].lead, "会话运行模型与长连接 的头两句。")
+        // A read from before the lead, or a document whose first section says nothing yet: no line under the title.
+        XCTAssertNil(WikiDocLogic.homeCategories(read, seen: seen)[1].written[0].lead)
+
+        // Every written document is new to a reader who has not looked before; none to one who looked since;
+        // and none before the stamp is read at all.
+        let fresh = { (seen: Double?) in WikiDocLogic.homeCategories(led, seen: seen).flatMap { $0.written.map(\.fresh) } }
+        XCTAssertEqual(fresh(0), [true, true, true])
+        XCTAssertEqual(fresh(try XCTUnwrap(RelativeTime.parse("2026-09-29T00:00:00.000Z")).timeIntervalSince1970),
+                       [false, false, false])
+        XCTAssertEqual(fresh(nil), [false, false, false])
+
+        // The web's readings, line for line.
+        let lib = try web(Self.lib)
+        assertSays(lib, "if (directory && wikiReadsByDocs(directory)) return wikiDocsWritten(directory.docs.total, directory.docs.written);",
+                   in: Self.lib)
+        assertSays(lib, "return articles > 0 ? wikiArticleCount(articles) : WIKI_NO_DOCUMENTS;", in: Self.lib)
+        assertSays(lib, "fresh: seen <= 0 || (doc.updatedAt !== null && Date.parse(doc.updatedAt) > seen),", in: Self.lib)
+        assertSays(lib, "return category.written.length > 0 ? wikiNotWrittenYet(category.notWritten.length) : "
+                   + "wikiDocsNotWrittenYet(category.notWritten.length);", in: Self.lib)
     }
 
     // MARK: the orders

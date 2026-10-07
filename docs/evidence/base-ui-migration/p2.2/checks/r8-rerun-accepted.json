@@ -1,0 +1,13 @@
+{
+  "command": "cd /var/tmp/p22-r8-accepted && npm run test:ui-choices -w @orbit/web -- --project chromium-light-desktop --project chromium-dark-desktop --project chromium-dark-phone --project webkit-light-desktop --grep 'touch or pointer menus dismiss outside|reduce Dialog Popover Select exits|select supports arrows, Enter, clear|tooltip center zoom origin matches|normal flipped entrance and exit motion matches search' --repeat-each 3",
+  "runner": "mcp__orbit__bg_run",
+  "bgJobId": "bgj_014ba3f67af3",
+  "cwd": "/var/tmp/p22-r8-accepted",
+  "commit": "45bb56928225bbe6d00800180ebcc73f26250fd4",
+  "webTree": "0d82a97ba0283350710a1da88b0d7ba4e5034116",
+  "started": "2026-10-06T06:06:26Z",
+  "outputLastWritten": "2026-10-06T06:08:33.822803+00:00",
+  "exitCode": 0,
+  "outputSha256": "2cd3d2b9c84bb43afc67e072fdef00ebd85cebf7418f8dad0400eae41e9d23d0",
+  "outputBytes": 10196
+}

@@ -55,6 +55,7 @@ import {
 } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
 import {
+  meQuery,
   providersQuery,
   publishedRunnerVersionQuery,
   workspacePermissionRulesQuery,
@@ -79,15 +80,16 @@ import {
   keepFreeLabel,
   latestRunnerVersion,
   runnerAttention,
+  runnerCanUpdateNow,
   runnerDisk,
   type AttentionItem,
   type AttentionKind,
 } from '../lib/runnerAttention';
 import {
-  ATTENTION_CANT_UPDATE_ITSELF,
   RUNNER_ABOUT,
   RUNNER_ABOUT_HOSTNAME,
   RUNNER_ABOUT_LAST_CHECK_IN,
+  RUNNER_ABOUT_LAST_UPDATE,
   RUNNER_ABOUT_NAME,
   RUNNER_ABOUT_REGISTERED,
   RUNNER_ABOUT_REPOS_FOLDER,
@@ -98,6 +100,7 @@ import {
   RUNNER_COPY_COMMAND,
   RUNNER_DISK,
   RUNNER_KEEP_FREE,
+  RUNNER_LINE_SEPARATOR,
   RUNNER_MAX_CONCURRENT,
   RUNNER_NEEDS_ATTENTION,
   RUNNER_OFFLINE,
@@ -109,13 +112,17 @@ import {
   RUNNER_SET_A_RESERVE,
   RUNNER_SIGN_IN,
   RUNNER_UPDATE_ENGINES_NOW,
+  RUNNER_UPDATE_RUNNER_NOW,
+  RUNNER_UPDATE_RUNNER_REQUESTED,
   RUNNER_VERSION_INSTALLS_WHEN_IDLE,
   RUNNER_VERSION_LATEST,
+  RUNNER_VERSION_NOT_ROLLED_OUT,
   RUNNER_WORKSPACES,
   attentionQuotaResets,
   runnerDiskUsed,
   runnerOfflineLastSeen,
   runnerRunningOf,
+  runnerUpdatedFromTo,
   runnerVersionTag,
   runnerWorkspaceRunning,
 } from '../lib/runnerCopy';
@@ -138,6 +145,7 @@ interface Workspace {
    *  runner added. null = Default, the runner's own CODEX_HOME. */
   codexAccount?: string | null;
   claudeAccount?: string | null;
+  antigravityAccount?: string | null;
   runnerId?: string | null;
   enabled?: boolean;
   enableWorktree?: boolean;
@@ -250,6 +258,9 @@ export function RunnerDetailPage() {
   // account's runners, whichever is newer.
   const publishedVersion = useQuery(publishedRunnerVersionQuery()).data;
   const latestVersion = latestRunnerVersion(publishedVersion, runners.data ?? []);
+  // The account's switch for smart model selection: off (the default), the Agent has no switch of
+  // its own for it, and its Model line reads as it always has.
+  const smartSelection = useQuery(meQuery()).data?.preferences?.modelRouting === true;
 
   // Rename / delete the runner — same API the Runners grid uses.
   const [renaming, setRenaming] = useState(false);
@@ -299,6 +310,17 @@ export function RunnerDetailPage() {
   const capacityRef = useRef<HTMLElement>(null);
   const keepFreeRef = useRef<RefSelectProps>(null);
   const engineUpdate = useEngineUpdate(runnerId ?? '');
+  // Update Runner Now: the runner checks for its release at once rather than at its next 10-minute
+  // check, by the same rules — a turn in flight still holds the install. Nothing answers but the
+  // update state its next heartbeats report, which the list's refetch brings to this page.
+  const runnerUpdate = useMutation({
+    mutationFn: () => api(`/runners/${runnerId}/self-update`, { method: 'POST' }),
+    onSuccess: () => {
+      message.success(RUNNER_UPDATE_RUNNER_REQUESTED);
+      void qc.invalidateQueries({ queryKey: ['runners'] });
+    },
+    onError: (e: Error) => message.error("Couldn't start the runner update", e.message),
+  });
   const rotation = useRunnerTokenRotation();
   // Repair a checkout stuck mid-merge — the same request and words as a session's merge bar.
   const repairMut = useMutation({
@@ -333,6 +355,7 @@ export function RunnerDetailPage() {
   // null = Default, the runner's own Codex account.
   const [fCodexAccount, setFCodexAccount] = useState<string | null>(null);
   const [fClaudeAccount, setFClaudeAccount] = useState<string | null>(null);
+  const [fAntigravityAccount, setFAntigravityAccount] = useState<string | null>(null);
   // The Claude session id the Import section carries (edit mode only — importing needs the
   // workspace to exist). Reset with the rest of the form so a stale id can't leak across picks.
   const [importId, setImportId] = useState('');
@@ -362,6 +385,7 @@ export function RunnerDetailPage() {
         ),
         codexAccount: fCodexAccount,
         claudeAccount: fClaudeAccount,
+        antigravityAccount: fAntigravityAccount,
       };
       return editing
         ? api<Workspace>(`/workspaces/${editing.id}`, { method: 'PATCH', body })
@@ -438,6 +462,7 @@ export function RunnerDetailPage() {
           // account's quota without anyone having chosen that.
           codexAccount: a.codexAccount ?? null,
           claudeAccount: a.claudeAccount ?? null,
+          antigravityAccount: a.antigravityAccount ?? null,
           runnerId,
         },
       }),
@@ -552,6 +577,7 @@ export function RunnerDetailPage() {
     setFEnv(Object.entries(a?.env ?? {}).map(([key, value]) => ({ key, value })));
     setFCodexAccount(a?.codexAccount ?? null);
     setFClaudeAccount(a?.claudeAccount ?? null);
+    setFAntigravityAccount(a?.antigravityAccount ?? null);
     setImportId('');
     setHistory(null);
     setImportMode('none');
@@ -618,7 +644,8 @@ export function RunnerDetailPage() {
       (fEnv.length ? 1 : 0) +
       (fAppend.trim() ? 1 : 0) +
       (fCodexAccount ? 1 : 0) +
-      (fClaudeAccount ? 1 : 0);
+      (fClaudeAccount ? 1 : 0) +
+      (fAntigravityAccount ? 1 : 0);
     // What the runner last found at this path. It answers for the *saved* path, so an edited
     // field says so instead of showing a verdict about a directory that is no longer named
     // here — a stale ✓ against a typo would be worse than no answer at all.
@@ -731,24 +758,26 @@ export function RunnerDetailPage() {
       />
       {/* Off by default, and only the owner's to turn on: it decides what task runs cost, so the
           agent tools cannot set it (docs/model-routing-design.md §7.2). */}
-      <SettingRow
-        label="Smart model selection for tasks"
-        desc="Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected."
-        checked={fModelRouting}
-        onChange={(v) => {
-          setFModelRouting(v);
-          setDirty(true);
-        }}
-      >
-        <RoutingEngines
-          own={formProvider}
-          value={fRoutingEngines}
-          onChange={(next) => {
-            setFRoutingEngines(next);
+      {smartSelection && (
+        <SettingRow
+          label="Smart model selection for tasks"
+          desc="Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected."
+          checked={fModelRouting}
+          onChange={(v) => {
+            setFModelRouting(v);
             setDirty(true);
           }}
-        />
-      </SettingRow>
+        >
+          <RoutingEngines
+            own={formProvider}
+            value={fRoutingEngines}
+            onChange={(next) => {
+              setFRoutingEngines(next);
+              setDirty(true);
+            }}
+          />
+        </SettingRow>
+      )}
 
       {/* Model is not a workspace field: it resolves from the runtime/provider this project last
           ran on. Stated read-only because the row displays it — otherwise it reads as a setting
@@ -756,7 +785,7 @@ export function RunnerDetailPage() {
           per-session choices, made in the session where the context for them is. With smart
           selection on, that model is only what the sessions opened by hand start on. */}
       <div className="rd-form-derived">
-        {fModelRouting ? (
+        {smartSelection && fModelRouting ? (
           <>
             Task runs: model picked per task by smart selection. Sessions you open yourself:{' '}
             <b>{formModel || '—'}</b> · resolved by {providerLabelFor(formProvider)} on this runner.
@@ -867,6 +896,18 @@ export function RunnerDetailPage() {
                 setDirty(true);
               }}
               envDir={fEnv.find((r) => r.key.trim() === 'CLAUDE_CONFIG_DIR')?.value}
+            />
+          )}
+          {runner && offersAccount(runner, 'antigravity', fAntigravityAccount) && (
+            <AccountSelect
+              engine="antigravity"
+              runner={runner}
+              value={fAntigravityAccount}
+              onChange={(next) => {
+                setFAntigravityAccount(next);
+                setDirty(true);
+              }}
+              envDir={fEnv.find((r) => r.key.trim() === 'ORBIT_ANTIGRAVITY_GOOGLE_DIR')?.value}
             />
           )}
           <div className="rd-form-field">
@@ -1107,16 +1148,34 @@ export function RunnerDetailPage() {
     else capacityMut.mutate({ maxConcurrent: next });
   };
 
-  // About's version line: current, catching up by itself, or stuck until someone upgrades it.
+  // About's version line: current, catching up by itself, or stuck until someone upgrades it. A
+  // runner that reports where its updates stand says which; an older one is judged by runsAsRoot.
   const version = runner.version?.trim() || null;
   const versionNote = (() => {
     if (!version || !latestVersion) return null;
-    if (attention.some((item) => item.kind === 'cannotSelfUpdate')) {
-      return { text: ATTENTION_CANT_UPDATE_ITSELF, warn: true };
-    }
+    const stuck = attention.find((item) => item.kind === 'cannotSelfUpdate');
+    if (stuck) return { text: stuck.short, warn: true };
     if (compareRunnerVersions(version, latestVersion) >= 0) return { text: RUNNER_VERSION_LATEST, warn: false };
+    const state = runner.selfUpdate?.state;
+    if (state === 'heldByRollout') return { text: RUNNER_VERSION_NOT_ROLLED_OUT, warn: false };
+    if (state === 'enabled' || state === 'waitingForIdle') {
+      return { text: RUNNER_VERSION_INSTALLS_WHEN_IDLE, warn: false };
+    }
+    if (state) return null;
     return runner.runsAsRoot ? { text: RUNNER_VERSION_INSTALLS_WHEN_IDLE, warn: false } : null;
   })();
+  // The last update it installed into itself, for a runner that reports it: when, and its versions.
+  const lastUpdate = (() => {
+    const report = runner.selfUpdate;
+    if (!report) return null;
+    const versions =
+      report.lastUpdatedFrom && report.lastUpdatedTo
+        ? runnerUpdatedFromTo(report.lastUpdatedFrom, report.lastUpdatedTo)
+        : report.lastUpdatedTo;
+    const parts = [report.lastUpdatedAt ? fmtTime(report.lastUpdatedAt) : null, versions];
+    return parts.filter(Boolean).join(RUNNER_LINE_SEPARATOR) || '—';
+  })();
+  const canUpdateNow = runnerCanUpdateNow(runner, nowMs);
 
   const openRename = () => {
     setRenameVal(shownName);
@@ -1179,6 +1238,12 @@ export function RunnerDetailPage() {
         return (
           <Button size="small" disabled={engineUpdate.isPending} onClick={() => engineUpdate.mutate()}>
             {RUNNER_UPDATE_ENGINES_NOW}
+          </Button>
+        );
+      case 'updateRunner':
+        return (
+          <Button size="small" disabled={runnerUpdate.isPending} onClick={() => runnerUpdate.mutate()}>
+            {RUNNER_UPDATE_RUNNER_NOW}
           </Button>
         );
       default:
@@ -1409,6 +1474,13 @@ export function RunnerDetailPage() {
           <section className="rd-section rd-about">
             <div className="rd-section-head">
               <div className="rd-section-title">{RUNNER_ABOUT}</div>
+              {/* Like Update engines: the escape hatch for when its own 10-minute check isn't soon
+                  enough. Offered only where a check now can change something. */}
+              {canUpdateNow && (
+                <Button size="small" disabled={runnerUpdate.isPending} onClick={() => runnerUpdate.mutate()}>
+                  {RUNNER_UPDATE_RUNNER_NOW}
+                </Button>
+              )}
             </div>
             <div className="rd-box">
               <AboutRow label={RUNNER_ABOUT_NAME}>
@@ -1424,6 +1496,7 @@ export function RunnerDetailPage() {
                   <small className={versionNote.warn ? 'warn' : undefined}>{versionNote.text}</small>
                 )}
               </AboutRow>
+              {lastUpdate && <AboutRow label={RUNNER_ABOUT_LAST_UPDATE}>{lastUpdate}</AboutRow>}
               <AboutRow label={RUNNER_ABOUT_RUNS_AS}>{runsAs}</AboutRow>
               <AboutRow label={RUNNER_ABOUT_REPOS_FOLDER}>{runner.reposRoot || '—'}</AboutRow>
               <AboutRow label={RUNNER_ABOUT_LAST_CHECK_IN}>

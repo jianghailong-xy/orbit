@@ -8,14 +8,18 @@ import type {
   ProjectStartedCard,
   SessionCapabilities,
   SessionMessageCard,
+  SessionReplyCard,
   SessionMoveTargets,
   SessionRequestView,
+  SessionProjectMembership,
   SessionTurnIntent,
   SessionTurnPlacement,
+  TaskStartCard,
 } from '@orbit/shared';
 // Types only, so the public project page's payload is typed by the cards that draw it.
 import type { ProjectPanoramaBuckets, ProjectPanoramaShape } from './components/ProjectPanoramaHeader';
 import type { ProjectDependencyGraphResponse } from './lib/projectDependencyGraph';
+import type { CodexLogin } from './lib/codexLogin';
 import { clearTranscriptStore, setTranscriptUser } from './lib/transcriptStore';
 import type { Me } from './lib/queries';
 import { compatibleUuid as uuid } from './lib/uuid';
@@ -365,6 +369,8 @@ export const createInteractiveSession = (body: {
   codexAccount?: string;
   /** The same for a session on the built-in Claude engine: one of the runner's Claude accounts. */
   claudeAccount?: string;
+  /** The same again for the built-in Antigravity engine: one of the runner's Google accounts. */
+  antigravityAccount?: string;
   /** Ids of images uploaded unscoped on the compose page; the server scopes them to the
    *  new session and links them to its seeded first turn. */
   attachmentIds?: string[];
@@ -610,20 +616,16 @@ export const fetchAvatarDataUrl = async (): Promise<string> => {
 export const cancelQueuedTurn = (sessionId: string, turnId: string) =>
   api(`/sessions/${sessionId}/turns/${turnId}`, { method: 'DELETE' });
 
-export interface ActiveSessionTurn {
-  turnId: string;
-  kind: ConversationTurnKind;
-  placement: SessionTurnPlacement;
-  content: string;
-  createdAt: string;
-  targetTurnId?: string;
-  delivery?: 'failed' | 'unconfirmed';
-  deliveryCode?: string;
-  deliveryReason?: string;
-  attachments?: { id: string; mimeType: string }[];
+/** The cards a user turn is drawn as, under the names the runner's echo stores them by (apiserver
+ *  `TurnCards`, sessions/turn-cards.ts): a queued row carries the same fields its echo will, each
+ *  absent on every turn that is not that card. */
+export interface TurnCards {
   /** An exception item's delivery carries the item's own fields beside its words (`OpenItemDeliveryCard`),
    *  read by the same function the runner's echo is read by. Absent on every turn a person typed. */
   openItemDelivery?: OpenItemDeliveryCard;
+  /** The same for the turn that hands a task's run its brief (`TaskStartCard`): a resumed run's — a
+   *  run's opening turn is never listed here. */
+  taskStart?: TaskStartCard;
   /** The same for the message telling a coordinator its project was started (`ProjectStartedCard`). */
   projectStarted?: ProjectStartedCard;
   /** A confirmation request handed to this conversation to review, and a reviewer's return handed to
@@ -634,6 +636,22 @@ export interface ActiveSessionTurn {
    *  carry it. Its words are that session's, not the reader's. Absent on every turn nobody's session
    *  sent. */
   sessionMessage?: SessionMessageCard;
+  /** The outcomes of this session's own requests a reply turn hands back (`SessionReplyCard`), as
+   *  the runner's echo will carry them. Absent on every other turn. */
+  sessionReplies?: SessionReplyCard[];
+}
+
+export interface ActiveSessionTurn extends TurnCards {
+  turnId: string;
+  kind: ConversationTurnKind;
+  placement: SessionTurnPlacement;
+  content: string;
+  createdAt: string;
+  targetTurnId?: string;
+  delivery?: 'failed' | 'unconfirmed';
+  deliveryCode?: string;
+  deliveryReason?: string;
+  attachments?: { id: string; mimeType: string }[];
   /** The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
    *  delivery — so nobody typed its words. Absent on every turn somebody sent. */
   authoredByOrbit?: true;
@@ -774,10 +792,10 @@ export const updateSessionConfig = (
   },
 ) => api(`/sessions/${sessionId}/config`, { method: 'PATCH', body: config });
 
-/** Move a session on the built-in Codex or Claude engine to another of its runner's accounts — which
- *  pins it there — or back onto `automatic`. Spawn-only, like a provider: a live session's engine
- *  re-spawns on the new account once no turn is in flight, and an ended one takes it on its next
- *  resume. */
+/** Move a session on the built-in Codex, Claude or Antigravity engine to another of its runner's
+ *  accounts — which pins it there — or back onto `automatic`. Spawn-only, like a provider: a live
+ *  session's engine re-spawns on the new account once no turn is in flight, and an ended one takes it
+ *  on its next resume. */
 export const switchSessionAccount = (sessionId: string, account: string) =>
   api(`/sessions/${sessionId}/account`, { method: 'PATCH', body: { account } });
 
@@ -908,16 +926,33 @@ export const unpinSession = (sessionId: string) =>
 // from that window alone is how the button went missing on exactly the runs an outage kills.
 // `sessionMessage` is the card the words' echo carries when they are another Orbit session's: the
 // Retry then asks the server to re-send them (`resendSessionRetryMessage`).
+// `nothingToResend` says there is not even a turn of the failure's own kind for the sweep to
+// re-send, so a re-send is not what this session is waiting on: the card swaps its verb for
+// Continue (`CONTINUE_MESSAGE`, @orbit/shared) instead of offering a Retry that has nothing to
+// carry. Empty `text` without it means the sweep re-sends a reply or confirmation turn itself.
 export const getSessionRetryMessage = (sessionId: string) =>
-  api<{ text: string; sessionMessage?: SessionMessageCard }>(`/sessions/${sessionId}/retry-message`);
+  api<{ text: string; sessionMessage?: SessionMessageCard; nothingToResend?: boolean }>(
+    `/sessions/${sessionId}/retry-message`,
+  );
 
 // Re-send another session's message from the failure card (docs/session-request-reply-contract.md
 // §2.1): the server re-sends it as the automatic retry would — signed by that session, with the
 // request it was — instead of this page sending the words again in the owner's own name. It names no
 // key: the server derives one from the failed message, so a double tap or a response lost and clicked
 // again is the turn already queued rather than a second re-send (§2.1, §8 criterion 19).
-export const resendSessionRetryMessage = (sessionId: string) =>
-  api<{ turnId: string; placement?: string }>(`/sessions/${sessionId}/retry-message`, { method: 'POST' });
+// `identity` is the composer's pending pick, when Retry was pressed after choosing one. The re-send
+// is a resume, and what the person chose has to travel with it — without it, choosing a provider and
+// pressing Retry ran on the provider the session was already on. Omitted (or empty), the re-send
+// goes where the session is, which is what a Retry pressed with nothing chosen must do.
+export const resendSessionRetryMessage = (
+  sessionId: string,
+  identity: { provider?: string; account?: string } = {},
+) =>
+  api<{ turnId: string; placement?: string }>(`/sessions/${sessionId}/retry-message`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(identity),
+  });
 
 // Turn off / put back the retry armed on this session by a spent quota or a transient provider
 // error. Arming is automatic when one of those kills a turn; `armAutoRetry` exists so the card's
@@ -1023,6 +1058,107 @@ export const listShareLinks = () => api<{ links: ShareLink[] }>('/share-links');
 /** Turn off these links in one request; `count` is how many were still open. */
 export const turnOffShareLinks = (shareLinkIds: string[]) =>
   api<{ count: number }>('/share-links/turn-off', { method: 'POST', body: { shareLinkIds } });
+
+// ── Personal access tokens ──
+// A token a person issues so a script or the `orbit` CLI can call the API as them, with the scopes
+// and workspaces they choose (docs/personal-access-token-design.md §6.5, §9). The server keeps only
+// a hash: the token itself is in the answer that issues it, and nowhere else.
+
+/** ACTIVE works; EXPIRED ran past its expiry; REVOKED was ended by someone (`revokedReason`). */
+export type AccessTokenState = 'ACTIVE' | 'EXPIRED' | 'REVOKED';
+
+export interface AccessToken {
+  id: string;
+  name: string;
+  /** The token's last four characters, so it can be told apart from the others. */
+  tokenHint: string;
+  scopes: string[];
+  /** Empty: not confined to any workspace. */
+  workspaceIds: string[];
+  /** Those workspaces, named; one deleted since is missing. */
+  workspaces: { id: string; name: string }[];
+  /** Null: never expires. */
+  expiresAt: string | null;
+  createdVia: 'WEB' | 'CLI_DEVICE';
+  lastUsedAt: string | null;
+  lastUsedIp: string | null;
+  lastUsedUserAgent: string | null;
+  revokedAt: string | null;
+  revokedReason: 'USER' | 'EXPIRED' | 'PASSWORD_CHANGED' | 'USER_DELETED' | 'ADMIN' | null;
+  createdAt: string;
+  state: AccessTokenState;
+}
+
+/** The answer that issues a token — the one place the token ever appears. */
+export interface IssuedAccessToken {
+  id: string;
+  token: string;
+  name: string;
+  tokenHint: string;
+  scopes: string[];
+  workspaceIds: string[];
+  expiresAt: string | null;
+  createdVia: 'WEB' | 'CLI_DEVICE';
+  createdAt: string;
+}
+
+/** 30, 90 or 365 days, or null for a token that never expires. */
+export type AccessTokenLifetime = 30 | 90 | 365 | null;
+
+/** Every token the account has issued, newest first, revoked and expired ones included. */
+export const listAccessTokens = () => api<{ tokens: AccessToken[] }>('/access-tokens');
+
+export const issueAccessToken = (body: {
+  name: string;
+  scopes: string[];
+  workspaceIds?: string[];
+  expiresInDays: AccessTokenLifetime;
+}) => api<IssuedAccessToken>('/access-tokens', { method: 'POST', body });
+
+/** Revoke one of the account's tokens at once. Idempotent. */
+export const revokeAccessToken = (id: string) =>
+  api<{ id: string; revokedAt: string; revokedReason: string }>(`/access-tokens/${id}`, { method: 'DELETE' });
+
+/**
+ * An `orbit login` waiting at /cli-login?code=… (docs/personal-access-token-design.md §7.3): the
+ * token a terminal asks for. Approving issues nothing yet — the terminal collects the token, issued to
+ * whoever approved, the next time it asks — and denying tells it no.
+ */
+export interface CliLoginRequest {
+  userCode: string;
+  name: string;
+  scopes: string[];
+  /** Null: the token never expires. */
+  expiresInDays: AccessTokenLifetime;
+  /** The host the terminal says it runs on. */
+  hostname: string | null;
+  /** DELIVERED: approved, and the terminal has collected its token. */
+  status: 'PENDING' | 'APPROVED' | 'DENIED' | 'DELIVERED';
+  createdAt: string;
+  expiresAt: string;
+  /** One of your live tokens already has this name, so approving would be refused. */
+  nameInUse: boolean;
+}
+
+const cliLoginPath = (userCode: string) => `/access-tokens/device/${encodeURIComponent(userCode)}`;
+
+export const getCliLoginRequest = (userCode: string) => api<CliLoginRequest>(cliLoginPath(userCode));
+
+export const approveCliLogin = (userCode: string) =>
+  api<{ status: 'APPROVED'; name: string }>(`${cliLoginPath(userCode)}/approve`, { method: 'POST' });
+
+export const denyCliLogin = (userCode: string) =>
+  api<{ status: 'DENIED'; name: string }>(`${cliLoginPath(userCode)}/deny`, { method: 'POST' });
+
+/** Administrators: a user's tokens, as that user's own list shows them. */
+export const listUserAccessTokens = (userId: string) =>
+  api<{ tokens: AccessToken[] }>(`/admin/users/${userId}/access-tokens`);
+
+/** Administrators: revoke one of a user's tokens, recorded as revoked by an administrator. */
+export const revokeUserAccessToken = (userId: string, tokenId: string) =>
+  api<{ id: string; revokedAt: string; revokedReason: string }>(`/admin/users/${userId}/access-tokens/${tokenId}`, {
+    method: 'DELETE',
+  });
 
 /** One event in a public shared transcript (mirrors the owner SSE payload, sans live state). */
 export interface SharedEvent {
@@ -1359,6 +1495,9 @@ export interface SessionDetail {
   /** The Project this Session coordinates. Null for ordinary Sessions. */
   projectId?: string | null;
   projectTitle?: string | null;
+  projectMembership?: SessionProjectMembership | null;
+  /** The project's integration line, exposed for the existing worktree-bar display. */
+  projectIntegrationRef?: string | null;
   prompt?: string | null;
   createdAt?: string;
   lastTurnAt?: string | null;
@@ -1375,6 +1514,10 @@ export interface SessionDetail {
   poolMemberProviderId?: string | null;
   /** On a shared pool: the key its last claim chose (null before the first, or when none could run). */
   poolKeyId?: string | null;
+  /** On a Codex pool of one's own ChatGPT accounts: the account this session runs on, as the masked
+   *  view every response names one by (email + `…AB12`, never its id). Null until a claim records
+   *  one, or on a session of any other kind. */
+  poolCodexLogin?: CodexLogin | null;
   /** The Codex account picked for this session on the New Session screen; null follows the
    *  workspace's (`workspace.codexAccount`). */
   codexAccount?: string | null;
@@ -1385,6 +1528,10 @@ export interface SessionDetail {
   claudeAccount?: string | null;
   /** See codexAccountPinned. */
   claudeAccountPinned?: boolean;
+  /** The Antigravity Google account picked or chosen for this session; null follows the workspace's. */
+  antigravityAccount?: string | null;
+  /** See codexAccountPinned. */
+  antigravityAccountPinned?: boolean;
   // When the armed auto-retry fires (null = nothing armed), and how many attempts this run of
   // failures has already spent. Drives the transcript's quota / provider-error card.
   retryAt?: string | null;
@@ -1404,6 +1551,8 @@ export interface SessionDetail {
     codexAccount?: string | null;
     /** The Claude account this workspace's sessions run on; null is Default. */
     claudeAccount?: string | null;
+    /** The Antigravity Google account this workspace's sessions run on; null is Default. */
+    antigravityAccount?: string | null;
   } | null;
   branch?: string | null;
   baseSha?: string | null;
@@ -1419,9 +1568,8 @@ export interface SessionDetail {
   mergeRecoveryAction?: MergeRecoveryAction | null;
   mergeRecoverySupported?: boolean;
   mergedAt?: string | null;
-  // The branch the user chose to merge into (status bar's branch dropdown). Null = the
-  // default (runner auto-detects main, else master). Shown on the merged ✓ chip + used by
-  // "Retry merge" to retry the same target.
+  // The server-resolved merge target: an explicit choice, a project integration line, or the
+  // workspace/runner default. Shown on the merged ✓ chip and used by Retry merge.
   mergeTarget?: string | null;
   // Candidate merge-target branches the runner reported for this session's repo (local
   // branches minus orbit/*), populating the dropdown. Empty for older runners → no dropdown.

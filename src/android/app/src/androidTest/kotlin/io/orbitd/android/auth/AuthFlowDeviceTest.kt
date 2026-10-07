@@ -21,8 +21,10 @@ import io.orbitd.android.storage.AndroidCredentialStore
 import java.io.File
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
+import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.RecordedRequest
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -38,13 +40,15 @@ class AuthFlowDeviceTest {
         compose.waitUntil(10_000) { session.state.value !is AuthState.Restoring }
         assertTrue("Use a signed-out dedicated debug installation", session.state.value is AuthState.SignedOut)
         MockWebServer().use { server ->
-            val requests = java.util.concurrent.CopyOnWriteArrayList<okhttp3.mockwebserver.RecordedRequest>()
+            val requests = java.util.concurrent.CopyOnWriteArrayList<RecordedRequest>()
             var rejected = false
-            server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
-                override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): MockResponse {
+            server.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
                     requests += request
                     val path = request.requestUrl!!.encodedPath
                     return when (path) {
+                        // The login page also asks the typed instance what it offers; this one predates Google sign-in.
+                        "/api/auth/methods" -> MockResponse().setResponseCode(404)
                         "/api/auth/login" -> MockResponse().setBody(Wire.json.encodeToString(fixtureTokens()))
                         "/api/auth/refresh" -> MockResponse().setBody(Wire.json.encodeToString(fixtureTokens(1)))
                         "/api/users/me" -> if (!rejected) { rejected = true; MockResponse().setResponseCode(401) }

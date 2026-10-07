@@ -45,6 +45,16 @@ function row(over: Partial<ProjectOpenItemRow> = {}): ProjectOpenItemRow {
     title: `Coordinator asks: ${QUESTION}`,
     detailLine: 'Blocks 2 tasks · If you don’t answer: nothing starts; reminder at 2h',
     assignee: 'OWNER',
+    assigneeReason: 'DEFAULT',
+    escalateAt: null,
+    escalatedAt: null,
+    taskId: null,
+    sessionId: null,
+    promotionId: null,
+    fuseEpisodeId: null,
+    delivery: { state: 'NOT_REQUIRED', sessionId: null, at: null },
+    actions: [],
+    facts: null,
     waitingSince: new Date(NOW - 35 * MINUTE).toISOString(),
     question: {
       question: QUESTION,
@@ -74,6 +84,8 @@ describe('what the card says', () => {
     expect(html).toContain(COORDINATOR_QUESTION_HEADING);
     expect(html).toContain(FROM_COORDINATOR);
     expect(html).toContain(QUESTION);
+    expect(html).not.toContain('review-card-preview');
+    expect(html).toContain(SEND_ANSWER);
   });
 
   it('offers the options, marks the recommended one, and says what it holds up', () => {

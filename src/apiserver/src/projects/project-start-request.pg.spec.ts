@@ -30,7 +30,10 @@
  *       owner's read no longer draws it;
  *   (7) the start door answers the request: it is resolved APPROVED, and what the start records as
  *       asked for is the coordinator's suggestion, so the owner's change is the difference marked;
- *   (8) ask_owner works before the start, with the Automatic switch off, and the answer comes back.
+ *   (8) ask_owner works before the start, with the Automatic switch off, and the answer comes back;
+ *   (9) an open start request is an item waiting on the owner, so the coordinator cannot ask to record
+ *       the project done over it (`project_request_done`); the start answers it, and it holds
+ *       nothing back after.
  *
  * Every fact is produced the way the product produces it — criteria through `ProjectsService.update`,
  * requests through the runner controller, starts through `ProjectAcceptanceService.startProject` —
@@ -507,6 +510,7 @@ test('a coordinator asks its owner to start the project, and the plan is checked
     assert.deepEqual(view.startRequest?.actions, []);
     assert.deepEqual(view.needsYou, [], 'not among the exceptions');
     assert.deepEqual(view.withCoordinator, []);
+    assert.equal(view.doneRequest, null, 'and a request to start is not one to record the project done');
   });
 
   // ═══ (3) who may ask ═══════════════════════════════════════════════════════════════════════════
@@ -713,5 +717,41 @@ test('a coordinator asks its owner to start the project, and the plan is checked
     assert.deepEqual(turns.map((turn) => turn.client_turn_id),
       [`owner-answer:v1:${asked.itemId}:${project.sessionId}`]);
     assert.ok(turns[0].content.includes('Wait for A'), 'carrying what the owner chose');
+  });
+
+  // ═══ (9) a start request and a done request ═══════════════════════════════════════════════════
+
+  await t.test('(9) an open start request holds back a request to record the project done', async () => {
+    const project = await planned('start-before-done');
+    const filed = await ask(project.id, project.sessionId);
+    /** What `project_request_done` is refused for, by code, and the owner items it names. */
+    const doneRefusal = async () => {
+      const refusal = await refused(() => door.requestDone(runner, project.sessionId, project.id, {
+        judgment: 'Everything is done.',
+        gaps: [],
+      } as never));
+      assert.equal(refusal.status, 409);
+      assert.equal(refusal.body.code, 'DONE_REQUEST_NOT_READY');
+      const findings = (refusal.body as unknown as {
+        findings: Array<{ code: string; items: Array<{ itemId: string; kind: string }> }>;
+      }).findings;
+      return findings.find((finding) => finding.code === 'DONE_OWNER_ITEMS_OPEN')?.items ?? [];
+    };
+    assert.deepEqual(
+      (await doneRefusal()).map((item) => `${item.kind} ${item.itemId}`),
+      [`START_REQUEST ${filed.itemId}`],
+      'the start the owner has not answered is an item waiting on them',
+    );
+
+    await acceptance.startProject(ownerId, project.id, {
+      criteriaDigest: await seal(project.id),
+      line: 'PROJECT_BRANCH',
+      automatic: false,
+      maxConcurrentTasks: 3,
+      mergeCheckCommand: 'npm test',
+      requestId: filed.itemId,
+    });
+    assert.deepEqual(await doneRefusal(), [],
+      'answered by the start, it holds nothing back — the plan’s unfinished work still does');
   });
 });

@@ -1,0 +1,28 @@
+{
+ "round1": {
+  "report": "runs/p0-verify-v2-round-1/report.json",
+  "stats": {
+   "startTime": "2026-10-07T00:37:10.035Z",
+   "duration": 350417.433,
+   "expected": 101,
+   "skipped": 11,
+   "unexpected": 0,
+   "flaky": 0
+  }
+ },
+ "round2": {
+  "report": "runs/p0-verify-v2-round-2/report.json",
+  "stats": {
+   "startTime": "2026-10-07T00:43:15.302Z",
+   "duration": 311421.025,
+   "expected": 101,
+   "skipped": 11,
+   "unexpected": 0,
+   "flaky": 0
+  }
+ },
+ "tests": 112,
+ "identical": true,
+ "differences": [],
+ "failures": {}
+}

@@ -179,10 +179,10 @@ final class TaskDetailWiringTests: XCTestCase {
                                to: "private func runTime(")
         XCTAssertTrue(runs.contains("Button { model.route(to: .session(session.id)) } label: { runRow(session, task) }"),
                       "the row is still the way into the run")
-        XCTAssertTrue(runs.contains("if let route = TaskDetailLogic.runRoute(session) {"))
+        XCTAssertTrue(runs.contains("if let route = TaskDetailLogic.runRoute(session, smartSelection: smartSelection) {"))
         XCTAssertTrue(runs.contains("routeWhy = TaskRouteWhy(id: session.id, title: TaskDetailCopy.why(pick),"))
         XCTAssertTrue(runs.contains("footer: TaskDetailLogic.routeWhyFooter(route))"))
-        XCTAssertTrue(runs.contains("TaskDetailLogic.runModelLine(session, modelLabel: name)"))
+        XCTAssertTrue(runs.contains("TaskDetailLogic.runModelLine(session, smartSelection: smartSelection, modelLabel: name)"))
         XCTAssertTrue(runs.contains("if let route, route.applied {"), "the tier tag, on a run on the pick")
         XCTAssertTrue(runs.contains("TaskDetailCopy.wouldHavePicked("), "the purple line, on a shadow run")
         XCTAssertTrue(runs.contains("options: task.modelHintOptions,"), "a model named by the picker's tiers first")
@@ -233,6 +233,38 @@ final class TaskDetailWiringTests: XCTestCase {
         XCTAssertTrue(mac.contains("Color.accentColor.opacity(0.12)"))
     }
 
+    /// The account's switch (preferences.modelRouting) hides all of it while off, the default — web
+    /// parity with TaskDetailPanel.tsx, WorkspaceView.tsx and RunnerDetailPage.tsx.
+    func testTheAccountSwitchGatesEverySmartSelectionEntry() throws {
+        let view = try source(Self.tasksView)
+        XCTAssertTrue(view.contains("private var smartSelection: Bool { model.user?.preferences?.smartModelSelection ?? false }"))
+        let details = try section(view, from: "private func detailsSection(_ task: TaskItem) -> some View {",
+                                  to: "private func detailRow(")
+        XCTAssertTrue(details.contains("if smartSelection { suggestedPicker(task) }"), "no Suggested row")
+        XCTAssertTrue(details.contains("if smartSelection, let note = TaskDetailLogic.modelHintNote(task) {"),
+                      "no coordinator's reason")
+        let model = try section(view, from: "private func modelPicker(_ task: TaskItem) -> some View {",
+                                to: "private func listPicker(")
+        XCTAssertTrue(model.contains("let unpinned = smartSelection && assigneeAgent(task)?.modelRouting == true"),
+                      "no ✦ Smart selection placeholder")
+        let runs = try section(view, from: "private func runsSection(_ task: TaskItem) -> some View {",
+                               to: "private func runTime(")
+        XCTAssertFalse(runs.contains("TaskDetailLogic.runRoute(session)"), "every route read goes through the switch")
+        XCTAssertEqual(runs.components(separatedBy: "TaskDetailLogic.runRoute(session, smartSelection: smartSelection)").count - 1, 2,
+                       "the ⓘ Why and the row's tier tag / purple line")
+
+        let composer = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/ComposerView.swift")
+        let route = try section(composer, from: "private var smartRoute: TaskRunRoute? {", to: "private var modelDisplayName")
+        XCTAssertTrue(route.contains("smartSelection: app.user?.preferences?.smartModelSelection ?? false)"),
+                      "no ✦ chip and no menu header")
+
+        let agents = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/AgentsView.swift")
+        let form = try section(agents, from: "struct AgentFormContent: View {", to: "private func prefill()")
+        let gate = try positions(["if app.user?.preferences?.smartModelSelection ?? false {", "Section(\"Task runs\") {"],
+                                 in: form)
+        XCTAssertEqual(gate, gate.sorted(), "no Task runs group")
+    }
+
     func testTheNewBlocksReadAndWriteThroughTheModel() throws {
         let view = try source(Self.tasksView)
         let load = try section(view, from: ".task(id: taskID) {\n            await loadDetail()",
@@ -251,8 +283,8 @@ final class TaskDetailWiringTests: XCTestCase {
         XCTAssertTrue(view.contains("TaskDetailLogic.dependencyGraph(for: task, loaded: tasks.dependencyGraph)"))
         XCTAssertTrue(view.contains("TaskDependencyGraphView(graph: graph)"))
         // Removing an input or a prerequisite is asked first, in the browser's words.
-        XCTAssertTrue(view.contains("confirmationDialog(TaskDetailCopy.removeInputTitle"))
-        XCTAssertTrue(view.contains("confirmationDialog(TaskDetailCopy.removePrerequisiteTitle"))
+        XCTAssertTrue(view.contains("orbitConfirmation({ _ in TaskDetailCopy.removeInputTitle }"))
+        XCTAssertTrue(view.contains("orbitConfirmation({ _ in TaskDetailCopy.removePrerequisiteTitle }"))
     }
 
     func testLongTextFoldsFromItsLengthAndTheSheetsSaveExplicitly() throws {

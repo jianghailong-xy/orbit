@@ -83,7 +83,12 @@ function serviceOn(current: {
       },
       count: async () => 0,
     },
-    modelProvider: { findFirst: async () => modelProvider ?? null },
+    // An admin, for whom a shared row resolves as any row of theirs does (usableProviderScope).
+    user: { findUnique: async () => ({ role: 'ADMIN' }) },
+    modelProvider: {
+      findFirst: async () => modelProvider ?? null,
+      findMany: async () => (modelProvider ? [modelProvider] : []),
+    },
   };
   const prisma = { $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx) } as never;
   const service = new SessionsService(prisma, {} as never, {
@@ -329,6 +334,47 @@ test('an opencode session is re-spawned too — its process does not outlive the
 
   assert.deepEqual(turns.map((t) => t.kind), ['reload']);
   assert.equal(JSON.parse(turns[0].content ?? '{}').model, 'anthropic/claude-haiku-4-5');
+});
+
+// A configured key run on OpenCode lives in the process environment (shared `openCodeKeys`), so a
+// move onto, off or between keys names the provider on the reload, which is what has the inbox
+// rebuild that environment (reloadProviderEnv).
+const deepseekKey = () => {
+  process.env.PROVIDER_SECRET_KEY ??= 'test-master-key';
+  return {
+    slug: 'deepseek',
+    runtime: 'claude',
+    baseUrl: 'https://api.deepseek.com/anthropic',
+    apiKeyEnc: encryptSecret('sk-ds'),
+    defaultModel: 'deepseek-v4-pro',
+    enabled: true,
+  };
+};
+
+test('an opencode session moved onto a configured key has its environment rebuilt', async () => {
+  const { service, turns } = serviceOn({ provider: 'opencode', model: 'anthropic/claude-opus-5', modelProvider: deepseekKey() });
+
+  await service.updateConfig(OWNER, ID, { model: 'orbit-deepseek/deepseek-v4-pro' });
+
+  assert.deepEqual(turns.map((t) => t.kind), ['reload']);
+  const content = JSON.parse(turns[0].content ?? '{}');
+  assert.equal(content.model, 'orbit-deepseek/deepseek-v4-pro');
+  assert.equal(content.provider, 'opencode');
+});
+
+test("an opencode session moving between one key's models keeps its environment", async () => {
+  const { service, turns } = serviceOn({ provider: 'opencode', model: 'orbit-deepseek/deepseek-v4-pro', modelProvider: deepseekKey() });
+
+  await service.updateConfig(OWNER, ID, { model: 'orbit-deepseek/deepseek-flash' });
+
+  assert.equal(JSON.parse(turns[0].content ?? '{}').provider, undefined);
+});
+
+test('an opencode session cannot be moved onto a key OpenCode may not spend', async () => {
+  const { service, turns } = serviceOn({ provider: 'opencode', model: 'anthropic/claude-opus-5', modelProvider: { ...deepseekKey(), enabled: false } });
+
+  await assert.rejects(service.updateConfig(OWNER, ID, { model: 'orbit-deepseek/deepseek-v4-pro' }), /provider not available on OpenCode/);
+  assert.deepEqual(turns, []);
 });
 
 test('an antigravity session is re-spawned although it speaks stream-json like claude', async () => {

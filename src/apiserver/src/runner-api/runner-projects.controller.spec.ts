@@ -209,6 +209,52 @@ test('requestStart files the request in the runner owner scope, as the acting se
   assert.deepEqual(filed, { itemId: 'item-1', state: 'OPEN', warnings: [] });
 });
 
+test('requestDone is exposed as POST projects/:id/done-requests', () => {
+  const handler = RunnerProjectsController.prototype.requestDone;
+  assert.equal(Reflect.getMetadata(PATH_METADATA, handler), 'projects/:id/done-requests');
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.POST);
+});
+
+/** A done request is filed the same way: in the runner owner's scope, as the acting session. */
+test('requestDone files the request in the runner owner scope, as the acting session', async () => {
+  const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, 'requestDone') as
+    | Record<string, { data?: unknown }>
+    | undefined;
+  const headers = Object.values(args ?? {})
+    .map((arg) => arg.data)
+    .filter((data) => typeof data === 'string' && data.includes('-'));
+  assert.deepEqual(headers, ['x-orbit-session-id']);
+
+  const seen: unknown[] = [];
+  const openItems = {
+    requestDone: async (...call: unknown[]) => {
+      seen.push(call);
+      return { itemId: 'item-2', state: 'OPEN', warnings: [] };
+    },
+  } as never;
+  const controller = new RunnerProjectsController(
+    {} as never,
+    acceptanceDouble(),
+    {} as never,
+    orchestrationDouble(),
+    openItems,
+  );
+  const body = {
+    judgment: 'Every criterion is met and on main; the go-live made no commits, and I checked it.',
+    gaps: [{
+      criterionKey: 'criterion-7',
+      whyNotProven: 'its task made no commits, so there is no merge to hold a receipt for',
+      coordinatorChecked: 'the live web bundle has the new strings',
+      evidenceRefs: ['task 34Y4xlxE comment'],
+    }],
+  };
+
+  const filed = await controller.requestDone(RUNNER, ` ${SESSION_ID} `, 'project-1', body);
+
+  assert.deepEqual(seen, [['owner-1', 'project-1', SESSION_ID, body]]);
+  assert.deepEqual(filed, { itemId: 'item-2', state: 'OPEN', warnings: [] });
+});
+
 test('retryIntegration is exposed as POST projects/:id/tasks/:taskId/integration/retry', () => {
   const handler = RunnerProjectsController.prototype.retryIntegration;
   assert.equal(
@@ -267,6 +313,67 @@ test('retryIntegration reruns the landing in the runner owner scope, as the acti
   assert.deepEqual(retried, { taskId: 'task-1', jobId: 'job-2', generation: 2 });
   // A missing header is passed on as missing, for the service to refuse — never read as the owner.
   await controller.retryIntegration(RUNNER, undefined, 'project-1', 'task-1', body);
+  assert.deepEqual(seen[1], ['owner-1', 'project-1', 'task-1', body, undefined]);
+});
+
+/**
+ * Skipping one landing's merge check (contract §2.4 J-S5) is the rerun's route with the card on it:
+ * the same ids, resolved the same way, and the same acting session — which is the authority the
+ * service compares with the project's coordinator before it will read a card at all.
+ */
+test('skipIntegrationMergeCheck is exposed as POST projects/:id/tasks/:taskId/integration/skip-merge-check', () => {
+  const handler = RunnerProjectsController.prototype.skipIntegrationMergeCheck;
+  assert.equal(
+    Reflect.getMetadata(PATH_METADATA, handler),
+    'projects/:id/tasks/:taskId/integration/skip-merge-check',
+  );
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.POST);
+  const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, 'skipIntegrationMergeCheck') as
+    | Record<string, { data?: unknown; pipes?: unknown[] }>
+    | undefined;
+  for (const id of ['id', 'taskId']) {
+    const arg = Object.values(args ?? {}).find((candidate) => candidate.data === id);
+    assert.ok(arg, `no ${id} param on skipIntegrationMergeCheck`);
+    assert.ok(
+      (arg.pipes ?? []).some((pipe) => pipe === PublicIdPipe || pipe instanceof PublicIdPipe),
+      `${id} does not resolve through PublicIdPipe`,
+    );
+  }
+});
+
+test('skipIntegrationMergeCheck skips in the runner owner scope, as the acting session and its card', async () => {
+  const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, 'skipIntegrationMergeCheck') as
+    | Record<string, { data?: unknown }>
+    | undefined;
+  const headers = Object.values(args ?? {})
+    .map((arg) => arg.data)
+    .filter((data) => typeof data === 'string' && data.includes('-'));
+  assert.deepEqual(headers, ['x-orbit-session-id']);
+
+  const seen: unknown[] = [];
+  const openItems = {
+    skipIntegrationMergeCheck: async (...call: unknown[]) => {
+      seen.push(call);
+      return { taskId: 'task-1', jobId: 'job-2', generation: 2, skippedCheck: {} };
+    },
+  } as never;
+  const controller = new RunnerProjectsController(
+    {} as never,
+    acceptanceDouble(),
+    {} as never,
+    orchestrationDouble(),
+    openItems,
+  );
+  const body = { reason: 'this machine has no GNU timeout', approvalId: 'card-1' };
+
+  const skipped = await controller.skipIntegrationMergeCheck(RUNNER, ` ${SESSION_ID} `, 'project-1', 'task-1', body);
+
+  // The card travels with the reason: the service reads the row it names and refuses the call when
+  // nobody answered it, so a coordinator cannot skip a check by saying so.
+  assert.deepEqual(seen, [['owner-1', 'project-1', 'task-1', body, SESSION_ID]]);
+  assert.deepEqual(skipped, { taskId: 'task-1', jobId: 'job-2', generation: 2, skippedCheck: {} });
+  // A missing header is passed on as missing, for the service to refuse — never read as the owner.
+  await controller.skipIntegrationMergeCheck(RUNNER, undefined, 'project-1', 'task-1', body);
   assert.deepEqual(seen[1], ['owner-1', 'project-1', 'task-1', body, undefined]);
 });
 
@@ -693,6 +800,7 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     // confirmation card — that press is not here, and its absence is the assertion below.
     'ensureCoordinator',
     'getProject',
+    'handOverOpenItem',
     // Unit L7's one, and it is a GET on purpose. §7 RB2 puts the ANSWER to a cross-project
     // crossing with the user, so this door carries the question and not the write: an agent that
     // could sign a crossing for another goal is the incident this whole unit exists for wearing a
@@ -701,6 +809,10 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     'listProjectHandoffs',
     'recordMergeEvidence',
     'removeProject',
+    // The coordinator asking the owner to record the project done (`project_request_done`). It is
+    // the counterpart of requestStart: the service checks readiness and files a card; only the
+    // owner's press records DONE.
+    'requestDone',
     // The coordinator asking the owner to START the project (`project_request_start`). Beside the
     // question and for the same reasons: only the conversation the project is coordinated from may
     // ask, and asking starts nothing — the owner's press on the start card does — so the acting
@@ -731,6 +843,12 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     // those two requests invalidates — which is why the delivery has to be resolvable in one call
     // rather than being a `session send` the caller lines up behind a read.
     'sendToCoordinator',
+    // `integration_skip_merge_check` (§2.4 J-S5): the coordinator queueing one landing again with
+    // the merge check NOT run, for the red that is the check's rather than the delivery's. On the
+    // machine door because the acting session is half the authority — the service checks it against
+    // the project's coordinator AND requires the account owner's answered card — and it spends no
+    // orchestration credential: it queues the line's own work and starts no session.
+    'skipIntegrationMergeCheck',
     'updateProject',
   ]);
   const verbs = Object.fromEntries(
@@ -751,11 +869,14 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     listProjectHandoffs: RequestMethod.GET,
     recordMergeEvidence: RequestMethod.POST,
     removeProject: RequestMethod.DELETE,
+    requestDone: RequestMethod.POST,
     requestStart: RequestMethod.POST,
     resolveBlocker: RequestMethod.POST,
     resolveOpenItem: RequestMethod.POST,
+    handOverOpenItem: RequestMethod.POST,
     retryIntegration: RequestMethod.POST,
     retryPromotionCheck: RequestMethod.POST,
+    skipIntegrationMergeCheck: RequestMethod.POST,
     // POST: it writes a turn, and a rotation is a side effect it may have. Both are the send the
     // project's coordinator would have received anyway — this door moves WHERE it is addressed from
     // a session to a project, and adds no authority to it.

@@ -135,6 +135,36 @@ func TestSourcePinRefusesToTrustAStaleLocalRef(t *testing.T) {
 	}
 }
 
+// Gate G2 asks whether THIS MACHINE holds the repository, and an agent's workDir is allowed to carry
+// a leading ~ — sessionExecDir expands it before the engine chdirs in. Resolution has to expand it
+// too: as written, "~/orbit" is not a path that exists, so isGitRepo said no and every project task
+// on such an agent was refused SOURCE_AUTHORITY_UNREACHABLE by a checkout the machine has (live on
+// longdeMac-mini.local, 2026-10-07: the agent is configured "~/orbit" and no project task could
+// start until it was re-spelled).
+func TestSourcePinExpandsATildeWorkDir(t *testing.T) {
+	origin, _, tip := originAndClone(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	clone := filepath.Join(home, "orbit")
+	if out, err := git(t.TempDir(), "clone", origin, clone); err != nil {
+		t.Fatalf("clone: %v (%s)", err, out)
+	}
+	srv := newPinServer(t)
+	tr := NewTransport(srv.URL, "tok")
+
+	job := selectedJob("~/orbit")
+	if err := ensureSourcePinned(context.Background(), tr, job); err != nil {
+		t.Fatalf("ensureSourcePinned: %v", err)
+	}
+	if len(srv.requests) != 1 || srv.requests[0].Refusal != nil {
+		t.Fatalf("expected one resolved pin, got %+v", srv.requests)
+	}
+	if job.Source.State != sourceStatePinned || job.Source.BaseSha != tip {
+		t.Errorf("pin after a ~ workDir: state=%s baseSha=%s, want PINNED %s",
+			job.Source.State, job.Source.BaseSha, tip)
+	}
+}
+
 // SR29: every recovery path READS the pin. Resume, reclaim and takeover must not resolve again, or
 // a ref that moved would quietly make the second half of a run about different code than the first.
 func TestSourcePinnedSessionResolvesNothing(t *testing.T) {

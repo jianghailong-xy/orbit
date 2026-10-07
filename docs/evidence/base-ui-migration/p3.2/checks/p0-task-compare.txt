@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/docs/evidence/base-ui-migration/p3.2/compare_runs.py", line 89, in <module>
+    ref_att, del_att = attachments(ref_report), attachments(del_report)
+                       ~~~~~~~~~~~^^^^^^^^^^^^
+  File "/root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/docs/evidence/base-ui-migration/p3.2/compare_runs.py", line 75, in attachments
+    walk(s, [s['title']])
+    ~~~~^^^^^^^^^^^^^^^^^
+  File "/root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/docs/evidence/base-ui-migration/p3.2/compare_runs.py", line 67, in walk
+    body = base64.b64decode(a['body']).decode() if 'body' in a else (open(a['path']).read() if a.get('path') and os.path.exists(a['path']) else None)
+                                                                     ~~~~~~~~~~~~~~~~~~~~^^
+  File "<frozen codecs>", line 325, in decode
+UnicodeDecodeError: 'utf-8' codec can't decode byte 0xae in position 11: invalid start byte

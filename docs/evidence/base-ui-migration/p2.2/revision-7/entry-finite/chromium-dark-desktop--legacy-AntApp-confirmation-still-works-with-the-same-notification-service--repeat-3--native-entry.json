@@ -1,0 +1,3153 @@
+[
+  {
+    "kind": "frame",
+    "time": 7,
+    "hit": false,
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 7.5999999940395355,
+    "hit": false,
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 30.599999994039536,
+    "hit": false,
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 106.5,
+    "hit": false,
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 109.7000000178814,
+    "hit": false,
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 110.7000000178814,
+    "hit": false,
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 124.30000001192093,
+    "hit": false,
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 141,
+    "hit": false,
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 399.59999999403954,
+    "hit": false,
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 415.40000000596046,
+    "hit": false,
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 416,
+    "hit": false,
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 424.2000000178814,
+    "hit": false,
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 440.90000000596046,
+    "hit": false,
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 457.59999999403954,
+    "hit": false,
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 474.2000000178814,
+    "hit": false,
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 490.80000001192093,
+    "hit": false,
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 596.0999999940395,
+    "hit": false,
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 706,
+    "hit": false,
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 719.8000000119209,
+    "hit": false,
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 724.2000000178814,
+    "hit": false,
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 742.2000000178814,
+    "hit": false,
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 757.5,
+    "hit": false,
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 774.2000000178814,
+    "hit": false,
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "confirmed": false
+  },
+  {
+    "kind": "pointerdown",
+    "time": 777.8000000119209,
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "Legacy confirm"
+    },
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "event": {
+      "trusted": true,
+      "x": 648.9600219726562,
+      "y": 408,
+      "target": {
+        "tag": "SPAN",
+        "role": null,
+        "text": "Legacy confirm"
+      },
+      "targetOK": false
+    },
+    "confirmed": false
+  },
+  {
+    "kind": "pointerup",
+    "time": 778.0999999940395,
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "Legacy confirm"
+    },
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "event": {
+      "trusted": true,
+      "x": 648.9600219726562,
+      "y": 408,
+      "target": {
+        "tag": "SPAN",
+        "role": null,
+        "text": "Legacy confirm"
+      },
+      "targetOK": false
+    },
+    "confirmed": false
+  },
+  {
+    "kind": "click",
+    "time": 778.2000000178814,
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "Legacy confirm"
+    },
+    "hitOK": false,
+    "entrancePointHitOK": false,
+    "event": {
+      "trusted": true,
+      "x": 648,
+      "y": 408,
+      "target": {
+        "tag": "SPAN",
+        "role": null,
+        "text": "Legacy confirm"
+      },
+      "targetOK": false
+    },
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 802.0999999940395,
+    "dialog": {
+      "opacity": "0",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 809.9000000059605,
+    "dialog": {
+      "opacity": "0",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 824.4000000059605,
+    "dialog": {
+      "opacity": "0",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "animationstart",
+    "time": 841,
+    "dialog": {
+      "opacity": "0",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePointHitOK": false,
+    "animations": [],
+    "event": {
+      "trusted": true,
+      "x": 797.8828125,
+      "y": 180,
+      "target": {
+        "tag": "DIV",
+        "role": null,
+        "text": ""
+      },
+      "targetOK": false
+    },
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 841,
+    "dialog": {
+      "opacity": "0",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 858,
+    "dialog": {
+      "opacity": "0",
+      "transform": "matrix(0.2, 0, 0, 0.2, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 672.7531127929688,
+      "y": 359.1999816894531,
+      "width": 10.4468994140625,
+      "height": 6.4000244140625,
+      "top": 359.1999816894531,
+      "right": 683.2000122070312,
+      "bottom": 365.6000061035156,
+      "left": 672.7531127929688
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": true,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomIn",
+        "state": "running",
+        "pending": true,
+        "currentTime": 0
+      }
+    ],
+    "confirmed": false
+  },
+  {
+    "kind": "animationstart",
+    "time": 874.5,
+    "dialog": {
+      "opacity": "0.422125",
+      "transform": "matrix(0.5377, 0, 0, 0.5377, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 714.5487060546875,
+      "y": 276.80126953125,
+      "width": 28.08642578125,
+      "height": 17.206390380859375,
+      "top": 276.80126953125,
+      "right": 742.6351318359375,
+      "bottom": 294.0076599121094,
+      "left": 714.5487060546875
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomIn",
+        "state": "running",
+        "pending": false,
+        "currentTime": 16.702000007173034
+      }
+    ],
+    "event": {
+      "trusted": true,
+      "x": 728.5919189453125,
+      "y": 285.4044647216797,
+      "target": {
+        "tag": "DIV",
+        "role": "dialog",
+        "text": "Legacy confirmationLegacy confirmationCancelOK"
+      },
+      "targetOK": false
+    },
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 874.5999999940395,
+    "dialog": {
+      "opacity": "0.422125",
+      "transform": "matrix(0.5377, 0, 0, 0.5377, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 714.5487060546875,
+      "y": 276.80126953125,
+      "width": 28.08642578125,
+      "height": 17.206390380859375,
+      "top": 276.80126953125,
+      "right": 742.6351318359375,
+      "bottom": 294.0076599121094,
+      "left": 714.5487060546875
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomIn",
+        "state": "running",
+        "pending": false,
+        "currentTime": 16.702000007173034
+      }
+    ],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 891.0999999940395,
+    "dialog": {
+      "opacity": "0.625384",
+      "transform": "matrix(0.700307, 0, 0, 0.700307, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 734.6739501953125,
+      "y": 237.12510681152344,
+      "width": 36.580078125,
+      "height": 22.409835815429688,
+      "top": 237.12510681152344,
+      "right": 771.2540283203125,
+      "bottom": 259.5349426269531,
+      "left": 734.6739501953125
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomIn",
+        "state": "running",
+        "pending": false,
+        "currentTime": 33.30200000717309
+      }
+    ],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 907.8000000119209,
+    "dialog": {
+      "opacity": "0.739185",
+      "transform": "matrix(0.791348, 0, 0, 0.791348, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 745.941650390625,
+      "y": 214.91114807128906,
+      "width": 41.3355712890625,
+      "height": 25.323135375976562,
+      "top": 214.91114807128906,
+      "right": 787.2772216796875,
+      "bottom": 240.23428344726562,
+      "left": 745.941650390625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomIn",
+        "state": "running",
+        "pending": false,
+        "currentTime": 50.00200000717303
+      }
+    ],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 924.4000000059605,
+    "dialog": {
+      "opacity": "0.81134",
+      "transform": "matrix(0.849072, 0, 0, 0.849072, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 753.0859375,
+      "y": 200.8264617919922,
+      "width": 44.3507080078125,
+      "height": 27.170303344726562,
+      "top": 200.8264617919922,
+      "right": 797.4366455078125,
+      "bottom": 227.99676513671875,
+      "left": 753.0859375
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomIn",
+        "state": "running",
+        "pending": false,
+        "currentTime": 66.70200000717308
+      }
+    ],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 941,
+    "dialog": {
+      "opacity": "0.860578",
+      "transform": "matrix(0.888463, 0, 0, 0.888463, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 757.9611206054688,
+      "y": 191.21511840820312,
+      "width": 46.40826416015625,
+      "height": 28.430816650390625,
+      "top": 191.21511840820312,
+      "right": 804.369384765625,
+      "bottom": 219.64593505859375,
+      "left": 757.9611206054688
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomIn",
+        "state": "running",
+        "pending": false,
+        "currentTime": 83.30200000717302
+      }
+    ],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 957.8000000119209,
+    "dialog": {
+      "opacity": "0.896252",
+      "transform": "matrix(0.917002, 0, 0, 0.917002, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 761.4932861328125,
+      "y": 184.25155639648438,
+      "width": 47.8990478515625,
+      "height": 29.34405517578125,
+      "top": 184.25155639648438,
+      "right": 809.392333984375,
+      "bottom": 213.59561157226562,
+      "left": 761.4932861328125
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomIn",
+        "state": "running",
+        "pending": false,
+        "currentTime": 100.00200000717308
+      }
+    ],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 974.4000000059605,
+    "dialog": {
+      "opacity": "0.92257",
+      "transform": "matrix(0.938056, 0, 0, 0.938056, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 764.09912109375,
+      "y": 179.11427307128906,
+      "width": 48.998779296875,
+      "height": 30.017807006835938,
+      "top": 179.11427307128906,
+      "right": 813.097900390625,
+      "bottom": 209.132080078125,
+      "left": 764.09912109375
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomIn",
+        "state": "running",
+        "pending": false,
+        "currentTime": 116.60200000717302
+      }
+    ],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 990.9000000059605,
+    "dialog": {
+      "opacity": "0.942602",
+      "transform": "matrix(0.954081, 0, 0, 0.954081, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 766.08251953125,
+      "y": 175.2041778564453,
+      "width": 49.8358154296875,
+      "height": 30.530593872070312,
+      "top": 175.2041778564453,
+      "right": 815.9183349609375,
+      "bottom": 205.73477172851562,
+      "left": 766.08251953125
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomIn",
+        "state": "running",
+        "pending": false,
+        "currentTime": 133.30200000717306
+      }
+    ],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1007.7000000178814,
+    "dialog": {
+      "opacity": "0.957913",
+      "transform": "matrix(0.966331, 0, 0, 0.966331, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 767.5985107421875,
+      "y": 172.21531677246094,
+      "width": 50.4757080078125,
+      "height": 30.922576904296875,
+      "top": 172.21531677246094,
+      "right": 818.07421875,
+      "bottom": 203.1378936767578,
+      "left": 767.5985107421875
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomIn",
+        "state": "running",
+        "pending": false,
+        "currentTime": 150.0020000071731
+      }
+    ],
+    "confirmed": false
+  },
+  {
+    "kind": "animationend",
+    "time": 1024.300000011921,
+    "dialog": {
+      "opacity": "0.969674",
+      "transform": "matrix(0.975739, 0, 0, 0.975739, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 768.762939453125,
+      "y": 169.91970825195312,
+      "width": 50.9671630859375,
+      "height": 31.2236328125,
+      "top": 169.91970825195312,
+      "right": 819.7301025390625,
+      "bottom": 201.14334106445312,
+      "left": 768.762939453125
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomIn",
+        "state": "running",
+        "pending": false,
+        "currentTime": 166.70200000717307
+      }
+    ],
+    "event": {
+      "trusted": true,
+      "x": 794.2465209960938,
+      "y": 185.53152465820312,
+      "target": {
+        "tag": "DIV",
+        "role": null,
+        "text": ""
+      },
+      "targetOK": false
+    },
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1024.5999999940395,
+    "dialog": {
+      "opacity": "0.969674",
+      "transform": "matrix(0.975739, 0, 0, 0.975739, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 768.762939453125,
+      "y": 169.91970825195312,
+      "width": 50.9671630859375,
+      "height": 31.2236328125,
+      "top": 169.91970825195312,
+      "right": 819.7301025390625,
+      "bottom": 201.14334106445312,
+      "left": 768.762939453125
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomIn",
+        "state": "running",
+        "pending": false,
+        "currentTime": 166.70200000717307
+      }
+    ],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1041.0999999940395,
+    "dialog": {
+      "opacity": "0.978648",
+      "transform": "matrix(0.982919, 0, 0, 0.982919, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 769.6515502929688,
+      "y": 168.1678466796875,
+      "width": 51.34210205078125,
+      "height": 31.453399658203125,
+      "top": 168.1678466796875,
+      "right": 820.99365234375,
+      "bottom": 199.62124633789062,
+      "left": 769.6515502929688
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomIn",
+        "state": "running",
+        "pending": false,
+        "currentTime": 183.302000007173
+      }
+    ],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1057.7000000178814,
+    "dialog": {
+      "opacity": "0.985529",
+      "transform": "matrix(0.988424, 0, 0, 0.988424, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 770.3328857421875,
+      "y": 166.8246612548828,
+      "width": 51.629638671875,
+      "height": 31.629547119140625,
+      "top": 166.8246612548828,
+      "right": 821.9625244140625,
+      "bottom": 198.45420837402344,
+      "left": 770.3328857421875
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomIn",
+        "state": "running",
+        "pending": false,
+        "currentTime": 200.00200000717294
+      }
+    ],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1074.4000000059605,
+    "dialog": {
+      "opacity": "0.99069",
+      "transform": "matrix(0.992552, 0, 0, 0.992552, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 770.8438720703125,
+      "y": 165.81727600097656,
+      "width": 51.8453369140625,
+      "height": 31.761672973632812,
+      "top": 165.81727600097656,
+      "right": 822.689208984375,
+      "bottom": 197.57894897460938,
+      "left": 770.8438720703125
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomIn",
+        "state": "running",
+        "pending": false,
+        "currentTime": 216.7020000071731
+      }
+    ],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1091.2000000178814,
+    "dialog": {
+      "opacity": "0.994441",
+      "transform": "matrix(0.995553, 0, 0, 0.995553, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.2152709960938,
+      "y": 165.0850372314453,
+      "width": 52.00213623046875,
+      "height": 31.857696533203125,
+      "top": 165.0850372314453,
+      "right": 823.2174072265625,
+      "bottom": 196.94273376464844,
+      "left": 771.2152709960938
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomIn",
+        "state": "running",
+        "pending": false,
+        "currentTime": 233.30200000717304
+      }
+    ],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1107.7000000178814,
+    "dialog": {
+      "opacity": "0.997083",
+      "transform": "matrix(0.997666, 0, 0, 0.997666, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.476806640625,
+      "y": 164.56948852539062,
+      "width": 52.1124267578125,
+      "height": 31.925323486328125,
+      "top": 164.56948852539062,
+      "right": 823.5892333984375,
+      "bottom": 196.49481201171875,
+      "left": 771.476806640625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomIn",
+        "state": "running",
+        "pending": false,
+        "currentTime": 250.002000007173
+      }
+    ],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1124.300000011921,
+    "dialog": {
+      "opacity": "0.998788",
+      "transform": "matrix(0.99903, 0, 0, 0.99903, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.6456298828125,
+      "y": 164.23666381835938,
+      "width": 52.1837158203125,
+      "height": 31.968963623046875,
+      "top": 164.23666381835938,
+      "right": 823.829345703125,
+      "bottom": 196.20562744140625,
+      "left": 771.6456298828125
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomIn",
+        "state": "running",
+        "pending": false,
+        "currentTime": 266.7020000071731
+      }
+    ],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1141,
+    "dialog": {
+      "opacity": "0.999713",
+      "transform": "matrix(0.999771, 0, 0, 0.999771, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.7372436523438,
+      "y": 164.05593872070312,
+      "width": 52.22235107421875,
+      "height": 31.99267578125,
+      "top": 164.05593872070312,
+      "right": 823.9595947265625,
+      "bottom": 196.04861450195312,
+      "left": 771.7372436523438
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomIn",
+        "state": "running",
+        "pending": false,
+        "currentTime": 283.3020000071731
+      }
+    ],
+    "confirmed": false
+  },
+  {
+    "kind": "animationend",
+    "time": 1157.7000000178814,
+    "dialog": {
+      "opacity": "1",
+      "transform": "matrix(1, 0, 0, 1, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomIn",
+        "state": "finished",
+        "pending": false,
+        "currentTime": 300
+      }
+    ],
+    "event": {
+      "trusted": true,
+      "x": 797.8828125,
+      "y": 180,
+      "target": {
+        "tag": "DIV",
+        "role": "dialog",
+        "text": "Legacy confirmationLegacy confirmationCancelOK"
+      },
+      "targetOK": false
+    },
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1157.9000000059605,
+    "dialog": {
+      "opacity": "1",
+      "transform": "matrix(1, 0, 0, 1, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomIn",
+        "state": "finished",
+        "pending": false,
+        "currentTime": 300
+      }
+    ],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1174.9000000059605,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1190.9000000059605,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1207.5,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1224.2000000178814,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1240.9000000059605,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1257.5,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1274.2000000178814,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1291,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1307.5999999940395,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1324.300000011921,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1340.9000000059605,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1357.5999999940395,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1374.2000000178814,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1390.9000000059605,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1407.5999999940395,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1424.2000000178814,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1440.9000000059605,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1457.5999999940395,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1474.2000000178814,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1490.9000000059605,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1507.5999999940395,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1524.0999999940395,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1540.9000000059605,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1557.5999999940395,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1574.2000000178814,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1591,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1607.5999999940395,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1624.2000000178814,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": false
+  },
+  {
+    "kind": "pointerdown",
+    "time": 1626.800000011921,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "event": {
+      "trusted": true,
+      "x": 797.8800048828125,
+      "y": 180,
+      "target": {
+        "tag": "SPAN",
+        "role": null,
+        "text": "OK"
+      },
+      "targetOK": true
+    },
+    "confirmed": false
+  },
+  {
+    "kind": "pointerup",
+    "time": 1627.2000000178814,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "event": {
+      "trusted": true,
+      "x": 797.8800048828125,
+      "y": 180,
+      "target": {
+        "tag": "SPAN",
+        "role": null,
+        "text": "OK"
+      },
+      "targetOK": true
+    },
+    "confirmed": false
+  },
+  {
+    "kind": "click",
+    "time": 1627.2000000178814,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "SPAN",
+      "role": null,
+      "text": "OK"
+    },
+    "hitOK": true,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "event": {
+      "trusted": true,
+      "x": 797,
+      "y": 180,
+      "target": {
+        "tag": "SPAN",
+        "role": null,
+        "text": "OK"
+      },
+      "targetOK": true
+    },
+    "confirmed": false
+  },
+  {
+    "kind": "frame",
+    "time": 1641.300000011921,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "DIV",
+      "role": null,
+      "text": "Legacy confirmationLegacy confirmationCancelOK"
+    },
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": true
+  },
+  {
+    "kind": "frame",
+    "time": 1657.7000000178814,
+    "dialog": {
+      "opacity": "1",
+      "transform": "none",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "DIV",
+      "role": null,
+      "text": "Legacy confirmationLegacy confirmationCancelOK"
+    },
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [],
+    "confirmed": true
+  },
+  {
+    "kind": "frame",
+    "time": 1674.4000000059605,
+    "dialog": {
+      "opacity": "1",
+      "transform": "matrix(1, 0, 0, 1, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 771.765625,
+      "y": 164,
+      "width": 52.234375,
+      "height": 32,
+      "top": 164,
+      "right": 824,
+      "bottom": 196,
+      "left": 771.765625
+    },
+    "hit": {
+      "tag": "DIV",
+      "role": null,
+      "text": "Legacy confirmationLegacy confirmationCancelOK"
+    },
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomOut",
+        "state": "running",
+        "pending": true,
+        "currentTime": 0
+      }
+    ],
+    "confirmed": true
+  },
+  {
+    "kind": "animationstart",
+    "time": 1691.800000011921,
+    "dialog": {
+      "opacity": "0.981491",
+      "transform": "matrix(0.985193, 0, 0, 0.985193, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 769.93310546875,
+      "y": 167.61288452148438,
+      "width": 51.4609375,
+      "height": 31.526168823242188,
+      "top": 167.61288452148438,
+      "right": 821.39404296875,
+      "bottom": 199.13905334472656,
+      "left": 769.93310546875
+    },
+    "hit": {
+      "tag": "DIV",
+      "role": null,
+      "text": "Legacy confirmationLegacy confirmationCancelOK"
+    },
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomOut",
+        "state": "running",
+        "pending": false,
+        "currentTime": 16.6680000192021
+      }
+    ],
+    "event": {
+      "trusted": true,
+      "x": 795.66357421875,
+      "y": 183.37596893310547,
+      "target": {
+        "tag": "DIV",
+        "role": null,
+        "text": ""
+      },
+      "targetOK": false
+    },
+    "confirmed": true
+  },
+  {
+    "kind": "animationstart",
+    "time": 1691.9000000059605,
+    "dialog": {
+      "opacity": "0.981491",
+      "transform": "matrix(0.985193, 0, 0, 0.985193, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 769.93310546875,
+      "y": 167.61288452148438,
+      "width": 51.4609375,
+      "height": 31.526168823242188,
+      "top": 167.61288452148438,
+      "right": 821.39404296875,
+      "bottom": 199.13905334472656,
+      "left": 769.93310546875
+    },
+    "hit": {
+      "tag": "DIV",
+      "role": null,
+      "text": "Legacy confirmationLegacy confirmationCancelOK"
+    },
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomOut",
+        "state": "running",
+        "pending": false,
+        "currentTime": 16.6680000192021
+      }
+    ],
+    "event": {
+      "trusted": true,
+      "x": 795.66357421875,
+      "y": 183.37596893310547,
+      "target": {
+        "tag": "DIV",
+        "role": "dialog",
+        "text": "Legacy confirmationLegacy confirmationCancelOK"
+      },
+      "targetOK": false
+    },
+    "confirmed": true
+  },
+  {
+    "kind": "frame",
+    "time": 1692,
+    "dialog": {
+      "opacity": "0.981491",
+      "transform": "matrix(0.985193, 0, 0, 0.985193, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 769.93310546875,
+      "y": 167.61288452148438,
+      "width": 51.4609375,
+      "height": 31.526168823242188,
+      "top": 167.61288452148438,
+      "right": 821.39404296875,
+      "bottom": 199.13905334472656,
+      "left": 769.93310546875
+    },
+    "hit": {
+      "tag": "DIV",
+      "role": null,
+      "text": "Legacy confirmationLegacy confirmationCancelOK"
+    },
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomOut",
+        "state": "running",
+        "pending": false,
+        "currentTime": 16.6680000192021
+      }
+    ],
+    "confirmed": true
+  },
+  {
+    "kind": "frame",
+    "time": 1708.300000011921,
+    "dialog": {
+      "opacity": "0.953773",
+      "transform": "matrix(0.963018, 0, 0, 0.963018, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 767.1885986328125,
+      "y": 173.02354431152344,
+      "width": 50.3026123046875,
+      "height": 30.81658935546875,
+      "top": 173.02354431152344,
+      "right": 817.4912109375,
+      "bottom": 203.8401336669922,
+      "left": 767.1885986328125
+    },
+    "hit": {
+      "tag": "DIV",
+      "role": null,
+      "text": "Legacy confirmationLegacy confirmationCancelOK"
+    },
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomOut",
+        "state": "running",
+        "pending": false,
+        "currentTime": 33.368000019202036
+      }
+    ],
+    "confirmed": true
+  },
+  {
+    "kind": "frame",
+    "time": 1724.5999999940395,
+    "dialog": {
+      "opacity": "0.912026",
+      "transform": "matrix(0.929621, 0, 0, 0.929621, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 763.0551147460938,
+      "y": 181.17250061035156,
+      "width": 48.55816650390625,
+      "height": 29.74786376953125,
+      "top": 181.17250061035156,
+      "right": 811.61328125,
+      "bottom": 210.9203643798828,
+      "left": 763.0551147460938
+    },
+    "hit": {
+      "tag": "DIV",
+      "role": null,
+      "text": "Legacy confirmationLegacy confirmationCancelOK"
+    },
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomOut",
+        "state": "running",
+        "pending": false,
+        "currentTime": 49.96800001920199
+      }
+    ],
+    "confirmed": true
+  },
+  {
+    "kind": "frame",
+    "time": 1741.0999999940395,
+    "dialog": {
+      "opacity": "0.843984",
+      "transform": "matrix(0.875188, 0, 0, 0.875188, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 756.318115234375,
+      "y": 194.45423889160156,
+      "width": 45.71484375,
+      "height": 28.005996704101562,
+      "top": 194.45423889160156,
+      "right": 802.032958984375,
+      "bottom": 222.46023559570312,
+      "left": 756.318115234375
+    },
+    "hit": {
+      "tag": "DIV",
+      "role": null,
+      "text": "Legacy confirmationLegacy confirmationCancelOK"
+    },
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomOut",
+        "state": "running",
+        "pending": false,
+        "currentTime": 66.66800001920193
+      }
+    ],
+    "confirmed": true
+  },
+  {
+    "kind": "frame",
+    "time": 1757.9000000059605,
+    "dialog": {
+      "opacity": "0.711343",
+      "transform": "matrix(0.769074, 0, 0, 0.769074, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 743.1849365234375,
+      "y": 220.34591674804688,
+      "width": 40.172119140625,
+      "height": 24.610382080078125,
+      "top": 220.34591674804688,
+      "right": 783.3570556640625,
+      "bottom": 244.956298828125,
+      "left": 743.1849365234375
+    },
+    "hit": {
+      "tag": "DIV",
+      "role": null,
+      "text": "Legacy confirmationLegacy confirmationCancelOK"
+    },
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomOut",
+        "state": "running",
+        "pending": false,
+        "currentTime": 83.26800001920209
+      }
+    ],
+    "confirmed": true
+  },
+  {
+    "kind": "frame",
+    "time": 1774.5,
+    "dialog": {
+      "opacity": "0.391172",
+      "transform": "matrix(0.512937, 0, 0, 0.512937, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 711.4840087890625,
+      "y": 282.84326171875,
+      "width": 26.79296875,
+      "height": 16.41400146484375,
+      "top": 282.84326171875,
+      "right": 738.2769775390625,
+      "bottom": 299.25726318359375,
+      "left": 711.4840087890625
+    },
+    "hit": {
+      "tag": "DIV",
+      "role": null,
+      "text": "Legacy confirmationLegacy confirmationCancelOK"
+    },
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomOut",
+        "state": "running",
+        "pending": false,
+        "currentTime": 99.96800001920204
+      }
+    ],
+    "confirmed": true
+  },
+  {
+    "kind": "frame",
+    "time": 1791,
+    "dialog": {
+      "opacity": "0.211126",
+      "transform": "matrix(0.368901, 0, 0, 0.368901, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 693.6572265625,
+      "y": 317.98828125,
+      "width": 19.269287109375,
+      "height": 11.804840087890625,
+      "top": 317.98828125,
+      "right": 712.926513671875,
+      "bottom": 329.7931213378906,
+      "left": 693.6572265625
+    },
+    "hit": {
+      "tag": "DIV",
+      "role": null,
+      "text": "Legacy confirmationLegacy confirmationCancelOK"
+    },
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomOut",
+        "state": "running",
+        "pending": false,
+        "currentTime": 116.56800001920197
+      }
+    ],
+    "confirmed": true
+  },
+  {
+    "kind": "frame",
+    "time": 1807.7000000178814,
+    "dialog": {
+      "opacity": "0.126094",
+      "transform": "matrix(0.300875, 0, 0, 0.300875, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 685.2379760742188,
+      "y": 334.58648681640625,
+      "width": 15.71600341796875,
+      "height": 9.628021240234375,
+      "top": 334.58648681640625,
+      "right": 700.9539794921875,
+      "bottom": 344.2145080566406,
+      "left": 685.2379760742188
+    },
+    "hit": {
+      "tag": "DIV",
+      "role": null,
+      "text": "Legacy confirmationLegacy confirmationCancelOK"
+    },
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomOut",
+        "state": "running",
+        "pending": false,
+        "currentTime": 133.3680000192019
+      }
+    ],
+    "confirmed": true
+  },
+  {
+    "kind": "frame",
+    "time": 1824.4000000059605,
+    "dialog": {
+      "opacity": "0.0749807",
+      "transform": "matrix(0.259985, 0, 0, 0.259985, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 680.1771240234375,
+      "y": 344.5637512207031,
+      "width": 13.58013916015625,
+      "height": 8.31951904296875,
+      "top": 344.5637512207031,
+      "right": 693.7572631835938,
+      "bottom": 352.8832702636719,
+      "left": 680.1771240234375
+    },
+    "hit": {
+      "tag": "DIV",
+      "role": null,
+      "text": "Legacy confirmationLegacy confirmationCancelOK"
+    },
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomOut",
+        "state": "running",
+        "pending": false,
+        "currentTime": 149.96800001920207
+      }
+    ],
+    "confirmed": true
+  },
+  {
+    "kind": "frame",
+    "time": 1841.0999999940395,
+    "dialog": {
+      "opacity": "0.0405132",
+      "transform": "matrix(0.232411, 0, 0, 0.232411, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 676.764404296875,
+      "y": 351.29180908203125,
+      "width": 12.13983154296875,
+      "height": 7.4371337890625,
+      "top": 351.29180908203125,
+      "right": 688.9042358398438,
+      "bottom": 358.72894287109375,
+      "left": 676.764404296875
+    },
+    "hit": {
+      "tag": "DIV",
+      "role": null,
+      "text": "Legacy confirmationLegacy confirmationCancelOK"
+    },
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomOut",
+        "state": "running",
+        "pending": false,
+        "currentTime": 166.668000019202
+      }
+    ],
+    "confirmed": true
+  },
+  {
+    "kind": "frame",
+    "time": 1857.800000011921,
+    "dialog": {
+      "opacity": "0.0167161",
+      "transform": "matrix(0.213373, 0, 0, 0.213373, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 674.408203125,
+      "y": 355.9369812011719,
+      "width": 11.1453857421875,
+      "height": 6.82794189453125,
+      "top": 355.9369812011719,
+      "right": 685.5535888671875,
+      "bottom": 362.7649230957031,
+      "left": 674.408203125
+    },
+    "hit": {
+      "tag": "DIV",
+      "role": null,
+      "text": "Legacy confirmationLegacy confirmationCancelOK"
+    },
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomOut",
+        "state": "running",
+        "pending": false,
+        "currentTime": 183.26800001920196
+      }
+    ],
+    "confirmed": true
+  },
+  {
+    "kind": "animationend",
+    "time": 1874.5,
+    "dialog": {
+      "opacity": "0",
+      "transform": "matrix(0.2, 0, 0, 0.2, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 672.7531127929688,
+      "y": 359.1999816894531,
+      "width": 10.4468994140625,
+      "height": 6.4000244140625,
+      "top": 359.1999816894531,
+      "right": 683.2000122070312,
+      "bottom": 365.6000061035156,
+      "left": 672.7531127929688
+    },
+    "hit": {
+      "tag": "DIV",
+      "role": null,
+      "text": "Legacy confirmationLegacy confirmationCancelOK"
+    },
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomOut",
+        "state": "finished",
+        "pending": false,
+        "currentTime": 200
+      }
+    ],
+    "event": {
+      "trusted": true,
+      "x": 677.9765625,
+      "y": 362.3999938964844,
+      "target": {
+        "tag": "DIV",
+        "role": null,
+        "text": ""
+      },
+      "targetOK": false
+    },
+    "confirmed": true
+  },
+  {
+    "kind": "animationend",
+    "time": 1874.7000000178814,
+    "dialog": {
+      "opacity": "0",
+      "transform": "matrix(0.2, 0, 0, 0.2, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 672.7531127929688,
+      "y": 359.1999816894531,
+      "width": 10.4468994140625,
+      "height": 6.4000244140625,
+      "top": 359.1999816894531,
+      "right": 683.2000122070312,
+      "bottom": 365.6000061035156,
+      "left": 672.7531127929688
+    },
+    "hit": {
+      "tag": "DIV",
+      "role": null,
+      "text": "Legacy confirmationLegacy confirmationCancelOK"
+    },
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomOut",
+        "state": "finished",
+        "pending": false,
+        "currentTime": 200
+      }
+    ],
+    "event": {
+      "trusted": true,
+      "x": 677.9765625,
+      "y": 362.3999938964844,
+      "target": {
+        "tag": "DIV",
+        "role": "dialog",
+        "text": "Legacy confirmationLegacy confirmationCancelOK"
+      },
+      "targetOK": false
+    },
+    "confirmed": true
+  },
+  {
+    "kind": "frame",
+    "time": 1874.7000000178814,
+    "dialog": {
+      "opacity": "0",
+      "transform": "matrix(0.2, 0, 0, 0.2, 0, 0)",
+      "pointerEvents": "none"
+    },
+    "box": {
+      "x": 672.7531127929688,
+      "y": 359.1999816894531,
+      "width": 10.4468994140625,
+      "height": 6.4000244140625,
+      "top": 359.1999816894531,
+      "right": 683.2000122070312,
+      "bottom": 365.6000061035156,
+      "left": 672.7531127929688
+    },
+    "hit": {
+      "tag": "DIV",
+      "role": null,
+      "text": "Legacy confirmationLegacy confirmationCancelOK"
+    },
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "animations": [
+      {
+        "name": "css-dev-only-do-not-override-oc1rc0-antZoomOut",
+        "state": "finished",
+        "pending": false,
+        "currentTime": 200
+      }
+    ],
+    "confirmed": true
+  },
+  {
+    "kind": "frame",
+    "time": 1891,
+    "hit": false,
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "confirmed": true
+  },
+  {
+    "kind": "frame",
+    "time": 1907.5999999940395,
+    "hit": false,
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "confirmed": true
+  },
+  {
+    "kind": "frame",
+    "time": 1924.4000000059605,
+    "hit": false,
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "confirmed": true
+  },
+  {
+    "kind": "frame",
+    "time": 1940.9000000059605,
+    "hit": false,
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "confirmed": true
+  },
+  {
+    "kind": "end",
+    "time": 1942.7000000178814,
+    "hit": false,
+    "hitOK": false,
+    "entrancePoint": {
+      "x": 677.9765625,
+      "y": 362.3999938964844
+    },
+    "entrancePointHitOK": false,
+    "confirmed": true
+  }
+]

@@ -180,6 +180,20 @@ export function sessionPoolAccount(
   return next ? { member: next, current: false } : null;
 }
 
+/** What the account beside the quota says about itself when asked (a tooltip on web): the claim's
+ *  pick says it is running, the next claim's pick says a session would start on it — a shared pool's
+ *  member is one of its keys, which is what the second sentence ends by saying. */
+export function poolAccountHelp(
+  pool: Pick<ProviderPool, 'label' | 'shared'>,
+  account: { member: Pick<PoolMember, 'label'>; current: boolean },
+): string {
+  return account.current
+    ? `${pool.label} is running this session on ${account.member.label}`
+    : `A session on ${pool.label} starts on ${account.member.label} — ${
+        pool.shared ? 'the key it picks for you right now' : 'the account whose quota resets soonest'
+      }`;
+}
+
 /** The gauge a member row shows: the window that stopped a spent member, else the one closest to its
  *  limit — a 5-hour window at 6% says nothing of a weekly one at 97%, which stops the account first.
  *  A tie goes to the first of them, the 5-hour window. */

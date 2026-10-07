@@ -1,0 +1,47 @@
+{
+  "target": "orbit-menu",
+  "sequence": "menu-down-up-enter",
+  "control": null,
+  "mode": "paced",
+  "run": 15,
+  "keys": [
+    "ArrowDown",
+    "ArrowUp",
+    "Enter"
+  ],
+  "from": null,
+  "before": "none",
+  "after": "command",
+  "result": "ran /Command",
+  "listOpen": false,
+  "active": "button:Add attachment",
+  "keyLog": [
+    {
+      "key": "ArrowDown",
+      "t": 29.2,
+      "target": "button:Add attachment",
+      "trusted": true,
+      "focused": "button:Add attachment",
+      "listbox": false,
+      "highlighted": null
+    },
+    {
+      "key": "ArrowUp",
+      "t": 355.6,
+      "target": "menuitem:File",
+      "trusted": true,
+      "focused": "menuitem:File",
+      "listbox": true,
+      "highlighted": "File"
+    },
+    {
+      "key": "Enter",
+      "t": 664.1,
+      "target": "menuitem:/Command",
+      "trusted": true,
+      "focused": "menuitem:/Command",
+      "listbox": true,
+      "highlighted": "/Command"
+    }
+  ]
+}

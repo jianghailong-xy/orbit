@@ -29,13 +29,16 @@ import { Observable, Subject, filter, map, mergeMap } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { deriveSessionCapabilities } from '../sessions/session-state';
+import { readWorktreeArtifactRequest } from '../sessions/worktree-artifact';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { isSessionGenerating } from '../common/session-generating';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { readOpenRequestPeers } from '../sessions/session-request';
+import { readSessionProjectMembership } from '../sessions/session-project-membership';
 import { readConfirmationsUnderReview } from '../tasks/owner-confirmation-read';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
 import { latestAcceptedCheckpoint } from '../projects/task-checkpoint.service';
+import { RUNNER_WAKE_CHANNEL } from './runner-wake';
 import {
   ownerItemsForRow,
   readOwnerDecisionsBySession,
@@ -52,6 +55,8 @@ import {
 
 const EVENT_CHANNEL = 'orbit_event';
 const INBOX_CHANNEL = 'orbit_inbox';
+/** How long a wake nobody was parked for stays owed (see notifyRunnerWake). */
+const RUNNER_WAKE_HOLD_MS = 30_000;
 const MAX_NOTIFY_BYTES = 7000; // Postgres NOTIFY payload limit is 8000 bytes; stay under.
 const CANCEL_MAX_AGE_MS = 60 * 60_000; // stop redelivering a cancel after an hour
 
@@ -179,6 +184,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   /** This replica's own publications, never one the NOTIFY bridge carried in (see localPublications). */
   private readonly published = new Subject<{ runId: string; event: NormalizedRunEvent }>();
   private readonly inbox = new EventEmitter(); // event name = runId
+  private readonly runnerWake = new EventEmitter(); // event name = runnerId
+  /** runnerId → when a wake was asked for that no parked poll has taken yet. */
+  private readonly runnerWakeOwed = new Map<string, number>();
   private listener?: Client;
   private connecting = false;
   private reconnectTimer?: ReturnType<typeof setTimeout>;
@@ -211,6 +219,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     private readonly push: PushService,
   ) {
     this.inbox.setMaxListeners(0);
+    this.runnerWake.setMaxListeners(0);
   }
 
   async onModuleInit(): Promise<void> {
@@ -242,6 +251,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       await client.connect();
       await client.query(`LISTEN ${EVENT_CHANNEL}`);
       await client.query(`LISTEN ${INBOX_CHANNEL}`);
+      await client.query(`LISTEN ${RUNNER_WAKE_CHANNEL}`);
       this.listener = client;
       this.log.log(`LISTEN/NOTIFY active (instance ${this.instanceId.slice(0, 8)})`);
     } catch (e) {
@@ -275,15 +285,21 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
 
   private onNotify(channel: string, payload?: string): void {
     if (!payload) return;
-    let m: { i: string; r: string; e?: NormalizedRunEvent; s?: number };
+    let m: { i?: string; r: string; c?: true; e?: NormalizedRunEvent; s?: number };
     try {
       m = JSON.parse(payload);
     } catch {
       return;
     }
-    if (m.i === this.instanceId) return; // our own write — already emitted locally
+    // Our own write — already emitted locally. A committed-transaction wake is the exception: it
+    // carries `c` because nothing emitted it locally, so this replica takes its own delivery too.
+    if (m.i === this.instanceId && !(channel === RUNNER_WAKE_CHANNEL && m.c)) return;
     if (channel === INBOX_CHANNEL) {
       this.inbox.emit(m.r);
+      return;
+    }
+    if (channel === RUNNER_WAKE_CHANNEL) {
+      this.wakeRunnerLocally(m.r);
       return;
     }
     if (channel === EVENT_CHANNEL) {
@@ -340,6 +356,53 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       };
       const timer = setTimeout(done, timeoutMs);
       this.inbox.once(runId, done);
+    });
+  }
+
+  // ── runner wake (heartbeat-delivered work) ─────────────────────────────
+
+  /**
+   * Have this runner heartbeat now instead of at its next 30s tick: something its heartbeat carries
+   * — a sign-in to start, a pasted code — is waiting, and the person who asked is watching a
+   * spinner. The runner parks in GET /runner/wake (waitForRunnerWake) and beats when it returns.
+   *
+   * Only a nudge: the work itself stays in the row and is delivered by the heartbeat, so a wake that
+   * is lost costs the old half-minute and nothing else.
+   */
+  notifyRunnerWake(runnerId: string): void {
+    this.wakeRunnerLocally(runnerId);
+    this.notifyRaw(RUNNER_WAKE_CHANNEL, JSON.stringify({ i: this.instanceId, r: runnerId }));
+  }
+
+  /** A wake with nobody parked is held for the next poll, so one asked for in the moment between
+   *  two polls is not lost. Every replica holds it; the spare ones cost one extra heartbeat. */
+  private wakeRunnerLocally(runnerId: string): void {
+    if (this.runnerWake.listenerCount(runnerId) > 0) {
+      this.runnerWake.emit(runnerId);
+      return;
+    }
+    this.runnerWakeOwed.set(runnerId, Date.now());
+  }
+
+  /** Park until this runner is asked to wake (true), the timeout elapses or the poll hangs up (false). */
+  waitForRunnerWake(runnerId: string, timeoutMs: number, hungUp?: AbortSignal): Promise<boolean> {
+    const owed = this.runnerWakeOwed.get(runnerId);
+    if (owed !== undefined) {
+      this.runnerWakeOwed.delete(runnerId);
+      if (Date.now() - owed <= RUNNER_WAKE_HOLD_MS) return Promise.resolve(true);
+    }
+    return new Promise((resolve) => {
+      const done = (woke: boolean) => (): void => {
+        clearTimeout(timer);
+        this.runnerWake.off(runnerId, onWake);
+        hungUp?.removeEventListener('abort', onHangUp);
+        resolve(woke);
+      };
+      const onWake = done(true);
+      const onHangUp = done(false);
+      const timer = setTimeout(done(false), timeoutMs);
+      this.runnerWake.once(runnerId, onWake);
+      hungUp?.addEventListener('abort', onHangUp, { once: true });
     });
   }
 
@@ -940,6 +1003,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       folderId: s.folderId ?? null,
       projectId: s.coordinatorForProject?.id ?? null,
       projectTitle: s.coordinatorForProject?.title ?? null,
+      projectMembership: await readSessionProjectMembership(this.prisma, sessionId),
       pendingApprovals,
       waitingKind: sessionWaitingKind(approvals, decisions),
       confirmationUnderReview: underReview
@@ -1272,6 +1336,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
     return turns
       .filter((t) => t.content)
-      .map((t) => ({ requestId: t.id, sessionId: t.sessionId, path: t.content! }));
+      .map((t) => {
+        const request = readWorktreeArtifactRequest(t.content);
+        return {
+          requestId: t.id, sessionId: t.sessionId,
+          path: request?.path ?? t.content!,
+          ...(request ? { source: 'worktree' as const } : {}),
+        };
+      });
   }
 }

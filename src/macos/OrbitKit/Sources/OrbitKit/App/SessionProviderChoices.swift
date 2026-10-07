@@ -47,16 +47,21 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
     /// Nil for anything else.
     public let note: String?
     /// The runner's own accounts of this engine, when it has signed in more than one: offered under
-    /// its row, so a session can start on another account than its workspace's. Codex and Claude —
-    /// the engines whose CLI keeps a login per directory (`Session.codexAccount`, `.claudeAccount`).
+    /// its row, so a session can start on another account than its workspace's. Codex, Claude and
+    /// Antigravity — the engines whose CLI keeps a login per directory (`Session.codexAccount`,
+    /// `.claudeAccount`, `.antigravityAccount`).
     public let accounts: [AccountChoice]?
+    /// Not a provider at all: the offer to connect one (DeepSeek Harness with no key yet). Always
+    /// `unavailable`, never a session's provider, so no runtime's menu lists it.
+    public let setup: Bool
     public var id: String { slug }
 
     public init(slug: String, label: String, kind: Kind, brandKey: String?, modelLabel: String,
                 unavailable: String? = nil, fixEngine: String? = nil, poolSize: Int? = nil,
                 poolUnit: String? = nil, inPool: Bool = false, note: String? = nil,
-                accounts: [AccountChoice]? = nil, labelDetail: String? = nil) {
+                accounts: [AccountChoice]? = nil, labelDetail: String? = nil, setup: Bool = false) {
         self.slug = slug
+        self.setup = setup
         self.label = label
         self.labelDetail = labelDetail
         self.kind = kind
@@ -79,7 +84,9 @@ public struct AccountChoice: Equatable, Sendable, Identifiable {
     public let id: String
     public let label: String
     /// Its own quota's tightest window — the one closest to its limit, which is the one that stops it —
-    /// compactly: "5h 100%", "Weekly 0%". Nil when none is reported.
+    /// compactly: "5h 100%", "Weekly 0%"; an Antigravity bucket by what is left, "gemini-5h 4% left".
+    /// "env key" for Antigravity's Default on a runner that runs it on its own Gemini key. Nil when
+    /// none is reported.
     public let quota: String?
     /// That window is at least 90% spent — where the composer's quota gauge turns amber too.
     public let nearLimit: Bool
@@ -96,25 +103,65 @@ public struct AccountChoice: Equatable, Sendable, Identifiable {
     }
 }
 
+/// An engine — the CLI a session runs on — as the new-session hero lists it (web `EngineChoice`).
+/// Which provider of that engine the session spends (its own sign-in, an account pool, a key that
+/// borrows it) is the composer's Provider menu's question, so a row here names the engine and the
+/// provider a pick of it lands on.
+public struct EngineChoice: Equatable, Sendable, Identifiable {
+    public let slug: String
+    public let label: String
+    /// The vendor preset whose mark the engine wears (`SessionProviderChoices.enginePreset`).
+    public let brandKey: String?
+    /// Where picking this engine lands (`SessionProviderChoices.engines`).
+    public let provider: ProviderChoice
+    public var id: String { slug }
+    /// Why none of this engine's providers can run here — the landing provider's own reason, since
+    /// there is no better one to pick — and where it is fixed.
+    public var unavailable: String? { provider.unavailable }
+    public var fixEngine: String? { provider.fixEngine }
+}
+
 public enum SessionProviderChoices {
-    /// The runner's accounts of an engine as picker rows, each with its own quota — nil unless it has
-    /// signed in more than one (web `providerChoices`).
-    public static func accountChoices(_ accounts: [RunnerEngineAccount]?, usage: PlanUsageSnapshot?) -> [AccountChoice]? {
-        guard let accounts, accounts.count >= 2 else { return nil }
+    /// The runner's accounts of an engine (`health`) as picker rows, each with its own quota — nil
+    /// unless it has signed in more than one (web `providerChoices`). `usage` is the engine's snapshot
+    /// (`CodexAccounts.usage`).
+    public static func accountChoices(_ health: RunnerEngineHealth?, usage: PlanUsageSnapshot?) -> [AccountChoice]? {
+        guard let health, let accounts = health.accounts, accounts.count >= 2 else { return nil }
         return accounts.map { account in
+            // Antigravity's Default on the runner's own Gemini key runs, on the key, with no quota of its
+            // own to show (`RunnerPageFormat.runsOnEnvKey`): not an account that is signed out.
+            if RunnerPageFormat.runsOnEnvKey(health, account: account.id, auth: account.auth) {
+                return AccountChoice(id: account.id, label: CodexAccounts.label(account.id, accounts: accounts),
+                                     quota: "env key")
+            }
+            let own = account.auth == "yes" ? CodexAccounts.snapshot(usage, account: account.id) : nil
+            let rows = own?.rows ?? []
             // The window closest to its limit: a Claude login's 5-hour window can read 0% while its
-            // weekly one is spent, and the first window alone would say it has room.
-            let rows = account.auth == "yes" ? (CodexAccounts.snapshot(usage, account: account.id)?.rows ?? []) : []
-            let row = rows.reduce(nil as PlanUsageRow?) { tightest, row in
-                tightest.map { row.percent > $0.percent ? row : $0 } ?? row
+            // weekly one is spent, and the first window alone would say it has room. An Antigravity
+            // bucket's row counts what is left rather than what is used, so its tightest is the one
+            // with least left: the binding row, judged by use.
+            let row: PlanUsageRow?
+            if rows.contains(where: \.remaining) {
+                row = own?.bindingRow()
+            } else {
+                row = rows.reduce(nil as PlanUsageRow?) { tightest, next in
+                    tightest.map { next.percent > $0.percent ? next : $0 } ?? next
+                }
             }
             return AccountChoice(
                 id: account.id,
                 label: CodexAccounts.label(account.id, accounts: accounts),
-                quota: row.map { r in "\(compactWindowLabel(r.label)) \(r.percent)%" },
+                quota: row.map(quotaText),
                 nearLimit: (row?.window.utilization ?? 0) >= 90,
                 unavailable: account.auth == "no" ? "Not signed in" : nil)
         }
+    }
+
+    /// One account's tightest window, compactly: "5h 100%" — or, for one that counts what is left, its
+    /// bucket and that: "gemini-5h 4% left".
+    static func quotaText(_ row: PlanUsageRow) -> String {
+        guard row.remaining else { return "\(compactWindowLabel(row.label)) \(row.percent)%" }
+        return "\(row.groupLabel ?? row.label) \(row.percent)% left"
     }
 
     /// A window's name short enough for a row beside an account's: "5h", "Weekly", "Weekly Opus" —
@@ -127,8 +174,7 @@ public enum SessionProviderChoices {
         return short.replacingOccurrences(of: " · ", with: " ")
     }
 
-    /// Login engines, plus the environment-key Antigravity compatibility entry. The server's
-    /// workspace/runner key availability determines whether Antigravity is offered.
+    /// Login engines, with Antigravity offered for Google sign-in or a workspace/runner key.
     public static let engineSlugs = ["claude", "codex", "antigravity", "kimi"]
 
     /// A built-in engine has no configured row, so it has no preset to inherit a look from. Borrow
@@ -141,19 +187,23 @@ public enum SessionProviderChoices {
         "claude": "anthropic", "codex": "openai", "kimi": "moonshot", "antigravity": "antigravity",
     ]
 
-    /// Missing outranks signed out. Antigravity readiness and key availability are supplied by
-    /// the server separately; it has no interactive sign-in.
+    /// Missing outranks signed out. Antigravity readiness and credential availability are supplied by
+    /// the server separately.
     static func engineBlocker(_ health: RunnerEngineHealth?) -> String? {
         guard let health else { return nil }
         if health.installed == false { return "Not installed" }
-        if health.auth == "no", health.engine != "antigravity" { return "Not signed in" }
+        if health.auth == "no" { return "Not signed in" }
         return nil
     }
 
-    static func antigravityBlocker(_ state: RunnerAntigravityState?, health: RunnerEngineHealth? = nil) -> String? {
+    static func antigravityBlocker(_ state: RunnerAntigravityState?, health: RunnerEngineHealth? = nil, login: Bool = false) -> String? {
         if state?.supported == false { return "Update runner" }
         if state?.installed == false { return "Not installed" }
-        return state == nil ? byokBlocker(health) : nil
+        if login {
+            if state?.authSource == "google", state?.envKeyAvailable == false { return "Not signed in" }
+            return engineBlocker(health)
+        }
+        return byokBlocker(health)
     }
 
     /// Read only the server's key-availability result for the machine this session will run on.
@@ -179,7 +229,7 @@ public enum SessionProviderChoices {
         ProviderPools.unavailableReason(pool)
     }
 
-    /// The picker's contents. Antigravity is only offered with server-confirmed key availability;
+    /// The picker's contents. Antigravity is offered for a Google account or server-confirmed key;
     /// login engines stay listed when their CLI is missing or signed out.
     ///
     /// The user's pools come after the engines, each one choice that runs on its members' own
@@ -195,11 +245,14 @@ public enum SessionProviderChoices {
                                planUsage: PlanUsage? = nil,
                                now: Date = Date(),
                                antigravity: RunnerAntigravityState? = nil,
-                               antigravityKeyAvailable: Bool? = nil) -> [ProviderChoice] {
+                               antigravityKeyAvailable: Bool? = nil,
+                               dshState: DshRuntime.RunnerState? = nil) -> [ProviderChoice] {
         let health = { (engine: String) in engines?.first { $0.engine == engine } }
         let keyAvailable = antigravityKeyAvailable ?? antigravity?.envKeyAvailable ?? false
-        let engineChoices = engineSlugs.filter { $0 != "antigravity" || keyAvailable }.map { slug in
-            let blocker = slug == "antigravity" ? antigravityBlocker(antigravity, health: health(slug)) : engineBlocker(health(slug))
+        let googleAccount = antigravity?.authSource == "google"
+            && !(keyAvailable && antigravity?.envKeyAvailable == false)
+        let engineChoices = engineSlugs.filter { $0 != "antigravity" || keyAvailable || antigravity?.authSource == "google" }.map { slug in
+            let blocker = slug == "antigravity" ? antigravityBlocker(antigravity, health: health(slug), login: !keyAvailable || googleAccount) : engineBlocker(health(slug))
             return ProviderChoice(
                 slug: slug,
                 label: AgentDefaults.providerName(slug, configured: configured),
@@ -208,10 +261,10 @@ public enum SessionProviderChoices {
                 modelLabel: modelLabel(for: slug, configured: configured, catalog: catalog),
                 unavailable: blocker,
                 fixEngine: blocker == nil ? nil : slug,
-                accounts: (slug == "codex" || slug == "claude") && blocker == nil
-                    ? accountChoices(health(slug)?.accounts, usage: planUsage?.snapshot(for: slug))
+                accounts: RunnerPageFormat.keepsAccounts(slug) && blocker == nil
+                    ? accountChoices(health(slug), usage: CodexAccounts.usage(slug, planUsage: planUsage, engines: engines))
                     : nil,
-                labelDetail: slug == "antigravity" ? "env key" : nil)
+                labelDetail: slug == "antigravity" ? (googleAccount ? "Google account" : "env key") : nil)
         }
         // Like a configured provider, a pool needs the CLI it runs on and nothing signed in: each run
         // carries one of its members' credentials. A missing CLI outranks the members, because it is
@@ -244,7 +297,9 @@ public enum SessionProviderChoices {
             .map { provider -> ProviderChoice in
                 // Judged through the engine it borrows, since that CLI is what actually runs it.
                 let runtime = executingRuntime(provider.slug, configured: configured)
-                let blocker = runtime == "antigravity" ? antigravityBlocker(antigravity, health: health(runtime)) : byokBlocker(health(runtime))
+                let blocker = runtime == "antigravity" ? antigravityBlocker(antigravity, health: health(runtime))
+                    : runtime == "dsh" ? dshState?.label
+                    : byokBlocker(health(runtime))
                 return ProviderChoice(
                     slug: provider.slug,
                     label: provider.label,
@@ -254,9 +309,38 @@ public enum SessionProviderChoices {
                     unavailable: blocker,
                     fixEngine: blocker == nil ? nil : runtime,
                     inPool: pooled.contains(provider.slug),
-                    labelDetail: runtime == "antigravity" ? "Antigravity CLI" : nil)
+                    // DeepSeek's key runs on either agent; say which one this row is.
+                    labelDetail: runtime == "antigravity" ? "Antigravity CLI"
+                        : runtime == "dsh" ? "Harness"
+                        : provider.presetSlug == "deepseek" ? "Claude Code" : nil)
             }
-        return engineChoices + poolChoices + byok
+        // No Harness key yet, on a runner that could run one: offer the connection rather than
+        // nothing, so "where is DeepSeek Harness?" has an answer in the picker itself.
+        let dshSetup: [ProviderChoice] =
+            dshState != nil && dshState != .updateRunner
+                && !configured.contains(where: { $0.runtime == "dsh" })
+            ? [ProviderChoice(slug: "\(DshRuntime.presetSlug):connect", label: "DeepSeek Harness", kind: .byok,
+                              brandKey: DshRuntime.presetSlug, modelLabel: "", unavailable: "Add API key",
+                              fixEngine: DshRuntime.connectFix, setup: true)]
+            : []
+        // OpenCode, once the runner reports it installed — it has no sign-in to offer, so a machine
+        // without it has nothing to fix here either. Its own config first, then every key it may spend
+        // (`OpenCodeKeys`): it speaks each dialect a configured key does, so the same key is listed
+        // under its own engine above and here, as `opencode/<slug>` (web parity).
+        let openCode: [ProviderChoice] = health("opencode")?.installed == true
+            ? [ProviderChoice(slug: "opencode", label: AgentDefaults.providerName("opencode", configured: nil),
+                              kind: .engine, brandKey: nil,
+                              modelLabel: modelLabel(for: "opencode", configured: configured, catalog: catalog))]
+                + configured
+                    .filter { $0.runsOnOpenCode == true && !poolSlugs.contains($0.slug) }
+                    .map { provider in
+                        let choice = OpenCodeKeys.choice(provider.slug)
+                        return ProviderChoice(slug: choice, label: provider.label, kind: .byok,
+                                              brandKey: provider.presetSlug,
+                                              modelLabel: modelLabel(for: choice, configured: configured, catalog: catalog))
+                    }
+            : []
+        return engineChoices + poolChoices + byok + dshSetup + openCode
     }
 
     /// The providers a session that already exists may be moved to: the ones that borrow the same
@@ -285,7 +369,7 @@ public enum SessionProviderChoices {
                                    antigravity: RunnerAntigravityState? = nil) -> [ProviderChoice] {
         let runtime = executingRuntime(provider, configured: configured)
         let sameRuntime = choices.filter {
-            executingRuntime($0.slug, configured: configured) == runtime
+            !$0.setup && executingRuntime($0.slug, configured: configured) == runtime
         }
         if sameRuntime.contains(where: { $0.slug == provider }) { return sameRuntime }
         return [current(provider, in: choices, configured: configured, catalog: catalog,
@@ -297,12 +381,14 @@ public enum SessionProviderChoices {
     /// the OpenCode slug — harmless where it is used for model defaults, but here it would offer
     /// an OpenCode session every Claude provider on the account. A Gemini key borrows Antigravity,
     /// so it executes on the same CLI as the engine's own slug.
-    static func executingRuntime(_ provider: String, configured: [ConfiguredProvider]) -> String {
+    public static func executingRuntime(_ provider: String, configured: [ConfiguredProvider]) -> String {
+        // A key run on OpenCode is run by OpenCode, whichever CLI the key itself borrows.
+        if OpenCodeKeys.choiceKey(provider) != nil { return "opencode" }
         if let custom = configured.first(where: { $0.slug == provider }) {
             let borrowed = custom.runtime ?? ""
-            return ["codex", "kimi", "antigravity"].contains(borrowed) ? borrowed : "claude"
+            return ["codex", "kimi", "antigravity", "dsh"].contains(borrowed) ? borrowed : "claude"
         }
-        return ["codex", "kimi", "opencode", "antigravity"].contains(provider) ? provider : "claude"
+        return ["codex", "kimi", "opencode", "antigravity", "dsh"].contains(provider) ? provider : "claude"
     }
 
     /// The entry to show as current. An agent set to `opencode`, or pointing at a provider that has
@@ -315,7 +401,7 @@ public enum SessionProviderChoices {
                                antigravity: RunnerAntigravityState? = nil) -> ProviderChoice {
         if let found = choices.first(where: { $0.slug == provider }) { return found }
         let runtime = executingRuntime(provider, configured: configured)
-        let blocker = runtime == "antigravity" ? antigravityBlocker(antigravity) : nil
+        let blocker = runtime == "antigravity" ? antigravityBlocker(antigravity, login: provider == "antigravity" && antigravity?.envKeyAvailable != true) : nil
         return ProviderChoice(
             slug: provider,
             label: AgentDefaults.providerName(provider, configured: configured),
@@ -323,14 +409,44 @@ public enum SessionProviderChoices {
             brandKey: enginePreset[provider] ?? configured.first { $0.slug == provider }?.presetSlug,
             modelLabel: modelLabel(for: provider, configured: configured, catalog: catalog),
             unavailable: blocker, fixEngine: blocker == nil ? nil : "antigravity",
-            labelDetail: provider == "antigravity" ? "env key" : runtime == "antigravity" ? "Antigravity CLI" : nil)
+            labelDetail: provider == "antigravity" ? (antigravity?.authSource == "google" ? "Google account" : "env key") : runtime == "antigravity" ? "Antigravity CLI" : nil)
     }
 
-    /// What a pool's mark counts, as web labels that badge: an account pool's accounts, a shared
-    /// pool's keys (`"2 keys"`, `"1 account"`). Screen-reader only — the number itself is what is
-    /// drawn — but it is the pool's own word for what sits in its corner, so it is web's sentence.
-    public static func poolBadgeLabel(size: Int, unit: String?) -> String {
-        "\(size) \(unit ?? "account")\(size == 1 ? "" : "s")"
+    /// The engine row for `provider`, landing on it. Also how the hero names a pick that is in no
+    /// group (`opencode`, a removed provider): its runtime, on the synthesized current choice.
+    public static func engine(for provider: ProviderChoice, configured: [ConfiguredProvider]) -> EngineChoice {
+        let slug = provider.setup ? "dsh" : executingRuntime(provider.slug, configured: configured)
+        // Harness is not a built-in provider option (its key is a configured row), so name it here.
+        return EngineChoice(slug: slug,
+                            label: slug == "dsh" ? "DeepSeek Harness" : AgentDefaults.providerName(slug, configured: nil),
+                            brandKey: slug == "dsh" ? DshRuntime.presetSlug : enginePreset[slug], provider: provider)
+    }
+
+    /// `choices` grouped by the engine that runs them, in the order the engines first appear there
+    /// (web `engineChoices`). Each engine lands on the first of `preferred` it holds that can run (the
+    /// draft's pick, then what the workspace last ran on), else its own sign-in, else the first of its
+    /// providers that can run — one in a pool last, since the pool beside it is the usual answer. An
+    /// engine none of whose providers can run lands on its own row (or its first) and carries its reason.
+    public static func engines(_ choices: [ProviderChoice], configured: [ConfiguredProvider],
+                               preferred: [String?] = []) -> [EngineChoice] {
+        var order: [String] = []
+        var groups: [String: [ProviderChoice]] = [:]
+        for choice in choices {
+            let runtime = choice.setup ? "dsh" : executingRuntime(choice.slug, configured: configured)
+            if groups[runtime] == nil { order.append(runtime) }
+            groups[runtime, default: []].append(choice)
+        }
+        return order.map { engine in
+            let group = groups[engine]!
+            let ready = group.filter { $0.unavailable == nil }
+            let landing = preferred.lazy.compactMap { slug in ready.first { $0.slug == slug } }.first
+                ?? ready.first { $0.slug == engine }
+                ?? ready.first { !$0.inPool }
+                ?? ready.first
+                ?? group.first { $0.slug == engine }
+                ?? group[0]
+            return self.engine(for: landing, configured: configured)
+        }
     }
 
     /// The label for a provider's resolved default model, or a plain hint when the provider picks

@@ -1,0 +1,11 @@
+{
+  "runtimeCommit": "489941cf0942f71edad00ecbc14d5a53aeb5da0b",
+  "originalLifecycleGitBlob": "8387056bacd2453151a67ce38463dd7505dee9b5",
+  "probeSha256": {
+    "scroll-observation.mjs": "8f5871dba682aa82c99d4b7b0ee0b1ab007ae3163d0aa6644fcf2e0a04989e25",
+    "scroll-probe.browser.mjs": "3beadca17a6996fb57c8df716f96e6dc70b1709f274ebe861736a60ae57af672",
+    "scroll-probe.config.mjs": "863288ba218f44d6bb11d75b66736d8a67db0b6a657256bd0704fccce40ac632"
+  },
+  "runtimeEdits": [],
+  "method": "Copy the two existing nested lifecycle cases; retain initial/focus/inner-lock checks; collect final-Escape style mutation timing, the original first read, bounded eventual unlock, and trusted wheel page movement. Observe the unmodified runtime before changing the shipped test."
+}

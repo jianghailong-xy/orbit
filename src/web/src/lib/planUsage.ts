@@ -15,6 +15,7 @@ export interface PlanUsageDisplayRow {
   window: PlanUsageWindow;
   percent: number;
   nearLimit: boolean;
+  remaining?: boolean;
 }
 
 export interface PlanUsageSectionInfo {
@@ -28,7 +29,9 @@ export interface PlanUsageSectionInfo {
  * legacy-flat payload into it. New runners nest snapshots by provider; older
  * runners reported one flat snapshot, where Claude may omit `provider` and
  * Codex/Kimi identify themselves explicitly (or, for Codex, by its bucket
- * fields). */
+ * fields). Antigravity's is never in a heartbeat's planUsage: it is found here
+ * only once a reader has folded its engine's in (withEnginePlanUsage), nested,
+ * or flat and naming itself when the runner reported no other quota. */
 export function planUsageSnapshotForProvider(
   usage: PlanUsage | null | undefined,
   provider: string,
@@ -37,6 +40,10 @@ export function planUsageSnapshotForProvider(
   if (provider === 'kimi') {
     if (usage.kimi) return usage.kimi;
     return usage.provider === 'kimi' ? usage : null;
+  }
+  if (provider === 'antigravity') {
+    if (usage.antigravity) return usage.antigravity;
+    return usage.provider === 'antigravity' ? usage : null;
   }
   if (provider === 'codex') {
     if (usage.codex) return usage.codex;
@@ -206,6 +213,18 @@ function codexRows(usage: PlanUsageSnapshot): PlanUsageDisplayRow[] {
 }
 
 export function planUsageRows(usage: PlanUsageSnapshot): PlanUsageDisplayRow[] {
+  if (usage.provider === 'antigravity') return (usage.buckets ?? []).map((bucket) => {
+    const used = (1 - bucket.remainingFraction) * 100;
+    return {
+      key: bucket.id,
+      label: bucket.window === 'weekly' ? 'Weekly' : bucket.window === '5h' ? '5-hour' : bucket.window,
+      groupLabel: bucket.id,
+      window: { utilization: used, resetsAt: bucket.resetTime },
+      percent: clampPercent(bucket.remainingFraction * 100),
+      nearLimit: used >= 90,
+      remaining: true,
+    };
+  });
   const codex = usage.provider === 'codex' || !!usage.primary || !!usage.secondary || !!usage.rateLimits?.length;
   if (codex) return codexRows(usage);
   return CLAUDE_ROWS.flatMap(({ key, label }) => {
@@ -233,6 +252,7 @@ export function planUsageRows(usage: PlanUsageSnapshot): PlanUsageDisplayRow[] {
  */
 export function currentPlanUsageRows(usage: PlanUsageSnapshot, now: number = Date.now()): PlanUsageDisplayRow[] {
   return planUsageRows(usage).map((row) => {
+    if (row.remaining) return row;
     const { resetsAt, ...window } = row.window;
     const at = Date.parse(resetsAt ?? '');
     if (Number.isNaN(at) || at > now) return row;

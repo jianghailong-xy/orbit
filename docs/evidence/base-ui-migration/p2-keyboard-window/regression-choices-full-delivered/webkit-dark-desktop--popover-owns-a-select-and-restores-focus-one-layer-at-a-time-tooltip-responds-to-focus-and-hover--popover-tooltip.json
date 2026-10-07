@@ -1,0 +1,6 @@
+{
+  "nestedSelect": true,
+  "sequentialEscape": true,
+  "focusReturn": true,
+  "tooltipFocusHoverEscape": true
+}

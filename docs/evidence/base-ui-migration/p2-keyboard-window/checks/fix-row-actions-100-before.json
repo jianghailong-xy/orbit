@@ -1,0 +1,13 @@
+{
+ "command": "cd /var/tmp/p2kw-c2604b/before && git log --oneline -1 && unshare -n bash -c 'ip link set lo up && npm run test:ui-choices -w @orbit/web -- --grep \"multiple choices in Dialog keep their owner\" --project chromium-light-phone --repeat-each 100'",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_d7470511d93d",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "46a418fba",
+ "webTree": "62fce56ed0c10a115d5c4e567ce1c60e882f79a9",
+ "outputLastWritten": "2026-10-07T05:30:54.162259+00:00",
+ "exitCode": 1,
+ "outputSha256": "1a5046a369e6522315f5d86742fefd2eb4c7a9236780ca738173ed0b7c6f7469",
+ "outputBytes": 23386,
+ "note": "Before-fix tree, the unchanged P2.2 case choices.browser.mjs:592 repeated 100 times on chromium-light-phone at default priority (own network namespace), at the same time as fix-row-actions-100-after: 98 passed / 2 failed (repeats 11 and 21). Both fail at :624, Row actions stays 1 instead of 2: the window's symptom. Their traces (fix-row-actions-100-before-traces.json) show no failed request and no network-change error; the ArrowDown press runs from +0 to +12.7 ms and the Enter press starts at +14.4 and +14.9 ms, within one frame."
+}

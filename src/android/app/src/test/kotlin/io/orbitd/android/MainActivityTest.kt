@@ -120,8 +120,23 @@ class MainActivityTest {
 }
 
 class TestOrbitApplication : OrbitApplication() {
+    /** auth/methods answers 404, as a server from before Google sign-in does, unless a test offers Google. */
+    @Volatile var methods: () -> ApiResponse = { ApiResponse(404, """{"statusCode":404}""".encodeToByteArray()) }
+    @Volatile var exchange: () -> ApiResponse = { ApiResponse(200, LOGIN.encodeToByteArray()) }
+    val requests: MutableList<HttpRequest> = java.util.Collections.synchronizedList(mutableListOf())
+
     override fun createSession(): AuthSession = AuthSession(
-        HttpTransport { request -> ApiResponse(200, (if (request.api.path == listOf("auth", "login")) """{"accessToken":"fixture-access","refreshToken":"fixture-refresh","user":{"id":"u1","email":"fixture@example.test","name":"Fixture"}}""" else if (request.api.path.firstOrNull() == "tasks") """{"id":"01a0cca7-8609-70ed-a0e2-d4b55b832b60","title":"Linked task"}""" else "[]").encodeToByteArray()) },
+        HttpTransport { request ->
+            requests += request
+            when {
+                request.api.path == listOf("auth", "methods") -> methods()
+                request.api.path == listOf("auth", "google", "exchange") -> exchange()
+                request.api.path == listOf("auth", "login") -> ApiResponse(200, LOGIN.encodeToByteArray())
+                request.api.path.firstOrNull() == "tasks" -> ApiResponse(200, """{"id":"01a0cca7-8609-70ed-a0e2-d4b55b832b60","title":"Linked task"}""".encodeToByteArray())
+                // The signed-in shell's directory reads: empty lists.
+                else -> ApiResponse(200, "[]".encodeToByteArray())
+            }
+        },
         object : CredentialStore {
             private var value: StoredSession? = null
             override suspend fun load() = value
@@ -139,3 +154,5 @@ class TestOrbitApplication : OrbitApplication() {
         }, "test",
     )
 }
+
+private const val LOGIN = """{"accessToken":"fixture-access","refreshToken":"fixture-refresh","user":{"id":"u1","email":"fixture@example.test","name":"Fixture"}}"""

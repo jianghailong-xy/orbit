@@ -28,8 +28,11 @@ import {
   toUuid,
 } from '@orbit/shared';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
+import { refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
+import type { AuthCredential } from '../common/current-user.decorator';
 import { isSessionGenerating } from '../common/session-generating';
 import { SingleFlight } from '../common/single-flight';
+import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { MergeReceiptRow, mergeReceiptRow } from '../sessions/merge-receipt';
@@ -161,6 +164,14 @@ import {
   readProjectCodebase,
   readProjectIntegrationLines,
 } from './project-integration-line';
+import {
+  findMergeCheckApproval,
+  isMergeCheckField,
+  MERGE_CHECK_AUDIT_TYPE,
+  type MergeCheckApproval,
+  mergeCheckAuditPayload,
+  namedIntegrationFields,
+} from './project-integration-approval';
 import {
   readProjectBlockers,
   resolveProjectBlocker,
@@ -445,16 +456,19 @@ const PROJECT_LIST_SELECT = {
 /**
  * A row of `GET /projects/sidebar`, as opposed to a project document.
  *
- * The rail draws four things of a project — it is working, it waits on the reader, how recently it
- * moved, and its title — and this is the select behind them. `goal`, `updatedAt` and the
- * coordination bindings are absent on purpose: nothing on the rail reads them, and the whole point
- * of this endpoint is that a 15-second poll does not carry what a page view carries.
+ * The rail draws activity, attention, title and task progress. This select supplies the project
+ * fields; `readProjectSidebarRollups` reads progress from the maintained status tally. `goal`,
+ * `updatedAt` and coordination bindings are absent on purpose: nothing on the rail reads them,
+ * and a 15-second poll does not carry what a page view carries. `startedAt` is the one column the
+ * project sessions page reads off this row: null is a project nobody has started, which that page
+ * offers to start under its progress strip.
  */
 const SIDEBAR_PROJECT_SELECT = {
   id: true,
   title: true,
   status: true,
   createdAt: true,
+  startedAt: true,
   coordinatorSession: { select: COORDINATOR_ACTIVITY_SELECT },
 } satisfies Prisma.ProjectSelect;
 
@@ -881,10 +895,12 @@ export class ProjectsService {
    * The fields that decide whether an action the coordinator wants to take may happen — and the
    * complete list of them, which is the property that matters.
    *
-   * Two things read it, and they must not disagree: writing any of them bumps `configRevision`
-   * (so a revoke that races an action is a comparison rather than an archaeology), and the runner
-   * door refuses all of them (an agent does not widen its own authority). A field that can change
-   * what the coordinator is allowed to do and is not in here is a hole in both.
+   * Three things read it, and they must not disagree: writing any of them bumps `configRevision`
+   * (so a revoke that races an action is a comparison rather than an archaeology), the runner door
+   * refuses all of them (an agent does not widen its own authority), and the user door refuses all
+   * of them to a personal access token (a script does not set them for the owner —
+   * `governanceFields`). A field that can change what the coordinator is allowed to do and is not
+   * in here is a hole in all three.
    *
    * `automationPolicy` was the third until the column went: it said HOW FAR the coordinator may go,
    * and it was the one entry that could widen what a decider was allowed to do without any action
@@ -904,6 +920,19 @@ export class ProjectsService {
     'maxConcurrentTasks',
     'sessionBudgetPerDay',
   ] as const;
+
+  /**
+   * How far this project's coordinator may act and who it is, as `dto` carries them: the
+   * authorization set and `coordinatorAgentId` — what the runner door refuses an agent
+   * (`RunnerProjectsController.refuseGovernance`), and what `create` and `update` refuse a personal
+   * access token, whole (docs/personal-access-token-design.md §5.1).
+   */
+  private static governanceFields(dto: CreateProjectDto | UpdateProjectDto): Record<string, unknown> {
+    const sent = dto as unknown as Record<string, unknown>;
+    return Object.fromEntries(
+      [...ProjectsService.AUTHORIZATION_FIELDS, 'coordinatorAgentId'].map((field) => [field, sent[field]]),
+    );
+  }
 
   /** One wording for every reason an agent id is not one this project may coordinate with —
    *  unknown, another owner's, or deleted. Distinguishing them would answer "does this id exist"
@@ -929,6 +958,9 @@ export class ProjectsService {
   private static readonly NO_SESSION_COORDINATOR =
     'no session to record as this project’s coordinator — the session this request came from ' +
     'is not one this runner is running for this owner, or the workspace it ran in cannot be run in';
+
+  /** The one wording for an edit's acting session that is no session of this account (`assertHumanOnlyProjectWrites`). */
+  private static readonly NO_SUCH_ACTING_SESSION = 'X-Orbit-Session-Id names no session of this account';
 
   /**
    * The other half of the binding, refused. `coordinator_session_id` is UNIQUE, so a session
@@ -1051,21 +1083,99 @@ export class ProjectsService {
   }
 
   /**
-   * A project's integration line is the account owner's to choose (contract L5): no agent session,
-   * a coordinator's included, picks the branch its own project's work lands on. Checked before the
-   * transaction like `status` above, so a refused request writes nothing it carried.
+   * Recording a project: an integration choice made in the same request that creates it. The whole
+   * object is the owner's here, merge check included, because there is no project yet for a card to
+   * be bound to — the card that authorises a merge-check change names the project it changes, and
+   * at this point there is nothing to name. A project created from a session therefore takes the
+   * default line and no merge check, and both are set afterwards: the line from the owner's own
+   * doors, the merge check from a session once there is a card (`project-integration-approval.ts`).
+   *
+   * Checked before the transaction like `status` above, so a refused request writes nothing it
+   * carried — including no project.
    */
   private static assertIntegrationIsNotWrittenFromASession(
-    dto: UpdateProjectDto | CreateProjectDto,
+    dto: CreateProjectDto,
     actingSessionId: string | undefined,
   ): void {
     if (dto.integration === undefined || !actingSessionId?.trim()) return;
     throw new ForbiddenException({
       statusCode: 403,
       code: 'INTEGRATION_SETTINGS_OWNER_ONLY',
-      message: 'a project’s integration line is the account owner’s to set, not this session’s — ask '
-        + 'them to set it from the Orbit web app, the user API or `orbit project update` at their own terminal',
+      message: 'a new project’s integration line and merge check are the account owner’s to set, '
+        + 'not this session’s — a card for a merge-check change names the project it changes, and '
+        + 'this one does not exist yet. Ask them to set both from the Orbit web app, the user API '
+        + 'or `orbit project update` at their own terminal; once the project exists, this session '
+        + 'can change its merge check through the project_update tool, which asks them first',
     });
+  }
+
+  /**
+   * The integration object on an UPDATE, split by who may write it (contract L5, and
+   * `project-integration-approval.ts` for the whole of the reasoning).
+   *
+   *   - Where the work lands — `line`, `projectBranchName`, `upstreamRef` — is the account owner's,
+   *     and no card changes that. A session sending one is refused whatever else it sends.
+   *   - The merge check — `mergeCheckCommand`, `mergeCheckTimeoutSeconds` — may be changed from a
+   *     session, but only on a confirmation card the account owner has answered for THIS project,
+   *     from THIS session, for EXACTLY this change. Anything less keeps today's refusal.
+   *   - Anything else in the object is refused too, which is what makes the split fail-closed: a
+   *     field added to `IntegrationSettings` later is owner-only until somebody deliberately gives
+   *     it a card.
+   *
+   * Returns the card that authorised the write, or null when the request carried no merge check —
+   * the caller records it beside the write it is about. Async and query-free in the common cases:
+   * a session sending only a line field, or only an unwritable field, is refused without a lookup.
+   *
+   * Checked BEFORE the update's transaction, like `status` above, so a refusal writes nothing at
+   * all — not the merge check, and not the title the same request happened to carry.
+   */
+  private async assertIntegrationIsWrittenByItsOwner(
+    ownerId: string,
+    projectId: string,
+    dto: UpdateProjectDto,
+    actingSessionId: string | undefined,
+  ): Promise<MergeCheckApproval | null> {
+    const settings = dto.integration as Record<string, unknown> | undefined;
+    if (settings === undefined) return null;
+    const sessionId = actingSessionId?.trim();
+    // No acting session is the owner at their own terminal, the user API, or a token on it: nobody
+    // to ask and no card to bind, so the field is theirs exactly as it was before this existed.
+    if (!sessionId) return null;
+
+    const named = namedIntegrationFields(settings);
+    const refused = named.filter((field) => !isMergeCheckField(field));
+    const mergeCheck = named.filter(isMergeCheckField);
+    if (refused.length > 0 || mergeCheck.length === 0) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        code: 'INTEGRATION_SETTINGS_OWNER_ONLY',
+        message: refused.includes('line') || refused.includes('projectBranchName')
+          || refused.includes('upstreamRef')
+          ? 'a project’s integration line is the account owner’s to set, not this session’s — ask '
+            + 'them to set it from the Orbit web app, the user API or `orbit project update` at '
+            + 'their own terminal'
+          : `a project’s integration settings are the account owner’s to set, not this session’s: `
+            + `${refused.join(', ') || named.join(', ') || 'an empty integration object'} can only `
+            + 'be changed from the Orbit web app, the user API or `orbit project update` at their '
+            + 'own terminal. The merge check is the exception — this session can propose one, and '
+            + 'it takes effect once the owner confirms it on the card the project_update tool raises',
+      });
+    }
+
+    const approval = await findMergeCheckApproval(this.prisma, { projectId, sessionId, settings });
+    if (!approval) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        code: 'INTEGRATION_SETTINGS_OWNER_ONLY',
+        message: 'a project’s merge check is the account owner’s to change, and only on a '
+          + 'confirmation card they have answered for this project, from this session, for exactly '
+          + `this change (${mergeCheck.join(', ')}). No such card was found — none was filed, the `
+          + 'one filed was declined or is still unanswered, or it authorised a different change — '
+          + 'so nothing was written. Call project_update with the change you want: it puts the '
+          + 'question in front of them and performs the write once they answer',
+      });
+    }
+    return approval;
   }
 
   /**
@@ -1077,6 +1187,11 @@ export class ProjectsService {
    * once and only when the request actually asks for it. A no-session request is NON_JUDGMENT by
    * this role contract, so the user API and headless/internal paths keep their existing behavior;
    * that negative classification is not proof a person held the credential.
+   *
+   * A named session that is not one of this account's is refused rather than read as no session:
+   * the edit writes its id as the criteria's author or as the held decision's principal, and
+   * another account's session — the tenant isolation census's T2 — is answered as an id that
+   * names nothing, before anything of it is recorded.
    */
   private async assertHumanOnlyProjectWrites(
     ownerId: string,
@@ -1089,7 +1204,8 @@ export class ProjectsService {
       where: { id: actingSessionId, ownerId },
       select: { dispatchOrigin: true },
     });
-    const principal = authorityPrincipal(acting?.dispatchOrigin);
+    if (!acting) throw new ForbiddenException(ProjectsService.NO_SUCH_ACTING_SESSION);
+    const principal = authorityPrincipal(acting.dispatchOrigin);
     const refusal = refuseHumanOnlyAction(principal, 'EDIT_ACCEPTANCE_CRITERIA');
     if (refusal) throw new ForbiddenException(refusal);
   }
@@ -1974,14 +2090,20 @@ export class ProjectsService {
    * came from. Putting it on the DTO would let any caller name any session and any workspace on a
    * project it is creating — which is to say claim a conversation it does not own as this
    * project’s coordinator, and point it into a workspace it was never given.
+   *
+   * `credential` is the user door's: a personal access token does not choose the integration line
+   * either, nor how far the coordinator may act or who it is (docs/personal-access-token-design.md
+   * §5.1), and is refused before anything is written.
    */
   async create(
     ownerId: string,
     dto: CreateProjectDto,
     coordinator?: ProjectCoordinatorSeed,
     principal: ProjectCreatePrincipal = { type: 'SYSTEM', id: ownerId },
+    credential?: AuthCredential,
   ) {
     if (!dto.title) throw new BadRequestException('title is required');
+    refuseOwnerFieldsToToken(credential, { integration: dto.integration, ...ProjectsService.governanceFields(dto) });
     ProjectsService.assertOneAcceptanceAuthoringShape(dto);
     const structuredCriteria = dto.acceptanceCriteriaItems === undefined
       ? undefined
@@ -2191,9 +2313,10 @@ export class ProjectsService {
     sessionId: string,
     dto: CreateProjectDto,
   ) {
-    // Same door rule as the update path: an agent session does not choose the branch its own
-    // project's work lands on (L5). Checked before anything is written, so a refused request
-    // leaves no project behind for the caller to wonder about.
+    // Same door rule as the update path for the line (L5), and stricter for the merge check: a
+    // card has to name the project it changes, and this one is being created by the request that
+    // would carry it. Checked before anything is written, so a refused request leaves no project
+    // behind for the caller to wonder about.
     ProjectsService.assertIntegrationIsNotWrittenFromASession(dto, sessionId);
     const seed = await this.coordinatorFromSession(ownerId, runnerId, sessionId);
     const principal = { type: 'RUNNER', id: runnerId } as const;
@@ -2237,6 +2360,11 @@ export class ProjectsService {
         project.title,
         project.id,
         project.coordinatorEnabled,
+        // Read on its own rather than with the project, whose payload is returned as it is.
+        modelRoutingEnabled(await this.prisma.user.findUnique({
+          where: { id: ownerId },
+          select: { preferences: true },
+        })),
       ),
       // Keep the transition first in the serialized tool result. Project payloads can contain long
       // acceptance definitions, and the role change is what the currently-running turn must see.
@@ -2274,9 +2402,11 @@ export class ProjectsService {
     /** The session that proved the caller may name a workspace, when one did. Its presence is what
      *  makes an integration choice in the same request this session's rather than the owner's. */
     actingSessionId?: string,
+    /** The user door's credential, handed to `create`, which refuses a token's integration choice. */
+    credential?: AuthCredential,
   ) {
     ProjectsService.assertIntegrationIsNotWrittenFromASession(dto, actingSessionId);
-    const project = await this.create(ownerId, dto, undefined, principal);
+    const project = await this.create(ownerId, dto, undefined, principal, credential);
     await this.coordinator(ownerId, project.id, workspaceId);
     return this.get(ownerId, project.id);
   }
@@ -2600,7 +2730,8 @@ export class ProjectsService {
    * every task of every project for a dot that reads one lane is what made a browser tab the
    * single largest consumer of this database (2026-09-29: ~5,400 calls/day, ~1.1s of PostgreSQL
    * execution each, ~100 minutes/day), so the rail got its own read: the same `running` count and
-   * the same `lastActivityAt`, from `readProjectSidebarRollups`.
+   * the same `lastActivityAt`, plus progress from the maintained task-status tally, through
+   * `readProjectSidebarRollups`.
    *
    * The fields it keeps are the ones `SidebarProject` declares — `buckets` carries `running` alone,
    * and `attention` is the same whole summary the index sends (its `ownerItems` and
@@ -2637,7 +2768,11 @@ export class ProjectsService {
       ...project,
       // A project with no tasks has no group in the aggregate, and reports nothing in flight and
       // no activity rather than making the client read two shapes.
-      ...(rollups.get(project.id) ?? { buckets: { running: 0 }, lastActivityAt: null }),
+      ...(rollups.get(project.id) ?? {
+        taskCounts: { done: 0, failed: 0, total: 0 },
+        buckets: { running: 0 },
+        lastActivityAt: null,
+      }),
       attention: attention.get(project.id) ?? emptyProjectListAttention(),
       coordinatorActivity: coordinatorActivityOf(coordinatorSession),
       integration: integration.get(project.id) ?? null,
@@ -3288,8 +3423,25 @@ export class ProjectsService {
    * on who asks: refused whole when an acting session is on the request, written verbatim when
    * there is none, for `refuseProjectStatusWrite`'s reasons. Neither answer decides what DONE says:
    * that is projected from rows already committed by `projects/project-done-derived.ts`, on this
-   * method's own post-commit edge as much as anywhere else. */
-  async update(ownerId: string, id: string, dto: UpdateProjectDto, actingSessionId?: string) {
+   * method's own post-commit edge as much as anywhere else.
+   *
+   * `credential` is the user door's. A personal access token is refused `status`, `integration` and
+   * `acceptanceCriteriaItems` whole, and the authorization set and `coordinatorAgentId`, as the
+   * runner door refuses an agent them: they are the account owner's own decisions
+   * (docs/personal-access-token-design.md §5.1). Every other field is a token's to write.
+   *
+   * An acting session is refused `status` the same way, and `integration` by FIELD rather than
+   * whole: the line is still the owner's alone, while the merge check is written when a card the
+   * owner has answered covers exactly this change (`assertIntegrationIsWrittenByItsOwner`). A token
+   * stays refused the whole object, card or no card — it is not a session, so there is nothing for
+   * a card to be bound to — which is the one asymmetry here. */
+  async update(
+    ownerId: string,
+    id: string,
+    dto: UpdateProjectDto,
+    actingSessionId?: string,
+    credential?: AuthCredential,
+  ) {
     const current = await this.prisma.project.findFirst({
       where: { id, ownerId },
       select: { id: true, coordinatorSessionId: true },
@@ -3304,7 +3456,17 @@ export class ProjectsService {
       );
     }
     ProjectsService.assertStatusIsNotWrittenFromASession(dto, actingSessionId);
-    ProjectsService.assertIntegrationIsNotWrittenFromASession(dto, actingSessionId);
+    // The card this write rests on, when it carries a merge check. Read BEFORE the transaction
+    // with the rest of the guards, so a request no card covers is refused having written nothing.
+    const mergeCheckApproval = await this.assertIntegrationIsWrittenByItsOwner(
+      ownerId, id, dto, actingSessionId,
+    );
+    refuseOwnerFieldsToToken(credential, {
+      status: dto.status,
+      integration: dto.integration,
+      acceptanceCriteriaItems: dto.acceptanceCriteriaItems,
+      ...ProjectsService.governanceFields(dto),
+    });
     await this.assertHumanOnlyProjectWrites(ownerId, dto, actingSessionId);
 
     const agentId =
@@ -3398,6 +3560,23 @@ export class ProjectsService {
         // and before any criterion row below.
         if (dto.integration !== undefined) {
           await configureProjectIntegration(tx, { ownerId, projectId: id, settings: dto.integration });
+        }
+        // Who let this merge check through, when a card did — and in the same transaction as the
+        // write it is about, so a rolled-back attempt leaves no row claiming the change happened.
+        // The other doors (the owner's terminal, the user API) write none: nothing was approved.
+        if (mergeCheckApproval && actingSessionId?.trim() && dto.integration) {
+          await tx.activity.create({
+            data: {
+              actorId: mergeCheckApproval.decidedById,
+              type: MERGE_CHECK_AUDIT_TYPE,
+              payload: mergeCheckAuditPayload({
+                projectId: id,
+                sessionId: actingSessionId.trim(),
+                approval: mergeCheckApproval,
+                settings: dto.integration as unknown as Record<string, unknown>,
+              }) as Prisma.InputJsonValue,
+            },
+          });
         }
 
         // Definitions change under the already-held project lock. Nothing derives from them any
@@ -4013,8 +4192,10 @@ export class ProjectsService {
       select: {
         id: true,
         title: true,
-        // Which of the two instruction texts the opening says (`coordinator-opening.ts`).
+        // Which of the two instruction texts the opening says (`coordinator-opening.ts`), and
+        // whether it asks for a tier: the owner's smart model selection, the switch delivery reads.
         coordinatorEnabled: true,
+        owner: { select: { preferences: true } },
         coordinatorSessionId: true,
         coordinatorWorkspaceId: true,
         // Both halves of the fold `deriveSessionLifecycleState` takes, rather than a second reading
@@ -4088,7 +4269,12 @@ export class ProjectsService {
         {
           workspaceId: runIn,
           title: coordinatorSessionTitle(project.title),
-          prompt: buildCoordinatorOpening(project.title, project.id, project.coordinatorEnabled),
+          prompt: buildCoordinatorOpening(
+            project.title,
+            project.id,
+            project.coordinatorEnabled,
+            modelRoutingEnabled(project.owner),
+          ),
         },
         { source: 'user', titleManagedByProject: true },
       );

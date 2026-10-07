@@ -86,13 +86,14 @@ export function PlanUsageIndicator({
           {account.note && <div className="cu-reset">{account.note}</div>}
         </div>
       )}
-      {rows.map(({ key, label, groupLabel, window, percent, nearLimit }) => {
+      {rows.map(({ key, label, groupLabel, window, percent, nearLimit, remaining }) => {
         return (
           <div className="cu-row" key={key}>
             {groupLabel && <div className="cu-label">{groupLabel}</div>}
             <div className="cu-head">
               <span className="cu-label">{label}</span>
-              <span className="cu-pct">{percent}%</span>
+              {/* An Antigravity bucket counts what is left, as agy does: said so, or 100% reads spent. */}
+              <span className="cu-pct">{percent}%{remaining ? ' remaining' : ''}</span>
             </div>
             <div className={`runner-util ${nearLimit ? 'full' : ''}`}>
               <span className="runner-util-fill" style={{ width: `${percent}%` }} />
@@ -132,7 +133,7 @@ export function PlanUsageIndicator({
           ref={trigger}
           type="button"
           className={`composer-pill composer-usage ${primary.nearLimit ? 'full' : ''}`}
-          aria-label={`Plan usage ${primary.percent}%${credit.busy ? ', reset in progress' : ''}`}
+          aria-label={`Plan usage ${primary.percent}%${primary.remaining ? ' left' : ''}${credit.busy ? ', reset in progress' : ''}`}
           aria-haspopup="dialog"
           aria-expanded={open}
           onClick={() => {
@@ -142,7 +143,7 @@ export function PlanUsageIndicator({
           <span className="composer-usage-bar">
             <span className="composer-usage-fill" style={{ width: `${primary.percent}%` }} />
           </span>
-          <span className="composer-usage-pct">{primary.percent}%</span>
+          <span className="composer-usage-pct">{primary.percent}%{primary.remaining ? ' left' : ''}</span>
           {credit.busy && <span className="composer-usage-resetting" aria-hidden="true" />}
         </button>
       </Popover>

@@ -82,6 +82,46 @@ final class RetrySendWiringTests: XCTestCase {
                           + "retried text rather than whatever the composer was holding")
     }
 
+    /// A limit that killed a turn nobody sent has nothing of anybody's to re-send, and the press
+    /// sends the platform's continue instead: the sentence the card quotes under the button, handed
+    /// to the same send as anything typed — which is what carries the composer's provider pick and
+    /// the ordinary failure handling with it. Written so that routing it through the composer, or
+    /// sending nothing at all, turns one of these red.
+    func testAContinuePressSendsThePlatformsSentenceThroughTheSameSend() throws {
+        let retry = try section(try source(Self.consolePath),
+                                from: "func retryLastMessage() async {",
+                                to: "switch RetryRoute.of(")
+        XCTAssertTrue(retry.contains("serverNothingToResend"),
+                      "the continue is not decided from the server's own answer, which is what knows "
+                          + "there is nothing to re-send")
+        XCTAssertTrue(retry.contains("await send(overrideText: AutoRetryLogic.continueMessage,"),
+                      "the continue no longer goes to the send path as the message itself")
+        XCTAssertTrue(retry.contains("overrideAttachments: []"),
+                      "a continue carries no files — there is no bubble whose attachments they would be")
+        XCTAssertTrue(retry.contains("retryInFlight = true"),
+                      "the press is not in flight like any other retry: a second tap is a second turn")
+        XCTAssertFalse(retry.contains("composerText ="),
+                       "the continue landed in the composer — the text flashing through the input "
+                           + "field on its way out is the bug this file exists for")
+    }
+
+    /// The card names the provider whose outage it is — the SESSION's, never the composer's pending
+    /// pick. Choosing another provider for the next turn is exactly what a person does when a quota
+    /// is spent, and it renamed an outage that had already happened: a card about claude's spent
+    /// 5-hour window read as deepseek's, because the pick rewrites the same field the card read.
+    func testTheCardNamesTheSessionsProviderNotTheComposersPick() throws {
+        let card = try source(Self.cardPath)
+        XCTAssertTrue(card.contains("provider: console.outageProvider"),
+                      "the card stopped asking for the session's own provider")
+        XCTAssertFalse(card.contains("provider: console.provider"),
+                       "the card is reading the field the composer's pending pick rewrites")
+        let accessor = try section(try source(Self.consolePath),
+                                   from: "var outageProvider: String {",
+                                   to: "func refreshRetryState()")
+        XCTAssertTrue(accessor.contains("worktree.detail?.provider"),
+                      "the session's provider is not read off the detail the server answered with")
+    }
+
     /// The card does not decide from the window it happens to hold.
     ///
     /// `lastUserMessageText` reads the transcript this client loaded — its newest 200 events. That
@@ -256,8 +296,13 @@ final class RetrySendWiringTests: XCTestCase {
 
         let resend = try section(console, from: "private func resendFromSession() async {",
                                  to: "// MARK: auto-retry")
-        XCTAssertTrue(resend.contains("try await api.resendRetryMessage(sessionID: sessionID)"),
+        XCTAssertTrue(resend.contains("try await api.resendRetryMessage(sessionID: sessionID,"),
                       "the server's re-send is what the route promises")
+        // …carrying what the composer has picked. Without it the button re-sends on the provider the
+        // session is already on, which on 2026-10-05 made "choose the pool, press Retry" run on the
+        // account the person was trying to leave.
+        XCTAssertTrue(resend.contains("provider: pendingResumeProvider"),
+                      "the pick the composer had was dropped on its way to the server's re-send")
         XCTAssertFalse(resend.contains("send(overrideText:"))
         XCTAssertFalse(resend.contains("postTurn("), "the re-send reached the owner's turn door")
         XCTAssertFalse(resend.contains("composerText ="), "the re-send went through the composer")

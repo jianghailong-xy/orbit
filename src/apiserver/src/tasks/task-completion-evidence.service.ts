@@ -16,6 +16,7 @@ import {
   EvidenceDecisionValue,
   assertCriterionUnmoved,
   assertCurrentEvidenceRevision,
+  assertDecidingSessionInTaskProject,
   assertIndependentDecidingSession,
   decisionNote,
 } from './task-evidence-decision';
@@ -661,9 +662,10 @@ export class TaskCompletionEvidenceService {
    * SEND_BACK writes its row and its note and nothing else; the task is untouched, so it stays
    * OPEN waiting for the next revision — the absence of a write is the whole of "keep going".
    *
-   * The four checks run in the order authority, subject, standard: may this caller answer at all,
-   * is it answering the version that is actually open, and is the standard it is answering still
-   * the one stated. A refusal at any of them writes nothing.
+   * The four checks run in the order authority, subject, standard: may this caller answer at all
+   * (independent of the work, and acting for the project the task is in), is it answering the
+   * version that is actually open, and is the standard it is answering still the one stated. A
+   * refusal at any of them writes nothing.
    */
   async decide(
     ownerId: string,
@@ -720,6 +722,9 @@ export class TaskCompletionEvidenceService {
       if (!(await ownerDecidesInTheRun(tx, { ownerId, taskId }, decidingSession.id, ownerInTheApp))) {
         await assertIndependentDecidingSession(tx, { ownerId, taskId }, decidingSession);
       }
+      // And it acts for the project the task is in NOW: a confirmed move takes the undecided
+      // evidence with the task, and the project it left decides it no more.
+      await assertDecidingSessionInTaskProject(tx, { ownerId, projectId: task.projectId }, decidingSession);
 
       const latest = await tx.taskCompletionEvidence.findFirst({
         where: { taskId },
@@ -806,7 +811,10 @@ export class TaskCompletionEvidenceService {
       // transaction that wrote the DONE, so the fact and the queueing commit together
       // (docs/project-integration-line-contract.md §2.3 J-T1a).
       if (settled && completed === TaskStatus.DONE) {
-        await enqueueForDoneTask(tx, ownerId, taskId);
+        await enqueueForDoneTask(tx, ownerId, taskId,
+          actor.type === CreatorType.USER
+            ? { userId: actor.id }
+            : { sessionId: decidingSession.id });
       }
       return { decision: decisionResponse(written), completed: settled };
     }, loggedRetry(this.logger, 'taskCompletionEvidence.decide'));

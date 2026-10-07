@@ -1,0 +1,36 @@
+{
+  "taskId": "34Za394q2ZEgr7TKprjkF",
+  "status": "DONE",
+  "adoptedDelivery": "d71afc686760eb4a37c84822bf1ea478dbe8fcf1",
+  "webTree": "efeb783da7d7292f845b29b83fa891652ac3d7e5",
+  "integration": {
+    "state": "CONFLICT",
+    "since": "2026-10-04T12:44:18.107Z",
+    "handler": "COORDINATOR",
+    "openItemId": "34a4vmyncNXIaoRhKZvoZ",
+    "jobId": "7jnGs3TRFXE6EvTE1UmToQ",
+    "checksRunningForMs": null,
+    "landTask": {
+      "jobId": "7jnGs3TRFXE6EvTE1UmToQ",
+      "state": "CONFLICT",
+      "phase": "MAIN_SYNC",
+      "generation": "3",
+      "queuedAt": "2026-10-04T12:43:30.991Z",
+      "startedAt": "2026-10-04T12:44:08.211Z",
+      "heartbeatAt": "2026-10-04T12:44:18.092Z",
+      "finishedAt": "2026-10-04T12:44:18.092Z",
+      "targetRef": "refs/heads/project/34ZZeq0e3IR65GVm2kAs7",
+      "waitMs": 37220,
+      "blockingReason": {
+        "code": "CONFLICT",
+        "summary": "Stopped at a conflict: upstream could not be merged into the target branch (2 conflicting files)"
+      },
+      "jobPublicId": "7jnGs3TRFXE6EvTE1UmToQ"
+    },
+    "openItemPublicId": "34a4vmyncNXIaoRhKZvoZ",
+    "jobPublicId": "7jnGs3TRFXE6EvTE1UmToQ"
+  },
+  "actualLandedProjectTip": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+  "source": "task_get and git ls-remote after coordination handoff",
+  "decision": "Do not cherry-pick unlanded delivery; retain untouched public components/configuration and let platform combine after this toast conflict repair."
+}

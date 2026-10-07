@@ -1,0 +1,37 @@
+{
+  "motion": "reduce",
+  "geometry": {
+    "box": {
+      "x": 602,
+      "y": 244,
+      "width": 81.359375,
+      "height": 104,
+      "top": 244,
+      "right": 683.359375,
+      "bottom": 348,
+      "left": 602
+    },
+    "inPopover": true,
+    "inDialog": true,
+    "cornersHitPopup": true,
+    "animationName": "none"
+  },
+  "selectExit": [
+    {
+      "connected": true,
+      "opacity": 1,
+      "pointerEvents": "none",
+      "visible": true
+    }
+  ],
+  "popoverExit": [
+    {
+      "connected": true,
+      "opacity": 1,
+      "pointerEvents": "none",
+      "visible": true
+    }
+  ],
+  "focusReturned": true,
+  "scrollUnlocked": true
+}

@@ -1,0 +1,63 @@
+{
+  "node": "v26.10.0",
+  "npm": "11.19.1",
+  "dependencyPaths": {
+    "node_modules": {
+      "symlink": false,
+      "realpath": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/node_modules",
+      "exists": true
+    },
+    "src/node_modules": {
+      "symlink": false,
+      "realpath": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/node_modules",
+      "exists": true
+    },
+    "src/web/node_modules": {
+      "symlink": false,
+      "realpath": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/node_modules",
+      "exists": true
+    },
+    "node_modules/@orbit/shared": {
+      "symlink": true,
+      "realpath": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/shared",
+      "exists": true
+    },
+    "node_modules/.prisma": {
+      "symlink": false,
+      "realpath": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/node_modules/.prisma",
+      "exists": false
+    },
+    "node_modules/.vite": {
+      "symlink": false,
+      "realpath": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/node_modules/.vite",
+      "exists": false
+    },
+    "node_modules/.vite-temp": {
+      "symlink": false,
+      "realpath": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/node_modules/.vite-temp",
+      "exists": false
+    },
+    "src/apiserver/node_modules/.prisma": {
+      "symlink": false,
+      "realpath": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/apiserver/node_modules/.prisma",
+      "exists": true
+    },
+    "src/web/node_modules/.vite": {
+      "symlink": false,
+      "realpath": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/node_modules/.vite",
+      "exists": true
+    },
+    "src/web/node_modules/.vite-temp": {
+      "symlink": false,
+      "realpath": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/node_modules/.vite-temp",
+      "exists": true
+    }
+  },
+  "lockfileSha256": "1cbd66c8623d8d7fbd9499ed7607efba173bb578ff0877eda2c7dc12feff7836",
+  "reusedCoordinatorR2Archive": {
+    "path": "/root/.orbit/uploads/01a1023e-9bb2-75b0-8a60-7d4b29ba57ed/p22-r2-coordinator-review.zip",
+    "sha256": "a9650aafe26a94d46df16bc8632b4f685dd0aa5b3e7680bd177b913a8cbfd950",
+    "bytes": 6441309,
+    "notRerun": true
+  }
+}

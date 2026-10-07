@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import io.orbitd.android.auth.AuthScreen
 import io.orbitd.android.auth.AuthViewModel
+import io.orbitd.android.auth.openInSignInBrowser
 import io.orbitd.android.core.BuildIdentity
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.reader.SessionReader
@@ -45,24 +46,34 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 
 class MainActivity : ComponentActivity() {
+    private lateinit var auth: AuthViewModel
     private var incoming by mutableStateOf<Pair<Long, String>?>(null)
     private var linkSequence = 0L
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        auth = ViewModelProvider(this, ViewModelProvider.AndroidViewModelFactory(application))[AuthViewModel::class.java]
+        // A recreated activity's intent was handled when it first arrived.
         if (savedInstanceState == null) acceptIntent(intent)
-        val auth = ViewModelProvider(this, ViewModelProvider.AndroidViewModelFactory(application))[AuthViewModel::class.java]
-        setContent { OrbitTheme { OrbitShell(auth, application as OrbitApplication, incoming) } }
+        setContent {
+            OrbitTheme {
+                OrbitShell(auth, application as OrbitApplication, incoming) { address ->
+                    auth.continueWithGoogle(address) { url -> openInSignInBrowser(this@MainActivity, url) }
+                }
+            }
+        }
     }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); acceptIntent(intent) }
     private fun acceptIntent(intent: Intent) {
+        // `orbit://auth/google`, from GoogleSignInRedirectActivity; any other address is not Google's answer.
+        intent.data?.let { auth.handleGoogleCallback(it.toString()) }
         if (intent.action == Intent.ACTION_VIEW) intent.dataString?.let { incoming = ++linkSequence to it }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pair<Long, String>?) {
+private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pair<Long, String>?, continueWithGoogle: (String) -> Unit) {
     val authState by auth.state.collectAsState()
     val authMessage by auth.message.collectAsState()
     val signedIn = authState as? AuthState.SignedIn
@@ -98,7 +109,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                 if (showBuild) BuildInformation { showBuild = false } else Column(
                     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineLarge)
-                    AuthScreen(authState, authMessage, auth::login, auth::logout)
+                    AuthScreen(authState, authMessage, auth::login, auth::logout, auth::signInMethods, continueWithGoogle)
                     Button(onClick = { showBuild = true }) { Text(stringResource(R.string.build_information)) }
                 }
             }
@@ -190,7 +201,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.TASKS, Destination.TASK, Destination.LIST -> TasksScreen(app, signedIn.handle, route, revision, ::open) { navigation = navigation.back() }
                                 Destination.PROJECTS, Destination.PROJECT -> ProjectsScreen(app, signedIn.handle, route, revision, ::open) { navigation = navigation.back() }
                                 Destination.SETTINGS -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    AuthScreen(authState, authMessage, auth::login, auth::logout)
+                                    AuthScreen(authState, authMessage, auth::login, auth::logout, auth::signInMethods, continueWithGoogle)
                                     Button(onClick = { open(OrbitRoute(Destination.BUILD)) }) { Text("Build information") }
                                 }
                                 Destination.BUILD -> BuildInformation { navigation = navigation.back() }

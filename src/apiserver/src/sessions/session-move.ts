@@ -12,6 +12,7 @@ import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { runAccount } from '../providers/plan-usage-accounts';
 import { makeBranchName } from './naming';
 import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
+import { branchName } from '../projects/project-criterion-landing';
 
 /** What a runner declares when it can take in a session moved from another workspace: it checks an
  *  old checkout's repository and branch before reusing it, and carries a Claude conversation over to
@@ -26,6 +27,7 @@ const RUNTIME_LABEL: Record<AgentProvider, string> = {
   [AgentProvider.KIMI]: 'Kimi',
   [AgentProvider.OPENCODE]: 'OpenCode',
   [AgentProvider.ANTIGRAVITY]: 'Antigravity',
+  [AgentProvider.DSH]: 'DeepSeek Harness',
 };
 
 /** Why a session cannot move at all (§5.2, "会话自身"). */
@@ -95,7 +97,8 @@ export function sessionMoveVerdict(s: SessionMoveFacts): SessionMoveVerdict {
   if (
     s.runtime === AgentProvider.KIMI ||
     s.runtime === AgentProvider.OPENCODE ||
-    s.runtime === AgentProvider.ANTIGRAVITY
+    s.runtime === AgentProvider.ANTIGRAVITY ||
+    s.runtime === AgentProvider.DSH
   ) {
     return refuse(`Moving ${RUNTIME_LABEL[s.runtime]} sessions isn't supported yet.`);
   }
@@ -199,9 +202,19 @@ export function accountsAfterMove(args: {
   session: { provider: string; claudeAccount: string | null; codexAccount: string | null };
   from: { env: unknown; claudeAccount: string | null; codexAccount: string | null } | null;
   runnerEngines: unknown;
-}): { claudeAccount?: string | null; claudeAccountPinned?: boolean; codexAccount?: string | null; codexAccountPinned?: boolean } {
+}): {
+  claudeAccount?: string | null;
+  claudeAccountPinned?: boolean;
+  codexAccount?: string | null;
+  codexAccountPinned?: boolean;
+  antigravityAccount?: string | null;
+  antigravityAccountPinned?: boolean;
+} {
   if (!args.sameRunner) {
-    return { claudeAccount: null, claudeAccountPinned: false, codexAccount: null, codexAccountPinned: false };
+    return {
+      claudeAccount: null, claudeAccountPinned: false, codexAccount: null, codexAccountPinned: false,
+      antigravityAccount: null, antigravityAccountPinned: false,
+    };
   }
   // A configured provider or a pool runs on a credential of its own, not on one of the runner's accounts.
   const { session } = args;
@@ -229,13 +242,16 @@ export function branchIsMerged(session: { branchMerged: boolean | null; mergeSta
   return session.branchMerged ?? session.mergeStatus === 'merged';
 }
 
-/** The branch the session's work merges into: the one picked for it, its workspace's remembered one,
- *  else what the runner auto-detects (main, else master). */
+/** The branch the session's work merges into: the one picked for it, its project's integration line
+ * when it is a code task, its workspace's remembered one, else what the runner auto-detects (main,
+ * else master). */
 export function mergeTargetOf(
   session: { mergeTarget: string | null; mergeTargets: string[] },
   workspaceDefault: string | null | undefined,
+  projectIntegrationRef?: string | null,
 ): string {
   if (session.mergeTarget) return session.mergeTarget;
+  if (projectIntegrationRef) return branchName(projectIntegrationRef);
   if (workspaceDefault) return workspaceDefault;
   return !session.mergeTargets.includes('main') && session.mergeTargets.includes('master') ? 'master' : 'main';
 }

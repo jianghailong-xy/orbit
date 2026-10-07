@@ -5,6 +5,7 @@ import { AgentProvider } from '@orbit/shared';
 import { QueueService } from './queue.service';
 import {
   ANTIGRAVITY_RUNNER_UPGRADE_ERROR,
+  DSH_RUNNER_UPGRADE_ERROR,
   OPENCODE_RUNNER_UPGRADE_ERROR,
 } from '../runner-api/runner-provider-support';
 
@@ -18,6 +19,7 @@ interface Captured {
   /** The value bound for each transaction-local GUC, read off the statement that sets it. */
   claimSetting: unknown;
   antigravitySetting: unknown;
+  dshSetting: unknown;
   settingSql: string;
   sql: string;
   values: unknown[];
@@ -81,6 +83,7 @@ async function capturedClaimCapability(supportedProviders: AgentProvider[]): Pro
     borrowedAntigravityCapability: boundBefore('OR NOT EXISTS ('),
     claimSetting: settingFor('orbit.runner_supports_opencode'),
     antigravitySetting: settingFor('orbit.runner_supports_antigravity'),
+    dshSetting: settingFor('orbit.runner_supports_dsh'),
     settingSql,
     sql,
     values,
@@ -126,12 +129,13 @@ test('a runner that advertises OpenCode but not Antigravity is withheld Antigrav
 
 test('a runner that does not name Antigravity is withheld a Gemini key\'s rows too', async () => {
   // The slug is the configured row's own, so the built-in slug's predicate cannot see it; the job
-  // is an `antigravity` one all the same. Held to the same capability, on the rows dispatch resolves.
+  // is an `antigravity` one all the same. Held to the same capability, on the rows dispatch resolves:
+  // the owner's own, and a shared one only for an admin (usableProviderSql).
   const legacy = await capturedClaimCapability([AgentProvider.CLAUDE, AgentProvider.CODEX, AgentProvider.OPENCODE]);
   assert.equal(legacy.borrowedAntigravityCapability, false);
   assert.match(
     legacy.sql,
-    /OR NOT EXISTS \(\s*SELECT 1 FROM "model_provider" mp\s+WHERE mp\."slug" = s\.provider\s+AND mp\."runtime" = 'antigravity'\s+AND mp\."enabled"\s+AND \(mp\."owner_id" IS NULL OR mp\."owner_id" = s\."owner_id"\)/,
+    /OR NOT EXISTS \(\s*SELECT 1 FROM "model_provider" mp\s+WHERE mp\."slug" = s\.provider\s+AND mp\."runtime" = 'antigravity'\s+AND NOT \(s.provider = 'dsh' AND s\."provider_builtin"\)\s+AND mp\."enabled"\s+AND \(mp\."owner_id" = s\."owner_id" OR \(mp\."owner_id" IS NULL AND EXISTS \(\s*SELECT 1 FROM "user" u WHERE u\."id" = s\."owner_id" AND u\."role" = 'ADMIN'\)\)\)/,
   );
   const current = await capturedClaimCapability([
     AgentProvider.CLAUDE,
@@ -160,4 +164,15 @@ test('a claim clears the upgrade notice of every runtime gate it just passed', a
   assert.match(captured.sql, /error = CASE\s+WHEN error IN \(/);
   assert.ok(captured.values.includes(OPENCODE_RUNNER_UPGRADE_ERROR));
   assert.ok(captured.values.includes(ANTIGRAVITY_RUNNER_UPGRADE_ERROR));
+});
+
+test('P1b dsh queue negotiates transaction gate and clears upgrade notices', async () => {
+  const legacy = await capturedClaimCapability([AgentProvider.CLAUDE]);
+  const current = await capturedClaimCapability([AgentProvider.DSH]);
+  assert.equal(legacy.dshSetting, '0');
+  assert.equal(current.dshSetting, '1');
+  assert.match(current.sql, /'provider:dsh' = ANY\(r.capabilities\)/);
+  assert.match(current.sql, /r\."capabilities_reported_at" IS NOT NULL/);
+  assert.match(current.sql, /s.provider = 'dsh' AND s\."provider_builtin"/);
+  assert.ok(current.values.includes(DSH_RUNNER_UPGRADE_ERROR));
 });

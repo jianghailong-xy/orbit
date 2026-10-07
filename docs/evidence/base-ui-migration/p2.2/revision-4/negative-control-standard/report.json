@@ -1,0 +1,925 @@
+{
+  "config": {
+    "argv": [
+      "/usr/local/bin/node",
+      "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/node_modules/@playwright/test/cli.js",
+      "test",
+      "--config",
+      "docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.config.mjs"
+    ],
+    "configFile": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.config.mjs",
+    "rootDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/environment.mjs",
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-light-desktop",
+        "name": "chromium-light-desktop",
+        "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+        "testIgnore": [],
+        "testMatch": [
+          "scroll-negative-control-standard.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-light-phone",
+        "name": "chromium-light-phone",
+        "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+        "testIgnore": [],
+        "testMatch": [
+          "scroll-negative-control-standard.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-dark-desktop",
+        "name": "chromium-dark-desktop",
+        "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+        "testIgnore": [],
+        "testMatch": [
+          "scroll-negative-control-standard.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-dark-phone",
+        "name": "chromium-dark-phone",
+        "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+        "testIgnore": [],
+        "testMatch": [
+          "scroll-negative-control-standard.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-light-desktop",
+        "name": "webkit-light-desktop",
+        "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+        "testIgnore": [],
+        "testMatch": [
+          "scroll-negative-control-standard.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-light-phone",
+        "name": "webkit-light-phone",
+        "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+        "testIgnore": [],
+        "testMatch": [
+          "scroll-negative-control-standard.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-dark-desktop",
+        "name": "webkit-dark-desktop",
+        "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+        "testIgnore": [],
+        "testMatch": [
+          "scroll-negative-control-standard.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-dark-phone",
+        "name": "webkit-dark-phone",
+        "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+        "testIgnore": [],
+        "testMatch": [
+          "scroll-negative-control-standard.browser.mjs"
+        ],
+        "timeout": 90000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/report.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "none",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": {
+      "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+      "cwd": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/",
+      "url": "http://127.0.0.1:4177",
+      "reuseExistingServer": false,
+      "timeout": 30000
+    }
+  },
+  "suites": [
+    {
+      "title": "scroll-negative-control-standard.browser.mjs",
+      "file": "scroll-negative-control-standard.browser.mjs",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "observer rejects retained scroll lock",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-desktop",
+              "projectName": "chromium-light-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 497,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T11:54:27.834Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "rejected-unlock",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMTAwLAogICJ1bmxvY2tlZEFmdGVyTXMiOiBudWxsLAogICJmaXJzdFJlYWQiOiB7CiAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICJhZnRlckVzY2FwZU1zIjogMy43OTk5OTk5ODIxMTg2MDY2LAogICAgIm92ZXJmbG93IjogWwogICAgICAiaGlkZGVuIiwKICAgICAgImhpZGRlbiIKICAgIF0sCiAgICAibG9ja2VkIjogdHJ1ZQogIH0sCiAgImZpbmFsUmVhZCI6IHsKICAgICJwaGFzZSI6ICJmaW5hbC1yZWFkIiwKICAgICJhZnRlckVzY2FwZU1zIjogMTAwLjUsCiAgICAib3ZlcmZsb3ciOiBbCiAgICAgICJoaWRkZW4iLAogICAgICAiaGlkZGVuIgogICAgXSwKICAgICJsb2NrZWQiOiB0cnVlCiAgfSwKICAic2FtcGxlcyI6IFsKICAgIHsKICAgICAgInBoYXNlIjogImZpbmFsLWVzY2FwZSIsCiAgICAgICJhZnRlckVzY2FwZU1zIjogMC4wOTk5OTk5OTQwMzk1MzU1MiwKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9LAogICAgewogICAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiAzLjc5OTk5OTk4MjExODYwNjYsCiAgICAgICJvdmVyZmxvdyI6IFsKICAgICAgICAiaGlkZGVuIiwKICAgICAgICAiaGlkZGVuIgogICAgICBdLAogICAgICAibG9ja2VkIjogdHJ1ZQogICAgfSwKICAgIHsKICAgICAgInBoYXNlIjogImRlYWRsaW5lIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiAxMDAuNSwKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9LAogICAgewogICAgICAicGhhc2UiOiAiZmluYWwtcmVhZCIsCiAgICAgICJhZnRlckVzY2FwZU1zIjogMTAwLjUsCiAgICAgICJvdmVyZmxvdyI6IFsKICAgICAgICAiaGlkZGVuIiwKICAgICAgICAiaGlkZGVuIgogICAgICBdLAogICAgICAibG9ja2VkIjogdHJ1ZQogICAgfQogIF0KfQ=="
+                    },
+                    {
+                      "name": "blocked-scroll",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMjUwLAogICJiZWZvcmUiOiAwLAogICJhZnRlciI6IDAsCiAgInNjcm9sbEhlaWdodCI6IDMwMjEsCiAgInZpZXdwb3J0SGVpZ2h0IjogOTAwLAogICJpbnB1dCI6IHsKICAgICJraW5kIjogIndoZWVsIiwKICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICJhZnRlclN0YXJ0TXMiOiAzNi41CiAgfSwKICAibW92ZWRBZnRlck1zIjogbnVsbAp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "4c47633a191d615bfb7a-674151f6f86a7bb07a3b",
+          "file": "scroll-negative-control-standard.browser.mjs",
+          "line": 6,
+          "column": 42
+        },
+        {
+          "title": "observer rejects late scroll lock",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-desktop",
+              "projectName": "chromium-light-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 345,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T11:54:28.527Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "rejected-unlock",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMTAwLAogICJ1bmxvY2tlZEFmdGVyTXMiOiBudWxsLAogICJmaXJzdFJlYWQiOiB7CiAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICJhZnRlckVzY2FwZU1zIjogMS4xOTk5OTk5ODgwNzkwNzEsCiAgICAib3ZlcmZsb3ciOiBbCiAgICAgICJoaWRkZW4iLAogICAgICAiaGlkZGVuIgogICAgXSwKICAgICJsb2NrZWQiOiB0cnVlCiAgfSwKICAiZmluYWxSZWFkIjogewogICAgInBoYXNlIjogImZpbmFsLXJlYWQiLAogICAgImFmdGVyRXNjYXBlTXMiOiAxMDAuMzAwMDAwMDExOTIwOTMsCiAgICAib3ZlcmZsb3ciOiBbCiAgICAgICJoaWRkZW4iLAogICAgICAiaGlkZGVuIgogICAgXSwKICAgICJsb2NrZWQiOiB0cnVlCiAgfSwKICAic2FtcGxlcyI6IFsKICAgIHsKICAgICAgInBoYXNlIjogImZpbmFsLWVzY2FwZSIsCiAgICAgICJhZnRlckVzY2FwZU1zIjogMCwKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9LAogICAgewogICAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiAxLjE5OTk5OTk4ODA3OTA3MSwKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9LAogICAgewogICAgICAicGhhc2UiOiAiZGVhZGxpbmUiLAogICAgICAiYWZ0ZXJFc2NhcGVNcyI6IDEwMC4zMDAwMDAwMTE5MjA5MywKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9LAogICAgewogICAgICAicGhhc2UiOiAiZmluYWwtcmVhZCIsCiAgICAgICJhZnRlckVzY2FwZU1zIjogMTAwLjMwMDAwMDAxMTkyMDkzLAogICAgICAib3ZlcmZsb3ciOiBbCiAgICAgICAgImhpZGRlbiIsCiAgICAgICAgImhpZGRlbiIKICAgICAgXSwKICAgICAgImxvY2tlZCI6IHRydWUKICAgIH0KICBdCn0="
+                    },
+                    {
+                      "name": "late-release",
+                      "contentType": "application/json",
+                      "body": "eyJhY3R1YWxSZWxlYXNlQWZ0ZXJNcyI6MTUwLjQwMDAwMDAwNTk2MDQ2fQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "4c47633a191d615bfb7a-3ab37c718c6db0925fa8",
+          "file": "scroll-negative-control-standard.browser.mjs",
+          "line": 6,
+          "column": 42
+        },
+        {
+          "title": "observer rejects retained scroll lock",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 443,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T11:54:29.175Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "rejected-unlock",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMTAwLAogICJ1bmxvY2tlZEFmdGVyTXMiOiBudWxsLAogICJmaXJzdFJlYWQiOiB7CiAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICJhZnRlckVzY2FwZU1zIjogMS43MDAwMDAwMTc4ODEzOTM0LAogICAgIm92ZXJmbG93IjogWwogICAgICAiaGlkZGVuIiwKICAgICAgImhpZGRlbiIKICAgIF0sCiAgICAibG9ja2VkIjogdHJ1ZQogIH0sCiAgImZpbmFsUmVhZCI6IHsKICAgICJwaGFzZSI6ICJmaW5hbC1yZWFkIiwKICAgICJhZnRlckVzY2FwZU1zIjogMTAwLjMwMDAwMDAxMTkyMDkzLAogICAgIm92ZXJmbG93IjogWwogICAgICAiaGlkZGVuIiwKICAgICAgImhpZGRlbiIKICAgIF0sCiAgICAibG9ja2VkIjogdHJ1ZQogIH0sCiAgInNhbXBsZXMiOiBbCiAgICB7CiAgICAgICJwaGFzZSI6ICJmaW5hbC1lc2NhcGUiLAogICAgICAiYWZ0ZXJFc2NhcGVNcyI6IDAuMDk5OTk5OTk0MDM5NTM1NTIsCiAgICAgICJvdmVyZmxvdyI6IFsKICAgICAgICAiaGlkZGVuIiwKICAgICAgICAiaGlkZGVuIgogICAgICBdLAogICAgICAibG9ja2VkIjogdHJ1ZQogICAgfSwKICAgIHsKICAgICAgInBoYXNlIjogImZpcnN0LXJlYWQtYWZ0ZXItaGlkZGVuLWFuZC1mb2N1cyIsCiAgICAgICJhZnRlckVzY2FwZU1zIjogMS43MDAwMDAwMTc4ODEzOTM0LAogICAgICAib3ZlcmZsb3ciOiBbCiAgICAgICAgImhpZGRlbiIsCiAgICAgICAgImhpZGRlbiIKICAgICAgXSwKICAgICAgImxvY2tlZCI6IHRydWUKICAgIH0sCiAgICB7CiAgICAgICJwaGFzZSI6ICJkZWFkbGluZSIsCiAgICAgICJhZnRlckVzY2FwZU1zIjogMTAwLjMwMDAwMDAxMTkyMDkzLAogICAgICAib3ZlcmZsb3ciOiBbCiAgICAgICAgImhpZGRlbiIsCiAgICAgICAgImhpZGRlbiIKICAgICAgXSwKICAgICAgImxvY2tlZCI6IHRydWUKICAgIH0sCiAgICB7CiAgICAgICJwaGFzZSI6ICJmaW5hbC1yZWFkIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiAxMDAuMzAwMDAwMDExOTIwOTMsCiAgICAgICJvdmVyZmxvdyI6IFsKICAgICAgICAiaGlkZGVuIiwKICAgICAgICAiaGlkZGVuIgogICAgICBdLAogICAgICAibG9ja2VkIjogdHJ1ZQogICAgfQogIF0KfQ=="
+                    },
+                    {
+                      "name": "blocked-scroll",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMjUwLAogICJiZWZvcmUiOiAwLAogICJhZnRlciI6IDAsCiAgInNjcm9sbEhlaWdodCI6IDMwMjEsCiAgInZpZXdwb3J0SGVpZ2h0IjogMjEyMSwKICAiaW5wdXQiOiB7CiAgICAia2luZCI6ICJQYWdlRG93biIsCiAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAiYWZ0ZXJTdGFydE1zIjogOS44MDAwMDAwMTE5MjA5MjkKICB9LAogICJtb3ZlZEFmdGVyTXMiOiBudWxsCn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "4c47633a191d615bfb7a-fddf424a142e855b2e64",
+          "file": "scroll-negative-control-standard.browser.mjs",
+          "line": 6,
+          "column": 42
+        },
+        {
+          "title": "observer rejects late scroll lock",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-phone",
+              "projectName": "chromium-light-phone",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 248,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T11:54:29.691Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "rejected-unlock",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMTAwLAogICJ1bmxvY2tlZEFmdGVyTXMiOiBudWxsLAogICJmaXJzdFJlYWQiOiB7CiAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICJhZnRlckVzY2FwZU1zIjogMS4wOTk5OTk5OTQwMzk1MzU1LAogICAgIm92ZXJmbG93IjogWwogICAgICAiaGlkZGVuIiwKICAgICAgImhpZGRlbiIKICAgIF0sCiAgICAibG9ja2VkIjogdHJ1ZQogIH0sCiAgImZpbmFsUmVhZCI6IHsKICAgICJwaGFzZSI6ICJmaW5hbC1yZWFkIiwKICAgICJhZnRlckVzY2FwZU1zIjogMTAwLjUsCiAgICAib3ZlcmZsb3ciOiBbCiAgICAgICJoaWRkZW4iLAogICAgICAiaGlkZGVuIgogICAgXSwKICAgICJsb2NrZWQiOiB0cnVlCiAgfSwKICAic2FtcGxlcyI6IFsKICAgIHsKICAgICAgInBoYXNlIjogImZpbmFsLWVzY2FwZSIsCiAgICAgICJhZnRlckVzY2FwZU1zIjogMC4wOTk5OTk5OTQwMzk1MzU1MiwKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9LAogICAgewogICAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiAxLjA5OTk5OTk5NDAzOTUzNTUsCiAgICAgICJvdmVyZmxvdyI6IFsKICAgICAgICAiaGlkZGVuIiwKICAgICAgICAiaGlkZGVuIgogICAgICBdLAogICAgICAibG9ja2VkIjogdHJ1ZQogICAgfSwKICAgIHsKICAgICAgInBoYXNlIjogImRlYWRsaW5lIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiAxMDAuNSwKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9LAogICAgewogICAgICAicGhhc2UiOiAiZmluYWwtcmVhZCIsCiAgICAgICJhZnRlckVzY2FwZU1zIjogMTAwLjUsCiAgICAgICJvdmVyZmxvdyI6IFsKICAgICAgICAiaGlkZGVuIiwKICAgICAgICAiaGlkZGVuIgogICAgICBdLAogICAgICAibG9ja2VkIjogdHJ1ZQogICAgfQogIF0KfQ=="
+                    },
+                    {
+                      "name": "late-release",
+                      "contentType": "application/json",
+                      "body": "eyJhY3R1YWxSZWxlYXNlQWZ0ZXJNcyI6MTUwLjU5OTk5OTk5NDAzOTU0fQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "4c47633a191d615bfb7a-5c1850f005da5a7dd89c",
+          "file": "scroll-negative-control-standard.browser.mjs",
+          "line": 6,
+          "column": 42
+        },
+        {
+          "title": "observer rejects retained scroll lock",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 501,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T11:54:30.156Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "rejected-unlock",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMTAwLAogICJ1bmxvY2tlZEFmdGVyTXMiOiBudWxsLAogICJmaXJzdFJlYWQiOiB7CiAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICJhZnRlckVzY2FwZU1zIjogMS45MDAwMDAwMDU5NjA0NjQ1LAogICAgIm92ZXJmbG93IjogWwogICAgICAiaGlkZGVuIiwKICAgICAgImhpZGRlbiIKICAgIF0sCiAgICAibG9ja2VkIjogdHJ1ZQogIH0sCiAgImZpbmFsUmVhZCI6IHsKICAgICJwaGFzZSI6ICJmaW5hbC1yZWFkIiwKICAgICJhZnRlckVzY2FwZU1zIjogMTAwLjQwMDAwMDAwNTk2MDQ2LAogICAgIm92ZXJmbG93IjogWwogICAgICAiaGlkZGVuIiwKICAgICAgImhpZGRlbiIKICAgIF0sCiAgICAibG9ja2VkIjogdHJ1ZQogIH0sCiAgInNhbXBsZXMiOiBbCiAgICB7CiAgICAgICJwaGFzZSI6ICJmaW5hbC1lc2NhcGUiLAogICAgICAiYWZ0ZXJFc2NhcGVNcyI6IDAsCiAgICAgICJvdmVyZmxvdyI6IFsKICAgICAgICAiaGlkZGVuIiwKICAgICAgICAiaGlkZGVuIgogICAgICBdLAogICAgICAibG9ja2VkIjogdHJ1ZQogICAgfSwKICAgIHsKICAgICAgInBoYXNlIjogImZpcnN0LXJlYWQtYWZ0ZXItaGlkZGVuLWFuZC1mb2N1cyIsCiAgICAgICJhZnRlckVzY2FwZU1zIjogMS45MDAwMDAwMDU5NjA0NjQ1LAogICAgICAib3ZlcmZsb3ciOiBbCiAgICAgICAgImhpZGRlbiIsCiAgICAgICAgImhpZGRlbiIKICAgICAgXSwKICAgICAgImxvY2tlZCI6IHRydWUKICAgIH0sCiAgICB7CiAgICAgICJwaGFzZSI6ICJkZWFkbGluZSIsCiAgICAgICJhZnRlckVzY2FwZU1zIjogMTAwLjMwMDAwMDAxMTkyMDkzLAogICAgICAib3ZlcmZsb3ciOiBbCiAgICAgICAgImhpZGRlbiIsCiAgICAgICAgImhpZGRlbiIKICAgICAgXSwKICAgICAgImxvY2tlZCI6IHRydWUKICAgIH0sCiAgICB7CiAgICAgICJwaGFzZSI6ICJmaW5hbC1yZWFkIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiAxMDAuNDAwMDAwMDA1OTYwNDYsCiAgICAgICJvdmVyZmxvdyI6IFsKICAgICAgICAiaGlkZGVuIiwKICAgICAgICAiaGlkZGVuIgogICAgICBdLAogICAgICAibG9ja2VkIjogdHJ1ZQogICAgfQogIF0KfQ=="
+                    },
+                    {
+                      "name": "blocked-scroll",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMjUwLAogICJiZWZvcmUiOiAwLAogICJhZnRlciI6IDAsCiAgInNjcm9sbEhlaWdodCI6IDMwMjEsCiAgInZpZXdwb3J0SGVpZ2h0IjogOTAwLAogICJpbnB1dCI6IHsKICAgICJraW5kIjogIndoZWVsIiwKICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICJhZnRlclN0YXJ0TXMiOiAyOS40MDAwMDAwMDU5NjA0NjQKICB9LAogICJtb3ZlZEFmdGVyTXMiOiBudWxsCn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "4c47633a191d615bfb7a-11858df19d5f6357bdd4",
+          "file": "scroll-negative-control-standard.browser.mjs",
+          "line": 6,
+          "column": 42
+        },
+        {
+          "title": "observer rejects late scroll lock",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-desktop",
+              "projectName": "chromium-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 344,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T11:54:30.714Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "rejected-unlock",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMTAwLAogICJ1bmxvY2tlZEFmdGVyTXMiOiBudWxsLAogICJmaXJzdFJlYWQiOiB7CiAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICJhZnRlckVzY2FwZU1zIjogMTUuNDAwMDAwMDA1OTYwNDY0LAogICAgIm92ZXJmbG93IjogWwogICAgICAiaGlkZGVuIiwKICAgICAgImhpZGRlbiIKICAgIF0sCiAgICAibG9ja2VkIjogdHJ1ZQogIH0sCiAgImZpbmFsUmVhZCI6IHsKICAgICJwaGFzZSI6ICJmaW5hbC1yZWFkIiwKICAgICJhZnRlckVzY2FwZU1zIjogMTAwLjcwMDAwMDAxNzg4MTQsCiAgICAib3ZlcmZsb3ciOiBbCiAgICAgICJoaWRkZW4iLAogICAgICAiaGlkZGVuIgogICAgXSwKICAgICJsb2NrZWQiOiB0cnVlCiAgfSwKICAic2FtcGxlcyI6IFsKICAgIHsKICAgICAgInBoYXNlIjogImZpbmFsLWVzY2FwZSIsCiAgICAgICJhZnRlckVzY2FwZU1zIjogMC4yMDAwMDAwMTc4ODEzOTM0MywKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9LAogICAgewogICAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiAxNS40MDAwMDAwMDU5NjA0NjQsCiAgICAgICJvdmVyZmxvdyI6IFsKICAgICAgICAiaGlkZGVuIiwKICAgICAgICAiaGlkZGVuIgogICAgICBdLAogICAgICAibG9ja2VkIjogdHJ1ZQogICAgfSwKICAgIHsKICAgICAgInBoYXNlIjogImRlYWRsaW5lIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiAxMDAuNzAwMDAwMDE3ODgxNCwKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9LAogICAgewogICAgICAicGhhc2UiOiAiZmluYWwtcmVhZCIsCiAgICAgICJhZnRlckVzY2FwZU1zIjogMTAwLjcwMDAwMDAxNzg4MTQsCiAgICAgICJvdmVyZmxvdyI6IFsKICAgICAgICAiaGlkZGVuIiwKICAgICAgICAiaGlkZGVuIgogICAgICBdLAogICAgICAibG9ja2VkIjogdHJ1ZQogICAgfQogIF0KfQ=="
+                    },
+                    {
+                      "name": "late-release",
+                      "contentType": "application/json",
+                      "body": "eyJhY3R1YWxSZWxlYXNlQWZ0ZXJNcyI6MTUwLjgwMDAwMDAxMTkyMDkzfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "4c47633a191d615bfb7a-51df1e61b6454379cd65",
+          "file": "scroll-negative-control-standard.browser.mjs",
+          "line": 6,
+          "column": 42
+        },
+        {
+          "title": "observer rejects retained scroll lock",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-phone",
+              "projectName": "chromium-dark-phone",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 597,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T11:54:31.604Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "rejected-unlock",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMTAwLAogICJ1bmxvY2tlZEFmdGVyTXMiOiBudWxsLAogICJmaXJzdFJlYWQiOiB7CiAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICJhZnRlckVzY2FwZU1zIjogNy40MDAwMDAwMDU5NjA0NjQ1LAogICAgIm92ZXJmbG93IjogWwogICAgICAiaGlkZGVuIiwKICAgICAgImhpZGRlbiIKICAgIF0sCiAgICAibG9ja2VkIjogdHJ1ZQogIH0sCiAgImZpbmFsUmVhZCI6IHsKICAgICJwaGFzZSI6ICJmaW5hbC1yZWFkIiwKICAgICJhZnRlckVzY2FwZU1zIjogMTAwLjQwMDAwMDAwNTk2MDQ2LAogICAgIm92ZXJmbG93IjogWwogICAgICAiaGlkZGVuIiwKICAgICAgImhpZGRlbiIKICAgIF0sCiAgICAibG9ja2VkIjogdHJ1ZQogIH0sCiAgInNhbXBsZXMiOiBbCiAgICB7CiAgICAgICJwaGFzZSI6ICJmaW5hbC1lc2NhcGUiLAogICAgICAiYWZ0ZXJFc2NhcGVNcyI6IDAuMDk5OTk5OTk0MDM5NTM1NTIsCiAgICAgICJvdmVyZmxvdyI6IFsKICAgICAgICAiaGlkZGVuIiwKICAgICAgICAiaGlkZGVuIgogICAgICBdLAogICAgICAibG9ja2VkIjogdHJ1ZQogICAgfSwKICAgIHsKICAgICAgInBoYXNlIjogImZpcnN0LXJlYWQtYWZ0ZXItaGlkZGVuLWFuZC1mb2N1cyIsCiAgICAgICJhZnRlckVzY2FwZU1zIjogNy40MDAwMDAwMDU5NjA0NjQ1LAogICAgICAib3ZlcmZsb3ciOiBbCiAgICAgICAgImhpZGRlbiIsCiAgICAgICAgImhpZGRlbiIKICAgICAgXSwKICAgICAgImxvY2tlZCI6IHRydWUKICAgIH0sCiAgICB7CiAgICAgICJwaGFzZSI6ICJkZWFkbGluZSIsCiAgICAgICJhZnRlckVzY2FwZU1zIjogMTAwLjMwMDAwMDAxMTkyMDkzLAogICAgICAib3ZlcmZsb3ciOiBbCiAgICAgICAgImhpZGRlbiIsCiAgICAgICAgImhpZGRlbiIKICAgICAgXSwKICAgICAgImxvY2tlZCI6IHRydWUKICAgIH0sCiAgICB7CiAgICAgICJwaGFzZSI6ICJmaW5hbC1yZWFkIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiAxMDAuNDAwMDAwMDA1OTYwNDYsCiAgICAgICJvdmVyZmxvdyI6IFsKICAgICAgICAiaGlkZGVuIiwKICAgICAgICAiaGlkZGVuIgogICAgICBdLAogICAgICAibG9ja2VkIjogdHJ1ZQogICAgfQogIF0KfQ=="
+                    },
+                    {
+                      "name": "blocked-scroll",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMjUwLAogICJiZWZvcmUiOiAwLAogICJhZnRlciI6IDAsCiAgInNjcm9sbEhlaWdodCI6IDMwMjEsCiAgInZpZXdwb3J0SGVpZ2h0IjogMjEyMSwKICAiaW5wdXQiOiB7CiAgICAia2luZCI6ICJQYWdlRG93biIsCiAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAiYWZ0ZXJTdGFydE1zIjogMy4xMDAwMDAwMjM4NDE4NTgKICB9LAogICJtb3ZlZEFmdGVyTXMiOiBudWxsCn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "4c47633a191d615bfb7a-6d2e402d68f94ad4b195",
+          "file": "scroll-negative-control-standard.browser.mjs",
+          "line": 6,
+          "column": 42
+        },
+        {
+          "title": "observer rejects late scroll lock",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-dark-phone",
+              "projectName": "chromium-dark-phone",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 308,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T11:54:32.342Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "rejected-unlock",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMTAwLAogICJ1bmxvY2tlZEFmdGVyTXMiOiBudWxsLAogICJmaXJzdFJlYWQiOiB7CiAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICJhZnRlckVzY2FwZU1zIjogOC4yOTk5OTk5ODIxMTg2MDcsCiAgICAib3ZlcmZsb3ciOiBbCiAgICAgICJoaWRkZW4iLAogICAgICAiaGlkZGVuIgogICAgXSwKICAgICJsb2NrZWQiOiB0cnVlCiAgfSwKICAiZmluYWxSZWFkIjogewogICAgInBoYXNlIjogImZpbmFsLXJlYWQiLAogICAgImFmdGVyRXNjYXBlTXMiOiAxMDEuNDAwMDAwMDA1OTYwNDYsCiAgICAib3ZlcmZsb3ciOiBbCiAgICAgICJoaWRkZW4iLAogICAgICAiaGlkZGVuIgogICAgXSwKICAgICJsb2NrZWQiOiB0cnVlCiAgfSwKICAic2FtcGxlcyI6IFsKICAgIHsKICAgICAgInBoYXNlIjogImZpbmFsLWVzY2FwZSIsCiAgICAgICJhZnRlckVzY2FwZU1zIjogMC4wOTk5OTk5OTQwMzk1MzU1MiwKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9LAogICAgewogICAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiA4LjI5OTk5OTk4MjExODYwNywKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9LAogICAgewogICAgICAicGhhc2UiOiAiZGVhZGxpbmUiLAogICAgICAiYWZ0ZXJFc2NhcGVNcyI6IDEwMS40MDAwMDAwMDU5NjA0NiwKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9LAogICAgewogICAgICAicGhhc2UiOiAiZmluYWwtcmVhZCIsCiAgICAgICJhZnRlckVzY2FwZU1zIjogMTAxLjQwMDAwMDAwNTk2MDQ2LAogICAgICAib3ZlcmZsb3ciOiBbCiAgICAgICAgImhpZGRlbiIsCiAgICAgICAgImhpZGRlbiIKICAgICAgXSwKICAgICAgImxvY2tlZCI6IHRydWUKICAgIH0KICBdCn0="
+                    },
+                    {
+                      "name": "late-release",
+                      "contentType": "application/json",
+                      "body": "eyJhY3R1YWxSZWxlYXNlQWZ0ZXJNcyI6MTUwLjY5OTk5OTk4ODA3OTA3fQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "4c47633a191d615bfb7a-3bc0457fa25c05d893fa",
+          "file": "scroll-negative-control-standard.browser.mjs",
+          "line": 6,
+          "column": 42
+        },
+        {
+          "title": "observer rejects retained scroll lock",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-desktop",
+              "projectName": "webkit-light-desktop",
+              "results": [
+                {
+                  "workerIndex": 4,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1003,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T11:54:33.165Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "rejected-unlock",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMTAwLAogICJ1bmxvY2tlZEFmdGVyTXMiOiBudWxsLAogICJmaXJzdFJlYWQiOiB7CiAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICJhZnRlckVzY2FwZU1zIjogNSwKICAgICJvdmVyZmxvdyI6IFsKICAgICAgImhpZGRlbiIsCiAgICAgICJoaWRkZW4iCiAgICBdLAogICAgImxvY2tlZCI6IHRydWUKICB9LAogICJmaW5hbFJlYWQiOiB7CiAgICAicGhhc2UiOiAiZmluYWwtcmVhZCIsCiAgICAiYWZ0ZXJFc2NhcGVNcyI6IDEwMSwKICAgICJvdmVyZmxvdyI6IFsKICAgICAgImhpZGRlbiIsCiAgICAgICJoaWRkZW4iCiAgICBdLAogICAgImxvY2tlZCI6IHRydWUKICB9LAogICJzYW1wbGVzIjogWwogICAgewogICAgICAicGhhc2UiOiAiZmluYWwtZXNjYXBlIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiAwLAogICAgICAib3ZlcmZsb3ciOiBbCiAgICAgICAgImhpZGRlbiIsCiAgICAgICAgImhpZGRlbiIKICAgICAgXSwKICAgICAgImxvY2tlZCI6IHRydWUKICAgIH0sCiAgICB7CiAgICAgICJwaGFzZSI6ICJmaXJzdC1yZWFkLWFmdGVyLWhpZGRlbi1hbmQtZm9jdXMiLAogICAgICAiYWZ0ZXJFc2NhcGVNcyI6IDUsCiAgICAgICJvdmVyZmxvdyI6IFsKICAgICAgICAiaGlkZGVuIiwKICAgICAgICAiaGlkZGVuIgogICAgICBdLAogICAgICAibG9ja2VkIjogdHJ1ZQogICAgfSwKICAgIHsKICAgICAgInBoYXNlIjogImRlYWRsaW5lIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiAxMDEsCiAgICAgICJvdmVyZmxvdyI6IFsKICAgICAgICAiaGlkZGVuIiwKICAgICAgICAiaGlkZGVuIgogICAgICBdLAogICAgICAibG9ja2VkIjogdHJ1ZQogICAgfSwKICAgIHsKICAgICAgInBoYXNlIjogImZpbmFsLXJlYWQiLAogICAgICAiYWZ0ZXJFc2NhcGVNcyI6IDEwMSwKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9CiAgXQp9"
+                    },
+                    {
+                      "name": "blocked-scroll",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMjUwLAogICJiZWZvcmUiOiAwLAogICJhZnRlciI6IDAsCiAgInNjcm9sbEhlaWdodCI6IDMwMjgsCiAgInZpZXdwb3J0SGVpZ2h0IjogOTAwLAogICJpbnB1dCI6IHsKICAgICJraW5kIjogIndoZWVsIiwKICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICJhZnRlclN0YXJ0TXMiOiAzMAogIH0sCiAgIm1vdmVkQWZ0ZXJNcyI6IG51bGwKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "4c47633a191d615bfb7a-db7333640c061b5fb766",
+          "file": "scroll-negative-control-standard.browser.mjs",
+          "line": 6,
+          "column": 42
+        },
+        {
+          "title": "observer rejects late scroll lock",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-desktop",
+              "projectName": "webkit-light-desktop",
+              "results": [
+                {
+                  "workerIndex": 4,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 673,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T11:54:34.406Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "rejected-unlock",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMTAwLAogICJ1bmxvY2tlZEFmdGVyTXMiOiBudWxsLAogICJmaXJzdFJlYWQiOiB7CiAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICJhZnRlckVzY2FwZU1zIjogOSwKICAgICJvdmVyZmxvdyI6IFsKICAgICAgImhpZGRlbiIsCiAgICAgICJoaWRkZW4iCiAgICBdLAogICAgImxvY2tlZCI6IHRydWUKICB9LAogICJmaW5hbFJlYWQiOiB7CiAgICAicGhhc2UiOiAiZmluYWwtcmVhZCIsCiAgICAiYWZ0ZXJFc2NhcGVNcyI6IDEwMSwKICAgICJvdmVyZmxvdyI6IFsKICAgICAgImhpZGRlbiIsCiAgICAgICJoaWRkZW4iCiAgICBdLAogICAgImxvY2tlZCI6IHRydWUKICB9LAogICJzYW1wbGVzIjogWwogICAgewogICAgICAicGhhc2UiOiAiZmluYWwtZXNjYXBlIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiAxLAogICAgICAib3ZlcmZsb3ciOiBbCiAgICAgICAgImhpZGRlbiIsCiAgICAgICAgImhpZGRlbiIKICAgICAgXSwKICAgICAgImxvY2tlZCI6IHRydWUKICAgIH0sCiAgICB7CiAgICAgICJwaGFzZSI6ICJmaXJzdC1yZWFkLWFmdGVyLWhpZGRlbi1hbmQtZm9jdXMiLAogICAgICAiYWZ0ZXJFc2NhcGVNcyI6IDksCiAgICAgICJvdmVyZmxvdyI6IFsKICAgICAgICAiaGlkZGVuIiwKICAgICAgICAiaGlkZGVuIgogICAgICBdLAogICAgICAibG9ja2VkIjogdHJ1ZQogICAgfSwKICAgIHsKICAgICAgInBoYXNlIjogImRlYWRsaW5lIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiAxMDEsCiAgICAgICJvdmVyZmxvdyI6IFsKICAgICAgICAiaGlkZGVuIiwKICAgICAgICAiaGlkZGVuIgogICAgICBdLAogICAgICAibG9ja2VkIjogdHJ1ZQogICAgfSwKICAgIHsKICAgICAgInBoYXNlIjogImZpbmFsLXJlYWQiLAogICAgICAiYWZ0ZXJFc2NhcGVNcyI6IDEwMSwKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9CiAgXQp9"
+                    },
+                    {
+                      "name": "late-release",
+                      "contentType": "application/json",
+                      "body": "eyJhY3R1YWxSZWxlYXNlQWZ0ZXJNcyI6MTUxfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "4c47633a191d615bfb7a-bfe86a5ab2b6eef7f5be",
+          "file": "scroll-negative-control-standard.browser.mjs",
+          "line": 6,
+          "column": 42
+        },
+        {
+          "title": "observer rejects retained scroll lock",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 5,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 805,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T11:54:35.807Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "rejected-unlock",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMTAwLAogICJ1bmxvY2tlZEFmdGVyTXMiOiBudWxsLAogICJmaXJzdFJlYWQiOiB7CiAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICJhZnRlckVzY2FwZU1zIjogMjAsCiAgICAib3ZlcmZsb3ciOiBbCiAgICAgICJoaWRkZW4iLAogICAgICAiaGlkZGVuIgogICAgXSwKICAgICJsb2NrZWQiOiB0cnVlCiAgfSwKICAiZmluYWxSZWFkIjogewogICAgInBoYXNlIjogImZpbmFsLXJlYWQiLAogICAgImFmdGVyRXNjYXBlTXMiOiAxMDEsCiAgICAib3ZlcmZsb3ciOiBbCiAgICAgICJoaWRkZW4iLAogICAgICAiaGlkZGVuIgogICAgXSwKICAgICJsb2NrZWQiOiB0cnVlCiAgfSwKICAic2FtcGxlcyI6IFsKICAgIHsKICAgICAgInBoYXNlIjogImZpbmFsLWVzY2FwZSIsCiAgICAgICJhZnRlckVzY2FwZU1zIjogMCwKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9LAogICAgewogICAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiAyMCwKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9LAogICAgewogICAgICAicGhhc2UiOiAiZGVhZGxpbmUiLAogICAgICAiYWZ0ZXJFc2NhcGVNcyI6IDEwMSwKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9LAogICAgewogICAgICAicGhhc2UiOiAiZmluYWwtcmVhZCIsCiAgICAgICJhZnRlckVzY2FwZU1zIjogMTAxLAogICAgICAib3ZlcmZsb3ciOiBbCiAgICAgICAgImhpZGRlbiIsCiAgICAgICAgImhpZGRlbiIKICAgICAgXSwKICAgICAgImxvY2tlZCI6IHRydWUKICAgIH0KICBdCn0="
+                    },
+                    {
+                      "name": "blocked-scroll",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMjUwLAogICJiZWZvcmUiOiAwLAogICJhZnRlciI6IDAsCiAgInNjcm9sbEhlaWdodCI6IDMwMjcsCiAgInZpZXdwb3J0SGVpZ2h0IjogMjEyMCwKICAiaW5wdXQiOiB7CiAgICAia2luZCI6ICJQYWdlRG93biIsCiAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAiYWZ0ZXJTdGFydE1zIjogMTAKICB9LAogICJtb3ZlZEFmdGVyTXMiOiBudWxsCn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "4c47633a191d615bfb7a-3bd0f1fa5b3fbd10fc81",
+          "file": "scroll-negative-control-standard.browser.mjs",
+          "line": 6,
+          "column": 42
+        },
+        {
+          "title": "observer rejects late scroll lock",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-light-phone",
+              "projectName": "webkit-light-phone",
+              "results": [
+                {
+                  "workerIndex": 5,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 608,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T11:54:36.834Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "rejected-unlock",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMTAwLAogICJ1bmxvY2tlZEFmdGVyTXMiOiBudWxsLAogICJmaXJzdFJlYWQiOiB7CiAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICJhZnRlckVzY2FwZU1zIjogNiwKICAgICJvdmVyZmxvdyI6IFsKICAgICAgImhpZGRlbiIsCiAgICAgICJoaWRkZW4iCiAgICBdLAogICAgImxvY2tlZCI6IHRydWUKICB9LAogICJmaW5hbFJlYWQiOiB7CiAgICAicGhhc2UiOiAiZmluYWwtcmVhZCIsCiAgICAiYWZ0ZXJFc2NhcGVNcyI6IDEwMSwKICAgICJvdmVyZmxvdyI6IFsKICAgICAgImhpZGRlbiIsCiAgICAgICJoaWRkZW4iCiAgICBdLAogICAgImxvY2tlZCI6IHRydWUKICB9LAogICJzYW1wbGVzIjogWwogICAgewogICAgICAicGhhc2UiOiAiZmluYWwtZXNjYXBlIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiAxLAogICAgICAib3ZlcmZsb3ciOiBbCiAgICAgICAgImhpZGRlbiIsCiAgICAgICAgImhpZGRlbiIKICAgICAgXSwKICAgICAgImxvY2tlZCI6IHRydWUKICAgIH0sCiAgICB7CiAgICAgICJwaGFzZSI6ICJmaXJzdC1yZWFkLWFmdGVyLWhpZGRlbi1hbmQtZm9jdXMiLAogICAgICAiYWZ0ZXJFc2NhcGVNcyI6IDYsCiAgICAgICJvdmVyZmxvdyI6IFsKICAgICAgICAiaGlkZGVuIiwKICAgICAgICAiaGlkZGVuIgogICAgICBdLAogICAgICAibG9ja2VkIjogdHJ1ZQogICAgfSwKICAgIHsKICAgICAgInBoYXNlIjogImRlYWRsaW5lIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiAxMDEsCiAgICAgICJvdmVyZmxvdyI6IFsKICAgICAgICAiaGlkZGVuIiwKICAgICAgICAiaGlkZGVuIgogICAgICBdLAogICAgICAibG9ja2VkIjogdHJ1ZQogICAgfSwKICAgIHsKICAgICAgInBoYXNlIjogImZpbmFsLXJlYWQiLAogICAgICAiYWZ0ZXJFc2NhcGVNcyI6IDEwMSwKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9CiAgXQp9"
+                    },
+                    {
+                      "name": "late-release",
+                      "contentType": "application/json",
+                      "body": "eyJhY3R1YWxSZWxlYXNlQWZ0ZXJNcyI6MTUzfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "4c47633a191d615bfb7a-3eea4c573e076dca2885",
+          "file": "scroll-negative-control-standard.browser.mjs",
+          "line": 6,
+          "column": 42
+        },
+        {
+          "title": "observer rejects retained scroll lock",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-dark-desktop",
+              "projectName": "webkit-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 6,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1273,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T11:54:38.017Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "rejected-unlock",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMTAwLAogICJ1bmxvY2tlZEFmdGVyTXMiOiBudWxsLAogICJmaXJzdFJlYWQiOiB7CiAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICJhZnRlckVzY2FwZU1zIjogNCwKICAgICJvdmVyZmxvdyI6IFsKICAgICAgImhpZGRlbiIsCiAgICAgICJoaWRkZW4iCiAgICBdLAogICAgImxvY2tlZCI6IHRydWUKICB9LAogICJmaW5hbFJlYWQiOiB7CiAgICAicGhhc2UiOiAiZmluYWwtcmVhZCIsCiAgICAiYWZ0ZXJFc2NhcGVNcyI6IDEwMSwKICAgICJvdmVyZmxvdyI6IFsKICAgICAgImhpZGRlbiIsCiAgICAgICJoaWRkZW4iCiAgICBdLAogICAgImxvY2tlZCI6IHRydWUKICB9LAogICJzYW1wbGVzIjogWwogICAgewogICAgICAicGhhc2UiOiAiZmluYWwtZXNjYXBlIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiAxLAogICAgICAib3ZlcmZsb3ciOiBbCiAgICAgICAgImhpZGRlbiIsCiAgICAgICAgImhpZGRlbiIKICAgICAgXSwKICAgICAgImxvY2tlZCI6IHRydWUKICAgIH0sCiAgICB7CiAgICAgICJwaGFzZSI6ICJmaXJzdC1yZWFkLWFmdGVyLWhpZGRlbi1hbmQtZm9jdXMiLAogICAgICAiYWZ0ZXJFc2NhcGVNcyI6IDQsCiAgICAgICJvdmVyZmxvdyI6IFsKICAgICAgICAiaGlkZGVuIiwKICAgICAgICAiaGlkZGVuIgogICAgICBdLAogICAgICAibG9ja2VkIjogdHJ1ZQogICAgfSwKICAgIHsKICAgICAgInBoYXNlIjogImRlYWRsaW5lIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiAxMDEsCiAgICAgICJvdmVyZmxvdyI6IFsKICAgICAgICAiaGlkZGVuIiwKICAgICAgICAiaGlkZGVuIgogICAgICBdLAogICAgICAibG9ja2VkIjogdHJ1ZQogICAgfSwKICAgIHsKICAgICAgInBoYXNlIjogImZpbmFsLXJlYWQiLAogICAgICAiYWZ0ZXJFc2NhcGVNcyI6IDEwMSwKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9CiAgXQp9"
+                    },
+                    {
+                      "name": "blocked-scroll",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMjUwLAogICJiZWZvcmUiOiAwLAogICJhZnRlciI6IDAsCiAgInNjcm9sbEhlaWdodCI6IDMwMjgsCiAgInZpZXdwb3J0SGVpZ2h0IjogOTAwLAogICJpbnB1dCI6IHsKICAgICJraW5kIjogIndoZWVsIiwKICAgICJ0cnVzdGVkIjogdHJ1ZSwKICAgICJhZnRlclN0YXJ0TXMiOiAxNQogIH0sCiAgIm1vdmVkQWZ0ZXJNcyI6IG51bGwKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "4c47633a191d615bfb7a-64ebb28fc1e936c6adcd",
+          "file": "scroll-negative-control-standard.browser.mjs",
+          "line": 6,
+          "column": 42
+        },
+        {
+          "title": "observer rejects late scroll lock",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-dark-desktop",
+              "projectName": "webkit-dark-desktop",
+              "results": [
+                {
+                  "workerIndex": 6,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 614,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T11:54:39.436Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "rejected-unlock",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMTAwLAogICJ1bmxvY2tlZEFmdGVyTXMiOiBudWxsLAogICJmaXJzdFJlYWQiOiB7CiAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICJhZnRlckVzY2FwZU1zIjogMTksCiAgICAib3ZlcmZsb3ciOiBbCiAgICAgICJoaWRkZW4iLAogICAgICAiaGlkZGVuIgogICAgXSwKICAgICJsb2NrZWQiOiB0cnVlCiAgfSwKICAiZmluYWxSZWFkIjogewogICAgInBoYXNlIjogImZpbmFsLXJlYWQiLAogICAgImFmdGVyRXNjYXBlTXMiOiAxMDIsCiAgICAib3ZlcmZsb3ciOiBbCiAgICAgICJoaWRkZW4iLAogICAgICAiaGlkZGVuIgogICAgXSwKICAgICJsb2NrZWQiOiB0cnVlCiAgfSwKICAic2FtcGxlcyI6IFsKICAgIHsKICAgICAgInBoYXNlIjogImZpbmFsLWVzY2FwZSIsCiAgICAgICJhZnRlckVzY2FwZU1zIjogMSwKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9LAogICAgewogICAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiAxOSwKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9LAogICAgewogICAgICAicGhhc2UiOiAiZGVhZGxpbmUiLAogICAgICAiYWZ0ZXJFc2NhcGVNcyI6IDEwMiwKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9LAogICAgewogICAgICAicGhhc2UiOiAiZmluYWwtcmVhZCIsCiAgICAgICJhZnRlckVzY2FwZU1zIjogMTAyLAogICAgICAib3ZlcmZsb3ciOiBbCiAgICAgICAgImhpZGRlbiIsCiAgICAgICAgImhpZGRlbiIKICAgICAgXSwKICAgICAgImxvY2tlZCI6IHRydWUKICAgIH0KICBdCn0="
+                    },
+                    {
+                      "name": "late-release",
+                      "contentType": "application/json",
+                      "body": "eyJhY3R1YWxSZWxlYXNlQWZ0ZXJNcyI6MTUyfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "4c47633a191d615bfb7a-2d4faf32ac9bf0435631",
+          "file": "scroll-negative-control-standard.browser.mjs",
+          "line": 6,
+          "column": 42
+        },
+        {
+          "title": "observer rejects retained scroll lock",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-dark-phone",
+              "projectName": "webkit-dark-phone",
+              "results": [
+                {
+                  "workerIndex": 7,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 643,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T11:54:40.547Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "rejected-unlock",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMTAwLAogICJ1bmxvY2tlZEFmdGVyTXMiOiBudWxsLAogICJmaXJzdFJlYWQiOiB7CiAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICJhZnRlckVzY2FwZU1zIjogMTAsCiAgICAib3ZlcmZsb3ciOiBbCiAgICAgICJoaWRkZW4iLAogICAgICAiaGlkZGVuIgogICAgXSwKICAgICJsb2NrZWQiOiB0cnVlCiAgfSwKICAiZmluYWxSZWFkIjogewogICAgInBoYXNlIjogImZpbmFsLXJlYWQiLAogICAgImFmdGVyRXNjYXBlTXMiOiAxMDEsCiAgICAib3ZlcmZsb3ciOiBbCiAgICAgICJoaWRkZW4iLAogICAgICAiaGlkZGVuIgogICAgXSwKICAgICJsb2NrZWQiOiB0cnVlCiAgfSwKICAic2FtcGxlcyI6IFsKICAgIHsKICAgICAgInBoYXNlIjogImZpbmFsLWVzY2FwZSIsCiAgICAgICJhZnRlckVzY2FwZU1zIjogMSwKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9LAogICAgewogICAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiAxMCwKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9LAogICAgewogICAgICAicGhhc2UiOiAiZGVhZGxpbmUiLAogICAgICAiYWZ0ZXJFc2NhcGVNcyI6IDEwMSwKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9LAogICAgewogICAgICAicGhhc2UiOiAiZmluYWwtcmVhZCIsCiAgICAgICJhZnRlckVzY2FwZU1zIjogMTAxLAogICAgICAib3ZlcmZsb3ciOiBbCiAgICAgICAgImhpZGRlbiIsCiAgICAgICAgImhpZGRlbiIKICAgICAgXSwKICAgICAgImxvY2tlZCI6IHRydWUKICAgIH0KICBdCn0="
+                    },
+                    {
+                      "name": "blocked-scroll",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMjUwLAogICJiZWZvcmUiOiAwLAogICJhZnRlciI6IDAsCiAgInNjcm9sbEhlaWdodCI6IDMwMjcsCiAgInZpZXdwb3J0SGVpZ2h0IjogMjEyMCwKICAiaW5wdXQiOiB7CiAgICAia2luZCI6ICJQYWdlRG93biIsCiAgICAidHJ1c3RlZCI6IHRydWUsCiAgICAiYWZ0ZXJTdGFydE1zIjogMgogIH0sCiAgIm1vdmVkQWZ0ZXJNcyI6IG51bGwKfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "4c47633a191d615bfb7a-3f5d1d4911730ebf2d83",
+          "file": "scroll-negative-control-standard.browser.mjs",
+          "line": 6,
+          "column": 42
+        },
+        {
+          "title": "observer rejects late scroll lock",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit-dark-phone",
+              "projectName": "webkit-dark-phone",
+              "results": [
+                {
+                  "workerIndex": 7,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 335,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-04T11:54:41.287Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "rejected-unlock",
+                      "contentType": "application/json",
+                      "body": "ewogICJsaW1pdE1zIjogMTAwLAogICJ1bmxvY2tlZEFmdGVyTXMiOiBudWxsLAogICJmaXJzdFJlYWQiOiB7CiAgICAicGhhc2UiOiAiZmlyc3QtcmVhZC1hZnRlci1oaWRkZW4tYW5kLWZvY3VzIiwKICAgICJhZnRlckVzY2FwZU1zIjogMiwKICAgICJvdmVyZmxvdyI6IFsKICAgICAgImhpZGRlbiIsCiAgICAgICJoaWRkZW4iCiAgICBdLAogICAgImxvY2tlZCI6IHRydWUKICB9LAogICJmaW5hbFJlYWQiOiB7CiAgICAicGhhc2UiOiAiZmluYWwtcmVhZCIsCiAgICAiYWZ0ZXJFc2NhcGVNcyI6IDEwMSwKICAgICJvdmVyZmxvdyI6IFsKICAgICAgImhpZGRlbiIsCiAgICAgICJoaWRkZW4iCiAgICBdLAogICAgImxvY2tlZCI6IHRydWUKICB9LAogICJzYW1wbGVzIjogWwogICAgewogICAgICAicGhhc2UiOiAiZmluYWwtZXNjYXBlIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiAwLAogICAgICAib3ZlcmZsb3ciOiBbCiAgICAgICAgImhpZGRlbiIsCiAgICAgICAgImhpZGRlbiIKICAgICAgXSwKICAgICAgImxvY2tlZCI6IHRydWUKICAgIH0sCiAgICB7CiAgICAgICJwaGFzZSI6ICJmaXJzdC1yZWFkLWFmdGVyLWhpZGRlbi1hbmQtZm9jdXMiLAogICAgICAiYWZ0ZXJFc2NhcGVNcyI6IDIsCiAgICAgICJvdmVyZmxvdyI6IFsKICAgICAgICAiaGlkZGVuIiwKICAgICAgICAiaGlkZGVuIgogICAgICBdLAogICAgICAibG9ja2VkIjogdHJ1ZQogICAgfSwKICAgIHsKICAgICAgInBoYXNlIjogImRlYWRsaW5lIiwKICAgICAgImFmdGVyRXNjYXBlTXMiOiAxMDEsCiAgICAgICJvdmVyZmxvdyI6IFsKICAgICAgICAiaGlkZGVuIiwKICAgICAgICAiaGlkZGVuIgogICAgICBdLAogICAgICAibG9ja2VkIjogdHJ1ZQogICAgfSwKICAgIHsKICAgICAgInBoYXNlIjogImZpbmFsLXJlYWQiLAogICAgICAiYWZ0ZXJFc2NhcGVNcyI6IDEwMSwKICAgICAgIm92ZXJmbG93IjogWwogICAgICAgICJoaWRkZW4iLAogICAgICAgICJoaWRkZW4iCiAgICAgIF0sCiAgICAgICJsb2NrZWQiOiB0cnVlCiAgICB9CiAgXQp9"
+                    },
+                    {
+                      "name": "late-release",
+                      "contentType": "application/json",
+                      "body": "eyJhY3R1YWxSZWxlYXNlQWZ0ZXJNcyI6MTUxfQ=="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "4c47633a191d615bfb7a-b204971f8cd25c538e2e",
+          "file": "scroll-negative-control-standard.browser.mjs",
+          "line": 6,
+          "column": 42
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-04T11:54:26.365Z",
+    "duration": 15357.756,
+    "expected": 16,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

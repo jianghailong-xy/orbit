@@ -151,3 +151,22 @@ function loginMember(pool: ProviderPool, login: CodexLogin, index: number, now: 
     login,
   };
 }
+
+/**
+ * The account a session on a login pool is on, as the session's detail names it (`poolCodexLogin`,
+ * the masked view the session DTO carries): that account as the pool's member of it — whatever its
+ * state, a spent one still renders — read as the claim's pick (`current`). The pool's own `next`
+ * member is no answer here: it marks the account a session STARTING now would get, which with the
+ * pool's oldest account spent can be nobody while the session runs on that very account. Null when
+ * the session names none, or names an account the pool no longer holds (the next claim chooses
+ * again, and naming anyone until then would be a guess).
+ */
+export function poolSessionLoginMember(
+  pool: ProviderPool,
+  login: CodexLogin | null | undefined,
+  now: number = Date.now(),
+): { member: PoolMember; current: boolean } | null {
+  if (!login) return null;
+  const member = withLogin(pool, now).members.find((m) => m.login?.fingerprint === login.fingerprint);
+  return member ? { member, current: true } : null;
+}

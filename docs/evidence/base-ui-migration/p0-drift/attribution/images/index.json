@@ -1,0 +1,114 @@
+[
+ {
+  "change": "A1",
+  "screenshot": "chromium-light-desktop/session-idle.png",
+  "before": "full-293e12a85",
+  "after": "full-918034e72",
+  "differentPixels": 12,
+  "maxChannelDelta": 74,
+  "box": [
+   550,
+   209,
+   12,
+   2
+  ]
+ },
+ {
+  "change": "A2",
+  "screenshot": "chromium-light-desktop/session-idle.png",
+  "before": "full-6e5ba7544",
+  "after": "full2-f5bdd7fd3",
+  "differentPixels": 621,
+  "maxChannelDelta": 214,
+  "box": [
+   459,
+   193,
+   113,
+   13
+  ]
+ },
+ {
+  "change": "A3",
+  "screenshot": "chromium-light-desktop/project-overview.png",
+  "before": "full2-06400e8ea",
+  "after": "full2-93d3ec580",
+  "differentPixels": 186910,
+  "maxChannelDelta": 233,
+  "box": [
+   312,
+   206,
+   936,
+   694
+  ]
+ },
+ {
+  "change": "A4",
+  "screenshot": "chromium-light-desktop/task-detail.png",
+  "before": "full2-14e64870f",
+  "after": "full2-4088d37e6",
+  "differentPixels": 45617,
+  "maxChannelDelta": 255,
+  "box": [
+   312,
+   174,
+   968,
+   669
+  ]
+ },
+ {
+  "change": "A4",
+  "screenshot": "chromium-light-desktop/settings.png",
+  "before": "full2-14e64870f",
+  "after": "full2-4088d37e6",
+  "differentPixels": 50712,
+  "maxChannelDelta": 224,
+  "box": [
+   500,
+   249,
+   560,
+   651
+  ]
+ },
+ {
+  "change": "A5",
+  "screenshot": "chromium-dark-desktop/breakpoint-961-wiki.png",
+  "before": "m5-5bc8c9d63",
+  "after": "m5-e64d0c72a",
+  "differentPixels": 210,
+  "maxChannelDelta": 1,
+  "box": [
+   312,
+   182,
+   61,
+   155
+  ]
+ },
+ {
+  "change": "B1",
+  "screenshot": "webkit-light-phone/profile-validation.png",
+  "before": "e361ee373",
+  "after": "57f792135",
+  "differentPixels": 4863,
+  "maxChannelDelta": 224,
+  "box": [
+   104,
+   42,
+   178,
+   80
+  ]
+ },
+ {
+  "change": "B1",
+  "screenshot": "chromium-light-desktop/settings-saved.png",
+  "before": "e361ee373",
+  "after": "57f792135",
+  "differentPixels": 97,
+  "maxChannelDelta": 59,
+  "box": [
+   1195,
+   31,
+   36,
+   11
+  ]
+ }
+]

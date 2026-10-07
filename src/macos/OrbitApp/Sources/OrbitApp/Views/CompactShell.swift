@@ -149,11 +149,11 @@ struct CompactShell: View {
                     }
                     .offset(x: x)
 
-                // Left-edge open strip — present at a section's root, and on a page opened from the
-                // drawer — a console from Recents, a project from its row — which turns off the
-                // system back-swipe below, freeing this edge, so the drawer-open swipe is available
-                // there. A normal pushed page keeps the edge for the system back-swipe.
-                if !drawerOpen && (isAtRoot || model.consoleFromRecents || model.projectFromDrawer) {
+                // Left-edge open strip — present on a drawer destination's own page: a section's
+                // root, or a project's sessions page put up as the project's own (not one a list row
+                // pushed), which turns off the system back-swipe below, freeing this edge. A page
+                // pushed over either keeps the edge for the system back-swipe.
+                if !drawerOpen && model.atDestinationRoot {
                     Color.clear
                         .frame(width: 18)
                         .frame(maxHeight: .infinity)
@@ -219,10 +219,6 @@ struct CompactShell: View {
                 dragX = 0
             }
     }
-
-    /// A section is "at root" when nothing is pushed onto its stack, so the left edge is free for
-    /// the open gesture — `AppModel.sectionAtRoot`, derived from the shared selection state.
-    private var isAtRoot: Bool { model.sectionAtRoot }
 }
 
 /// The selected section's navigation stack, switched on `selectedSection`. A hidden-tab-bar `TabView`
@@ -278,6 +274,16 @@ private struct CompactSections: View {
             NavigationStack(path: $model.nav.path) {
                 AgentContentColumn(rowNavigation: .push)
                     .drawerToggle(open: openDrawer)
+                    // The list stays mounted under whatever this stack pushes over it — that is what
+                    // keeps its rows and scroll position for the pop back — but none of it is on
+                    // screen then. Its rows' animated cues (the running spinner, the breathing
+                    // terminal) are held back until it is the page showing again: same switch, and
+                    // same reasoning, as the drawer's own `live:` above. The pushed pages keep their
+                    // own cues — this is set on the list, not on the stack.
+                    //
+                    // Settings is the other way this list is covered: a sheet over the whole shell,
+                    // its own page, with the list still mounted under it (owner, 2026-10-06).
+                    .environment(\.liveRowCues, model.sectionAtRoot && !model.settingsPresented)
                     // New session is a page of its own (not a bottom sheet): it leads into the
                     // session rather than back to a list, so a push reads more naturally and flows
                     // straight into the console once the first message is sent. One destination per
@@ -286,29 +292,47 @@ private struct CompactSections: View {
                     // mechanism's page over it. (The iPad/macOS shells render the same two values
                     // inline in the detail pane: `AgentConsoleDetail`.)
                     .navigationDestination(for: NavNode.self) { node in
-                        switch node {
-                        case .compose(let agentID, let folderID):
-                            AgentComposePage(agentID: agentID, folderID: folderID)
-                        // One folder's page: the sessions filed in it, opened by its row at the top of
-                        // a workspace's session list (§3.3). Its own ✎ pushes a draft over it, and
-                        // the session that draft creates lands in the folder.
-                        case .folder(let address):       SessionFolderPage(address: address)
-                        // The one place the phone's console is told that what it opens goes on
-                        // this stack (`opensPagesOverConsole`): its links, its Watching card, its
-                        // Tasks created here card — so the back swipe returns to the conversation
-                        // instead of to another section's list. The wide shells never set it.
-                        case .console(let sessionID, _):
-                            AgentConsolePage(sessionID: sessionID)
-                                .environment(\.opensPagesOverConsole, true)
-                        // What a console opens over itself.
-                        case .taskDetail(let taskID):       TaskDetailPage(taskID: taskID)
-                        case .projectDetail(let projectID, _): ProjectDetailView(projectID: projectID)
-                        case .createdTasks(let sessionID):  CreatedTasksPage(sessionID: sessionID)
-                        case .watches:                      FollowingListView(rowNavigation: .push)
-                        case .watchDetail(let watchID):     WatchDetailView(watchID: watchID)
-                        case .wikiEntry(let entryID):       WikiEntryView(entryID: entryID)
-                        // The other sections' pages ride their own stacks, not this one.
-                        default:                         EmptyView()
+                        // A pushed page is a list too, and it is covered the same way the root one is:
+                        // the page a row of it opens — a conversation over a project's or a folder's
+                        // sessions — leaves it mounted under the push, and Settings leaves it mounted
+                        // under the sheet. Its cues follow the page that is *showing*, which is the top
+                        // of the stack, not the page itself (owner, 2026-10-06). The rows read the same
+                        // switch the list's do; `AgentsStackPage` is the second place the shell answers.
+                        AgentsStackPage(node: node) {
+                            switch node {
+                            case .compose(let agentID, let folderID):
+                                AgentComposePage(agentID: agentID, folderID: folderID)
+                            // One folder's page: the sessions filed in it, opened by its row at the top of
+                            // a workspace's session list (§3.3). Its own ✎ pushes a draft over it, and
+                            // the session that draft creates lands in the folder.
+                            case .folder(let address):       SessionFolderPage(address: address)
+                            // A project's sessions page a session list's row pushed is a page over that
+                            // list: the system back button and back-swipe return to it (owner,
+                            // 2026-10-06). Put up as the project's own page — by the drawer's row, the
+                            // merge banner or a notification — it leads like the session list it stands
+                            // in for: the drawer's hamburger, not a back button.
+                            case .sessionProject(let address, asDestination: false): SessionProjectPage(address: address)
+                            case .sessionProject(let address, asDestination: true): SessionProjectPage(address: address)
+                                .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }
+                                .navigationBarBackButtonHidden()
+                                .drawerToggle(open: openDrawer)
+                            // The one place the phone's console is told that what it opens goes on
+                            // this stack (`opensPagesOverConsole`): its links, its Watching card, its
+                            // Tasks created here card — so the back swipe returns to the conversation
+                            // instead of to another section's list. The wide shells never set it.
+                            case .console(let sessionID, _):
+                                AgentConsolePage(sessionID: sessionID)
+                                    .environment(\.opensPagesOverConsole, true)
+                            // What a console opens over itself.
+                            case .taskDetail(let taskID):       TaskDetailPage(taskID: taskID)
+                            case .projectDetail(let projectID, _): ProjectDetailView(projectID: projectID)
+                            case .createdTasks(let sessionID):  CreatedTasksPage(sessionID: sessionID)
+                            case .watches:                      FollowingListView(rowNavigation: .push)
+                            case .watchDetail(let watchID):     WatchDetailView(watchID: watchID)
+                            case .wikiEntry(let entryID):       WikiEntryView(entryID: entryID)
+                            // The other sections' pages ride their own stacks, not this one.
+                            default:                         EmptyView()
+                            }
                         }
                     }
             }
@@ -317,9 +341,7 @@ private struct CompactSections: View {
         // stack, like every section here. A task a project's rows open is pushed over the page on
         // this stack, so the back swipe returns to the project — not opened in Tasks, whose every-task
         // scope is the tasks outside projects. The push keeps the detail store in step
-        // (`AppModel.push`), as a console's task page does. A page one of the drawer's project rows
-        // opened hands the left edge to the drawer-open swipe, as a Recents console does: the system
-        // back-swipe is off there, and the back button still returns to the list.
+        // (`AppModel.push`), as a console's task page does.
         case .projects:
             NavigationStack(path: $model.nav.path) {
                 ProjectsListView(rowNavigation: .push)
@@ -329,7 +351,6 @@ private struct CompactSections: View {
                         switch node {
                         case .projectDetail(let projectID, _):
                             ProjectDetailView(projectID: projectID)
-                                .background { SwipeBackGestureToggle(enabled: !model.projectFromDrawer) }
                         case .taskDetail(let taskID):       TaskDetailPage(taskID: taskID)
                         default:                            EmptyView()
                         }
@@ -346,6 +367,7 @@ private struct CompactSections: View {
                         switch node {
                         case .wikiEntry(let entryID): WikiEntryView(entryID: entryID)
                         case .wikiReview:             WikiReviewView()
+                        case .wikiActivity:           WikiActivityView()
                         case .wikiSettings:           WikiSettingsView()
                         case .wikiRun(let changesetID): WikiRunView(changesetID: changesetID)
                         case .wikiArticle(let topic, let part):
@@ -435,6 +457,27 @@ private struct CompactSections: View {
     }
 }
 
+/// One page of the Agents stack, holding its rows to the switch the list under it reads
+/// (`liveRowCues`): a page is showing exactly while it is the top of the stack — a conversation
+/// pushed over a project's or a folder's sessions leaves it mounted without a pixel of it on screen,
+/// and so does Settings' sheet over the whole shell.
+///
+/// The read has to happen in a body. A `navigationDestination` builder runs once, when the frame is
+/// pushed: an environment value computed there freezes at "I am on top" for as long as the page
+/// stays on the stack, and the covered page went on spinning its rows (measured on an iPhone 17 Pro
+/// simulator, `sample`, 20s: a project's sessions page with two running rows draws 7 samples in
+/// `SpinnerGlyph`'s timeline closure under a conversation, against 0 when it is the page showing and
+/// 0 when the cover is another project's page — which SwiftUI replaces rather than layers).
+private struct AgentsStackPage<Content: View>: View {
+    @Environment(AppModel.self) private var model
+    let node: NavNode
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        content.environment(\.liveRowCues, model.nav.path.last == node && !model.settingsPresented)
+    }
+}
+
 /// The drawer surface color — one level below the content card so the undimmed white card floats.
 /// `secondarySystemBackground` (#F2F2F7) read too gray next to ChatGPT's near-white drawer, so light
 /// uses ~#F9F9F9: barely off-white, leaving the card/drawer separation to the edge shadow (exactly
@@ -508,7 +551,6 @@ private struct NavBarLeadingMargin: UIViewRepresentable {
     }
 
     func updateUIView(_ view: UIView, context: Context) {
-        Self.restore(from: view)
         context.coordinator.track()
     }
 
@@ -525,10 +567,18 @@ private struct NavBarLeadingMargin: UIViewRepresentable {
         private var link: CADisplayLink?
         private var observer: CFRunLoopObserver?
         private var deadline = Date.distantPast
+        /// The bars the last walk of the window found, held weakly. Walking the whole window — the
+        /// session list's hundreds of rows included — on every tick of the slide cost ~220ms of main
+        /// thread per open/close, so it is walked once per `track()` and again only when a cached bar
+        /// has left the window (or gone); `nil` means not looked up yet.
+        private var bars: [Weak]?
+
+        struct Weak { weak var bar: UINavigationBar? }
 
         func track() {
             deadline = Date().addingTimeInterval(NavBarLeadingMargin.trackingWindow)
-            NavBarLeadingMargin.restore(from: view)
+            bars = nil
+            restore()
             guard link == nil else { return }
             let link = CADisplayLink(target: self, selector: #selector(tick))
             link.add(to: .main, forMode: .common)
@@ -551,13 +601,20 @@ private struct NavBarLeadingMargin: UIViewRepresentable {
                 }
                 return
             }
-            if let view { NavBarLeadingMargin.restore(from: view) }
+            restore()
+        }
+
+        private func restore() {
+            guard let window = view?.window else { return }
+            if bars == nil || bars!.contains(where: { $0.bar?.window !== window }) {
+                bars = window.orbitNavigationBars.map(Weak.init)
+            }
+            NavBarLeadingMargin.restore(bars!.compactMap(\.bar), in: window)
         }
     }
 
-    private static func restore(from view: UIView?) {
-        guard let window = view?.window else { return }
-        for bar in window.orbitNavigationBars {
+    private static func restore(_ bars: [UINavigationBar], in window: UIWindow) {
+        for bar in bars {
             let offLeadingEdge = bar.convert(bar.bounds, to: window).minX != 0
             guard offLeadingEdge, bar.directionalLayoutMargins.leading == 0 else { continue }
             bar.directionalLayoutMargins.leading = leading
@@ -684,7 +741,10 @@ struct NavigationDrawer: View {
                     if section == .projects {
                         projectsRow
                     } else if section == .wiki {
-                        wikiRow
+                        // No row at all for an account the server has not switched the wiki on for
+                        // (WIKI_DISABLED), as the web sidebar draws none: a row that led to a refusal
+                        // would be worse than none.
+                        if model.wiki?.shown == true { wikiRow }
                     } else {
                         sectionRow(section)
                     }
@@ -708,8 +768,8 @@ struct NavigationDrawer: View {
             // The rail's first row counts the projects waiting on you, and its last rows are the
             // open projects: fetch them with the drawer rather than waiting for the section.
             .task { await model.projects?.load() }
-            // The Wiki row counts the proposals waiting for review — the spaces list, fetched with
-            // the drawer for the same reason.
+            // The Wiki row counts what waits on the owner across the spaces — the spaces list, fetched
+            // with the drawer for the same reason.
             .task { await model.wiki?.loadSpaces() }
             // The action bar *floats over* the rail (ChatGPT-style) rather than being docked below a
             // divider, so the list keeps the full drawer height and rows slide under the buttons. The
@@ -863,17 +923,11 @@ struct NavigationDrawer: View {
             .contentShape(Rectangle())
     }
 
-    /// A plain destination row: tapping switches section and closes the drawer.
+    /// A plain destination row: tapping lands on the section's root and closes the drawer.
     private func sectionRow(_ section: AppSection) -> some View {
-        let selected = section == model.selectedSection
+        let selected = model.drawerDestination == .section(section)
         return Button {
-            if section == .tasks && !inSidebarColumn {
-                model.selectedTaskID = nil
-                model.taskListsDirectoryPresented = false
-                model.tasks?.selectScope(.all)
-            }
-            model.selectedSection = section
-            close()
+            open(.section(section))
         } label: {
             pill(selected: selected) {
                 HStack(spacing: 12) {
@@ -897,12 +951,10 @@ struct NavigationDrawer: View {
     /// waiting on the reader in person — a merge to confirm, a question, an escalation, a pause —
     /// and nothing at all when none has; a project that merely went quiet is not counted.
     private var projectsRow: some View {
-        let selected = model.selectedSection == .projects && model.sectionAtRoot
+        let selected = model.drawerDestination == .section(.projects)
         let waiting = model.projects?.needsYouCount ?? 0
         return Button {
-            model.selectedSection = .projects
-            if !inSidebarColumn { model.nav.popToRoot() }
-            close()
+            open(.section(.projects))
         } label: {
             pill(selected: selected) {
                 HStack(spacing: 12) {
@@ -928,18 +980,17 @@ struct NavigationDrawer: View {
 
     // MARK: Wiki
 
-    /// The Wiki: what the work learned, after the work itself. The amber number is the proposals
-    /// waiting for review, summed over every space — the web sidebar's count, the home page banner's
-    /// and Review's — written the way the Projects row writes its own, and nothing at all at zero.
-    /// Opening the Wiki never clears it: only deciding a proposal does. Selected whenever the Wiki is
-    /// what is showing, since the drawer has no rows below it for the Wiki's pages.
+    /// The Wiki: what the work learned, after the work itself. The amber number is what waits on the
+    /// owner across every space — the proposals in Review and what each plan waits for (design
+    /// §12.3.3) — the web sidebar's count and the Wiki bar's Activity badge, written and said the way the
+    /// Projects row writes and says its own, and nothing at all at zero. Opening the Wiki never clears
+    /// it: only answering what waits does. Selected whenever the Wiki is what is showing, since the
+    /// drawer has no rows below it for the Wiki's pages.
     private var wikiRow: some View {
-        let selected = model.selectedSection == .wiki
-        let waiting = model.wiki?.proposalsToReview ?? 0
+        let selected = model.drawerDestination == .section(.wiki)
+        let waiting = model.wiki?.waiting ?? 0
         return Button {
-            model.selectedSection = .wiki
-            if !inSidebarColumn { model.nav.popToRoot() }
-            close()
+            open(.section(.wiki))
         } label: {
             pill(selected: selected) {
                 HStack(spacing: 12) {
@@ -954,7 +1005,7 @@ struct NavigationDrawer: View {
                         Text("\(waiting)")
                             .font(.orbitMeta.weight(.semibold))
                             .foregroundStyle(.orange)
-                            .accessibilityLabel(WikiCopy.proposalsToReview(waiting))
+                            .accessibilityLabel(WikiCopy.waitingOnYou(waiting))
                     }
                 }
             }
@@ -984,7 +1035,7 @@ struct NavigationDrawer: View {
     }
 
     /// The open projects, closing the rail: those waiting on the reader first, then by the most
-    /// recent task activity. Tapping one opens its page. Hidden until the index has loaded. A row is
+    /// recent task activity. Tapping one opens its sessions page. Hidden until the index has loaded. A row is
     /// drawn in the Workspace rows' grammar — the title leads, flush with the group label as the
     /// Recents rows were, and state takes the one trailing slot with the Workspace rows' own marks —
     /// so the rail keeps a single column for state instead of one on each side.
@@ -999,12 +1050,12 @@ struct NavigationDrawer: View {
         }
     }
 
+    /// Opens the project's sessions page, and is selected while that page — from this row or a
+    /// session list's project row — or one pushed over it is showing.
     private func projectRow(_ project: ProjectSummary) -> some View {
-        let selected = model.selectedSection == .projects
-            && model.selectedProjectID.map(PublicID.storageKey) == PublicID.storageKey(project.id)
+        let selected = model.drawerDestination == .project(projectID: project.id)
         return Button {
-            model.openProject(project.id, origin: .drawer)
-            close()
+            open(.project(projectID: project.id))
         } label: {
             pill(selected: selected) {
                 HStack(spacing: 12) {
@@ -1092,10 +1143,10 @@ struct NavigationDrawer: View {
     /// A compact Workspace row: folder/offline state leads; Workspace · Runner carries identity; one
     /// trailing slot shows attention or running state. Tapping jumps straight to its sessions.
     private func agentRow(_ agent: Agent, agents: AgentsModel) -> some View {
-        let selected = model.selectedSection == .agents && model.selectedAgentID == agent.id
+        let selected = model.drawerDestination == .workspace(agentID: agent.id)
         let offline = agents.runnerIsOffline(agent.runnerId)
         return Button {
-            openAgent(agent.id)
+            open(.workspace(agentID: agent.id))
         } label: {
             pill(selected: selected) {
                 WorkspaceNavigationRow(
@@ -1116,8 +1167,10 @@ struct NavigationDrawer: View {
     /// Jump straight to an agent from the drawer: mirror the Agents-list selection (a real switch
     /// empties the Agents stack), enter the Agents section, and close the drawer. The shell then
     /// surfaces that agent's sessions.
-    private func openAgent(_ id: String) {
-        model.openAgent(id)
+    /// Every row's tap: its destination's root, or — on the row already selected — nothing but
+    /// closing the drawer.
+    private func open(_ destination: DrawerDestination) {
+        model.openDrawerDestination(destination, inColumn: inSidebarColumn)
         close()
     }
 }
@@ -1196,11 +1249,8 @@ private struct AgentComposePage: View {
 }
 
 /// A session's console, pushed onto the compact Agents stack — the `.console` frame, reached from a
-/// list row, a Recents row, the needs-you banner or a deep link. The same `ConsoleView` the
-/// three-column detail pane shows for the same frame; what the frame carries is where it came from,
-/// which is what the edge does here: a Recents-opened console hands the left screen edge to the
-/// drawer-open swipe (you came from the drawer, so the edge returns you there) and turns the system
-/// back-swipe off, while every other console keeps the edge to swipe back to the list.
+/// list row, the needs-you banner or a deep link. The same `ConsoleView` the three-column detail pane
+/// shows for the same frame; it keeps the left edge for the system back-swipe.
 private struct AgentConsolePage: View {
     @Environment(AppModel.self) private var model
     let sessionID: String
@@ -1210,19 +1260,17 @@ private struct AgentConsolePage: View {
             ConsoleView(sessionID: sessionID,
                         agentID: model.agentID(for: sessionID) ?? model.selectedAgentID,
                         registry: registry)
-                .background { SwipeBackGestureToggle(enabled: !model.consoleFromRecents) }
         }
     }
 }
 
 /// Toggles the enclosing `UINavigationController`'s interactive pop gestures (the edge swipe-back, and
 /// on iOS 26 the swipe-back from anywhere in the content) while leaving the tappable back button
-/// intact — there's no SwiftUI API to disable only the swipe. Used on a page opened from the drawer (a
-/// Recents console, a project's page) so the left screen edge drives `CompactShell`'s drawer-open swipe
-/// instead of the system back-swipe: backing out with the edge returns you to the drawer you came from,
-/// while the `‹` button still pops to the list. A passive, non-interactive probe that reaches the nav
-/// controller through its own responder chain; it caches that controller so the gesture is restored even
-/// if the view is torn down while disabled.
+/// intact — there's no SwiftUI API to disable only the swipe. Used on a drawer destination's own page
+/// that sits on a stack (a project's sessions page the drawer, not a list row, put up) so the left
+/// screen edge drives `CompactShell`'s drawer-open swipe instead of the system back-swipe. A passive,
+/// non-interactive probe that reaches the nav controller through its own responder chain; it caches
+/// that controller so the gesture is restored even if the view is torn down while disabled.
 private struct SwipeBackGestureToggle: UIViewRepresentable {
     var enabled: Bool
 

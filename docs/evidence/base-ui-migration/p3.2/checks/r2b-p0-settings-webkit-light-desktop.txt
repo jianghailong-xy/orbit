@@ -1,0 +1,38 @@
+
+Running 1 test using 1 worker
+
+  ✘  1 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (7.3s)
+
+
+  1) [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings ────────────────────────
+
+    Error: A snapshot doesn't exist at /var/tmp/p32r2-final/r2b-p0-shots/webkit-light-desktop/settings-saved.png.
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/harness.mjs:38:26)
+        at settingsScenario (/root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/page-scenarios.mjs:103:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0-settings-webkit-light-desktop/pages.browser.mjs-settings-webkit-light-desktop/attachments/computed-styles-and-timings-dfbfec684425d0043c073766c6064dba0ac52276.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p32r2-final/r2b-p0-settings-webkit-light-desktop/pages.browser.mjs-settings-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-p0-settings-webkit-light-desktop/pages.browser.mjs-settings-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32r2-final/r2b-p0-settings-webkit-light-desktop/pages.browser.mjs-settings-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings ─────────────────────────
