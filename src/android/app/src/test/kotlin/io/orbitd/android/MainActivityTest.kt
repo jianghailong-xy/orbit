@@ -92,8 +92,20 @@ class MainActivityTest {
 }
 
 class TestOrbitApplication : OrbitApplication() {
+    /** auth/methods answers 404, as a server from before Google sign-in does, unless a test offers Google. */
+    @Volatile var methods: () -> ApiResponse = { ApiResponse(404, """{"statusCode":404}""".encodeToByteArray()) }
+    @Volatile var exchange: () -> ApiResponse = { ApiResponse(200, LOGIN.encodeToByteArray()) }
+    val requests: MutableList<HttpRequest> = java.util.Collections.synchronizedList(mutableListOf())
+
     override fun createSession(): AuthSession = AuthSession(
-        HttpTransport { ApiResponse(200, """{"accessToken":"fixture-access","refreshToken":"fixture-refresh","user":{"id":"u1","email":"fixture@example.test","name":"Fixture"}}""".encodeToByteArray()) },
+        HttpTransport { request ->
+            requests += request
+            when (request.api.path) {
+                listOf("auth", "methods") -> methods()
+                listOf("auth", "google", "exchange") -> exchange()
+                else -> ApiResponse(200, LOGIN.encodeToByteArray())
+            }
+        },
         object : CredentialStore {
             private var value: StoredSession? = null
             override suspend fun load() = value
@@ -111,3 +123,5 @@ class TestOrbitApplication : OrbitApplication() {
         }, "test",
     )
 }
+
+private const val LOGIN = """{"accessToken":"fixture-access","refreshToken":"fixture-refresh","user":{"id":"u1","email":"fixture@example.test","name":"Fixture"}}"""

@@ -3,8 +3,10 @@ package io.orbitd.android.core.auth
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.net.ApiResponse
+import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.net.NetworkException
 import io.orbitd.android.core.protocol.RefreshRequest
+import io.orbitd.android.core.protocol.SignInMethods
 import io.orbitd.android.core.protocol.Wire
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
@@ -293,6 +295,70 @@ class AuthSessionTest {
         assertTrue(runCatching { h.client.login(serverA, "alice@example.test", "fixture-password") }.exceptionOrNull() is SecureStorageException)
         assertNull(h.credentials.value)
         assertTrue(h.client.state.value is AuthState.SignedOut)
+    }
+
+    @Test fun googleTicketLoginExchangesTheTicketAndSwitchesLikeAPasswordLogin() = runTest {
+        val h = Harness(this)
+        val alice = h.seed()
+        h.client.writeData(alice, DataKind.DRAFT, "s1", byteArrayOf(1))
+        h.handler = { req -> if (req.api.path == listOf("auth", "google", "exchange")) response(tokens("bob")) else unauthorized() }
+        val bob = h.client.loginWithGoogleTicket(serverB, "fixture-ticket", "fixture-verifier")
+        runCurrent()
+        val exchange = h.requests.single { it.api.path == listOf("auth", "google", "exchange") }
+        assertEquals(serverB, exchange.server)
+        assertEquals(HttpMethod.POST, exchange.api.method)
+        assertNull("the exchange never carries the old session's bearer", exchange.accessToken)
+        assertEquals("""{"ticket":"fixture-ticket","codeVerifier":"fixture-verifier"}""", exchange.api.body!!.decodeToString())
+        // The password login's switch: the old session is revoked, fenced and purged before the new one is published.
+        val revoked = h.requests.single { it.api.path == listOf("auth", "logout") }
+        assertEquals(tokens().refreshToken, Wire.decode(revoked.api.body!!, RefreshRequest.serializer()).refreshToken)
+        assertTrue(runCatching { h.client.readData(alice, DataKind.DRAFT, "s1") }.exceptionOrNull() is SessionChanged)
+        assertTrue(h.data.values.isEmpty())
+        assertTrue(h.credentials.value == StoredSession(serverB.value, tokens("bob")))
+        assertEquals(serverB.value, h.instances.value)
+        assertEquals(AccountKey(serverB.value, "bob"), bob.account)
+        assertEquals(AuthState.SignedIn(bob, tokens("bob").user), h.client.state.value)
+        assertNull(h.client.readData(bob, DataKind.DRAFT, "s1"))
+    }
+
+    @Test fun aFailedGoogleTicketLoginLeavesNoSession() = runTest {
+        val refusal = """{"code":"GOOGLE_ACCOUNT_NOT_FOUND","message":"No Orbit account signs in with this Google account"}"""
+        for (failure in listOf("refused", "storage")) {
+            val h = Harness(this)
+            h.seed()
+            h.credentials.failSave = failure == "storage"
+            h.handler = { if (failure == "refused") ApiResponse(403, refusal.encodeToByteArray()) else response(tokens("bob")) }
+            val error = runCatching { h.client.loginWithGoogleTicket(serverB, "fixture-ticket", "fixture-verifier") }.exceptionOrNull()
+            if (failure == "refused") assertTrue(error is ApiError && error.status == 403 && error.code == "GOOGLE_ACCOUNT_NOT_FOUND")
+            else assertTrue(error is SecureStorageException)
+            assertNull(failure, h.credentials.value)
+            assertEquals(failure, AuthState.SignedOut(serverB, if (failure == "storage") SignOutReason.STORAGE else null), h.client.state.value)
+        }
+    }
+
+    @Test fun signInMethodsAsksTheInstanceWithoutTouchingTheSession() = runTest {
+        val h = Harness(this)
+        h.seed()
+        h.handler = { ApiResponse(200, """{"password":true,"google":true,"googleSignup":false,"later":1}""".encodeToByteArray()) }
+        assertEquals(SignInMethods(password = true, google = true, googleSignup = false), h.client.signInMethods(serverB))
+        val asked = h.requests.single()
+        assertEquals(listOf("auth", "methods"), asked.api.path)
+        assertEquals(HttpMethod.GET, asked.api.method)
+        assertEquals(serverB, asked.server)
+        assertNull(asked.accessToken)
+        // A server from before Google sign-in has no such route.
+        h.handler = { ApiResponse(404, """{"statusCode":404,"message":"Cannot GET /api/auth/methods"}""".encodeToByteArray()) }
+        assertEquals(404, (runCatching { h.client.signInMethods(serverA) }.exceptionOrNull() as ApiError).status)
+        assertTrue(h.client.state.value is AuthState.SignedIn)
+        assertTrue(h.credentials.value == StoredSession(serverA.value, tokens()))
+        // A network failure (such as a pooled connection the server closed) is sent again, three times at most.
+        var failing = 2
+        h.handler = { if (failing-- > 0) throw NetworkException() else ApiResponse(200, "{}".encodeToByteArray()) }
+        assertEquals(SignInMethods(), h.client.signInMethods(serverB))
+        h.handler = { throw NetworkException() }
+        val before = h.requests.size
+        assertTrue(runCatching { h.client.signInMethods(serverB) }.exceptionOrNull() is NetworkException)
+        assertEquals(3, h.requests.size - before)
     }
 
     @Test fun switchingCancelsAnOrdinaryInFlightTransportCall() = runTest {

@@ -528,23 +528,31 @@ export class RunnerSessionsController {
    * that already happened, is append-only, and is scoped to the caller's own tenant. Requiring an
    * orchestration grant to file evidence would mean the deployments that most need the audit — the
    * ones where orchestration is off — are exactly the ones that cannot produce it.
+   *
+   * The machine's own credential, though, not a service token: a receipt is in no token's
+   * vocabulary, and these two read the session by owner alone, so a token — pinned to one workspace,
+   * granted only `session:get` — would reach every session of the account through them.
    */
   @Post('sessions/:id/merge-receipts')
   async recordMergeReceipt(
     @CurrentRunner() runner: Runner,
+    @CurrentServiceGrant() grant: ServiceTokenGrant | undefined,
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: RecordMergeReceiptDto,
   ) {
+    this.assertNoServiceToken(grant);
     return this.mergeReceipts.record(runner.ownerId, id, dto, 'AGENT');
   }
 
-  /** Every merge recorded against this session's branch, newest first. */
+  /** Every merge recorded against this session's branch, newest first. The machine's credential only, as above. */
   @Get('sessions/:id/merge-receipts')
   async listMergeReceipts(
     @CurrentRunner() runner: Runner,
+    @CurrentServiceGrant() grant: ServiceTokenGrant | undefined,
     @Param('id', PublicIdPipe) id: string,
     @Query('limit') limit?: string,
   ) {
+    this.assertNoServiceToken(grant);
     return this.mergeReceipts.list(runner.ownerId, id, limit ? Number(limit) : undefined);
   }
 

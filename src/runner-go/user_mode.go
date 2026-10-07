@@ -58,6 +58,10 @@ var userModeActions = map[string]string{
 	"project get":             "",
 	"project crossings":       "",
 	"project resolve-blocker": "",
+	// Runs as the person, and unlike the rest it is the door's OTHER side there: the skip is the
+	// account owner's decision, so a terminal with nobody to ask is exactly the case where the write
+	// goes straight through (the same reading `project resolve-blocker` gives a headless caller).
+	"project skip-merge-check": "",
 	"project merge-evidence":  "",
 	"project create":          "",
 	"project update":          "",
@@ -409,6 +413,11 @@ type projectTransport interface {
 	createProject(sessionID, orchestrationToken string, body map[string]interface{}) (json.RawMessage, error)
 	updateProject(sessionID, id string, body map[string]interface{}) (json.RawMessage, error)
 	deleteProject(id string) (json.RawMessage, error)
+	// skipIntegrationMergeCheck queues one landing with its merge check not run (§2.4 J-S5). The two
+	// transports are the door's two sides and take one signature: the runner side sends the session
+	// (the coordinator) and the card the owner answered, and the user side ignores both — that caller
+	// IS the owner, so it has no session to act as and no card to name.
+	skipIntegrationMergeCheck(sessionID, id, taskID, reason, approvalID string) (json.RawMessage, error)
 }
 
 // cliProjectTransport is where a project command sends its requests, as cliTaskTransport is for a task
@@ -449,6 +458,18 @@ func (u *userTransport) resolveProjectBlocker(projectID, blockerID string, body 
 
 func (u *userTransport) recordProjectMergeEvidence(id string, body map[string]interface{}) (json.RawMessage, error) {
 	return u.at(http.MethodPost, "/projects", id, "/acceptance/merge-evidence", body)
+}
+
+// skipIntegrationMergeCheck as the person: their own route, and no card. A skip is approved BY the
+// account owner, so asking them to answer a card of their own would be asking them to agree with
+// themselves — the server records them as the one who gave it either way.
+func (u *userTransport) skipIntegrationMergeCheck(_, id, taskID, reason, _ string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(taskID); err != nil {
+		return nil, err
+	}
+	return u.at(http.MethodPost, "/projects", id,
+		"/tasks/"+url.PathEscape(taskID)+"/integration/skip-merge-check",
+		map[string]interface{}{"reason": reason})
 }
 
 // createProject is the owner's own door, where naming a workspace needs no acting session: it is theirs

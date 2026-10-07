@@ -24,7 +24,7 @@ const writes: unknown[] = [];
         update: async (args: { where: unknown; data: { preferences: Record<string, unknown> } }) => {
           writes.push({ where: args.where, data: args.data });
           preferences = args.data.preferences;
-          return { id: USER_ID, email: 'owner@example.test', preferences, avatar: null };
+          return { id: USER_ID, email: 'owner@example.test', preferences, avatar: null, passwordHash: 'scrypt-hash', identities: [] };
         },
       },
     } },

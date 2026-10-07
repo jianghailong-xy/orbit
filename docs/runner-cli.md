@@ -274,7 +274,10 @@ orbit logout                                  # revokes the token, then forgets 
 ```
 
 - `orbit login` asks the server for a token and opens `<server>/cli-login?code=…`. Signed in to Orbit there,
-  you see the token's name, scopes, lifetime and the host asking, and approve or deny it. The CLI waits up to
+  you see the token's name, scopes, lifetime and the host asking, and approve or deny it. A browser that is not
+  signed in goes to the login page first and comes back to the request: sign in with your password, or with
+  Google where the server offers it ([Google sign-in](self-hosting.md#google-sign-in)). The approval page
+  `orbit register` opens for a new runner works the same way. The CLI waits up to
   ten minutes, then saves the token it is handed. `--name` defaults to `orbit CLI on <host>`, `--scopes` to
   `read-only` (or `read-write`, or a list such as `tasks:read,tasks:write`), and `--expires` to `90d` (`30d`,
   `365d` or `never`). The token belongs to the account that approved it. The server keeps only its hash, and

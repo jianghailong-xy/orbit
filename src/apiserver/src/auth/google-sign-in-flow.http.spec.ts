@@ -156,12 +156,13 @@ function memoryPrisma(db: Tables) {
       assert.equal(
         text.replace(/\s+/g, ' ').trim(),
         'DELETE FROM "oauth_login_flow" WHERE "ticket_hash" = ? AND "status" = \'AUTHENTICATED\' '
-          + 'RETURNING "intent", "client_challenge" AS "clientChallenge", "ticket_expires_at" AS "ticketExpiresAt", "claims"',
+          + 'RETURNING "intent", "client_challenge" AS "clientChallenge", "ticket_expires_at" AS "ticketExpiresAt", "claims", '
+          + '"link_user_id" AS "linkUserId"',
       );
       const flow = [...db.flows.values()].find((row) => row.ticketHash === values[0] && row.status === 'AUTHENTICATED');
       if (!flow) return [];
       db.flows.delete(flow.id);
-      return [{ intent: flow.intent, clientChallenge: flow.clientChallenge, ticketExpiresAt: flow.ticketExpiresAt, claims: structuredClone(flow.claims) }];
+      return [{ intent: flow.intent, clientChallenge: flow.clientChallenge, ticketExpiresAt: flow.ticketExpiresAt, claims: structuredClone(flow.claims), linkUserId: flow.linkUserId ?? null }];
     },
     userIdentity: {
       findUnique: async ({ where, include }: { where: Row; include?: Row }) => {

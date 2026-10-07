@@ -188,6 +188,12 @@ export interface UserPreferences {
   modelRouting?: boolean;
 }
 
+/** How an account signs in (docs/google-sign-in-design.md §6): a password, and the Google account linked. */
+export interface SignInMethods {
+  password: boolean;
+  google: { email: string } | null;
+}
+
 export interface Me {
   id: string;
   email: string;
@@ -197,6 +203,8 @@ export interface Me {
   role?: 'MEMBER' | 'ADMIN';
   /** When the account's profile photo was set — the version it is fetched by. Null without one. */
   avatarUpdatedAt?: string | null;
+  /** Absent from a server that predates Google sign-in, where an account has a password and nothing else. */
+  signInMethods?: SignInMethods;
 }
 
 /** The signed-in user — backs the account page and the nav footer's avatar + name. */

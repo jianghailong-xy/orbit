@@ -6,11 +6,14 @@ import io.orbitd.android.core.net.ApiResponse
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.net.HttpRequest
 import io.orbitd.android.core.net.HttpTransport
+import io.orbitd.android.core.net.NetworkException
 import io.orbitd.android.core.net.ServerAddress
+import io.orbitd.android.core.protocol.GoogleExchangeRequest
 import io.orbitd.android.core.protocol.LoginRequest
 import io.orbitd.android.core.protocol.LoginResponse
 import io.orbitd.android.core.protocol.ProtocolException
 import io.orbitd.android.core.protocol.RefreshRequest
+import io.orbitd.android.core.protocol.SignInMethods
 import io.orbitd.android.core.protocol.User
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.EventTransport
@@ -34,6 +37,9 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.encodeToString
+
+/** How many times `signInMethods` sends its request through network failures. */
+private const val METHODS_ATTEMPTS = 3
 
 /** Identity, not value equality: logging in again as the same user still invalidates old work. */
 class SessionHandle internal constructor(val account: AccountKey)
@@ -114,8 +120,35 @@ class AuthSession(
         }
     }
 
+    /** Public: what [server]'s login page offers (docs/google-sign-in-design.md §6). Older servers answer 404. */
+    suspend fun signInMethods(server: ServerAddress): SignInMethods {
+        val request = HttpRequest(server, ApiRequest(listOf("auth", "methods")), clientVersion)
+        var failures = 0
+        while (true) {
+            val response = try {
+                transport.execute(request)
+            } catch (error: NetworkException) {
+                // The transport never retries, and a pooled connection the server has since closed fails
+                // once when reused. This request carries no credential and changes nothing: send it again.
+                if (++failures == METHODS_ATTEMPTS) throw error
+                continue
+            }
+            return Wire.decode(response.requireSuccess().body, SignInMethods.serializer())
+        }
+    }
+
     /** Also switches accounts: old requests/data are invalidated before the login leaves the device. */
-    suspend fun login(server: ServerAddress, email: String, password: String): SessionHandle {
+    suspend fun login(server: ServerAddress, email: String, password: String): SessionHandle =
+        signIn(server, listOf("login"), Wire.json.encodeToString(LoginRequest(email, password)))
+
+    /**
+     * The last step of a Google sign-in (§4.3): its callback's one-time ticket and the verifier only
+     * this process holds, for the same session `login` answers with. Switches accounts as `login` does.
+     */
+    suspend fun loginWithGoogleTicket(server: ServerAddress, ticket: String, codeVerifier: String): SessionHandle =
+        signIn(server, listOf("google", "exchange"), Wire.json.encodeToString(GoogleExchangeRequest(ticket, codeVerifier)))
+
+    private suspend fun signIn(server: ServerAddress, operation: List<String>, body: String): SessionHandle {
         val next = withContext(NonCancellable) {
             lock.withLock {
                 initialized = true
@@ -129,7 +162,7 @@ class AuthSession(
         }
         try {
             return owned(next) {
-                val response = sendPublic(next.server, "login", Wire.json.encodeToString(LoginRequest(email, password)))
+                val response = sendPublic(next.server, operation, body)
                 val tokens = Wire.decode(response.requireSuccess().body, LoginResponse.serializer())
                 lock.withLock {
                     requireCurrent(next)
@@ -253,7 +286,7 @@ class AuthSession(
     private suspend fun rotate(current: Epoch): LoginResponse {
         try {
             val old = lock.withLock { requireCurrent(current); current.tokens!! }
-            val response = sendPublic(current.server, "refresh", Wire.json.encodeToString(RefreshRequest(old.refreshToken)))
+            val response = sendPublic(current.server, listOf("refresh"), Wire.json.encodeToString(RefreshRequest(old.refreshToken)))
             val fresh = Wire.decode(response.requireSuccess().body, LoginResponse.serializer())
             if (fresh.user.id != old.user.id || fresh.refreshToken == old.refreshToken) throw ProtocolException()
             return lock.withLock {
@@ -275,8 +308,8 @@ class AuthSession(
         }
     }
 
-    private suspend fun sendPublic(server: ServerAddress, operation: String, body: String): ApiResponse =
-        transport.execute(HttpRequest(server, ApiRequest(listOf("auth", operation), HttpMethod.POST,
+    private suspend fun sendPublic(server: ServerAddress, operation: List<String>, body: String): ApiResponse =
+        transport.execute(HttpRequest(server, ApiRequest(listOf("auth") + operation, HttpMethod.POST,
             body = body.encodeToByteArray()), clientVersion))
 
     private fun activateLocked(current: Epoch, tokens: LoginResponse): SessionHandle {
@@ -298,7 +331,7 @@ class AuthSession(
         old?.refreshing = null
         if (old != null && oldRefresh != null) revocations.launch {
             withTimeoutOrNull(5_000) {
-                try { sendPublic(old.server, "logout", Wire.json.encodeToString(RefreshRequest(oldRefresh))) }
+                try { sendPublic(old.server, listOf("logout"), Wire.json.encodeToString(RefreshRequest(oldRefresh))) }
                 catch (_: Exception) { /* Local logout is authoritative when offline. */ }
             }
         }

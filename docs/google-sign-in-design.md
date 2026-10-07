@@ -314,9 +314,12 @@ model SignInProvider {               // sign_in_provider，每个提供方一行
    授权域名填部署域名；scope 只要 `openid`、`email`、`profile`。
 2. 凭据 → 创建 OAuth 客户端 ID → 类型「Web 应用」→ 已获授权的重定向 URI 填 `https://<域名>/api/auth/google/callback`。
 3. 把 client ID / secret 填进 Orbit 管理区的「Sign-in」设置，打开开关。
-4. 同意屏幕处于「测试」状态时只有登记的测试用户能登录（最多 100 个），可用来灰度。开放注册必须发布为「正式」：
-   按控制台要求提供应用首页、隐私政策链接，并验证授权域名的所有权。只用基础 scope 通常不需要 Google 的应用审核；
-   要在同意屏显示 Logo 等品牌信息，按控制台当时的要求做品牌验证。
+4. 「测试」状态一般只放行登记的测试用户（最多 100 个），但只申请基础 scope（`openid`、`email`、`profile`）的应用
+   不受此限：Google 的 [Manage App Audience](https://support.google.com/cloud/answer/15549945) 写明这类请求的用户
+   不必在测试用户名单里，也看不到警告。本方案正是如此，所以「测试」状态挡不住任何 Google 账号，不能用来灰度；
+   决定谁能进 Orbit 的是注册策略（默认「仅已有账号」）。开放注册必须发布为「正式」：
+   按控制台要求提供应用首页、隐私政策链接，并验证授权域名的所有权。只用基础 scope 不需要 Google 的应用审核；
+   要在同意屏显示应用名与 Logo，须通过品牌验证（未验证时只显示域名）。
 
 限制：Google 要求回调地址是 https 公网域名（`http://localhost` 例外，可用于本机试用）。只有内网 IP 的自建部署用不了 Google 登录。
 
