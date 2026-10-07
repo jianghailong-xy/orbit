@@ -1,0 +1,6 @@
+Test Case '-[CrossingsMacProbeUITests.CrossingsShotTests testMacConfirmsAMoveInTwoPresses]' started.
+Test Case '-[CrossingsMacProbeUITests.CrossingsShotTests testMacConfirmsAMoveInTwoPresses]' passed (78.677 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 78.677 (78.678) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 78.677 (78.679) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 78.677 (78.680) seconds
+** TEST SUCCEEDED **

@@ -231,9 +231,9 @@ test('orbit login through the browser: started and polled with no credential, de
     assert.equal(approving.code, 'PAT_DEVICE_LOGIN_DECIDED');
     assert.match(approving.message, /already denied/);
     expect(await decide(owner.login, started.userCode, 'deny'), 201, 'denying again');
-    // Someone else cannot overturn it either.
+    // Someone else cannot overturn it either: to every other account, a decided request's code names nothing.
     const other = await user('latecomer');
-    assert.equal(expect(await decide(other.login, started.userCode, 'approve'), 409, 'another account approving').code, 'PAT_DEVICE_LOGIN_DECIDED');
+    expect(await decide(other.login, started.userCode, 'approve'), 404, 'another account approving');
     assert.deepEqual(await tokensOf(owner), []);
     assert.deepEqual(await tokensOf(other), []);
     assert.equal(await pollStatus(started.deviceCode), 'denied');

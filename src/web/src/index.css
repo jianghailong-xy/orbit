@@ -22314,3 +22314,75 @@ button.agent-progress-agent:hover {
   opacity: 0.38;
   cursor: default;
 }
+
+/* Google under the password, when the server offers it: Google's own button in the login's capsule —
+   the four-colour G on white with a grey stroke, or on near-black in dark mode, with Google's 8% / 12%
+   state layers, as its sign-in branding guidelines draw it. Two classes to outrank the ui Button's
+   own sheet, which loads after this one. */
+.login-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.login-or::before,
+.login-or::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--border);
+}
+
+.login-google.orbit-button {
+  height: 50px;
+  gap: 12px;
+  border-color: #747775;
+  border-radius: 999px;
+  background: #fff;
+  color: #1f1f1f;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.login-google.orbit-button:hover:not(:disabled) {
+  border-color: #747775;
+  background: color-mix(in srgb, #303030 8%, #fff);
+  color: #1f1f1f;
+  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);
+}
+
+.login-google.orbit-button:active:not(:disabled) {
+  background: color-mix(in srgb, #303030 12%, #fff);
+}
+
+:root[data-theme='dark'] .login-google.orbit-button {
+  border-color: #8e918f;
+  background: #131314;
+  color: #e3e3e3;
+}
+
+:root[data-theme='dark'] .login-google.orbit-button:hover:not(:disabled) {
+  border-color: #8e918f;
+  background: color-mix(in srgb, #e3e3e3 8%, #131314);
+  color: #e3e3e3;
+}
+
+:root[data-theme='dark'] .login-google.orbit-button:active:not(:disabled) {
+  background: color-mix(in srgb, #e3e3e3 12%, #131314);
+}
+
+.login-google-mark {
+  display: block;
+  width: 20px;
+  height: 20px;
+}
+
+.login-signup {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-2);
+  text-align: center;
+  text-wrap: balance;
+}

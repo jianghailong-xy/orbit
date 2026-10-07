@@ -1,0 +1,221 @@
+{
+  "rule": "Accepted migration differences for the P0 regression. Only a P0 screenshot whose difference from its current expectation (the P0.2 original or its main drift reference) the coordinator CONFIRMed in a migration batch's evidence may be registered, after that batch landed, with the before and after originals of the batch's same-commit comparison in the P0.2 environment. Nothing else is registered here. Maintenance rules: ../README.md.",
+  "screenshots": [
+    {
+      "screenshot": "chromium-dark-desktop/project-graph-fullscreen.png",
+      "sha256": "8d8c6b9e938eb385cb46fb1ef136775d7cad26dc23d69361674ad76736a4fb60",
+      "replaces": {
+        "layer": "p0-drift",
+        "sha256": "26778b718ba9190d14ba61299bece6421e318f3ceb88ae483b32057e250b28af"
+      },
+      "decision": {
+        "taskId": "SCRATCHnotAdecision00",
+        "evidenceRevision": 1,
+        "evidenceDigest": "ad0ac585a8ae068d0167b64806fde467e79747a9c47bc6a4306164b7368a342f",
+        "verdict": "CONFIRM",
+        "document": "p0-drift/negative-control/accepted/DECISION-STAND-IN.md"
+      },
+      "difference": "Scratch negative control: a 2px outline inside the full-screen dependency graph canvas (.tdg-modal .tdg-full-canvas).",
+      "sameCommit": {
+        "before": {
+          "commit": "99ec589280aaf3ab1727e520107ebb26a87a1bdb",
+          "sha256": "26778b718ba9190d14ba61299bece6421e318f3ceb88ae483b32057e250b28af"
+        },
+        "after": {
+          "commit": "4103f361f73721ca5ab9c9b8f2856379d07d63d2",
+          "sha256": "8d8c6b9e938eb385cb46fb1ef136775d7cad26dc23d69361674ad76736a4fb60"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    },
+    {
+      "screenshot": "chromium-dark-phone/project-graph-fullscreen.png",
+      "sha256": "dbbe60a7ee8995e5298aab8445e7b8b45ff5d26f542775aa8b9c5bb86864572c",
+      "replaces": {
+        "layer": "p0.2",
+        "sha256": "c21d31f9bfb0dc2207b9838505fb5d8b9c962c9a8be513e1a2bf224de3392b04"
+      },
+      "decision": {
+        "taskId": "SCRATCHnotAdecision00",
+        "evidenceRevision": 1,
+        "evidenceDigest": "ad0ac585a8ae068d0167b64806fde467e79747a9c47bc6a4306164b7368a342f",
+        "verdict": "CONFIRM",
+        "document": "p0-drift/negative-control/accepted/DECISION-STAND-IN.md"
+      },
+      "difference": "Scratch negative control: a 2px outline inside the full-screen dependency graph canvas (.tdg-modal .tdg-full-canvas).",
+      "sameCommit": {
+        "before": {
+          "commit": "99ec589280aaf3ab1727e520107ebb26a87a1bdb",
+          "sha256": "c21d31f9bfb0dc2207b9838505fb5d8b9c962c9a8be513e1a2bf224de3392b04"
+        },
+        "after": {
+          "commit": "4103f361f73721ca5ab9c9b8f2856379d07d63d2",
+          "sha256": "dbbe60a7ee8995e5298aab8445e7b8b45ff5d26f542775aa8b9c5bb86864572c"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    },
+    {
+      "screenshot": "chromium-light-desktop/project-graph-fullscreen.png",
+      "sha256": "89aac6158440f841af432ec7bbb17d7762fb4cef774cb86655a3d20e1d88295e",
+      "replaces": {
+        "layer": "p0-drift",
+        "sha256": "0e129acaf6cb97b227cdd4af76e1a4210cba0824a2a9a404f7bfae091d87fa98"
+      },
+      "decision": {
+        "taskId": "SCRATCHnotAdecision00",
+        "evidenceRevision": 1,
+        "evidenceDigest": "ad0ac585a8ae068d0167b64806fde467e79747a9c47bc6a4306164b7368a342f",
+        "verdict": "CONFIRM",
+        "document": "p0-drift/negative-control/accepted/DECISION-STAND-IN.md"
+      },
+      "difference": "Scratch negative control: a 2px outline inside the full-screen dependency graph canvas (.tdg-modal .tdg-full-canvas).",
+      "sameCommit": {
+        "before": {
+          "commit": "99ec589280aaf3ab1727e520107ebb26a87a1bdb",
+          "sha256": "0e129acaf6cb97b227cdd4af76e1a4210cba0824a2a9a404f7bfae091d87fa98"
+        },
+        "after": {
+          "commit": "4103f361f73721ca5ab9c9b8f2856379d07d63d2",
+          "sha256": "89aac6158440f841af432ec7bbb17d7762fb4cef774cb86655a3d20e1d88295e"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    },
+    {
+      "screenshot": "chromium-light-phone/project-graph-fullscreen.png",
+      "sha256": "2c17daef42756c730cf71c4fcb646047461bf84a03f6a13cc31997cfcbbac07b",
+      "replaces": {
+        "layer": "p0.2",
+        "sha256": "5bbdd1f3349bec5251905e2d57de03894d1e270ba0977c708fd63efc0cd7da27"
+      },
+      "decision": {
+        "taskId": "SCRATCHnotAdecision00",
+        "evidenceRevision": 1,
+        "evidenceDigest": "ad0ac585a8ae068d0167b64806fde467e79747a9c47bc6a4306164b7368a342f",
+        "verdict": "CONFIRM",
+        "document": "p0-drift/negative-control/accepted/DECISION-STAND-IN.md"
+      },
+      "difference": "Scratch negative control: a 2px outline inside the full-screen dependency graph canvas (.tdg-modal .tdg-full-canvas).",
+      "sameCommit": {
+        "before": {
+          "commit": "99ec589280aaf3ab1727e520107ebb26a87a1bdb",
+          "sha256": "5bbdd1f3349bec5251905e2d57de03894d1e270ba0977c708fd63efc0cd7da27"
+        },
+        "after": {
+          "commit": "4103f361f73721ca5ab9c9b8f2856379d07d63d2",
+          "sha256": "2c17daef42756c730cf71c4fcb646047461bf84a03f6a13cc31997cfcbbac07b"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    },
+    {
+      "screenshot": "webkit-dark-desktop/project-graph-fullscreen.png",
+      "sha256": "860cef0914012e38ede54c9747a13a61beb052f0a6994df2eb4953768339b20c",
+      "replaces": {
+        "layer": "p0-drift",
+        "sha256": "f9ad8b3983f3f30379ae0c689926727eefc72e25f093fc08223c1014d93490c9"
+      },
+      "decision": {
+        "taskId": "SCRATCHnotAdecision00",
+        "evidenceRevision": 1,
+        "evidenceDigest": "ad0ac585a8ae068d0167b64806fde467e79747a9c47bc6a4306164b7368a342f",
+        "verdict": "CONFIRM",
+        "document": "p0-drift/negative-control/accepted/DECISION-STAND-IN.md"
+      },
+      "difference": "Scratch negative control: a 2px outline inside the full-screen dependency graph canvas (.tdg-modal .tdg-full-canvas).",
+      "sameCommit": {
+        "before": {
+          "commit": "99ec589280aaf3ab1727e520107ebb26a87a1bdb",
+          "sha256": "f9ad8b3983f3f30379ae0c689926727eefc72e25f093fc08223c1014d93490c9"
+        },
+        "after": {
+          "commit": "4103f361f73721ca5ab9c9b8f2856379d07d63d2",
+          "sha256": "860cef0914012e38ede54c9747a13a61beb052f0a6994df2eb4953768339b20c"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    },
+    {
+      "screenshot": "webkit-dark-phone/project-graph-fullscreen.png",
+      "sha256": "d320de9cb230915626e1b7c8dff48e3bcaf3412a10f4f6d7ab6266e6c30afe87",
+      "replaces": {
+        "layer": "p0.2",
+        "sha256": "dafed8c223afc325c5a996329bfd9cfbce6156da713e453b682a61b250dc0c74"
+      },
+      "decision": {
+        "taskId": "SCRATCHnotAdecision00",
+        "evidenceRevision": 1,
+        "evidenceDigest": "ad0ac585a8ae068d0167b64806fde467e79747a9c47bc6a4306164b7368a342f",
+        "verdict": "CONFIRM",
+        "document": "p0-drift/negative-control/accepted/DECISION-STAND-IN.md"
+      },
+      "difference": "Scratch negative control: a 2px outline inside the full-screen dependency graph canvas (.tdg-modal .tdg-full-canvas).",
+      "sameCommit": {
+        "before": {
+          "commit": "99ec589280aaf3ab1727e520107ebb26a87a1bdb",
+          "sha256": "dafed8c223afc325c5a996329bfd9cfbce6156da713e453b682a61b250dc0c74"
+        },
+        "after": {
+          "commit": "4103f361f73721ca5ab9c9b8f2856379d07d63d2",
+          "sha256": "d320de9cb230915626e1b7c8dff48e3bcaf3412a10f4f6d7ab6266e6c30afe87"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    },
+    {
+      "screenshot": "webkit-light-desktop/project-graph-fullscreen.png",
+      "sha256": "e60b348db3f71ead778a5efa7220d0254448ec9e2c82b6a6662b26bbe877b11d",
+      "replaces": {
+        "layer": "p0-drift",
+        "sha256": "a214da72a31f1818295647a030be68c5802a94a6580358f2c127252852612c32"
+      },
+      "decision": {
+        "taskId": "SCRATCHnotAdecision00",
+        "evidenceRevision": 1,
+        "evidenceDigest": "ad0ac585a8ae068d0167b64806fde467e79747a9c47bc6a4306164b7368a342f",
+        "verdict": "CONFIRM",
+        "document": "p0-drift/negative-control/accepted/DECISION-STAND-IN.md"
+      },
+      "difference": "Scratch negative control: a 2px outline inside the full-screen dependency graph canvas (.tdg-modal .tdg-full-canvas).",
+      "sameCommit": {
+        "before": {
+          "commit": "99ec589280aaf3ab1727e520107ebb26a87a1bdb",
+          "sha256": "a214da72a31f1818295647a030be68c5802a94a6580358f2c127252852612c32"
+        },
+        "after": {
+          "commit": "4103f361f73721ca5ab9c9b8f2856379d07d63d2",
+          "sha256": "e60b348db3f71ead778a5efa7220d0254448ec9e2c82b6a6662b26bbe877b11d"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    },
+    {
+      "screenshot": "webkit-light-phone/project-graph-fullscreen.png",
+      "sha256": "0044878ce3cfac102b575872dabf78e1dc407f52ce2a10078488953f8b453263",
+      "replaces": {
+        "layer": "p0.2",
+        "sha256": "4c25fd1acefe818d78cf63f75e7dd4598c1561095580096c0db02a569e631e64"
+      },
+      "decision": {
+        "taskId": "SCRATCHnotAdecision00",
+        "evidenceRevision": 1,
+        "evidenceDigest": "ad0ac585a8ae068d0167b64806fde467e79747a9c47bc6a4306164b7368a342f",
+        "verdict": "CONFIRM",
+        "document": "p0-drift/negative-control/accepted/DECISION-STAND-IN.md"
+      },
+      "difference": "Scratch negative control: a 2px outline inside the full-screen dependency graph canvas (.tdg-modal .tdg-full-canvas).",
+      "sameCommit": {
+        "before": {
+          "commit": "99ec589280aaf3ab1727e520107ebb26a87a1bdb",
+          "sha256": "4c25fd1acefe818d78cf63f75e7dd4598c1561095580096c0db02a569e631e64"
+        },
+        "after": {
+          "commit": "4103f361f73721ca5ab9c9b8f2856379d07d63d2",
+          "sha256": "0044878ce3cfac102b575872dabf78e1dc407f52ce2a10078488953f8b453263"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    }
+  ]
+}
