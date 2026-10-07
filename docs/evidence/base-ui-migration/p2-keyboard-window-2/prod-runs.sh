@@ -10,6 +10,9 @@
 #            (npm run test:ui-choices) and the overlays matrix (npm run test:ui-overlays), by their npm scripts; raw
 #            results copied to /var/tmp/kw2-246921c8/runs/<step>-<label>, slim copy in <step>-<label>/ here
 #   choices-list  the choices test list (playwright --list), to show no test was added, removed or renamed
+#   entry-repeat  the choices entry's "Dialog Popover Select exits" test ten times in chromium-light-desktop and
+#            webkit-dark-phone (--repeat-each 10), the two projects where it failed once under load; raw results
+#            copied to /var/tmp/kw2-246921c8/runs/entry-repeat-<label>, slim copy in entry-repeat-<label>/ here
 #   p0       P0 by its original command, npm run test:ui-migration -w @orbit/web (its pretest builds again); raw
 #            results copied to /var/tmp/kw2-246921c8/runs/p0-<label>, slim copy in p0-<label>/ here. Its output
 #            directory is src/web/.ui-migration-results, which every probe's globalSetup also writes, so it runs
@@ -64,6 +67,10 @@ for step in "$@"; do
         cp src/web/.ui-migration-results/environment.json "$raw/runs/$step-$label/environment.json"
         python3 -B "$here/slim.py" "$raw/runs/$step-$label" "$here/$step-$label" > /dev/null ;;
     choices-list) run choices-list 'cd src/web && NO_COLOR=1 npx playwright test --config ui-migration/choices.config.mjs --list' ;;
+    entry-repeat) run entry-repeat "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 npm run test:ui-choices -w @orbit/web -- --grep \"Dialog Popover Select exits\" --project chromium-light-desktop --project webkit-dark-phone --repeat-each 10'"
+        rm -rf "$raw/runs/entry-repeat-$label" && cp -r src/web/.choices-results "$raw/runs/entry-repeat-$label"
+        cp src/web/.ui-migration-results/environment.json "$raw/runs/entry-repeat-$label/environment.json"
+        python3 -B "$here/slim.py" "$raw/runs/entry-repeat-$label" "$here/entry-repeat-$label" > /dev/null ;;
     *) echo "unknown step $step"; exit 2 ;;
   esac
 done
