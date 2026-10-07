@@ -210,6 +210,7 @@ import {
   type TranscriptRecordKind,
 } from './transcript-around';
 import { EngineSignedOutConflict, engineSignInAction, signedOutEngineRefusal } from './engine-signin-preflight';
+import { assertManagedFirstSessionRuntime } from '../managed-runners/managed-runner-supply';
 import { antigravityState, hasGeminiEnvKey } from '../common/antigravity-readiness';
 import { DSH_RUNNER_UPGRADE_ERROR, dshRuntimeUnavailable } from '../runner-api/runner-provider-support';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
@@ -902,6 +903,9 @@ export class SessionsService {
     let workspaceEnv: unknown;
     // The accounts the workspace pins its sessions to, whose sign-ins the preflight below judges.
     let accountChoices: WorkspaceAccountChoices | undefined;
+    // Set when the workspace is a managed runner's default workspace: that runner, whose first
+    // session is held to the runtimes it has ready (see the preflight below).
+    let managedRunnerId: string | undefined;
     if (!assignedRunnerId && dto.workspaceId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
@@ -913,6 +917,7 @@ export class SessionsService {
           codexAccount: true,
           claudeAccount: true,
           antigravityAccount: true,
+          managedRunnerDefault: { select: { runnerId: true } },
         },
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
@@ -928,16 +933,21 @@ export class SessionsService {
       enableWorktree = workspace.enableWorktree;
       workspaceEnv = workspace.env;
       accountChoices = workspace;
+      managedRunnerId = workspace.managedRunnerDefault?.runnerId;
     } else if (dto.workspaceId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
-        select: { enableWorktree: true, enabled: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true },
+        select: {
+          enableWorktree: true, enabled: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true,
+          managedRunnerDefault: { select: { runnerId: true } },
+        },
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
       if (workspace.enabled === false) throw new ForbiddenException('workspace is disabled');
       enableWorktree = workspace.enableWorktree;
       workspaceEnv = workspace.env;
       accountChoices = workspace;
+      managedRunnerId = workspace.managedRunnerDefault?.runnerId;
     }
     if (!assignedRunnerId) {
       throw new BadRequestException('pick a workspace bound to a runner, or pass assignedRunnerId');
@@ -1204,6 +1214,18 @@ export class SessionsService {
     // clears it where Orbit can start one, so a client can offer that as a button.
     if (refusal && targetRunner) {
       throw new EngineSignedOutConflict(runtime, refusal, assignedRunnerId, engineSignInAction(runtime, targetRunner));
+    }
+    // A managed runner installs no engine on demand, so its default workspace's first session runs on
+    // a runtime it reported ready — the default derived above is the one it became READY with — or is
+    // refused MODEL_UNAVAILABLE here (docs/managed-runner-design.md, "Provisioning retry wake and sleep" 3).
+    if (managedRunnerId && managedRunnerId === assignedRunnerId && targetRunner && dto.workspaceId) {
+      await assertManagedFirstSessionRuntime(this.prisma, {
+        workspaceId: dto.workspaceId,
+        runtime,
+        bringsOwnCredentials: borrowedRuntime != null,
+        workspaceEnv,
+        runner: targetRunner,
+      });
     }
     // §13.8: a conversation gets no worktree. Applied after the workspace's default is read, so it
     // is a deliberate override rather than a second source of the default.
