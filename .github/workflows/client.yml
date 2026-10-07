@@ -34,7 +34,15 @@ on:
       - "scripts/ci/nav-push-gate.sh"
   # Manual trigger to compile a branch on the Mac runners without opening a throwaway PR, e.g.
   # `gh workflow run client.yml --ref <branch>`.
+  #
+  # `source_refused_probe` is the evidence probe's own switch (see the job below): off by default,
+  # so an ordinary dispatch compiles a branch and takes no pictures.
   workflow_dispatch:
+    inputs:
+      source_refused_probe:
+        description: "Also run the source-refused evidence probe (Mac window + iPhone shots)"
+        type: boolean
+        default: false
 
 concurrency:
   group: client-${{ github.ref }}
@@ -132,3 +140,98 @@ jobs:
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             build
+
+  # TEMPORARY (task 34bkMbJBijj8rD2HwWXqJ, the "this run never started" card's Mac pictures). The
+  # branch's own Mac mini has no display and no automation grant, so the Mac window's pixels can
+  # only be taken on a runner: this job builds the probe app from the real shared sources and lets
+  # `RunStartShotTests` drive and photograph it, as the crossings probe did
+  # (docs/evidence/project-crossings-native/README.md). Dispatch-only, and only when the dispatch
+  # asks for it: it costs a 90-minute Mac runner and an ordinary dispatch should not.
+  #
+  # The pictures land in `source-refused-shots` (artifact) and, because artifacts cannot be
+  # downloaded without a token, in `probe/source-refused-mac-shots-results` — the branch a clone
+  # can read, which is what `docs/evidence/source-refused-native/README.md` names.
+  source-refused-shots:
+    name: Source-refused probe (Mac window + iPhone)
+    if: github.event_name == 'workflow_dispatch' && inputs.source_refused_probe
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      # project.yml's `../src` paths are relative to the repository root, so the harness runs from
+      # a copy of itself placed there (the crossings probe's `.xcross-probe/`).
+      - name: Stage the harness at the repository root
+        run: |
+          mkdir -p .sr-probe
+          cp -R docs/evidence/source-refused-native/probe-harness/. .sr-probe/
+      - name: Build, drive and capture
+        id: capture
+        continue-on-error: true
+        run: |
+          bash .sr-probe/run.sh 2>&1 | tee run-output.log
+          exit "${PIPESTATUS[0]}"
+      - name: Keep the build's errors and the run's output beside the shots
+        if: always()
+        run: |
+          mkdir -p .sr-probe/shots
+          cp run-output.log .sr-probe/shots/run-output.log 2>/dev/null || true
+          for log in .sr-probe/build-*.log; do
+            [ -f "$log" ] || continue
+            base=$(basename "$log" .log)
+            grep -E "error:|Test Case|Executed|\*\* TEST|\*\* BUILD" "$log" | head -400 > ".sr-probe/shots/summary-$base.txt" || true
+            tail -300 "$log" > ".sr-probe/shots/tail-$base.txt" || true
+          done
+          find .sr-probe/shots -name 'xcodebuild-*.log' -size +20M -exec gzip -9 {} \;
+          echo "capture=${{ steps.capture.outcome }}" > .sr-probe/shots/outcomes.txt
+          echo "run=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> .sr-probe/shots/outcomes.txt
+          echo "sha=${{ github.sha }}" >> .sr-probe/shots/outcomes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: source-refused-shots
+          path: .sr-probe/shots
+      - name: Fail as the capture did
+        if: steps.capture.outcome != 'success'
+        run: exit 1
+
+  # Artifacts need a token to download and this repository's readers do not have one: the same job
+  # the crossings probe used puts the pictures on a branch a plain `git clone` can read.
+  source-refused-publish:
+    name: Push the shots where a clone can read them
+    needs: [source-refused-shots]
+    # Guarded like the job it publishes: an ordinary dispatch must not rewrite the results branch.
+    if: always() && github.event_name == 'workflow_dispatch' && inputs.source_refused_probe
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Push to probe/source-refused-mac-shots-results
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd out
+          {
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "sha: ${{ github.sha }}"
+            echo "shots: ${{ needs.source-refused-shots.result }}"
+          } > RESULTS.txt
+          cat RESULTS.txt
+          git init -q
+          git config user.name "orbit-probe"
+          git config user.email "probe@orbit.invalid"
+          git checkout -q -b results
+          git add -A
+          git commit -q -m "source-refused probe results for ${{ github.sha }} (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
+            results:refs/heads/probe/source-refused-mac-shots-results
