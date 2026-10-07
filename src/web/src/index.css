@@ -6617,6 +6617,45 @@ html[data-theme='dark'] .session-tag-chip {
 .composer-model-menu.ant-dropdown-menu {
   min-width: 200px;
 }
+/* The menu's own title: the engine this session runs on. A display, not a control — no chevron,
+   no pointer, no hover fill — and the rule under it keeps the one fact nothing here can change
+   apart from the rows that pick. `→` shows only while a standing pick will carry the next turn to
+   another engine. */
+.ant-dropdown-menu-item.composer-engine-title,
+.ant-dropdown-menu-item.composer-engine-title:hover {
+  cursor: default;
+  background: transparent;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  margin-bottom: 4px;
+  padding-top: 3px;
+  padding-bottom: 9px;
+}
+.composer-engine-title-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.composer-engine-title-glyph {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+.composer-engine-title-mono {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+.composer-engine-title-name {
+  color: var(--text-1);
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.composer-engine-title-arrow {
+  color: var(--text-3);
+  font-size: 14px;
+}
 /* A task run on smart selection's pick (model routing §9): a ✦ and a light blue ground, no wider
    than before — why it is this model opens at the top of the menu. */
 .composer-model-chip.is-smart {

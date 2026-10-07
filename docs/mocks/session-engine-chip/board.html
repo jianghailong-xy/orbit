@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Session 聊天页：让「当前运行的 Engine」可见</title>
+<style>
+@font-face { font-family: "Inter"; src: local("Inter"), url("file:///tmp/mockfonts/Inter.ttf"); font-weight: 100 900; }
+@font-face { font-family: "Noto Sans SC"; src: local("Noto Sans SC"), url("file:///tmp/mockfonts/NotoSansSC.ttf"); font-weight: 100 900; }
+@font-face { font-family: "JetBrains Mono"; src: local("JetBrains Mono"), url("file:///tmp/mockfonts/JetBrainsMono.ttf"); font-weight: 100 900; }
+:root { --badge: #FF9500; --line: #d8d8de; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 40px 44px 56px; background: #e4e4e9; color: #16161a; width: max-content;
+  font: 15px/1.6 "Inter", "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+h1 { font-size: 27px; letter-spacing: -.02em; margin: 0 0 10px; }
+h2 { font-size: 19px; margin: 0 0 4px; letter-spacing: -.01em; }
+h2 .n { color: #8a8a93; font-weight: 600; margin-right: 8px; }
+.lede { color: #4f4f58; margin: 0 0 6px; font-size: 15px; max-width: 1280px; }
+.lede b { color: #16161a; }
+.lede:last-of-type { margin-bottom: 26px; }
+code { font: 12.5px "JetBrains Mono", monospace; background: #d9d9e0; border-radius: 4px; padding: 1px 5px; }
+.panel { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; margin: 0 0 22px; }
+.panel > .hint { color: #6b6b74; font-size: 13.5px; margin: 0 0 14px; }
+.cols { display: flex; gap: 30px; align-items: flex-start; }
+.cols > .txt { flex: 1; min-width: 0; }
+.cols > .fig { flex: none; }
+ul.pts { margin: 4px 0 0; padding-left: 20px; color: #3c3c44; }
+ul.pts li { margin: 0 0 8px; }
+ul.pts b { color: #16161a; }
+.tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 2px 10px; margin-bottom: 10px; }
+.tag.now { background: #ffd9d4; color: #8f1d13; }
+.tag.after { background: #d6e4ff; color: #14428f; }
+.tag.opt { background: #ece3ff; color: #4b2a8f; }
+.tag.bad { background: #ffe3e0; color: #a01b0f; }
+figure { margin: 0; }
+figure img { display: block; border: 1px solid #cfcfd6; border-radius: 10px; background: #fff; }
+figcaption { color: #6b6b74; font-size: 12.5px; margin-top: 7px; max-width: 420px; }
+figcaption b { color: #16161a; }
+.row2 { display: flex; gap: 26px; align-items: flex-start; margin-top: 8px; }
+table.mx { border-collapse: collapse; margin-top: 6px; font-size: 14px; }
+table.mx th, table.mx td { border: 1px solid var(--line); padding: 8px 12px; text-align: left; vertical-align: top; }
+table.mx th { background: #f2f2f6; font-weight: 600; }
+table.mx td:first-child { white-space: nowrap; }
+.mono { font: 13px "JetBrains Mono", monospace; }
+.q { margin: 10px 0 0; padding-left: 20px; color: #3c3c44; }
+.q li { margin-bottom: 6px; }
+</style>
+</head>
+<body>
+
+<h1>Session 聊天页：让「当前运行的 Engine」可见</h1>
+<p class="lede">要求：<b>菜单标题就是引擎名</b>——只读，排在 Provider 行之上（不写「Engine」字样）。已按三个决定定稿并实现：<b>借壳不补注</b>、<b>切换中显示去向</b>、<b>额度不进标题</b>。下面的图是真实组件渲染（vite + 假 API；会话数据取 owner 截图里的那个：DeepSeek provider、DeepSeek V4.1 Flash、Max）。</p>
+<p class="lede">一句话结论：这行放在菜单里解决「打开菜单时看得到」；如果要「不打开菜单也一直看得到」，再叠一个头部常驻 chip（第 ③ 节，可选）。</p>
+
+<div class="panel">
+  <span class="tag now">① 现状</span>
+  <h2><span class="n">1</span>菜单里只回答「下一条消息用什么」，没有一处说「这次运行由谁在跑」</h2>
+  <div class="cols">
+    <div class="fig"><figure>
+      <img src="menu-now.png" width="430">
+      <figcaption>今天的模型菜单：<b>Provider</b>（发给哪个 endpoint）、模型行（✓ 当前模型）、<b>Effort</b> / Speed。没有引擎。</figcaption>
+    </figure></div>
+    <div class="txt">
+      <ul class="pts">
+        <li>Provider 行的值（<span class="mono">DeepSeek</span>）说的是<b>下一条消息</b>的目标，不是<b>当前这一轮</b>由谁执行。</li>
+        <li>第三方 provider 的会话最需要这一行：模型是 DeepSeek 的，真正驱动的 CLI 是 <b>Claude Code</b> —— 菜单里、header 里都看不出来。</li>
+        <li>底部 chip「DeepSeek V4.1 Flash　Max」同样只说下一条消息的模型与档位。</li>
+      </ul>
+    </div>
+  </div>
+  <div class="row2">
+    <figure>
+      <img src="now-mark-header.png" width="760">
+      <figcaption>会话 header 也一样（红框 ① 状态行、② 标题行）：没有引擎信息。</figcaption>
+    </figure>
+  </div>
+</div>
+
+<div class="panel">
+  <span class="tag after">② 方案（已实现）</span>
+  <h2><span class="n">2</span>菜单的标题就是引擎名（只读），Provider 往下才是可点的控件</h2>
+  <div class="cols">
+    <div class="fig"><figure>
+      <img src="real-menu-byok.png" width="430">
+      <figcaption><b>真实组件渲染</b>：标题一行 —— 品牌标 ＋ 引擎名（15px/650、正文色），下压 1px 分隔线；不写「Engine」字样。借壳（DeepSeek 的模型、Claude 的运行时）不补注。</figcaption>
+    </figure></div>
+    <div class="txt">
+      <ul class="pts">
+        <li><b>「标题」本身就解决了只读语义</b>：没有 chevron、点了不 PATCH 任何配置、hover 不出现选中底色。</li>
+        <li>值取 CLI 自己的产品名（<span class="mono">ENGINE_CLI_NAME</span>）：<span class="mono">Claude Code / Codex / Kimi Code / OpenCode / Antigravity CLI / DeepSeek Harness</span>。</li>
+        <li>数据是 <span class="mono">engineTitleFor(session.provider, configuredProviders, pendingResumeProvider)</span>，用会话<b>实际</b>的 provider。</li>
+        <li>排版规范：名称 15px/650/字距 -.01em/正文色 ＋ 14px 品牌标（没有品牌标的引擎用首字母圆牌）；整块左右 padding 12px，下缘 1px 分隔线。</li>
+        <li>任务会话里已有的「✦ Picked by smart selection」说明块排在标题之下（它解释模型怎么选的，标题说明谁在跑）。</li>
+      </ul>
+    </div>
+  </div>
+  <div class="row2">
+    <figure>
+      <img src="real-menu-claude.png" width="330">
+      <figcaption><b>内置 Claude 会话</b>：没有 Provider 行可切，标题领衔菜单。</figcaption>
+    </figure>
+    <figure>
+      <img src="real-menu-phone.png" width="300">
+      <figcaption><b>手机</b>：同一个菜单、同一条标题。</figcaption>
+    </figure>
+    <figure>
+      <img src="engine-title-switch.png" width="330">
+      <figcaption><b>切换中</b>：下一条要换引擎时，标题直接说去向 —— <span class="mono">Claude Code → Codex</span>。</figcaption>
+    </figure>
+  </div>
+  <p class="hint" style="margin:12px 0 0">切换中的规则：<span class="mono">engineTitleFor(当前 provider, …, 待生效的 provider)</span> —— 只有当两端<b>引擎不同</b>才画箭头；同一个 CLI 的两个 provider 不画（<span class="mono">Claude Code → Claude Code</span> 没有信息量，那件事由 Provider 行说）。图里的箭头是照组件的画法补的：菜单的 Provider 行今天只列<b>同一个 CLI</b> 的 provider，所以这条状态要等跨引擎的选择（任务改派、或将来允许跨引擎切换）才出现在真实数据里——规则已经就位。</p>
+</div>
+
+<div class="panel">
+  <h2><span class="n">3</span>四个控件各自回答什么（加这行不会和底部 chip 重复）</h2>
+  <table class="mx">
+    <tr><th>控件</th><th>回答的问题</th><th>性质</th></tr>
+    <tr><td>菜单标题 · 引擎名（新）</td><td><b>这次运行由哪个引擎驱动</b></td><td>只读展示</td></tr>
+    <tr><td>菜单 · Provider</td><td>下一条消息发给哪个 endpoint / 账号</td><td>可切换</td></tr>
+    <tr><td>菜单 · 模型行 ✓ / Effort / Speed</td><td>下一条消息用哪个模型、档位</td><td>可切换</td></tr>
+    <tr><td>composer 底部 chip</td><td>下一条消息的模型 + 档位（折叠态）</td><td>可切换（菜单的入口）</td></tr>
+  </table>
+</div>
+
+<div class="panel">
+  <span class="tag opt">③ 可选补充</span>
+  <h2><span class="n">4</span>想「不打开菜单也一直看得到」：头部常驻 chip</h2>
+  <div class="row2">
+    <figure>
+      <img src="a-chip-crop.png" width="760">
+      <figcaption><b>桌面</b>：标题行 Follow 之后一个安静的小 chip：<span class="mono">✳ Claude · Opus 5.5</span>（运行中可以带一个活动点）。</figcaption>
+    </figure>
+  </div>
+  <div class="row2">
+    <figure>
+      <img src="a-popover.png" width="700">
+      <figcaption><b>点开是详情卡</b>：Provider / Model / Effort / Account / Runner / 选它的原因，再补一句「你的下一条消息用 composer 的选择」。</figcaption>
+    </figure>
+  </div>
+  <div class="row2">
+    <figure>
+      <img src="a-phone-status.png" width="300">
+      <figcaption><b>手机</b>：chip 放状态行 —— <span class="mono">Running · ✳ Claude Opus 5.5 · 1m ago</span>。</figcaption>
+    </figure>
+    <figure>
+      <img src="a-phone.png" width="300">
+      <figcaption><b>反例</b>：chip 塞进手机标题行会把标题挤到只剩「执行…」。所以手机要放状态行。</figcaption>
+    </figure>
+    <figure style="max-width:430px">
+      <img src="c-live.png" width="420">
+      <figcaption><b>另一处可选</b>：把引擎标在运行中的那一轮上（行内会更挤，只在需要「哪一轮跑的」时用）。</figcaption>
+    </figure>
+  </div>
+</div>
+
+<div class="panel">
+  <h2><span class="n">5</span>三个决定（已定，实现按这个来）</h2>
+  <ul class="q">
+    <li><b>借壳不补注</b>：DeepSeek 的模型经 Claude Code 跑，标题只写 <span class="mono">Claude Code</span>，不加说明、不加 tooltip。</li>
+    <li><b>切换中显示去向</b>：下一条会换引擎时，标题写成 <span class="mono">Claude Code → Codex</span>；两端同引擎（同一 CLI 的两个 provider）不画箭头。</li>
+    <li><b>额度不进标题</b>：<span class="mono">claude-2 · weekly 62%</span> 这类信息留在 Provider 子菜单里，标题只有引擎名。</li>
+  </ul>
+  <p class="hint" style="margin:12px 0 0">实现落点：<span class="mono">lib/sessionProviderChoices.ts</span> 的 <span class="mono">engineTitleFor()</span>（纯函数，含箭头规则）＋ <span class="mono">WorkspaceView.tsx</span> 的 <span class="mono">modelMenuItems</span> 第一项 ＋ <span class="mono">index.css</span> 的 <span class="mono">.composer-engine-title</span>；单测在 <span class="mono">sessionProviderChoices.test.ts</span>（引擎名/品牌标/箭头规则）与 <span class="mono">WorkspaceView.modelControl.test.tsx</span>（菜单真的以它为标题、点了不发 PATCH）。</p>
+</div>
+
+</body>
+</html>
