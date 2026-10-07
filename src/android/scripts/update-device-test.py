@@ -17,6 +17,7 @@ import json
 import os
 import pathlib
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -193,14 +194,11 @@ def main():
         # subprocess closes inherited descriptors anyway; every adb call names the serial.
         subprocess.run([ADB, 'start-server'], check=True, capture_output=True, timeout=60)
         lock = open(os.environ.get('ANDROID_DEVICE_LOCK', '/var/lib/orbit/android/ui.lock'), 'w')
-        deadline = time.time() + args.lock_timeout
-        while True:
-            try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except BlockingIOError:
-                assert time.time() < deadline, 'UI lock is busy'
-                time.sleep(5)
+        # Queue like flock(1) does: a blocking wait, bounded by an alarm.
+        signal.signal(signal.SIGALRM, lambda *_: (_ for _ in ()).throw(TimeoutError('UI lock is busy')))
+        signal.alarm(args.lock_timeout)
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        signal.alarm(0)
         device.note(f'Holding the UI lock for {args.serial}')
         assert device.adb('get-state').strip() == 'device'
         device.save('device.txt', ''.join(f"{p}={device.shell(f'getprop {p}').strip()}\n" for p in (
