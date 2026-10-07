@@ -186,7 +186,7 @@ internal fun TaskBrowser(app: OrbitApplication, handle: SessionHandle, route: Or
             TaskOptionsMenu(batches, sort, descending, labels.isNotEmpty(),
                 select = { selecting = true; selected = emptyList() },
                 view = { batches = it; selecting = false; selected = emptyList() },
-                sort = { sort = it; descending = it == TaskSort.CREATED }, order = { descending = it },
+                pickSort = { sort = it; descending = it == TaskSort.CREATED }, order = { descending = it },
                 labels = { labelsOpen = true }, refresh = { scope.launch { navigation(); load(reset = false) } })
         }
         if (batches) OutlinedTextField(labelQuery, { labelQuery = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("task-label-search"),
@@ -366,7 +366,7 @@ private fun ListedTask(task: JsonObject, selecting: Boolean, checked: Boolean, t
 
 @Composable
 private fun TaskOptionsMenu(batches: Boolean, sort: TaskSort, descending: Boolean, labelled: Boolean, select: () -> Unit, view: (Boolean) -> Unit,
-    sort: (TaskSort) -> Unit, order: (Boolean) -> Unit, labels: () -> Unit, refresh: () -> Unit) {
+    pickSort: (TaskSort) -> Unit, order: (Boolean) -> Unit, labels: () -> Unit, refresh: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         TextButton(onClick = { open = true }, modifier = Modifier.testTag("tasks-options").semantics { contentDescription = "Task options" }) {
@@ -383,7 +383,7 @@ private fun TaskOptionsMenu(batches: Boolean, sort: TaskSort, descending: Boolea
             Text("${TaskListCopy.sortBy} · ${TaskListCopy.restHeader(sort, descending)}", Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                 style = MaterialTheme.typography.labelMedium)
             TaskSort.entries.forEach { option -> DropdownMenuItem(text = { Text(option.title) }, leadingIcon = { Text(if (option == sort) "✓" else " ") },
-                onClick = { open = false; sort(option) }) }
+                onClick = { open = false; pickSort(option) }) }
             DropdownMenuItem(text = { Text("Descending") }, leadingIcon = { Text(if (descending) "✓" else " ") }, onClick = { open = false; order(true) })
             DropdownMenuItem(text = { Text("Ascending") }, leadingIcon = { Text(if (!descending) "✓" else " ") }, onClick = { open = false; order(false) })
             HorizontalDivider()

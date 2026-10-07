@@ -2,197 +2,202 @@ package io.orbitd.android.tasks
 
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import io.orbitd.android.composer.ComposerCatalog
 import io.orbitd.android.core.cards.*
-import io.orbitd.android.core.net.HttpMethod
-import io.orbitd.android.navigation.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.*
 import java.time.Instant
+import java.time.LocalDateTime
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
+// The task page's sheets (TaskDetailParts.swift): Start at, Acceptance, Follow task, the
+// prerequisite picker and a routed run's Why. Every word comes from TaskDetailCopy.
+
+/** `Start at`: the one time the task starts by itself, saved explicitly, never in the past. */
 @Composable
-internal fun TaskEditor(kind: String, task: JsonObject, api: TaskApi, enabled: Boolean, workspaces: List<JsonObject>,
-    close: () -> Unit, submit: (JsonObject) -> Unit, operation: (suspend () -> Unit) -> Unit, open: (OrbitRoute) -> Unit) {
-    val id = task.text("id")!!
+internal fun ScheduleSheet(task: JsonObject, enabled: Boolean, close: () -> Unit, save: (String?) -> Unit) {
     val context = LocalContext.current
-    val clipboard = LocalClipboardManager.current
-    var criteria by rememberSaveable(id, kind) { mutableStateOf(task.text("acceptanceCriteria").orEmpty()) }
-    var command by rememberSaveable(id, kind) { mutableStateOf(task.text("acceptanceCommand").orEmpty()) }
-    var exitCode by rememberSaveable(id, kind) { mutableStateOf(task.number("acceptanceExpectedExitCode")?.toString().orEmpty()) }
-    var schedule by rememberSaveable(id, kind) { mutableStateOf(task.text("runAt")) }
-    var provider by rememberSaveable(id, kind) { mutableStateOf(task.text("provider")) }
-    var model by rememberSaveable(id, kind) { mutableStateOf(task.text("model")) }
-    var catalog by remember { mutableStateOf<ComposerCatalog?>(null) }
-    var query by rememberSaveable { mutableStateOf("") }
-    var candidates by remember { mutableStateOf<List<JsonObject>>(emptyList()) }
-    var prerequisite by remember { mutableStateOf<String?>(null) }
-    var follow by rememberSaveable { mutableStateOf("TASK_TERMINAL") }
-    var ttl by rememberSaveable { mutableStateOf("86400") }
-    val followKey = rememberSaveable { UUID.randomUUID().toString() }
-    var share by remember { mutableStateOf<JsonObject?>(null) }
-    var shareExpiry by rememberSaveable { mutableStateOf<String?>(null) }
-    var shareComments by rememberSaveable { mutableStateOf(false) }
-    var shareConversations by rememberSaveable { mutableStateOf(false) }
-    var shareTools by rememberSaveable { mutableStateOf(true) }
-    var loading by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(kind, query) {
-        if (kind !in setOf("dependency", "model", "share")) return@LaunchedEffect
-        loading = true; error = null
-        try {
-            when (kind) {
-                "dependency" -> {
-                    prerequisite = null; delay(250)
-                    // Prerequisites can belong to a project; do not apply the Tasks tab's outside-project scope.
-                    val result = api.read(listOf("tasks", "page"), listOf("limit" to "100", "q" to query, "counts" to "none")) as JsonObject
-                    val existing = task.objects("dependsOn").mapNotNull { it.obj("dependsOnTask")?.text("id") }
-                    candidates = result.objects("items").filter { it.text("id") != id && it.text("id") !in existing }
-                }
-                "model" -> {
-                    val workspace = workspaces.firstOrNull { ObjectId.same(it.text("id"), task.text("assigneeId")) }
-                    val runnerId = workspace?.text("runnerId") ?: workspace?.obj("runner")?.text("id")
-                    val runner = runnerId?.let { api.read(listOf("runners", it)) as JsonObject } ?: JsonObject(emptyMap())
-                    val providers = (api.read(listOf("providers")) as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
-                    catalog = ComposerCatalog(runner, providers)
-                }
-                "share" -> {
-                    share = api.read(listOf("tasks", id, "share")) as JsonObject
-                    val existing = share?.obj("link")
-                    shareExpiry = existing?.text("expiresAt")
-                    existing?.obj("include")?.let { include ->
-                        shareComments = include.flag("commentsAndFiles"); shareConversations = include.flag("conversations"); shareTools = include.flag("toolOutput")
-                    }
+    val zone = ZoneId.systemDefault()
+    var picked by rememberSaveable(task.text("id")) { mutableStateOf(TaskTime.parse(task.text("runAt"))?.toEpochMilli()
+        ?: Instant.now().truncatedTo(ChronoUnit.HOURS).plus(1, ChronoUnit.HOURS).toEpochMilli()) }
+    val instant = Instant.ofEpochMilli(picked)
+    val future = instant.isAfter(Instant.now())
+    AlertDialog(onDismissRequest = close, title = { Text(TaskDetailCopy.startAtLabel) }, modifier = Modifier.testTag("task-schedule-sheet"),
+        text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(TaskTime.local(instant.toString()) ?: "", style = MaterialTheme.typography.titleMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = {
+                    val now = instant.atZone(zone)
+                    DatePickerDialog(context, { _, y, m, d -> picked = LocalDateTime.of(y, m + 1, d, now.hour, now.minute).atZone(zone).toInstant().toEpochMilli() },
+                        now.year, now.monthValue - 1, now.dayOfMonth).apply { datePicker.minDate = System.currentTimeMillis() - 1000 }.show()
+                }) { Text("Date") }
+                OutlinedButton(onClick = {
+                    val now = instant.atZone(zone)
+                    TimePickerDialog(context, { _, h, min -> picked = now.withHour(h).withMinute(min).withSecond(0).toInstant().toEpochMilli() },
+                        now.hour, now.minute, android.text.format.DateFormat.is24HourFormat(context)).show()
+                }) { Text("Time") }
+            }
+            Text(TaskDetailLogic.scheduleHint(task.text("runAt")), style = MaterialTheme.typography.bodySmall)
+            if (task.text("runAt") != null) TextButton(onClick = { save(null) }, enabled = enabled, modifier = Modifier.testTag("task-cancel-schedule")) {
+                Text(TaskDetailCopy.cancelSchedule, color = MaterialTheme.colorScheme.error) }
+        } },
+        confirmButton = { TextButton(onClick = { save(instant.truncatedTo(ChronoUnit.MILLIS).toString()) }, enabled = enabled && future,
+            modifier = Modifier.testTag("task-save-schedule")) { Text(TaskDetailCopy.saveSchedule) } },
+        dismissButton = { TextButton(onClick = close) { Text(TaskDetailCopy.cancel) } })
+}
+
+/** The acceptance editor: criteria, and the command with the exit code that counts as done — together or not at all. */
+@Composable
+internal fun AcceptanceSheet(current: AcceptanceDraft, enabled: Boolean, close: () -> Unit, save: (JsonObject) -> Unit) {
+    var criteria by rememberSaveable { mutableStateOf(current.criteria) }
+    var command by rememberSaveable { mutableStateOf(current.command) }
+    var exitCode by rememberSaveable { mutableStateOf(current.exitCode) }
+    val draft = AcceptanceDraft(criteria, command, exitCode)
+    AlertDialog(onDismissRequest = close, title = { Text(TaskDetailCopy.acceptanceHeading) }, modifier = Modifier.testTag("task-acceptance-sheet"),
+        text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(TaskDetailCopy.acceptanceCriteriaLabel, style = MaterialTheme.typography.labelMedium)
+            OutlinedTextField(criteria, { criteria = it }, Modifier.fillMaxWidth().testTag("task-acceptance-criteria"), placeholder = { Text(TaskDetailCopy.acceptanceCriteriaPlaceholder) },
+                minLines = 3, maxLines = 10)
+            Text(TaskDetailCopy.automaticJudgementLabel, style = MaterialTheme.typography.labelMedium)
+            OutlinedTextField(command, { command = it }, Modifier.fillMaxWidth().testTag("task-acceptance-command"), label = { Text(TaskDetailCopy.acceptanceCommandLabel) },
+                placeholder = { Text(TaskDetailCopy.acceptanceCommandPlaceholder) }, textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace), singleLine = true)
+            OutlinedTextField(exitCode, { exitCode = it }, Modifier.fillMaxWidth().testTag("task-acceptance-exit"), label = { Text(TaskDetailCopy.doneWhenItExits) },
+                placeholder = { Text("0") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+            Text(TaskDetailCopy.acceptanceAutomaticHint, style = MaterialTheme.typography.bodySmall)
+            draft.problem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        } },
+        confirmButton = { TextButton(onClick = { save(draft.patch(current)) }, enabled = enabled && draft.canSave(current),
+            modifier = Modifier.testTag("task-save-acceptance")) { Text(TaskDetailCopy.saveAcceptance) } },
+        dismissButton = { TextButton(onClick = close) { Text(TaskDetailCopy.cancel) } })
+}
+
+/** The conditions Follow offers over one task (`WatchEditing.conditions(for: .task)`) and how each reads. */
+object TaskFollow {
+    private fun leaf(kind: String, leaf: String) = buildJsonObject { put("kind", kind); put("over", "ALL_TARGETS"); put("leaf", leaf) }
+    val conditions: List<JsonObject> = listOf(
+        leaf("ALL", "TASK_TERMINAL"),
+        buildJsonObject { put("kind", "ANY_OF"); putJsonArray("operands") { add(leaf("ALL", "TASK_TERMINAL")); add(leaf("ANY", "TASK_FAILED")) } },
+        leaf("ALL", "TASK_DONE"),
+        leaf("ANY", "TASK_FAILED"),
+    )
+    val deadlines = listOf(3_600, 21_600, 86_400, 259_200, 604_800, 2_592_000)
+    const val defaultDeadline = 86_400
+    fun deadlineTitle(seconds: Int): String = if (seconds % 86_400 == 0) { val days = seconds / 86_400; if (days == 1) "1 day" else "$days days" }
+        else { val hours = seconds / 3_600; if (hours == 1) "1 hour" else "$hours hours" }
+    private const val unknown = "a condition this version of Orbit can't show"
+    /** `WatchProjection.condition` for one task target. */
+    fun condition(predicate: JsonObject?): String {
+        val text = sentence(predicate, nested = false)
+        return text.replaceFirstChar { it.uppercase() }
+    }
+    private fun sentence(predicate: JsonObject?, nested: Boolean): String = when (predicate?.text("kind")) {
+        "ALL", "ANY" -> if (predicate.text("over") != "ALL_TARGETS") unknown else when (predicate.text("leaf")) {
+            "TASK_TERMINAL" -> "the task finishes"; "TASK_FAILED" -> "the task fails"; "TASK_DONE" -> "the task is done"; else -> unknown }
+        "ALL_OF" -> predicate.objects("operands").joinToString(" and ") { sentence(it, true) }.let { if (nested) "($it)" else it }
+        "ANY_OF" -> predicate.objects("operands").joinToString(", or ") { sentence(it, true) }.let { if (nested) "($it)" else it }
+        else -> unknown
+    }
+}
+
+/** Follow task: wait for a condition on this task, then notify you — until a deadline. One key per sheet. */
+@Composable
+internal fun FollowSheet(task: JsonObject, enabled: Boolean, close: () -> Unit, follow: (JsonObject, Int, String) -> Unit) {
+    var condition by rememberSaveable { mutableIntStateOf(0) }
+    var ttl by rememberSaveable { mutableIntStateOf(TaskFollow.defaultDeadline) }
+    val key = rememberSaveable { UUID.randomUUID().toString().lowercase() }
+    AlertDialog(onDismissRequest = close, title = { Text(TaskDetailCopy.followTask) }, modifier = Modifier.testTag("task-follow-sheet"),
+        text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(TaskDetailCopy.watchingLabel, style = MaterialTheme.typography.labelMedium)
+            Text(task.text("title").orEmpty(), maxLines = 3)
+            Text(TaskDetailCopy.waitUntilTheTask, style = MaterialTheme.typography.labelMedium)
+            TaskFollow.conditions.forEachIndexed { index, predicate ->
+                Row(Modifier.fillMaxWidth().clickable(role = Role.RadioButton) { condition = index }, verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(condition == index, null); Text(TaskFollow.condition(predicate))
                 }
             }
-        } catch (cancel: CancellationException) { throw cancel }
+            Text(TaskDetailCopy.thenLabel, style = MaterialTheme.typography.labelMedium)
+            Text("🔔 ${TaskDetailCopy.notifyMe}")
+            Text(TaskDetailCopy.stopWatchingAfter, style = MaterialTheme.typography.labelMedium)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TaskFollow.deadlines.take(3).forEach { seconds -> FilterChip(ttl == seconds, { ttl = seconds }, label = { Text(TaskFollow.deadlineTitle(seconds)) }) }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TaskFollow.deadlines.drop(3).forEach { seconds -> FilterChip(ttl == seconds, { ttl = seconds }, label = { Text(TaskFollow.deadlineTitle(seconds)) }) }
+            }
+            Text(TaskDetailCopy.followDeadlineHint, style = MaterialTheme.typography.bodySmall)
+        } },
+        confirmButton = { TextButton(onClick = { follow(TaskFollow.conditions[condition], ttl, key) }, enabled = enabled, modifier = Modifier.testTag("task-follow-confirm")) {
+            Text(TaskDetailCopy.follow) } },
+        dismissButton = { TextButton(onClick = close) { Text(TaskDetailCopy.cancel) } })
+}
+
+/** The bounded, server-searched prerequisite picker (`TaskDependencyPicker`). */
+@Composable
+internal fun DependencyPicker(api: TaskApi, taskId: String, existing: List<String>, enabled: Boolean, close: () -> Unit, pick: (String) -> Unit) {
+    var query by rememberSaveable { mutableStateOf("") }
+    var candidates by remember { mutableStateOf<List<JsonObject>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(query) {
+        loading = true; candidates = emptyList(); error = null
+        delay(250)
+        try { candidates = api.candidates(query) }
+        catch (cancel: CancellationException) { throw cancel }
         catch (failure: Exception) { error = taskError(failure) }
         finally { loading = false }
     }
-    val acceptanceValid = acceptanceProblem(command, exitCode) == null
-    val canSave = enabled && !loading && error == null && when (kind) {
-        "acceptance" -> acceptanceValid
-        "dependency" -> prerequisite != null
-        "schedule" -> schedule == null || runCatching { Instant.parse(schedule) }.isSuccess
-        "model" -> catalog != null
-        else -> true
+    val needle = query.trim()
+    val shown = candidates.filter { candidate ->
+        val id = candidate.text("id")
+        id != null && !io.orbitd.android.navigation.ObjectId.same(id, taskId) && existing.none { io.orbitd.android.navigation.ObjectId.same(it, id) } &&
+            (needle.isEmpty() || candidate.text("title").orEmpty().contains(needle, ignoreCase = true))
     }
-    AlertDialog(onDismissRequest = close, title = { Text(when (kind) {
-        "acceptance" -> "Edit acceptance"; "dependency" -> "Add prerequisite"; "schedule" -> "Schedule task"
-        "model" -> "Provider and model"; "follow" -> "Follow task"; else -> "Public sharing"
-    }) }, text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        when (kind) {
-            "acceptance" -> {
-                OutlinedTextField(criteria, { criteria = it }, label = { Text("Acceptance criteria") }, minLines = 3)
-                OutlinedTextField(command, { command = it }, label = { Text("Acceptance command") })
-                OutlinedTextField(exitCode, { exitCode = it }, label = { Text("Expected exit code") })
-                acceptanceProblem(command, exitCode)?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                Text("Orbit checks whether this changes the completion method and whether the edit is allowed.", style = MaterialTheme.typography.bodySmall)
-            }
-            "schedule" -> {
-                val whenLocal = schedule?.let { runCatching { Instant.parse(it).atZone(ZoneId.systemDefault()) }.getOrNull() }
-                Text(whenLocal?.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm z")) ?: "No scheduled start")
-                TextButton(onClick = {
-                    val initial = whenLocal ?: Instant.now().atZone(ZoneId.systemDefault()).plusHours(1)
-                    DatePickerDialog(context, { _, year, month, day ->
-                        TimePickerDialog(context, { _, hour, minute ->
-                            schedule = java.time.LocalDateTime.of(year, month + 1, day, hour, minute).atZone(ZoneId.systemDefault()).toInstant().toString()
-                        }, initial.hour, initial.minute, android.text.format.DateFormat.is24HourFormat(context)).show()
-                    }, initial.year, initial.monthValue - 1, initial.dayOfMonth).show()
-                }) { Text("Choose date and time") }
-                TextButton(onClick = { schedule = null }) { Text("Cancel scheduled start") }
-                Text("The task starts once at this local time, subject to its dependencies and server run policy.")
-            }
-            "dependency" -> {
-                OutlinedTextField(query, { query = it }, label = { Text("Search prerequisites") })
-                if (!loading && candidates.isEmpty()) Text("No matching tasks")
-                candidates.forEach { candidate ->
-                    Row { RadioButton(prerequisite == candidate.text("id"), onClick = { prerequisite = candidate.text("id") })
-                        TextButton(onClick = { prerequisite = candidate.text("id") }) { Text("${candidate.text("title")} · ${taskStatus(candidate)}") }
-                    }
+    AlertDialog(onDismissRequest = close, title = { Text(TaskDetailCopy.addPrerequisite) }, modifier = Modifier.testTag("task-dependency-picker"),
+        text = { LazyColumn(Modifier.heightIn(max = 460.dp)) {
+            item { OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().testTag("task-dependency-search"), label = { Text(TaskListCopy.searchTasks) }, singleLine = true) }
+            if (loading && shown.isEmpty()) item { LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp)) }
+            error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
+            if (!loading && shown.isEmpty()) item { Text("No matching tasks", Modifier.padding(vertical = 12.dp)) }
+            items(shown, key = { it.text("id").orEmpty() }) { candidate ->
+                Row(Modifier.fillMaxWidth().clickable(enabled = enabled, role = Role.Button) { candidate.text("id")?.let(pick) }.padding(vertical = 10.dp)
+                    .testTag("candidate:${candidate.text("id")}"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TaskStatusPill(TaskListLogic.pill(candidate)); Text(candidate.text("title").orEmpty(), maxLines = 2)
                 }
             }
-            "model" -> {
-                val workspace = workspaces.firstOrNull { ObjectId.same(it.text("id"), task.text("assigneeId")) }
-                val inherited = workspace?.text("provider") ?: "claude"
-                val effective = provider ?: inherited
-                val providers = catalog?.options(effective, newSession = true).orEmpty()
-                TaskChoice("Provider", (listOf(null to "Assignee's ($inherited)") + providers.map { it.id to it.label } +
-                    listOfNotNull(provider?.let { it to it })).distinctBy { it.first }, provider) { provider = it; model = null }
-                val models = catalog?.models(effective).orEmpty()
-                TaskChoice("Model", (listOf(null to "Provider default") + models.map { it.text("value") to (it.text("label") ?: it.text("value").orEmpty()) } +
-                    listOfNotNull(model?.let { it to it })).distinctBy { it.first }, model) { model = it }
-            }
-            "follow" -> {
-                TaskChoice("Notify me when", listOf("TASK_TERMINAL" to "The task finishes", "TASK_DONE" to "The task is done", "TASK_FAILED" to "The task fails"), follow) { follow = it!! }
-                TaskChoice("Stop watching after", listOf("3600" to "1 hour", "21600" to "6 hours", "86400" to "1 day", "259200" to "3 days", "604800" to "7 days", "2592000" to "30 days"), ttl) { ttl = it!! }
-                Text("Send a notification to my account when the condition is met.")
-            }
-            "share" -> {
-                val url = share?.obj("link")?.text("token")?.let { "${api.server.trimEnd('/')}/s/$it" }
-                Text(if (url != null) "Public link is enabled" else "Enable a public, read-only link to this task.")
-                if (url != null) TextButton(onClick = { clipboard.setText(AnnotatedString(url)) }) { Text("Copy public link") }
-                Row { Checkbox(shareComments, { shareComments = it }); Text("Comments and files", Modifier.padding(top = 12.dp)) }
-                Row { Checkbox(shareConversations, { shareConversations = it }); Text("Run conversations", Modifier.padding(top = 12.dp)) }
-                if (shareConversations) Row { Checkbox(shareTools, { shareTools = it }); Text("Tool output", Modifier.padding(top = 12.dp)) }
-                TaskChoice("Expires", listOf(null to "Never") + listOfNotNull(shareExpiry?.let { it to it }) + listOf(86400L to "1 day", 604800L to "7 days", 2592000L to "30 days").map { (seconds, label) ->
-                    Instant.now().plusSeconds(seconds).toString() to label
-                }, shareExpiry) { shareExpiry = it }
-                TextButton(onClick = { operation { api.write(listOf("tasks", id, "share"), HttpMethod.DELETE) } }, enabled = canSave && url != null) { Text("Disable public link") }
-            }
-        }
-    } }, confirmButton = { TextButton(enabled = canSave, onClick = {
-        when (kind) {
-            "acceptance" -> submit(acceptancePatch(task, criteria, command, exitCode))
-            "schedule" -> submit(buildJsonObject { put("runAt", schedule?.let(::JsonPrimitive) ?: JsonNull) })
-            "model" -> submit(buildJsonObject { put("provider", provider?.let(::JsonPrimitive) ?: JsonNull); put("model", model?.let(::JsonPrimitive) ?: JsonNull) })
-            "dependency" -> operation { api.addDependency(id, prerequisite!!) }
-            "follow" -> operation {
-                val response = api.write(listOf("watches"), body = buildJsonObject {
-                    put("predicateVersion", 2); putJsonObject("predicate") { put("kind", if (follow == "TASK_FAILED") "ANY" else "ALL"); put("over", "ALL_TARGETS"); put("leaf", follow) }
-                    putJsonArray("targets") { add(buildJsonObject { put("kind", "TASK"); put("id", id) }) }
-                    put("action", "NOTIFY_USER"); put("ttlSeconds", ttl.toInt()); put("idempotencyKey", followKey)
-                }) as? JsonObject
-                response?.text("id")?.let { open(OrbitRoute(Destination.WATCH, it)) }
-            }
-            "share" -> operation { api.write(listOf("tasks", id, "share"), HttpMethod.PUT, buildJsonObject {
-                put("expiresAt", shareExpiry?.let(::JsonPrimitive) ?: JsonNull)
-                putJsonObject("include") { put("commentsAndFiles", shareComments); put("conversations", shareConversations); put("toolOutput", shareTools) }
-            }) }
-        }
-    }) { Text(if (kind == "share") "Enable public link" else if (kind == "follow") "Follow" else "Save") } },
-        dismissButton = { TextButton(onClick = close) { Text("Cancel") } })
+        } },
+        confirmButton = {}, dismissButton = { TextButton(onClick = close) { Text(TaskDetailCopy.cancel) } })
 }
 
-internal fun acceptanceProblem(command: String, code: String): String? = when {
-    command.isBlank() && code.isBlank() -> null
-    command.isBlank() || code.isBlank() -> "Set both the command and its expected exit code, or clear both."
-    !code.trim().matches(Regex("-?[0-9]+")) || code.trim().toIntOrNull() == null -> "Expected exit code must be a whole number."
-    else -> null
-}
-internal fun acceptancePatch(task: JsonObject, criteria: String, command: String, code: String): JsonObject {
-    require(acceptanceProblem(command, code) == null)
-    return buildJsonObject {
-        if (criteria.trim() != task.text("acceptanceCriteria").orEmpty().trim()) put("acceptanceCriteria", criteria.takeUnless { it.isBlank() }?.let(::JsonPrimitive) ?: JsonNull)
-        if (command.trim() != task.text("acceptanceCommand").orEmpty().trim() || code.trim() != task.number("acceptanceExpectedExitCode")?.toString().orEmpty()) {
-            put("acceptanceCommand", command.takeUnless { it.isBlank() }?.let(::JsonPrimitive) ?: JsonNull)
-            put("acceptanceExpectedExitCode", code.trim().toIntOrNull()?.let(::JsonPrimitive) ?: JsonNull)
-        }
-    }
+/** The Why of one routed run: the router's own sentences, then its policy and when it decided. */
+@Composable
+internal fun RouteWhySheet(route: JsonObject, modelLabel: (String) -> String, close: () -> Unit) {
+    AlertDialog(onDismissRequest = close, title = { Text(TaskDetailCopy.why(TaskDetailLogic.routePick(route, modelLabel))) },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            route.strings("reasons").forEachIndexed { index, reason -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("${index + 1}", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary); Text(reason)
+            } }
+            Text(TaskDetailLogic.routeWhyFooter(route), style = MaterialTheme.typography.bodySmall)
+        } },
+        confirmButton = { TextButton(onClick = close) { Text("Done") } })
 }

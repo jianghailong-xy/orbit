@@ -86,7 +86,7 @@ fun writable(state: RealtimeState, handle: SessionHandle, signedIn: SessionHandl
 fun OrbitApplication.canWrite(handle: SessionHandle): Boolean =
     writable(realtime.state.value, handle, (session.state.value as? AuthState.SignedIn)?.handle)
 
-fun OrbitApplication.featureWrites(handle: SessionHandle) = FeatureWrites(session, handle) { canWrite(handle) }
+fun OrbitApplication.featureWrites(handle: SessionHandle) = FeatureWrites(session, handle, writable = { canWrite(handle) })
 
 class FeatureWriteUncertain(cause: Throwable? = null) : IllegalStateException(
     "The change may have reached Orbit. Refresh and check the server record before making another change. It has not been resent.", cause)

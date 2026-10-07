@@ -579,8 +579,8 @@ object OwnerConfirmations {
         if (task.text("completionCriterion") != "OWNER_CONFIRMED" || task.text("status") !in confirmableStatuses) return null
         return if (task.objects("sessions").isEmpty()) OwnerPanelAction.Confirm else null
     }
-    /** The panel's press answers no run: an explicit null `requestId`. */
-    fun panelRequest() = buildJsonObject { put("decision", "CONFIRM"); put("requestId", JsonNull) }
+    /** The panel's press answers no run: an explicit null `requestId`, and a CONFIRM names no review record. */
+    fun panelRequest() = buildJsonObject { put("decision", "CONFIRM"); put("requestId", JsonNull); put("reviewRecordId", JsonNull) }
 }
 
 /** The two presses under a task's title (`TaskDetailActionRow`). */
@@ -870,4 +870,63 @@ fun taskError(error: Throwable): String = when {
     error is io.orbitd.android.taskprojects.FeatureWriteUncertain -> error.message.orEmpty()
     error is io.orbitd.android.taskprojects.FeatureWriteRefused -> error.message.orEmpty()
     else -> "Request failed — check your connection."
+}
+
+/** Copy as Markdown for a task (`ShareMarkdown.task`): the owner's own read with the signed-in link. */
+object TaskMarkdown {
+    const val listedRuns = 10
+    const val acceptanceEmpty = "No acceptance criteria set."
+    fun outcomeLabel(status: String?, terminalReason: String? = null): String = when {
+        terminalReason == "SUPERSEDED" -> "Superseded"
+        terminalReason == "ABANDONED" -> "Abandoned"
+        else -> when (status.orEmpty()) { "OPEN" -> "Open"; "IN_PROGRESS" -> "In progress"; "DONE" -> "Done"; "FAILED" -> "Failed"
+            "CANCELLED" -> "Cancelled"; else -> status.orEmpty() }
+    }
+    fun supersessionNote(task: JsonObject): String? {
+        if (task.text("terminalReason") == "SUPERSEDED") {
+            if (task.text("supersededByTaskIdAbsentReason") == "SUCCESSOR_DELETED") return "Superseded — the task that replaced it has been deleted"
+            val chain = task.objects("successorChain")
+            val head = chain.lastOrNull() ?: return "Superseded by a later attempt"
+            return if (chain.size == 1) "Superseded by ${head.text("title").orEmpty()}"
+                else "Superseded — ${head.text("title").orEmpty()} is the live attempt, ${chain.size} replacements on"
+        }
+        val replaced = task.objects("supersedes")
+        if (replaced.size == 1) return "Replaces ${replaced[0].text("title").orEmpty()}"
+        if (replaced.size > 1) return "Replaces ${replaced.size} earlier attempts"
+        return null
+    }
+    private fun firstSeparatorAsSpace(chip: String) = chip.replaceFirst(" · ", " ")
+    fun task(task: JsonObject, link: String, time: (String?) -> String): String {
+        val judged = TaskJudgmentCopy.completionCriterionChip[task.text("completionCriterion")]?.let(::firstSeparatorAsSpace)
+        val status = listOfNotNull(outcomeLabel(task.text("status"), task.text("terminalReason")), judged).filter { it.isNotEmpty() }.joinToString(" · ")
+        val out = mutableListOf("# ${task.text("title").orEmpty()}", "", "**Status:** $status")
+        supersessionNote(task)?.let { out.add("**Outcome:** $it") }
+        val acceptance = task.text("acceptanceCriteria")?.trim().orEmpty()
+        out += listOf("**Link:** $link", "", "## Acceptance", "", acceptance.ifEmpty { acceptanceEmpty })
+        val command = task.text("acceptanceCommand")
+        val code = (task["acceptanceExpectedExitCode"] as? JsonPrimitive)?.longOrNull
+        if (!command.isNullOrEmpty() && code != null) out += listOf("", "Command: `$command` — done when it exits `$code`")
+        val needs = task.objects("dependsOn").mapNotNull { it.obj("dependsOnTask") }
+        val unblocks = task.objects("dependedOnBy").mapNotNull { it.obj("task") }
+        out += listOf("", "## Dependencies", "")
+        if (needs.isEmpty() && unblocks.isEmpty()) out.add("No dependencies")
+        needs.forEach { out.add("- Needs: ${it.text("title").orEmpty()} — ${outcomeLabel(it.text("status"))}") }
+        unblocks.forEach { out.add("- Unblocks: ${it.text("title").orEmpty()} — ${outcomeLabel(it.text("status"))}") }
+        val runs = task.objects("sessions").filter { it["deletedAt"] == null || it["deletedAt"] is JsonNull }
+        out += listOf("", "## Runs", "")
+        if (runs.isEmpty()) out.add("No runs yet") else out += listOf("${runs.size} run${if (runs.size == 1) "" else "s"}", "")
+        runs.take(listedRuns).forEach { run ->
+            val workspace = run.obj("agent")?.text("name")?.takeIf { it.isNotEmpty() }?.let { " · $it" }.orEmpty()
+            out.add("- ${TaskDetailLogic.runLabel(run)} · ${time(run.text("createdAt"))}$workspace")
+        }
+        if (runs.size > listedRuns) out.add("- …and ${runs.size - listedRuns} earlier")
+        return out.joinToString("\n") + "\n"
+    }
+}
+
+/** The workspace ids a comment @-mentions by name (`mentionedAgentIDs`): `@Name` at a word start. */
+fun mentionedWorkspaceIds(body: String, workspaces: List<JsonObject>): List<String> = workspaces.mapNotNull { workspace ->
+    val name = workspace.text("name")?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+    val pattern = Regex("(?:^|\\s)@" + Regex.escape(name) + "(?![\\w])", RegexOption.IGNORE_CASE)
+    workspace.text("id")?.takeIf { pattern.containsMatchIn(body) }
 }

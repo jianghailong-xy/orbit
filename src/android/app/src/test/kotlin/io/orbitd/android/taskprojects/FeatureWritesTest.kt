@@ -62,6 +62,51 @@ class FeatureWritesTest {
         assertEquals(1, fixture.mutations)
     }
 
+    @Test fun anUnknownAnswerHoldsThatPressForAMinuteNotForever() = runTest {
+        val fixture = Fixture()
+        val session = fixture.session()
+        val handle = session.login(fixture.server, "fixture@example.test", "fixture")
+        var now = 1_000_000L
+        val writes = FeatureWrites(session, handle, clock = { now })
+        fixture.response = { throw java.io.IOException("lost response") }
+        try { writes.execute("comment:1", mutation); fail() } catch (_: FeatureWriteUncertain) { }
+        fixture.response = { ApiResponse(200, "{}".encodeToByteArray()) }
+        now += FeatureWrites.FENCE_MS - 1
+        try { writes.execute("comment:1", mutation); fail("still held") } catch (_: FeatureWriteUncertain) { }
+        assertEquals(1, fixture.mutations)
+        // Past the hold the page has re-read the record; the same press is the person's to make again.
+        now += 2
+        assertNotNull(writes.execute("comment:1", mutation))
+        assertEquals(2, fixture.mutations)
+    }
+
+    @Test fun nothingIsSentWhileTheAccountStreamIsDown() = runTest {
+        val fixture = Fixture()
+        val session = fixture.session()
+        val handle = session.login(fixture.server, "fixture@example.test", "fixture")
+        var online = false
+        val writes = FeatureWrites(session, handle, writable = { online })
+        try { writes.execute("pause:1", mutation); fail() } catch (_: FeatureWriteRefused) { }
+        assertEquals(0, fixture.mutations)
+        online = true
+        assertNotNull(writes.execute("pause:1", mutation))
+        assertEquals(1, fixture.mutations)
+    }
+
+    @Test fun aNamedPressIsResentUnchangedButAnAnswerIsNeverRetried() = runTest {
+        val fixture = Fixture()
+        val session = fixture.session()
+        val handle = session.login(fixture.server, "fixture@example.test", "fixture")
+        val writes = FeatureWrites(session, handle)
+        var calls = 0
+        fixture.response = { if (++calls < 3) throw java.io.IOException("dropped") else ApiResponse(200, "{\"sessionId\":\"s\"}".encodeToByteArray()) }
+        assertNotNull(writes.execute("run:1", mutation, resends = 3))
+        assertEquals(3, fixture.mutations)
+        fixture.response = { ApiResponse(409, "{\"code\":\"TASK_ALREADY_RUNNING\"}".encodeToByteArray()) }
+        try { writes.execute("run:2", mutation, resends = 3); fail() } catch (error: ApiError) { assertEquals(409, error.status) }
+        assertEquals("a refusal is the answer, not a fault to resend", 4, fixture.mutations)
+    }
+
     private val mutation = ApiRequest(listOf("tasks", "one", "run"), HttpMethod.POST,
         body = "{\"triggerId\":\"fixed-user-gesture\"}".encodeToByteArray())
 
