@@ -277,7 +277,7 @@ model OAuthLoginFlow {               // oauth_login_flow：短命，兑换即删
 | `POST /api/admin/users` | ADMIN | 新增可选 `passwordless` |
 | `PATCH /api/admin/users/:id/disabled` | ADMIN | `{disabled: boolean}`，5.5 |
 | `DELETE /api/admin/users/:id/identities/google` | ADMIN | 解除他人的关联 |
-| `GET /api/admin/sign-in/google` | ADMIN | `{enabled, clientId, hasSecret, signupPolicy, redirectUri}`，从不返回密钥 |
+| `GET /api/admin/sign-in/google` | ADMIN | `{enabled, clientId, hasSecret, secretUnreadable, signupPolicy, redirectUri}`，从不返回密钥；`secretUnreadable` 为真时管理区提示重填（换了 `PROVIDER_SECRET_KEY`，见 7.1） |
 | `PUT /api/admin/sign-in/google` | ADMIN | `{enabled, clientId, clientSecret?, signupPolicy}`；不带 `clientSecret` 即保留原值 |
 
 全是新路由或增量字段，旧客户端不受影响。新路由要过 `pat-route-coverage.spec.ts` 的声明普查（admin 路由沿用 `@PatForbidden('ADMIN')`）。
@@ -304,6 +304,8 @@ model SignInProvider {               // sign_in_provider，每个提供方一行
 - `enabled` 为真且 ID、密钥都在，才算启用；否则 `/auth/methods` 报 `google: false`，行为与今天完全相同。
 - 回调地址取已有的 `PUBLIC_ORIGIN`，必须与 Google 控制台登记的一字不差；`self-hosting.md` 已要求它是对外的 HTTPS 地址。
 - 密钥与模型提供方的 API key 同一套加密：没有密钥版本，轮换 `PROVIDER_SECRET_KEY` 后要重填（与提供方相同的已知限制）。
+  轮换后 `GET /api/admin/sign-in/google` 报 `secretUnreadable: true`，Sign-in 页据此提示已保存的密钥解不开、要求重填，
+  不显示 On 与「A secret is saved」；用户侧登录仍按 4.3 的通用失败文案处理。
 
 为什么不用环境变量：apiserver 的 compose 段被 `test/compose-topology.test.mjs` 钉住，加变量要所有者重新审批；
 改了还要重启。存库则 orbitd.io 和每个自建部署都是「发版后管理员填一次」，不动部署文件。

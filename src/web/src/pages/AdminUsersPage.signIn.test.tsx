@@ -21,7 +21,7 @@ vi.mock('../api', async (importOriginal) => ({
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() };
 vi.mock('../lib/toast', () => ({ useToast: () => toast }));
 const { api } = await import('../api');
-const { AdminUsersPage, GOOGLE_SIGN_IN_ONLY, UNLINK_GOOGLE } = await import('./AdminUsersPage');
+const { AdminUsersPage, GOOGLE_SIGN_IN_ONLY, GOOGLE_SIGN_IN_ONLY_HINT, UNLINK_GOOGLE } = await import('./AdminUsersPage');
 
 interface Row {
   id: string;
@@ -186,7 +186,7 @@ describe('Admin → Users · Google sign-in', { timeout: 60_000 }, () => {
     expect(button(rowOf('dev@example.test'), UNLINK_GOOGLE)).toBeTruthy();
   });
 
-  it('Add user offers Google sign-in only while Google sign-in is on, and creates the account without a password', async () => {
+  it('Add user offers Google sign-in only while Google sign-in is on, says which addresses it can work for, and creates the account without a password', async () => {
     await open();
     await click(button(container, 'Add user'), 'Add user');
     const dialog = addUserDialog();
@@ -195,7 +195,12 @@ describe('Admin → Users · Google sign-in', { timeout: 60_000 }, () => {
     const googleOnly = [...dialog!.querySelectorAll<HTMLElement>('label.orbit-choice')].find((label) => label.textContent === GOOGLE_SIGN_IN_ONLY);
     await click(googleOnly?.querySelector('[role="checkbox"]'), GOOGLE_SIGN_IN_ONLY);
     expect(googleOnly?.querySelector('[role="checkbox"]')?.getAttribute('aria-checked')).toBe('true');
-    expect(dialog?.textContent).toContain('No password is set: they sign in with the Google account of this email address.');
+    // The limit is stated where the administrator chooses it (§5.6): only Gmail or Workspace, and a
+    // password for anyone else, because a passwordless account no Google account vouches for has no way in.
+    expect(dialog?.textContent).toContain(GOOGLE_SIGN_IN_ONLY_HINT);
+    expect(dialog?.textContent).toContain('must be a Gmail or Google Workspace address');
+    expect(dialog?.textContent).toContain('give them a password instead');
+    expect(dialog?.textContent).not.toContain('A one-time password is generated and shown once after creating.');
 
     await click(button(dialog, 'Create'), 'Create');
     expect(requests.filter((r) => r.path === '/admin/users' && r.method === 'POST').map((r) => r.body)).toEqual([
