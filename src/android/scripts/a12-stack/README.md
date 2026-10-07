@@ -47,6 +47,7 @@ task, and that each account lists only its own space. Every id goes to `<stack>/
 | `readback.mjs` | the seeded objects as the owner and the other account read them now, as JSON (read-only) |
 | `live-args.mjs` | the instrumentation arguments of `WikiWatchLiveTest`, from `seed.json` and `accounts.json` |
 | `live.sh` | the locked device run (below) |
+| `cycle.sh` | one resumable cycle into one evidence directory: a fresh seed, then `live.sh` |
 | `api.mjs` | `node <stack>/api.mjs METHOD PATH [json] [--as owner\|other]` for ad-hoc reads and writes |
 | `loopback-only.cjs` | the apiserver preload (loopback bind and keep-alive) |
 | `fake-claude` | the runner's fake engine |
@@ -81,22 +82,30 @@ worktree with `node_modules` installed by `npm ci` from the SHA's `package-lock.
 ```bash
 A=src/android/scripts/a12-stack
 bash $A/setup.sh build
-bash $A/setup.sh reset        # fresh database plus seed; the journeys that decide or stop something are one-shot
 # APKs: :app:assembleDebug :app:assembleDebugAndroidTest
-bash $A/live.sh src/android/app/build/outputs/apk/debug/app-debug.apk \
+bash $A/cycle.sh src/android/app/build/outputs/apk/debug/app-debug.apk \
   src/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk <new evidence dir> [emulator-5554]
 bash $A/setup.sh clean        # when done
 ```
+
+`cycle.sh` seeds the stack afresh (`setup.sh reset`) once per evidence directory and records that seed there, then
+runs `live.sh`. The journeys that decide or stop something are one-shot, so every cycle needs its own seed. Run the
+same command again after an interruption (a session recycle kills background jobs): it starts the apiserver and the
+runner again if they are gone, checks that the stack still holds that directory's seed, and `live.sh` skips the
+journeys that already have a result. A journey cut off midway runs again, and one that decides or stops something
+then fails its precondition (a new evidence directory, and so a new seed, runs it again). `live.sh` alone runs
+against whatever the stack holds.
 
 `live.sh` waits for host memory pressure to fall (PSI `full avg10` < 10), starts the adb server, then holds
 `/var/lib/orbit/android/ui.lock` for the whole device run with no adb call inheriting the lock's fd. It refuses any
 serial that is not an emulator (`ro.kernel.qemu`), adds `adb reverse tcp:3712`, installs both APKs inside the hold and
 records the installed APK's sha256, clears the app, sets font 1.0 and day mode, and runs each `WikiWatchLiveTest`
 journey as its own `am instrument` (in order). After each journey `readback.mjs` writes the server's view to
-`server/NN-<journey>.json`. Then it pulls each journey's captures (`a12-live/`: identity, screenshots, semantics trees,
+`server/NN-<journey>.json`, and the journey's captures (`a12-live/`: identity, screenshots, semantics trees,
 `<journey>-server.json` with what the test read from the server, `<journey>-checks.txt`, and the stack trace of a
-failure) and the logcat of each test process, removes the reverse and restores the device settings. It fails if a
-journey failed, the process crashed, or either test password appears anywhere in the evidence.
+failure) and the logcat of its test process are pulled at once. At the end it removes the reverse and restores the
+device settings. It fails if a journey failed, the process crashed, or either test password appears anywhere in the
+evidence.
 
 | journey | account | link | acts, then reads back |
 | --- | --- | --- | --- |
