@@ -79,7 +79,7 @@ Refresh: the account stream reaches pages only as A04's `invalidationRevision`, 
 
 ### Deliberate platform differences
 
-- Top-bar actions and titles live in the shell's TopAppBar; iOS principal title blocks (Review's count line) are a second title line.
+- Top-bar actions and titles live in the shell's TopAppBar; iOS principal title blocks (Review's count line) are a second title line. A bar title is one line ending in an ellipsis when the bar's buttons leave too little room, as iOS's inline titles are; the watch record's headline, cut first at large type, is also its overview section's header, as on iOS.
 - Sheets are Material bottom sheets (the article footnote card can be dragged to full height); confirmation dialogs are `AlertDialog`s; iOS Menus/Pickers are `DropdownMenu`s; steppers are −/+ buttons; list reordering in the plan's Edit sheet is ↑/↓/remove buttons with TalkBack labels instead of drag handles.
 - iOS's trailing swipe (a run's Reject) is a swipe that snaps back and asks for the reason, also reachable as a TalkBack custom action.
 - The A–Z section index is a letter strip beside the list (letters jump; drag scrubs); each letter is a button for TalkBack.
