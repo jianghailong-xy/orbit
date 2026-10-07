@@ -177,12 +177,14 @@ import {
 } from '../common/runtime-provider';
 import {
   accountPoolRuntime,
+  adminOnlyProviderRefusal,
   execRuntime,
   isBuiltinProvider,
   openCodeKeyRows,
   resolveProviderExec,
   runsOnOpenCode,
   sessionExecRuntime,
+  usableProviderScope,
 } from '../providers/custom-provider';
 import { ownsModel } from '../providers/preset-overlay';
 import {
@@ -961,7 +963,7 @@ export class SessionsService {
           where: {
             slug: dto.provider,
             ...(provider === AgentProvider.DSH ? {} : { enabled: true }),
-            OR: [{ ownerId: null }, { ownerId }],
+            ...(await usableProviderScope(this.prisma, ownerId)),
           },
           select: { runtime: true, enabled: true },
         });
@@ -975,7 +977,9 @@ export class SessionsService {
         if (configured || borrowedRuntime) providerBuiltin = false;
         // The slug is named: a command-line caller typed it, and no picker checked it first.
         if (!providerBuiltin && !configured && !borrowedRuntime) {
-          throw new BadRequestException(`provider not available: "${dto.provider}"`);
+          throw new BadRequestException(
+            (await adminOnlyProviderRefusal(this.prisma, ownerId, dto.provider)) ?? `provider not available: "${dto.provider}"`,
+          );
         }
         if (!configured && borrowedRuntime) await this.assertUsablePool(ownerId, dto.provider);
       }
@@ -984,13 +988,17 @@ export class SessionsService {
       // Inherited from the workspace: a removed/disabled provider cannot substitute the runner's
       // own Claude login for the configured endpoint the caller inherited.
       const configured = await this.prisma.modelProvider.findFirst({
-        where: { slug: provider, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
+        where: { slug: provider, enabled: true, ...(await usableProviderScope(this.prisma, ownerId)) },
         select: { runtime: true },
       });
       borrowedRuntime = configured
         ? configured.runtime
         : await accountPoolRuntime(this.prisma, ownerId, provider);
-      if (!borrowedRuntime) throw new BadRequestException(`provider not available: "${provider}"`);
+      if (!borrowedRuntime) {
+        throw new BadRequestException(
+          (await adminOnlyProviderRefusal(this.prisma, ownerId, provider)) ?? `provider not available: "${provider}"`,
+        );
+      }
       if (!configured && borrowedRuntime) await this.assertUsablePool(ownerId, provider);
     }
     if (borrowedRuntime && (!Object.values(AgentProvider).includes(borrowedRuntime as AgentProvider) ||
@@ -1002,11 +1010,14 @@ export class SessionsService {
     const openCodeKey = provider === AgentProvider.OPENCODE ? openCodeKeyOf(dto.model) : null;
     if (openCodeKey) {
       const row = await this.prisma.modelProvider.findFirst({
-        where: { slug: openCodeKey.slug, OR: [{ ownerId: null }, { ownerId }] },
+        where: { slug: openCodeKey.slug, ...(await usableProviderScope(this.prisma, ownerId)) },
         select: { enabled: true, runtime: true, apiKeyEnc: true },
       });
       if (!row || !runsOnOpenCode(row)) {
-        throw new BadRequestException(`provider not available on OpenCode: "${openCodeKey.slug}"`);
+        throw new BadRequestException(
+          (!row && (await adminOnlyProviderRefusal(this.prisma, ownerId, openCodeKey.slug)))
+            || `provider not available on OpenCode: "${openCodeKey.slug}"`,
+        );
       }
     }
     await this.assertOwnedRefs(ownerId, { workspaceId: dto.workspaceId, assignedRunnerId });
@@ -7908,13 +7919,15 @@ export class SessionsService {
     const currentRow = isBuiltinProvider(declared, session.providerBuiltin)
       ? null
       : await tx.modelProvider.findFirst({
-          where: { slug: declared, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
+          where: { slug: declared, ...(await usableProviderScope(tx, session.ownerId)) },
         });
     const fromPool = isBuiltinProvider(declared, session.providerBuiltin) || currentRow
       ? null
       : await accountPoolRuntime(tx, session.ownerId, declared);
     if (!isBuiltinProvider(declared, session.providerBuiltin) && !currentRow && !fromPool) {
-      throw new BadRequestException(`provider not available: "${declared}"`);
+      throw new BadRequestException(
+        (await adminOnlyProviderRefusal(tx, session.ownerId, declared)) ?? `provider not available: "${declared}"`,
+      );
     }
     if (requested === undefined || requested === declared) {
       if (currentRow?.enabled === false) throw new BadRequestException('provider is disabled');
@@ -7935,7 +7948,7 @@ export class SessionsService {
           where: {
             slug: requested,
             ...(requested === AgentProvider.DSH ? {} : { enabled: true }),
-            OR: [{ ownerId: null }, { ownerId: session.ownerId }],
+            ...(await usableProviderScope(tx, session.ownerId)),
           },
         });
     if (targetRow?.enabled === false) throw new BadRequestException('provider not available');
@@ -7947,7 +7960,9 @@ export class SessionsService {
         : await accountPoolRuntime(tx, session.ownerId, requested);
     if (targetRow || poolRuntime) providerBuiltin = false;
     if (!providerBuiltin && !targetRow && !poolRuntime) {
-      throw new BadRequestException('provider not available');
+      throw new BadRequestException(
+        (await adminOnlyProviderRefusal(tx, session.ownerId, requested)) ?? 'provider not available',
+      );
     }
     if (poolRuntime) await this.assertUsablePool(session.ownerId, requested, tx);
     // A session already on a pool has no row either, and runs on that pool's engine — a shared pool's

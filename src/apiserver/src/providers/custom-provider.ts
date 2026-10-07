@@ -136,6 +136,54 @@ export function execRuntime(args: {
 }
 
 /**
+ * The configured providers `ownerId` may resolve a slug to: their own, and the shared ones (ownerId
+ * NULL, which an admin keeps under /admin/providers) only when `ownerId` is an admin. A session on a
+ * configured provider is handed its key — decrypted into the engine's environment (injectedEnv) on the
+ * runner the session runs on, which its owner registered themselves — so a shared row any account
+ * could resolve would give its key to anybody who can sign up. The owner decided (2026-10-07) that a
+ * shared provider is the admins' own: a key is shared with other people through a shared pool, whose
+ * owner adds each person and whose gateway keeps the key off their runners (resolveSharedPool).
+ *
+ * The role is read on every resolution, as AdminRoleGuard reads it, so a promotion or a demotion
+ * counts from the next door asked. Every door that resolves a slug to a row asks this, and the claim
+ * asks usableProviderSql, its twin in SQL, so no two doors disagree about which rows a session may run
+ * on.
+ */
+export async function usableProviderScope(
+  db: Pick<Prisma.TransactionClient, 'user'>,
+  ownerId: string,
+): Promise<Prisma.ModelProviderWhereInput> {
+  return (await isAdmin(db, ownerId)) ? { OR: [{ ownerId: null }, { ownerId }] } : { ownerId };
+}
+
+/** usableProviderScope in SQL: `row` names a model_provider row, `ownerId` the id of the account asking. */
+export function usableProviderSql(row: string, ownerId: Prisma.Sql): Prisma.Sql {
+  const provider = Prisma.raw(row);
+  return Prisma.sql`(${provider}."owner_id" = ${ownerId} OR (${provider}."owner_id" IS NULL AND EXISTS (
+    SELECT 1 FROM "user" u WHERE u."id" = ${ownerId} AND u."role" = 'ADMIN')))`;
+}
+
+/**
+ * What a door tells someone who names a shared provider they may not use (usableProviderScope), or null
+ * when `slug` names no shared provider or they are an admin. The row exists and only the role keeps it
+ * from them, so "not available" would send them looking for a typo.
+ */
+export async function adminOnlyProviderRefusal(
+  db: Pick<Prisma.TransactionClient, 'user' | 'modelProvider'>,
+  ownerId: string,
+  slug: string,
+): Promise<string | null> {
+  const shared = await db.modelProvider.findFirst({ where: { slug, ownerId: null }, select: { id: true } });
+  if (!shared || (await isAdmin(db, ownerId))) return null;
+  return `provider "${slug}" is available to admins only; ask an admin to add you to a shared pool`;
+}
+
+async function isAdmin(db: Pick<Prisma.TransactionClient, 'user'>, userId: string): Promise<boolean> {
+  const user = await db.user.findUnique({ where: { id: userId }, select: { role: true } });
+  return user?.role === 'ADMIN';
+}
+
+/**
  * The built-in runtime a session's turns actually execute on, resolving a configured (BYOK)
  * slug to the runtime it borrows. The ModelProvider lookup happens only for a slug that needs
  * one, so a built-in session costs nothing.
@@ -153,7 +201,7 @@ export async function sessionExecRuntime(
   const customRow = builtin
     ? null
     : await tx.modelProvider.findFirst({
-        where: { slug: session.provider, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
+        where: { slug: session.provider, ...(await usableProviderScope(tx, session.ownerId)) },
       });
   // A pool holds no provider row: it runs on its own engine — a shared pool on Codex, not the Claude a
   // slug nothing holds falls back to.
@@ -170,12 +218,13 @@ export async function sessionExecRuntime(
 
 /**
  * Every provider slug whose sessions run on `runtime` for `ownerId`: the built-in slug itself, and
- * each enabled configured row of theirs — or a shared one — that borrows it, the way a Gemini key
- * runs on Antigravity under a slug of its own. This is what a runner-capability gate has to ask
+ * each enabled configured row they may resolve (usableProviderScope) that borrows it, the way a Gemini
+ * key runs on Antigravity under a slug of its own. This is what a runner-capability gate has to ask
  * (ADVERTISED_RUNTIMES): a runner that never advertised the runtime is handed that runtime's job
  * whichever of these slugs the session names. A disabled row cannot dispatch, so it is not one of
- * them. The claim SQL (QueueService.trySessionClaim) and migration 0372's trigger
- * ask the same question of the same rows.
+ * them. The claim SQL (QueueService.trySessionClaim) asks the same question of the same rows;
+ * migration 0372's trigger still counts every shared row, which can only refuse a claim the claim SQL
+ * never makes.
  */
 export async function providerSlugsOn(
   db: Prisma.TransactionClient,
@@ -183,7 +232,7 @@ export async function providerSlugsOn(
   runtime: AgentProvider,
 ): Promise<string[]> {
   const borrowing = await db.modelProvider.findMany({
-    where: { runtime, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
+    where: { runtime, enabled: true, ...(await usableProviderScope(db, ownerId)) },
     select: { slug: true },
   });
   return [runtime, ...borrowing.map((row) => row.slug)];
@@ -339,15 +388,15 @@ export function runsOnOpenCode(row: Pick<ModelProviderRow, 'runtime' | 'enabled'
 export type OpenCodeKeyRow = ModelProviderRow & { slug: string };
 
 /**
- * Every configured key `ownerId` could name in an OpenCode model: their own and the shared ones, as a
- * session's provider resolves (`OR: [{ ownerId: null }, { ownerId }]`). Read for an OpenCode session
- * only, and handed to resolveProviderExec, which takes the one the model names.
+ * Every configured key `ownerId` could name in an OpenCode model: the rows a session's provider
+ * resolves to (usableProviderScope) — their own, and the shared ones only for an admin. Read for an
+ * OpenCode session only, and handed to resolveProviderExec, which takes the one the model names.
  */
 export async function openCodeKeyRows(
   db: Prisma.TransactionClient,
   ownerId: string,
 ): Promise<OpenCodeKeyRow[]> {
-  return db.modelProvider.findMany({ where: { enabled: true, OR: [{ ownerId: null }, { ownerId }] } });
+  return db.modelProvider.findMany({ where: { enabled: true, ...(await usableProviderScope(db, ownerId)) } });
 }
 
 /**

@@ -277,7 +277,13 @@ import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
 import { ACCOUNT_CHOICE, accountEnvVar } from '../providers/account';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { readOwnerConfirmationRows } from './owner-confirmation-read';
-import { accountPoolRuntime, isBuiltinProvider } from '../providers/custom-provider';
+import {
+  accountPoolRuntime,
+  adminOnlyProviderRefusal,
+  isBuiltinProvider,
+  usableProviderScope,
+  usableProviderSql,
+} from '../providers/custom-provider';
 import {
   criterionNeedsProjectRefusal,
   deriveTaskCompletionStatus,
@@ -2419,12 +2425,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!provider) return;
     if (Object.values(AgentProvider).includes(provider as AgentProvider)) return;
     const configured = await this.prisma.modelProvider.findFirst({
-      where: { slug: provider, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
+      where: { slug: provider, enabled: true, ...(await usableProviderScope(this.prisma, ownerId)) },
       select: { slug: true },
     });
     if (configured) return;
     if (!(await accountPoolRuntime(this.prisma, ownerId, provider))) {
-      throw new BadRequestException('provider not available');
+      throw new BadRequestException(
+        (await adminOnlyProviderRefusal(this.prisma, ownerId, provider)) ?? 'provider not available',
+      );
     }
     const refusal = await this.sessions.accountPoolRefusal(ownerId, provider);
     if (refusal) throw new BadRequestException(refusal);
@@ -6670,10 +6678,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           })
         : Promise.resolve([]),
       providerSlugs.length
-        ? this.prisma.modelProvider.findMany({
-            where: { slug: { in: providerSlugs }, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
+        ? usableProviderScope(this.prisma, ownerId).then((usable) => this.prisma.modelProvider.findMany({
+            where: { slug: { in: providerSlugs }, enabled: true, ...usable },
             select: { slug: true },
-          })
+          }))
         : Promise.resolve([]),
     ]);
     const facts: PlanFacts = {
@@ -6880,7 +6888,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await tx.$queryRaw`
         SELECT "id" FROM "model_provider"
         WHERE "slug" = ANY(${slugs}::text[])
-          AND ("owner_id" IS NULL OR "owner_id" = ${ownerId}::uuid)
+          AND ${usableProviderSql('"model_provider"', Prisma.sql`${ownerId}::uuid`)}
         ORDER BY "id"
         FOR SHARE`;
     }
@@ -6945,7 +6953,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         where: {
           slug: { in: snapshot.providerSlugs },
           enabled: true,
-          OR: [{ ownerId: null }, { ownerId }],
+          ...(await usableProviderScope(tx, ownerId)),
         },
         select: { slug: true },
       });
@@ -13550,11 +13558,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const configured = await this.prisma.modelProvider.findFirst({
         where: {
           slug: seed.provider, enabled: true,
-          OR: [{ ownerId: null }, { ownerId: delivery.ownerId }],
+          ...(await usableProviderScope(this.prisma, delivery.ownerId)),
         },
         select: { slug: true },
       });
       const usable = configured ?? (await accountPoolRuntime(this.prisma, delivery.ownerId, seed.provider));
+      // A shared provider runs an admin's sessions only: answered on it, the comment would hand its key to
+      // this agent's runner. Promoted, or moved onto a provider of their own, the mention delivers itself.
+      if (!usable && (await adminOnlyProviderRefusal(this.prisma, delivery.ownerId, seed.provider))) {
+        throw new MentionUndeliverable(
+          'PROVIDER_UNAVAILABLE',
+          `this agent runs on "${seed.provider}", which is available to admins only`,
+          true,
+          'ask an admin to add you to a shared pool, or point this agent at a provider of your own; ' +
+            'the mention then delivers itself',
+        );
+      }
       if (!usable) {
         throw new MentionUndeliverable(
           'PROVIDER_UNAVAILABLE',

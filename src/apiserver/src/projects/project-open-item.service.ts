@@ -1810,6 +1810,10 @@ export class ProjectOpenItemService {
       // facts on this row, and `decideIntegrationSkipCheck` refuses anything but an answered card
       // about this very task. An owner-channel call names none and needs none.
       //
+      // Only among this account's own cards: another account's is no card here, refused as an id that
+      // names nothing is, so a refusal never repeats what is on somebody else's row — its tool, its
+      // answer, the conversation it was raised in (tenant-isolation-runner-cases.ts).
+      //
       // An id that is not an id is refused here rather than looked up: an approval id is a uuid, and
       // anything else would reach a uuid column and come back as a 500 from the database.
       if (!ownerRequester && approvalId && !isApprovalId(approvalId)) {
@@ -1817,7 +1821,7 @@ export class ProjectOpenItemService {
         throw new HttpException(refusal.body, refusal.status);
       }
       const approval = ownerRequester || !approvalId ? null : await tx.approval.findFirst({
-        where: { id: approvalId },
+        where: { id: approvalId, session: { ownerId } },
         select: {
           id: true, toolName: true, status: true, sessionId: true, input: true, decidedById: true,
         },

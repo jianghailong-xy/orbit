@@ -221,9 +221,13 @@ a sign-up and no confirmation email is sent; Google's verified email address is 
 open it:
 
 - A new member sees only their own runners, workspaces and tasks, and uses a provider pool only once its owner
-  adds them. Model providers an administrator shared with all users are the exception: every account is
-  offered them, and a session hands the provider's API key to the runner it runs on, which a new member can
-  register themselves. Do not open sign-up on a deployment that has shared providers.
+  adds them. A model provider an administrator added for everyone (one with no owner, made through
+  `/api/admin/providers`) runs administrators' sessions only. A session on a model provider hands the
+  provider's API key to the runner it runs on, which a member registers themselves, so members are not
+  offered these providers. A member who names one, or whose session, task or agent was already on one, is
+  told it is available to admins only. To share an OpenAI API key with members, put it in a shared Codex pool
+  and add them: their sessions reach the key through the control plane's pool gateway, and it never reaches
+  their runners. No other kind of key can be shared with members.
 - Nothing limits how many accounts sign up, or what each one stores or runs.
 - An administrator cannot suspend an account or keep one person out. Deleting an account fails while it owns
   runners, workspaces or tasks, and its owner can sign up again. Unlinking its Google account or resetting its

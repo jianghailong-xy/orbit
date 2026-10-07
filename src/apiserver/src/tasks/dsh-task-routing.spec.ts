@@ -5,6 +5,8 @@ import { taskRouteReads } from './task-route-decision';
 function fixture(rows: Array<{ slug: string; runtime: string; enabled?: boolean; presetSlug?: string; followsPreset?: boolean }> = [],
   poolEngine?: string) {
   const reads = taskRouteReads({
+    // An admin, for whom a shared row resolves as any row of theirs does (usableProviderScope).
+    user: { findUnique: async () => ({ role: 'ADMIN' }) },
     modelProvider: { findFirst: async ({ where }: { where: { slug: string } }) =>
       rows.find((row) => row.slug === where.slug) ?? null },
     providerPool: { findFirst: async () => poolEngine ? { shared: false, engine: poolEngine } : null },
