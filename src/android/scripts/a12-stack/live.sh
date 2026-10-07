@@ -16,6 +16,8 @@ S=$(realpath -m "${A12_STACK_DIR:-/var/tmp/a12-stack}")
 port=${A12_STACK_API_PORT:-3712}
 server=http://127.0.0.1:$port
 ADB=${ANDROID_HOME:-/opt/android-sdk}/platform-tools/adb
+# The node helpers run from this checkout and find the stack by these two.
+export A12_STACK_DIR=$S A12_STACK_API_PORT=$port
 package=io.orbitd.android.debug
 runner=io.orbitd.android.debug.test/androidx.test.runner.AndroidJUnitRunner
 class=io.orbitd.android.wiki.WikiWatchLiveTest
@@ -30,7 +32,7 @@ mkdir -p "$out"; [[ -z "$(ls -A "$out")" ]] || { echo 'EVIDENCE_DIR must be new 
 [[ -f "$S/seed.json" && -f "$S/accounts.json" ]] || { echo "no seeded stack in $S (setup.sh reset)" >&2; exit 2; }
 curl -fsS -m 5 "$server/api/health" > /dev/null || { echo "the stack does not answer on $server" >&2; exit 2; }
 # The test's arguments carry the stack's test passwords: read into memory, never written to the evidence.
-mapfile -t live_args < <(node "$S/live-args.mjs" "$server") && (( ${#live_args[@]} > 0 )) || { echo 'could not read the seeded ids' >&2; exit 2; }
+mapfile -t live_args < <(node "$here/live-args.mjs" "$server") && (( ${#live_args[@]} > 0 )) || { echo 'could not read the seeded ids' >&2; exit 2; }
 mapfile -t secrets < <(node -e 'const a=require(process.argv[1]);console.log(a.owner.password);console.log(a.other.password)' "$S/accounts.json")
 
 # Host memory pressure starves the emulator (ANRs, null screenshots): wait for PSI full avg10 < 10 first (up to 30 min).
@@ -101,7 +103,7 @@ printf 'font=%s\nnight=%s\n' "${A12_FONT_SCALE:-1.0}" "${A12_NIGHT:-no}" > "$out
 start="$(adb shell date +%s | tr -d '\r').000"
 
 mkdir -p "$out/server"
-node "$S/readback.mjs" before > "$out/server/00-before.json" 2> "$out/server/00-before.err" 9>&-
+node "$here/readback.mjs" before > "$out/server/00-before.json" 2> "$out/server/00-before.err" 9>&-
 status=0; n=0
 for journey in "${journeys[@]}"; do
   n=$((n + 1))
@@ -111,7 +113,7 @@ for journey in "${journeys[@]}"; do
   cat "$out/instrumentation-$journey.txt" >> "$out/instrumentation.txt"
   if command grep -aq '^OK (1 test)' "$out/instrumentation-$journey.txt"; then echo "PASS $journey" >> "$out/journeys.txt"
   else echo "FAIL $journey" >> "$out/journeys.txt"; status=1; fi
-  node "$S/readback.mjs" "$journey" > "$out/server/$(printf '%02d' "$n")-$journey.json" 2> "$out/server/$(printf '%02d' "$n")-$journey.err" 9>&-
+  node "$here/readback.mjs" "$journey" > "$out/server/$(printf '%02d' "$n")-$journey.json" 2> "$out/server/$(printf '%02d' "$n")-$journey.err" 9>&-
 done
 
 for pid in $(sed -n 's/.*a12_pid=\([0-9]*\).*/\1/p' "$out/instrumentation.txt" | sort -u); do
