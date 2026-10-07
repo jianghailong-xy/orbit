@@ -20,7 +20,8 @@ const ROW = {
 
 const serviceFor = (asked: unknown[]) =>
   new ProvidersService(
-    { modelProvider: { findMany: async () => [ROW] } } as never,
+    // The caller's own row: their role decides only whether shared rows come too (usableProviderScope).
+    { user: { findUnique: async () => ({ role: 'MEMBER' }) }, modelProvider: { findMany: async () => [ROW] } } as never,
     {} as never,
     {
       snapshot: (row: unknown) => {

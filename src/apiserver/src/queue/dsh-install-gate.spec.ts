@@ -56,6 +56,8 @@ function claimController(snapshot: unknown) {
   const marked: Array<{ where: unknown; data: { error: string } }> = [];
   const prisma = {
     runner: { findUnique: async () => snapshot },
+    // An admin, for whom the configured rows on a runtime include the shared ones (usableProviderScope).
+    user: { findUnique: async () => ({ role: 'ADMIN' }) },
     modelProvider: { findMany: async ({ where }: { where: { runtime: string } }) =>
       where.runtime === 'dsh' ? [{ slug: 'harness-key' }] : [] },
     session: {

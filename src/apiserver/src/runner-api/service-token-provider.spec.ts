@@ -57,11 +57,13 @@ test('the provider a create-scoped token names reaches the spawn', async () => {
   assert.equal((calls.at(-1)?.args[2] as { provider?: string }).provider, 'codex');
 });
 
-/** Configured providers as the database holds them; only the first is the caller's to dispatch. */
+/** Configured providers as the database holds them; only the first is the caller's to dispatch. The
+ *  shared one is an admin's, and the caller is a member (usableProviderScope). */
 const PROVIDERS = [
   { slug: 'deepseek', runtime: 'claude', enabled: true, ownerId: 'owner-1' },
   { slug: 'switched-off', runtime: 'claude', enabled: false, ownerId: 'owner-1' },
   { slug: 'someone-elses', runtime: 'claude', enabled: true, ownerId: 'owner-2' },
+  { slug: 'team-shared', runtime: 'claude', enabled: true, ownerId: null },
 ];
 
 /** The door on the real SessionsService, so a provider is followed all the way to the row. */
@@ -90,13 +92,13 @@ function makeServiceBackedController() {
       findFirst: async ({
         where,
       }: {
-        where: { slug: string; enabled: boolean; OR: Array<{ ownerId: string | null }> };
+        where: { slug: string; enabled?: boolean; ownerId?: string | null; OR?: Array<{ ownerId: string | null }> };
       }) =>
         PROVIDERS.find(
           (row) =>
             row.slug === where.slug &&
-            row.enabled === where.enabled &&
-            where.OR.some((scope) => scope.ownerId === row.ownerId),
+            (where.enabled === undefined || row.enabled === where.enabled) &&
+            (where.OR ?? [{ ownerId: where.ownerId }]).some((scope) => scope.ownerId === row.ownerId),
         ) ?? null,
     },
     providerPool: { findFirst: async () => null },
@@ -140,7 +142,7 @@ test('the session a token starts runs on the provider it named, not the workspac
 
 test('a provider the owner cannot dispatch is refused by name, and nothing starts on the default', async () => {
   const { controller, creates } = makeServiceBackedController();
-  for (const provider of ['no-such-provider', 'switched-off', 'someone-elses']) {
+  for (const provider of ['no-such-provider', 'switched-off', 'someone-elses', 'team-shared']) {
     await assert.rejects(
       () =>
         controller.createSession(RUNNER, CREATE_GRANT, undefined, undefined, {
