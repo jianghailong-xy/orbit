@@ -22,9 +22,10 @@
 | `Switch` | 必填 checked、onCheckedChange(boolean)，size="small/middle"、disabled、loading；使用 aria-label 或 aria-labelledby 命名，支持 name/value/form 和原生 input ref。 |
 | `Badge` | 原生 span 状态标签（替代 Tag），tone="default/info/success/warning/error/blue"、icon、children。使用可读文字表达状态。 |
 | `Spinner` | 原生 span，size="small/middle"（14/20px），role=status、默认 aria-label="Loading"；嵌入已有加载状态时可设 aria-hidden，避免重复播报。 |
-| `Avatar` | 原生 span 的圆形首字头像：`size`（px，默认 32）与文字 children，颜色/字号由调用方 style 给出。1px 透明边框、内容居中、行高为字号的 1.5714 倍。只覆盖当前在用的文字头像，不含图片与加载失败回退。 |
-| `Alert` | role=alert 的状态块：`type="error"`（目前唯一在用的语气）、`title`、`description`。带说明时 20px/24px 内边距、8px 圆角、24px 图标、16px 标题。 |
-| `Segmented` | radiogroup 分段切换：受控 `value`/`onValueChange`、`options`（value/label/disabled）、aria-label。只有任务面板在用的紧凑尺寸（2px 轨道、20px 项、7px 文字内边距）。切换时选中块从旧项滑到新项（0.3s），减少动态效果时直接切换；方向键在项间移动并选中，选中项是唯一的 Tab 停留点。 |
+| `Avatar` | 原生 span 的圆形头像：`size`（px，默认 32）与文字 children，颜色/字号由调用方 style 给出。1px 透明边框、内容居中、行高为字号的 1.5714 倍。给 `src`（及可选 `alt`，默认空）时画图片：铺满边框内侧并按圆裁切，调用方背景在透明边框处仍可见；没有图片或图片加载失败时显示文字。 |
+| `Alert` | role=alert 的状态块：`type="error/warning"`、`title`、`description`、className/style。无说明时 8px/12px 内边距、14px 图标与文字垂直居中；带说明时 20px/24px 内边距、24px 图标顶对齐、16px 标题。8px 圆角。 |
+| `Segmented` | radiogroup 分段切换：受控 `value`/`onValueChange`、`options`（value/label/disabled）、aria-label。`size="middle"`（默认，28px 项、11px 文字内边距、6px 轨道圆角、4px 项圆角）或 `"small"`（任务面板的 20px 项、7px 内边距、4px/2px 圆角），轨道均 2px。切换时选中块从旧项滑到新项（0.3s），减少动态效果时直接切换；方向键在项间移动并选中，选中项是唯一的 Tab 停留点。 |
+| `PasswordInput` | Input 的密码形态（除 type 外同 Input 的 props）：末尾显示/隐藏开关同被替换字段——`role=button`、在 Tab 顺序中、Enter/Space 切换，名称为 Show/Hide 并以 aria-pressed 表示密码已显示；按下开关不夺走字段焦点与光标。`suffix` 排在开关之后，间隔 8px。 |
 
 Button、Checkbox、Radio、Switch 的交互封装 Base UI；文本输入与标签/加载图形使用原生语义。Checkbox/Radio/Switch 的值由业务持有，公共 API 不提供 defaultChecked/defaultValue；需要 reset 的表单由父级重置受控值。Checkbox/Radio 的 className/style 指向标签，其他 DOM 属性指向可聚焦控件，input ref 的 focus 由 Base UI 转交可访问控件。不要读取隐藏 input 或第三方 DOM 结构。
 
@@ -36,11 +37,20 @@ Button、Checkbox、Radio、Switch 的交互封装 Base UI；文本输入与标�
 
 组件自行导入局部样式，基础变量由应用入口统一加载。不要把原 AntD type="primary" 或内部 ref 直接带到新组件；按上述语义改写调用。业务布局的手机 40px 按钮、等宽字体等例外随页面迁移保留，不能仅靠切换 import 完成迁移。
 
+## 卡片、表单字段与表格
+
+P4.1（登录、初始化、个人资料、设置）按页面实际需要补齐，均为原生结构，不依赖 Base UI。
+
+- `Card`（`Card.tsx` + `Card.css`）：`section` 以标题 `h2` 命名（aria-labelledby），`title` 与 children，其余为 section 属性。几何同被替换卡片：1px 分隔色边框、8px 圆角、凸起表面；56px 头部，16px 半粗标题（25.14px 行高，单行省略），头部下 1px 分隔线，正文上移 1px 与之重叠；24px 正文内边距。**不带外边距**，卡片间距由页面给（如 `style={{ marginBottom: 16 }}`）。`.orbit-card`、`.orbit-card-head`、`.orbit-card-title`、`.orbit-card-body` 是这份样式的公开类名：根元素不能是 section 的情形（AdminSignInPage 的表单卡片）沿用这些类名并直接导入 `Card.css`。这些类名原是 main 为资料页与管理页写在 index.css 的原生卡片，P4.1 收为本目录的公共样式，不另造同名或近名的卡片类。
+- `Field`（`Field.tsx` + `Field.css`）：被替换表单的纵向字段：标签在上（8px 间距），控件行至少 32px，下方是消息与 `extra` 说明。字段底部保留 24px；有消息时消息占用这 24px（单行 22px 不推动下方字段），多行才撑开；`extra` 在消息之后，至少 24px。消息出现时 0.1s 淡入并下移 5px，消失时同样淡出（减少动态效果时直接切换）。`id` 必填：标签指向它，消息与说明的 id 为 `${id}_help`、`${id}_extra`。children 是函数，拿到 `{ id, aria-invalid, aria-required, aria-describedby }` 交给控件；没有 `label` 时控件自带名称（复选框自己的文字）。`FieldFeedback status="success/error"` 是放在控件末尾（如 `PasswordInput` 的 `suffix`）的校验结果图标，0.2s 放大淡入。
+- `useFormFields(initial, rules, dependsOn)`（`useFormFields.ts`）：文本字段的值与校验，触发时机同被替换表单：改动某字段即校验该字段；某字段改动时，依赖它且已改动或校验过的字段一并重校验（确认密码跟随新密码）；提交时 `validate()` 校验全部并返回是否通过；`reset()` 回到初值并清除消息与改动记录；`checked(name)` 表示该字段已改动或校验过（此时才显示通过图标）。规则是 `(value, values) => message | null`，每条失败的规则一条消息；文案由业务给出。表单使用原生 `<form onSubmit>`（Enter 提交、浏览器自身的 type=email 约束保持不变），不新增表单框架。
+- `Table.css` + `TableScroll`（`Table.tsx`）：原生 `table.orbit-table` 的被替换数据表外观：半粗表头与 1px 分隔线、表头单元之间 1px 竖线、16px 单元格、行悬停底色、空表时一行居中浅色说明（`tr.orbit-table-empty > td > div`：说明限在可见宽度内，表格横向滚动时不随之移动）。`TableScroll` 是横向滚动盒：表格至少与盒同宽，内容更宽时横向滚动，并在还有内容的一侧画出与被替换表格相同的内阴影；滚动条颜色同被替换表格（因而用浏览器自身的覆盖式滚动条，不是全站 8px 自定义滚动条）；表头为空的列保留一个空格宽（被替换表格的测量行给每列放了空格）。列定义、排序、分页与选择都不在其中；需要时按实际需求再加。
+
 ## Dialog、Drawer 和异步确认
 
 业务分别导入 `ui/Dialog`、`ui/Drawer`、`ui/ConfirmDialog`；`OverlaySurface` 是三者共享的实现，不是业务调用入口。全部要求受控 `open` 和可访问 `title`，正文为 children，简单说明可用 description（自动关联 aria-describedby）。
 
-- Dialog：`onClose` 是关闭请求，业务更新 open；默认宽度520px、顶部100px，<=767px时保留旧弹窗108px顶部和8px边距，最大宽度适应视口。footer 完全由调用方提供，原生表单使用 Button 的 type/form 属性。默认无自动 OK/Cancel。
+- Dialog：`onClose` 是关闭请求，业务更新 open；默认宽度520px、顶部100px，宽度上限 100vw−32px；<=767px时保留旧弹窗108px顶部和8px边距（上限 100vw−16px）。宽度按视口宽度计，弹层视口出现滚动条时对话框宽度不变；滚动到底止于对话框下缘，与被替换对话框相同。footer 完全由调用方提供，原生表单使用 Button 的 type/form 属性。默认无自动 OK/Cancel。
 - Drawer：相同关闭和焦点约定，`placement="right"`（默认）或 `"bottom"`；width/height 支持 CSS 尺寸，默认378px，底部可用 height="auto"。headerActions 放置已有最大化等动作。复用 Base Dialog，因为现有 Drawer 没有滑动关闭或吸附点；不新增手势。
 - 默认支持 Esc、单击/单指轻点遮罩和 Close 按钮；内部按下、外部释放不关闭。`closeOnEscape`、`closeOnOutsideClick`、`closable` 分别控制三种关闭方式。busy 阻止关闭请求并禁用 Close；调用方负责自己的提交按钮。隐藏 Close 时应提供可访问的退出按钮。
 - 默认聚焦弹层容器，避免手机打开时自动弹出软键盘；initialFocus 可指定原生 ref。默认返回先前焦点；从菜单、触摸入口或会卸载的节点打开时，传 `returnFocus` 指向稳定的触发按钮。不能通过读取第三方 DOM 找触发器。
@@ -125,7 +135,7 @@ Combobox 的值、占位与搜索输入框放在同一个行盒 `.orbit-combobox
 
 浮层位置按被替换的 rc-trigger 计算：其每个 inset 向下取整（顶/左边缘 floor(锚点边+间距)，以底/右边缘定位的——在锚点上方/左侧或与锚点末端对齐——取对应 ceil），Floating UI 则四舍五入，小数部分≥.5 时会差1px，`useWholePixelOffsets` 用 Base UI 公开的 sideOffset/alignOffset 函数补齐。Menu、Select、Combobox、MultiSelect 的列表另用 `useDropdownPlacement`：与触发器起/止边对齐，超出视口时若另一边能显示更多则改对另一边，不沿触发器平移，并收窄到对齐一侧的剩余宽度（`--orbit-dropdown-room`）；与 rc-trigger 先按不受限宽度测量一样，列表在第一次越界前保持自然宽度，由那次越界决定本次打开的对齐边；`align="center"` 的菜单仍用 Base UI 平移。Tooltip、Popover、Popconfirm 越界时按各自避让留白滑回视口后再向下取整，箭头指向旧组件所指之处（未取整位置下所覆盖锚点段的中点，`--orbit-arrow-nudge`）。Popconfirm 与旧确认浮层一样贴视口边缘（无避让留白），最宽 100vw。与末端对齐的列表由旧组件的 right 定位，左缘保留列表宽度的小数部分；Base UI 取整后的余数以相对定位交还（`--orbit-dropdown-subpixel`），不改变定位层尺寸。
 
-`MultiSelect` 使用字符串数组 value/onValueChange；搜索选项后保持列表打开，支持逐项移除、全清、分组和 maxTagCount。`mode="tags"`、`open={false}`、`searchValue/onSearch`、`tokenSeparators={[',', ' ']}` 对应现有邮件输入：Enter 或失焦提交尾项，输入法组合期间不提交，值去重；格式校验和分享请求仍由业务负责。Backspace 删除数组末项，即使它在折叠计数内。
+`MultiSelect` 使用字符串数组 value/onValueChange；搜索选项后保持列表打开，支持逐项移除、全清、分组和 maxTagCount。与被替换的多选一样，`mode="multiple"` 打开即高亮第一项（Enter 选它），打开期间箭头换成放大镜。`mode="tags"`、`open={false}`、`searchValue/onSearch`、`tokenSeparators={[',', ' ']}` 对应现有邮件输入：Enter 或失焦提交尾项，输入法组合期间不提交，值去重；格式校验和分享请求仍由业务负责。Backspace 删除数组末项，即使它在折叠计数内。
 
 正常动效沿用旧实测：根菜单/选择列表200ms纵向展开，子菜单/Popover 200ms缩放，Tooltip 100ms缩放；入场/退场缓动与方向原点分别匹配旧组件。通过 Base UI 公开 data-open/data-closed/data-side/data-align/data-nested 设置 CSS 动画，由其生命周期等待退场完成，退场面不接收指针。入场结束不保留 transform，避免改变嵌套 portal 的定位参照。减少动态效果时与 P2.1 一样禁用缩放/渐隐。手机附件菜单除任务指定字号外保持旧实测布局：5px/12px行padding、4px行圆角、原分隔线、图标x=12px、总高240.953125px（本例5行）。
 
