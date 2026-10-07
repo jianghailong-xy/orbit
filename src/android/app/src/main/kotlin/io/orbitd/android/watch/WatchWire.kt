@@ -265,10 +265,19 @@ internal data class Watch(
     val expiryDeliveries: List<WatchEndDelivery> = emptyList(),
 ) {
     companion object {
-        /** A watch as the server sends it; null for a row that isn't one. */
+        /** The fields the server always sends (OrbitKit `Watch`'s non-optional properties), by the JSON kind each is. */
+        private val texts = listOf("observerType", "mode", "action", "state", "expiresAt", "createdAt", "updatedAt")
+        private val numbers = listOf("predicateVersion", "generation")
+        private val lists = listOf("targets", "matches", "expiryDeliveries")
+
+        /** A watch as the server sends it; null for a row that isn't one — any row missing a field the server always
+         * sends, or holding another kind of value there, is left out rather than drawn as a watch out of defaults
+         * (iOS fails the whole list on such a row). A value this version doesn't know still reads, as unknown. */
         fun decode(element: JsonElement?): Watch? {
             val c = element as? JsonObject ?: return null
             val id = c["id"].watchText()?.takeIf(String::isNotEmpty) ?: return null
+            if (texts.any { c[it].watchText() == null } || numbers.any { c[it].int() == null } || lists.any { c[it] !is JsonArray }
+                || c["predicate"] !is JsonObject) return null
             return Watch(id, WatchObserverType.of(c["observerType"].watchText()), c["observerSessionId"].watchText(),
                 c["predicateVersion"].int() ?: WatchPredicate.VERSION, WatchPredicate.decode(c["predicate"]), WatchMode.of(c["mode"].watchText()),
                 WatchAction.of(c["action"].watchText()), WatchState.of(c["state"].watchText()), c["generation"].int() ?: 0,
