@@ -1405,10 +1405,11 @@ public final class APIClient: @unchecked Sendable {
     }
     public func startRunnerLogin(_ id: String, engine: LoginEngine,
                                  account: String? = nil,
-                                 accountName: String? = nil) async throws -> RunnerLoginState {
+                                 accountName: String? = nil,
+                                 region: String? = nil) async throws -> RunnerLoginState {
         try await post("runners/\(id)/login",
                        body: StartLoginRequest(engine: engine, account: account,
-                                               accountName: accountName))
+                                               accountName: accountName, region: region))
     }
     /// Hand the runner the authorization code the sign-in page gave the user (claude's paste-back
     /// flow). Useless without the PKCE verifier that never leaves the runner process.

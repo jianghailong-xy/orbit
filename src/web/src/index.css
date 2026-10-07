@@ -8790,6 +8790,66 @@ button.chat-jump-start:hover {
   color: var(--success);
   font-size: 13px;
 }
+/* Kimi's two sites, as the choice that starts its sign-in: one press picks the site and begins. */
+.rsi-q {
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 500;
+}
+.rsi-sites {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.rsi-site {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 200px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg-raised);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.rsi-site:hover:not(:disabled) {
+  border-color: var(--brand-border);
+  background: var(--brand-tint);
+}
+.rsi-site:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.rsi-site-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 600;
+}
+.rsi-site-sub {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.rsi-site-tag {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--brand-tint);
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+}
+/* Cancel beside the device flow's way to the other Kimi site. */
+.rsi-links {
+  display: flex;
+  gap: 16px;
+}
 
 /* Takes a rejected configured key to the page that holds it. The runner-login shape has its own
    pair of buttons (.rsi-actions); this shape has only the one route. */

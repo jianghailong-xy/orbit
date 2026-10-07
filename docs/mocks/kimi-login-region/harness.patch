@@ -1,0 +1,108 @@
+diff --git a/src/web/ui-migration/kimi-region-mock.html b/src/web/ui-migration/kimi-region-mock.html
+new file mode 100644
+index 000000000..a0d567d37
+--- /dev/null
++++ b/src/web/ui-migration/kimi-region-mock.html
+@@ -0,0 +1,12 @@
++<!doctype html>
++<html lang="en">
++  <head>
++    <meta charset="UTF-8" />
++    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
++    <title>Kimi sign-in site mock</title>
++  </head>
++  <body>
++    <div id="root"></div>
++    <script type="module" src="./kimi-region-mock.tsx"></script>
++  </body>
++</html>
+diff --git a/src/web/ui-migration/kimi-region-mock.tsx b/src/web/ui-migration/kimi-region-mock.tsx
+new file mode 100644
+index 000000000..bc8b587a4
+--- /dev/null
++++ b/src/web/ui-migration/kimi-region-mock.tsx
+@@ -0,0 +1,84 @@
++// Design-mock harness (docs/mocks/kimi-login-region): the Providers page's "On your runners" card,
++// shipped components and CSS, on synthetic REST data chosen by ?frame=. Not a test, not shipped.
++import { App as AntApp, ConfigProvider } from 'antd';
++import 'antd/dist/reset.css';
++import '../src/index.css';
++import '../src/components/ui/foundation.css';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { createRoot } from 'react-dom/client';
++import { MemoryRouter } from 'react-router-dom';
++import { lightTheme } from '../src/theme';
++import { ThemeProvider } from '../src/lib/theme';
++import { RunnerEngines } from '../src/components/RunnerEngines';
++
++const params = new URLSearchParams(location.search);
++const frame = params.get('frame') ?? 'out';
++const width = Number(params.get('w') ?? 930);
++const RUNNER_ID = '33zx0JhRhJo8rd25d3qAM';
++const NOW = Date.now();
++const ago = (m: number) => new Date(NOW - m * 60_000).toISOString();
++
++const update = { status: 'checked', at: ago(29), okAt: ago(29) };
++const kimiIn = frame.startsWith('in');
++const kimiRegion = !kimiIn ? undefined : frame.includes('-com') ? 'mainland-cn' : frame.includes('-ai') ? 'global' : undefined;
++const kimi = {
++  engine: 'kimi', installed: true, version: '2.1.1', auth: kimiIn ? 'yes' : 'no', update,
++  ...(kimiRegion ? { kimiRegion } : {}),
++};
++
++const runner = {
++  id: RUNNER_ID, name: 'hpc', displayName: 'HPC', hostname: 'hpc-01', version: '0.68.0', online: true,
++  capabilities: frame === 'old-runner' ? [] : ['kimi-login-region/v1'],
++  engines: [
++    { engine: 'claude', installed: true, version: '2.1.287 (Claude Code)', auth: 'yes', update },
++    { engine: 'codex', installed: true, version: 'codex-cli 0.130.0', auth: 'yes', update },
++    kimi,
++  ],
++  antigravity: { supported: true, installed: false, version: null, envKeyAvailable: false },
++};
++
++const device = (host: string) => ({
++  status: 'awaiting_approval', engine: 'kimi', account: null, message: null,
++  url: `https://${host}/verify?user_code=62WK-UEL8`, userCode: '62WK-UEL8',
++});
++const login =
++  frame === 'device-com' ? device('auth.kimi.com')
++  : frame === 'device-ai' ? device('auth.kimi.ai')
++  : { status: null, engine: null, url: null, userCode: null, message: null, account: null };
++
++const json = (body: unknown, status = 200) =>
++  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
++const realFetch = window.fetch.bind(window);
++window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
++  const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.href);
++  if (!url.pathname.startsWith('/api/')) return realFetch(input, init);
++  const method = (init?.method ?? 'GET').toUpperCase();
++  if (url.pathname === '/api/runners') return json([runner]);
++  if (url.pathname === `/api/runners/${RUNNER_ID}/login`) {
++    if (method === 'POST') {
++      (window as unknown as { __loginBody?: unknown }).__loginBody = JSON.parse(String(init?.body ?? '{}'));
++      return json({ ...login, status: 'pending', engine: 'kimi' });
++    }
++    return json(login);
++  }
++  return json({});
++};
++
++localStorage.setItem('orbit:providers-expanded-runners', JSON.stringify([RUNNER_ID]));
++const qc = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } });
++
++createRoot(document.getElementById('root')!).render(
++  <QueryClientProvider client={qc}>
++    <ThemeProvider>
++      <ConfigProvider theme={lightTheme}>
++        <AntApp>
++          <MemoryRouter initialEntries={['/providers']}>
++            <div id="stage" style={{ width, padding: 20, background: 'var(--bg-base)' }}>
++              <RunnerEngines />
++            </div>
++          </MemoryRouter>
++        </AntApp>
++      </ConfigProvider>
++    </ThemeProvider>
++  </QueryClientProvider>,
++);
