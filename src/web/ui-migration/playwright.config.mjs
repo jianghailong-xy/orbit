@@ -8,7 +8,7 @@ export default defineConfig({
   // Deliberately outside Vitest's *.test.* / *.spec.* discovery.
   testMatch: '*.browser.mjs',
   // The development-only foundation fixture has its own server/configuration.
-  testIgnore: ['foundation*.browser.mjs', 'controls*.browser.mjs', 'overlays*.browser.mjs', 'choices*.browser.mjs', 'toasts*.browser.mjs', 'composer*.browser.mjs'],
+  testIgnore: ['foundation*.browser.mjs', 'controls*.browser.mjs', 'overlays*.browser.mjs', 'choices*.browser.mjs', 'toasts*.browser.mjs', 'composer*.browser.mjs', 'pilot*.browser.mjs'],
   fullyParallel: false,
   workers: 1,
   retries: 0,

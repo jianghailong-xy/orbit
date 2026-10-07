@@ -7,7 +7,7 @@ export async function taskScenario({ page, expect, capture, measure }) {
   const panel = page.locator('.task-detail-panel');
   await expect(page.getByRole('button', { name: 'More actions', exact: true })).toBeVisible();
   await expect(page.getByText('Review the visual baseline', { exact: true }).last()).toBeVisible();
-  await capture('task-detail', { panel, title: '.tdp-title', button: '.tdp-head-actions .ant-btn', select: '.task-detail-panel .ant-select' });
+  await capture('task-detail', { panel, title: '.tdp-title', button: '.tdp-head-actions button', select: '.task-detail-panel .tdp-assignee-select' });
   const more = page.getByRole('button', { name: 'More actions', exact: true });
   await more.hover();
   await capture('task-action-hover', { hoveredButton: more });
@@ -27,7 +27,7 @@ export async function taskScenario({ page, expect, capture, measure }) {
   await expect(page.getByRole('textbox', { name: 'Public link' })).toHaveValue(new RegExp(`/s/${SHARE_TOKEN}$`));
   await page.keyboard.press('Tab');
   await expect(dialog.locator(':focus')).toHaveCount(1);
-  await capture('task-share-dialog', { dialog, surface: '.ant-modal-container', input: '[aria-label="Public link"]', access: '[aria-label="Access"]' });
+  await capture('task-share-dialog', { dialog, surface: dialog, input: '[aria-label="Public link"]', access: '[aria-label="Access"]' });
   await dialog.getByRole('button', { name: 'Done', exact: true }).click();
   await expect(dialog).not.toBeVisible();
   await expect(panel).toBeVisible();

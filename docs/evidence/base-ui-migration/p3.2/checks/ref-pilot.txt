@@ -1,0 +1,309 @@
+
+Running 64 tests using 1 worker
+
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-delete-confirm.png, writing actual.
+  ✓   1 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:42:3 › task detail pilot › fields, pickers and the panel header (11.6s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-comment-mention.png, writing actual.
+  ✓   2 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:123:3 › task detail pilot › dependencies, inputs and comments (5.0s)
+  ✓   3 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:189:3 › task detail pilot › a failed upload says so and leaves the list as it was (814ms)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-reopen-refused.png, writing actual.
+  ✓   4 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:209:3 › task detail pilot › reopening a stopped task, refused and then backed out of (2.0s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-share-turn-off.png, writing actual.
+  ✓   5 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:234:3 › share dialog pilot › from Only you to a public link and back (7.5s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-share-error.png, writing actual.
+  ✓   6 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:296:3 › share dialog pilot › loading and a read that failed (3.1s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-p0-share-focused.png, writing actual.
+  ✓   7 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:328:3 › P0 share dialog, focused alike › same element focused before the shot (1.2s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-desktop/pilot-account-open.png, writing actual.
+  ✓   8 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:343:3 › workspace account pilot › the Claude account picker of a new workspace (1.6s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-delete-confirm.png, writing actual.
+  ✓   9 [chromium-light-phone] › ui-migration/pilot.browser.mjs:42:3 › task detail pilot › fields, pickers and the panel header (10.9s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-comment-mention.png, writing actual.
+  ✓  10 [chromium-light-phone] › ui-migration/pilot.browser.mjs:123:3 › task detail pilot › dependencies, inputs and comments (4.8s)
+  ✓  11 [chromium-light-phone] › ui-migration/pilot.browser.mjs:189:3 › task detail pilot › a failed upload says so and leaves the list as it was (869ms)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-reopen-refused.png, writing actual.
+  ✓  12 [chromium-light-phone] › ui-migration/pilot.browser.mjs:209:3 › task detail pilot › reopening a stopped task, refused and then backed out of (2.0s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-share-turn-off.png, writing actual.
+  ✓  13 [chromium-light-phone] › ui-migration/pilot.browser.mjs:234:3 › share dialog pilot › from Only you to a public link and back (6.5s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-share-error.png, writing actual.
+  ✓  14 [chromium-light-phone] › ui-migration/pilot.browser.mjs:296:3 › share dialog pilot › loading and a read that failed (3.6s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-p0-share-focused.png, writing actual.
+  ✓  15 [chromium-light-phone] › ui-migration/pilot.browser.mjs:328:3 › P0 share dialog, focused alike › same element focused before the shot (1.7s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-light-phone/pilot-account-open.png, writing actual.
+  ✓  16 [chromium-light-phone] › ui-migration/pilot.browser.mjs:343:3 › workspace account pilot › the Claude account picker of a new workspace (1.3s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-delete-confirm.png, writing actual.
+  ✓  17 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:42:3 › task detail pilot › fields, pickers and the panel header (11.7s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-comment-mention.png, writing actual.
+  ✓  18 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:123:3 › task detail pilot › dependencies, inputs and comments (4.8s)
+  ✓  19 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:189:3 › task detail pilot › a failed upload says so and leaves the list as it was (968ms)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-reopen-refused.png, writing actual.
+  ✓  20 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:209:3 › task detail pilot › reopening a stopped task, refused and then backed out of (1.9s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-share-turn-off.png, writing actual.
+  ✓  21 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:234:3 › share dialog pilot › from Only you to a public link and back (7.1s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-share-error.png, writing actual.
+  ✓  22 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:296:3 › share dialog pilot › loading and a read that failed (3.5s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-p0-share-focused.png, writing actual.
+  ✓  23 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:328:3 › P0 share dialog, focused alike › same element focused before the shot (1.6s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-desktop/pilot-account-open.png, writing actual.
+  ✓  24 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:343:3 › workspace account pilot › the Claude account picker of a new workspace (1.7s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-delete-confirm.png, writing actual.
+  ✓  25 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:42:3 › task detail pilot › fields, pickers and the panel header (13.8s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-comment-mention.png, writing actual.
+  ✓  26 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:123:3 › task detail pilot › dependencies, inputs and comments (10.8s)
+  ✓  27 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:189:3 › task detail pilot › a failed upload says so and leaves the list as it was (1.2s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-reopen-refused.png, writing actual.
+  ✓  28 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:209:3 › task detail pilot › reopening a stopped task, refused and then backed out of (2.2s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-share-turn-off.png, writing actual.
+  ✓  29 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:234:3 › share dialog pilot › from Only you to a public link and back (7.1s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-share-error.png, writing actual.
+  ✓  30 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:296:3 › share dialog pilot › loading and a read that failed (3.2s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-p0-share-focused.png, writing actual.
+  ✓  31 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:328:3 › P0 share dialog, focused alike › same element focused before the shot (1.6s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/chromium-dark-phone/pilot-account-open.png, writing actual.
+  ✓  32 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:343:3 › workspace account pilot › the Claude account picker of a new workspace (1.5s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-delete-confirm.png, writing actual.
+  ✓  33 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:42:3 › task detail pilot › fields, pickers and the panel header (14.0s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-comment-mention.png, writing actual.
+  ✓  34 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:123:3 › task detail pilot › dependencies, inputs and comments (7.0s)
+  ✓  35 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:189:3 › task detail pilot › a failed upload says so and leaves the list as it was (1.4s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-reopen-refused.png, writing actual.
+  ✓  36 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:209:3 › task detail pilot › reopening a stopped task, refused and then backed out of (2.8s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-share-turn-off.png, writing actual.
+  ✓  37 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:234:3 › share dialog pilot › from Only you to a public link and back (9.2s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-share-error.png, writing actual.
+  ✓  38 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:296:3 › share dialog pilot › loading and a read that failed (4.7s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-p0-share-focused.png, writing actual.
+  ✓  39 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:328:3 › P0 share dialog, focused alike › same element focused before the shot (2.4s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-desktop/pilot-account-open.png, writing actual.
+  ✓  40 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:343:3 › workspace account pilot › the Claude account picker of a new workspace (2.1s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-delete-confirm.png, writing actual.
+  ✓  41 [webkit-light-phone] › ui-migration/pilot.browser.mjs:42:3 › task detail pilot › fields, pickers and the panel header (12.4s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-comment-mention.png, writing actual.
+  ✓  42 [webkit-light-phone] › ui-migration/pilot.browser.mjs:123:3 › task detail pilot › dependencies, inputs and comments (5.6s)
+  ✓  43 [webkit-light-phone] › ui-migration/pilot.browser.mjs:189:3 › task detail pilot › a failed upload says so and leaves the list as it was (1.3s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-reopen-refused.png, writing actual.
+  ✓  44 [webkit-light-phone] › ui-migration/pilot.browser.mjs:209:3 › task detail pilot › reopening a stopped task, refused and then backed out of (2.8s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-share-turn-off.png, writing actual.
+  ✓  45 [webkit-light-phone] › ui-migration/pilot.browser.mjs:234:3 › share dialog pilot › from Only you to a public link and back (8.6s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-share-error.png, writing actual.
+  ✓  46 [webkit-light-phone] › ui-migration/pilot.browser.mjs:296:3 › share dialog pilot › loading and a read that failed (4.2s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-p0-share-focused.png, writing actual.
+  ✓  47 [webkit-light-phone] › ui-migration/pilot.browser.mjs:328:3 › P0 share dialog, focused alike › same element focused before the shot (2.1s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-light-phone/pilot-account-open.png, writing actual.
+  ✓  48 [webkit-light-phone] › ui-migration/pilot.browser.mjs:343:3 › workspace account pilot › the Claude account picker of a new workspace (1.9s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-delete-confirm.png, writing actual.
+  ✓  49 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:42:3 › task detail pilot › fields, pickers and the panel header (13.4s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-comment-mention.png, writing actual.
+  ✓  50 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:123:3 › task detail pilot › dependencies, inputs and comments (6.4s)
+  ✓  51 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:189:3 › task detail pilot › a failed upload says so and leaves the list as it was (1.3s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-reopen-refused.png, writing actual.
+  ✓  52 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:209:3 › task detail pilot › reopening a stopped task, refused and then backed out of (3.1s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-share-turn-off.png, writing actual.
+  ✓  53 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:234:3 › share dialog pilot › from Only you to a public link and back (9.6s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-share-error.png, writing actual.
+  ✓  54 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:296:3 › share dialog pilot › loading and a read that failed (4.4s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-p0-share-focused.png, writing actual.
+  ✓  55 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:328:3 › P0 share dialog, focused alike › same element focused before the shot (2.4s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-desktop/pilot-account-open.png, writing actual.
+  ✓  56 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:343:3 › workspace account pilot › the Claude account picker of a new workspace (2.1s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-delete-confirm.png, writing actual.
+  ✓  57 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:42:3 › task detail pilot › fields, pickers and the panel header (14.1s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-comment-mention.png, writing actual.
+  ✓  58 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:123:3 › task detail pilot › dependencies, inputs and comments (7.5s)
+  ✓  59 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:189:3 › task detail pilot › a failed upload says so and leaves the list as it was (1.5s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-reopen-refused.png, writing actual.
+  ✓  60 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:209:3 › task detail pilot › reopening a stopped task, refused and then backed out of (3.0s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-share-turn-off.png, writing actual.
+  ✓  61 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:234:3 › share dialog pilot › from Only you to a public link and back (46.3s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-share-error.png, writing actual.
+  ✓  62 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:296:3 › share dialog pilot › loading and a read that failed (5.8s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-p0-share-focused.png, writing actual.
+  ✓  63 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:328:3 › P0 share dialog, focused alike › same element focused before the shot (2.9s)
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-account.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/ref-pilot-shots/webkit-dark-phone/pilot-account-open.png, writing actual.
+  ✓  64 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:343:3 › workspace account pilot › the Claude account picker of a new workspace (2.3s)
+
+  64 passed (5.9m)

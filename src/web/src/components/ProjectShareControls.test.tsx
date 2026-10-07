@@ -116,18 +116,21 @@ const item = (items: HTMLElement[], label: string) =>
   items.find((el) => el.querySelector('.ant-dropdown-menu-title-content')?.textContent?.startsWith(label));
 
 const dialog = (): HTMLElement => {
-  const found = document.body.querySelector<HTMLElement>('.ant-modal.share-dialog');
+  const found = document.body.querySelector<HTMLElement>('[role="dialog"].share-dialog');
   if (!found) throw new Error('the Share dialog is not open');
   return found;
 };
+/** A dialog's name, as assistive technology reads it. */
+const nameOf = (el: Element): string | undefined =>
+  document.getElementById(el.getAttribute('aria-labelledby') ?? '')?.textContent ?? undefined;
 const layers = () =>
   [...dialog().querySelectorAll<HTMLElement>('.share-layer')].map((row) => ({
     name: row.querySelector('.share-layer-name')?.textContent,
     detail: row.querySelector('.share-layer-detail')?.textContent,
     nested: row.classList.contains('is-nested'),
     idle: row.classList.contains('is-idle'),
-    on: row.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked,
-    locked: row.querySelector<HTMLInputElement>('input[type="checkbox"]')!.disabled,
+    on: row.querySelector('[role="checkbox"]')!.getAttribute('aria-checked') === 'true',
+    locked: row.querySelector('[role="checkbox"]')!.getAttribute('aria-disabled') === 'true',
     count: row.querySelector('.share-layer-count')?.textContent,
   }));
 
@@ -180,7 +183,7 @@ describe('the project header’s sharing controls', { timeout: 60_000 }, () => {
     expect(buttonNamed('Share')).toBeNull();
     // The pill opens the project's Share dialog.
     await click(pill, 'the Shared · Live pill');
-    await vi.waitFor(() => expect(dialog().querySelector('.ant-modal-title')?.textContent).toBe('Share project'));
+    await vi.waitFor(() => expect(nameOf(dialog())).toBe('Share project'));
   });
 
   it('Copy link copies the signed-in address, not a public one', async () => {
@@ -263,7 +266,7 @@ describe('the Share dialog, on a project', { timeout: 60_000 }, () => {
     ]);
 
     // Task pages off: saved as it is made, and the two layers under it go grey and cannot be pressed.
-    await click(dialog().querySelector('[data-layer="taskPages"] input[type="checkbox"]'), 'the Task pages box');
+    await click(dialog().querySelector('[data-layer="taskPages"] [role="checkbox"]'), 'the Task pages box');
     expect(vi.mocked(putShareLink).mock.calls).toEqual([['PROJECT', PROJECT, { include: { taskPages: false } }]]);
     await vi.waitFor(() =>
       expect(layers().slice(1).map(({ name, on, idle, locked }) => ({ name, on, idle, locked }))).toEqual([

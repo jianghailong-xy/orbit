@@ -11650,7 +11650,7 @@ button.chat-jump-start:hover {
     flex-wrap: wrap;
     row-gap: 12px;
   }
-  .tdp-head > .ant-btn-icon-only {
+  .tdp-head > .orbit-button-icon-only {
     /* Ordered ahead of the actions, which come after them in the markup: with wrap, order is what
        decides which line each lands on, and these have to stay on the title's. */
     order: 1;
@@ -11666,13 +11666,13 @@ button.chat-jump-start:hover {
   .tdp-head-actions > * {
     flex: 1 1 0;
   }
-  .tdp-head-actions > .ant-btn {
+  .tdp-head-actions > .orbit-button {
     height: 40px;
   }
   /* Run now sits in a span — the Tooltip needs it to still fire while the button is disabled —
      and the running-session case in a Link. Stretch what is inside those two as well. */
-  .tdp-head-actions > a > .ant-btn,
-  .tdp-head-actions > span > .ant-btn {
+  .tdp-head-actions > a > .orbit-button,
+  .tdp-head-actions > span > .orbit-button {
     flex: 1;
     height: 40px;
   }
@@ -11893,6 +11893,9 @@ button.chat-jump-start:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.tdp-input-add {
+  display: inline-block;
+}
 .tdp-field {
   display: flex;
   gap: 10px;
@@ -11929,19 +11932,28 @@ button.chat-jump-start:hover {
   min-width: 0;
   margin: -3px 0;
 }
-.tdp-assignee-select.ant-select .ant-select-content {
-  padding: 0;
+/* The value sits 6px from the arrow; the field's own line is the 13px one even where the input is
+   lifted to 16px for touch keyboards. Hovering shades that line, as it did before. */
+.tdp-assignee-select.orbit-select {
+  height: auto;
+  gap: 6px;
   font-size: 13px;
+  line-height: 1.5714285714285714;
+  cursor: text;
 }
-.tdp-assignee-select.ant-select .ant-select-content-has-value {
-  color: var(--text-1);
+.tdp-assignee-select .orbit-select-trigger {
+  gap: 6px;
 }
-.tdp-assignee-select.ant-select .ant-select-placeholder {
-  color: var(--text-3);
-}
-.tdp-assignee-select.ant-select:hover .ant-select-content {
-  background: var(--bg-hover);
+/* Hovering shades the value's line box; open with a value, that box fades shading and all. */
+.tdp-assignee-select :is(.orbit-combobox-field, .orbit-select-trigger > .orbit-choice-value) {
   border-radius: 4px;
+}
+.tdp-assignee-select:hover :is(.orbit-combobox-field, .orbit-select-trigger > .orbit-choice-value) {
+  background: var(--bg-hover);
+}
+.tdp-assignee-select .orbit-combobox-placeholder,
+.tdp-assignee-select.orbit-select[data-empty] .orbit-choice-value {
+  color: var(--text-3);
 }
 /* The Suggested tier (model routing §9): its picker with the coordinator's reason under it, and in
    the picker each tier's dot, its model and effort, and the work it is for. */
@@ -12003,6 +12015,24 @@ button.chat-jump-start:hover {
   font-size: 11.5px;
   line-height: 1.45;
   color: var(--text-2);
+}
+/* The Reopen question replaced an AntD Modal, whose line height is unitless: text of another size
+   inside keeps its own proportional line. The shared Dialog shell stays at 22px. */
+.tdp-reopen-dialog.orbit-overlay {
+  line-height: 1.5714285714285714;
+}
+/* The Reopen question's paragraphs: secondary text, and the sentence the reader is there for. */
+.tdp-reopen-paragraph {
+  margin: 0 0 1em;
+  color: var(--text-3);
+  line-height: 1.5714285714285714;
+  word-break: break-word;
+}
+.tdp-reopen-paragraph.is-strong {
+  color: var(--text-1);
+}
+.tdp-reopen-paragraph strong {
+  font-weight: 600;
 }
 /* 「Start at」editor: the label keeps the shared 76px gutter, everything the control needs —
    input, its two actions, and the line under them — stacks in the remaining column. */
@@ -12159,7 +12189,7 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   font-size: 11.5px;
 }
-.tdp-dependency-view.ant-segmented {
+.tdp-dependency-view.orbit-segmented {
   flex: none;
   font-size: 12px;
 }
@@ -13187,7 +13217,6 @@ button.chat-jump-start:hover {
   padding: 12px 16px;
   border-top: 1px solid var(--border-subtle);
 }
-.tdp-compose .ant-input,
 .tdp-compose .orbit-textarea {
   flex: 1;
 }
@@ -14138,6 +14167,11 @@ button.chat-jump-start:hover {
 /* ── Share dialog (ShareModal) ─────────────────────────────────────────────────
    docs/mocks/share-links/03-share-dialog: Access, the link, Includes with counts, the Live line,
    Expires, and a foot with the views and the two buttons. */
+/* Unitless line height, as the AntD Modal this dialog replaced: smaller text inside keeps its own
+   proportional line. The shared Dialog shell stays at 22px. */
+.share-dialog.orbit-overlay {
+  line-height: 1.5714285714285714;
+}
 .share-dialog-state {
   padding: 28px 0;
   text-align: center;
@@ -14195,12 +14229,7 @@ button.chat-jump-start:hover {
   font-size: 12.5px;
   line-height: 1.5;
 }
-.share-access-menu .ant-dropdown-menu-item {
-  align-items: flex-start;
-  padding-top: 8px;
-  padding-bottom: 8px;
-}
-.share-access-menu .ant-dropdown-menu-item .ant-dropdown-menu-item-icon {
+.share-access-menu .orbit-menu-icon {
   margin-top: 3px;
 }
 .share-access-option {
@@ -14261,11 +14290,12 @@ button.chat-jump-start:hover {
 .share-layer + .share-layer {
   border-top: 1px solid var(--border-subtle);
 }
-.share-layer-check {
+/* Qualified by the checkbox's own class, whose stylesheet loads after this one. */
+.share-layer-check.orbit-choice {
   align-items: flex-start;
   min-width: 0;
 }
-.share-layer-check .ant-checkbox {
+.share-layer-check .orbit-checkbox {
   align-self: flex-start;
   margin-top: 2px;
 }
