@@ -77,6 +77,9 @@ serve "$OUT/ios/requests.log"
 run_pass ios RunStartProbe "id=$IPHONE_UDID" "$OUT/ios"
 kill "$STUB_PID" 2>/dev/null || true
 
+# What the Mac probe app did to its own windows (`-probe.windowLog`): the UI-test runner's sandbox
+# cannot read it back, so it is collected here.
+cp /tmp/sr-window-*.log "$OUT/mac/" 2>/dev/null || true
 for p in ios mac; do
   grep -E "POST|PATCH|DELETE|BODY" "$OUT/$p/requests.log" > "$OUT/$p/writes.txt" || true
   grep -E "^[0-9:]+ NOT SERVED" "$OUT/$p/requests.log" | sed -E 's/^[0-9:]+ //' | sort | uniq -c | sort -rn \

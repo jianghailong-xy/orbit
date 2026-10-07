@@ -50,7 +50,8 @@ final class RunStartShotTests: ProbeCase {
                                "-probe.session", session,
                                "-ApplePersistenceIgnoreState", "YES"]
         #if os(macOS)
-        app.launchArguments += ["-shell.sidebarVisible", "NO"]
+        app.launchArguments += ["-shell.sidebarVisible", "NO",
+                                "-probe.fitWindow", "-probe.windowLog", "/tmp/sr-window-\(session).log"]
         #endif
         app.launch()
         dismissSystemPrompts()
@@ -119,7 +120,8 @@ final class RunStartShotTests: ProbeCase {
         project.launchArguments = ["-orbit.instance", "http://127.0.0.1:8765", "-probe.fresh", "-probe.project",
                                    "-ApplePersistenceIgnoreState", "YES"]
         #if os(macOS)
-        project.launchArguments += ["-shell.sidebarVisible", "NO"]
+        project.launchArguments += ["-shell.sidebarVisible", "NO",
+                                    "-probe.fitWindow", "-probe.windowLog", "/tmp/sr-window-project.log"]
         #endif
         project.launch()
         dismissSystemPrompts()

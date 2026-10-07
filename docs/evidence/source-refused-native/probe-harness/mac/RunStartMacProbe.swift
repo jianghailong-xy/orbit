@@ -31,6 +31,7 @@ struct RunStartMacProbeApp: App {
                 .frame(minWidth: 900, minHeight: 600)
                 .task {
                     let args = ProcessInfo.processInfo.arguments
+                    Task { await WindowFit.watchIfAsked() }
                     if args.contains("-probe.project") { await ProbeArgs.landOnProject(model) }
                     else { await ProbeArgs.land(model, session: probeSession) }
                     await WindowShot.takeIfAsked()
@@ -45,6 +46,63 @@ struct RunStartMacProbeApp: App {
         let args = ProcessInfo.processInfo.arguments
         if let i = args.firstIndex(of: "-probe.session"), args.count > i + 1 { return args[i + 1] }
         return "S1"
+    }
+}
+
+/// `-probe.fitWindow`: keep every visible window inside the screen's visible frame, and log what
+/// each one was before. The runner's console page lays itself out for a window taller than the
+/// display — on the CI Mac a 1564-point split view whose composer band (the "this run never
+/// started" card) starts at y≈900 in a window showing 31…708 — and nothing scrolls that band back
+/// into view: it is not in a scroll view, and the transcript above it is the part that flexes.
+/// Shrink the window and SwiftUI lays the console out again for the size it now has (run
+/// 37617057113's three identical 40250-byte pictures are what the unfitted window photographs as).
+enum WindowFit {
+    @MainActor
+    static func watchIfAsked() async {
+        guard ProcessInfo.processInfo.arguments.contains("-probe.fitWindow") else { return }
+        var seen: Set<String> = []
+        // A window can arrive late (the UI-test pass presses ⌘N when none came up), so watch rather
+        // than fit once — and log every frame the windows go through, which is what says whether
+        // the console overflows a window that was already the screen's size, or a window that was
+        // bigger than the screen to begin with.
+        for iteration in 0..<240 {
+            try? await Task.sleep(for: .seconds(1))
+            for window in NSApp.windows where window.isVisible && !window.isMiniaturized {
+                guard let screen = window.screen ?? NSScreen.main ?? NSScreen.screens.first else { continue }
+                let visible = screen.visibleFrame
+                let frame = window.frame
+                let before = "\(window.title)|\(frame)"
+                if !seen.contains(before), iteration < 40 {
+                    seen.insert(before)
+                    log("window (screen \(screen.frame), visible \(visible), backing \(window.backingScaleFactor)): \(frame) content \(window.contentView?.frame ?? .zero)")
+                }
+                guard frame.height > visible.height || frame.width > visible.width
+                        || frame.minY < visible.minY || frame.maxY > visible.maxY else { continue }
+                var fit = frame
+                fit.size.width = min(frame.width, visible.width)
+                fit.size.height = min(frame.height, visible.height)
+                fit.origin.x = min(max(frame.minX, visible.minX), visible.maxX - fit.width)
+                fit.origin.y = visible.maxY - fit.height
+                window.setFrame(fit, display: true)
+                log("fitWindow: \(frame) -> \(window.frame) content \(window.contentView?.frame ?? .zero)")
+            }
+        }
+    }
+
+    /// `-probe.windowLog <path>`: what the app did to its own windows, where the UI-test runner's
+    /// sandbox cannot read it back — `run.sh` copies the file into the shots.
+    private static func log(_ line: String) {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-probe.windowLog"), args.count > i + 1,
+              let data = "\(line)\n".data(using: .utf8) else { return }
+        let path = args[i + 1]
+        if let handle = FileHandle(forWritingAtPath: path) {
+            handle.seekToEndOfFile()
+            handle.write(data)
+            try? handle.close()
+        } else {
+            try? data.write(to: URL(fileURLWithPath: path))
+        }
     }
 }
 

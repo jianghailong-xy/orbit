@@ -193,6 +193,11 @@ jobs:
           echo "capture=${{ steps.capture.outcome }}" > .sr-probe/shots/outcomes.txt
           echo "run=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> .sr-probe/shots/outcomes.txt
           echo "sha=${{ github.sha }}" >> .sr-probe/shots/outcomes.txt
+          # The screen the Mac window had to fit in: the window is sized against it, and the
+          # console page lays itself out taller than it (see WindowFit in the probe app).
+          { echo "== displays =="; system_profiler SPDisplaysDataType 2>/dev/null | head -40
+            osascript -e 'tell application "Finder" to get bounds of window of desktop' 2>&1
+          } >> .sr-probe/shots/outcomes.txt || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
