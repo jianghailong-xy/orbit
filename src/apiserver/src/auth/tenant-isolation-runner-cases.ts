@@ -451,6 +451,15 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     }),
     nested: ['taskId'],
   },
+  'POST /runner/projects/:id/tasks/:taskId/integration/skip-merge-check': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: of.projectId, taskId: of.projectTaskId },
+      headers: calling(mine.runner.coordinatorSessionId),
+      body: { reason: 'the census' },
+    }),
+    nested: ['taskId'],
+  },
   'POST /runner/projects/:id/promotions/:promotionId/integration/retry': {
     as: RUNNER,
     request: (of, mine) => ({
@@ -760,6 +769,10 @@ const coordinatorRequests: Readonly<Record<string, (mine: RunnerTenant) => Tenan
     body: { note: 'the census' },
   }),
   'POST /runner/projects/:id/tasks/:taskId/integration/retry': (mine) => ({
+    params: { id: mine.projectId, taskId: mine.projectTaskId },
+    body: { reason: 'the census' },
+  }),
+  'POST /runner/projects/:id/tasks/:taskId/integration/skip-merge-check': (mine) => ({
     params: { id: mine.projectId, taskId: mine.projectTaskId },
     body: { reason: 'the census' },
   }),
@@ -1084,6 +1097,15 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
       params: { id: mine.projectId },
       headers: calling(mine.runner.coordinatorSessionId),
       body: { question: 'Which first?', blocksTaskIds: [of.projectTaskId] },
+    }),
+  },
+  // The card the owner answered the skip on: B's own landing, A's approval.
+  'POST /runner/projects/:id/tasks/:taskId/integration/skip-merge-check body approvalId': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: mine.projectId, taskId: mine.projectTaskId },
+      headers: calling(mine.runner.coordinatorSessionId),
+      body: { reason: 'the census', approvalId: of.runner.allowedApprovalId },
     }),
   },
   ...Object.fromEntries(Object.entries(coordinatorRequests).map(([route, own]) => [
