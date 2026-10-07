@@ -14,8 +14,30 @@ import android.util.Log
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityManager
 import android.view.accessibility.AccessibilityNodeInfo
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
+import androidx.compose.ui.unit.dp
+import io.orbitd.android.R
+import io.orbitd.android.ui.OrbitTheme
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -205,6 +227,75 @@ class WikiWatchTalkBackTest {
         awaitTag("session-watches")
     }
 
+    // MARK: the lazy-list control
+
+    /**
+     * Control for the open finding that TalkBack's swipes stop at the last row on screen of the entry and document pages:
+     * the app's content replaced by lists of 40 rows — bare, under Scaffold + TopAppBar as MainActivity has it, inside a
+     * PullToRefreshBox as the Wiki pages have it, with the rows grouped in card items, and after one item taller than the
+     * screen. On each: TalkBack's focus on row 0, then up to 25 swipes right; the rows it reached and the list's first
+     * visible row before and after. Recorded in talkback-control.txt, not asserted.
+     */
+    @Test fun lazyListControl() {
+        report.setLength(0); problems.clear(); notes.clear(); recorded = false
+        instrument.sendStatus(0, Bundle().apply { putString("a12_pid", Process.myPid().toString()) })
+        try {
+            ActivityScenario.launch<MainActivity>(Intent(app, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)).use { scenario ->
+                try {
+                    talkBackIsOn()
+                    listOf("plain", "scaffold", "pull-to-refresh", "cards", "tall-item").forEach { variant ->
+                        val state = LazyListState()
+                        scenario.onActivity { it.setContent { OrbitTheme { ControlList(variant, state) } } }
+                        compose.waitForIdle(); SystemClock.sleep(1_000)
+                        val before = state.firstVisibleItemIndex
+                        val stops = traverse("control-$variant", 25, rectOf("control-row:0"), null, false)
+                        val rows = stops.mapNotNull { Regex("Row (\\d+)").find(it)?.groupValues?.get(1)?.toInt() }
+                        log("CONTROL $variant: rows reached ${rows.distinct()}, furthest row ${rows.maxOrNull()}; " +
+                            "first visible row before ${before}, after ${state.firstVisibleItemIndex}")
+                    }
+                } catch (error: Throwable) {
+                    File(output, "talkback-control-failure.txt").writeText(error.stackTraceToString())
+                    runCatching { capture("talkback-control-failed") }
+                    throw error
+                } finally { File(output, "talkback-control.txt").writeText(report.toString()) }
+            }
+        } finally { console?.close(); console = null }
+    }
+
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    private fun ControlList(variant: String, state: LazyListState) {
+        val row = @Composable { i: Int -> Text("Row $i", Modifier.fillMaxWidth().padding(16.dp).testTag("control-row:$i")) }
+        when (variant) {
+            "plain" -> LazyColumn(Modifier.fillMaxSize(), state) { items(40) { row(it) } }
+            "scaffold" -> ControlScaffold { padding -> LazyColumn(Modifier.padding(padding).fillMaxSize(), state) { items(40) { row(it) } } }
+            "pull-to-refresh" -> ControlScaffold { padding ->
+                PullToRefreshBox(isRefreshing = false, onRefresh = {}, modifier = Modifier.padding(padding).fillMaxSize()) {
+                    LazyColumn(Modifier.fillMaxSize(), state) { items(40) { row(it) } }
+                }
+            }
+            // Five rows to an item, as the entry page's cards hold their rows.
+            "cards" -> ControlScaffold { padding -> LazyColumn(Modifier.padding(padding).fillMaxSize(), state) {
+                items(8) { card -> Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) { repeat(5) { row(card * 5 + it) } } }
+            } }
+            // Row 1 is taller than the screen, as the document's first paragraph is.
+            else -> ControlScaffold { padding -> LazyColumn(Modifier.padding(padding).fillMaxSize(), state) {
+                item { row(0) }
+                item { Text("Row 1 " + "with words that go on and on ".repeat(120), Modifier.fillMaxWidth().padding(16.dp)) }
+                items(38) { row(it + 2) }
+            } }
+        }
+    }
+
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    private fun ControlScaffold(content: @Composable (PaddingValues) -> Unit) {
+        Scaffold(topBar = {
+            TopAppBar(title = { Text("Control") }, navigationIcon = { IconButton(onClick = {}) { Icon(painterResource(R.drawable.ic_back), "Back") } },
+                actions = { IconButton(onClick = {}) { Icon(painterResource(R.drawable.ic_menu), "Open navigation") } })
+        }) { padding -> content(padding) }
+    }
+
     // MARK: the fixture
 
     private fun http(path: String, body: String? = null): JsonObject = (URL(server + path).openConnection() as HttpURLConnection).run {
@@ -320,13 +411,13 @@ class WikiWatchTalkBackTest {
 
     /** TalkBack's own order: a finger on [start] (else the window's first item), then swipe right after swipe right, with
      * what it stops on, what it has for each and what it spoke. */
-    private fun traverse(page: String, steps: Int, start: Rect?, within: String?, fromTop: Boolean) {
-        val root = appRoot() ?: return
+    private fun traverse(page: String, steps: Int, start: Rect?, within: String?, fromTop: Boolean): List<String> {
+        val root = appRoot() ?: return emptyList()
         val window = bounds(root)
         val candidates = nodes(root).filter { it.isVisibleToUser && (it.isClickable || words(it).isNotEmpty()) && bounds(it) != window }
         // A sheet from its top (its handle), a page from its first item in the tree.
         val first = start ?: (if (fromTop) candidates.minByOrNull { bounds(it).top } else candidates.firstOrNull())
-            ?.let(::bounds) ?: run { problem("$page: nothing on screen for TalkBack", ""); return }
+            ?.let(::bounds) ?: run { problem("$page: nothing on screen for TalkBack", ""); return emptyList() }
         report.appendLine("## $page — TalkBack, swipe right after swipe right (\"said\" is what the speech engine was given)")
         var since = System.currentTimeMillis()
         tap(first.exactCenterX(), first.exactCenterY())
@@ -334,8 +425,10 @@ class WikiWatchTalkBackTest {
         var said = heard(since)
         report.appendLine("  0 ${node?.let(::describe) ?: "(no focus)"} (touched)${line(said)}")
         node?.let { judge(page, it, within, said) }
+        val stops = listOfNotNull(node?.let(::spoken)).toMutableList()
         capture("talkback-$page")
         val seen = mutableListOf(node?.let(::key))
+        var unmoved = 0
         for (step in 1..steps) {
             since = System.currentTimeMillis()
             swipeRight()
@@ -346,14 +439,20 @@ class WikiWatchTalkBackTest {
                 report.appendLine("  (TalkBack's focus left the app: ${node?.packageName})${line(said)}"); break
             }
             val key = key(node)
-            if (key == seen.last()) { report.appendLine("  (the last item: the focus stays)${line(said)}"); break }
+            // One swipe TalkBack let go by is not the end: the end is two in a row that leave its focus where it was.
+            if (key == seen.last()) {
+                if (++unmoved < 2) { report.appendLine("  (the focus stayed; swiped again)${line(said)}"); continue }
+                report.appendLine("  (the last item: the focus stays)${line(said)}"); break
+            }
+            unmoved = 0
             if (key in seen) { report.appendLine("  (back to an earlier item: ${describe(node)})${line(said)}"); break }
-            seen += key
+            seen += key; stops += spoken(node)
             report.appendLine("  $step ${describe(node)}${line(said)}")
             judge(page, node, within, said)
             if (step == steps) report.appendLine("  (stopped after $steps swipes)")
         }
         if (within == null && seen.size < 3) problem("$page: TalkBack's swipes reached ${seen.size} item(s)", "")
+        return stops
     }
 
     /** What a stop says, judged: a press needs words, and no part of them — as the node has them, or as TalkBack [said]
