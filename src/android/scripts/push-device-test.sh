@@ -21,6 +21,7 @@ scripts="$(cd "$(dirname "$0")" && pwd)"
 export ANDROID_HOME="${ANDROID_HOME:-/opt/android-sdk}"
 export ANDROID_USER_HOME="${ANDROID_USER_HOME:-/var/lib/orbit/android/user}"
 export ANDROID_AVD_HOME="${ANDROID_AVD_HOME:-/var/lib/orbit/android/avd}"
+export PYTHONDONTWRITEBYTECODE=1 # The fixture imports cards-fixture.py; keep __pycache__ out of the checkout.
 adb="$ANDROID_HOME/platform-tools/adb"
 # Children never inherit the lock fd: a daemon started while holding it (an adb server, an emulator,
 # the fixture) would keep the lock after this script exits. The server is started before the lock.
