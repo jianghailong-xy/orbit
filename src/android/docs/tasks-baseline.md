@@ -38,10 +38,11 @@ OrbitKit's task rules and words are ported as pure Kotlin (`tasks/TaskLogic.kt`)
 ## Differences from the iOS baseline (deliberate, recorded)
 
 1. **Mark done is not offered.** The pinned `TasksView.swift` sends `PATCH status:DONE`; the same pinned backend refuses it (`DIRECT_TASK_DONE_REFUSED`). Completion goes through evidence, owner confirmation or the server's criterion.
-2. **"Created in ‹session›" scope has no Android entry.** On iOS it is reached from the session's created-tasks strip, which on Android is A08's file; the request to wire "View all in Tasks ›" was filed on this task (comment `34aJYX5VcTnUDQJZoDsIa`). `TaskQuery.creatorSessionId` and the scope rules are implemented and unit-tested.
+2. **"Created in ‹session›" has no entry — as in iOS.** The pinned base contains iOS `18edaeb0b`, which removed the created-tasks card's "View all in Tasks ›" footer; only its rows remain, opening the task (A01 matrix §2, "not to be recorded as reachable", item 2). Android's created-task rows now open the task through a minimal A08 hook (`cards/SessionCards.kt`); the creator scope keeps its implementation without a regular entry, as confirmed by the coordinator.
 3. **No "new task" form.** Neither does iOS: tasks are filed by agents (A08 create cards). "Edit task" covers schedule, acceptance, assignee/provider/model/list and dependencies.
-4. **403 withdraws the page** (above) and **offline writes are refused locally** — both stricter than iOS.
-5. Graph zoom buttons (Zoom in/out) are Android additions beside pinch and pan.
+4. **403 withdraws the page** (above) and **offline writes are refused locally** — approved by the account owner as platform differences (card 34bbkPvI56b7ZUi8cJjX4, 2026-10-07T05:08:28Z).
+5. Graph zoom buttons (Zoom in/out) beside pinch and pan — approved with the two above.
+6. Writes belong to the app, not to the page (iOS's model-owned Task): a Run's resends, a comment, a project setting or a start finish when the page is left; sheets close only after the server takes their write; live events are coalesced into one read two seconds after the first of a burst (iOS `ProjectsModel.nudge`).
 
 ## Verification
 

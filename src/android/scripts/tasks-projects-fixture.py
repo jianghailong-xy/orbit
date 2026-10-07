@@ -61,7 +61,7 @@ def reset():
     generation = state.get('generation', 0) + 1
     state.update(case='normal', pending=True, denied=False, mode='', assignment=None, final=None,
                  denyTasks=False, denyProjects=False, readError=False, generation=generation, journal=old_journal,
-                 runTriggers={}, mutations=0, streamDown=False, eventStorm=False, delays={}, dropNext={})
+                 runTriggers={}, mutations=0, streamDown=False, eventStorm=False, delays={}, dropNext={}, manyJobs=False, createdTasks=False)
     state.update(shares={}, watches=[], attachments={})
     state['tasks'] = {
         OUTSIDE: task(OUTSIDE, 'A11 task checklist', labels=['Mobile', 'Sprint, one']),
@@ -296,6 +296,15 @@ class Handler(cards.Handler):
                         coordination=dict(sessionId=SID, session=snapshot()['detail'], coordinatorGeneration='1', workspaceId=WS, workspaceName='A11 workspace', agentName='A11 workspace',
                                           wakeups=dict(state='NONE', at=None), fuse=dict(selfStartedToday=0, limit=10, paused=False, episodeId=None)),
                         openability=dict(canOpen=True, willCreate=False, refusalCode=None, refusalDetail=None, requiredAction=None, landing=dict(workspaceId=WS, workspaceName='A11 workspace'))))
+            # A conversation long enough below its cards that the first card starts off screen.
+            if path == '/api/sessions/' + SID + '/background' and state.get('manyJobs'):
+                return self.reply([dict(id=f'job-{i}', taskId=None, description=f'Background check {i + 1}', status='COMPLETED',
+                                        command='true', exitCode=0, outputTail='ok') for i in range(14)])
+            # The conversation's created-tasks card, with the task it filed.
+            if path == '/api/sessions/' + SID + '/created-tasks' and state.get('createdTasks'):
+                row = state['tasks'][OUTSIDE]
+                return self.reply(dict(total=1, running=0, failed=0, done=0, projects=[],
+                                       items=[dict(id=OUTSIDE, title=row['title'], status=row['status'], running=row['running'], replaces=None)]))
             if path.endswith('/events/page'):
                 return self.reply(dict(events=[dict(seq=1, type='user', payload=dict(text='A11 source conversation')),
                                                 dict(seq=2, type='assistant', payload=dict(text='[Open A11 task](orbit-task:' + OUTSIDE + ')\n\n[Open A11 project](orbit-project:' + PID + ')\n\nProject work: [A11 project delivery](orbit-task:' + TID + ').')),
@@ -329,7 +338,7 @@ class Handler(cards.Handler):
         if path == '/__control':
             with LOCK:
                 if body.get('reset'): reset()
-                for key in ('case', 'mode', 'pending', 'denied', 'denyTasks', 'denyProjects', 'readError', 'assignment', 'streamDown', 'eventStorm', 'delays', 'dropNext'):
+                for key in ('case', 'mode', 'pending', 'denied', 'denyTasks', 'denyProjects', 'readError', 'assignment', 'streamDown', 'eventStorm', 'delays', 'dropNext', 'manyJobs', 'createdTasks'):
                     if key in body: state[key] = body[key]
                 if 'case' in body: state['pending'] = body.get('pending', True)
                 if 'task' in body:

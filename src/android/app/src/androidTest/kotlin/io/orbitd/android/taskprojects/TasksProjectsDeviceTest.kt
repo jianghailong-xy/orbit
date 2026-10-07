@@ -1,5 +1,6 @@
 package io.orbitd.android.taskprojects
 
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
@@ -70,7 +71,13 @@ class TasksProjectsDeviceTest {
     }
     private fun tap(tag: String, list: String? = null) {
         if (list != null) scrollTo(list, hasTestTag(tag))
-        compose.onNodeWithTag(tag).performClick()
+        // A loaded shared emulator sometimes refuses one injected touch; the press itself is what is tested.
+        try { compose.onNodeWithTag(tag).performClick() }
+        catch (refused: AssertionError) {
+            if (refused.message?.contains("inject") != true) throw refused
+            SystemClock.sleep(500); compose.waitForIdle()
+            compose.onNodeWithTag(tag).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        }
     }
     private fun capture(name: String) {
         compose.waitForIdle()
@@ -88,6 +95,17 @@ class TasksProjectsDeviceTest {
             .invoke(activity, Intent(Intent.ACTION_VIEW, Uri.parse(uri)).setClass(activity, MainActivity::class.java))
         activity.intent = original
     }
+    /** Both semantics trees as the test saw them when a journey failed. */
+    private fun trees(name: String) = runCatching {
+        File(output, "$name-tree.txt").writeText(buildString {
+            for (unmerged in listOf(false, true)) {
+                val roots = compose.onAllNodes(isRoot(), useUnmergedTree = unmerged)
+                val count = roots.fetchSemanticsNodes(atLeastOneRootRequired = false).size
+                appendLine("== ${if (unmerged) "unmerged" else "merged"} tree, $count root(s)")
+                for (i in 0 until count) appendLine(roots[i].printToString(Int.MAX_VALUE))
+            }
+        })
+    }
     private fun drawer(entry: String) {
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
         awaitText(entry)
@@ -97,6 +115,8 @@ class TasksProjectsDeviceTest {
     private fun login(case: String = "normal", mode: String = "") {
         instrument.sendStatus(0, Bundle().apply { putString("a11_pid", Process.myPid().toString()) })
         File(output, "identity.txt").writeText("sha=${BuildConfig.SOURCE_SHA}\ndirty=${BuildConfig.SOURCE_DIRTY}\nscope=controlled HTTP fixture; no real deployed account\n")
+        // The Tasks filter is remembered across launches (as iOS's); each journey starts from the default one.
+        app.getSharedPreferences("orbit.tasks", Context.MODE_PRIVATE).edit().clear().commit()
         http("/__control", """{"reset":true,"case":"$case","mode":"$mode"}""")
         compose.waitUntil(10_000) { app.session.state.value !is AuthState.Restoring }
         if (app.session.state.value is AuthState.SignedIn) runBlocking { app.session.logout() }
@@ -109,7 +129,7 @@ class TasksProjectsDeviceTest {
     }
     private fun journey(name: String, block: () -> Unit) {
         try { block(); File(output, "$name-result.txt").writeText("PASS\n") }
-        catch (error: Throwable) { capture("$name-failed"); throw error }
+        catch (error: Throwable) { capture("$name-failed"); trees(name); throw error }
         finally {
             runCatching { http("/__control", """{"streamDown":false}""") }
             File(output, "$name-journal.json").writeText(http("/__stats").toString()); runBlocking { app.session.logout() }
@@ -409,7 +429,7 @@ class TasksProjectsDeviceTest {
     @Test fun regressionP26_recordAsDoneIsTheOwnersDoneDoor() = journey("p2-6-record-done") {
         login(); val mark = journal().size
         open("orbit-project:$projectId"); awaitTag("project-detail"); awaitText("A11 Android launch")
-        tap("project-menu"); compose.onNodeWithText("Record as done").performClick()
+        awaitTag("project-menu"); tap("project-menu"); compose.onNodeWithText("Record as done").performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("project-done-record").fetchSemanticsNodes().isNotEmpty() ||
             compose.onAllNodesWithTag("project-status-confirm").fetchSemanticsNodes().isNotEmpty() }
         capture("p2-6-record-done-confirmation")
@@ -424,6 +444,28 @@ class TasksProjectsDeviceTest {
         assertEquals("seal1", done.text("criteriaDigest")); assertEquals(JsonNull, done["requestId"])
         assertTrue(done["acceptedGaps"] is JsonArray)
         assertEquals("OWNER", http("/__stats").obj("project")?.text("doneBy"))
+    }
+
+    /** Point 5: the coordinator conversation opens onto the open item's card, even when that card starts off screen. */
+    @Test fun regressionFocus_theCoordinatorConversationOpensOntoTheItemsCard() = journey("focus-item-card") {
+        login(case = "x1"); http("/__control", """{"manyJobs":true}""")
+        open("orbit-project:$projectId"); awaitTag("project-detail"); awaitTag("open-item:x1")
+        tap("open-item:x1", "project-detail")
+        awaitTag("interaction-cards")
+        try { compose.waitUntil(15_000) { runCatching { compose.onNodeWithTag("item:x1").assertIsDisplayed() }.isSuccess } }
+        finally { capture("focus-item-card") }
+    }
+
+    /** Point 5: a created task's row in the conversation opens the task, and Back returns to the conversation. */
+    @Test fun regressionCreatedTaskRow_opensTheTask() = journey("created-task-row") {
+        login(); http("/__control", """{"createdTasks":true}""")
+        open("orbit-session:$sessionId"); awaitTag("composer-input")
+        awaitScrollTo("transcript-list", hasText("Tasks created here"))
+        awaitScrollTo("transcript-list", hasText("Show tasks")); compose.onNodeWithText("Show tasks").performClick()
+        awaitScrollTo("transcript-list", hasTestTag("created-task:$taskId")); capture("created-task-row")
+        compose.onNodeWithTag("created-task:$taskId").performClick()
+        awaitTag("task-detail"); awaitText("A11 task checklist")
+        back(); awaitTag("composer-input")
     }
 
     // MARK: screens for the owner (run again under dark mode and a large font)

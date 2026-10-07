@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# A11 real-account journeys against the isolated Orbit stack (/var/tmp/a11-stack: apiserver at the fixed
+# server SHA, its own PostgreSQL and runner). No fixture: every write is read back from the stack's API by the
+# test itself (RealStackDeviceTest). Instrumentation arguments come from A11_STACK_ARGS (key=value lines).
 set -euo pipefail
 
 if (( $# < 4 || $# > 5 )); then
@@ -28,17 +31,13 @@ runner='io.orbitd.android.debug.test/androidx.test.runner.AndroidJUnitRunner'
 emulator_pid=''
 exec 9>"${ANDROID_DEVICE_LOCK:-/var/lib/orbit/android/ui.lock}"
 flock -w "${ANDROID_DEVICE_LOCK_WAIT:-7200}" 9 || { echo "Device busy; continue offline work" >&2; exit 75; }
-restore_secure() {
-  if [[ "$2" == null || -z "$2" ]]; then "$adb" -s "$serial" shell settings delete secure "$1" >/dev/null || true
-  else "$adb" -s "$serial" shell settings put secure "$1" "$2" >/dev/null || true; fi
-}
 cleanup() {
   local result=$?
   if [[ -n "${fixture_pid:-}" ]]; then
     kill "$fixture_pid" 2>/dev/null || true
     wait "$fixture_pid" 2>/dev/null || true
   fi
-  if [[ -n "${serial:-}" ]]; then "$adb" -s "$serial" shell am force-stop "$package" >/dev/null 2>&1 || true; "$adb" -s "$serial" reverse --remove tcp:18771 >/dev/null 2>&1 || true; fi
+  if [[ -n "${serial:-}" ]]; then "$adb" -s "$serial" shell am force-stop "$package" >/dev/null 2>&1 || true; "$adb" -s "$serial" reverse --remove "tcp:${stack_port:-3711}" >/dev/null 2>&1 || true; fi
   if [[ -n "${old_font:-}" ]]; then
     if [[ "$old_font" == null ]]; then
       "$adb" -s "$serial" shell settings delete system font_scale >/dev/null || true
@@ -65,14 +64,6 @@ cleanup() {
       "$actual_font" "$old_font" "$actual_size" "$old_size" "$actual_density" "$old_density" "$actual_night" "$old_night" > "$output/restored-settings.txt"
     [[ "$actual_font" == "$old_font" && "$actual_size" == "$old_size" && "$actual_density" == "$old_density" && "$actual_night" == "$old_night" ]] || result=1
   fi
-  if [[ -n "${old_a11_enabled:-}" ]]; then
-    # A TalkBack check that died before its own @After must not leave TalkBack on for the next lock holder.
-    restore_secure enabled_accessibility_services "$old_a11_services"
-    restore_secure accessibility_enabled "$old_a11_enabled"
-    printf 'accessibility_services=%s expected=%s\naccessibility_enabled=%s expected=%s\n' \
-      "$("$adb" -s "$serial" shell settings get secure enabled_accessibility_services | tr -d '\r')" "$old_a11_services" \
-      "$("$adb" -s "$serial" shell settings get secure accessibility_enabled | tr -d '\r')" "$old_a11_enabled" >> "$output/restored-settings.txt"
-  fi
   if [[ -n "$emulator_pid" ]]; then
     kill "$emulator_pid" 2>/dev/null || true
     wait "$emulator_pid" 2>/dev/null || true
@@ -87,7 +78,7 @@ cleanup() {
   exit "$result"
 }
 trap cleanup EXIT
-printf 'scope=A11 Tasks/Projects UI; controlled authenticated HTTP fixture; not a physical/deployed-account result\nstarted_utc=%s\n' "$(date -u +%FT%TZ)" > "$output/result.txt"
+printf 'scope=A11 Tasks/Projects UI; isolated real Orbit stack (fixed server SHA, test accounts); not production, not a physical device\nstarted_utc=%s\n' "$(date -u +%FT%TZ)" > "$output/result.txt"
 if [[ -z "$serial" ]]; then
   if [[ "$api" == 36 ]]; then
     serial=emulator-5554
@@ -165,35 +156,34 @@ done
   "$adb" -s "$serial" shell pm list packages --show-versioncode com.google.android.marvin.talkback
 } > "$output/conditions.txt"
 [[ "$("$adb" -s "$serial" shell cmd uimode night | awk '{print $NF}' | tr -d '\r')" == "${A11_NIGHT:-no}" ]] || { echo 'Requested night mode did not apply; not running under mislabeled conditions' >&2; exit 1; }
-cp "$(dirname "$0")/../../shared/src/interaction-cards.fixture.json" "$output/corpus.json"
-cp "$(dirname "$0")/../../shared/src/interaction-cards-review.fixture.json" "$output/review-corpus.json"
-python3 "$(dirname "$0")/tasks-projects-fixture.py" --port 18771 > "$output/fixture.log" 2>&1 9>&- &
-fixture_pid=$!
-for attempt in {1..30}; do
-  if curl --fail --silent http://127.0.0.1:18771/__stats > /dev/null; then break; fi
-  sleep 0.2
-done
-kill -0 "$fixture_pid"
-"$adb" -s "$serial" reverse tcp:18771 tcp:18771
+stack_server="${A11_STACK_SERVER:-http://127.0.0.1:3711}"
+stack_port="${stack_server##*:}"
+args_file="${A11_STACK_ARGS:?A11_STACK_ARGS must name a key=value file}"
+curl --fail --silent "$stack_server/api/health" > "$output/stack-health.json"
+cat /var/tmp/a11-stack/SOURCE_SHA > "$output/stack-source-sha.txt" 2>/dev/null || true
+instrument_args=()
+while IFS='=' read -r key value; do
+  [[ -z "$key" || "$key" == \#* ]] && continue
+  instrument_args+=(-e "$key" "$value")
+done < "$args_file"
+grep -v -i 'password' "$args_file" > "$output/instrument-args.txt" || true
+"$adb" -s "$serial" reverse "tcp:$stack_port" "tcp:$stack_port"
 "$adb" -s "$serial" shell am force-stop "$package"
-old_a11_services="$("$adb" -s "$serial" shell settings get secure enabled_accessibility_services | tr -d '\r')"
-old_a11_enabled="$("$adb" -s "$serial" shell settings get secure accessibility_enabled | tr -d '\r')"
 "$adb" -s "$serial" shell run-as "$package" rm -rf files/a11-tasks-projects files/a11-captures.tar
 "$adb" -s "$serial" shell run-as "$package" mkdir -p files/a11-tasks-projects
 start="$("$adb" -s "$serial" shell date +%s | tr -d '\r').000"
-test_class=io.orbitd.android.taskprojects.TasksProjectsDeviceTest
+test_class=io.orbitd.android.taskprojects.RealStackDeviceTest
 test_selection="${A11_TEST:-$test_class}"
-timeout "${A11_INSTRUMENT_TIMEOUT:-1200}" "$adb" -s "$serial" shell am instrument -w -r -e class "$test_selection" "$runner" > "$output/instrumentation.txt" 2>&1
+timeout "${A11_INSTRUMENT_TIMEOUT:-1200}" "$adb" -s "$serial" shell am instrument -w -r "${instrument_args[@]}" -e class "$test_selection" "$runner" > "$output/instrumentation.txt" 2>&1
 pid="$(sed -n 's/.*a11_pid=\([0-9]*\).*/\1/p' "$output/instrumentation.txt" | head -1)"
 [[ -n "$pid" ]]
 "$adb" -s "$serial" logcat -d -v threadtime --pid="$pid" -T "$start" > "$output/logcat.txt"
-curl --fail --silent http://127.0.0.1:18771/__stats > "$output/server-stats.json"
 "$adb" -s "$serial" shell run-as "$package" tar -cf files/a11-captures.tar -C files a11-tasks-projects > "$output/capture-create.txt" 2>&1
 "$adb" -s "$serial" exec-out run-as "$package" cat files/a11-captures.tar > "$output/captures.tar"
 tar --no-same-owner -xf "$output/captures.tar" -C "$output"
 chmod -R a+rX "$output/a11-tasks-projects"
-if grep -E 'a(08|11)-fixture-(password|access|refresh)' "$output/logcat.txt"; then
-  echo 'Fixture credential marker found in logcat' >&2
+if grep -E 'a11-owner-pass|eyJhbGciOi' "$output/logcat.txt"; then
+  echo 'Stack credential or token found in logcat' >&2
   exit 1
 fi
 grep -Eq 'OK \([0-9]+ tests?\)' "$output/instrumentation.txt"

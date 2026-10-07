@@ -24,7 +24,7 @@ OrbitKit's project rules are ported as pure Kotlin over the server's JSON — `P
 | Run queue | Rows with Run / Resume list / Open session / tag | Only `runState:READY` offers Run (`POST /tasks/:id/execute`, one trigger per press, 3 resends); PAUSED resumes the list (`PATCH /task-lists/:id {paused:false, note}`) after the iOS confirmation |
 | Acceptance criteria | Ordinal marks met / unmet / unanswered, work lines, held-up task links, How it's checked, first 4 + View all | `ProjectPage.criterionWork`, `criteriaDisclosure` (compact) |
 | Tasks | Bands (Running, Pending landing, Ready, Waiting for landing, Blocked by level, Landed, Done / Cancelled) with tags, waits/blocks, Load more | `GET /projects/:id/tasks/page`; a refresh re-reads the loaded window from the top |
-| ⋯ menu | Record as done / cancelled or Reopen; Copy Link; Share…; Copy as Markdown; Delete project (only with no tasks) | `PATCH {status}` as the pinned Swift menu does; `/projects/:id/share`; `ProjectMarkdown.project`; `DELETE` |
+| ⋯ menu | Record as done / cancelled or Reopen; Copy Link; Share…; Copy as Markdown; Delete project (only with no tasks) | Record as done opens "Is this project done?" (`ProjectDoneSheet`, port of OrbitKit `ProjectDone`, main 7c9d0ceec) and presses `POST /projects/:id/done {criteriaDigest, acceptedGaps, requestId}` — the seal read (or the coordinator request's own), the gaps shown, the DONE_REQUEST answered or null — leaving an OWNER record a later check does not undo; Open items carry Ready to close / Record as done… rows and the header says who recorded it. A server without the `derivedDone` projection keeps the status door (`PATCH {status}`), as iOS does. Cancelled / Reopen stay `PATCH {status}`; `/projects/:id/share`; `ProjectMarkdown.project`; `DELETE` |
 
 Refusals surface as "Couldn't do that" with OrbitKit's sentences ("These settings were not saved — …", "That start was not recorded — …", "Couldn't start the task: …"), the server's own words after the dash (`failureReason` = `APIClient.failureReason`).
 
@@ -34,10 +34,10 @@ Writes use `ProjectApi` over A03's handle and A11's `FeatureWrites`: gated on th
 
 ## Differences from the iOS baseline (deliberate, recorded)
 
-1. **Owner's own Start… is a native sheet, not A08's card.** iOS reuses `StartProjectCard` with a locally built owner request; on Android the start card belongs to A08 and authorizes only cards read from a session, so a fabricated card is not used. The sheet carries the same words (held by `ProjectCopyParityTest`) and sends the same body. Coordinator-asked starts, exceptions, questions, merge reviews and criteria changes are answered on A08's cards in the coordinator conversation.
-2. **Focus on a card in the coordinator conversation.** iOS opens the conversation focused on the item's card; the open-items read carries no record id, so Android opens the conversation and the card is drawn among its cards.
-3. **Record as done** keeps the pinned compatibility `PATCH {status:DONE}`; the server may keep the project OPEN, and the page shows what it reads back. The durable `POST /projects/:id/done` decision is not in the pinned iOS client.
-4. **403 withdraws the page**; **offline writes are refused locally**; graph Zoom buttons are additions.
+1. **Owner's own Start… is a native sheet, not A08's card** — approved by the account owner as a platform difference (card 34bbkPvI56b7ZUi8cJjX4, 2026-10-07T05:08:28Z). The sheet carries the same words (held by `ProjectCopyParityTest`) and sends the same body; coordinator-asked starts, exceptions, questions, merge reviews and criteria changes are answered on A08's cards in the coordinator conversation.
+2. **The coordinator conversation opens onto the item's card** (iOS `focus(ownerItem:)`): the page asks A08's card host for the card by its address (`item:<itemId>`, `start:<itemId>`, `promotion:<id>`) through the minimal hook `cards/CardFocus.kt`, and the host brings it into view once drawn. A later live event may follow the transcript to its end, as the reader does.
+3. **Record as done is the owner's done door** (above), following iOS/web on main (7c9d0ceec / 0f47238c1) at the coordinator's request (decision 5dshHuxUn20vj22RYT968k). The earlier statement that a status PATCH "reads back OPEN" no longer describes Android. "Not yet…" (declining a DONE_REQUEST with a note) and the "Why is this project not done?" card are not ported.
+4. **403 withdraws the page**, **writes are refused locally while the account stream is down**, and the graph's **Zoom buttons** — all three approved by the account owner as platform differences (card 34bbkPvI56b7ZUi8cJjX4).
 
 ## Verification
 

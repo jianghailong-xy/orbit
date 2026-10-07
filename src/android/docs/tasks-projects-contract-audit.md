@@ -116,12 +116,12 @@ For object reads/actions, a stale response after account/server/route switch mus
 The audit above is the read-only inventory it was written as. How the implementation (`tasks-baseline.md`, `projects-baseline.md`) disposes of each difference:
 
 1. **Task Mark done** — not offered on Android; completion goes through evidence, owner confirmation or the server's criterion.
-2. **Project done** — the ⋯ menu keeps the pinned compatibility `PATCH {status:DONE}` and shows what the server reads back; `POST /projects/:id/done` is not offered because the pinned iOS client does not offer it.
+2. **Project done** — Record as done presses the owner's done door `POST /projects/:id/done` with the seal read, the gaps shown and the DONE_REQUEST answered or null (OrbitKit `ProjectDone`, main 7c9d0ceec); an older server without the `derivedDone` projection keeps the compatibility `PATCH {status:DONE}`, as iOS does.
 3. **Open-item vocabulary** — rows show any kind with the server's title/detail; only actions this client can carry out get a press; tapping opens the coordinator conversation, where A08 answers what it knows.
 4. **Owner-initiated start / panel confirm** — native owner doors with no fabricated request: the project start sends `requestId:null` from a native sheet; the task panel confirm sends `{decision:CONFIRM, requestId:null, reviewRecordId:null}` after a re-read and is withheld while a run is waiting.
 5. **Acceptance edit guard** — the editor sends only the acceptance fields; a refusal is shown in the server's words and the task is left as read.
 
-Further recorded differences: a 403 withdraws the task or project page (iOS keeps the task page beside a banner); writes are refused locally while the account stream is down; the "Created in ‹session›" scope has no Android entry until A08's created-tasks strip links it; the coordinator conversation opens without focusing a specific card (the open-items read carries no record id).
+Further recorded differences — 403 withdraws the task or project page, writes are refused locally while the account stream is down, the graph's Zoom buttons and the native owner Start sheet — are approved by the account owner (card 34bbkPvI56b7ZUi8cJjX4). The creator scope has no regular entry, as in iOS after 18edaeb0b; created-task rows open the task and the coordinator conversation opens onto the item's card through two minimal A08 hooks.
 
 ## Existing fixtures and meaningful verification
 
