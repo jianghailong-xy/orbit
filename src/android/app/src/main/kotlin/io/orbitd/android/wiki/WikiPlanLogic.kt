@@ -121,6 +121,17 @@ internal object WikiPlanCopy {
 internal object WikiPlanLogic {
     private fun plural(n: Int, one: String, many: String) = "${WikiArticleCopy.count(n)} ${if (n == 1) one else many}"
 
+    // MARK: orders — the web phone's, top to bottom
+
+    /** The plan page's blocks (`WIKI_PLAN_PAGE_SECTIONS`). */
+    enum class PageSection { CRUMB, TITLE, META, ACTIONS, HINT, JOB, GATE, CHANGES, DOCUMENTS }
+    /** A document's own page (`WIKI_PLAN_DOC_SECTIONS`). */
+    enum class DocSection { CRUMB, TITLE, META, FIELDS, SECTIONS }
+    /** A section's own page (`WIKI_PLAN_SECTION_SECTIONS`). */
+    enum class SectionSection { CRUMB, TITLE, META, COVERS, SOURCES }
+    /** A change's card (`WIKI_PLAN_CHANGE_PARTS`). */
+    enum class ChangePart { HEAD, TITLE, WHY, CHANGE, SOURCES, FROM, CHECK, ACTIONS }
+
     // MARK: a plan, as the page draws it
 
     data class ShownProject(val id: String?, val title: String)
