@@ -198,6 +198,9 @@ jobs:
         with:
           name: source-refused-shots
           path: .sr-probe/shots
+          # `.done-probe` is the marker the probe's own evidence convention reads: hidden files are
+          # excluded by default, and that one is the "it ran to the end" record.
+          include-hidden-files: true
       - name: Fail as the capture did
         if: steps.capture.outcome != 'success'
         run: exit 1
