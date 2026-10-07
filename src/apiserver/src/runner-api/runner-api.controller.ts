@@ -100,6 +100,7 @@ import {
   CodexAccountRemoveResult,
   InstallCommand,
   InstallResult,
+  KIMI_LOGIN_REGION_V1,
   LoginCommand,
   LoginEngine,
   LoginResult,
@@ -322,7 +323,7 @@ import {
   NON_REPLAYABLE_EVENT_TYPES,
   replayableEventSql,
 } from '../common/system-noise';
-import { isInstallEngine, isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
+import { isInstallEngine, isKimiRegion, isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
 import { antigravityGoogleLoginRefusal, antigravitySignInUnderWay } from '../common/antigravity-readiness';
 import { RUNNER_OS_HEADER, withRunnerOs } from '../common/runner-platform';
 import { loginCodeRelay } from '../runners/login-code-relay';
@@ -1814,6 +1815,7 @@ export class RunnerApiController {
         loginEngine: true,
         loginAccount: true,
         loginAccountName: true,
+        loginRegion: true,
         loginCode: true,
         loginAt: true,
       },
@@ -1848,6 +1850,8 @@ export class RunnerApiController {
     if (r.loginStatus === 'pending') {
       const account = r.loginAccount ?? undefined;
       const accountName = r.loginAccountName ?? undefined;
+      // Kimi's site, only ever stored for Kimi (RunnersService.startLogin) and handed over only for it.
+      const region = engine === 'kimi' && isKimiRegion(r.loginRegion) ? r.loginRegion : undefined;
       // A process that does not declare account sign-in for THIS engine would ignore the account
       // and sign in its machine's Default instead — replacing the very login this sign-in was meant
       // to leave alone. One engine's declaration says nothing about another's: a runner that has
@@ -1857,13 +1861,17 @@ export class RunnerApiController {
       // Antigravity's Google sign-in is judged again on the process polling now — the relay it
       // declares and the OS it names — which the start (RunnersService.startLogin) could only
       // check against the last heartbeat's.
+      // A process that does not declare the site choice would ignore it and run a bare `kimi login`,
+      // which goes wherever the CLI decides — perhaps the very site the user just turned away from.
       const refusal =
         !signsInAccounts && (accountName || (account && account !== 'default'))
           ? `This runner is too old to sign in another ${ACCOUNT_ENGINE_LABEL[accountEngine]} account — ` +
             'update it, then try again.'
-          : engine === 'antigravity'
-            ? antigravityGoogleLoginRefusal({ capabilities: withRunnerOs(parseRunnerCapabilities(capabilities) ?? [], osHeader) })
-            : null;
+          : region && !runnerSupportsCapability(capabilities, KIMI_LOGIN_REGION_V1)
+            ? 'This runner is too old to choose a Kimi site — update it, then try again.'
+            : engine === 'antigravity'
+              ? antigravityGoogleLoginRefusal({ capabilities: withRunnerOs(parseRunnerCapabilities(capabilities) ?? [], osHeader) })
+              : null;
       if (refusal) {
         await this.prisma.runner.update({
           where: { id: runnerId },
@@ -1878,6 +1886,7 @@ export class RunnerApiController {
         // Only when named, so a start for the runner's own login is the shape it always was.
         ...(account ? { account } : {}),
         ...(accountName ? { accountName } : {}),
+        ...(region ? { region } : {}),
       };
     }
     // Antigravity's code never touched the row: it is in this process's memory, bound to the attempt

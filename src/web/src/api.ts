@@ -950,8 +950,11 @@ export const resendSessionRetryMessage = (
 ) =>
   api<{ turnId: string; placement?: string }>(`/sessions/${sessionId}/retry-message`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(identity),
+    // The object, not `JSON.stringify` of it: `api` serializes the body itself, and handing it a
+    // string puts a JSON STRING on the wire (`"{\"provider\":…}"`), which express's strict body
+    // parser refuses with 400 `Unexpected token '"'` before any handler sees the request — every
+    // press of the failure card's Retry failed that way (seen on orbitd.io, 2026-10-07).
+    body: identity,
   });
 
 // Turn off / put back the retry armed on this session by a spent quota or a transient provider
