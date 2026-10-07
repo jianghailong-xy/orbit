@@ -39,7 +39,7 @@ fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: 
     when (route.id) {
         "profile" -> EditProfile(api, revision, back)
         "password" -> ChangePassword(api)
-        "providers" -> ProviderManagement(api, revision, runner)
+        "providers" -> ProviderManagement(api, revision, route.recordId, open, back)
         "workspace" -> WorkspaceSettings(api, route.workspaceId, revision, back, workspaceDeleted, changed)
         "runners" -> RunnersList(api, revision, runner)
         "sharing" -> SharingSettings(api, revision)
