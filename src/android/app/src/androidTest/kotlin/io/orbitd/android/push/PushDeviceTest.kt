@@ -443,6 +443,7 @@ class PushDeviceTest {
     private fun shell(command: String): String = ParcelFileDescriptor.AutoCloseInputStream(instrument.uiAutomation.executeShellCommand(command))
         .bufferedReader().use { it.readText() }
     private fun capture(label: String) {
+        SystemClock.sleep(1_000) // The emulator's software renderer presents frames after the UI state settles.
         instrument.uiAutomation.takeScreenshot()?.let { bitmap ->
             File(evidence, "$label.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
             bitmap.recycle()

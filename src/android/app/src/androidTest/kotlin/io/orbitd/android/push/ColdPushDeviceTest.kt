@@ -270,6 +270,7 @@ class ColdPushDeviceTest {
         }
     }
     private fun capture(label: String) {
+        SystemClock.sleep(1_000) // The emulator's software renderer presents frames after the UI state settles.
         instrument.uiAutomation.takeScreenshot()?.let { image -> File(output, "$label.png").outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }; image.recycle() }
     }
 }
