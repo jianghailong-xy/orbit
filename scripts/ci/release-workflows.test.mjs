@@ -258,7 +258,7 @@ test('ordinary Android PR verification never receives release signing secrets', 
   assert.match(ci, /node --test scripts\/ci\/release-workflows\.test\.mjs/);
   for (const [name, source] of Object.entries(workflows)) {
     if (name !== 'android-release.yml') {
-      assert.doesNotMatch(source, /ANDROID_KEYSTORE_BASE64|ANDROID_STORE_PASSWORD|ANDROID_KEY_PASSWORD|android-internal/, name);
+      assert.doesNotMatch(source, /secrets\.ANDROID_|vars\.ANDROID_|environment:\s*android-internal/, name);
     }
   }
 });
