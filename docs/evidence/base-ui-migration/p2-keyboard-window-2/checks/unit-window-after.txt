@@ -1,0 +1,13 @@
+069601b67 fix(web): hand keys that beat the focus move to an open submenu, and Home, End, Tab and Shift+Tab to a menu
+34ebe07972ab9680cad0775ad5f4169c39b5f98b
+
+ RUN  v5.0.2 /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/src/web
+
+ ✓ src/components/ui/Menu.test.tsx (18 tests) 420ms
+ ✓ src/components/ui/keyboardWindow.test.tsx (58 tests) 1267ms
+
+ Test Files  2 passed (2)
+      Tests  76 passed (76)
+   Start at  23:00:16
+   Duration  2.37s (tests 46%, import 24%, environment 24%, transform 6%)
+
