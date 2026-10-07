@@ -386,8 +386,8 @@ private fun ChallengeLine(op: WikiChangesetOp, entry: WikiEntry?) {
             if (ref != null) withStyle(SpanStyle(color = secondary)) { append(" · " + WikiModeCopy.checkedOnMain(ref)) }
         }
     }
-    Row(Modifier.fillMaxWidth().background(WikiPalette.amberWash, RoundedCornerShape(10.dp)).padding(10.dp).testTag("wiki-review-challenge"),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(Modifier.fillMaxWidth().background(WikiPalette.amberWash, RoundedCornerShape(10.dp)).padding(10.dp).testTag("wiki-review-challenge")
+        .semantics(mergeDescendants = true) {}, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("◎", style = WikiType.label, color = Color(0xFFFF9500))
         Text(text, style = WikiType.label)
     }

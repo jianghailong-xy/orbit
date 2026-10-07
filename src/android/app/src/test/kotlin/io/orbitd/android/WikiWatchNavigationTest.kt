@@ -2,6 +2,7 @@ package io.orbitd.android
 
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.navigation.*
+import io.orbitd.android.wiki.WikiNav
 import kotlinx.serialization.encodeToString
 import org.junit.Assert.*
 import org.junit.Test
@@ -23,17 +24,42 @@ class WikiWatchNavigationTest {
         assertEquals(Destination.WORKSPACES, restored.back().current.destination)
     }
 
-    @Test fun sourceRecordReturnsToExactDocumentSectionAndSpaceAcrossRecreation() {
-        val document = OrbitRoute(Destination.WIKI_DOC, "deployment", wikiSpaceId = uuid, wikiSection = "restore")
-        val record = OrbitLinks.parse("orbit-session:$publicId?at=$publicId")!!
-        val nav = OrbitNavigation().bindAccount("server|reader").select("Wiki", OrbitRoute(Destination.WIKI, uuid))
-            .push(document).push(record)
+    @Test fun sourceRecordReturnsToExactDocumentSectionAcrossRecreation() {
+        var nav = OrbitNavigation().bindAccount("server|reader").select("Wiki", OrbitRoute(Destination.WIKI, origin = Origin.DRAWER))
+        val wiki = WikiNav({ nav = nav.push(it) }, { change -> nav = change(nav) }, "https://example.test") {}
+        val document = OrbitRoute(Destination.WIKI_DOC, "deployment", wikiSection = "restore")
+        wiki.open(document)
+        // A footnote's one button: the session at the quoted record, by the same deep link iOS opens.
+        wiki.sessionRecord(publicId, publicId)
         val restored = Wire.json.decodeFromString<OrbitNavigation>(Wire.json.encodeToString(nav))
-        assertEquals(uuid, restored.current.recordId)
+        assertEquals(OrbitRoute(Destination.SESSION, uuid, recordId = uuid, origin = Origin.LINK), restored.current)
         assertEquals(document, restored.back().current)
         assertEquals("Wiki", restored.back().section)
-        val versioned = OrbitRoute(Destination.WIKI_PLAN_SECTION, "deployment", wikiSpaceId = uuid, wikiSection = "2", wikiVersion = 4)
+        val versioned = OrbitRoute(Destination.WIKI_PLAN_SECTION, "deployment", wikiPart = 2, wikiVersion = 4)
         assertEquals(versioned, Wire.json.decodeFromString<OrbitRoute>(Wire.json.encodeToString(versioned)))
+    }
+
+    @Test fun aRecordTheLinkCannotNameStillOpensTheSession() {
+        var nav = OrbitNavigation().bindAccount("server|reader")
+        val wiki = WikiNav({ nav = nav.push(it) }, { change -> nav = change(nav) }, "https://example.test") {}
+        wiki.sessionRecord(publicId, "not a record!")
+        assertEquals(OrbitRoute(Destination.SESSION, publicId, origin = Origin.LINK), nav.current)
+    }
+
+    @Test fun contentsHomeReturnsToTheWikiHomeUnderThePageOrPushesOne() {
+        var nav = OrbitNavigation().bindAccount("server|reader").select("Wiki", OrbitRoute(Destination.WIKI, origin = Origin.DRAWER))
+        val wiki = WikiNav({ nav = nav.push(it) }, { change -> nav = change(nav) }, "https://example.test") {}
+        wiki.open(OrbitRoute(Destination.WIKI_BROWSE)); wiki.open(OrbitRoute(Destination.WIKI_ARTICLE, "reader", wikiPart = 1))
+        wiki.home()
+        assertEquals(listOf(OrbitRoute(Destination.WIKI, origin = Origin.DRAWER)), nav.frames)
+        // An entry a session's link opened rides the workspace's stack: its Home is the Wiki home over it.
+        nav = OrbitNavigation().bindAccount("server|reader").push(OrbitRoute(Destination.SESSION, uuid))
+        wiki.entry(uuid); wiki.home()
+        assertEquals(listOf(Destination.WORKSPACES, Destination.SESSION, Destination.WIKI_ENTRY, Destination.WIKI), nav.frames.map { it.destination })
+        wiki.replace(OrbitRoute(Destination.WIKI_PLAN, wikiVersion = 3))
+        assertEquals(listOf(Destination.WORKSPACES, Destination.SESSION, Destination.WIKI_ENTRY, Destination.WIKI_PLAN), nav.frames.map { it.destination })
+        wiki.back()
+        assertEquals(Destination.WIKI_ENTRY, nav.current.destination)
     }
 
     @Test fun watchPushRetainsOriginalConversationAndLogoutClearsBoth() {

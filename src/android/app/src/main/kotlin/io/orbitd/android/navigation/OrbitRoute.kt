@@ -19,7 +19,6 @@ data class OrbitRoute(
     val recordId: String? = null,
     val origin: Origin = Origin.LIST,
     val sessionView: String = "open",
-    val wikiSpaceId: String? = null,
     val wikiPart: Int = 0,
     val wikiSection: String? = null,
     val wikiVersion: Int? = null,

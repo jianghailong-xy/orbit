@@ -23,11 +23,12 @@ internal class WikiNav(private val push: (OrbitRoute) -> Unit,
     fun open(route: OrbitRoute) = push(route)
     fun entry(id: String) = push(OrbitRoute(Destination.WIKI_ENTRY, id))
     fun session(id: String) = push(OrbitRoute(Destination.SESSION, id, origin = Origin.LINK))
-    /** A session at one of its records — `orbit://session/<id>?at=<record>`, the deep link a footnote rests on;
-     * the session alone when that link cannot be made (iOS `WikiDocScreen.open`). */
+    /** A session at one of its records — what `orbit://session/<id>?at=<record>`, the deep link a footnote rests on,
+     * opens; the session alone when that link cannot be made (iOS `WikiDocScreen.open`). */
     fun sessionRecord(session: String, record: String) {
-        val link = "orbit://session/${Uri.encode(session)}?at=${Uri.encode(record)}"
-        push(OrbitLinks.parse(link, origin = Origin.LINK)?.takeIf { it.recordId != null } ?: OrbitRoute(Destination.SESSION, session, origin = Origin.LINK))
+        val id = ObjectId.canonical(session); val at = ObjectId.canonical(record)
+        push(if (id != null && at != null) OrbitRoute(Destination.SESSION, id, recordId = at, origin = Origin.LINK)
+            else OrbitRoute(Destination.SESSION, session, origin = Origin.LINK))
     }
     fun task(id: String) = push(OrbitRoute(Destination.TASK, id, origin = Origin.LINK))
     fun project(id: String) = push(OrbitRoute(Destination.PROJECT, id, origin = Origin.LINK))

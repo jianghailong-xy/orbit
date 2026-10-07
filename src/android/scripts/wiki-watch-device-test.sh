@@ -16,6 +16,11 @@ runner=io.orbitd.android.debug.test/androidx.test.runner.AndroidJUnitRunner
 [[ -f "$apk" && -f "$tests" ]]
 mkdir -p "$output"
 [[ -z "$(ls -A "$output")" ]]
+# Start the adb server before holding the lock, and never let adb inherit the lock's fd: a server spawned
+# with fd 9 open would hold the device lock for as long as it lives.
+"$adb" start-server >/dev/null 2>&1
+adb() { command "$adb_bin" "$@" 9>&-; }
+adb_bin="$adb"; adb=adb
 exec 9>"${ANDROID_DEVICE_LOCK:-/var/lib/orbit/android/ui.lock}"
 flock -n 9 || { echo 'Device lock busy; no device action performed' >&2; exit 75; }
 fixture_pid=''
@@ -60,7 +65,7 @@ old_night="$("$adb" -s "$serial" shell cmd uimode night | awk '{print $NF}' | tr
 "$adb" -s "$serial" shell settings put system font_scale "${A12_FONT_SCALE:-1.0}"
 "$adb" -s "$serial" shell cmd uimode night "${A12_NIGHT:-no}" >/dev/null
 printf 'font=%s\nnight=%s\n' "${A12_FONT_SCALE:-1.0}" "${A12_NIGHT:-no}" > "$output/conditions.txt"
-python3 "$scripts/wiki-watch-fixture.py" --port 18770 > "$output/fixture.log" 2>&1 &
+python3 "$scripts/wiki-watch-fixture.py" --port 18770 > "$output/fixture.log" 2>&1 9>&- &
 fixture_pid=$!
 for attempt in {1..30}; do
   if curl --fail --silent http://127.0.0.1:18770/__stats > /dev/null; then break; fi
