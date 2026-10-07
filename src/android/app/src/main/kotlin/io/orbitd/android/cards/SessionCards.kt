@@ -106,8 +106,10 @@ fun SessionCards(open: (String) -> Unit, discuss: ((String) -> Unit)? = null) {
             // A11 hook: a created task's row opens its task page (iOS `CreatedTasksCard` row → task detail).
             DetailFold("tasks") { tasks.objects("items").forEach { task ->
                 val taskId = task.text("id")
-                Box(Modifier.fillMaxWidth().then(if (taskId == null) Modifier
-                    else Modifier.clickable(role = Role.Button) { open("orbit-task:$taskId") }.testTag("created-task:$taskId"))) {
+                // A column, as the fields were laid out in the card's own column before the row became pressable.
+                Column(Modifier.fillMaxWidth().then(if (taskId == null) Modifier
+                    else Modifier.clickable(role = Role.Button) { open("orbit-task:$taskId") }.testTag("created-task:$taskId")),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     CardFields(task, listOf("title", "status", "running", "replaces"), open)
                 }
             } }

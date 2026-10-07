@@ -11,7 +11,9 @@ that carries it, the tests that exercise it, and what they established. Three ki
   its own PostgreSQL, the repo's Go runner with a stand-in engine), seeded only through the real API, signed in through the
   product's sign-in screen with the stack's test accounts (owner and member). Every write is read back from the API as the
   same account and every list is compared with what the API answers; the reads are kept beside the screenshots
-  (`<journey>-readback.txt`). Not production, not a physical phone.
+  (`<journey>-readback.txt`). Not production, not a physical phone. The stack was removed after the runs; its tooling
+  (setup, seeding, verification, the stand-in engine, seed ids with share tokens and test passwords redacted) and its final
+  state are kept with the evidence uploads (`a11-stack-tooling/`).
 
 App code is unchanged since 0705c23ad (`git diff 0705c23ad.. -- src/android/app/src/main src/android/core/src/main` is
 empty); later commits change only device tests, scripts and docs.
@@ -26,20 +28,21 @@ empty); later commits change only device tests, scripts and docs.
 | S1 | bgj_8e6f0a4c032f | 54e7da53a | stack s03, s06, s08–s13 | PASS (8) |
 | S2 | bgj_653eb9b2a024 | 6e8f3435a | stack s02, s05, s07 | PASS (3) |
 | S3 | bgj_8d93d1598e05 | eef116e19 | stack s11 with `orbit://` forms | PASS |
-| S4 | bgj_5a87dbe3206a | 9ae822323 | stack s01, s04 | RESULT_S4 |
-| F36 | bgj_5a87dbe3206a | 9ae822323 | fixture suite, API 36 light (20 journeys) | RESULT_F36 |
-| D200 | bgj_5a87dbe3206a | 9ae822323 | screens tour, dark + 200 % font | RESULT_D200 |
+| S4 | bgj_5a87dbe3206a | 9ae822323 | stack s04 | PASS |
+| S5 | bgj_993f0d5d3a51 | 089fc1bb1 | stack s01 | PASS |
+| F36 | bgj_5a87dbe3206a | 9ae822323 | fixture suite, API 36 light (20 journeys) | PASS 20/20 |
+| D200 | bgj_5a87dbe3206a | 9ae822323 | screens tour, dark + 200 % font | PASS (Run now ends above the comment box) |
 | F29 | bgj_5a87dbe3206a | 9ae822323 | fixture suite on API 29 (Android 10, emulator-5556 started and stopped by the runner) | RESULT_F29 |
-| TB | bgj_5a87dbe3206a | 9ae822323 | `TalkBackCheckTest`, TalkBack running | RESULT_TB |
+| TB | bgj_5a87dbe3206a | 9ae822323 | `TalkBackCheckTest`, TalkBack running | PASS: touch exploration on through 6 pages; no press without words; TalkBack's focus landed on Task options, Task actions, Send comment, Project actions; TalkBack's notification prompt dismissed unanswered (its permission unchanged); settings restored |
 
 ## UI-F04 · Drawer Tasks / `orbit-task` / created-task row → list and task page
 
 | A01 entry / field group | Android page | Tests | Result |
 | --- | --- | --- | --- |
-| Drawer Tasks | `TaskBrowser` (Tasks branch of `MainActivity`) | Fixture `taskSearchAndLabelsKeepScopeThroughRecreation`, `screensTour`; Stack `s01_theTaskListIsTheServersList` | S4: every row of `GET /tasks/page?projectId=none` is shown |
+| Drawer Tasks | `TaskBrowser` (Tasks branch of `MainActivity`) | Fixture `taskSearchAndLabelsKeepScopeThroughRecreation`, `screensTour`; Stack `s01_theTaskListIsTheServersList` | S5: every row of `GET /tasks/page?projectId=none` is shown |
 | `orbit-task:` from a conversation, back to it with the draft kept | `TaskDetail` over the conversation (A05 stack) | Fixture `sourceConversationTaskAndProjectReturnKeepDraft` | F36, F29 |
 | created-task row → task | A08 created-tasks card row (minimal hook) → `TaskDetail` | Fixture `regressionCreatedTaskRow_opensTheTask` | RG2: red on the reviewed build (no entry), green on the fix |
-| scope All / list; search; filter; sort/order; Tasks/Batches; labels | `TaskBrowser` bar, chips, options menu, label sheet | Unit `TaskApiTest`, `TaskLogicTest`; Fixture `taskSearchAndLabels…`, `regressionP21_…`; Stack `s01_…` | S4: the Failed chip shows the server's failed rows; a search shows the server's matches plus the rows `/tasks/active` pins over them (Happening now, as iOS `TasksView`); the `android` label shows the server's labelled rows. RG2: a write finishing under an earlier filter no longer refills the new one (P2-1) |
+| scope All / list; search; filter; sort/order; Tasks/Batches; labels | `TaskBrowser` bar, chips, options menu, label sheet | Unit `TaskApiTest`, `TaskLogicTest`; Fixture `taskSearchAndLabels…`, `regressionP21_…`; Stack `s01_…` | S5: the Failed chip shows the server's failed rows; a search shows the server's matches plus the rows `/tasks/active` pins over them (Happening now, as iOS `TasksView`); the `android` label shows the server's labelled rows. RG2: a write finishing under an earlier filter no longer refills the new one (P2-1) |
 | multi-select bulk run / stop / assign / delete | bulk bar + iOS confirmations | Unit `TaskApiTest`; Stack `s04_bulkDeleteLeavesNothingOnTheServer` | S4: both rows answer `GET /tasks/:id` → 404 after Delete |
 | detail: comments, acceptance, schedule, prerequisites, watch | `TaskDetail` sections and sheets (`TaskEditor.kt`) | Fixture `taskDetailWritesGoThroughTheServersOwnRecord`, `regressionP23_…`; Stack `s02_taskPageWritesAreTheServersRecord` | S2: comment, acceptance criteria, runAt set then cleared, prerequisite, watch — each read back from `GET /tasks/:id` or `GET /watches`. RG1: a refused acceptance edit keeps its sheet and draft (P2-3) |
 | run / delete | action row, ⋯ menu | Fixture `taskDetailWrites…`, `regressionP24_aRunPressedJustBeforeLeavingStillStarts`; Stack `s03_aRunOnTheStackRunnerThenDelete` | S1: Run on the stack's runner → task DONE; Delete → 404. RG1: a Run pressed just before leaving still starts, under one name |
@@ -52,7 +55,7 @@ empty); later commits change only device tests, scripts and docs.
 | --- | --- | --- | --- |
 | Task lists directory; choose a list → Tasks in its scope | `TaskListsDirectory` from the scope title | Stack `s05_taskListsDirectoryAndListLinks` | S2: the directory lists the server's lists; choosing "A11 Sprint" shows every row of `GET /tasks/page?listId=…` |
 | `orbit-list:<id>`; `lists/none` is not a named list | Tasks branch `Destination.LIST` | Unit `TaskApiTest`; Stack `s05_…`, `s11_linksOpenTheirPages` | S2, S3: `orbit-list:` and `orbit://list/` open the list scope with the server's rows; `/lists/none` changes nothing |
-| labels sheet | `LabelPicker` | Fixture `taskSearchAndLabels…`; Stack `s01_…` | F36; S4 |
+| labels sheet | `LabelPicker` | Fixture `taskSearchAndLabels…`; Stack `s01_…` | F36; S5 |
 
 ## UI-F06 · Drawer Projects / project row / `orbit-project` → list and project page
 
