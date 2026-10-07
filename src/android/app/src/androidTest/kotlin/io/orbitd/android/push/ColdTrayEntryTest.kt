@@ -2,6 +2,7 @@ package io.orbitd.android.push
 
 import android.os.Bundle
 import android.os.Process
+import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.orbitd.android.OrbitApplication
@@ -33,6 +34,10 @@ class ColdTrayEntryTest {
         val notifications = PushNotifications(app)
         val message = PushMessage.parse(data)!!
         assertTrue(notifications.show(message, data))
+        // The notification service posts asynchronously; the entry must appear and stay.
+        val until = SystemClock.elapsedRealtime() + 10_000
+        while (notifications.active() != listOf(message) && SystemClock.elapsedRealtime() < until) SystemClock.sleep(100)
+        SystemClock.sleep(1_000)
         assertEquals(listOf(message), notifications.active())
         File(app.filesDir, "a10-push").apply { mkdirs() }.resolve("tray-seed.txt")
             .writeText("pid=${Process.myPid()}\nlink=${message.link}\napplication=${app.javaClass.name}\n")
