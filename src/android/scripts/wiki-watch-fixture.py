@@ -56,6 +56,22 @@ def make_watch(id_, status='ACTIVE', action='RESUME_SESSION'):
                          'targetTitle': 'A12 watched task', 'targetEpoch': 1, 'lastEvaluatedAt': AT,
                          'targetStatus': {'status': 'IN_PROGRESS', 'running': True, 'queued': False}}], 'matches': [], 'expiryDeliveries': []}
 
+def stored_doc(doc, sent):
+    """An edit's document as the server stores it: the sections it kept keep their ids, the order is the one sent,
+    and a session source's projects carry their titles again (the edit names them by id)."""
+    kept = {x['key']: x for x in doc['sections']}
+    titles = {p['id']: p.get('title') for x in doc['sections'] for p in ((x.get('sources') or {}).get('sessions') or {}).get('projects', [])}
+    sections = []
+    for at, section in enumerate(sent.get('sections', [])):
+        old = kept.get(section['key'], {})
+        sources = copy.deepcopy(section.get('sources') or {})
+        sources.setdefault('sessions', None)
+        if sources['sessions']:
+            sources['sessions']['projects'] = [{'id': p, 'title': titles.get(p)} for p in sources['sessions'].get('projects', [])]
+            sources['sessions'].setdefault('until', None)
+        sections.append({**section, 'id': old.get('id', 'r-' + section['key']), 'position': at, 'extra': old.get('extra', {}), 'sources': sources})
+    return {**sent, 'sections': sections}
+
 def reset():
     # The shared corpus's maintenance run, whole: Recently changed folds it into one row, its page counts it,
     # and its pending ops (run1-op3, run1-op7) are what Review lists.
@@ -307,7 +323,7 @@ class Handler(BASE.Handler):
             draft = copy.deepcopy(latest)
             doc = next((d for d in draft['docs'] if d['slug'] == body.get('docSlug')), None)
             if doc is None: return {}, 404
-            if body.get('doc'): doc.update(body['doc'])
+            if body.get('doc'): doc.update(stored_doc(doc, body['doc']))
             elif body.get('section'):
                 section = next((x for x in doc['sections'] if x['key'] == body.get('sectionKey')), None)
                 if section is None: return {}, 404

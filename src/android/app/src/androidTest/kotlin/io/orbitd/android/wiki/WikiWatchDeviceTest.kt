@@ -306,6 +306,11 @@ class WikiWatchDeviceTest {
             .map { it.jsonObject.string("key") }
         assertEquals(listOf(stored[1], stored[0]) + stored.drop(2), sent)
         compose.waitUntil(15_000) { compose.onAllNodesWithTag("wiki-plan-edit-sheet").fetchSemanticsNodes().isEmpty() }
+        // The page shows the new draft, and the draft the fixture keeps has the order sent.
+        await("v3 · Draft")
+        val kept = http("/__stats").getValue("plan").jsonObject.getValue("draft").jsonObject.getValue("docs").jsonArray
+            .map { it.jsonObject }.first { it.string("slug") == "session-runtime" }.getValue("sections").jsonArray.map { it.jsonObject.string("key") }
+        assertEquals(sent, kept)
         capture("plan-drag-saved")
     }
 
