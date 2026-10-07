@@ -33,8 +33,8 @@
   border-color: var(--orbit-control-primary-hover);
 }
 
-.orbit-text-control:focus,
-.orbit-text-control:focus-within {
+/* Focus outranks hover, as in AntD: a field just clicked into is still under the pointer. */
+.orbit-text-control:is(:focus, :focus-within):not([data-disabled]) {
   border-color: var(--orbit-control-primary);
   outline: 0;
   box-shadow: var(--orbit-input-focus-shadow);
@@ -48,8 +48,7 @@
   border-color: var(--orbit-input-error-hover);
 }
 
-.orbit-text-control[data-invalid]:focus,
-.orbit-text-control[data-invalid]:focus-within {
+.orbit-text-control[data-invalid]:is(:focus, :focus-within):not([data-disabled]) {
   border-color: var(--orbit-control-error);
   box-shadow: var(--orbit-input-invalid-shadow);
 }
@@ -119,11 +118,33 @@
   min-height: var(--orbit-control-height);
   resize: vertical;
   vertical-align: bottom;
+  /* As the AntD textarea: every change eases over 0.3s, the auto-size height included. */
+  transition: all 0.3s;
 }
 
-/* Preserve the existing mobile text-field sizing. AntD affix inputs keep their
-   component font size, while unadorned inputs and textareas use this override. */
-@media (max-width: 600px) {
+/* Borderless: no frame or fill, the frame's 1px given back as padding, and AntD's in-field focus
+   ring. While that ring shows only it transitions, so growth while typing is immediate. */
+.orbit-textarea[data-variant='borderless'],
+.orbit-textarea[data-variant='borderless']:is(:hover, :focus) {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.orbit-textarea[data-variant='borderless'] {
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+.orbit-textarea[data-variant='borderless']:focus-visible {
+  outline: 1px solid var(--orbit-control-primary);
+  outline-offset: -1px;
+  transition: outline-offset 0s, outline 0s;
+}
+
+/* Preserve the existing mobile text-field sizing: index.css lifts AntD's unadorned inputs and
+   textareas to 16px at ≤960px. AntD affix inputs keep their component font size. */
+@media (max-width: 960px) {
   input.orbit-input,
   .orbit-textarea {
     font-size: 16px;

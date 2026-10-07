@@ -1,0 +1,51 @@
+28405c86d docs(web): archive the Menu window probe before and after the fix
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --grep Dialog owns choices|Dialog keeps composition|Dialog Popover Select exits
+
+P0 expected screenshots: 131 P0.2 originals, 121 main drift references, 0 accepted migration differences.
+
+Running 32 tests using 1 worker
+
+  ✓   1 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.1s)
+  ✓   2 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.6s)
+  ✓   3 [chromium-light-desktop] › ui-migration/choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme (2.1s)
+  ✓   4 [chromium-light-desktop] › ui-migration/choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner (1.5s)
+  ✓   5 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.0s)
+  ✓   6 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.6s)
+  ✓   7 [chromium-light-phone] › ui-migration/choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme (2.2s)
+  ✓   8 [chromium-light-phone] › ui-migration/choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner (1.6s)
+  ✓   9 [chromium-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.9s)
+  ✓  10 [chromium-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.5s)
+  ✓  11 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme (2.0s)
+  ✓  12 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner (1.5s)
+  ✓  13 [chromium-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.0s)
+  ✓  14 [chromium-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.4s)
+  ✓  15 [chromium-dark-phone] › ui-migration/choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme (2.1s)
+  ✓  16 [chromium-dark-phone] › ui-migration/choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner (1.5s)
+  ✓  17 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.0s)
+  ✓  18 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.5s)
+  ✓  19 [webkit-light-desktop] › ui-migration/choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme (1.9s)
+  ✓  20 [webkit-light-desktop] › ui-migration/choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner (1.5s)
+  ✓  21 [webkit-light-phone] › ui-migration/choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.7s)
+  ✓  22 [webkit-light-phone] › ui-migration/choices-lifecycle.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.8s)
+  ✓  23 [webkit-light-phone] › ui-migration/choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme (2.2s)
+  ✓  24 [webkit-light-phone] › ui-migration/choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner (1.4s)
+  ✓  25 [webkit-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.3s)
+  ✓  26 [webkit-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.9s)
+  ✓  27 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme (2.1s)
+  ✓  28 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner (1.5s)
+  ✓  29 [webkit-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.8s)
+  ✓  30 [webkit-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.7s)
+  ✓  31 [webkit-dark-phone] › ui-migration/choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme (2.1s)
+  ✓  32 [webkit-dark-phone] › ui-migration/choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner (1.4s)
+
+  32 passed (1.2m)

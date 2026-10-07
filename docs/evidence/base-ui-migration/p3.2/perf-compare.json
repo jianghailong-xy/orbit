@@ -1,0 +1,425 @@
+{
+ "reference": {
+  "observedAt": "2026-10-06T19:25:16.710Z",
+  "browser": "153.0.8010.12",
+  "hostStart": {
+   "loadAverage": [
+    9.87,
+    8.93,
+    9.44
+   ],
+   "freeMemoryBytes": 7906308096,
+   "cpuCount": 24
+  },
+  "hostEnd": {
+   "loadAverage": [
+    9.5,
+    8.92,
+    9.43
+   ],
+   "freeMemoryBytes": 7460814848,
+   "cpuCount": 24
+  },
+  "methodology": "As p0.2 performance.browser.mjs: fresh contexts for loads (ready = pilot task title, its thumbnail and Suggested value visible, fonts ready, two frames); ten sequential samples per operation; intervals include Playwright transport, actionability, popups reaching opacity 1 and two frames."
+ },
+ "delivery": {
+  "observedAt": "2026-10-06T19:25:43.699Z",
+  "browser": "153.0.8010.12",
+  "hostStart": {
+   "loadAverage": [
+    9.5,
+    8.92,
+    9.43
+   ],
+   "freeMemoryBytes": 7829172224,
+   "cpuCount": 24
+  },
+  "hostEnd": {
+   "loadAverage": [
+    9.03,
+    8.84,
+    9.4
+   ],
+   "freeMemoryBytes": 7468793856,
+   "cpuCount": 24
+  }
+ },
+ "loads": {
+  "task": {
+   "hostReadyMs": {
+    "reference": {
+     "count": 5,
+     "min": 434.40474300000005,
+     "median": 439.57211899999993,
+     "p95": 449.6922239999999,
+     "max": 449.6922239999999
+    },
+    "delivery": {
+     "count": 5,
+     "min": 420.6706879999999,
+     "median": 444.69757500000014,
+     "p95": 471.086713,
+     "max": 471.086713
+    },
+    "medianDifference": 5.125
+   },
+   "browserReadyMs": {
+    "reference": {
+     "count": 5,
+     "min": 433.7000000476837,
+     "median": 438.10000002384186,
+     "p95": 449.0999999642372,
+     "max": 449.0999999642372
+    },
+    "delivery": {
+     "count": 5,
+     "min": 420.30000001192093,
+     "median": 443.89999997615814,
+     "p95": 468.30000001192093,
+     "max": 468.30000001192093
+    },
+    "medianDifference": 5.8
+   }
+  }
+ },
+ "operations": {
+  "assignee-picker-close": {
+   "browserMs": {
+    "reference": {
+     "count": 10,
+     "min": 313.10000002384186,
+     "median": 315.25,
+     "p95": 332.4000000357628,
+     "max": 332.4000000357628
+    },
+    "delivery": {
+     "count": 10,
+     "min": 46.10000002384186,
+     "median": 47.349999994039536,
+     "p95": 49.19999998807907,
+     "max": 49.19999998807907
+    },
+    "medianDifference": -267.9
+   },
+   "hostMs": {
+    "reference": {
+     "count": 10,
+     "min": 313.4132989999998,
+     "median": 315.51236400000016,
+     "p95": 333.41348300000027,
+     "max": 333.41348300000027
+    },
+    "delivery": {
+     "count": 10,
+     "min": 46.44754699999976,
+     "median": 47.44501350000019,
+     "p95": 49.74524499999825,
+     "max": 49.74524499999825
+    },
+    "medianDifference": -268.067
+   }
+  },
+  "assignee-picker-open": {
+   "browserMs": {
+    "reference": {
+     "count": 10,
+     "min": 412.39999997615814,
+     "median": 428.30000001192093,
+     "p95": 431.80000001192093,
+     "max": 431.80000001192093
+    },
+    "delivery": {
+     "count": 10,
+     "min": 76.89999997615814,
+     "median": 80.15000000596046,
+     "p95": 81.79999995231628,
+     "max": 81.79999995231628
+    },
+    "medianDifference": -348.15
+   },
+   "hostMs": {
+    "reference": {
+     "count": 10,
+     "min": 412.55178800000067,
+     "median": 428.3327414999985,
+     "p95": 432.38760399999956,
+     "max": 432.38760399999956
+    },
+    "delivery": {
+     "count": 10,
+     "min": 76.97555199999988,
+     "median": 80.05817599999955,
+     "p95": 82.80132099999992,
+     "max": 82.80132099999992
+    },
+    "medianDifference": -348.275
+   }
+  },
+  "comment-fill": {
+   "browserMs": {
+    "reference": {
+     "count": 10,
+     "min": 44.40000003576279,
+     "median": 47.14999997615814,
+     "p95": 68.5,
+     "max": 68.5
+    },
+    "delivery": {
+     "count": 10,
+     "min": 44.39999997615814,
+     "median": 47.650000005960464,
+     "p95": 48.89999997615814,
+     "max": 48.89999997615814
+    },
+    "medianDifference": 0.5
+   },
+   "hostMs": {
+    "reference": {
+     "count": 10,
+     "min": 43.80026100000032,
+     "median": 47.13756250000006,
+     "p95": 69.93785800000114,
+     "max": 69.93785800000114
+    },
+    "delivery": {
+     "count": 10,
+     "min": 44.53669000000082,
+     "median": 47.62329650000038,
+     "p95": 49.240899000000354,
+     "max": 49.240899000000354
+    },
+    "medianDifference": 0.486
+   }
+  },
+  "dependency-view-toggle": {
+   "browserMs": {
+    "reference": {
+     "count": 10,
+     "min": 79.40000003576279,
+     "median": 82.44999998807907,
+     "p95": 100.60000002384186,
+     "max": 100.60000002384186
+    },
+    "delivery": {
+     "count": 10,
+     "min": 78.40000003576279,
+     "median": 80.44999998807907,
+     "p95": 84,
+     "max": 84
+    },
+    "medianDifference": -2.0
+   },
+   "hostMs": {
+    "reference": {
+     "count": 10,
+     "min": 79.65209299999879,
+     "median": 82.82419200000004,
+     "p95": 100.85717599999771,
+     "max": 100.85717599999771
+    },
+    "delivery": {
+     "count": 10,
+     "min": 77.99501699999928,
+     "median": 80.4956034999991,
+     "p95": 84.28768200000013,
+     "max": 84.28768200000013
+    },
+    "medianDifference": -2.329
+   }
+  },
+  "more-menu-open": {
+   "browserMs": {
+    "reference": {
+     "count": 10,
+     "min": 424.39999997615814,
+     "median": 443.35000002384186,
+     "p95": 714.2000000476837,
+     "max": 714.2000000476837
+    },
+    "delivery": {
+     "count": 10,
+     "min": 95.5,
+     "median": 97.5,
+     "p95": 370.30000001192093,
+     "max": 370.30000001192093
+    },
+    "medianDifference": -345.85
+   },
+   "hostMs": {
+    "reference": {
+     "count": 10,
+     "min": 423.789463000001,
+     "median": 442.9773824999984,
+     "p95": 714.450597,
+     "max": 714.450597
+    },
+    "delivery": {
+     "count": 10,
+     "min": 95.62122399999862,
+     "median": 97.47687500000029,
+     "p95": 371.34833000000026,
+     "max": 371.34833000000026
+    },
+    "medianDifference": -345.501
+   }
+  },
+  "share-dialog-close": {
+   "browserMs": {
+    "reference": {
+     "count": 10,
+     "min": 345.10000002384186,
+     "median": 347.0499999821186,
+     "p95": 348.9000000357628,
+     "max": 348.9000000357628
+    },
+    "delivery": {
+     "count": 10,
+     "min": 78.79999995231628,
+     "median": 81.25000002980232,
+     "p95": 99.40000003576279,
+     "max": 99.40000003576279
+    },
+    "medianDifference": -265.8
+   },
+   "hostMs": {
+    "reference": {
+     "count": 10,
+     "min": 344.7807899999998,
+     "median": 347.028241,
+     "p95": 349.5557509999999,
+     "max": 349.5557509999999
+    },
+    "delivery": {
+     "count": 10,
+     "min": 78.40400599999975,
+     "median": 81.28549500000008,
+     "p95": 99.4678100000001,
+     "max": 99.4678100000001
+    },
+    "medianDifference": -265.743
+   }
+  },
+  "share-dialog-open": {
+   "browserMs": {
+    "reference": {
+     "count": 10,
+     "min": 448.2999999523163,
+     "median": 464.85000002384186,
+     "p95": 473.80000001192093,
+     "max": 473.80000001192093
+    },
+    "delivery": {
+     "count": 10,
+     "min": 95.5,
+     "median": 98.44999998807907,
+     "p95": 114.5,
+     "max": 114.5
+    },
+    "medianDifference": -366.4
+   },
+   "hostMs": {
+    "reference": {
+     "count": 10,
+     "min": 448.1122780000005,
+     "median": 465.0014325000002,
+     "p95": 473.5586320000002,
+     "max": 473.5586320000002
+    },
+    "delivery": {
+     "count": 10,
+     "min": 95.3308879999995,
+     "median": 98.69898699999976,
+     "p95": 114.48066699999981,
+     "max": 114.48066699999981
+    },
+    "medianDifference": -366.302
+   }
+  }
+ },
+ "resources": {
+  "reference": {
+   "files": 9,
+   "decodedBytes": 3909945,
+   "list": [
+    {
+     "name": "/assets/rolldown-runtime-hePW80VL.js",
+     "decodedBodySize": 716
+    },
+    {
+     "name": "/assets/taskDependencyGraph-B91604km.js",
+     "decodedBodySize": 538242
+    },
+    {
+     "name": "/assets/index-CdtE5_gu.js",
+     "decodedBodySize": 1791358
+    },
+    {
+     "name": "/assets/Transcript-BtITXXF3.css",
+     "decodedBodySize": 6360
+    },
+    {
+     "name": "/assets/projectDependencyGraph-C7Yj51jL.js",
+     "decodedBodySize": 164999
+    },
+    {
+     "name": "/assets/Transcript-Vzag2pKy.js",
+     "decodedBodySize": 817981
+    },
+    {
+     "name": "/assets/index-CEnjz7lS.css",
+     "decodedBodySize": 386294
+    },
+    {
+     "name": "/assets/TaskDependencyGraph-lEeGEcR2.js",
+     "decodedBodySize": 188582
+    },
+    {
+     "name": "/assets/TaskDependencyGraph-DLioOiRN.css",
+     "decodedBodySize": 15413
+    }
+   ]
+  },
+  "delivery": {
+   "files": 9,
+   "decodedBytes": 4113832,
+   "list": [
+    {
+     "name": "/assets/index-DIh0iskc.js",
+     "decodedBodySize": 1946679
+    },
+    {
+     "name": "/assets/rolldown-runtime-hePW80VL.js",
+     "decodedBodySize": 716
+    },
+    {
+     "name": "/assets/Transcript-BtITXXF3.css",
+     "decodedBodySize": 6360
+    },
+    {
+     "name": "/assets/index-CVcUO2xu.css",
+     "decodedBodySize": 421827
+    },
+    {
+     "name": "/assets/projectDependencyGraph-DEwcr3kB.js",
+     "decodedBodySize": 164989
+    },
+    {
+     "name": "/assets/taskDependencyGraph-Bx_saetJ.js",
+     "decodedBodySize": 538224
+    },
+    {
+     "name": "/assets/Transcript-DRDTosy7.js",
+     "decodedBodySize": 831042
+    },
+    {
+     "name": "/assets/TaskDependencyGraph-BUQvfMAl.js",
+     "decodedBodySize": 188582
+    },
+    {
+     "name": "/assets/TaskDependencyGraph-DLioOiRN.css",
+     "decodedBodySize": 15413
+    }
+   ]
+  }
+ }
+}

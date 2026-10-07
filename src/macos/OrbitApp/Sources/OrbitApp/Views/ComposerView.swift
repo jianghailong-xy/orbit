@@ -1481,7 +1481,8 @@ private struct PlanUsageAccount {
 }
 
 /// Compact plan-usage pill for the composer footer. Limit items mirror Codex TUI,
-/// while percentages retain Orbit's percent-consumed semantics.
+/// while percentages retain Orbit's percent-consumed semantics — but for an Antigravity
+/// bucket's, which says what is left, as agy does, and says so ("4% left").
 private struct PlanUsageIndicator: View {
     let usage: PlanUsageSnapshot
     var account: PlanUsageAccount?
@@ -1501,21 +1502,26 @@ private struct PlanUsageIndicator: View {
     }
 
     var body: some View {
-        if let pct = usage.bindingRow()?.percent {
+        if let row = usage.bindingRow() {
+            let pct = row.percent
+            // An Antigravity bucket counts what is left, as agy does: said so, or 100% would read spent
+            // (web parity).
+            let left = row.remaining ? " left" : ""
             Button { showDetail.toggle() } label: {
                 HStack(spacing: 5) {
-                    UsageBar(percent: pct).frame(width: gaugeShowsNumber ? 26 : 20, height: 4)
+                    UsageBar(percent: pct, warn: row.remaining ? row.nearLimit : nil)
+                        .frame(width: gaugeShowsNumber ? 26 : 20, height: 4)
                     if gaugeShowsNumber {
                         // fixedSize keeps the pill at its ideal width: an unbounded Text is the most
                         // flexible view in the toolbar, so without this a tight row wraps "12%" onto
                         // two lines instead of truncating the (lineLimit-1) model name.
-                        Text("\(pct)%").foregroundStyle(.secondary).fixedSize()
+                        Text(verbatim: "\(pct)%\(left)").foregroundStyle(.secondary).fixedSize()
                     }
                 }
             }
             .buttonStyle(.plain)
-            .help("Plan usage \(pct)%")
-            .accessibilityLabel("Plan usage \(pct)%")
+            .help("Plan usage \(pct)%\(left)")
+            .accessibilityLabel("Plan usage \(pct)%\(left)")
             .modifier(PlanUsageDetailPresentation(isPresented: $showDetail, usage: usage,
                                                    account: account, resetConsole: resetConsole))
         }
@@ -1844,10 +1850,11 @@ private struct PlanUsageDetailRows: View {
                     HStack {
                         Text(row.label)
                         Spacer()
-                        Text("\(row.percent)%").foregroundStyle(.secondary)
+                        Text(verbatim: "\(row.percent)%\(row.remaining ? " remaining" : "")").foregroundStyle(.secondary)
                     }
                     .font(compact ? .caption : .subheadline)
-                    UsageBar(percent: row.percent).frame(height: compact ? 5 : 8)
+                    UsageBar(percent: row.percent, warn: row.remaining ? row.nearLimit : nil)
+                        .frame(height: compact ? 5 : 8)
                     if let reset = row.window.resetsAt.flatMap(formatReset) {
                         Text("Resets \(reset)")
                             .font(compact ? .caption2 : .caption)
@@ -1862,13 +1869,16 @@ private struct PlanUsageDetailRows: View {
 /// A horizontal utilization gauge that fills its frame; turns amber past 90%.
 private struct UsageBar: View {
     let percent: Int
+    /// Whether it is amber, for a reading that counts what is left (an Antigravity bucket), whose
+    /// percent says nothing of how near its limit it is. Nil judges `percent` as the share used.
+    var warn: Bool? = nil
     private var fraction: CGFloat { CGFloat(min(100, max(0, percent))) / 100 }
 
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule().fill(.quaternary)
-                Capsule().fill(percent >= 90 ? Color.orange : Color.accentColor)
+                Capsule().fill((warn ?? (percent >= 90)) ? Color.orange : Color.accentColor)
                     .frame(width: geo.size.width * fraction)
             }
         }

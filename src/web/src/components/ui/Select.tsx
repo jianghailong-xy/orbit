@@ -1,9 +1,8 @@
 import { useRef, type AriaAttributes, type CSSProperties, type ReactNode, type Ref } from 'react';
 import { Select as BaseSelect } from '@base-ui/react/select';
-import { CloseCircleFilled, DownOutlined } from '@ant-design/icons';
-import { Spinner } from './Spinner';
+import { CloseCircleFilled, DownOutlined, LoadingOutlined } from '@ant-design/icons';
 import { SelectEmpty } from './SelectEmpty';
-import { useFloating, type FloatingProps } from './Floating';
+import { useAnchorWidth, useDropdownPlacement, useFloating, type FloatingProps } from './Floating';
 import './Floating.css';
 import './Select.css';
 
@@ -51,32 +50,51 @@ export function Select<Value extends string = string>({ options, value, onValueC
   open, onOpenChange, side = 'bottom', align = 'start', popupClassName, popupStyle, returnFocus, ...aria }: SelectProps<Value>) {
   const layer = useFloating({ open, onOpenChange });
   const anchor = useRef<HTMLSpanElement>(null);
+  const anchorWidth = useAnchorWidth(layer.open, anchor);
+  const { positioner, ...placement } = useDropdownPlacement(layer.open, anchor, 4, align);
   const trigger = useRef<HTMLButtonElement | null>(null);
+  const popup = useRef<HTMLDivElement>(null);
   const flat = flattenOptions(options);
   const selected = flat.find((item) => item.value === value);
   const item = (option: SelectOption<Value>) => <BaseSelect.Item key={option.value} value={option.value} disabled={option.disabled} className="orbit-select-option">
     <BaseSelect.ItemText className="orbit-select-option-label">{renderOption?.(option) ?? option.label}</BaseSelect.ItemText>
   </BaseSelect.Item>;
-  return <BaseSelect.Root value={value} onValueChange={onValueChange} items={flat} name={name} disabled={disabled}
+  // Picking the option that is already chosen only closes the list, as with the select this replaces.
+  return <BaseSelect.Root value={value} onValueChange={(next) => { if (next !== value) onValueChange(next); }} items={flat} name={name} disabled={disabled}
     open={layer.open} onOpenChange={layer.setOpen} modal={false}>
-    <span ref={anchor} className={`orbit-choice${className ? ` ${className}` : ''}`} data-size={size} data-variant={variant} data-open={layer.open || undefined} data-empty={value === null || undefined} data-disabled={disabled || undefined} style={style}>
+    <span ref={anchor} className={`orbit-select${className ? ` ${className}` : ''}`} data-size={size} data-variant={variant} data-open={layer.open || undefined} data-empty={value === null || undefined} data-disabled={disabled || undefined} style={style}>
       <BaseSelect.Trigger {...aria} id={id} ref={(node) => {
         trigger.current = node;
         if (typeof ref === 'function') return ref(node);
         if (ref) ref.current = node;
-      }} className="orbit-select-trigger" aria-busy={loading || undefined}>
+      }} className="orbit-select-trigger" aria-busy={loading || undefined} onKeyDown={(event) => {
+        // Base UI moves focus into an opened list on the next animation frame. Until then the trigger
+        // would restart the highlight (arrows) or close the list unselected (Enter), so hand these keys
+        // to the element focus is moving to; they then act as in the list, as with AntD.
+        const list = popup.current;
+        if (!layer.open || !list || !['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        event.preventBaseUIHandler();
+        const target = list.querySelector<HTMLElement>('[data-highlighted]') ?? list;
+        target.focus({ preventScroll: true });
+        target.dispatchEvent(new KeyboardEvent('keydown', { key: event.key, code: event.code, bubbles: true, cancelable: true,
+          shiftKey: event.shiftKey, ctrlKey: event.ctrlKey, altKey: event.altKey, metaKey: event.metaKey }));
+      }}>
         <BaseSelect.Value className="orbit-choice-value" placeholder={placeholder}>
           {value === null ? undefined : renderValue?.(value, selected) ?? selected?.label ?? value}
         </BaseSelect.Value>
-        {loading ? <Spinner size="small" aria-hidden /> : showArrow && <DownOutlined className="orbit-choice-arrow" aria-hidden />}
+        {/* The replaced select's loading mark: its spinning arc in the arrow's place. */}
+        {loading ? <LoadingOutlined spin className="orbit-choice-arrow" aria-hidden /> : showArrow && <DownOutlined className="orbit-choice-arrow" aria-hidden />}
       </BaseSelect.Trigger>
       {clearable && value !== null && !disabled && <button type="button" className="orbit-choice-clear" aria-label={clearLabel}
         onClick={() => { onValueChange(null); trigger.current?.focus(); }}><CloseCircleFilled aria-hidden /></button>}
     </span>
     <BaseSelect.Portal container={layer.container()}>
-      <BaseSelect.Positioner anchor={anchor} alignItemWithTrigger={false} side={side} align={align} sideOffset={4} collisionPadding={8}
-        className="orbit-floating-positioner orbit-choice-positioner" data-match-width={matchTriggerWidth} style={{ zIndex: layer.zIndex }}>
-        <BaseSelect.Popup className={`orbit-select-popup${popupClassName ? ` ${popupClassName}` : ''}`} style={popupStyle} finalFocus={returnFocus}>
+      <BaseSelect.Positioner ref={positioner} anchor={anchor} alignItemWithTrigger={false} side={side} align={align} {...placement}
+        className="orbit-floating-positioner orbit-choice-positioner" data-match-width={matchTriggerWidth}
+        style={{ zIndex: layer.zIndex, '--orbit-choice-anchor-width': anchorWidth === undefined ? undefined : `${anchorWidth}px` } as CSSProperties}>
+        <BaseSelect.Popup ref={popup} className={`orbit-select-popup${popupClassName ? ` ${popupClassName}` : ''}`} style={popupStyle} finalFocus={returnFocus}>
           <BaseSelect.List className="orbit-select-list">
             {options.map((entry) => 'options' in entry ? <BaseSelect.Group key={entry.label}>
               <BaseSelect.GroupLabel className="orbit-select-group-label">{entry.label}</BaseSelect.GroupLabel>{entry.options.map(item)}

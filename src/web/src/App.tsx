@@ -11,9 +11,11 @@ import { RunnerRegisterGuide } from './components/RunnerRegisterGuide';
 import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
+import { AdminSignInPage } from './pages/AdminSignInPage';
 import { ProvidersPage } from './pages/ProvidersPage';
 import { ProviderConnectPage, ProviderPickPage } from './pages/ProviderConnectPage';
 import { ProviderPoolPage } from './pages/ProviderPoolPage';
+import { CliLoginPage } from './pages/CliLoginPage';
 import { EnrollPage } from './pages/EnrollPage';
 import { LoginPage } from './pages/LoginPage';
 import { SetupPage } from './pages/SetupPage';
@@ -21,6 +23,7 @@ import { RunnerDetailPage } from './pages/RunnerDetailPage';
 import { RunnersPage } from './pages/RunnersPage';
 import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
 import { SharedLinksPage } from './pages/SharedLinksPage';
+import { AccessTokensPage } from './pages/AccessTokensPage';
 import { SharedLinkPage, SharedProjectTaskRoute } from './pages/SharedLinkPage';
 import { SharedSessionPage } from './pages/SharedSessionPage';
 import { TaskRoute } from './pages/TaskRoute';
@@ -112,6 +115,21 @@ export function App() {
           )
         }
       />
+      {/* The browser half of `orbit login`, signed in like /enroll: approving issues the terminal a
+          personal access token for this account. */}
+      <Route
+        path="/cli-login"
+        element={
+          authed ? (
+            <CliLoginPage />
+          ) : (
+            <Navigate
+              to={`/login?next=${encodeURIComponent('/cli-login' + window.location.search)}`}
+              replace
+            />
+          )
+        }
+      />
       {!authed ? (
         <Route path="*" element={<LoginRedirect />} />
       ) : (
@@ -154,11 +172,29 @@ export function App() {
                 </DocView>
               }
             />
+            {/* The personal access tokens this account has issued: issue, list, revoke. */}
+            <Route
+              path="settings/access-tokens"
+              element={
+                <DocView>
+                  <AccessTokensPage />
+                </DocView>
+              }
+            />
             <Route
               path="admin"
               element={
                 <DocView>
                   <AdminUsersPage />
+                </DocView>
+              }
+            />
+            {/* The admin area's Sign-in settings, beside its user management (docs/google-sign-in-design.md §7.1). */}
+            <Route
+              path="admin/sign-in"
+              element={
+                <DocView>
+                  <AdminSignInPage />
                 </DocView>
               }
             />
@@ -276,6 +312,14 @@ export function App() {
               element={
                 <DocView>
                   <WikiPage route="home" />
+                </DocView>
+              }
+            />
+            <Route
+              path="wiki/:space/activity"
+              element={
+                <DocView>
+                  <WikiPage route="activity" />
                 </DocView>
               }
             />

@@ -12,7 +12,6 @@ package main
 import (
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -220,10 +219,7 @@ func TestAntigravityContractApprovalTimesOut(t *testing.T) {
 // Orbit's hooks. The script gets the real agy's path as $REAL_AGY and its own argv.
 func agyWrapper(t *testing.T, script string) {
 	t.Helper()
-	real, err := exec.LookPath(agyExecutable)
-	if err != nil {
-		t.Skip("agy is not installed")
-	}
+	real := requireRealAgy(t)
 	bin := t.TempDir()
 	body := "#!/bin/sh\nREAL_AGY='" + real + "'\n" + script + "\n"
 	if err := os.WriteFile(filepath.Join(bin, agyExecutable), []byte(body), 0o755); err != nil {

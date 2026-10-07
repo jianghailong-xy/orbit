@@ -133,6 +133,30 @@ evidence.
   any other session deciding as the run is still refused `EVIDENCE_JUDGMENT_REQUIRES_INDEPENDENT_SESSION`:
   the owner decides there, not the run.
 
+## A moved task takes its undecided evidence with it
+
+When the account owner confirms a `MOVE_TASK` request, the task's run and its undecided evidence go
+with it, and the project it moved into decides that evidence (decision of 2026-10-06,
+`src/apiserver/src/tasks/moved-task-evidence.ts`). After the move commits, an `EVIDENCE_JUDGMENT`
+task that has not settled and whose latest revision carries no decision is handed over:
+
+- **Decidable in the target** — the revision quotes the task's own `acceptanceCriteria`, or the
+  criterion the move declared. It goes through the evidence door again as a
+  `COMPLETION_EVIDENCE_REVISED` fact keyed with the target project, so the delivery the source got
+  before the move cannot dedupe it: an Automatic target's coordinator is handed it to decide, and
+  any other target records it for the owner's card there.
+- **Not decidable in the target** — typically it quotes the source's criterion, which the move took
+  back. Nobody is asked to decide it (the door would refuse `EVIDENCE_JUDGMENT_CRITERION_MOVED`).
+  Each live run of the task is told which standard to quote in a new revision, and an Automatic
+  target's coordinator is told the task arrived owing one. Neither revives a session that has ended.
+- **Nothing undecided** — no evidence, or its latest revision already answered — and the move says
+  nothing new to anybody.
+
+What the source was told before the move is not taken back, but the source can no longer act on
+it: the decision door refuses a session acting for a project other than the one the task is in now
+(its coordinator, a judgment session opened for it, or a run of another of its tasks) with
+`EVIDENCE_JUDGMENT_TASK_IN_ANOTHER_PROJECT`, and the pending read no longer lists the revision for it.
+
 ## Shape advice and deliberate overrides
 
 On task creation Orbit compares the literal wording of `acceptanceCriteria` with a small keyword
@@ -251,7 +275,11 @@ the runner, and session-scoped values are removed rather than inherited or accep
 configuration: `ORBIT_SESSION_ID`, `ORBIT_AGENT_ID`, `ORBIT_TASK_ID`, `ORBIT_SPAWN_DEPTH`,
 `ORBIT_ALLOW_ORCHESTRATION`, `ORBIT_ORCHESTRATION_TOKEN`, and `ORBIT_MCP_PERMISSION_PROMPT`.
 A person's access token, `ORBIT_USER_TOKEN`, is removed from both sources the same way
-(`docs/personal-access-token-design.md` §8).
+(`docs/personal-access-token-design.md` §8). The runner then sets `ORBIT_RUNNER_CHILD=1`, whatever
+either source said about it, as it does on every process it starts for a session. The `orbit` CLI
+in the command therefore acts as the machine, never as a login saved in the runner's `ORBIT_HOME`
+(§7.2 of the same document), so `orbit wiki check` and `orbit wiki plan check` run with the runner
+credential.
 No extra criterion-specific env is injected.
 
 A command may use PostgreSQL when the task's own workspace deliberately provides a reachable

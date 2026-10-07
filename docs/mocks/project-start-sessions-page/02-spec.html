@@ -1,0 +1,87 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<body style="width:1500px">
+<h1>② 启动行：结构、状态与文案</h1>
+<p class="lede">启动行长在进度卡里，状态行下面。它只做一件事：把你带到起始卡。真正的启动仍然只有起始卡上的 <b>Start the project</b> 一个入口。</p>
+
+<div class="panel">
+  <h2>结构</h2>
+  <p class="hint">两种状态用同一副骨架：状态行 → 请求行 → 按钮。已请求时多一行建议（③）。卡片底色不变，靠点的颜色和按钮的实心/浅色区分轻重。</p>
+  <div class="anat" id="anat"></div>
+</div>
+
+<div class="panel">
+  <h2>什么时候画、点了去哪</h2>
+  <p class="hint">判断只用一个函数：<code>StartProject.pageRow(status:started:openItems:)</code>。项目页 Open items 里的 Start 行用的也是它，所以两处的说法不会对不上。</p>
+  <table class="mx">
+    <thead><tr><th>情形</th><th>怎么判断</th><th>状态行 ①</th><th>启动行 ②③④</th><th>点按</th></tr></thead>
+    <tbody>
+      <tr><th>协调者已请求</th><td>OPEN，<code>startedAt</code> 为空，open items 里有 <code>START_REQUEST</code></td><td class="new">Not started · 5 tasks</td>
+        <td class="new"><span class="o">●</span> <span class="k">Ready to start</span> · asked 2m ago<br>Project branch · Automatic on · 2 at a time<br><span class="b">实心</span> Review and start</td>
+        <td class="new">起始卡 sheet 盖在本页上：设置是协调者的建议，带它的理由和 “Orbit checked the plan”。Start 回答的就是这份请求。不放 Chat about this</td></tr>
+      <tr><th>协调者还没请求</th><td>OPEN，<code>startedAt</code> 为空，没有 <code>START_REQUEST</code></td><td class="new">Not started · 5 tasks</td>
+        <td class="new"><span class="m">●</span> The coordinator hasn’t asked yet<br><span class="b">浅蓝</span> Start…</td>
+        <td class="new">同一张起始卡，设置按默认规则填，没有 “suggested by the coordinator”、没有检查结果、没有 Chat</td></tr>
+      <tr><th>请求作废</th><td>请求发出后计划又改了，服务器在同一次读取里把它标成作废</td><td>Not started · 5 tasks</td>
+        <td>退回“还没请求”的样子，等协调者重新请求</td><td>同上</td></tr>
+      <tr><th>还没有任务</th><td>同“还没请求”，只是 0 个任务</td><td>Not started · 0 tasks</td>
+        <td>照常画，不另加条件，和项目页保持一致</td><td>起始卡写 Plan · 0 tasks</td></tr>
+      <tr><th>还没读到</th><td><code>started</code> 或 open items 还没返回</td><td>现在的写法</td>
+        <td><span class="m">不画。宁可晚一点出现，也不要先闪出来再消失</span></td><td>—</td></tr>
+      <tr><th>已启动 / Done / Cancelled</th><td><code>startedAt</code> 有值，或状态不是 OPEN</td><td>现在的写法，例如 0/5 done · 1 running</td>
+        <td><span class="m">不画</span></td><td>—</td></tr>
+      <tr><th>按了 Start 被拒</th><td>409：别处已经启动了，或者判据变了</td><td>—</td>
+        <td>—</td><td>sheet 不关，红字 “That start was not recorded” 加服务器原话（现有行为）。本页下次刷新时按实际状态重画</td></tr>
+    </tbody>
+  </table>
+  <div class="leg"><span><i></i>新的画法</span></div>
+</div>
+
+<div class="row">
+  <div class="panel" style="width:733px">
+    <h2>规则</h2>
+    <ul class="rules">
+      <li><b>不算 Needs you。</b>客户端和服务器本来就不把启动请求算进角标、抽屉计数和推送（<code>SessionGrouping.countsOnlyAStart</code>），因为启动不卡住任何事。这里也不加徽标，卡片不变色，只用橙点。</li>
+      <li><b>已请求时，就在这一页打开起始卡，不跳进协调会话去找。</b>这和今天把合入卡搬到这一页是同一个思路：需要你处理的事，在这一页就能做完。Chat about this 只留在会话里那张卡上；sheet 下面就是协调者那一行，想先改再启动就点它。项目页 Open items 里的 Review 现在还是跳会话，以后可以统一。</li>
+      <li><b>不会和合入卡同时出现。</b>没启动的项目没有东西可合。位置上也不冲突：启动行在进度卡里面，合入卡在进度卡下面。</li>
+      <li><b>数据。</b><code>/projects/sidebar</code> 多带一列 <code>startedAt</code>（null 就是没人启动过）；页面只在项目没启动时读 open items，随页面每 4 秒轮询一次；启动以后就不再读。</li>
+      <li><b>iPad</b> 上这一页会替换会话栏，起始卡用 form sheet 弹出。<b>Web</b> 的项目 sessions 视图，在进度条（<code>.session-project-page-progress</code>）下面同样的位置，按同样的规则画，点按打开现有的 StartProjectCard 弹窗。</li>
+      <li><b>辅助功能</b>：②③ 合成一个元素读出来。按钮的 hint 是 “Opens the start card: the criteria, the plan and how it runs.” 字号调大以后，③ 允许换行，不截断。</li>
+    </ul>
+  </div>
+  <div class="panel" style="width:661px">
+    <h2>文案</h2>
+    <table class="mx">
+      <thead><tr><th>位置</th><th>文案</th><th>来源</th></tr></thead>
+      <tbody>
+        <tr><th>① 状态行</th><td>Not started · 5 tasks</td><td>现有 <code>StartProject.notStarted</code> 加任务数，组合是新的</td></tr>
+        <tr><th>② 已请求</th><td>Ready to start · asked 2m ago</td><td>现有 <code>StartProject.readyToStart</code>，时间写法和协调者那一行一样</td></tr>
+        <tr><th>③ 建议</th><td>Project branch · Automatic on · 2 at a time</td><td>从 <code>requestSummary</code> 缩短：去掉开头的 “The coordinator asked”，把 “at most 2 at a time” 改成 “2 at a time”，一行放得下</td></tr>
+        <tr><th>④ 已请求</th><td>Review and start</td><td class="new">新增</td></tr>
+        <tr><th>② 还没请求</th><td>The coordinator hasn’t asked yet</td><td class="new">新增。项目页现在用的是更短的 “not asked yet”</td></tr>
+        <tr><th>④ 还没请求</th><td>Start…</td><td>现有 <code>StartProject.rowOwn</code></td></tr>
+      </tbody>
+    </table>
+    <p class="hint" style="margin:12px 0 0">新增的句子在 iOS 的 <code>SessionProjectCopy</code> 和 web 的 <code>SESSION_PROJECT_COPY</code>（<code>lib/sessionProjects.ts</code>）各写一份，<code>SessionProjectCopyParityTests</code> 会对照两边。</p>
+  </div>
+</div>
+
+<script>
+const pin = (html, k, left = -28) => `<div class="pin">${html}<span class="badge" style="left:${left}px">${k}</span></div>`;
+const askedCard = `<div class="pcard has-start" style="margin:0">${pin(progLine('Not started · 5 tasks'), 1, -16)}
+<div class="start">${pin('<div class="ask"><span class="d on"></span><b>Ready to start</b><span class="ago">asked 2m ago</span></div>', 2)}
+${pin(`<div class="sug">${SUGGESTED}</div>`, 3)}${pin('<div class="go pri">Review and start</div>', 4)}</div></div>`;
+const ownCard = `<div class="pcard has-start" style="margin:0">${pin(progLine('Not started · 5 tasks'), 1, -16)}
+<div class="start">${pin(ownLine(), 2)}${pin('<div class="go tin">Start…</div>', 4)}</div></div>`;
+const spec = `<table class="mx" style="flex:1">
+<thead><tr><th></th><th>元素</th><th>字体</th><th>颜色</th><th>尺寸与间距</th></tr></thead><tbody>
+<tr><th>${badge(1)}</th><td>状态行：进度条 + 文字</td><td><code>.orbitMeta</code></td><td>secondary</td><td>进度条 66×4pt，空着；行高和现在的进度行一样，启动后只换字</td></tr>
+<tr><th>${badge(2)}</th><td>请求行：点 + 标题，右边是时间</td><td>标题 <code>.orbitLabel</code> semibold<br>时间、未请求整句 <code>.orbitMeta</code></td><td>点：已请求 <span class="o">orange</span>，未请求 secondary 45%<br>标题 primary，其余 secondary</td><td>点 8pt，点和字隔 7pt</td></tr>
+<tr><th>${badge(3)}</th><td>建议行，只在已请求时出现</td><td><code>.orbitMeta</code></td><td>secondary</td><td>和标题左对齐（缩进 15pt），一行，放不下就截掉尾部</td></tr>
+<tr><th>${badge(4)}</th><td>按钮</td><td><code>.orbitLabel</code> semibold</td><td>已请求 <code>.borderedProminent</code><br>未请求 <code>.bordered</code><br>tint 都是 <span class="b">accentColor</span></td><td>全宽胶囊，高至少 44pt（<code>.controlSize(.large)</code>），按下时 <code>PlatformHaptics.tap()</code></td></tr>
+<tr><th>卡</th><td>进度卡本身</td><td>—</td><td>背景 secondary 10%，不变色</td><td>内边距 12；① → ② 隔 12（状态行自己的下边距），② → ④ 隔 10；圆角 12</td></tr>
+</tbody></table>`;
+document.getElementById('anat').innerHTML = `<div class="col" style="padding-left:30px;width:391px"><div class="cap">协调者已请求</div>${askedCard}
+<div class="cap" style="margin-top:22px">协调者还没请求</div>${ownCard}</div>${spec}`;
+</script>

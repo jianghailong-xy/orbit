@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>Web 项目会话页：照 iOS 的交互整体对齐</title>
+<link rel="stylesheet" href="web.css"></head>
+<body>
+<h1>① Web 项目会话页：照 iOS 的交互整体对齐</h1>
+<p class="lede" style="width:2080px">Web 的项目会话页和 iOS 的同一页，骨架已经一样：页头、进度、合入卡、Coordinator、按时间分组的会话。但交互上有好几处不同：页头用 ⋯ 菜单；进度是一条钉在列表上方的横带，还带 ↗；没有启动入口，也没有落地行；合入卡不随列表滚动；手机上叠着两层顶栏。<br>
+<b>方案：以 iOS 的项目会话页（<code>SessionProjectPage</code>）为准，逐项对齐。</b>完整对照见图 ④ 的 15 项清单。图里的数据是截图中那个项目的真实状态：5 个任务，还没启动，协调者还没请求启动。每一帧都截自真实的 Web 控制台（vite + 固定数据），方案部分用控制台自己的样式画进页面；红色虚线和数字是标注。</p>
+
+<div class="row">
+  <div class="col" style="width:980px">
+    <div class="cap"><span class="tag now">现在</span>桌面：会话栏换成项目页，右边是协调会话</div>
+    <div class="shot"><img src="shots/d-now.png" alt=""></div>
+    <ul class="notes">
+      <li class="n" data-n="1">⋯ 菜单里只有两项：<b>Open Project</b> 和 <b>Open Coordinator</b>。</li>
+      <li class="n" data-n="2">进度是一条钉在列表上方的横带：“0/5 done · 0 running” 加一个 ↗ 链接。没启动的项目也这么写，看不出它在等启动；这一页也没有启动入口，得去项目页的 Open items 里找 Start…。</li>
+    </ul>
+  </div>
+  <div class="vs">→</div>
+  <div class="col" style="width:980px">
+    <div class="cap"><span class="tag new">方案</span>同一页，照 iOS 的交互</div>
+    <div class="shot"><img src="shots/d-own.png" alt=""></div>
+    <ul class="notes">
+      <li class="n" data-n="1">页头右边换成一个 <b>⊞</b> 按钮，打开项目页，和 iOS 工具栏一样。<b>Open Coordinator</b> 去掉，因为协调者那一行就在下面。</li>
+      <li class="n" data-n="2">进度改成一张灰底圆角卡，放在列表最前面，跟着列表一起滚动；进度条从 32px 加长到 66px；↗ 去掉（页头的 ⊞ 就是入口）。没启动时写 <b>Not started · 5 tasks</b>。</li>
+      <li class="n" data-n="3">卡里加启动行，规则和 iOS 一样：协调者还没请求时是灰点加 <b>The coordinator hasn’t asked yet</b>；请求了是橙点加 <b>Ready to start</b>（见图 ②）。</li>
+      <li class="n" data-n="4"><b>Start…</b> 打开现有的起始卡弹窗（下图），在里面看判据、计划和跑法，按 <b>Start the project</b> 才真正启动。启动后这一行收起。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col" style="width:980px">
+    <div class="cap"><span class="tag new">方案</span>点 Start… 之后：起始卡弹窗</div>
+    <div class="shot"><img src="shots/d-dialog.png" alt=""></div>
+  </div>
+  <div class="col" style="width:980px;padding-top:34px">
+    <ul class="notes" style="margin-top:0">
+      <li>弹窗用现有组件 <code>ProjectStartDialog</code> / <code>StartProjectCard</code>，就是项目页 Open items 里 Start… 打开的那个，不新做。</li>
+      <li><b>还没请求</b>：设置按默认规则填。任务互相依赖，所以是项目分支；并发取项目现在的 3；Automatic 开。这个项目没配 merge check，所以那一行是琥珀色提醒。</li>
+      <li><b>已请求</b>：内容换成协调者请求的那一版（和协调会话里 <code>SessionStartProjectCard</code> 一样）：协调者建议的设置、它给的理由、“Orbit checked the plan”。<b>Start the project</b> 回答这份请求。</li>
+      <li class="n" data-n="1">计划这一行用的是修好后的编号规则：<b>P1 starts now · P2, P3 after P1 · …</b>。修之前，“P1 Web：…”这类标题认不出编号，每个标题会被截成 23 个字再拼起来。</li>
+      <li>点右上角 ✕、按 Esc 或点遮罩关掉：回到本页，什么都没写。启动被拒（比如别处已经启动了，或判据变了）时，弹窗不关，按钮上方用红字写出服务器的原话（现有行为）。</li>
+      <li>这里不放 <b>Chat about this</b>，和 iOS 一样：想先改再启动，就去协调者那一行（它就在弹窗下面），会话里的那张卡上有这个按钮。</li>
+    </ul>
+  </div>
+</div>
+</body></html>

@@ -1,0 +1,274 @@
+[
+ {
+  "screenshot": "chromium-dark-desktop/profile-validation.png",
+  "box": [
+   1094,
+   0,
+   1298,
+   86
+  ],
+  "file": "chromium-dark-desktop--profile-validation.png",
+  "columns": [
+   "P0 expectation",
+   "e361ee373 (pre-B1)",
+   "57f792135 (B1)",
+   "drift tree + fix v2",
+   "tip + fix v2"
+  ]
+ },
+ {
+  "screenshot": "chromium-dark-desktop/settings-saved.png",
+  "box": [
+   1084,
+   0,
+   1298,
+   86
+  ],
+  "file": "chromium-dark-desktop--settings-saved.png",
+  "columns": [
+   "P0 expectation",
+   "e361ee373 (pre-B1)",
+   "57f792135 (B1)",
+   "drift tree + fix v2",
+   "tip + fix v2"
+  ]
+ },
+ {
+  "screenshot": "chromium-dark-phone/profile-validation.png",
+  "box": [
+   93,
+   22,
+   297,
+   126
+  ],
+  "file": "chromium-dark-phone--profile-validation.png",
+  "columns": [
+   "P0 expectation",
+   "e361ee373 (pre-B1)",
+   "57f792135 (B1)",
+   "drift tree + fix v2",
+   "tip + fix v2"
+  ]
+ },
+ {
+  "screenshot": "chromium-dark-phone/settings-saved.png",
+  "box": [
+   88,
+   22,
+   302,
+   126
+  ],
+  "file": "chromium-dark-phone--settings-saved.png",
+  "columns": [
+   "P0 expectation",
+   "e361ee373 (pre-B1)",
+   "57f792135 (B1)",
+   "drift tree + fix v2",
+   "tip + fix v2"
+  ]
+ },
+ {
+  "screenshot": "chromium-light-desktop/profile-validation.png",
+  "box": [
+   1094,
+   0,
+   1298,
+   86
+  ],
+  "file": "chromium-light-desktop--profile-validation.png",
+  "columns": [
+   "P0 expectation",
+   "e361ee373 (pre-B1)",
+   "57f792135 (B1)",
+   "drift tree + fix v2",
+   "tip + fix v2"
+  ]
+ },
+ {
+  "screenshot": "chromium-light-desktop/settings-saved.png",
+  "box": [
+   1084,
+   0,
+   1298,
+   86
+  ],
+  "file": "chromium-light-desktop--settings-saved.png",
+  "columns": [
+   "P0 expectation",
+   "e361ee373 (pre-B1)",
+   "57f792135 (B1)",
+   "drift tree + fix v2",
+   "tip + fix v2"
+  ]
+ },
+ {
+  "screenshot": "chromium-light-phone/profile-validation.png",
+  "box": [
+   93,
+   22,
+   297,
+   126
+  ],
+  "file": "chromium-light-phone--profile-validation.png",
+  "columns": [
+   "P0 expectation",
+   "e361ee373 (pre-B1)",
+   "57f792135 (B1)",
+   "drift tree + fix v2",
+   "tip + fix v2"
+  ]
+ },
+ {
+  "screenshot": "chromium-light-phone/settings-saved.png",
+  "box": [
+   88,
+   22,
+   302,
+   126
+  ],
+  "file": "chromium-light-phone--settings-saved.png",
+  "columns": [
+   "P0 expectation",
+   "e361ee373 (pre-B1)",
+   "57f792135 (B1)",
+   "drift tree + fix v2",
+   "tip + fix v2"
+  ]
+ },
+ {
+  "screenshot": "webkit-dark-desktop/profile-validation.png",
+  "box": [
+   1086,
+   0,
+   1290,
+   86
+  ],
+  "file": "webkit-dark-desktop--profile-validation.png",
+  "columns": [
+   "P0 expectation",
+   "e361ee373 (pre-B1)",
+   "57f792135 (B1)",
+   "drift tree + fix v2",
+   "tip + fix v2"
+  ]
+ },
+ {
+  "screenshot": "webkit-dark-desktop/settings-saved.png",
+  "box": [
+   1076,
+   0,
+   1290,
+   86
+  ],
+  "file": "webkit-dark-desktop--settings-saved.png",
+  "columns": [
+   "P0 expectation",
+   "e361ee373 (pre-B1)",
+   "57f792135 (B1)",
+   "drift tree + fix v2",
+   "tip + fix v2"
+  ]
+ },
+ {
+  "screenshot": "webkit-dark-phone/profile-validation.png",
+  "box": [
+   89,
+   22,
+   293,
+   126
+  ],
+  "file": "webkit-dark-phone--profile-validation.png",
+  "columns": [
+   "P0 expectation",
+   "e361ee373 (pre-B1)",
+   "57f792135 (B1)",
+   "drift tree + fix v2",
+   "tip + fix v2"
+  ]
+ },
+ {
+  "screenshot": "webkit-dark-phone/settings-saved.png",
+  "box": [
+   88,
+   22,
+   302,
+   126
+  ],
+  "file": "webkit-dark-phone--settings-saved.png",
+  "columns": [
+   "P0 expectation",
+   "e361ee373 (pre-B1)",
+   "57f792135 (B1)",
+   "drift tree + fix v2",
+   "tip + fix v2"
+  ]
+ },
+ {
+  "screenshot": "webkit-light-desktop/profile-validation.png",
+  "box": [
+   1086,
+   0,
+   1290,
+   86
+  ],
+  "file": "webkit-light-desktop--profile-validation.png",
+  "columns": [
+   "P0 expectation",
+   "e361ee373 (pre-B1)",
+   "57f792135 (B1)",
+   "drift tree + fix v2",
+   "tip + fix v2"
+  ]
+ },
+ {
+  "screenshot": "webkit-light-desktop/settings-saved.png",
+  "box": [
+   1076,
+   0,
+   1290,
+   86
+  ],
+  "file": "webkit-light-desktop--settings-saved.png",
+  "columns": [
+   "P0 expectation",
+   "e361ee373 (pre-B1)",
+   "57f792135 (B1)",
+   "drift tree + fix v2",
+   "tip + fix v2"
+  ]
+ },
+ {
+  "screenshot": "webkit-light-phone/profile-validation.png",
+  "box": [
+   89,
+   22,
+   293,
+   126
+  ],
+  "file": "webkit-light-phone--profile-validation.png",
+  "columns": [
+   "P0 expectation",
+   "e361ee373 (pre-B1)",
+   "57f792135 (B1)",
+   "drift tree + fix v2",
+   "tip + fix v2"
+  ]
+ },
+ {
+  "screenshot": "webkit-light-phone/settings-saved.png",
+  "box": [
+   88,
+   22,
+   302,
+   126
+  ],
+  "file": "webkit-light-phone--settings-saved.png",
+  "columns": [
+   "P0 expectation",
+   "e361ee373 (pre-B1)",
+   "57f792135 (B1)",
+   "drift tree + fix v2",
+   "tip + fix v2"
+  ]
+ }
+]

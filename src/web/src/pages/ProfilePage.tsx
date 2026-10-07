@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Avatar, Button, Card, Form, Input } from 'antd';
+import { Avatar, Button, Card, Checkbox, Form, Input } from 'antd';
 import { useRef, useState } from 'react';
 import { api, setAvatar } from '../api';
+import { SignInMethodsCard } from '../components/SignInMethodsCard';
 import { squareJpeg } from '../lib/avatar';
-import { avatarQuery, meQuery, type Me } from '../lib/queries';
+import { accessTokensQuery, avatarQuery, meQuery, type Me } from '../lib/queries';
 import { useToast } from '../lib/toast';
 
 /** Under the name: who sees it besides you. The iOS edit-profile card says the same
@@ -17,12 +18,17 @@ interface PwdValues {
   currentPassword: string;
   newPassword: string;
   confirmPassword: string;
+  /** Also revoke every personal access token; unticked, they keep working (§11.3). */
+  revokeAccessTokens?: boolean;
 }
 
 // Self-service profile page: your identity — the photo and the name, which you change here, and the
-// email you sign in with — plus account security: changing your own password (re-verified
-// server-side; the existing session keeps working — no token revocation). A photo is cut to its
-// middle square and sent the moment it is chosen; the name is written by its Save.
+// email you sign in with — plus account security: how you sign in (a password, and the Google account
+// connected or to connect), and changing your own password (re-verified server-side; the existing
+// session keeps working — no token revocation — and so do personal access tokens unless the box to
+// revoke them is ticked). An account without a password signs in with Google and has no password to
+// change, so it is not offered the form. A photo is cut to its middle square and sent the moment it is
+// chosen; the name is written by its Save.
 export function ProfilePage() {
   const message = useToast();
   const qc = useQueryClient();
@@ -62,12 +68,22 @@ export function ProfilePage() {
 
   const changePwd = useMutation({
     mutationFn: (v: PwdValues) =>
-      api('/auth/change-password', {
+      api<{ success: boolean; revokedAccessTokens?: number }>('/auth/change-password', {
         method: 'POST',
-        body: { currentPassword: v.currentPassword, newPassword: v.newPassword },
+        body: {
+          currentPassword: v.currentPassword,
+          newPassword: v.newPassword,
+          ...(v.revokeAccessTokens ? { revokeAccessTokens: true } : {}),
+        },
       }),
-    onSuccess: () => {
-      message.success('Password changed');
+    onSuccess: (result) => {
+      const revoked = result?.revokedAccessTokens ?? 0;
+      if (revoked > 0) {
+        void qc.invalidateQueries({ queryKey: accessTokensQuery().queryKey });
+        message.success('Password changed', revoked === 1 ? '1 access token revoked' : `${revoked} access tokens revoked`);
+      } else {
+        message.success('Password changed');
+      }
       form.resetFields();
     },
     onError: (e: Error) => message.error("Couldn't change the password", e.message),
@@ -128,46 +144,57 @@ export function ProfilePage() {
         </div>
       </Card>
 
-      <Card title="Change password">
-        <Form form={form} layout="vertical" requiredMark={false} onFinish={(v) => changePwd.mutate(v)}>
-          <Form.Item
-            name="currentPassword"
-            label="Current password"
-            rules={[{ required: true, message: 'Enter your current password' }]}
-          >
-            <Input.Password autoComplete="current-password" />
-          </Form.Item>
-          <Form.Item
-            name="newPassword"
-            label="New password"
-            rules={[
-              { required: true, message: 'Enter a new password' },
-              { min: 6, message: 'At least 6 characters' },
-            ]}
-          >
-            <Input.Password autoComplete="new-password" />
-          </Form.Item>
-          <Form.Item
-            name="confirmPassword"
-            label="Confirm new password"
-            dependencies={['newPassword']}
-            rules={[
-              { required: true, message: 'Confirm your new password' },
-              ({ getFieldValue }) => ({
-                validator(_, value) {
-                  if (!value || getFieldValue('newPassword') === value) return Promise.resolve();
-                  return Promise.reject(new Error('Passwords do not match'));
-                },
-              }),
-            ]}
-          >
-            <Input.Password autoComplete="new-password" />
-          </Form.Item>
-          <Button type="primary" htmlType="submit" loading={changePwd.isPending}>
-            Change password
-          </Button>
-        </Form>
-      </Card>
+      <SignInMethodsCard me={me.data} />
+
+      {me.data?.signInMethods?.password !== false && (
+        <Card title="Change password">
+          <Form form={form} layout="vertical" requiredMark={false} onFinish={(v) => changePwd.mutate(v)}>
+            <Form.Item
+              name="currentPassword"
+              label="Current password"
+              rules={[{ required: true, message: 'Enter your current password' }]}
+            >
+              <Input.Password autoComplete="current-password" />
+            </Form.Item>
+            <Form.Item
+              name="newPassword"
+              label="New password"
+              rules={[
+                { required: true, message: 'Enter a new password' },
+                { min: 6, message: 'At least 6 characters' },
+              ]}
+            >
+              <Input.Password autoComplete="new-password" />
+            </Form.Item>
+            <Form.Item
+              name="confirmPassword"
+              label="Confirm new password"
+              dependencies={['newPassword']}
+              rules={[
+                { required: true, message: 'Confirm your new password' },
+                ({ getFieldValue }) => ({
+                  validator(_, value) {
+                    if (!value || getFieldValue('newPassword') === value) return Promise.resolve();
+                    return Promise.reject(new Error('Passwords do not match'));
+                  },
+                }),
+              ]}
+            >
+              <Input.Password autoComplete="new-password" />
+            </Form.Item>
+            <Form.Item
+              name="revokeAccessTokens"
+              valuePropName="checked"
+              extra="Scripts and the orbit CLI using them stop working at once. Unticked, they keep working."
+            >
+              <Checkbox>Also revoke all my access tokens</Checkbox>
+            </Form.Item>
+            <Button type="primary" htmlType="submit" loading={changePwd.isPending}>
+              Change password
+            </Button>
+          </Form>
+        </Card>
+      )}
     </div>
   );
 }

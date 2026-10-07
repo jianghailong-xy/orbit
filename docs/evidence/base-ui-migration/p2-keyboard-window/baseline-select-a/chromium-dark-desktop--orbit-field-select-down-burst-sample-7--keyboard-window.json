@@ -1,0 +1,27 @@
+{
+  "target": "orbit-field",
+  "sequence": "select-down",
+  "control": null,
+  "mode": "burst",
+  "run": 7,
+  "keys": [
+    "ArrowDown"
+  ],
+  "from": "Never",
+  "before": "never",
+  "after": "never",
+  "result": "never | list open",
+  "listOpen": true,
+  "active": "option:Never",
+  "keyLog": [
+    {
+      "key": "ArrowDown",
+      "t": 71.4,
+      "target": "combobox:Expires",
+      "trusted": true,
+      "focused": "combobox:Expires",
+      "listbox": false,
+      "highlighted": null
+    }
+  ]
+}

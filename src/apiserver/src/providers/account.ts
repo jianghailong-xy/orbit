@@ -1,4 +1,4 @@
-import type { LoginEngine, RunnerEngineAccount } from '@orbit/shared';
+import { ACCOUNT_DIR_VAR, type AccountEngine, type LoginEngine, type RunnerEngineAccount } from '@orbit/shared';
 import { engineKeepsAccounts, sanitizeRunnerEngines } from '../common/runner-engines';
 
 /** The account every engine's slots have: the directory its own environment selects — the one a
@@ -39,5 +39,20 @@ export function accountOnRunner(
  */
 export function accountEnvVar(engine: LoginEngine | string | null | undefined): string | null {
   if (!engineKeepsAccounts(engine)) return null;
-  return engine === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME';
+  return ACCOUNT_DIR_VAR[engine as AccountEngine];
 }
+
+/** Where a workspace — and a session, ahead of it — keeps the account picked for each engine that keeps
+ *  accounts, and where a session says that pick was made by hand. One row each, so no reader decides
+ *  "Claude, else Codex" and hands the next engine Codex's column. */
+export const ACCOUNT_CHOICE = {
+  codex: 'codexAccount',
+  claude: 'claudeAccount',
+  antigravity: 'antigravityAccount',
+} as const satisfies Record<AccountEngine, string>;
+
+export const ACCOUNT_PINNED = {
+  codex: 'codexAccountPinned',
+  claude: 'claudeAccountPinned',
+  antigravity: 'antigravityAccountPinned',
+} as const satisfies Record<AccountEngine, string>;

@@ -104,6 +104,11 @@ export function runnerEngineAccountsSignedIn(count: number): string {
   return `${count} accounts signed in`;
 }
 
+/** Above an engine's quota while it has several accounts: the one a new session starts on. */
+export function runnerEngineNext(account: string): string {
+  return `Next: ${account}`;
+}
+
 export function runnerEngineUpdateFailed(version: string, when: string): string {
   return `Update to ${version} failed ${when}`;
 }

@@ -1003,6 +1003,17 @@ Free 与个人 Pro/Ultra 同受 §3/§5 的交互数据收集、人工审阅和�
 - **preflight**：凭据目录有 token 时，`engineAuthPreflight` 不再先跑 `/usage`，交给会话自己的 agy 判定（它能分清网络和登出，且省掉每次开会话前的一次联网）。
 - **settings 被 agy 重写**【实测，2026-10-04，1.2.16，两种模式都一样】：agy 启动时会按它自己的结构重写 `settings.json`，`enableTelemetry` 和值为 false 的 `useG1Credits` 都会消失（`useG1Credits` 在 agy 里是 `omitempty` 的 bool，缺省即 false；`theme`、`modelProvider` 这类非零值保留）。Orbit 每次 spawn 前重写这份文件，所以每个 agy 启动时读到的是 Orbit 的值；agy 运行中会不会重读这份文件【未确立】。
 
+### 16.11 多个 Google 账号（2026-10-06）
+
+§16.6 的「每台 Linux runner 一个账号」到此为止：Antigravity 和 Claude Code、Codex 一样按账号槽位管理（`src/runner-go/antigravity_account_slot.go`，存储本身是 `account_slot.go`）。
+
+- **一个账号就是一个 Gemini 目录。** Default 是原来那份登录，`<orbit home>/antigravity/google`，升级后原样保留；「+ Account」加的账号在 `<orbit home>/antigravity-accounts/<8 位十六进制>`，旁边一份记录存名字。登录、`/usage` 探测、模型目录都用 `antigravityGoogleCommand`，只是 `--gemini_dir` 换成那个账号的目录；§16.5 的隔离（临时 HOME/XDG、不可达 D-Bus、去掉凭据变量）一样不少。
+- **会话怎么落到账号上。** agy 没有指定目录的环境变量，所以控制面派发时注入 Orbit 自己的 `ORBIT_ANTIGRAVITY_GOOGLE_DIR`（同 `CODEX_HOME` / `CLAUDE_CONFIG_DIR` 的位置），runner 只认 Default 或自己的槽位目录，据此复制令牌（§16.10），并且不把这个变量交给 agy。会话的对话库在会话自己的 Gemini 目录里，不在账号目录里，所以换账号只是下一次 spawn 换一份令牌，不需要「搬对话」的能力；能否在不同账号间续同一个 `--conversation` 【未实测】。
+- **没有 key 回退。** 加的账号没登录就是没登录，会话以 `Failed to authenticate` 失败（`antigravityAccountSignedOutMessage`），不会悄悄用 runner 的 `GEMINI_API_KEY`；只有 Default 保留原来的 key 回退。
+- **上报。** `engines[antigravity].accounts` 与 Claude/Codex 同形（id、name、home、auth）。Default 的 `auth` 只说 Google 登录：靠 key 跑的 runner 上引擎是 `yes / env_key`，Default 账号是 `no`。各账号额度同一次 `/usage` 读出，放在 `engines[antigravity].planUsage.accounts.<id>`（Default 的仍是 `buckets`），控制面按账号挑选、预检时用 `withEnginePlanUsage` 并进来比较，bucket 的剩余比例换算成已用比例。
+- **能力。** `antigravity-account-login/v1`、`antigravity-account-remove/v1`。旧 runner 不声明，控制面不给它派加账号/删账号。
+- **条款。** §16.8 的风险不因多账号消失，反而更显眼：Google 的条款限制第三方工具使用个人账号登录，§16.9 也不建议用多账号轮换规避限额。页面把 Google 条款放在每次登录的入口旁；是否开启自动换号由使用者决定。
+
 ## 附录：实测记录索引
 
 全部在 2026-10-03、agy 1.2.15、本机 runner 上进行。"样本"一栏指 `src/runner-go/testdata/antigravity/` 下的目录；

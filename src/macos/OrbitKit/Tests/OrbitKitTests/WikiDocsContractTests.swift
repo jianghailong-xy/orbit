@@ -139,6 +139,7 @@ final class WikiDocsContractTests: XCTestCase {
          "categories":[{"key":"product","number":1,"title":"Product","question":"What Orbit is","forAgents":false,
            "docs":[{"slug":"session-runtime","number":"1.1","title":"会话运行模型与长连接","question":"怎么运转？","written":true,
                     "status":"ok","updatedAt":"2026-09-29T02:00:00.000Z","planVersion":1,
+                    "lead":"turn 先落库再投递。它不用 WebSocket。",
                     "sections":[{"key":"s1","number":1,"title":"总览","kind":"overview","written":false,"stale":false},
                                 {"key":"s2","number":2,"title":"turn 投递","kind":"flow","written":true,"stale":true}]},
                    {"slug":"task-dispatch","number":"1.2","title":"任务派发","question":"怎么派发？","written":false,
@@ -150,6 +151,8 @@ final class WikiDocsContractTests: XCTestCase {
         let docs = try XCTUnwrap(directory.categories.first?.docs)
         XCTAssertEqual(docs.map(\.number), ["1.1", "1.2"])
         XCTAssertEqual(docs.first?.sections?.last?.stale, true)
+        XCTAssertEqual(docs.first?.lead, "turn 先落库再投递。它不用 WebSocket。")
+        XCTAssertNil(docs.last?.lead, "one not written has none — nor has any from a server older than leads")
         XCTAssertNil(docs.last?.status)
         XCTAssertEqual(directory.categories.last?.forAgents, true)
         let empty = try JSONDecoder().decode(WikiDocsDirectory.self, from: Data(#"{"spaceId":"34WSpace","plan":null,"docs":{"total":0,"written":0},"categories":[]}"#.utf8))

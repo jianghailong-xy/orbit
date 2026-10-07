@@ -86,6 +86,7 @@ import {
 } from './wiki-neighbours';
 import { checkWikiMaintenanceInput, setWikiMaintenance, type WikiMaintenanceInput } from './wiki-maintenance-settings';
 import { requestWikiPlanJob, resumeWikiPlanJobs } from './wiki-plan-job';
+import { wikiPlanWaitingOfSpaces } from './wiki-plan-waiting';
 import { isOrbitAuthoredTurn } from '../sessions/orbit-authored-turn';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { canonicalRepoUrl } from '../projects/project-integration-line';
@@ -689,8 +690,11 @@ export function entryView(row: EntryRow): Record<string, unknown> {
   };
 }
 
-/** A changeset as the wire describes it (`WikiChangeset`). */
-export function changesetView(row: ChangesetRow): Record<string, unknown> {
+/**
+ * A changeset as the wire describes it (`WikiChangeset`). Given `entryTitles`, every op also carries
+ * the title of the entry it names (`entryTitle`, null for an op that names none) — Review's read.
+ */
+export function changesetView(row: ChangesetRow, entryTitles?: ReadonlyMap<string, string>): Record<string, unknown> {
   return {
     id: row.id,
     spaceId: row.spaceId,
@@ -722,6 +726,7 @@ export function changesetView(row: ChangesetRow): Record<string, unknown> {
       spotCheck: op.spotCheck,
       verification: verificationView(op),
       verificationHistory: op.verificationHistory,
+      ...(entryTitles ? { entryTitle: op.entryId ? (entryTitles.get(op.entryId) ?? null) : null } : {}),
     })),
   };
 }
@@ -933,7 +938,13 @@ export class WikiService {
     return created.id;
   }
 
-  /** The owner's spaces, each with the pending-op count the sidebar shows (design §12.1). */
+  /**
+   * The owner's spaces, each with what the contract's `space.list` adds to a row: the ops waiting in
+   * Review (`pendingOps`) and the things of its plan that wait on the owner (`planWaiting`) — the two the
+   * drawer's and the sidebar's number adds up over the spaces (design §12.3.3) — the live workspaces bound
+   * to it (`workspaceIds`), and its confirmed plan's documents, written of how many — the directory's
+   * `docs`, null while it has no confirmed plan.
+   */
   async listSpaces(ownerId: string): Promise<Array<Record<string, unknown>>> {
     const spaces = await this.prisma.wikiSpace.findMany({
       where: { ownerId },
@@ -957,12 +968,37 @@ export class WikiService {
     for (const op of pending) {
       counts.set(op.changeset.spaceId, (counts.get(op.changeset.spaceId) ?? 0) + 1);
     }
+    const ids = spaces.map((space) => space.id);
+    const [waiting, bindings, plans] = await Promise.all([
+      wikiPlanWaitingOfSpaces(this.prisma, ownerId, spaces),
+      this.prisma.wikiSpaceWorkspace.findMany({
+        where: { ownerId, spaceId: { in: ids }, workspace: { deletedAt: null } },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        select: { spaceId: true, workspaceId: true },
+      }),
+      this.prisma.wikiPlan.findMany({
+        where: { ownerId, spaceId: { in: ids }, status: 'confirmed' },
+        select: { spaceId: true, docs: { select: { slug: true } } },
+      }),
+    ]);
+    // Written as the directory counts it (WikiDocs.directory): a stored document the confirmed plan names.
+    const stored = plans.length === 0
+      ? []
+      : await this.prisma.wikiDoc.findMany({ where: { ownerId, spaceId: { in: plans.map((plan) => plan.spaceId) } }, select: { spaceId: true, slug: true } });
+    const docs = new Map(plans.map((plan) => {
+      const slugs = new Set(plan.docs.map((doc) => doc.slug));
+      const written = stored.filter((doc) => doc.spaceId === plan.spaceId && slugs.has(doc.slug)).length;
+      return [plan.spaceId, { written, total: plan.docs.length }];
+    }));
     return spaces.map((space) => ({
       ...space,
       settings: wikiSpaceSettings(space.settings),
       createdAt: space.createdAt.toISOString(),
       updatedAt: space.updatedAt.toISOString(),
       pendingOps: counts.get(space.id) ?? 0,
+      planWaiting: waiting.get(space.id) ?? 0,
+      workspaceIds: bindings.filter((binding) => binding.spaceId === space.id).map((binding) => binding.workspaceId),
+      docs: docs.get(space.id) ?? null,
     }));
   }
 
@@ -4376,6 +4412,10 @@ export class WikiService {
    * while any op of it waits for its verification too, and one that waits for nothing else is no
    * card of the owner's (contract `states.changeset.note`), so only a changeset holding an op that
    * waits for the owner is listed.
+   *
+   * EVERY OP CARRIES ITS ENTRY'S TITLE (`entryTitle`). An op names its entry by id alone, and the
+   * pages' own entry reads are windows — the home's is the 200 newest — so a challenge or a retire of
+   * an entry older than that window was a card that said "An entry".
    */
   async listReview(ownerId: string, spaceId?: string): Promise<Array<Record<string, unknown>>> {
     const rows = await this.prisma.wikiChangeset.findMany({
@@ -4384,7 +4424,12 @@ export class WikiService {
       take: 100,
       select: CHANGESET_SELECT,
     });
-    return rows.map(changesetView);
+    const named = [...new Set(rows.flatMap((row) => row.ops.flatMap((op) => (op.entryId ? [op.entryId] : []))))];
+    const entries = named.length === 0
+      ? []
+      : await this.prisma.wikiEntry.findMany({ where: { ownerId, id: { in: named } }, select: { id: true, title: true } });
+    const titles = new Map(entries.map((entry) => [entry.id, entry.title]));
+    return rows.map((row) => changesetView(row, titles));
   }
 
   // ── The three reads the pages ask for (contract `agentSurface.doors.user.routes`) ─────────────

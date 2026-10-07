@@ -1,0 +1,17 @@
+{
+  "input": "touch",
+  "outside": true,
+  "menuBounds": {
+    "x": 46,
+    "y": 429,
+    "width": 250,
+    "height": 240.953125
+  },
+  "submenuBounds": {
+    "x": 171,
+    "y": 529,
+    "width": 139,
+    "height": 72
+  },
+  "dialogReturn": true
+}

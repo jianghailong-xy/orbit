@@ -14,7 +14,7 @@ import { resolvePermissionMode } from '../common/permission-mode';
 import { firstRuntimeCatalogModel, sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { normalizeEffortForProvider, normalizeRuntimeProvider } from '../common/runtime-provider';
 import type { PrismaService } from '../prisma/prisma.service';
-import { accountPoolRuntime, isBuiltinProvider } from '../providers/custom-provider';
+import { accountPoolRuntime, isBuiltinProvider, usableProviderScope } from '../providers/custom-provider';
 import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
 import { followsRuntimeCatalog } from '../providers/preset-overlay';
 import { signedOutEngineRefusal } from '../sessions/engine-signin-preflight';
@@ -92,7 +92,11 @@ async function routeEngine(
     return { runtime: normalizeRuntimeProvider(provider, true), hasOwnModelSpace: false };
   }
   const configured = await prisma.modelProvider.findFirst({
-    where: { slug: provider, ...(provider === AgentProvider.DSH ? {} : { enabled: true }), OR: [{ ownerId: null }, { ownerId }] },
+    where: {
+      slug: provider,
+      ...(provider === AgentProvider.DSH ? {} : { enabled: true }),
+      ...(await usableProviderScope(prisma, ownerId)),
+    },
     select: { runtime: true, enabled: true, presetSlug: true, followsPreset: true, models: true, defaultModel: true },
   });
   // A disabled pre-existing dsh row is still a configured identity, never the new runtime.

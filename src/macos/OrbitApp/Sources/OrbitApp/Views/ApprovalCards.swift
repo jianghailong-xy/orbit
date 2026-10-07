@@ -279,7 +279,7 @@ struct ToolApprovalCard: View {
     var body: some View {
         if batch != nil || dag != nil || blocker != nil {
             ApprovalReviewLayout(title: reviewTitle, symbol: "checklist", tone: .orange,
-                                 summary: reviewSummary) {
+                                 summary: reviewSummary, grouped: batch != nil) {
                 details
             } actions: {
                 actions
@@ -315,20 +315,12 @@ struct ToolApprovalCard: View {
 
     @ViewBuilder private var details: some View {
         if let batch {
-            ApprovalHeader(symbol: "square.stack.3d.up.fill",
-                           title: "Create \(batch.taskCount) task\(batch.taskCount == 1 ? "" : "s")?",
-                           tone: .orange, badge: "new tasks")
-            OrbitAskBody(impact: Approvals.batchImpactLines(batch),
-                         note: "",
-                         detail: (batch.lists.isEmpty ? "" : "into \(batch.lists.joined(separator: ", "))")
-                             + (batch.edges > 0 ? " · \(batch.edges) dependency edge\(batch.edges == 1 ? "" : "s")" : "")
-                             + shapeSuffix(batch),
-                         // Indented, so a chain reads as a chain and a fan-out as siblings —
-                         // the part a flat list of titles cannot show. Web draws a real graph;
-                         // a phone column has no room for one.
-                         rows: Approvals.batchTreeRows(batch.tasks).map(\.text),
-                         more: batch.titlesTruncated,
-                         mono: true)
+            // No header of its own: the review's navigation bar already asks "Create 3 tasks?", and
+            // the transcript's preview draws its own. The tasks are listed by level, each one push
+            // from its page, which reads the full body the runner is about to send.
+            BatchCreateReviewBody(batch: batch,
+                                  details: approval.input.map(Approvals.batchTaskDetails) ?? [],
+                                  close: dismissReview)
         } else if let dag {
             ApprovalHeader(symbol: "point.3.connected.trianglepath.dotted",
                            title: "Restructure dependencies in \(dag.listTitle)?",
@@ -336,9 +328,7 @@ struct ToolApprovalCard: View {
             OrbitAskBody(impact: Approvals.dagImpactLines(dag),
                          note: dag.note,
                          detail: "\(dag.edgesBefore) → \(dag.edgesAfter) edges",
-                         rows: dag.ops.map { $0.noop ? "\($0.sentence) (already so)" : $0.sentence },
-                         more: 0,
-                         mono: false)
+                         rows: dag.ops.map { $0.noop ? "\($0.sentence) (already so)" : $0.sentence })
         } else if let create {
             // A single create wears the batch card's skeleton — the count, the consequence, where
             // it lands, the name in the tree's own slot — and folds the two fields that made it
@@ -354,7 +344,7 @@ struct ToolApprovalCard: View {
                                : Approvals.createHeading,
                            tone: .orange, badge: create.isProject ? "new project" : "new task")
             VStack(alignment: .leading, spacing: 6) {
-                ForEach(create.impact, id: \.self) { ImpactPill(text: $0) }
+                ForEach(create.impactRows) { BatchImpactRowView(row: $0) }
                 if !create.detail.isEmpty {
                     Text(create.detail).font(.orbitLabel).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -385,8 +375,6 @@ struct ToolApprovalCard: View {
                          note: blocker.requiredAction,
                          detail: "The agent says it no longer blocks",
                          rows: blocker.reason.isEmpty ? [] : [blocker.reason],
-                         more: 0,
-                         mono: false,
                          markdown: true)
         } else {
             ApprovalHeader(symbol: "hand.raised.fill", title: "Approve tool call",
@@ -404,13 +392,20 @@ struct ToolApprovalCard: View {
 
     private var allowButton: some View {
         Button { decide(console, approval, .allow) } label: {
-            Text(batch != nil ? "Create them"
-                 : create != nil ? "Create it"
-                 : dag != nil ? "Apply changes"
-                 : blocker != nil ? "Resolve it" : "Allow")
+            Text(allowLabel)
                 .approvalActionLabel()
         }
         .buttonStyle(.borderedProminent)
+    }
+
+    /// The yes, in the words of what it does. A batch names its count, because the question above
+    /// it scrolls away on a long batch. Web's card says the same.
+    private var allowLabel: String {
+        if let batch { return Approvals.batchCreateAction(batch.taskCount) }
+        if create != nil { return "Create it" }
+        if dag != nil { return "Apply changes" }
+        if blocker != nil { return "Resolve it" }
+        return "Allow"
     }
     // Secondary "allow": same intent as Allow, so a bordered button (not plain text) that keeps
     // Allow the one filled/prominent action. The exact scope it will remember rides in monospace.
@@ -460,20 +455,9 @@ struct ToolApprovalCard: View {
     }
 }
 
-/// The body shared by Orbit's two own asks: the consequence first and largest, then the reason,
-/// then the rows it is made of. The counts are the decision — the titles look identical whether a
-/// batch costs one run or none — so the rows come last and are capped.
-/// The shape, appended to the detail line: it describes the whole window even when the tree below
-/// is flattened by the depth cap.
-private func shapeSuffix(_ batch: BatchApprovalPreview) -> String {
-    let shape = Approvals.describeBatchShape(batch.tasks)
-    return shape.isEmpty ? "" : " · \(shape)"
-}
-
-/// One consequence line, in the card's own accent: how many runs this write starts, how many wait,
-/// how many nothing will trigger. The batch card has led with these since it was written; a single
-/// create reads the same lines because it is a batch of one, and the two cards saying the same kind
-/// of thing first is what makes one family of them.
+/// One consequence line of a restructure, in the card's own accent. The batch and single-create
+/// cards draw theirs as `BatchImpactRowView`, with a mark per kind of consequence; a restructure's
+/// lines carry no kind, so they keep the pill.
 private struct ImpactPill: View {
     let text: String
 
@@ -485,18 +469,17 @@ private struct ImpactPill: View {
     }
 }
 
+/// The body of the restructure and blocker cards: the consequence first and largest, then the
+/// reason, then the rows it is made of.
 private struct OrbitAskBody: View {
     let impact: [String]
     let note: String
     let detail: String
     let rows: [String]
-    let more: Int
-    /// Tree rows are drawn with box glyphs, which only line up in a monospaced face.
-    var mono: Bool = false
     /// The note and rows are the agent's own prose — a create's description and its acceptance
     /// criteria, written as Markdown — so they render as Markdown, the way web draws both with its
-    /// Markdown component. The batch and DAG slots are sentences this app generates itself and stay
-    /// literal (web draws the DAG note as a plain paragraph too).
+    /// Markdown component. The DAG slots are sentences this app generates itself and stay literal
+    /// (web draws the DAG note as a plain paragraph too).
     var markdown: Bool = false
 
     var body: some View {
@@ -526,13 +509,10 @@ private struct OrbitAskBody: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                    Text(mono ? row : "• \(row)")
-                        .font(mono ? .orbitMono : .orbitLabel).foregroundStyle(.secondary)
+                    Text(verbatim: "• \(row)")
+                        .font(.orbitLabel).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-            }
-            if more > 0 {
-                Text("+\(more) more").font(.orbitLabel).foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1460,8 +1440,7 @@ private struct OwnerDecisionReceiptView: View {
             .approvalChrome(.blue, dimmed: true)
             // The task panel's own question and write (`TaskReopen`), so this is a second place to
             // press the one door rather than a door of its own.
-            .confirmationDialog(TaskReopenCopy.modalTitle, isPresented: $confirmingReopen,
-                                titleVisibility: .visible) {
+            .orbitConfirmation(TaskReopenCopy.modalTitle, isPresented: $confirmingReopen) {
                 Button(TaskReopenCopy.modalOK) {
                     Task { await console.reopenOwnerConfirmedTask() }
                 }

@@ -4,7 +4,6 @@ import {
   currentProviderChoice,
   defaultModelLabel,
   engineChoices,
-  engineProviderDetail,
   providerChoices,
   runtimeSummary,
   sameRuntimeChoices,
@@ -328,6 +327,100 @@ describe('the runner’s Codex accounts, under the Codex choice', () => {
       // Its 5-hour window reads 0% but its weekly one is spent: the row says what stops it.
       { id: 'default', label: 'Default', quota: 'Weekly 100%', nearLimit: true },
       { id: 'fad98727', label: 'jianghailong.rd', quota: 'Weekly 28%' },
+    ]);
+  });
+});
+
+describe('the runner’s Antigravity (Google) accounts, under the Antigravity choice', () => {
+  const google = {
+    supported: true,
+    installed: true,
+    version: 'agy 1.3.0',
+    envKeyAvailable: true,
+    authSource: 'google' as const,
+    googleLogin: 'available' as const,
+  };
+  const home = (id: string) => (id === 'default' ? '/root/.orbit/antigravity/google' : `/root/.orbit/antigravity-accounts/${id}`);
+  const bucket = (id: string, window: string, remainingFraction: number) => ({ id, window, remainingFraction });
+  // Antigravity's quota is never in the heartbeat's planUsage: it is on the engine's own health,
+  // Default's buckets beside every other account's.
+  const engines = (
+    accounts: Array<{ id: string; name?: string; auth: 'yes' | 'no' | 'unknown' }>,
+    over: Record<string, unknown> = {},
+  ) => [
+    { engine: 'claude' as const, installed: true, auth: 'yes' as const },
+    {
+      engine: 'antigravity' as const,
+      installed: true,
+      auth: 'yes' as const,
+      authSource: 'google' as const,
+      accounts: accounts.map((account) => ({ ...account, home: home(account.id) })),
+      planUsage: {
+        provider: 'antigravity',
+        buckets: [bucket('gemini-weekly', 'weekly', 1), bucket('3p-weekly', 'weekly', 0.98), bucket('gemini-5h', '5h', 1)],
+        accounts: {
+          '5c2e91a0': {
+            provider: 'antigravity',
+            buckets: [bucket('gemini-weekly', 'weekly', 0.61), bucket('gemini-5h', '5h', 0.04)],
+          },
+        },
+      },
+      ...over,
+    },
+  ];
+  const accountsOf = (choices: ReturnType<typeof providerChoices>) =>
+    choices.find((choice) => choice.slug === 'antigravity')?.accounts;
+
+  it('lists each account by the bucket with the least left, in what is left, read from the engine’s health', () => {
+    const choices = providerChoices(
+      [],
+      catalog,
+      undefined,
+      engines([{ id: 'default', auth: 'yes' }, { id: '5c2e91a0', name: 'Work', auth: 'yes' }, { id: 'c0ffee42', auth: 'no' }]),
+      [],
+      // The heartbeat's own report holds nothing of Antigravity's.
+      { claude: { provider: 'claude', fiveHour: { utilization: 3 } } } as never,
+      google,
+    );
+    expect(accountsOf(choices)).toEqual([
+      { id: 'default', label: 'Default', quota: '3p-weekly 98% left' },
+      { id: '5c2e91a0', label: 'Work', quota: 'gemini-5h 4% left', nearLimit: true },
+      { id: 'c0ffee42', label: 'Account c0ffee42', unavailable: 'Not signed in' },
+    ]);
+    // The Provider menu may still say how the engine signs in.
+    expect(choices.find((choice) => choice.slug === 'antigravity')?.labelDetail).toBe('Google account');
+  });
+
+  it('lists none for one account, or for an engine that cannot run', () => {
+    expect(accountsOf(providerChoices([], catalog, undefined, engines([{ id: 'default', auth: 'yes' }]), [], null, google))).toBeUndefined();
+    const lapsed = { ...google, envKeyAvailable: false };
+    const blocked = providerChoices(
+      [],
+      catalog,
+      undefined,
+      engines([{ id: 'default', auth: 'no' }, { id: '5c2e91a0', auth: 'no' }], { auth: 'no' }),
+      [],
+      null,
+      lapsed,
+    );
+    expect(blocked.find((choice) => choice.slug === 'antigravity')?.unavailable).toBe('Not signed in');
+    expect(accountsOf(blocked)).toBeUndefined();
+  });
+
+  it('offers Default on the runner’s Gemini key as the key it runs on, never as signed out', () => {
+    const onKey = { ...google, authSource: 'env_key' as const };
+    const choices = providerChoices(
+      [],
+      catalog,
+      undefined,
+      engines([{ id: 'default', auth: 'no' }, { id: '5c2e91a0', name: 'Work', auth: 'yes' }], { authSource: 'env_key' }),
+      [],
+      null,
+      onKey,
+    );
+    expect(accountsOf(choices)).toEqual([
+      { id: 'default', label: 'Default', quota: 'env key' },
+      { id: '5c2e91a0', label: 'Work', quota: 'gemini-5h 4% left', nearLimit: true },
     ]);
   });
 });
@@ -771,11 +864,6 @@ describe('engineChoices', () => {
     expect(kimi.provider.fixEngine).toBe('kimi');
   });
 
-  it("labels an engine with how its own sign-in signs in, never with a provider of it", () => {
-    const [claude] = engineChoices(all, configured, ['deepseek']);
-    expect(engineProviderDetail(claude)).toBeUndefined();
-    expect(engineProviderDetail(engineChoices(all, configured).find((e) => e.slug === 'antigravity')!)).toBe('env key');
-  });
 });
 
 describe('OpenCode and the keys it may spend', () => {
@@ -820,7 +908,6 @@ describe('OpenCode and the keys it may spend', () => {
     const openCode = engineChoices(choices, configured, ['opencode/deepseek']).find((e) => e.slug === 'opencode')!;
     expect(openCode.label).toBe('OpenCode');
     expect(openCode.provider.slug).toBe('opencode/deepseek');
-    expect(engineProviderDetail(openCode)).toBeUndefined();
     expect(sameRuntimeChoices('opencode/deepseek', choices, configured).map((c) => c.slug)).toEqual([
       'opencode',
       'opencode/deepseek',

@@ -1,11 +1,13 @@
 import { test, expect } from './harness.mjs';
 import { PATHS } from './fixtures.mjs';
 
-// Existing defects at the migration starting point. These keep the desired assertion;
-// an eventual repair becomes an unexpected pass and requires retiring the known failure.
+// Defects recorded at the migration starting point, with the desired assertion kept. P3.2 moved the
+// share dialog onto the Orbit Dialog (Escape stays in the dialog; focus returns to the ⋯ trigger),
+// both now pass in every project, and their expected-failure marks are retired. The observation of
+// where focus landed is still attached. The original behaviour is recorded in the P0.2 evidence.
 for (const [key, action, reason] of [
-  ['P0.2-FOCUS-1', 'Escape', 'Escape also closes the underlying task panel and returns focus to BODY.'],
-  ['P0.2-FOCUS-2', 'Done', 'Done keeps the task panel open but returns focus to BODY instead of its trigger.'],
+  ['P0.2-FOCUS-1', 'Escape', 'At the P0.2 baseline, Escape also closed the underlying task panel and returned focus to BODY.'],
+  ['P0.2-FOCUS-2', 'Done', 'At the P0.2 baseline, Done kept the task panel open but returned focus to BODY instead of its trigger.'],
 ]) {
   test(`${key}: task share ${action} restores focus`, async ({ evidence }, testInfo) => {
     const { page, api } = evidence;
@@ -31,7 +33,6 @@ for (const [key, action, reason] of [
       activeElement: { tag: document.activeElement?.tagName, label: document.activeElement?.getAttribute('aria-label') },
     }));
     await testInfo.attach('known-focus-failure', { body: JSON.stringify({ key, reason, observed }, null, 2), contentType: 'application/json' });
-    test.fail(true, `${key}: ${reason}`);
     await expect(more).toBeFocused({ timeout: 1000 });
   });
 }

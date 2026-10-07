@@ -210,6 +210,7 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("runnerEnginesReported", RunnerPageCopy.runnerEnginesReported(when: "${when}")),
         ("runnerEngineAccountsSignedIn", put(RunnerPageCopy.runnerEngineAccountsSignedIn(count: 90_001),
                                              [90_001: "count"])),
+        ("runnerEngineNext", RunnerPageCopy.runnerEngineNext(account: "${account}")),
         ("runnerEngineUpdateFailed", RunnerPageCopy.runnerEngineUpdateFailed(version: "${version}",
                                                                              when: "${when}")),
         ("runnerWorkspaceRunning", put(RunnerPageCopy.runnerWorkspaceRunning(count: 90_001),

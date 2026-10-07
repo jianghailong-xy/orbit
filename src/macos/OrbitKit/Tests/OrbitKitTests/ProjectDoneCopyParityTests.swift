@@ -116,6 +116,7 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         ("WHY_NOT_DONE_NEEDS_CALL_DETAIL", ProjectDone.needsCallDetail),
         ("WHY_NOT_DONE_NOT_MET_YET", ProjectDone.notMetYet),
         ("WHY_NOT_DONE_NOT_MET_DETAIL", ProjectDone.notMetDetail),
+        ("WHY_NOT_DONE_NOT_MET", ProjectDone.notMet),
         ("PROJECT_DONE_RECORDED_BY_YOU", ProjectDone.recordedByYou),
         ("PROJECT_DONE_RECORDED_BY_ORBIT", ProjectDone.recordedByOrbit),
         ("READY_TO_CLOSE", ProjectDone.readyToClose),
@@ -157,6 +158,7 @@ final class ProjectDoneCopyParityTests: XCTestCase {
                       "the Open items heading the card's row sits under drifted")
         XCTAssertTrue(web.contains("notMetYet: WHY_NOT_DONE_NOT_MET_YET,"))
         XCTAssertTrue(web.contains("notMetDetail: WHY_NOT_DONE_NOT_MET_DETAIL,"))
+        XCTAssertTrue(web.contains("notMet: WHY_NOT_DONE_NOT_MET,"))
         let card = try flat(Self.card)
         XCTAssertTrue(card.contains("className=\"criteria-provenance\">\(ProjectDone.provenance)</span>"),
                       "the done cards' provenance badge drifted from \(ProjectDone.provenance)")
@@ -171,6 +173,19 @@ final class ProjectDoneCopyParityTests: XCTestCase {
     private func counts() -> ProjectDoneCounts {
         ProjectDoneCounts(criteria: Self.criteria, met: Self.met, landed: Self.onMain + 2,
                           onMain: Self.onMain, byReason: [.inFlight: 1, .noReceipt: 2, .codeless: 3])
+    }
+
+    /// The same 23 criteria as answers, which is what the Why-not-done tally counts: 19 met — 13 on
+    /// main, 1 in flight, 2 merged outside Orbit, 3 with no code to land — and 4 not met, whose
+    /// landing lanes it must not count.
+    private func answers() -> ProjectDerivedDone {
+        func rows(_ n: Int, _ satisfied: Bool, _ reason: CriterionLandingReason?) -> [ProjectDoneCriterion] {
+            (0..<n).map { ProjectDoneCriterion(definitionId: "\(satisfied)-\(reason?.rawValue ?? "main")-\($0)",
+                                               satisfied: satisfied, landingReason: reason) }
+        }
+        return ProjectDerivedDone(criteria: rows(13, true, nil) + rows(1, true, .inFlight) + rows(2, true, .noReceipt)
+                                      + rows(3, true, .codeless) + rows(2, false, .noReceipt)
+                                      + rows(1, false, .codeless) + rows(1, false, nil))
     }
 
     func testTheReasonsAreSaidInTheWebsOrderAndWords() throws {
@@ -214,15 +229,17 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         XCTAssertEqual(ProjectDone.receiptTally(counts(), acceptedGaps: Self.gapCount),
                        "23 criteria met · 17 landed on main · 3 nothing to land · 7 gaps accepted")
         XCTAssertEqual(ProjectDone.receiptTally(nil, acceptedGaps: Self.gapCount), "7 gaps accepted")
-        XCTAssertEqual(ProjectDone.whyNotDoneTally(counts()),
-                       "23 criteria · 19 met · 17 on main · 1 in flight · 2 merged outside Orbit"
-                           + " · 3 no code to land")
+        XCTAssertEqual(ProjectDone.whyNotDoneTally(answers()),
+                       "23 criteria · 13 on main · 1 in flight · 2 merged outside Orbit"
+                           + " · 3 no code to land · 4 not met")
         for part in [
             "`${counts.criteria} criteria`,\n    `${counts.met} met`,\n    `${counts.onMain} ${PROJECT_DONE_COPY.landedOnMain}`,\n    ...reasonParts(counts),",
             "`${counts.met} met`,\n    `${counts.onMain} ${PROJECT_DONE_COPY.landedOnMain}`,\n    `${nothingToLandCount(counts)} ${PROJECT_DONE_COPY.nothingToLand}`,",
             "if (!counts) return `${acceptedGaps} ${PROJECT_DONE_COPY.gapsAccepted}`;",
             "`${counts.criteria} criteria met`,\n    `${counts.onMain} ${PROJECT_DONE_COPY.landedOnMain}`,\n    `${nothingToLandCount(counts)} ${PROJECT_DONE_COPY.nothingToLand}`,\n    `${acceptedGaps} ${PROJECT_DONE_COPY.gapsAccepted}`,",
-            "`${counts.criteria} criteria`,\n    `${counts.met} met`,\n    `${counts.onMain} ${PROJECT_DONE_COPY.onMain}`,\n    ...reasonParts(counts),",
+            "const met = derivedDone.criteria.filter((criterion) => criterion.satisfied);\n  const notMet = derivedDone.criteria.length - met.length;",
+            "met.filter((criterion) => criterion.landingReason === reason).length,",
+            "`${derivedDone.criteria.length} criteria`,\n    `${met.filter((criterion) => criterion.landingReason == null).length} ${PROJECT_DONE_COPY.onMain}`,\n    ...reasonParts({ byReason }),\n    ...(notMet > 0 ? [`${notMet} ${PROJECT_DONE_COPY.notMet}`] : []),",
             "return count > 0 ? [`${count} ${REASON_LABELS[reason]}`] : [];",
             "return (counts.byReason?.NOTHING_TO_LAND ?? 0) + (counts.byReason?.CODELESS ?? 0);",
         ] {
@@ -365,7 +382,7 @@ final class ProjectDoneCopyParityTests: XCTestCase {
             "{criterion.satisfied ? landingReasonLabel(criterion.landingReason) : PROJECT_DONE_COPY.notMetYet}",
             "{!criterion.satisfied\n                    ? PROJECT_DONE_COPY.notMetDetail\n                    : waitingGroup ? PROJECT_DONE_COPY.waitingDetail : PROJECT_DONE_COPY.needsCallDetail}",
             "{item?.ordinal ?? '•'}",
-            "{projectWhyNotDoneTally(counts)}",
+            "{projectWhyNotDoneTally(project.derivedDone)}",
             "{PROJECT_DONE_COPY.reviewDoneRequest}",
             "waiting.length > 0 && !coordinatorOnIt && onAskCoordinator ?",
             "{PROJECT_DONE_COPY.askCoordinator}",
@@ -386,40 +403,58 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         XCTAssertEqual(ProjectDone.settledBadge(.derived), ProjectDone.recordedByOrbit)
     }
 
-    /// Which card the conversation draws, state by state, is the browser's: the question for an
-    /// OPEN, started project with criteria that the projection does not call done; the owner's card
-    /// while asked or just pressed; the owner's DONE as its receipt; and a DONE Orbit recorded itself
-    /// as the Why-not-done card's terminal state — the coordinator's rulings of 2026-10-06, which the
-    /// web carries since ccb406ad0.
+    /// Which card the conversation draws, state by state, is the browser's: the owner's card while
+    /// the coordinator's request stands (or the row says Record as done…, or this conversation has
+    /// just recorded it — `adoptDoneSlot` on this client); the owner's DONE as its receipt; a DONE
+    /// Orbit recorded itself as the old card's terminal state; and NOTHING for an OPEN project
+    /// nobody has asked about, however finished it looks. At what the old question was asked of, the
+    /// browser and this client now agree by both drawing nothing — the owner's ruling of 2026-10-07
+    /// 04:20Z, which took "Why is this project not done?" out of the conversation.
     func testTheConversationDrawsTheWebsCardForEachState() throws {
         let card = try flat(Self.card)
         for part in [
-            "if (!project || project.status !== 'OPEN' || project.startedAt === null) return false;",
-            "if (!projection || !('counts' in projection) || projection.done) return false;",
-            "return projection.criteria.length > 0;",
             "&& document?.status === 'DONE'\n    && document.doneBy !== 'OWNER'",
-            "return <ProjectWhyNotDoneCard project={document as unknown as ProjectDoneDocument} />;",
             "const ownerRecordedDone = document?.status === 'DONE' && document.doneBy === 'OWNER';",
             "const ownerRecorded = receipt != null || (project.status === 'DONE' && project.doneBy === 'OWNER');",
             "const recorded = receipt != null || project.status === 'DONE';",
+            // Nothing else draws: the last thing every other read gets is the no-card return.
+            "  return null;\n}",
         ] {
             XCTAssertTrue(card.contains(part), "the conversation's card rule drifted: no \(part.debugDescription)")
         }
+        // The old question's card is rendered in the conversation exactly ONCE — its terminal
+        // state — and nothing asks it any more: not the gate, not the older projection.
+        XCTAssertEqual(card.components(separatedBy:
+            "return <ProjectWhyNotDoneCard project={document as unknown as ProjectDoneDocument} />;").count - 1, 1,
+                       "the Why-not-done card is rendered in the conversation again")
+        // The prose may still name the condition the question was asked by; the declaration itself
+        // is gone, which is what this reads.
+        XCTAssertFalse(card.contains("export function asksWhyNotDone("),
+                       "something asks why the project is not done again")
+        XCTAssertFalse(card.contains("if (!projection || !('counts' in projection)) return false;"),
+                       "the question's own gate is declared again")
+        XCTAssertFalse(card.contains("const shown = (delivered && !unified) || held;"),
+                       "the older projection's card is drawn in the conversation again")
+        XCTAssertFalse(card.contains("onAskCoordinator={delegate}"),
+                       "the conversation hands the card's facts over again")
         // …and this client's slot answers the same, state by state.
         func subject(_ status: String, doneBy: ProjectDoneBy? = nil, done: Bool = false,
                      criteria: [ProjectDoneCriterion] = [ProjectDoneCriterion(definitionId: "c1", satisfied: true)])
             -> ProjectDoneSubject {
             ProjectDoneSubject(title: "t", status: status, derivedDone: ProjectDerivedDone(
                 done: done, withheld: done ? [] : ["CRITERION_UNLANDED"], criteria: criteria,
-                counts: ProjectDoneCounts(criteria: criteria.count, met: criteria.count, landed: 0, onMain: 0,
-                                          byReason: [:])),
+                counts: ProjectDoneCounts(criteria: criteria.count, met: criteria.filter(\.satisfied).count,
+                                          landed: 0, onMain: 0, byReason: [:])),
                 doneBy: doneBy)
         }
-        func slot(_ subject: ProjectDoneSubject, started: Bool = true) -> ProjectDone.Slot {
-            ProjectDone.slot(subject: subject, request: nil, waitingKind: nil, record: nil, started: started)
+        func slot(_ subject: ProjectDoneSubject) -> ProjectDone.Slot {
+            ProjectDone.slot(subject: subject, request: nil, waitingKind: nil, record: nil)
         }
-        XCTAssertEqual(slot(subject("OPEN")), .notDone)
-        XCTAssertEqual(slot(subject("OPEN"), started: false), .none, "not started: the start card asks")
+        XCTAssertEqual(slot(subject("OPEN")), .none,
+                       "an OPEN project nobody asked about draws nothing, however finished it looks")
+        XCTAssertEqual(slot(subject("OPEN", criteria: [ProjectDoneCriterion(definitionId: "c1", satisfied: true),
+                                                       ProjectDoneCriterion(definitionId: "c2", satisfied: false)])),
+                       .none, "a criterion still unmet is no more a reason than every criterion met")
         XCTAssertEqual(slot(subject("OPEN", criteria: [])), .none, "no criteria: nothing to explain")
         XCTAssertEqual(slot(subject("OPEN", done: true)), .none, "the projection already says done")
         XCTAssertEqual(slot(subject("DONE", doneBy: .owner)), .done(requestID: nil), "the owner's receipt")
@@ -429,7 +464,7 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         XCTAssertEqual(ProjectDone.settledBadge(terminal.doneBy), ProjectDone.recordedByOrbit)
         XCTAssertTrue(ProjectDone.recorded(subject("DONE"), record: nil))
         XCTAssertFalse(ProjectDone.recorded(subject("OPEN", doneBy: .owner, done: true), record: nil),
-                       "an OPEN project is asked, whatever its projection or a leftover doneBy says")
+                       "an OPEN project is not recorded done, whatever its projection or a leftover doneBy says")
     }
 
     /// Orbit checked counts what the browser's `orbitCheckedOpenItemCount` counts: every row of the

@@ -369,6 +369,8 @@ suite("a pool of one's own ChatGPT login, at every door — its owner's, and nob
     const page = (await call(200, owner.id, 'GET', at)).json;
     assert.deepEqual(page.login, {
       state: 'ACTIVE',
+      // Nobody paused it (migration 0374): a pause would say until when.
+      pausedUntil: null,
       email: 'owner@example.invalid',
       plan: 'plus',
       fingerprint: `…${ACCOUNT_ID.slice(-4)}`,

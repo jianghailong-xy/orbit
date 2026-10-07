@@ -51,7 +51,7 @@ struct CreatedTasksPage: View {
                 ContentUnavailableView("No tasks", systemImage: "checkmark.square")
             }
         }
-        .navigationTitle(SessionCreatedTasksCopy.title)
+        .navigationTitle("Tasks created here")
         .task(id: sessionID) { await load(more: false) }
         .refreshable { await load(more: false) }
     }

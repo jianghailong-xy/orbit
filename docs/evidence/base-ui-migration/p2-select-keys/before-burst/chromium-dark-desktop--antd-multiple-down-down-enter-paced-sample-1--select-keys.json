@@ -1,0 +1,42 @@
+{
+  "target": "antd-multiple",
+  "sequence": "down-down-enter",
+  "mode": "paced",
+  "run": 1,
+  "keys": [
+    "ArrowDown",
+    "ArrowDown",
+    "Enter"
+  ],
+  "before": "Bug | Docs | + 1 ...",
+  "after": "Bug | Ops",
+  "expected": null,
+  "listboxOpen": true,
+  "active": "combobox:Sample choice",
+  "keyLog": [
+    {
+      "key": "ArrowDown",
+      "t": 34,
+      "target": "combobox:Sample choice",
+      "trusted": true,
+      "listbox": false,
+      "highlighted": null
+    },
+    {
+      "key": "ArrowDown",
+      "t": 372.7,
+      "target": "combobox:Sample choice",
+      "trusted": true,
+      "listbox": true,
+      "highlighted": "Bug"
+    },
+    {
+      "key": "Enter",
+      "t": 689.3,
+      "target": "combobox:Sample choice",
+      "trusted": true,
+      "listbox": true,
+      "highlighted": "Docs"
+    }
+  ]
+}

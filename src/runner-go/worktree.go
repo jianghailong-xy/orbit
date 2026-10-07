@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -1185,12 +1187,11 @@ func checkoutWorkIsCaptured(wt *Worktree) bool {
 	return err == nil && out == ""
 }
 
-// rebaseScratchPrefix names the throwaway staging worktree rebaseFastForward puts beside the
-// session checkouts. It is not a session checkout, and gcWorktrees skips it by this prefix: the
-// sweep runs while merges do, and reclaiming one mid-rebase would delete the working tree a merge
-// is replaying into and kill the git process doing it. Nothing else needs to collect them —
-// rebaseFastForward removes its own on every exit path and clears any leftover before staging a
-// new one.
+// rebaseScratchPrefix names the staging worktree rebaseFastForward puts beside the session
+// checkouts. It is not a session checkout, and gcWorktrees skips it by this prefix: the sweep runs
+// while merges do, and reclaiming one mid-rebase would delete the working tree a merge is
+// replaying into and kill the git process doing it. Nothing else collects it either — one scratch
+// serves a repository and is kept (see restageRebaseScratch), so there is no leftover to reclaim.
 const rebaseScratchPrefix = "_rebase-"
 
 // mergeLock serializes merges so two "merge to main" requests can't race on the same repo's
@@ -1237,8 +1238,9 @@ type mergeOutcome struct {
 // reported as an "error" to reconcile manually, rather than silently merged onto the wrong base.
 // Repos with no 'origin' (e.g. an auto-init'd workDir) skip this and behave exactly as before.
 //
-// The branch's commits are replayed on a temp copy in a throwaway worktree, so the session's own
-// branch is never rewritten (a resumable session keeps its original commits). The target is then
+// The branch's commits are replayed in the repository's staging worktree, which holds a detached
+// copy of them, so the session's own branch is never rewritten (a resumable session keeps its
+// original commits). The target is then
 // advanced to the rebased result, two paths, both conservative:
 //   - target is the repo root's current checkout (the usual case for main — isolated sessions
 //     run in their own worktrees, so the root sits on main between runs): fast-forward in place,
@@ -1479,14 +1481,90 @@ func replayAnchor(repoRoot, sessionID, sourceSha, serverBase string) string {
 	return ""
 }
 
+// rebaseScratchDir is the one staging worktree a repository's merges share:
+// `<worktrees>/_rebase-scratch-<repo name>-<digest>`. The repository's name is in the path for
+// whoever reads `git worktree list`; the digest of its root keeps two checkouts that share a
+// directory name apart.
+func rebaseScratchDir(repoRoot string) string {
+	sum := sha256.Sum256([]byte(repoRoot))
+	return filepath.Join(worktreesDir(), rebaseScratchPrefix+"scratch-"+filepath.Base(filepath.Clean(repoRoot))+"-"+hex.EncodeToString(sum[:3]))
+}
+
+// worktreeRegistered reports whether dir is one of repoRoot's registered worktrees AND is still on
+// disk. A registration whose directory was removed behind git's back answers false — the caller
+// rebuilds both rather than trusting half of it.
+func worktreeRegistered(repoRoot, dir string) bool {
+	if _, err := os.Stat(dir); err != nil {
+		return false
+	}
+	out, err := git(repoRoot, "worktree", "list", "--porcelain")
+	if err != nil {
+		return false
+	}
+	want := filepath.Clean(dir)
+	for _, line := range strings.Split(out, "\n") {
+		if p, ok := strings.CutPrefix(line, "worktree "); ok && filepath.Clean(p) == want {
+			return true
+		}
+	}
+	return false
+}
+
+// scratchMidOperation reports whether the staging worktree has a replay in progress — the state a
+// killed runner process leaves behind, which `git rebase` would refuse to start from.
+func scratchMidOperation(tmp string) bool {
+	return gitPathExists(tmp, "rebase-merge") || gitPathExists(tmp, "rebase-apply")
+}
+
+// restageRebaseScratch prepares the staging worktree at sourceSha and returns its path: a detached
+// checkout of that commit, with no half-finished replay and no stray file in it, ready for the
+// rebase rebaseFastForward is about to run.
+//
+// One scratch serves a repository and is reused; every later merge restages it, which costs only
+// the files that differ. A full checkout per merge was ~4s of a ~12s merge on the 28k-file
+// checkout this was measured on — the largest single cost of pressing Merge, and one the replay
+// never had to pay: a rebase needs the tree to exist, not to be freshly written. Detached, never a
+// branch, so nothing here can be mistaken for the source branch — the replay must not move it.
+//
+// A scratch git cannot reuse — a killed process's half-finished replay, a directory removed behind
+// git's back, a registration pruned — is rebuilt from nothing rather than repaired: every merge
+// starts from a state it can verify rather than from the one a previous merge left behind.
+func restageRebaseScratch(repoRoot, sourceSha string) (string, error) {
+	tmp := rebaseScratchDir(repoRoot)
+	recreate := func() error {
+		_, _ = git(repoRoot, "worktree", "remove", "--force", tmp)
+		_ = os.RemoveAll(tmp)
+		_, _ = git(repoRoot, "worktree", "prune")
+		_, err := git(repoRoot, "worktree", "add", "--detach", tmp, sourceSha)
+		return err
+	}
+	if !worktreeRegistered(repoRoot, tmp) {
+		return tmp, recreate()
+	}
+	if scratchMidOperation(tmp) {
+		_, _ = git(tmp, "rebase", "--abort")
+	}
+	if scratchMidOperation(tmp) {
+		// Even the abort could not clear it: rebuild rather than hand `git rebase` a broken state.
+		return tmp, recreate()
+	}
+	if _, err := git(tmp, "reset", "--hard", sourceSha); err != nil {
+		return tmp, recreate()
+	}
+	// Files the commit just abandoned: the reset removes what the previous replay tracked, and this
+	// takes out anything it left untracked (a conflicted attempt's strays included).
+	_, _ = git(tmp, "clean", "-ffdxq")
+	return tmp, nil
+}
+
 // rebaseFastForward replays source's commits onto target and advances target to the result by
-// fast-forward, yielding a linear history with no merge commit. The replay runs on a temp branch
-// (a copy of source) in a throwaway worktree, so the session's own branch is left intact even if
-// it's checked out. ffAtRoot picks how target is advanced: in place at the repo root
-// (merge --ff-only) when it's the root checkout, else by moving its ref (branch -f) when it's
-// checked out nowhere — both strict fast-forwards, since the rebase put target underneath. On a
-// rebase conflict it aborts and reports "conflict". Rewritten commits keep their original
-// authors and use the user's git committer identity.
+// fast-forward, yielding a linear history with no merge commit. The replay runs in a staging
+// worktree holding a detached copy of source (see restageRebaseScratch), so the session's own
+// branch is left intact even if it's checked out. ffAtRoot picks how target is advanced: in place
+// at the repo root (merge --ff-only) when it's the root checkout, else by moving its ref (branch
+// -f) when it's checked out nowhere — both strict fast-forwards, since the rebase put target
+// underneath. On a rebase conflict it aborts and reports "conflict". Rewritten commits keep their
+// original authors and use the user's git committer identity.
 //
 // `onto` (see replayAnchor) bounds what gets replayed: given the session's fork point, only its
 // own commits move, rather than everything the branch carries ahead of the target. Empty replays
@@ -1499,23 +1577,13 @@ func replayAnchor(repoRoot, sessionID, sourceSha, serverBase string) string {
 // can't pile up unpushed and silently diverge from origin. A concurrent push that beats ours is
 // rejected (non-fast-forward); we re-sync to the new origin tip and replay, up to mergePushAttempts.
 func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ffAtRoot bool, onto string) mergeOutcome {
-	tmpBranch := "orbit/" + rebaseScratchPrefix + sessionID
-	tmp := filepath.Join(worktreesDir(), rebaseScratchPrefix+sessionID)
-	// Clear any leftover from a crashed prior attempt before staging fresh.
-	_, _ = git(repoRoot, "worktree", "remove", "--force", tmp)
-	_ = os.RemoveAll(tmp)
-	_, _ = git(repoRoot, "branch", "-D", tmpBranch)
-
-	// Temp branch = source's tip, checked out in the throwaway worktree. A fresh branch (not
-	// source) means the rebase here never moves the session's branch.
-	if _, err := git(repoRoot, "worktree", "add", "-b", tmpBranch, tmp, sourceSha); err != nil {
+	// Staged once per repository and kept: the scratch is NOT removed afterwards, because the next
+	// merge restages it and paying a full checkout of the repository again is what pressing Merge
+	// mostly used to cost.
+	tmp, err := restageRebaseScratch(repoRoot, sourceSha)
+	if err != nil {
 		return mergeOutcome{Status: "error", Message: clip(fmt.Sprintf("could not stage rebase of %s: %s", source, gitStderr(err)), 1000)}
 	}
-	defer func() {
-		_, _ = git(repoRoot, "worktree", "remove", "--force", tmp)
-		_ = os.RemoveAll(tmp)
-		_, _ = git(repoRoot, "branch", "-D", tmpBranch)
-	}()
 
 	pushToOrigin := originTracks(repoRoot, target)
 	// Whether origin already accepted the rebased commits. It decides what a failure to advance the
@@ -1527,7 +1595,7 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 	// retried: re-sync the local target to the new tip and replay onto it. The loop ends on a clean
 	// push, a local-only target (nothing to push), a rebase conflict, or a divergence we can't fix.
 	for attempt := 0; ; attempt++ {
-		// Retry after origin moved: put the temp branch back on the source tip so this attempt
+		// Retry after origin moved: put the staging checkout back on the source tip so this attempt
 		// replays exactly what the first one did. Without the reset the second `rebase` would
 		// start from the already-replayed result, whose relationship to `onto` no longer holds.
 		if attempt > 0 {
@@ -1541,8 +1609,8 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 		} else {
 			rebase = append(rebase, target)
 		}
-		// A conflict stops the rebase; abort so the worktree is left clean before we tear it down
-		// (git writes "CONFLICT ..." to stdout, returned as `out`).
+		// A conflict stops the rebase; abort so nothing of this attempt is left in the scratch for
+		// the next merge to stage over (git writes "CONFLICT ..." to stdout, returned as `out`).
 		if out, err := git(tmp, rebase...); err != nil {
 			msg := strings.TrimSpace(out + "\n" + gitStderr(err))
 			// The paths git stopped on, read BEFORE the abort clears the index. They go on the
@@ -1594,12 +1662,19 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 		}
 	}
 
+	// The replayed tip, read once the last attempt has settled: the staging checkout carries no
+	// branch, so HEAD is the only name for it (and for what the root's fast-forward advances to).
+	mergedSha, err := git(tmp, "rev-parse", "HEAD")
+	if err != nil || mergedSha == "" {
+		return mergeOutcome{Status: "error", Message: clip(fmt.Sprintf("could not read the rebased result of %s: %s", source, gitStderr(err)), 1000)}
+	}
+
 	// Advance target to the rebased commits — a strict fast-forward (target is now an ancestor).
 	// Git declines this one when the fast-forward would overwrite a file someone left modified in
 	// that checkout; say which checkout is in the way (and, when origin already took the commits,
 	// that only this machine lags) rather than surfacing git's bare "your local changes…".
 	if ffAtRoot {
-		if out, err := git(repoRoot, "merge", "--ff-only", tmpBranch); err != nil {
+		if out, err := git(repoRoot, "merge", "--ff-only", mergedSha); err != nil {
 			detail := strings.TrimSpace(out + "\n" + gitStderr(err))
 			if pushed {
 				return mergeOutcome{Status: "error", Message: clip(fmt.Sprintf(
@@ -1609,7 +1684,7 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 			return mergeOutcome{Status: "error", Message: clip(fmt.Sprintf(
 				"this machine's %s checkout could not fast-forward: %s", target, detail), 1000)}
 		}
-	} else if _, err := git(repoRoot, "branch", "-f", target, tmpBranch); err != nil {
+	} else if _, err := git(repoRoot, "branch", "-f", target, mergedSha); err != nil {
 		return mergeOutcome{Status: "error", Message: clip(fmt.Sprintf("could not advance %s: %s", target, gitStderr(err)), 1000)}
 	}
 

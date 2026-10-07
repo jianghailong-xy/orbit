@@ -1,0 +1,10 @@
+{
+  "antd": {
+    "body": true,
+    "insideOwner": false
+  },
+  "orbit": {
+    "body": true,
+    "insideOwner": false
+  }
+}

@@ -43,7 +43,8 @@ final class ProjectDoneTests: XCTestCase {
         XCTAssertEqual(ProjectDone.cardTally(counts), "2 met · 1 landed on main · 1 nothing to land")
         XCTAssertEqual(ProjectDone.receiptTally(counts, acceptedGaps: 1),
                        "2 criteria met · 1 landed on main · 1 nothing to land · 1 gaps accepted")
-        XCTAssertEqual(ProjectDone.whyNotDoneTally(counts), "2 criteria · 2 met · 1 on main · 1 nothing to land")
+        // Its parts add up to the criteria: no "2 met" counted a second time beside where they are.
+        XCTAssertEqual(ProjectDone.whyNotDoneTally(closeout().derivedDone), "2 criteria · 1 on main · 1 nothing to land")
         XCTAssertEqual(ProjectDone.tally(nil), "", "a read without counts says nothing rather than zeros")
     }
 
@@ -51,8 +52,19 @@ final class ProjectDoneTests: XCTestCase {
         let counts = ProjectDoneCounts(criteria: 7, met: 4, landed: 3, onMain: 3,
                                        byReason: [.inFlight: 1, .noReceipt: 1, .codeless: 2])
         XCTAssertEqual(ProjectDone.cardTally(counts), "4 met · 3 landed on main · 2 nothing to land")
-        XCTAssertEqual(ProjectDone.whyNotDoneTally(counts),
-                       "7 criteria · 4 met · 3 on main · 1 in flight · 1 merged outside Orbit · 2 no code to land")
+        // The Why-not-done tally names it for a met criterion; an unmet one is not met, whatever its
+        // landing lane says — the same seven criteria, counted by their own answers.
+        let derived = ProjectDerivedDone(criteria: [
+            ProjectDoneCriterion(definitionId: "c1", satisfied: true),
+            ProjectDoneCriterion(definitionId: "c2", satisfied: true),
+            ProjectDoneCriterion(definitionId: "c3", satisfied: true, landingReason: .inFlight),
+            ProjectDoneCriterion(definitionId: "c4", satisfied: true, landingReason: .codeless),
+            ProjectDoneCriterion(definitionId: "c5", satisfied: false),
+            ProjectDoneCriterion(definitionId: "c6", satisfied: false, landingReason: .noReceipt),
+            ProjectDoneCriterion(definitionId: "c7", satisfied: false, landingReason: .codeless),
+        ])
+        XCTAssertEqual(ProjectDone.whyNotDoneTally(derived),
+                       "7 criteria · 2 on main · 1 in flight · 1 no code to land · 3 not met")
     }
 
     // MARK: the owner card
@@ -193,54 +205,54 @@ final class ProjectDoneTests: XCTestCase {
         let row = ProjectOpenItemRow(itemId: "req1", kind: .unknown, title: ProjectDone.heading,
                                      waitingSince: "", doneRequest: request)
         let open = closeout()
-        XCTAssertEqual(ProjectDone.slot(subject: open, request: nil, waitingKind: nil, record: nil, started: true),
-                       .notDone)
-        XCTAssertEqual(ProjectDone.slot(subject: open, request: row, waitingKind: .doneRequest, record: nil,
-                                        started: true), .done(requestID: "req1"))
-        XCTAssertEqual(ProjectDone.slot(subject: open, request: nil, waitingKind: .recordAsDone, record: nil,
-                                        started: true), .done(requestID: nil),
+        // An OPEN project nobody has asked about draws nothing, however finished it looks: the
+        // owner's ruling of 2026-10-07 04:20Z took "Why is this project not done?" out of the
+        // conversation (`ProjectWhyNotDoneGateTests` holds that state by state).
+        XCTAssertEqual(ProjectDone.slot(subject: open, request: nil, waitingKind: nil, record: nil), .none)
+        XCTAssertEqual(ProjectDone.slot(subject: open, request: row, waitingKind: .doneRequest, record: nil),
+                       .done(requestID: "req1"), "the coordinator's request puts the owner's card up")
+        XCTAssertEqual(ProjectDone.slot(subject: open, request: nil, waitingKind: .recordAsDone, record: nil),
+                       .done(requestID: nil),
                        "a project that looks finished and was not asked about in time gets the card unasked")
-        XCTAssertEqual(ProjectDone.slot(subject: open, request: nil, waitingKind: nil, record: nil, started: false),
-                       .none, "a project nobody started is asked by the start card, not this one")
         // DONE: the owner's record keeps its receipt in the conversation; a DONE Orbit recorded
-        // itself is the Why-not-done card's terminal state, "This project is done · recorded by
-        // Orbit" (the coordinator's ruling, 2026-10-06; the browser since ccb406ad0).
+        // itself is the old card's terminal state, "This project is done · recorded by Orbit"
+        // (the coordinator's ruling, 2026-10-06; the browser since ccb406ad0).
         let ownerDone = ProjectDoneSubject(title: "t", status: "DONE", derivedDone: open.derivedDone,
                                            doneBy: .owner)
-        XCTAssertEqual(ProjectDone.slot(subject: ownerDone, request: nil, waitingKind: nil, record: nil,
-                                        started: true), .done(requestID: nil),
+        XCTAssertEqual(ProjectDone.slot(subject: ownerDone, request: nil, waitingKind: nil, record: nil),
+                       .done(requestID: nil),
                        "the owner's DONE keeps its receipt in the conversation")
         let orbitDone = closeout(status: "DONE", done: true)
-        XCTAssertEqual(ProjectDone.slot(subject: orbitDone, request: nil, waitingKind: nil, record: nil,
-                                        started: true), .notDone,
-                       "Orbit's DONE is the Why-not-done card's terminal state")
+        XCTAssertEqual(ProjectDone.slot(subject: orbitDone, request: nil, waitingKind: nil, record: nil), .notDone,
+                       "Orbit's DONE is the old card's terminal state")
         XCTAssertTrue(ProjectDone.WhyNotDone(subject: orbitDone, withCoordinator: 0, requested: false)
                         .settled(orbitDone))
         XCTAssertEqual(ProjectDone.slot(subject: closeout(done: true), request: nil, waitingKind: nil,
-                                        record: nil, started: true), .none,
+                                        record: nil), .none,
                        "an OPEN project the projection already calls done is asked nothing")
         let older = ProjectDoneSubject(title: "t", status: "OPEN", derivedDone: ProjectDerivedDone(counts: nil))
-        XCTAssertEqual(ProjectDone.slot(subject: older, request: row, waitingKind: .doneRequest, record: nil,
-                                        started: true), .none, "a server without counts draws no card")
-        XCTAssertEqual(ProjectDone.slot(subject: nil, request: nil, waitingKind: nil, record: nil, started: true),
+        XCTAssertEqual(ProjectDone.slot(subject: older, request: row, waitingKind: .doneRequest, record: nil),
+                       .none, "a server without counts draws no card")
+        XCTAssertEqual(ProjectDone.slot(subject: nil, request: nil, waitingKind: nil, record: nil),
                        .none, "a read that has not answered is not an answer")
     }
 
     /// The card's whole life in one conversation, read the way the console adopts it after each
     /// read: asked, recorded, read back after a reload — with the projection still withholding, as
-    /// it does whenever the owner accepted a gap — reopened, asked again and answered Not yet….
-    func testTheReceiptOutlivesAReloadAndNotYetOrReopenGiveWayToWhyItIsNotDone() {
+    /// it does whenever the owner accepted a gap — reopened, and Not yet… answered, which both end
+    /// at nothing at all.
+    func testTheReceiptOutlivesAReloadAndNotYetOrReopenEndAtNothing() {
         let row = ProjectOpenItemRow(itemId: "req1", kind: .unknown, title: ProjectDone.heading,
                                      waitingSince: "", doneRequest: request)
         let asked = closeout()
-        XCTAssertEqual(ProjectDone.slot(subject: asked, request: row, waitingKind: .doneRequest, record: nil,
-                                        started: true), .done(requestID: "req1"))
+        XCTAssertEqual(ProjectDone.slot(subject: asked, request: row, waitingKind: .doneRequest, record: nil),
+                       .done(requestID: "req1"))
 
         // Record as done: the door's record turns the same card into its receipt, in place.
         let record = ProjectDoneRecord(projectId: "p1", doneAt: "2026-10-01T01:40:00.000Z",
                                        criteriaDigest: request.criteriaDigest, acceptedGaps: request.gaps)
-        XCTAssertEqual(ProjectDone.slot(subject: asked, request: nil, waitingKind: nil, record: record,
-                                        started: true), .done(requestID: nil))
+        XCTAssertEqual(ProjectDone.slot(subject: asked, request: nil, waitingKind: nil, record: record),
+                       .done(requestID: nil))
 
         // Reloaded: no record in hand, no request, and a projection that still says not done —
         // the owner's DONE is the record, and the receipt is what the conversation keeps.
@@ -249,24 +261,23 @@ final class ProjectDoneTests: XCTestCase {
                                           doneBy: .owner, doneAt: record.doneAt,
                                           acceptedGaps: request.gaps)
         XCTAssertEqual(reloaded.derivedDone?.done, false)
-        XCTAssertEqual(ProjectDone.slot(subject: reloaded, request: nil, waitingKind: nil, record: nil,
-                                        started: true), .done(requestID: nil),
-                       "a project the owner recorded done is never asked why it is not done")
+        XCTAssertEqual(ProjectDone.slot(subject: reloaded, request: nil, waitingKind: nil, record: nil),
+                       .done(requestID: nil),
+                       "a project the owner recorded done keeps its receipt")
         XCTAssertEqual(ProjectDone.receiptLine(reloaded, record: nil, timeZone: utc),
                        "You recorded this project done · Oct 1, 01:40")
         XCTAssertEqual(ProjectDone.receiptTally(reloaded, record: nil),
                        "2 criteria met · 1 landed on main · 1 nothing to land · 1 gaps accepted")
 
-        // Reopen project, or Not yet… on a request: nothing is asked, so the card gives way.
-        XCTAssertEqual(ProjectDone.slot(subject: asked, request: nil, waitingKind: nil, record: nil,
-                                        started: true), .notDone)
+        // Reopen project, or Not yet… on a request: nothing is asked, and the conversation draws
+        // nothing in its place — not the old question, which no conversation asks any more.
+        XCTAssertEqual(ProjectDone.slot(subject: asked, request: nil, waitingKind: nil, record: nil), .none)
         // Reopened at another end and read back: the read says OPEN while the record of who closed it
-        // remains — the conversation asks why it is not done, it does not show the old receipt.
+        // remains — the conversation shows neither that old receipt nor a question about it.
         let reopened = ProjectDoneSubject(title: "Project closeout", status: "OPEN",
                                           criteria: asked.criteria, derivedDone: asked.derivedDone,
                                           doneBy: .owner, doneAt: record.doneAt, acceptedGaps: request.gaps)
-        XCTAssertEqual(ProjectDone.slot(subject: reopened, request: nil, waitingKind: nil, record: nil,
-                                        started: true), .notDone)
+        XCTAssertEqual(ProjectDone.slot(subject: reopened, request: nil, waitingKind: nil, record: nil), .none)
     }
 
     func testTheRequestIsLiveOnlyOnAnOpenProjectWithARequestThisBuildCanRead() {
@@ -330,16 +341,15 @@ final class ProjectDoneTests: XCTestCase {
         XCTAssertNil(ProjectDone.requestWaiting(nil, now: now))
     }
 
-    /// The conversation asks why a project is not done only of one with criteria to be done against
-    /// (the browser's `asksWhyNotDone`): a started project that states none has nothing to explain.
-    func testAProjectWithNoCriteriaIsNotAskedWhyItIsNotDone() {
+    /// A project that states no criteria — and one that states plenty — are both asked nothing
+    /// while nobody has asked to close them out: the conversation's silence does not depend on what
+    /// the project says about itself.
+    func testAProjectNobodyAskedAboutIsDrawnACardForNoProjectionAtAll() {
         let none = ProjectDoneSubject(title: "t", status: "OPEN", derivedDone: ProjectDerivedDone(
             done: false, withheld: ["NO_CRITERIA_STATED"], criteria: [],
             counts: ProjectDoneCounts(criteria: 0, met: 0, landed: 0, onMain: 0, byReason: [:])))
-        XCTAssertEqual(ProjectDone.slot(subject: none, request: nil, waitingKind: nil, record: nil, started: true),
-                       .none)
-        XCTAssertEqual(ProjectDone.slot(subject: closeout(), request: nil, waitingKind: nil, record: nil,
-                                        started: true), .notDone)
+        XCTAssertEqual(ProjectDone.slot(subject: none, request: nil, waitingKind: nil, record: nil), .none)
+        XCTAssertEqual(ProjectDone.slot(subject: closeout(), request: nil, waitingKind: nil, record: nil), .none)
     }
 
     func testUnmetCodelessWorkStaysWaitingOnWork() {
@@ -442,7 +452,7 @@ final class ProjectDoneTests: XCTestCase {
         let page = try JSONDecoder().decode(ProjectDocument.self, from: Data(old.utf8))
         XCTAssertNil(page.doneSubject.counts)
         XCTAssertEqual(ProjectDone.slot(subject: page.doneSubject, request: nil, waitingKind: .recordAsDone,
-                                        record: nil, started: true), .none)
+                                        record: nil), .none)
         let broken = #"{"id":"p1","title":"t","status":"OPEN","derivedDone":"nonsense","acceptedGaps":7}"#
         XCTAssertNoThrow(try JSONDecoder().decode(ProjectCriteriaDocument.self, from: Data(broken.utf8)),
                          "a projection this build cannot read must not fail the confirmation cards' read")

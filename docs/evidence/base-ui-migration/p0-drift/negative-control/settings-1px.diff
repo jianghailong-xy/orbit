@@ -1,0 +1,13 @@
+diff --git a/src/web/src/pages/SettingsPage.tsx b/src/web/src/pages/SettingsPage.tsx
+index 63d2612e2..a20059bd7 100644
+--- a/src/web/src/pages/SettingsPage.tsx
++++ b/src/web/src/pages/SettingsPage.tsx
+@@ -58,7 +58,7 @@ export function SettingsPage() {
+ 
+       {/* The same order as Settings on iOS: how sessions start, then the alerts and the look, then
+           what the account has shared. iOS lays these out as one list (SettingsHome in OrbitKit). */}
+-      <Card title="Session defaults" style={{ marginBottom: 16 }}>
++      <Card title="Session defaults" style={{ marginBottom: 17 }}>
+         <Field
+           label="Default permission mode"
+           hint="The mode a new session starts in, unless the composer picks another. Account-wide: the mode is a property of the run, not of the workspace it runs in."

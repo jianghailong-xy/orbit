@@ -1928,7 +1928,81 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // index, constraint, enum, type, function or trigger is created, replaced or dropped; no
       // task, project, acceptance or DONE fence object is named; no INSERT, UPDATE or DELETE —
       // every runner reads NULL, "not reported" and "nobody asked", until its next heartbeat.
-      '0385_runner_self_update'],
+      '0385_runner_self_update',
+      // Move requests (0386): one nullable `requested_criterion_definition_id` on
+      // project_handoff_approval with a CHECK keeping it to MOVE_TASK rows, one partial unique index
+      // (one PENDING move per owner, task and pair of projects) and one new function + BEFORE UPDATE
+      // trigger freezing the new column. 0155's guard is not replaced; no task, project,
+      // acceptance or DONE fence object is named, and no row is written or backfilled.
+      '0386_project_handoff_move_request',
+      // Antigravity accounts (0387): one nullable TEXT with no default on `workspace`
+      // (`antigravity_account`, 0309's `claude_account` exactly), and on `session` one nullable TEXT
+      // with no default (`antigravity_account`) and one BOOLEAN NOT NULL DEFAULT false
+      // (`antigravity_account_pinned`) — 0336's pair exactly, catalog-only as a constant default is —
+      // with no index, no CHECK and no foreign key, and nothing else. `task`, `project` and
+      // `project_acceptance_criterion_definition` are not named, no `project_acceptance_*` object nor
+      // any of the six preserved triggers/functions is, and no function, trigger, enum or type is
+      // created — so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: nothing
+      // is backfilled.
+      '0387_antigravity_account',
+      // `orbit login` through the browser (0388): one new table, pat_device_login, with its own
+      // CHECKs, indexes and one foreign key to `user` (ON DELETE CASCADE). No existing table,
+      // column, constraint, function, trigger or type is altered or dropped; no task, project,
+      // acceptance or DONE fence object is named, and no row is written.
+      '0388_pat_device_login',
+      // Confirmed moves (0389): one CREATE OR REPLACE of `task_claimed_project_move_guard` (0122,
+      // widened by 0130); its trigger, event and refusal are unchanged. The body still refuses a
+      // project change on a task with a live claim, except in the transaction that applies the
+      // account owner's confirmation of a MOVE_TASK for that task and those two projects — named by
+      // a transaction-local setting and an unspent, USER-approved project_handoff_approval row the
+      // function only reads. It is none of the six preserved triggers/functions and not the DONE
+      // fence; no table, column, constraint, index or type is touched, and no row is written.
+      '0389_move_task_confirmation_live_claim',
+      // Sign-in providers (0390): one new table, sign_in_provider, with its primary key and two
+      // CHECKs of its own, and no other index, foreign key, function or trigger. No existing table,
+      // column, constraint, function, trigger or type is altered or dropped; no task, project,
+      // acceptance or DONE fence object is named, and no row is written. Written as 0387 and
+      // renumbered before landing, unchanged otherwise, when main's 0387_antigravity_account took
+      // that number first.
+      '0390_sign_in_provider',
+      // Signing in with Google (0391): two new tables. user_identity, with its primary key, two
+      // CHECKs, two unique indexes and a foreign key to `user` (ON DELETE CASCADE); and
+      // oauth_login_flow, with its primary key, four CHECKs, two unique indexes, two indexes and a
+      // foreign key to `user` (ON DELETE CASCADE). No function or trigger. No existing table, column,
+      // constraint, function, trigger or type is altered or dropped; no task, project, acceptance or
+      // DONE fence object is named, and no row is written.
+      '0391_google_login_flow',
+      // Accounts without a password (0392): one ALTER COLUMN … DROP NOT NULL of `user.password_hash`,
+      // and nothing else. `user` is not a preserved relation; its email's unique index, every other
+      // column and every constraint stay as they were; no task, project, acceptance or DONE fence
+      // object, function, trigger or type is named, and no row is written or backfilled.
+      '0392_user_password_hash_nullable',
+      // Skipping one landing's merge check (0393): four `ADD COLUMN`s on `project_integration_job`
+      // (one BOOLEAN NOT NULL DEFAULT false, one TEXT, two UUID) and three CHECKs, one of them the
+      // all-or-none rule that keeps a skip from being written without its reason and its approver.
+      // No function, trigger, type, index or foreign key is created, replaced or dropped, so it is
+      // not another writer of the DONE fence and names none of the six preserved objects;
+      // `project_integration_job` was created by 0281 and is not a preserved relation, and no
+      // `task`, `session`, `project`, `session_merge_receipt` or `project_acceptance_*` object is
+      // named. No INSERT, UPDATE or DELETE: no stored row is read, locked, backfilled or rewritten —
+      // the columns are catalog-only, and every existing row keeps the flag false.
+      '0393_integration_job_skip_merge_check',
+      // `task_project_rollup_covering_idx`, rebuilt (0395): 0178's five key columns and its
+      // predicate kept exactly, and the six columns the rollup's classifier reads
+      // (`completion_policy`, `verifies_task_id`, `assignee_id`, `dispatch_hold`, `terminal_reason`,
+      // `superseded_by_task_id`) added as INCLUDE payload, so `GET /projects` classifies a project's
+      // tasks from the index instead of fetching a heap row per task. Read against every claim
+      // above: one `DROP INDEX` and one `CREATE INDEX` and nothing else — no function, trigger,
+      // type, column or constraint is created, altered or dropped, so it is not another writer of
+      // the DONE fence and names none of the six preserved objects. `task` IS one of the preserved
+      // relations, and it is named only as the table the index is rebuilt on, as in 0283, 0305 and
+      // 0361: an index is a relation beside the table, and with the key columns unchanged no column
+      // of `task` is added, dropped or retyped — `task.acceptance_command`,
+      // `task.acceptance_expected_exit_code`, `task_executable_acceptance_pair` and
+      // `task_completion_criterion` are not named, and no `project_acceptance_*` object is. No
+      // INSERT, UPDATE or DELETE: the build reads every task row once and writes none, and the DROP
+      // takes the index away inside the migration's own transaction, so no reader sees it missing.
+      '0395_project_rollup_covering_idx_columns'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

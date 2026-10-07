@@ -1,5 +1,6 @@
 import { type MergeRecoveryAction, type ProjectPromotionView, type ProjectSidebarTaskCounts } from '@orbit/shared';
 import {
+  AppstoreOutlined,
   ArrowDownOutlined,
   ArrowLeftOutlined,
   ArrowUpOutlined,
@@ -17,6 +18,7 @@ import {
   EditOutlined,
   EllipsisOutlined,
   EyeOutlined,
+  ExclamationCircleOutlined,
   ExportOutlined,
   FolderOutlined,
   GlobalOutlined,
@@ -90,6 +92,7 @@ import {
   dragOffset,
   isFullSwipe,
   restingOffset,
+  sessionMovable,
   sessionSwipeActions,
   settleSwipe,
   swipeActionsOnScreen,
@@ -120,6 +123,7 @@ import {
   PROJECT_SESSION_REFRESH_MS,
   pendingCriteriaDecisionsQuery,
   pendingDecisionsQuery,
+  projectIntegrationQuery,
   projectMergedPromotionsQuery,
   projectOpenItemsQuery,
   projectPromotionQuery,
@@ -187,7 +191,7 @@ import {
   type LocalStatusRow,
 } from '../lib/slashCommands';
 import { sessionPlanUsage } from '../lib/planUsage';
-import { accountNameOf, accountPlanUsage } from '../lib/engineAccounts';
+import { accountNameOf, accountPlanUsage, ANTIGRAVITY_ACCOUNT_LOGIN_CAPABILITY } from '../lib/engineAccounts';
 import { poolAccountHelp, poolsAsProviders, providerPoolsQuery, sessionPoolAccount } from '../lib/providerPools';
 import { isLoginPool, poolSessionLoginMember } from '../lib/codexLogin';
 import { sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
@@ -210,6 +214,7 @@ import { SessionCreatedTasksStrip } from './SessionCreatedTasksStrip';
 import { SessionWatchBadges, SessionWatchStrip } from './WatchRelations';
 import { OrbitLinkCardsProvider } from './OrbitLinkCard';
 import {
+  ago,
   sessionWatching,
   watchingCountWord,
   watchingSessions,
@@ -311,7 +316,9 @@ import {
   promotionRecordMoment,
 } from './ProjectPromotionCard';
 import { ProjectMergeStrip, ProjectMergeTimelineRow } from './ProjectMergeStrip';
-import { projectTimelineSections } from '../lib/projectMerge';
+import { isMergeJob, projectTimelineSections } from '../lib/projectMerge';
+import { LandingRow, landingLine } from './ProjectPanoramaHeader';
+import { ProjectStartDialog } from './StartProjectCard';
 import {
   CHAT_FACTS_AS_ARMED,
   CHAT_SUBJECT_GONE,
@@ -346,8 +353,12 @@ import {
 import {
   READY_TO_START,
   START_PROJECT_INTENT,
+  START_ROW_OWN,
   confirmedChangesProjectKey,
+  projectStarted,
+  startPageRow,
   type SettlementQuestion,
+  type StartPageRow,
 } from '../lib/projectStart';
 import { PROJECT_DONE_COPY } from '../lib/projectDone';
 import { SessionProjectSettlementCard } from './ProjectSettlementCard';
@@ -383,11 +394,14 @@ import {
   accountOfEnv,
   accountToStartOn,
   AgentProvider,
+  CONTINUE_MESSAGE,
   derivePermissionSemantics,
   fastModeAvailable,
+  isAccountEngine,
   MAX_PROMPT_CHARS,
   permissionModeAvailableOnRunner,
   TRASH_RETENTION_DAYS,
+  withEnginePlanUsage,
   type AccountEngine,
 } from '@orbit/shared';
 import { lastTypedUserMessage } from '../lib/deliveredMessage';
@@ -627,11 +641,26 @@ const IS_MAC =
 const NEW_SESSION_HINT = IS_MAC ? '⌘N' : 'Ctrl N';
 const COMPLETE_SESSION_HINT = IS_MAC ? '⌘D' : 'Ctrl D';
 /** A runner that carries a session's conversation onto another of its accounts (runner
- *  codex_account_move.go, claude_account_move.go) — the one kind the composer offers the move on. */
+ *  codex_account_move.go, claude_account_move.go) — the one kind the composer offers the move on.
+ *  An Antigravity conversation lives in the session's own directory, never in an account's, so there
+ *  is nothing to carry: a runner that keeps Antigravity accounts at all can move one. */
 const ACCOUNT_MOVE_CAPABILITY: Record<AccountEngine, string> = {
   codex: 'codex-account-move/v1',
   claude: 'claude-account-move/v1',
+  antigravity: ANTIGRAVITY_ACCOUNT_LOGIN_CAPABILITY,
 };
+/** Where a session, and its workspace, keep the account each engine runs on — and whether a session's
+ *  was picked by hand. */
+const ACCOUNT_FIELD = {
+  codex: 'codexAccount',
+  claude: 'claudeAccount',
+  antigravity: 'antigravityAccount',
+} as const satisfies Record<AccountEngine, string>;
+const ACCOUNT_PINNED_FIELD = {
+  codex: 'codexAccountPinned',
+  claude: 'claudeAccountPinned',
+  antigravity: 'antigravityAccountPinned',
+} as const satisfies Record<AccountEngine, string>;
 /** What the composer sends to put a session back on Automatic (PATCH /sessions/:id/account). */
 const AUTOMATIC_ACCOUNT = 'automatic';
 
@@ -782,6 +811,8 @@ const SESSION_VIEWS: { value: SessionView; label: string }[] = [
 // page is asked for — roughly a couple of rows, so the list is already widened by the time
 // the user reaches the bottom.
 const SESSION_LOAD_MORE_PX = 240;
+/** How long a finger rests on a phone's session row before its menu opens, as iOS's context menu. */
+const LONG_PRESS_MS = 500;
 
 // Drag-resizable width of the left session column, persisted across reloads.
 const SESSION_COL_KEY = 'orbit.sessionColWidth';
@@ -1154,6 +1185,77 @@ function SessionProjectProgressBar({ counts, runningCount }: { counts: ProjectSi
       <span className="running" style={{ width: width(running) }} />
       <span className="failed" style={{ width: width(failed) }} />
     </span>
+  );
+}
+
+/** The start, under the progress line of a project nobody has started (docs/mocks/
+ *  project-start-sessions-page; iOS `SessionProjectPage.startLine`): the coordinator's request —
+ *  Ready to start, since when, what it suggests, Review and start — or, with none, the owner's own
+ *  Start…, quiet. Either opens the start card over the page, and only that card's Start the project
+ *  starts anything. Not counted as needing the reader, as a start request is counted nowhere. */
+function SessionProjectStartRow({ start, projectId }: { start: StartPageRow; projectId: string }) {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const asked = start.kind === 'asked' ? start.row : null;
+  const settings = asked?.startRequest?.settings ?? null;
+  return (
+    <div className="session-project-start">
+      {asked ? (
+        <div className="session-project-start-ask">
+          <div className="session-project-start-line">
+            <span className="session-project-start-dot is-asked" aria-hidden="true" />
+            <span className="session-project-start-title">{READY_TO_START}</span>
+            <span className="session-project-start-ago">
+              {SESSION_PROJECT_COPY.startAsked(ago(asked.waitingSince, Date.now()))}
+            </span>
+          </div>
+          {settings ? (
+            <div className="session-project-start-suggestion">{SESSION_PROJECT_COPY.startSuggestion(settings)}</div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="session-project-start-line">
+          <span className="session-project-start-dot" aria-hidden="true" />
+          <span>{SESSION_PROJECT_COPY.startNotAsked}</span>
+        </div>
+      )}
+      <button type="button" className={`session-project-start-press${asked ? ' is-primary' : ''}`}
+        title={SESSION_PROJECT_COPY.startHint} onClick={() => setOpen(true)}>
+        {asked ? SESSION_PROJECT_COPY.startReview : START_ROW_OWN}
+      </button>
+      <ProjectStartDialog projectId={projectId} asked={asked !== null} open={open} onClose={() => setOpen(false)}
+        onViewTasks={() => {
+          setOpen(false);
+          navigate(`/projects/${encodeId(projectId)}`);
+        }} />
+    </div>
+  );
+}
+
+/** The landing line inside the progress card while a task lands on the project branch (iOS
+ *  `SessionProjectPage.landingLine`): the project page's own row, ticking once a second, and a press
+ *  that opens the project page. A merge job's line is the merge card's (`ProjectMergeStrip`). Its own
+ *  component, so the second hand redraws this line and not the console around it. */
+function SessionProjectLanding({ projectId, onOpen }: { projectId: string; onOpen: () => void }) {
+  const integration = useQuery(projectIntegrationQuery(projectId));
+  const view = integration.data && typeof integration.data === 'object' ? integration.data : null;
+  const live = view?.inFlight != null && !isMergeJob(view.inFlight);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!live) return undefined;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(timer);
+  }, [live]);
+  const line = live && view
+    ? landingLine(view, now, { updatedAt: integration.dataUpdatedAt, failed: integration.isError })
+    : null;
+  if (!line) return null;
+  return (
+    <button type="button" className="session-project-page-landing" onClick={onOpen}>
+      <LandingRow line={line} />
+      <RightOutlined className="session-project-page-landing-chev" aria-hidden />
+    </button>
   );
 }
 
@@ -1923,6 +2025,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     geometry: SwipeGeometry;
   } | null>(null);
   const swipeClickGuard = useRef(false); // eat the click that trails a horizontal swipe
+  // A press held on a phone's session row opens that row's menu where the finger is, as iOS's
+  // context menu does — the row's ⋯ is not drawn on a touch phone. Any move past the swipe's
+  // deadzone cancels it, so a drag never opens it.
+  const [pressMenu, setPressMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const pressTimer = useRef<number | undefined>(undefined);
+  // Set when a held press opened the menu, so the release cancels the click it would send — that
+  // click would close the menu it just opened, or open the row.
+  const pressHeld = useRef(false);
+  const cancelPress = (): void => {
+    window.clearTimeout(pressTimer.current);
+    pressTimer.current = undefined;
+  };
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
   // A row's Share action opens the share dialog for that row rather than for the open session.
   const [shareRowId, setShareRowId] = useState<string | null>(null);
@@ -2112,9 +2226,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     swipeClickGuard.current = false;
     const id = projectId ?? session.id;
     const from = swipeOpen && swipeOpen.id === id ? swipeOpen.side : null;
+    const rect = e.currentTarget.getBoundingClientRect();
     const geometry = projectId
       ? { leadingWidth: SWIPE_ACTION_WIDTH, trailingWidth: SWIPE_ACTION_WIDTH, fullSwipeAt: null, maxOffset: SWIPE_ACTION_WIDTH + 20 }
-      : swipeGeometry(sessionRowView(session), e.currentTarget.getBoundingClientRect().width, canFullSwipe);
+      : swipeGeometry(sessionRowView(session), rect.width, canFullSwipe, sessionMovable(session));
     swipeRef.current = {
       session,
       id,
@@ -2125,6 +2240,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       from,
       geometry,
     };
+    cancelPress();
+    if (projectId) return;
+    const at = { id, x: t.clientX - rect.left, y: t.clientY - rect.top };
+    pressTimer.current = window.setTimeout(() => {
+      pressTimer.current = undefined;
+      const held = swipeRef.current;
+      if (!held || held.id !== id || held.axis !== '') return;
+      swipeRef.current = null; // the finger now holds a menu, not a swipe
+      swipeClickGuard.current = true; // and a click its release still sends must not open the row
+      pressHeld.current = true;
+      setSwipeOpen(null);
+      setMenuOpenId(null);
+      setPressMenu(at);
+    }, LONG_PRESS_MS);
   };
   const onRowTouchMove = (e: ReactTouchEvent): void => {
     const st = swipeRef.current;
@@ -2136,6 +2265,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // list's own scroll and never drags the row.
     if (st.axis === '') {
       if (Math.abs(mx) < 8 && Math.abs(my) < 8) return;
+      cancelPress();
       st.axis = Math.abs(mx) > Math.abs(my) ? 'h' : 'v';
       if (st.axis === 'h') {
         setSwipeOpen((cur) => (cur && cur.id !== st.id ? null : cur)); // starting a swipe shuts any other open row
@@ -2145,7 +2275,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     st.offset = dragOffset(st.from, mx, st.geometry); // synchronous truth for the touchend decision
     setSwipeDrag({ id: st.id, dx: st.offset, armed: isFullSwipe(st.offset, st.geometry) });
   };
-  const onRowTouchEnd = (): void => {
+  const onRowTouchEnd = (e?: ReactTouchEvent): void => {
+    cancelPress();
+    if (pressHeld.current) {
+      pressHeld.current = false;
+      e?.preventDefault();
+    }
     const st = swipeRef.current;
     swipeRef.current = null;
     if (!st || st.axis !== 'h') {
@@ -2163,6 +2298,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // An OS-interrupted gesture (system swipe, incoming call) fires touchcancel, not touchend —
   // drop the drag and let the row settle back to its committed open/closed state.
   const onRowTouchCancel = (): void => {
+    cancelPress();
+    pressHeld.current = false;
     swipeRef.current = null;
     setSwipeDrag(null);
   };
@@ -2876,6 +3013,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   } : undefined);
   const pageProjectTitle = pageProject?.title ?? pageProjectDetailsQ.data?.title ?? projectMembers[0]?.projectMembership?.projectTitle ?? pageMenuCoordinator?.projectMembership?.projectTitle ?? 'Project';
   const pageRunningCount = projectMembers.filter((s) => statusGlyphMotion(s) === 'spinner').length;
+  const pageStatus = pageProject?.status ?? pageProjectDetailsQ.data?.status ?? projectMembers[0]?.projectMembership?.projectStatus;
+  const pageSessionsError = (projectSessionsQ.error ?? completedProjectSessionsQ.error) as Error | null;
+  // A project nobody has started (docs/mocks/project-start-sessions-page): its progress line says so,
+  // and the start's row sits under it — by the project page's own rule (`startPageRow`), read off the
+  // sidebar's `startedAt` and the open items, which are read only while that holds.
+  const pageStarted = pageProject ? projectStarted(pageProject) : null;
+  const pageNotStarted = pageProject?.status === 'OPEN' && pageStarted === false;
+  const pageOpenItemsQ = useQuery({
+    ...projectOpenItemsQuery(openProjectId ?? ''),
+    enabled: !!openProjectId && pageNotStarted,
+    refetchInterval: controlLive ? 20_000 : 4000,
+  });
+  const pageStart = pageNotStarted
+    ? startPageRow(pageStarted, pageOpenItemsQ.isError ? undefined : pageOpenItemsQ.data)
+    : null;
   // The folder page the list is on: `?folder=<id>` on whichever route the console is at, so it
   // survives a reload and Back leaves it. Only a folder of this workspace, and only where the list
   // shows folders at all.
@@ -3164,8 +3316,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const pickedProvider: string = draftProvider ?? lastWorkspaceProvider;
   // The Provider-menu identity of that pick: the model space, the model seed and the menu's tick.
   const pickedChoice: string = draftChoice ?? lastWorkspaceProvider;
-  // The Codex or Claude account picked for the draft on the New Session hero, scoped to its workspace
-  // like the provider pick. Without one a new session starts where Automatic or its workspace says.
+  // The Codex, Claude or Antigravity account picked for the draft on the New Session hero, scoped to its
+  // workspace like the provider pick. Without one a new session starts where Automatic or its workspace
+  // says.
   const [draftAccountPick, setDraftAccountPick] = useState<{
     workspaceId?: string;
     engine: string;
@@ -3174,6 +3327,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const draftPickHere = draftAccountPick && draftAccountPick.workspaceId === workspaceId ? draftAccountPick : null;
   const draftCodexAccount = draftPickHere?.engine === 'codex' ? draftPickHere.account : null;
   const draftClaudeAccount = draftPickHere?.engine === 'claude' ? draftPickHere.account : null;
+  const draftAntigravityAccount = draftPickHere?.engine === 'antigravity' ? draftPickHere.account : null;
+  /** The draft's pick for one engine's account. */
+  const draftAccountOf = (engine: AccountEngine): string | null =>
+    draftPickHere?.engine === engine ? draftPickHere.account : null;
 
   // A provider switch made on an ENDED session, scoped to that session for the same reason the
   // draft pick is scoped to its workspace. There is nothing to PATCH while a session is ended, so
@@ -5518,6 +5675,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         // Only an explicit pick, as with the provider: none is Automatic, or the workspace's account.
         ...(draftCodexAccount && pickedProvider === 'codex' ? { codexAccount: draftCodexAccount } : {}),
         ...(draftClaudeAccount && pickedProvider === 'claude' ? { claudeAccount: draftClaudeAccount } : {}),
+        ...(draftAntigravityAccount && pickedProvider === 'antigravity'
+          ? { antigravityAccount: draftAntigravityAccount }
+          : {}),
         attachmentIds,
         // A `!cmd` draft seeds the session's first turn as a shell command, not a message.
         shell,
@@ -7188,16 +7348,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     });
     setTimeout(() => taRef.current?.focus(), 0);
   };
-  // The project settlement card's "Ask the coordinator to handle it": the card's own facts — the
-  // blocked criteria, what each is waiting on and what would clear them — go out as one ordinary
-  // turn. Ordinary because nothing is waiting on an answer: the card explains a projection, and the
-  // work that would clear it is this agent's. The facts ARE the message, so unlike the armed
-  // replies above there is nothing to type first; the composer stays free for anything they leave
-  // out. The card stays where it is, with its own Confirm still live.
-  const delegateProjectSettlement = (talk: { facts: string }): void => {
-    if (send.isPending) return;
-    send.mutate({ content: talk.facts, images: [], intent: defaultSendIntent });
-  };
   // A LIVE session's pills show its stored choice (editable any time the runner is
   // online — see configEditable); otherwise they're editable and reflect local state.
   const selectedWorkspace = workspacesForRunner.find((a) => a.id === selected?.workspace?.id);
@@ -7253,41 +7403,55 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         ? poolSessionLoginMember(shownPool, detailForSelected.poolCodexLogin)
         : sessionPoolAccount(shownPool, selectedId ? shownPoolMemberId : null)
       : null;
-  // Which of the runner's accounts a built-in Codex or Claude session spends — the draft's pick, or the
-  // one picked for the session, else its workspace's — and Default for an id this runner does not
-  // report, as dispatch resolves it (providers/account.ts accountOnRunner).
+  // Which of the runner's accounts a built-in Codex, Claude or Antigravity session spends — the draft's
+  // pick, or the one picked for the session, else its workspace's — and Default for an id this runner
+  // does not report, as dispatch resolves it (providers/account.ts accountOnRunner).
   const accountOnThisRunner = (engine: AccountEngine, wanted: string | null | undefined): string =>
     wanted && accountsOf(runner, engine).some((account) => account.id === wanted) ? wanted : 'default';
+  // The runner's quota, Antigravity's included: its accounts' travels with that engine's health.
+  const runnerUsage = withEnginePlanUsage(runner.planUsage, runner.engines);
   // Automatic is on offer for an engine where the workspace leaves its account to Orbit: it picked none,
   // and its env selects no other config directory and no key of its own — with two accounts or more
   // to choose between. A new session there starts on the runner's account whose quota resets soonest:
   // the choice the server makes when it creates the session (automaticAccount), asked of the same numbers.
   const automaticOfferedOn = (
     engine: AccountEngine,
-    workspace: { env?: Record<string, string> | null; codexAccount?: string | null; claudeAccount?: string | null } | null | undefined,
+    workspace:
+      | {
+          env?: Record<string, string> | null;
+          codexAccount?: string | null;
+          claudeAccount?: string | null;
+          antigravityAccount?: string | null;
+        }
+      | null
+      | undefined,
   ): boolean =>
-    !(engine === 'claude' ? workspace?.claudeAccount : workspace?.codexAccount) &&
+    !workspace?.[ACCOUNT_FIELD[engine]] &&
     accountsOf(runner, engine).length >= 2 &&
     accountOfEnv(engine, workspace?.env ?? null, accountsOf(runner, engine)) === 'default';
   const codexAccountsHere = accountsOf(runner, 'codex');
   const codexAutoOffered = automaticOfferedOn('codex', pickedWorkspace);
   const claudeAutoOffered = automaticOfferedOn('claude', pickedWorkspace);
+  const antigravityAutoOffered = automaticOfferedOn('antigravity', pickedWorkspace);
   const codexAutoAccount = codexAutoOffered ? accountToStartOn('codex', codexAccountsHere, runner.planUsage, new Date()) : null;
   const claudeAutoAccount = claudeAutoOffered
     ? accountToStartOn('claude', accountsOf(runner, 'claude'), runner.planUsage, new Date())
+    : null;
+  const antigravityAutoAccount = antigravityAutoOffered
+    ? accountToStartOn('antigravity', accountsOf(runner, 'antigravity'), runnerUsage, new Date())
     : null;
   // Where an ended session's held switch onto `engine` resumes, as the server decides it
   // (accountOnProviderSwitch): the account it names; else, unless the session is pinned there,
   // Automatic's pick; else where it already was.
   const pendingEngineAccount = (engine: AccountEngine): string | null | undefined => {
     if (pendingResumeAccount && pendingResumeAccount !== AUTOMATIC_ACCOUNT) return pendingResumeAccount;
-    const own = engine === 'claude' ? detailForSelected?.claudeAccount : detailForSelected?.codexAccount;
-    const pinned = engine === 'claude' ? detailForSelected?.claudeAccountPinned : detailForSelected?.codexAccountPinned;
+    const own = detailForSelected?.[ACCOUNT_FIELD[engine]];
+    const pinned = detailForSelected?.[ACCOUNT_PINNED_FIELD[engine]];
     if (pinned && pendingResumeAccount !== AUTOMATIC_ACCOUNT) return own;
     const workspace = workspacesForRunner.find((w) => w.id === selected?.workspace?.id);
     return automaticOfferedOn(engine, workspace)
-      ? accountToStartOn(engine, accountsOf(runner, engine), runner.planUsage, new Date())
-      : (own ?? (engine === 'claude' ? detailForSelected?.workspace?.claudeAccount : detailForSelected?.workspace?.codexAccount));
+      ? accountToStartOn(engine, accountsOf(runner, engine), runnerUsage, new Date())
+      : (own ?? detailForSelected?.workspace?.[ACCOUNT_FIELD[engine]]);
   };
   const shownCodexAccount = accountOnThisRunner(
     'codex',
@@ -7305,12 +7469,26 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         : (detailForSelected?.claudeAccount ?? detailForSelected?.workspace?.claudeAccount)
       : (draftClaudeAccount ?? pickedWorkspace?.claudeAccount ?? claudeAutoAccount),
   );
+  const shownAntigravityAccount = accountOnThisRunner(
+    'antigravity',
+    selectedId
+      ? pendingResumeProvider === 'antigravity'
+        ? pendingEngineAccount('antigravity')
+        : (detailForSelected?.antigravityAccount ?? detailForSelected?.workspace?.antigravityAccount)
+      : (draftAntigravityAccount ?? pickedWorkspace?.antigravityAccount ?? antigravityAutoAccount),
+  );
   const shownAccount =
-    shownProvider === 'codex' ? shownCodexAccount : shownProvider === 'claude' ? shownClaudeAccount : 'default';
-  // The engine whose account the composer names — built-in Codex or Claude, not an account pool — and the
-  // account it names in the quota gauge's popover, once the runner has more than one to tell apart.
-  const shownAccountEngine: AccountEngine | null =
-    !shownPool && (shownProvider === 'codex' || shownProvider === 'claude') ? shownProvider : null;
+    shownProvider === 'codex'
+      ? shownCodexAccount
+      : shownProvider === 'claude'
+        ? shownClaudeAccount
+        : shownProvider === 'antigravity'
+          ? shownAntigravityAccount
+          : 'default';
+  // The engine whose account the composer names — built-in Codex, Claude or Antigravity, not an account
+  // pool — and the account it names in the quota gauge's popover, once the runner has more than one to
+  // tell apart.
+  const shownAccountEngine: AccountEngine | null = !shownPool && isAccountEngine(shownProvider) ? shownProvider : null;
   const shownAccountsHere = shownAccountEngine ? accountsOf(runner, shownAccountEngine) : [];
   const shownAccountRow =
     shownAccountsHere.length >= 2
@@ -7321,9 +7499,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const shownAccountLabel = shownAccountRow ? accountNameOf(shownAccountRow) : null;
   const shownPlanUsage = shownPool
     ? (shownPoolAccount?.member.planUsage ?? null)
-    : (shownProvider === 'codex' || shownProvider === 'claude') && shownAccount !== 'default'
-      ? accountPlanUsage(runner.planUsage, shownProvider, shownAccount)
-      : sessionPlanUsage(shownProvider, runner.planUsage, configuredProviders);
+    : shownAccountEngine && shownAccount !== 'default'
+      ? accountPlanUsage(runnerUsage, shownAccountEngine, shownAccount)
+      : sessionPlanUsage(shownProvider, runnerUsage, configuredProviders);
   // Where this session could move without changing CLI. Offered on the three routes that actually
   // carry a provider: a live session's config PATCH, the resume that revives an ended one, and the
   // draft's create — whose engine the hero above picks, so here too it is the same-runtime slice. A
@@ -7383,6 +7561,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   }).data;
   const serverRetryText = serverRetry?.text ?? '';
   const autoRetryText = retryText || serverRetryText;
+  // …and whether the server said there is nothing at all for a re-send to carry. The card swaps
+  // its verb for a continue then — and there is nothing to quote or to hand `send` as the reader's
+  // words, because the continue is the platform's own sentence (`CONTINUE_MESSAGE`).
+  const nothingToResend = !!serverRetry?.nothingToResend;
   // Whose words those are. Another Orbit session's are not the reader's to send again: through
   // `send` they would go out in the owner's name, signed by nobody. So the Retry asks the server to
   // re-send them as the automatic retry would — that session's, with the request they were, charged
@@ -7470,31 +7652,53 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // The same retry, plus the pending auto-retry, for the quota / provider-error card. Disarming
   // is a plain fire-and-forget: the detail query refetches on settle, and the card's own
   // countdown is driven by the value it reads back.
+  // Whose outage the card names. The session's own provider — deliberately NOT `shownProvider`,
+  // which carries the composer's pending pick: choosing another provider for the next turn (which
+  // is exactly what a person does when a quota is spent) renamed the provider that had actually
+  // failed, so a card about claude's spent window read as deepseek's. `detailForSelected` first,
+  // because a pick just made is the stale thing here, not the detail.
+  const outageProvider = detailForSelected?.provider ?? selected?.provider ?? 'claude';
   const autoRetryHelp: AutoRetryHelp = useMemo(
     () => ({
-      provider: shownProvider,
+      provider: outageProvider,
       runnerName: runner.name,
       retryAt: detailForSelected?.retryAt ?? null,
       attempts: detailForSelected?.retryAttempts ?? 0,
       onRetry:
-        autoRetryText && !selectedTrashed && !selectedMissing
-          ? retryFromSession && selectedId
+        !selectedTrashed && !selectedMissing && selectedId && (nothingToResend || autoRetryText)
+          ? nothingToResend
             ? () => {
-                if (retryInFlight) return;
-                resendFromSessionMutate(selectedId);
-              }
-            : () => {
+                // Nothing of the reader's to send, so the press sends the platform's continue in
+                // their name — the words the note under the button quotes. Through `send`, so the
+                // composer's pick travels with it and a refusal arrives as any send's does.
                 if (retryInFlight) return;
                 sendMutate({
-                  content: autoRetryText,
+                  content: CONTINUE_MESSAGE,
                   images: [],
-                  attachmentIds: retry.attachmentIds,
+                  attachmentIds: [],
                   source: 'autoRetry',
                 });
               }
+            : retryFromSession
+              ? () => {
+                  if (retryInFlight) return;
+                  resendFromSessionMutate(selectedId);
+                }
+              : () => {
+                  if (retryInFlight) return;
+                  sendMutate({
+                    content: autoRetryText,
+                    images: [],
+                    attachmentIds: retry.attachmentIds,
+                    source: 'autoRetry',
+                  });
+                }
           : undefined,
       retryDisabled: retryInFlight,
-      retryText: autoRetryText,
+      // Never the continue: the card states that sentence under its own button, and a "Will
+      // re-send:" quote would read as the reader's own words.
+      retryText: nothingToResend ? '' : autoRetryText,
+      nothingToResend,
       // The card's own Retry goes through `send`, so its refusal arrives in the same handler as a
       // typed message's. Handed to the card rather than left to the toast: it is the card's offer
       // to re-send that has stopped being true, so the card is where that has to show.
@@ -7521,11 +7725,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         : undefined,
     }),
     [
-      shownProvider,
+      outageProvider,
       runner.name,
       detailForSelected?.retryAt,
       detailForSelected?.retryAttempts,
       autoRetryText,
+      nothingToResend,
       retryInFlight,
       retryFromSession,
       runConflict?.conflict,
@@ -8154,10 +8359,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     </span>
   );
   // The runner's accounts of the session's engine, listed under it in the Provider submenu for a
-  // session on built-in Codex or Claude to move between — each with its own quota, as the New Session
-  // picker lists them. Only with two or more (one is nothing to choose), and for a session only on a
-  // runner that carries a conversation from one account to another: an older one would resume it
-  // where it was. A draft has no conversation to carry, so it starts on any of them.
+  // session on built-in Codex, Claude or Antigravity to move between — each with its own quota, as the
+  // New Session picker lists them. Only with two or more (one is nothing to choose), and for a session
+  // only on a runner that carries a conversation from one account to another: an older one would resume
+  // it where it was. A draft has no conversation to carry, so it starts on any of them.
   const accountRows =
     shownAccountEngine && (!selected || runner.capabilities?.includes(ACCOUNT_MOVE_CAPABILITY[shownAccountEngine]))
       ? (providerSwitchChoices.find((choice) => choice.slug === shownAccountEngine)?.accounts ?? [])
@@ -8171,10 +8376,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const sessionAutomatic =
     automaticHere &&
     (!selected
-      ? !(shownAccountEngine === 'claude' ? draftClaudeAccount : draftCodexAccount)
+      ? !draftAccountOf(shownAccountEngine)
       : pendingResumeProvider
       ? !pendingResumeAccount || pendingResumeAccount === AUTOMATIC_ACCOUNT
-      : !(shownAccountEngine === 'claude' ? detailForSelected?.claudeAccountPinned : detailForSelected?.codexAccountPinned));
+      : !detailForSelected?.[ACCOUNT_PINNED_FIELD[shownAccountEngine]]);
   // Another built-in engine's accounts, listed under it as the engine's own are: a switch
   // onto that engine can land on any of them. For a session, on a runner that carries a conversation
   // between them.
@@ -8243,8 +8448,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               // engine the session is on, the ones it moves between (switchAccount); under another,
               // the ones a switch onto that engine lands on (pickProvider with the account).
               const here = choice.slug === shownAccountEngine;
-              const engine: AccountEngine | null =
-                choice.slug === 'codex' || choice.slug === 'claude' ? choice.slug : null;
+              const engine: AccountEngine | null = isAccountEngine(choice.slug) ? choice.slug : null;
               const accounts = here ? (accountsOffered ? accountRows : []) : engine && !blocked ? accountRowsFor(engine) : [];
               const automatic =
                 accounts.length > 0 && (here ? automaticHere : !!engine && automaticOfferedOn(engine, shownWorkspaceRow));
@@ -8542,19 +8746,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             </button>
             <span className="session-folder-titles">
               <span className="session-folder-title">{pageProjectTitle}</span>
-              <span className="session-folder-workspace">{SESSION_PROJECT_COPY.pageSubtitle(projectMembers.length)}</span>
+              <span className="session-folder-workspace">
+                {loadingSessions && projectMembers.length === 0
+                  ? SESSION_PROJECT_COPY.pageSubtitleLoading
+                  : SESSION_PROJECT_COPY.pageSubtitle(projectMembers.length)}
+              </span>
             </span>
-            <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: [
-              { key: 'project', label: SESSION_PROJECT_COPY.openProject,
-                onClick: () => navigate(`/projects/${encodeId(openProjectId)}`) },
-              { key: 'coordinator', label: SESSION_PROJECT_COPY.openCoordinator, disabled: !pageMenuCoordinator,
-                onClick: () => pageMenuCoordinator && navigateWithPaneSlide('push', () =>
-                  navigate(sessionPath(pageMenuCoordinator.id), { state: stampFromList() })) },
-            ] }}>
-              <button type="button" className="session-kebab session-folder-head-more" aria-label="Project actions">
-                <MoreOutlined />
-              </button>
-            </Dropdown>
+            {/* The page's one action, as iOS's toolbar has it: the project's own page. The
+                coordinator is the first row below, so it needs no entry of its own up here. */}
+            <button type="button" className="session-kebab session-folder-head-more session-project-page-open"
+              aria-label={SESSION_PROJECT_COPY.openProject} title={SESSION_PROJECT_COPY.openProject}
+              onClick={() => navigate(`/projects/${encodeId(openProjectId)}`)}>
+              <AppstoreOutlined />
+            </button>
           </div>
         ) : openFolder ? (
           // A folder's page: back to the workspace's list, the folder (and the workspace it is in),
@@ -8616,24 +8820,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         {openFolder && folderEdit?.id === openFolder.id && folderEdit.error && (
           <div className="session-folder-error">{folderEdit.error}</div>
         )}
-        {openProjectId && (
-          <div className="session-project-page-progress">
-            {pageTaskCounts && (
-              <>
-                <SessionProjectProgressBar counts={pageTaskCounts} runningCount={pageRunningCount} />
-                <span>{SESSION_PROJECT_COPY.pageProgress(pageTaskCounts.done, pageTaskCounts.total, pageRunningCount)}</span>
-              </>
-            )}
-            <a href={`/projects/${encodeId(openProjectId)}`} aria-label={SESSION_PROJECT_COPY.openProject}
-              onClick={(e) => { e.preventDefault(); navigate(`/projects/${encodeId(openProjectId)}`); }}>↗</a>
-          </div>
-        )}
-        {/* The merge into main: its card lives here, under the progress strip (owner decision
-            2026-10-06), and the coordinator's conversation keeps a line about it. */}
-        {openProjectId && (
-          <ProjectMergeStrip key={`merge:${openProjectId}`} projectId={openProjectId}
-            coordinatorSessionId={pageCoordinator?.id ?? null} />
-        )}
         {!openProjectId && <div className={`session-new ${composing ? 'active' : ''}`} onClick={goNew}>
           <PlusOutlined />
           <span>New session</span>
@@ -8663,9 +8849,56 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           ref={listRef}
           onScroll={onSessionListScroll}
         >
+          {/* The project's progress card and its merge into main lead the list and scroll with it, as
+              on iOS (docs/mocks/project-sessions-page-web); the coordinator's conversation keeps
+              a line about the merge. */}
+          {openProjectId && (
+            <div className="session-project-page-card">
+              <div className="session-project-page-progress">
+                {pageTaskCounts ? (
+                  <>
+                    <SessionProjectProgressBar counts={pageTaskCounts} runningCount={pageRunningCount} />
+                    <span>
+                      {pageNotStarted
+                        ? SESSION_PROJECT_COPY.pageNotStarted(pageTaskCounts.total)
+                        : SESSION_PROJECT_COPY.pageProgress(pageTaskCounts.done, pageTaskCounts.total, pageRunningCount)}
+                    </span>
+                  </>
+                ) : pageStatus ? <span>{SESSION_PROJECT_COPY.pageStatus(pageStatus)}</span> : null}
+              </div>
+              {pageStart ? <SessionProjectStartRow start={pageStart} projectId={openProjectId} /> : null}
+              <SessionProjectLanding projectId={openProjectId}
+                onOpen={() => navigate(`/projects/${encodeId(openProjectId)}`)} />
+            </div>
+          )}
+          {openProjectId && (
+            <ProjectMergeStrip key={`merge:${openProjectId}`} projectId={openProjectId}
+              onOpenCoordinator={pageCoordinator ? () => navigateWithPaneSlide('push', () =>
+                navigate(sessionPath(pageCoordinator.id), { state: stampFromList() })) : null} />
+          )}
           {openProjectId
-            ? projectMembers.length === 0 && !loadingSessions &&
-              <div className="chat-note">{projectSessionsQ.isError || completedProjectSessionsQ.isError ? 'Couldn’t load project sessions.' : 'No sessions in this project.'}</div>
+            ? projectMembers.length === 0 && !loadingSessions && (
+              <div className="session-project-empty">
+                {pageSessionsError ? (
+                  <>
+                    <ExclamationCircleOutlined className="session-project-empty-icon" />
+                    <b>{SESSION_PROJECT_COPY.pageUnread}</b>
+                    <span>{pageSessionsError.message}</span>
+                    <button type="button" className="session-project-empty-retry" onClick={() => {
+                      void projectSessionsQ.refetch();
+                      void completedProjectSessionsQ.refetch();
+                    }}>
+                      {SESSION_PROJECT_COPY.retry}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <MessageOutlined className="session-project-empty-icon" />
+                    <b>{SESSION_PROJECT_COPY.pageEmpty}</b>
+                  </>
+                )}
+              </div>
+            )
             : openFolder
             ? listedSessions.length === 0 &&
               !loadingSessions && <div className="chat-note">No sessions in this folder.</div>
@@ -8774,8 +9007,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 }
                 const actionSession = selectedSession?.id === s.id ? selectedSession : s;
                 const memberView = sessionRowView(actionSession);
-                const swipeActions = sessionSwipeActions(memberView);
-                const swipeSizes = swipeWidths(memberView);
+                const movable = sessionMovable(s);
+                const swipeActions = sessionSwipeActions(memberView, movable);
+                const swipeSizes = swipeWidths(memberView, movable);
                 const canCompleteRow = sessionCapabilityOf(actionSession, 'canComplete', true);
                 const canRestoreRow = sessionCapabilityOf(actionSession, 'canRestore', true);
                 // Open and Completed rows open their transcript; only
@@ -8828,7 +9062,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       ...swipeActions.leading.map(menuItem),
                       { type: 'divider' },
                       menuItem('share'),
-                      ...(!s.projectMembership || s.projectMembership.role === 'COORDINATOR' ? [menuItem('move')] : []),
+                      ...(movable ? [menuItem('move')] : []),
                       { type: 'divider' },
                       menuItem('delete'),
                     ];
@@ -8856,6 +9090,25 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     onTouchEnd={onRowTouchEnd}
                     onTouchCancel={onRowTouchCancel}
                   >
+                    {isMobile && pressMenu?.id === s.id && (
+                      <Dropdown
+                        open
+                        trigger={['click']}
+                        placement="bottomLeft"
+                        classNames={{ root: 'session-row-menu' }}
+                        onOpenChange={(open) => { if (!open) setPressMenu(null); }}
+                        menu={{
+                          items: menuItems,
+                          onClick: ({ key, domEvent }) => {
+                            domEvent.stopPropagation();
+                            setPressMenu(null);
+                            runSwipeAction(key as SwipeAction, s);
+                          },
+                        }}
+                      >
+                        <span className="session-press-anchor" style={{ left: pressMenu.x, top: pressMenu.y }} />
+                      </Dropdown>
+                    )}
                     {isMobile &&
                       (['leading', 'trailing'] as const).map((side) => (
                         <div
@@ -9559,14 +9812,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   onViewTasks={(createdTasks.data?.total ?? 0) > 0 ? viewCreatedTasks : undefined}
                 />
               )}
-              {/* The other end of that question: the work filed under this project has met every
-                  criterion it states and no task under it is IN_PROGRESS, so is the project done?
-                  Drawn from the
-                  project page's own `['project', id]` read and pressed straight at the status door
-                  with the browser's credential — the one shape that door accepts from a
-                  conversation. Keyed by the session, because whether it was delivered belongs to
-                  this conversation, and by a key none of its siblings carries, for the reason the
-                  evidence card's note above gives. */}
+              {/* The owner's end of the close-out, and the only card this slot draws since the
+                  owner's ruling of 2026-10-07 04:20Z took "Why is this project not done?" out of
+                  the conversation: "Is this project done?" while the coordinator has asked (or the
+                  row says Record as done…), and the receipt in its place once it is recorded. A
+                  project nobody has asked about draws nothing here — its gaps and the entries that
+                  act on them are the project page's Open items row and the Needs you hint. Keyed
+                  by the session, because whether it was delivered belongs to this conversation,
+                  and by a key none of its siblings carries, for the reason the evidence card's
+                  note above gives. */}
               {selected && selectedId && !selectedTrashed && (
                 <SessionProjectSettlementCard
                   key={`settlement:${selectedId}`}
@@ -9576,7 +9830,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       || selectedSession?.projectMembership?.role === 'COORDINATOR'
                   }
                   waitingKind={selectedSession?.waitingKind ?? null}
-                  onDelegate={delegateProjectSettlement}
                 />
               )}
               {selected &&
@@ -10460,15 +10713,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             {shownPlanUsage && (
               <PlanUsageIndicator
                 usage={shownPlanUsage}
-                // Which of the runner's Codex or Claude accounts this quota is, named inside the popover
-                // rather than beside the gauge, where a phone's toolbar has no room for an email. A
-                // draft names the one it would start on.
+                // Which of the runner's Codex, Claude or Antigravity accounts this quota is, named inside
+                // the popover rather than beside the gauge, where a phone's toolbar has no room for an
+                // email. A draft names the one it would start on.
                 account={
                   shownAccountEngine && shownAccountLabel
                     ? {
                         label: shownAccountLabel,
                         ...(!selectedId &&
-                        !(shownAccountEngine === 'claude' ? draftClaudeAccount : draftCodexAccount) &&
+                        !draftAccountOf(shownAccountEngine) &&
                         automaticOfferedOn(shownAccountEngine, pickedWorkspace)
                           ? { note: 'Automatic — the account whose quota resets soonest' }
                           : selectedId && sessionAutomatic && accountsOffered

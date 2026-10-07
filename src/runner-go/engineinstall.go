@@ -397,9 +397,19 @@ func engineAuthPreflight(bin string, agentEnv map[string]string) string {
 	}
 	// A Google sign-in is checked by the session's own agy as it starts, which can tell a sign-in it
 	// refuses from a network it cannot reach (antigravity_google_session.go); asking /usage here first
-	// could not, and would put a network round trip in front of every session.
-	if bin == providerAntigravity && antigravityGoogleSignInSaved() {
-		return ""
+	// could not, and would put a network round trip in front of every session. A session dispatched
+	// onto an added account runs on that account's sign-in or not at all — never on a key.
+	if bin == providerAntigravity {
+		dir, err := antigravitySessionGoogleDir(agentEnv)
+		if err != nil {
+			return "Failed to authenticate: " + err.Error()
+		}
+		if antigravityGoogleSignInSavedIn(dir) {
+			return ""
+		}
+		if def, err := filepath.Abs(antigravityGoogleDir()); err == nil && dir != def {
+			return antigravityAccountSignedOutMessage
+		}
 	}
 	path, ok := lookEngine(bin)
 	if !ok {
@@ -419,7 +429,9 @@ func engineAuthPreflight(bin string, agentEnv map[string]string) string {
 // spawn that is signed out.
 func sessionEngineAuth(bin, path string, agentEnv map[string]string) authState {
 	kind, ok := accountSlotKindFor(bin)
-	if !ok {
+	// An Antigravity session reaches this only on Default without a Google sign-in, where the runner's
+	// own GEMINI_API_KEY is what it runs on (engineAuthPreflight): the engine's own question.
+	if !ok || bin == providerAntigravity {
 		return probeAuth(bin, path)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

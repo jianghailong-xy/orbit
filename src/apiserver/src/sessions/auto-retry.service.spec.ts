@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
-import type { PlanUsageSnapshot } from '@orbit/shared';
+import { CONTINUE_MESSAGE, type PlanUsageSnapshot } from '@orbit/shared';
 import { encryptSecret } from '../providers/provider-crypto';
 import { QueueService } from '../queue/queue.service';
 import { AutoRetryService, RetryClaimLost } from './auto-retry.service';
@@ -720,10 +720,15 @@ test('backs off and stays armed when the resume itself fails', async () => {
   );
 });
 
-test('does not re-send when there is nothing to re-send', async () => {
+test('a session with nothing of anybody’s to re-send is continued, not re-sent', async () => {
+  // No records at all: nothing of the person's, and no reply or confirmation turn of the failure's
+  // own kind either. The continue is the one turn this sweep writes for nobody (CONTINUE_MESSAGE,
+  // @orbit/shared) — it is sent on the arm the card carries, whose switch states the sentence and is
+  // the whole opt-out, and leaving the session parked instead is what threw away the conversation.
   const { service, resumed, rows } = makeService([row({ numTurns: 3 })], { events: [] });
   await service.sweep(NOW);
-  assert.deepEqual(resumed, [], 'inventing a "continue" would be writing in the user’s voice');
+  assert.deepEqual(resumed, [{ id: 'session-1', content: CONTINUE_MESSAGE }],
+    'the session was left sitting instead of being picked back up');
   assert.equal(rows[0].retryAt, null);
 });
 
@@ -856,7 +861,7 @@ test('the sender re-sent is the sender of the words re-sent, not of the steer th
   assert.deepEqual(resumedWith.map((call) => Object.keys(call.opts as object)), [['participateSendTransaction']]);
 });
 
-test('a failed background job wake re-sends nothing, least of all the message before it', async () => {
+test('a failed background job wake continues the session, never the message before it', async () => {
   // The wake turn carries no words (runner-api/background-job-wake.ts); its echo is the control
   // plane's note. The only thing that tells it from a turn the person sent with no words is its id.
   const block = '<background-job-wake>\n  bgj_0123456789ab｜watch｜gh run watch 42｜ended｜failed｜exit code 1\n</background-job-wake>';
@@ -871,7 +876,8 @@ test('a failed background job wake re-sends nothing, least of all the message be
 
   const wake = failedAfter('bg-wake:bgj_0123456789ab:exit');
   await wake.service.sweep(NOW);
-  assert.deepEqual(wake.resumed, [], 'the retry of a failed wake re-sent the message the person sent before it');
+  assert.deepEqual(wake.resumed, [{ id: 'session-1', content: CONTINUE_MESSAGE }],
+    'the retry of a failed wake stepped back to the message the person sent before it');
 
   // The paired positive: the same wordless turn, when it is no wake, steps back to that message.
   const wordless = failedAfter('0f6a9d4e-5b1c-4e2a-9d3f-7c8b6a5e4d21');
@@ -882,7 +888,7 @@ test('a failed background job wake re-sends nothing, least of all the message be
 // Production, 2026-09-25: a workflow finished while the session sat answered, the turn Claude Code
 // started for its notification hit a 429, and the retry re-sent the person's already-answered
 // message four times over 25 minutes. A turn nobody sent carries no turn id on its events.
-test('a background turn failing after the person was answered re-sends nothing', async () => {
+test('a background turn failing after the person was answered continues rather than re-sending', async () => {
   const RATE_LIMITED =
     "API Error: Request rejected (429) · This request would exceed your account's rate limit.";
   const afterAnswer = (answer: string) => makeService([row()], {
@@ -899,10 +905,12 @@ test('a background turn failing after the person was answered re-sends nothing',
 
   const answered = afterAnswer('Here is the review.');
   await answered.service.sweep(NOW);
-  assert.deepEqual(answered.resumed, [], 'the retry re-sent a message its own turn had answered');
-  assert.equal(answered.rows[0].retryAt, null, 'disarmed as nothing to re-send');
-  assert.deepEqual(await answered.service.retryMessage('owner-1', 'session-1'), { text: '' },
-    'the card offers no button for it either');
+  assert.deepEqual(answered.resumed, [{ id: 'session-1', content: CONTINUE_MESSAGE }],
+    'the retry re-sent a message its own turn had answered');
+  assert.equal(answered.rows[0].retryAt, null, 'the claimed retry was not cleared');
+  assert.deepEqual(await answered.service.retryMessage('owner-1', 'session-1'),
+    { text: '', nothingToResend: true },
+    'the card must be told to offer Continue rather than a dead Retry');
 
   // The paired positive: the message's own turn died on the quota, so it is still owed its retry
   // however many background turns failed after it.

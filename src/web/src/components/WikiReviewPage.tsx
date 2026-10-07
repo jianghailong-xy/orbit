@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   AimOutlined,
+  ArrowLeftOutlined,
   CheckOutlined,
   DownOutlined,
   GlobalOutlined,
@@ -146,8 +147,11 @@ export function WikiReviewPage({ spaceSlug }: { spaceSlug: string | null }) {
 
   return (
     <div className="rv-page">
-      <div className="wk-crumb">
-        <Link to={spaceSlug ? `/wiki/${spaceSlug}` : '/wiki'}>{WIKI_TITLE}</Link>
+      <div className="wk-crumb wk-crumb--back">
+        <Link to={spaceSlug ? `/wiki/${spaceSlug}` : '/wiki'}>
+          <ArrowLeftOutlined className="back" />
+          {WIKI_TITLE}
+        </Link>
         <RightOutlined className="ic" />
         <span>{WIKI_REVIEW_TITLE}</span>
       </div>
@@ -269,8 +273,9 @@ function ReviewCard({
   // the kind it retires are the entry's.
   const target = useQuery({ ...wikiEntryQuery(op.entryId ?? null) });
   const kind = (draft.kind as string) ?? (target.data?.kind ?? null);
+  // Until that read lands, or when it fails, the title Review's own read carries for the entry.
   const title =
-    typeof draft.title === 'string' ? draft.title : (target.data?.title ?? null);
+    typeof draft.title === 'string' ? draft.title : (target.data?.title ?? op.entryTitle ?? null);
   const kindWord = kind ? wikiKindWord(kind) : WIKI_ENTRY_WORD;
 
   const write = useWikiWrite((decisions: WikiDecision[]) => decideWikiChangeset(changeset.id, decisions));

@@ -1,8 +1,9 @@
 import SwiftUI
 import OrbitKit
 
-/// What this session is waiting on, in the console above the composer: the live watches that will
-/// resume it. This is what a monitoring session shows instead of the "Background process running" a
+/// What this session is waiting on beyond its tasks, in the console above the composer: the live
+/// watches that will resume it and wait on something that is not a task (a task it waits on is an
+/// eye in `CreatedTasksCard`). This is what a monitoring session shows instead of the "Background process running" a
 /// polling shell used to leave behind; the Background processes tray below keeps the real shells and
 /// dev servers (contract §9.2). Drawn as the band's other cards are (`BackgroundTrayView`,
 /// `CreatedTasksCard`): one line, and opened, a list.
@@ -31,7 +32,8 @@ struct WatchingCardStack: View {
     private static let listFloor: CGFloat = 60
 
     var body: some View {
-        if let store = model.watches, let summary = store.summary(for: sessionID) {
+        // Only what waits beyond tasks: a task the session waits on is an eye in its Tasks card.
+        if let store = model.watches, let summary = store.summary(for: sessionID)?.beyondTasks {
             // The "Not checked for" reminder is relative to now: redraw between fetches so it
             // doesn't freeze.
             TimelineView(.periodic(from: .now, by: 30)) { context in

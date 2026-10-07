@@ -8,8 +8,10 @@ import OrbitKit
 
 extension AppModel {
     /// The workspace the space's maintenance runs in, as this client holds it.
-    private var wikiMaintenanceAgent: Agent? {
-        guard let id = wiki?.currentSpace?.settings?.maintenance?.workspaceId else { return nil }
+    private var wikiMaintenanceAgent: Agent? { wikiMaintenanceAgent(of: wiki?.currentSpace) }
+
+    private func wikiMaintenanceAgent(of space: WikiSpace?) -> Agent? {
+        guard let id = space?.settings?.maintenance?.workspaceId else { return nil }
         return agents?.items.first { PublicID.storageKey($0.id) == PublicID.storageKey(id) }
     }
 
@@ -18,8 +20,11 @@ extension AppModel {
 
     /// Whether that runner is online — nil when unknown. A job whose run has not started on a runner that is
     /// offline is held (owner's call 2026-09-29), as the web's `useWikiMaintenanceWhere` reads it.
-    var wikiMaintenanceRunnerOnline: Bool? {
-        guard let runner = wikiMaintenanceRunnerID, let online = agents?.runnerOnline else { return nil }
+    var wikiMaintenanceRunnerOnline: Bool? { wikiMaintenanceRunnerOnline(of: wiki?.currentSpace) }
+
+    /// The same of any space: Activity says what waits in the other spaces' plans too.
+    func wikiMaintenanceRunnerOnline(of space: WikiSpace?) -> Bool? {
+        guard let runner = wikiMaintenanceAgent(of: space)?.runnerId, let online = agents?.runnerOnline else { return nil }
         return online.first { PublicID.storageKey($0.key) == PublicID.storageKey(runner) }?.value
     }
 
@@ -66,6 +71,7 @@ struct WikiDocScreen: View {
             .task {
                 await wiki.loadDoc(address.slug)
                 await wiki.loadDocsDirectory()
+                if wiki.entries.isEmpty { await wiki.loadEntries() }
             }
             .refreshable { await wiki.loadDoc(address.slug) }
             .sheet(isPresented: $contentsShown) {
@@ -82,10 +88,10 @@ struct WikiDocScreen: View {
         return (docs.written, docs.total)
     }
 
-    /// The space's entries the home read, by id: the summaries under the entries the quotes came through.
+    /// The space's newest entries, by id: the summaries under the entries the quotes came through.
     private func summaries(_ wiki: WikiModel) -> [String: String] {
         var out: [String: String] = [:]
-        for entry in wiki.home?.entries ?? [] { if let summary = entry.summary { out[PublicID.storageKey(entry.id)] = summary } }
+        for entry in wiki.entries { if let summary = entry.summary { out[PublicID.storageKey(entry.id)] = summary } }
         return out
     }
 
