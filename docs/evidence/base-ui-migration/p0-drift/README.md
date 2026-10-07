@@ -189,7 +189,7 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 
 ## main 漂移参考层
 
-**位置**：[reference/registry.json](reference/registry.json) 和 `reference/screenshots/{project}/{name}.png`，共 121 张。
+**位置**：[reference/registry.json](reference/registry.json) 和 `reference/screenshots/{project}/{name}.png`，共 131 张。
 
 | 组 | 截图 | 张数 | mainCommits | 生成树（generatedFrom） |
 | --- | --- | ---: | --- | --- |
@@ -197,6 +197,7 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 | 项目页 | project-overview、project-graph（8 项目），project-graph-fullscreen、breakpoint-639/641-graph（桌面） | 28 | `93d3ec58…` | `93d3ec580`（full2-93d3ec580） |
 | 任务面板与设置 | task-detail、task-action-hover/focus/menu、task-share-dialog、settings、settings-saved（8 项目），breakpoint-599/601-dialog（桌面） | 64 | `4088d37e…` | `4088d37e6`（full2-4088d37e6） |
 | Wiki 961px 暗色 | breakpoint-961-wiki（chromium-dark-desktop） | 1 | `e64d0c72…` | `e64d0c72a`（m5-e64d0c72a） |
+| 资料页（第 2 批，A6） | profile（8 项目），profile-validation（WebKit 桌面 2 个项目） | 10 | `d233a6cd…` | `d233a6cd0`（full-maint-d233a6cd0） |
 
 **每条登记的字段**：
 
@@ -217,7 +218,9 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 - 这些 main 树都在 P2.3 晋升（`90e749e72`）之前，不含 B1。
 - 会话组的生成树 `f5bdd7fd3` 含 P1.1/P1.2 的晋升，项目页的 `93d3ec580` 含 P2.1 的晋升。这些晋升提交本身经过同样的运行，确认没有改变对应截图。
 
-**未登记**：B1 独有的 profile-validation 6 张，以及其余 125 张，仍然对照 P0.2。
+**未登记**：其余 121 张仍然对照 P0.2。第 1 批时只有 B1 差异的 profile-validation 6 张，现在另有 main `d233a6cd0` 的改动，它们按第 7 条另行登记。
+
+**第 2 批**：归因、同环境证明和登记经过见 [p0-drift-2](../p0-drift-2/README.md)。
 
 ## 「已接受的迁移差异」层
 

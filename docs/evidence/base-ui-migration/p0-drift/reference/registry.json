@@ -148,6 +148,26 @@
       ]
     },
     {
+      "screenshot": "chromium-dark-desktop/profile.png",
+      "sha256": "02716fdf772ec04fe21d643e95ab2fe8d696ccb946d7c90233eae66048f5439a",
+      "p0Baseline": "b95f566baa63e499c5d51cf18da26c1ef82fabbb419ae64c76e6842a3fb34914",
+      "mainCommits": [
+        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+      ],
+      "generatedFrom": {
+        "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-maint-d233a6cd0"
+      },
+      "projectLine": [
+        "dd1d197ef0dde7a6e2693a761401778138426bb5"
+      ],
+      "group": "profile page",
+      "change": [
+        "A6"
+      ]
+    },
+    {
       "screenshot": "chromium-dark-desktop/project-graph-fullscreen.png",
       "sha256": "26778b718ba9190d14ba61299bece6421e318f3ceb88ae483b32057e250b28af",
       "p0Baseline": "05524ffe05f67dc8e51b133b8e56c4232f36f9654ad1c45865ecb2218a5a1724",
@@ -463,6 +483,26 @@
       ]
     },
     {
+      "screenshot": "chromium-dark-phone/profile.png",
+      "sha256": "5a266cd0deb90ba08e9bd2503f7ccc2b7ab44a87b225141d513078815a7b6020",
+      "p0Baseline": "7fca6448b3d3ed994ee8ad010f7e293dcd0e0d39ca8382bd24ae3b618a6dd906",
+      "mainCommits": [
+        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+      ],
+      "generatedFrom": {
+        "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-maint-d233a6cd0"
+      },
+      "projectLine": [
+        "dd1d197ef0dde7a6e2693a761401778138426bb5"
+      ],
+      "group": "profile page",
+      "change": [
+        "A6"
+      ]
+    },
+    {
       "screenshot": "chromium-dark-phone/project-graph.png",
       "sha256": "e4eacd8d6f1f434a1b99f982fd58beddfbf115cd51082843a62f855b70d6f296",
       "p0Baseline": "1be261cda4363a0a0d509f7a65193964c5557df3f3ad7cb28d622b9e6068be31",
@@ -766,6 +806,26 @@
       "change": [
         "A1",
         "A2"
+      ]
+    },
+    {
+      "screenshot": "chromium-light-desktop/profile.png",
+      "sha256": "c212b90da375854b20dc4ac8b41e6dcd1d0d6ba292b90a4968606321e1e91e32",
+      "p0Baseline": "bee5cfd83eb10740b16f7ecacf90e4f6c41d0deef7706bb22959d69df0af115a",
+      "mainCommits": [
+        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+      ],
+      "generatedFrom": {
+        "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-maint-d233a6cd0"
+      },
+      "projectLine": [
+        "dd1d197ef0dde7a6e2693a761401778138426bb5"
+      ],
+      "group": "profile page",
+      "change": [
+        "A6"
       ]
     },
     {
@@ -1084,6 +1144,26 @@
       ]
     },
     {
+      "screenshot": "chromium-light-phone/profile.png",
+      "sha256": "4b966dec5ba6f0ccd0a48719d9682fc2758c7656d2dcfb956e9fa000fb9a880f",
+      "p0Baseline": "499301e9ac2f42611a2aa6b8950da630d2b99910716e4e20f47d485485e8ba04",
+      "mainCommits": [
+        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+      ],
+      "generatedFrom": {
+        "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-maint-d233a6cd0"
+      },
+      "projectLine": [
+        "dd1d197ef0dde7a6e2693a761401778138426bb5"
+      ],
+      "group": "profile page",
+      "change": [
+        "A6"
+      ]
+    },
+    {
       "screenshot": "chromium-light-phone/project-graph.png",
       "sha256": "e607f487ff68030704825e83535601e49155e5334a0d8793ebbadce6e8cfd90c",
       "p0Baseline": "8a10c5b4b1c4e0cb92aedb48acefa51e4762857466aba0172b695e29848d6e77",
@@ -1387,6 +1467,46 @@
       "change": [
         "A1",
         "A2"
+      ]
+    },
+    {
+      "screenshot": "webkit-dark-desktop/profile-validation.png",
+      "sha256": "52a0f5eb9e5e9a474dc8c828ac753791e27146e693e4f9f535bae273b7019a3e",
+      "p0Baseline": "99deef7f1461db0467cce09876082b2f5f8958d80090f528825dfd5d4ee82fc4",
+      "mainCommits": [
+        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+      ],
+      "generatedFrom": {
+        "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-maint-d233a6cd0"
+      },
+      "projectLine": [
+        "dd1d197ef0dde7a6e2693a761401778138426bb5"
+      ],
+      "group": "profile page",
+      "change": [
+        "A6"
+      ]
+    },
+    {
+      "screenshot": "webkit-dark-desktop/profile.png",
+      "sha256": "61b76afdf248cc30b2a1c9fca04da79a0cd2b37fac7dd4184bcc8eacaf9f10b2",
+      "p0Baseline": "7e602183d7575a135496b41e7cc2845c9ec5d37db6283ccd03a3a59b0c8911fc",
+      "mainCommits": [
+        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+      ],
+      "generatedFrom": {
+        "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-maint-d233a6cd0"
+      },
+      "projectLine": [
+        "dd1d197ef0dde7a6e2693a761401778138426bb5"
+      ],
+      "group": "profile page",
+      "change": [
+        "A6"
       ]
     },
     {
@@ -1705,6 +1825,26 @@
       ]
     },
     {
+      "screenshot": "webkit-dark-phone/profile.png",
+      "sha256": "c8a40a2b778c4dd00909bcbafc3230fc6e5847b9daeb032431774cb03ef68cb8",
+      "p0Baseline": "9790302ed85bb6d415885bf18199bcc3d3fc847687f8e32e8fae4712b37998bf",
+      "mainCommits": [
+        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+      ],
+      "generatedFrom": {
+        "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-maint-d233a6cd0"
+      },
+      "projectLine": [
+        "dd1d197ef0dde7a6e2693a761401778138426bb5"
+      ],
+      "group": "profile page",
+      "change": [
+        "A6"
+      ]
+    },
+    {
       "screenshot": "webkit-dark-phone/project-graph.png",
       "sha256": "b1f23376cf9ec3565b06a65ebfa095109ca1afe1e7c806e8b9824abc43592df4",
       "p0Baseline": "599d0af8e71a1c195530a42de9a0830ae58c59cacf5b64af8d729a2c09b0a7ef",
@@ -2008,6 +2148,46 @@
       "change": [
         "A1",
         "A2"
+      ]
+    },
+    {
+      "screenshot": "webkit-light-desktop/profile-validation.png",
+      "sha256": "93218ccee8fd996ba118008834cd9aba8da2f39f3267397403da2f6d9032fae4",
+      "p0Baseline": "9038001c0a8612c4d255d0c1b3ffa8b16d5653a6a172deeed466908daee70bca",
+      "mainCommits": [
+        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+      ],
+      "generatedFrom": {
+        "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-maint-d233a6cd0"
+      },
+      "projectLine": [
+        "dd1d197ef0dde7a6e2693a761401778138426bb5"
+      ],
+      "group": "profile page",
+      "change": [
+        "A6"
+      ]
+    },
+    {
+      "screenshot": "webkit-light-desktop/profile.png",
+      "sha256": "1ba88e058bf050bef54e3645b740af860b314e4a4e83e467f0f2f1fb4596fff2",
+      "p0Baseline": "0f8618857d899d8ae6d3bb72099706b19663b6796c6928345e972e6b0ba59272",
+      "mainCommits": [
+        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+      ],
+      "generatedFrom": {
+        "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-maint-d233a6cd0"
+      },
+      "projectLine": [
+        "dd1d197ef0dde7a6e2693a761401778138426bb5"
+      ],
+      "group": "profile page",
+      "change": [
+        "A6"
       ]
     },
     {
@@ -2323,6 +2503,26 @@
       "group": "task panel and settings",
       "change": [
         "A4"
+      ]
+    },
+    {
+      "screenshot": "webkit-light-phone/profile.png",
+      "sha256": "19d4e052db4726179df29fce1df55b4163df1d49e304f41a1d5d59dcde3bd8ae",
+      "p0Baseline": "7232da9dc15065c7dc14dd61352a6ba12a2251404541e475188dd3a16d26d8da",
+      "mainCommits": [
+        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+      ],
+      "generatedFrom": {
+        "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-maint-d233a6cd0"
+      },
+      "projectLine": [
+        "dd1d197ef0dde7a6e2693a761401778138426bb5"
+      ],
+      "group": "profile page",
+      "change": [
+        "A6"
       ]
     },
     {
