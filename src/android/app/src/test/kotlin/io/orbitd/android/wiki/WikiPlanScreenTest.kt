@@ -45,8 +45,8 @@ class WikiPlanScreenTest {
         return when (path) {
             "wiki/spaces" -> 200 to "[$space]"
             "wiki/spaces/sp1/plan" -> plan
-            "wiki/spaces/sp1/plan/versions" -> 200 to buildJsonObject { put("versions", WikiPlanFixture.plan.obj("versionRows").arr("versions")) }.toString()
-            "wiki/spaces/sp1/docs" -> 200 to WikiPlanFixture.shared.obj("docs").obj("directory").obj("read").toString()
+            "wiki/spaces/sp1/plan/versions" -> 200 to buildJsonObject { put("versions", WikiPlanFixture.plan.fobj("versionRows").farr("versions")) }.toString()
+            "wiki/spaces/sp1/docs" -> 200 to WikiPlanFixture.shared.fobj("docs").fobj("directory").fobj("read").toString()
             else -> null
         }
     }
@@ -187,9 +187,9 @@ class WikiPlanScreenTest {
         compose.waitForIdle()
         assertEquals(listOf("POST /api/wiki/spaces/sp1/plan/edits"), writes())
         val body = rig.body(rig.requests.first { it.method != HttpMethod.GET })!!
-        assertEquals(2, body.int("baseVersion"))
-        assertEquals("agent-tests", body.str("docSlug"))
-        assertEquals("测试与依赖", body.obj("doc").str("title"))
+        assertEquals(2, body.fint("baseVersion"))
+        assertEquals("agent-tests", body.fstr("docSlug"))
+        assertEquals("测试与依赖", body.fobj("doc").fstr("title"))
         assertFalse(body.toString(), body.toString().contains("\"position\""))
         assertEquals(WikiPlanCopy.draftSaved(3), WikiToast.text)
         compose.onAllNodesWithTag("wiki-plan-edit-sheet").assertCountEquals(0)

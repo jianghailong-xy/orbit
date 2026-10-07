@@ -16,48 +16,48 @@ import org.junit.Test
  * answers decodes, with a word this build has never heard of kept as it was sent rather than failing the page (closed
  * sets stay raw words here, where Swift reads them as `.unknown`). */
 class WikiPlanContractTest {
-    private val contract get() = WikiFixtures.contract
-    private val plan get() = contract.obj("plan")
-    private val userRoutes get() = contract.obj("agentSurface").obj("doors").obj("user").strings("routes").toSet()
-    private val maintenanceRoutes get() = contract.obj("agentSurface").obj("doors").obj("runner").strings("maintenanceRoutes").toSet()
+    private val contract get() = WikiSharedFiles.contract
+    private val plan get() = contract.fobj("plan")
+    private val userRoutes get() = contract.fobj("agentSurface").fobj("doors").fobj("user").fstrings("routes").toSet()
+    private val maintenanceRoutes get() = contract.fobj("agentSurface").fobj("doors").fobj("runner").fstrings("maintenanceRoutes").toSet()
 
     @Test fun theClosedSetsAreTheContracts() {
         // The section kinds the Edit sheets offer are the contract's, in its order, each with a name of its own.
-        assertEquals(plan.obj("sectionKinds").keys.toList(), wikiPlanSectionKinds)
+        assertEquals(plan.fobj("sectionKinds").keys.toList(), wikiPlanSectionKinds)
         wikiPlanSectionKinds.filter { it != "other" }.forEach { assertNotEquals(it, "Other", WikiDocCopy.sectionKind(it)) }
         // A version's three statuses are the page's three words; one a later server adds reads as a Draft.
         assertEquals(mapOf("draft" to "Draft", "confirmed" to "Confirmed", "superseded" to "Superseded"),
-            plan.obj("statuses").keys.associateWith { WikiPlanLogic.fromVersion(WikiPlanVersion("v", version = 1, status = it)).status.label })
+            plan.fobj("statuses").keys.associateWith { WikiPlanLogic.fromVersion(WikiPlanVersion("v", version = 1, status = it)).status.label })
         assertEquals("Draft", WikiPlanLogic.fromVersion(WikiPlanVersion("v", version = 1, status = "archived")).status.label)
         // The origins: the page names the owner's; anything else is a maintenance run's.
-        assertEquals(setOf("maintenance", "owner"), plan.obj("origins").keys)
+        assertEquals(setOf("maintenance", "owner"), plan.fobj("origins").keys)
         assertEquals("maintenance", WikiPlanLogic.fromVersion(WikiPlanVersion("v", version = 1, status = "draft")).origin)
-        assertEquals(setOf("pending", "accepted", "rejected"), plan.obj("proposals").obj("statuses").keys)
+        assertEquals(setOf("pending", "accepted", "rejected"), plan.fobj("proposals").fobj("statuses").keys)
         // The gate's four checks are the report's four rows.
-        assertEquals(plan.obj("gate").strings("checks").toSet(), WikiPlanLogic.gateOrder.toSet())
+        assertEquals(plan.fobj("gate").fstrings("checks").toSet(), WikiPlanLogic.gateOrder.toSet())
     }
 
     /** The owner's six routes are the user door's — and the Kotlin client calls exactly those; the runner door has the
      * maintenance run's three, none of which confirms or decides anything. */
     @Test fun theOwnersRoutesAreOnTheUserDoor() {
-        val routes = plan.obj("routes")
+        val routes = plan.fobj("routes")
         listOf("state", "versions", "version", "edit", "confirm", "decide").forEach { name ->
-            assertTrue("${routes.str(name)} is not a route the user door declares", routes.str(name) in userRoutes)
+            assertTrue("${routes.fstr(name)} is not a route the user door declares", routes.fstr(name) in userRoutes)
         }
         listOf("runnerState", "draft", "propose").forEach { name ->
-            val route = routes.str(name)
+            val route = routes.fstr(name)
             assertTrue("$route is not a maintenance route", route in maintenanceRoutes)
             assertFalse(route, route.contains("confirm") || route.contains("decide"))
         }
-        assertTrue(plan.obj("who").str("owner").contains("WIKI_OWNER_CHANNEL_ONLY"))
+        assertTrue(plan.fobj("who").fstr("owner").contains("WIKI_OWNER_CHANNEL_ONLY"))
         // What this client sends for each: the same routes, all on the user door.
         val called = clientRoutes { client ->
             client.plan("SP"); client.planVersions("SP"); client.planVersion("SP", 7)
             client.editPlan("SP", buildJsonObject {}); client.confirmPlan("SP", 7); client.decidePlanProposal("PR", accept = true)
             client.redraftPlan("SP", null)
         }
-        assertEquals(listOf("state", "versions", "version", "edit", "confirm", "decide").map { routes.str(it) } +
-            plan.obj("jobs").obj("routes").str("redraft"), called)
+        assertEquals(listOf("state", "versions", "version", "edit", "confirm", "decide").map { routes.fstr(it) } +
+            plan.fobj("jobs").fobj("routes").fstr("redraft"), called)
         called.forEach { assertTrue("$it is not a route the user door declares", it in userRoutes) }
         assertFalse(called.toString(), called.any { it.contains("/runner/") })
     }
@@ -65,10 +65,10 @@ class WikiPlanContractTest {
     /** The plan's jobs (contract `plan.jobs`): what the pages branch on is the contract's, and the owner's redraft is the
      * user door's route; the run's five are the runner door's maintenance routes. */
     @Test fun theJobsClosedSetsAndRoutesAreTheContracts() {
-        val jobs = plan.obj("jobs")
-        assertEquals(setOf("draft", "revise", "build"), jobs.obj("kinds").keys)
-        assertEquals(setOf("space_created", "owner"), jobs.obj("triggers").keys)
-        val states = jobs.obj("states").keys
+        val jobs = plan.fobj("jobs")
+        assertEquals(setOf("draft", "revise", "build"), jobs.fobj("kinds").keys)
+        assertEquals(setOf("space_created", "owner"), jobs.fobj("triggers").keys)
+        val states = jobs.fobj("states").keys
         assertEquals(setOf("queued", "held", "running", "succeeded", "failed"), states)
         // A draft is on its way while it is queued, held or running — never once it ended.
         assertEquals(setOf("queued", "held", "running"), states.filter { state ->
@@ -76,20 +76,20 @@ class WikiPlanContractTest {
         assertEquals(setOf("queued", "held", "running"), states.filter { state ->
             WikiPlanLogic.buildJob(WikiPlanState("sp", null, null, emptyList(), job("build", state))) != null }.toSet())
         // The server's two held reasons, and the runner offline, which only a client can see.
-        assertEquals(jobs.obj("held").strings("reasons"), WikiPlanLogic.Held.entries.filter { it != WikiPlanLogic.Held.RUNNER_OFFLINE }.map { it.name.lowercase() })
+        assertEquals(jobs.fobj("held").fstrings("reasons"), WikiPlanLogic.Held.entries.filter { it != WikiPlanLogic.Held.RUNNER_OFFLINE }.map { it.name.lowercase() })
         assertEquals(WikiPlanLogic.Held.MAINTENANCE_PROVIDER_UNUSABLE, WikiPlanLogic.held(job("draft", "held", """{"reason":"maintenance_provider_unusable"}"""), true))
         assertEquals(WikiPlanLogic.Held.NO_MAINTENANCE_WORKSPACE, WikiPlanLogic.held(job("draft", "held", """{"reason":"no_maintenance_workspace"}"""), true))
         // The rounds a draft gets: the card counts against the contract's three when a job does not say.
-        assertEquals(3, jobs.obj("rules").int("attemptsMax"))
+        assertEquals(3, jobs.fobj("rules").fint("attemptsMax"))
         val running = WikiPlanLogic.jobCard(WikiPlanJob.read(Json.parseToJsonElement(
             """{"id":"j","kind":"draft","state":"running","provider":"local-vllm","startedAt":"2026-09-29T07:00:00Z"}""")),
             Instant.parse("2026-09-29T08:00:00Z"), true, null, false, null)
         assertEquals("local-vllm · attempt 1 of 3 · started 1h ago", running?.text)
-        val routes = jobs.obj("routes")
-        assertTrue("the redraft is not a route of the user door", routes.str("redraft") in userRoutes)
-        listOf("context", "progress", "finish", "check", "materials").forEach { assertTrue("$it is not a maintenance route", routes.str(it) in maintenanceRoutes) }
+        val routes = jobs.fobj("routes")
+        assertTrue("the redraft is not a route of the user door", routes.fstr("redraft") in userRoutes)
+        listOf("context", "progress", "finish", "check", "materials").forEach { assertTrue("$it is not a maintenance route", routes.fstr(it) in maintenanceRoutes) }
         val refusals = contract["refusals"] as JsonArray
-        assertEquals(409, refusals.map { it.jsonObject }.first { it["code"].text() == "WIKI_PLAN_NO_JOB" }.int("httpStatus"))
+        assertEquals(409, refusals.map { it.jsonObject }.first { it["code"].text() == "WIKI_PLAN_NO_JOB" }.fint("httpStatus"))
     }
 
     /** The plan as the server answers it: the version in force, the draft, the pending proposals. */

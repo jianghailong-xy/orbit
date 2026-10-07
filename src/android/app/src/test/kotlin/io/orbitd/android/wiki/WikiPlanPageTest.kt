@@ -91,10 +91,10 @@ class WikiPlanPageTest {
     }
 
     @Test fun theVersionMenuListsEveryVersionAndPicksAnother() {
-        val rows = WikiPlanFixture.plan.obj("versionRows")
-        val failed = rows.obj("failed")
-        val versions = WikiPlanLogic.versionRows(rows.arr("versions").decode(kotlinx.serialization.builtins.ListSerializer(WikiPlanVersionSummary.serializer())),
-            failed.int("version") to failed["at"].text())
+        val rows = WikiPlanFixture.plan.fobj("versionRows")
+        val failed = rows.fobj("failed")
+        val versions = WikiPlanLogic.versionRows(rows.farr("versions").decode(kotlinx.serialization.builtins.ListSerializer(WikiPlanVersionSummary.serializer())),
+            failed.fint("version") to failed["at"].text())
         page("draftReady", versions = versions)
         compose.onNodeWithTag("wiki-plan-version-menu").performClick()
         compose.onNodeWithTag("wiki-plan-version:3").assertTextContains("v3 · Draft", substring = true)

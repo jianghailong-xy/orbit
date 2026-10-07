@@ -12,7 +12,7 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.*
 
 /** A shared file found by walking up from the test's working directory — never a skip: a fixture that moved fails here. */
-internal object WikiFixtures {
+internal object WikiSharedFiles {
     fun file(relative: String): File {
         val start = File(System.getProperty("user.dir") ?: ".").absoluteFile
         return generateSequence(start) { it.parentFile }.map { File(it, relative) }.firstOrNull { it.isFile }
@@ -25,38 +25,38 @@ internal object WikiFixtures {
     val contract: JsonObject by lazy { json("contracts/wiki.contract.json") }
 }
 
-internal fun JsonElement?.obj(key: String): JsonObject = (this as JsonObject)[key] as? JsonObject ?: throw AssertionError("no object `$key`")
-internal fun JsonElement?.arr(key: String): JsonArray = (this as JsonObject)[key] as? JsonArray ?: throw AssertionError("no array `$key`")
-internal fun JsonElement?.str(key: String): String = this[key].text() ?: throw AssertionError("no string `$key`")
-internal fun JsonElement?.strings(key: String): List<String> = arr(key).map { it.jsonPrimitive.content }
-internal fun JsonElement?.int(key: String): Int = this[key].integer() ?: throw AssertionError("no integer `$key`")
+internal fun JsonElement?.fobj(key: String): JsonObject = (this as JsonObject)[key] as? JsonObject ?: throw AssertionError("no object `$key`")
+internal fun JsonElement?.farr(key: String): JsonArray = (this as JsonObject)[key] as? JsonArray ?: throw AssertionError("no array `$key`")
+internal fun JsonElement?.fstr(key: String): String = this[key].text() ?: throw AssertionError("no string `$key`")
+internal fun JsonElement?.fstrings(key: String): List<String> = farr(key).map { it.jsonPrimitive.content }
+internal fun JsonElement?.fint(key: String): Int = this[key].integer() ?: throw AssertionError("no integer `$key`")
 internal fun <T> JsonElement.decode(serializer: KSerializer<T>): T = Wire.json.decodeFromJsonElement(serializer, this)
 
 /** The `plan` half of `wiki-docs.fixture.json` as the pages read it: its versions, proposals and jobs, and each named
  * state built the way the shared cases build it (OrbitKit `WikiPlanCopyParityTests.state`). */
 internal object WikiPlanFixture {
-    val shared: JsonObject get() = WikiFixtures.docs
-    val plan: JsonObject get() = shared.obj("plan")
-    val now get() = RelativeTime.parse(shared.str("now"))!!
-    val zone: java.time.ZoneId get() = java.time.ZoneId.of(shared.str("timeZone"))
-    val directory: WikiDocsDirectory get() = shared.obj("docs").obj("directory").obj("read").decode(WikiDocsDirectory.serializer())
-    val proposals: List<WikiPlanProposal> get() = plan.arr("proposals").decode(kotlinx.serialization.builtins.ListSerializer(WikiPlanProposal.serializer()))
-    fun version(key: String) = plan.obj("versions").obj(key).decode(WikiPlanVersion.serializer())
-    fun spec(name: String): JsonObject = plan.obj("states").obj(name).obj("spec")
+    val shared: JsonObject get() = WikiSharedFiles.docs
+    val plan: JsonObject get() = shared.fobj("plan")
+    val now get() = RelativeTime.parse(shared.fstr("now"))!!
+    val zone: java.time.ZoneId get() = java.time.ZoneId.of(shared.fstr("timeZone"))
+    val directory: WikiDocsDirectory get() = shared.fobj("docs").fobj("directory").fobj("read").decode(WikiDocsDirectory.serializer())
+    val proposals: List<WikiPlanProposal> get() = plan.farr("proposals").decode(kotlinx.serialization.builtins.ListSerializer(WikiPlanProposal.serializer()))
+    fun version(key: String) = plan.fobj("versions").fobj(key).decode(WikiPlanVersion.serializer())
+    fun spec(name: String): JsonObject = plan.fobj("states").fobj(name).fobj("spec")
     fun online(name: String) = spec(name)["runnerOnline"].bool()
     fun state(name: String) = state(spec(name))
     fun state(spec: JsonObject) = WikiPlanState("sp1", if (spec["confirmed"].text() == "v1") version("v1") else null,
         if (spec["draft"].text() == "v2") version("v2") else null, if (spec["proposals"].bool() == true) proposals else emptyList(),
-        spec["job"].text()?.let { WikiPlanJob.read(plan.obj("jobs")[it]) })
+        spec["job"].text()?.let { WikiPlanJob.read(plan.fobj("jobs")[it]) })
     /** The state as `GET /api/wiki/spaces/:id/plan` answers it. */
     fun read(name: String): JsonObject {
         val spec = spec(name)
         return buildJsonObject {
             put("spaceId", "sp1")
-            put("confirmed", if (spec["confirmed"].text() == "v1") plan.obj("versions").obj("v1") else JsonNull)
-            put("draft", if (spec["draft"].text() == "v2") plan.obj("versions").obj("v2") else JsonNull)
-            put("proposals", if (spec["proposals"].bool() == true) plan.arr("proposals") else JsonArray(emptyList()))
-            put("job", spec["job"].text()?.let { plan.obj("jobs").obj(it) } ?: JsonNull)
+            put("confirmed", if (spec["confirmed"].text() == "v1") plan.fobj("versions").fobj("v1") else JsonNull)
+            put("draft", if (spec["draft"].text() == "v2") plan.fobj("versions").fobj("v2") else JsonNull)
+            put("proposals", if (spec["proposals"].bool() == true) plan.farr("proposals") else JsonArray(emptyList()))
+            put("job", spec["job"].text()?.let { plan.fobj("jobs").fobj(it) } ?: JsonNull)
         }
     }
 }

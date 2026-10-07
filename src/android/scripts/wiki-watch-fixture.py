@@ -254,10 +254,13 @@ class Handler(BASE.Handler):
             state['idempotency'][key] = watch
             return watch, 200
         if path == '/api/wiki/spaces/' + SPACE and self.command == 'PATCH':
-            settings = copy.deepcopy(body.get('settings', {}))
-            if 'maintenance' in settings:
-                settings['maintenance'] = {**state['space']['settings']['maintenance'], **settings['maintenance']}
-            state['space']['settings'].update(settings)
+            # PATCH /wiki/spaces/:id: reviewMode, automaticSpotChecks and maintenance at the top level; a key left
+            # out is left as it is (contract `space.settings`; iOS WikiSpaceUpdate).
+            settings = state['space']['settings']
+            for key in ('reviewMode', 'automaticSpotChecks'):
+                if key in body: settings[key] = body[key]
+            if 'reviewMode' in body: settings['reviewModeChangedAt'] = AT
+            if 'maintenance' in body: settings['maintenance'] = {**settings['maintenance'], **body['maintenance']}
             return state['space'], 200
         if path.startswith('/api/wiki/entries/'):
             id_, action = path.split('/')[-2:]; entry = state['entries'].get(id_)

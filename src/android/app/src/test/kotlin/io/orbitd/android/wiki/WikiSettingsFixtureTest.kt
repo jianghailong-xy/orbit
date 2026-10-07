@@ -13,77 +13,77 @@ import org.junit.Test
  * which the web's `lib/wikiReviewMode.test.ts` reads too) and its contract check — and what the settings page writes:
  * the PATCH bodies of a mode, the spot checks, Turn off and Set up, with the look-back's three ways to be written. */
 class WikiSettingsFixtureTest {
-    private val settings get() = WikiFixtures.reviewMode.obj("settings")
+    private val settings get() = WikiSharedFiles.reviewMode.fobj("settings")
 
     @Test fun theSettingsPageSaysTheFixturesWordsInItsOrder() {
         val settings = settings
-        assertEquals(settings.str("title"), WikiModeCopy.settingsTitle)
-        assertEquals(settings.str("crumb"), WikiModeCopy.settings)
-        assertEquals(settings.strings("sections"), WikiModeLogic.SettingsSection.entries.map { it.title })
-        assertEquals(settings.str("reviewModeHint"), WikiModeCopy.reviewModeHint)
-        assertEquals(settings.str("lead"), WikiModeCopy.reviewModeLead)
-        assertEquals(settings.str("defaultTag"), WikiModeCopy.modeDefault)
-        val modes = settings.arr("modes").map { it.jsonObject }
-        assertEquals(modes.map { it.str("mode") }, WikiModeLogic.modes)
+        assertEquals(settings.fstr("title"), WikiModeCopy.settingsTitle)
+        assertEquals(settings.fstr("crumb"), WikiModeCopy.settings)
+        assertEquals(settings.fstrings("sections"), WikiModeLogic.SettingsSection.entries.map { it.title })
+        assertEquals(settings.fstr("reviewModeHint"), WikiModeCopy.reviewModeHint)
+        assertEquals(settings.fstr("lead"), WikiModeCopy.reviewModeLead)
+        assertEquals(settings.fstr("defaultTag"), WikiModeCopy.modeDefault)
+        val modes = settings.farr("modes").map { it.jsonObject }
+        assertEquals(modes.map { it.fstr("mode") }, WikiModeLogic.modes)
         modes.forEach { mode ->
-            assertEquals(mode.str("label"), WikiModeCopy.modeLabel(mode.str("mode")))
-            assertEquals(mode.str("note"), WikiModeCopy.modeNote(mode.str("mode")))
-            assertEquals(mode["default"].bool(), mode.str("mode") == WikiModeLogic.defaultMode)
+            assertEquals(mode.fstr("label"), WikiModeCopy.modeLabel(mode.fstr("mode")))
+            assertEquals(mode.fstr("note"), WikiModeCopy.modeNote(mode.fstr("mode")))
+            assertEquals(mode["default"].bool(), mode.fstr("mode") == WikiModeLogic.defaultMode)
         }
-        assertEquals(settings.obj("spotCheck").str("title"), WikiModeCopy.spotCheck)
-        assertEquals(settings.obj("spotCheck").str("note"), WikiModeCopy.spotCheckNote)
-        assertEquals(settings.obj("floors").str("lead"), WikiModeCopy.floorsLead)
-        assertEquals(settings.obj("floors").str("note"), WikiModeCopy.floorsNote)
+        assertEquals(settings.fobj("spotCheck").fstr("title"), WikiModeCopy.spotCheck)
+        assertEquals(settings.fobj("spotCheck").fstr("note"), WikiModeCopy.spotCheckNote)
+        assertEquals(settings.fobj("floors").fstr("lead"), WikiModeCopy.floorsLead)
+        assertEquals(settings.fobj("floors").fstr("note"), WikiModeCopy.floorsNote)
 
-        val maintenance = settings.obj("maintenance")
-        assertEquals(listOf(maintenance.str("name"), maintenance.str("note"), maintenance.str("off"), maintenance.str("on"), maintenance.str("setUp")),
+        val maintenance = settings.fobj("maintenance")
+        assertEquals(listOf(maintenance.fstr("name"), maintenance.fstr("note"), maintenance.fstr("off"), maintenance.fstr("on"), maintenance.fstr("setUp")),
             listOf(WikiModeCopy.maintenanceName, WikiModeCopy.maintenanceNote, WikiModeCopy.off, WikiModeCopy.on, WikiModeCopy.setUp))
-        val form = maintenance.obj("form")
-        assertEquals(form.str("title"), WikiModeCopy.setUpTitle)
-        assertEquals(form.arr("fields").map { it.jsonObject.str("label") },
+        val form = maintenance.fobj("form")
+        assertEquals(form.fstr("title"), WikiModeCopy.setUpTitle)
+        assertEquals(form.farr("fields").map { it.jsonObject.fstr("label") },
             listOf(WikiModeCopy.workspace, WikiModeCopy.provider, WikiModeCopy.dailyLimit, WikiModeCopy.lookback))
-        assertEquals(form.arr("fields").map { it.jsonObject.str("note") },
+        assertEquals(form.farr("fields").map { it.jsonObject.fstr("note") },
             listOf(WikiModeCopy.workspaceNote, WikiModeCopy.providerNote, WikiModeCopy.dailyLimitNote, WikiModeCopy.lookbackNote))
-        assertEquals(form.str("unit"), WikiModeCopy.runsADayUnit)
-        assertEquals(listOf(form.str("cancel"), form.str("turnOn"), form.str("save")), listOf(WikiModeCopy.cancel, WikiModeCopy.turnOn, WikiModeCopy.save))
-        val defaults = form.obj("defaults")
-        assertEquals(defaults.str("provider"), WikiMaintenanceSettings.default.provider)
-        assertEquals(defaults.int("dailyRunLimit"), WikiMaintenanceSettings.default.dailyRunLimit)
-        assertEquals(defaults.int("min")..defaults.int("max"), WikiMaintenanceSettings.dailyRunLimitRange)
-        assertEquals(maintenance.strings("rows"),
+        assertEquals(form.fstr("unit"), WikiModeCopy.runsADayUnit)
+        assertEquals(listOf(form.fstr("cancel"), form.fstr("turnOn"), form.fstr("save")), listOf(WikiModeCopy.cancel, WikiModeCopy.turnOn, WikiModeCopy.save))
+        val defaults = form.fobj("defaults")
+        assertEquals(defaults.fstr("provider"), WikiMaintenanceSettings.default.provider)
+        assertEquals(defaults.fint("dailyRunLimit"), WikiMaintenanceSettings.default.dailyRunLimit)
+        assertEquals(defaults.fint("min")..defaults.fint("max"), WikiMaintenanceSettings.dailyRunLimitRange)
+        assertEquals(maintenance.fstrings("rows"),
             listOf(WikiModeCopy.status, WikiModeCopy.workspace, WikiModeCopy.provider, WikiModeCopy.dailyLimit, WikiModeCopy.lookback))
-        assertEquals(listOf(maintenance.str("edit"), maintenance.str("turnOff")), listOf(WikiModeCopy.maintenanceEdit, WikiModeCopy.turnOff))
-        maintenance.arr("runsADay").map { it.jsonObject }.forEach { assertEquals(it.str("says"), WikiModeCopy.runsADay(it.int("runs"))) }
+        assertEquals(listOf(maintenance.fstr("edit"), maintenance.fstr("turnOff")), listOf(WikiModeCopy.maintenanceEdit, WikiModeCopy.turnOff))
+        maintenance.farr("runsADay").map { it.jsonObject }.forEach { assertEquals(it.fstr("says"), WikiModeCopy.runsADay(it.fint("runs"))) }
         // The look-back: from now on, some days, all of history — the form opening on the contract's 14 days.
-        val lookback = form.obj("lookback")
-        assertEquals(lookback.strings("choices"), WikiModeLogic.LookbackChoice.entries.map { it.name.lowercase() })
-        assertEquals(lookback.strings("says"), WikiModeLogic.LookbackChoice.entries.map {
-            WikiModeCopy.lookbackLabel(WikiModeLogic.lookbackDays(it, lookback.int("defaultDays"))) })
-        assertEquals(lookback.str("unit"), WikiModeCopy.lookbackUnit)
-        assertEquals(lookback.int("defaultDays"), WikiMaintenanceSettings.default.lookbackDays)
-        assertEquals(lookback.int("min")..lookback.int("max"), WikiMaintenanceSettings.lookbackDaysRange)
-        maintenance.arr("lookbacks").map { it.jsonObject }.forEach { row ->
+        val lookback = form.fobj("lookback")
+        assertEquals(lookback.fstrings("choices"), WikiModeLogic.LookbackChoice.entries.map { it.name.lowercase() })
+        assertEquals(lookback.fstrings("says"), WikiModeLogic.LookbackChoice.entries.map {
+            WikiModeCopy.lookbackLabel(WikiModeLogic.lookbackDays(it, lookback.fint("defaultDays"))) })
+        assertEquals(lookback.fstr("unit"), WikiModeCopy.lookbackUnit)
+        assertEquals(lookback.fint("defaultDays"), WikiMaintenanceSettings.default.lookbackDays)
+        assertEquals(lookback.fint("min")..lookback.fint("max"), WikiMaintenanceSettings.lookbackDaysRange)
+        maintenance.farr("lookbacks").map { it.jsonObject }.forEach { row ->
             val days = row["days"].integer()
             val named = days.toString()
-            assertEquals(named, row.str("says"), WikiModeCopy.lookbackLabel(days))
-            assertEquals(named, row.str("choice"), WikiModeLogic.lookbackChoice(days).name.lowercase())
-            assertEquals(named, row.int("offered"), WikiModeLogic.lookbackDaysOffered(days))
+            assertEquals(named, row.fstr("says"), WikiModeCopy.lookbackLabel(days))
+            assertEquals(named, row.fstr("choice"), WikiModeLogic.lookbackChoice(days).name.lowercase())
+            assertEquals(named, row.fint("offered"), WikiModeLogic.lookbackDaysOffered(days))
             // What the picker opens on writes back the setting it was read from.
             assertEquals(named, days, WikiModeLogic.lookbackDays(WikiModeLogic.lookbackChoice(days), WikiModeLogic.lookbackDaysOffered(days)))
         }
-        maintenance.arr("workspaceLabels").map { it.jsonObject }.forEach { row ->
-            val workspace = row.obj("workspace")
+        maintenance.farr("workspaceLabels").map { it.jsonObject }.forEach { row ->
+            val workspace = row.fobj("workspace")
             val runner = (workspace["runner"] as? JsonObject)?.let { it["displayName"].text() ?: it["name"].text() }
-            assertEquals(row.str("says"), WikiModeLogic.workspaceLabel(workspace["name"].text(), runner))
+            assertEquals(row.fstr("says"), WikiModeLogic.workspaceLabel(workspace["name"].text(), runner))
         }
-        maintenance.arr("providerLabels").map { it.jsonObject }.forEach { row ->
-            assertEquals(row.str("says"), WikiModeLogic.providerLabel(row.str("provider"), row["model"].text()))
+        maintenance.farr("providerLabels").map { it.jsonObject }.forEach { row ->
+            assertEquals(row.fstr("says"), WikiModeLogic.providerLabel(row.fstr("provider"), row["model"].text()))
         }
     }
 
     @Test fun theModeFallbackIsSaidWhileTheSpaceIsStillInIt() {
-        settings.arr("fallbacks").map { it.jsonObject }.forEach { row ->
-            val space = row.obj("settings").decode(WikiSpaceSettings.serializer())
+        settings.farr("fallbacks").map { it.jsonObject }.forEach { row ->
+            val space = row.fobj("settings").decode(WikiSpaceSettings.serializer())
             assertEquals("${space.reviewMode} by ${space.reviewModeChangedBy}", row["says"].text(), WikiModeLogic.modeFallback(space, ZoneId.of("UTC")))
         }
         // A space that names no mode is Manual: it was made before review modes existed.
@@ -129,18 +129,18 @@ class WikiSettingsFixtureTest {
     /** The review modes, who changes them and the spot checks are the contract's; every write the page makes goes to the
      * user door's PATCH, which is where the client sends it. */
     @Test fun theReviewModesAndTheOwnersRoutesAreTheContracts() {
-        val contract = WikiFixtures.contract
-        val reviewModes = contract.obj("reviewModes")
-        assertEquals(reviewModes.strings("values"), WikiModeLogic.modes)
-        val settings = contract.obj("space").obj("settings")
-        assertEquals(settings.obj("reviewMode").str("default"), WikiModeLogic.defaultMode)
-        assertEquals(settings.obj("reviewMode").str("unset"), WikiModeLogic.mode(null))
-        val changedBy = settings.obj("reviewModeChangedBy").str("type").split(" | ")
+        val contract = WikiSharedFiles.contract
+        val reviewModes = contract.fobj("reviewModes")
+        assertEquals(reviewModes.fstrings("values"), WikiModeLogic.modes)
+        val settings = contract.fobj("space").fobj("settings")
+        assertEquals(settings.fobj("reviewMode").fstr("default"), WikiModeLogic.defaultMode)
+        assertEquals(settings.fobj("reviewMode").fstr("unset"), WikiModeLogic.mode(null))
+        val changedBy = settings.fobj("reviewModeChangedBy").fstr("type").split(" | ")
         assertEquals(listOf("owner", "spot_checks", "verification"), changedBy)
-        assertEquals(false, settings.obj("automaticSpotChecks")["default"].bool())
-        assertEquals("the spot check's sentence says 1 in 200", 200, reviewModes.obj("rules").int("automaticSpotCheckEvery"))
+        assertEquals(false, settings.fobj("automaticSpotChecks")["default"].bool())
+        assertEquals("the spot check's sentence says 1 in 200", 200, reviewModes.fobj("rules").fint("automaticSpotCheckEvery"))
         assertTrue(WikiModeCopy.spotCheckNote.contains("1 in 200"))
-        val routes = contract.obj("agentSurface").obj("doors").obj("user").strings("routes").toSet()
+        val routes = contract.fobj("agentSurface").fobj("doors").fobj("user").fstrings("routes").toSet()
         listOf("PATCH /api/wiki/spaces/:id", "POST /api/wiki/entries/:id/confirm", "POST /api/wiki/entries/:id/reject",
             "POST /api/wiki/changesets/:id/revert", "GET /api/wiki/changesets/:id").forEach { assertTrue("$it is not a route the user door declares", it in routes) }
         val rig = WikiTestRig { request -> if (request.method.name == "PATCH") 200 to "{}" else 200 to "[]" }

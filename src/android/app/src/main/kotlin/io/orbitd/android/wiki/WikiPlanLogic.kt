@@ -325,7 +325,9 @@ internal object WikiPlanLogic {
         data class Link(val label: String, val to: LinkTo, val sessionId: String?)
         data class Progress(val done: Int, val total: Int, val now: String?)
     }
-    fun failedChecks(errors: List<WikiPlanGateError>) = errors.map { it.check }.toSet().size
+    /** The gate's checks this build names (OrbitKit `WikiPlanGateCheck`); any other is one `unknown`, as Swift decodes it. */
+    private val gateChecks = setOf("schema", "docCount", "protected", "references")
+    fun failedChecks(errors: List<WikiPlanGateError>) = errors.map { it.check.takeIf { c -> c in gateChecks } ?: "unknown" }.toSet().size
     private fun attempts(job: WikiPlanJob) = job.attempt ?: (if (job.kind != "build") job.report?.attempts?.size else null) ?: job.attemptsMax ?: 3
     private fun runLink(sessionId: String?) = sessionId?.let { JobCard.Link(WikiPlanCopy.viewRun, JobCard.LinkTo.RUN, it) }
     fun jobCard(job: WikiPlanJob?, now: Instant, runnerOnline: Boolean?, failed: WikiPlanJob?, inForce: Boolean, directory: WikiDocsDirectory?): JobCard? {
@@ -575,7 +577,7 @@ internal object WikiPlanLogic {
     fun change(proposal: WikiPlanProposal, base: Shown?): Change {
         val doc = proposal.change?.doc
         val slug = doc?.slug ?: ""
-        val title = doc?.title?.ifEmpty { null } ?: slug
+        val title = doc?.title ?: slug
         val sections = doc?.sections.orEmpty()
         fun note(section: WikiPlanSectionInput) = "${WikiDocCopy.sectionKind(section.kind)} · ${WikiPlanCopy.sectionChars(section.length)}"
         val before = base?.docs?.firstOrNull { it.slug == slug }
