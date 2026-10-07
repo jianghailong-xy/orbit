@@ -1,9 +1,10 @@
 # tree /root/.orbit/worktrees/d7cea808-8de1-5a4c-95f8-a005b1014ee1
-# commit 94c40abb6b0d05b5293ebdaac4376228f533a4fa
+# commit fcb53ab8510cad9b64d38c17e4f40661f273c7ad
 # branch orbit/s1b-add-user-google-sign-in-only-4ae978
+# merge: origin/project/34b9KDmnRzopeuF1enIN6 (359876433) merged here, census key registered once (case kept, hand proof dropped)
 # argv: npm run test:compose-topology && npm run prisma:generate && npm run build && npm test -w @orbit/shared && npm test -w @orbit/apiserver && npm test -w @orbit/web
-# started 2026-10-07T11:06:16Z
-# filtered: the stages, their summaries and anything red; output-full.txt.gz carries every line.
+# started 2026-10-07T11:33:41Z
+# filtered: the stages, their summaries, the tenant-isolation census lines and anything red; output-full.txt.gz carries every line.
 > orbit@0.1.221 test:compose-topology
 > node --test --test-reporter=tap test/compose-topology.test.mjs
 ok 1 - the baseline commit really is the nine-service stack this change removes from
@@ -26,7 +27,7 @@ ok 9 - (k) removing the sidecars is subtraction: Compose lost more lines than it
 > npm run prisma:generate -w @orbit/apiserver
 > @orbit/apiserver@0.1.0 prisma:generate
 > prisma generate
-✔ Generated Prisma Client (v7.10.0) to ./node_modules/@prisma/client in 956ms
+✔ Generated Prisma Client (v7.10.0) to ./node_modules/@prisma/client in 1.02s
 > orbit@0.1.221 build
 > npm run build -w @orbit/shared && npm run build -w @orbit/apiserver && npm run build -w @orbit/web
 > @orbit/shared@0.1.0 build
@@ -39,10 +40,22 @@ ok 9 - (k) removing the sidecars is subtraction: Compose lost more lines than it
 > vitest run
  Test Files  24 passed (24)
       Tests  398 passed (398)
-   Start at  19:06:25
-   Duration  552ms (transform 76%, import 13%, tests 8%, worker 2%)
+   Start at  19:33:51
+   Duration  676ms (transform 75%, import 17%, tests 8%, worker 1%)
 > @orbit/apiserver@0.1.0 test
 > tsc -p tsconfig.test.json && SPECS=$(ls build/*/*.spec.js | grep -v '\.pg\.spec\.js$') && node --test $SPECS
+✔ the census reads every controller the production app mounts, and every one that uses JwtAuthGuard (14.808099ms)
+✔ the census reads every controller the production app mounts, and every one that uses JwtAuthGuard (1412.269977ms)
+✔ the census lists only routes the app mounts, each once, and a reading by hand says why and where (0.210572ms)
+✔ the runner gate: the census reads every route behind RunnerAuthGuard or RunnerSessionAuthGuard, and every controller that has one is mounted (4.570323ms)
+✔ every runner-gate route that names something by its path has a cross-account case or a reading by hand (0.316597ms)
+✔ the runner census lists only runner-gate routes the app mounts, each once, and a reading by hand says why and where (0.42915ms)
+✔ every id a runner-gate request carries — in its query, its headers or its body, decoded or not — has a case or a reading by hand (0.625387ms)
+✔ a runner-gate body the census cannot read says by hand which ids it reads, and where (0.181881ms)
+✔ the census notices a door that completes a task and queues nothing (0.38877ms)
+✔ the door census explicitly registers every OpenItemKind, including newly added kinds (0.22424ms)
+✔ (c) the census still compares every production source against that list (0.320972ms)
+✔ the census counts calls and not the injection that used to be all there was (0.653988ms)
 ℹ tests 4691
 ℹ suites 0
 ℹ pass 4691
@@ -54,7 +67,7 @@ ok 9 - (k) removing the sidecars is subtraction: Compose lost more lines than it
 > vitest run --maxWorkers=2
  Test Files  344 passed (344)
       Tests  4380 passed (4380)
-   Start at  19:07:47
-   Duration  318.24s (tests 44%, import 40%, environment 12%, transform 4%)
+   Start at  19:34:46
+   Duration  266.65s (tests 49%, import 36%, environment 12%, transform 3%)
 MERGE_CHECK_EXIT=0
-# finished 2026-10-07T11:13:05Z exit 0
+# finished 2026-10-07T11:39:13Z exit 0

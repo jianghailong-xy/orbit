@@ -36,9 +36,15 @@ secret again, and the web tests cover both states of the page and the Add-user t
 
 ## The runs on the final tree
 
-`checks/` holds the two runs the task's acceptance asks for, both on `94c40abb6` — the branch tip after it
-absorbed `origin/main` (82 commits) and after a comment-only correction of the Add-user hint's design
-citation (`§5.6` → `§5.2`, the authoritative-email rule) — and before this record commit:
+`checks/` holds the two runs the task's acceptance asks for, both on `fcb53ab85` — the merge of
+`origin/project/34b9KDmnRzopeuF1enIN6` (tip `359876433`) into this branch. An earlier pair of runs on
+`94c40abb6` (the branch with `origin/main` absorbed but not the project branch) was sent back by the
+coordinator, because both sides had registered the same census key: this branch's `c2c9303de` sends
+`POST /runner/projects/:id/tasks/:taskId/integration/skip-merge-check body approvalId` as a real
+`RUNNER_ISOLATION_FIELD_CASES` case, while the project branch's `731e9a363` filed it as a reading by hand.
+`tenant-isolation-census.spec.ts` refuses a key registered both ways ("both sent and read by hand"), so the
+merge keeps the real case and drops that one hand-proof entry (see the merge commit); the census line
+`✔ every id a runner-gate request carries … has a case or a reading by hand` is in the merge-check record.
 
 | Run | Record | Result |
 | --- | --- | --- |
@@ -50,8 +56,9 @@ Each directory keeps `exit.txt`, the stages and summaries in `output-filtered.tx
 `PROVIDER_SECRET_KEY` wrote — is asserted inside the pg spec's subtest (3).
 
 The screenshots above were driven on the isolated stack from the task's code commit `c2c9303de`. Between
-that commit and `94c40abb6`, this change's files differ only in those two comment lines: nothing the
-walkthrough rendered changed.
+that commit and `fcb53ab85`, the pages, service and specs of this change differ only in two comment lines
+(the `§5.6` → `§5.2` citation fix); `docs/self-hosting.md` also carries the project branch's shared-provider
+paragraph, which no screenshot renders. Nothing the walkthrough rendered changed.
 
 ## Rerunning
 

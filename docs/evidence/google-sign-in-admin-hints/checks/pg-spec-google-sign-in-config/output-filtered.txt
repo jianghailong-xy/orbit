@@ -1,13 +1,14 @@
 # tree /root/.orbit/worktrees/d7cea808-8de1-5a4c-95f8-a005b1014ee1
-# commit 94c40abb6b0d05b5293ebdaac4376228f533a4fa
+# commit fcb53ab8510cad9b64d38c17e4f40661f273c7ad
 # branch orbit/s1b-add-user-google-sign-in-only-4ae978
+# merge: origin/project/34b9KDmnRzopeuF1enIN6 (359876433) merged here
 # argv: bash scripts/run-pg-spec.sh src/apiserver/src/auth/google-sign-in-config.pg.spec.ts
-# started 2026-10-07T11:13:20Z
+# started 2026-10-07T11:39:27Z
 # filtered: the stages, the spec's subtests and the witness line; output-full.txt.gz carries every line.
 # note: the rotation case (a ciphertext the key in force did not write) is asserted inside subtest (3).
-commit: 94c40abb6b0d05b5293ebdaac4376228f533a4fa
+commit: fcb53ab8510cad9b64d38c17e4f40661f273c7ad
 branch: orbit/s1b-add-user-google-sign-in-only-4ae978
-started: 2026-10-07T11:13:20Z
+started: 2026-10-07T11:39:27Z
 command: bash scripts/run-pg-spec.sh src/apiserver/src/auth/google-sign-in-config.pg.spec.ts
 ==> reusing this worktree's lockfile-compatible installation
 ==> tsc /root/.orbit/worktrees/d7cea808-8de1-5a4c-95f8-a005b1014ee1/node_modules/.bin/tsc (Version 7.0.2)
@@ -16,8 +17,8 @@ command: bash scripts/run-pg-spec.sh src/apiserver/src/auth/google-sign-in-confi
 ==> require.resolve('@orbit/shared') from src/web = /root/.orbit/worktrees/d7cea808-8de1-5a4c-95f8-a005b1014ee1/src/shared/dist/index.js
 ==> OK: /root/.orbit/worktrees/d7cea808-8de1-5a4c-95f8-a005b1014ee1 is ready to build and test
 ==> building the test tree (rm -rf build first)
-==> provisioning pccspec-pg-1791045-23163 (postgres:16-alpine, PGDATA on tmpfs)
-==> PostgreSQL 16.15 on 127.0.0.1:33291, system_identifier=7693882465508311081
+==> provisioning pccspec-pg-2133617-1042 (postgres:16-alpine, PGDATA on tmpfs)
+==> PostgreSQL 16.15 on 127.0.0.1:33296, system_identifier=7693889190278565929
 ==> prisma migrate deploy (template pccspec_tpl)
 ==> 392 migrations applied
 ########## google-sign-in-config.pg.spec.ts ##########
@@ -44,9 +45,9 @@ ok 1 - Google sign-in configuration: off until an administrator turns it on, the
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 21713.09879
+# duration_ms 21667.922918
 SPEC_EXIT=0
 ==> OK: 1 spec(s) witnessed against PostgreSQL 16.15, no skips
-==> removing pccspec-pg-1791045-23163
+==> removing pccspec-pg-2133617-1042
 PG_SPEC_EXIT=0
-# finished 2026-10-07T11:13:53Z exit 0
+# finished 2026-10-07T11:39:58Z exit 0
