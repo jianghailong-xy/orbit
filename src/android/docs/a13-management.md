@@ -27,7 +27,7 @@ The correspondence below is read from source. The behaviour was then run against
 | Change password page: three fields, footer outcome / “Passwords do not match” / “At least 6 characters” | `ChangePassword` | `POST auth/change-password` (wrong password is a 400, never a sign-out) |
 | Notifications page: device section; “Sent to all your devices” two switches with hints; “Always sent” list | Device section is A10’s `NotificationSettings(app.push)`; account switches and Always-sent rows here. An unconfigured FCM build reads “Unavailable”, never On | `PATCH users/me/preferences` |
 | Runners list: status dot, name, slots + bar, subtitle (host · v / Offline · last seen), attention line; Edit → reorder / delete (“Remove “x”?”); Add Runner + footer; load/fail/Retry | `RunnerScreens.kt` `RunnersList`: same rows; Edit reorders by dragging the "≡" handle, as on iOS (one `reorder` on release; TalkBack Move up / Move down), and removes with a Remove button instead of the swipe (agreed exception) | `GET runners`, `GET workspaces`, `POST runners/reorder`, `DELETE runners/:id`, `GET <origin>/dl/version.json` (unauthenticated) |
-| Runner page: head (status line, host line); Needs Attention (`RunnerAttention` — offline, signed out, stuck checkout → Repair, quota, disk → Set a Reserve…, can’t update itself → Copy Command, engine not updating → Update Engines Now); Capacity (Max Concurrent stepper, Disk gauge, Keep Free Off/10/20/50 GB); Engines (rows → engine page, Update Engines Now + relay, Refresh Model Lists, footers); Workspaces (opens the workspace’s sessions, running counts, footer); About (Name page, Hostname, Version · Latest, Runs As, Repos Folder, Last Check-in, Registered, root footer); Rotate Token… (shown once + Copy); Remove Runner | `RunnerDetail` with `RunnerPage.kt` (a port of the three OrbitKit files); the Needs Attention rule is checked against the web/iOS case file `src/web/src/lib/runnerAttention.cases.json` (69 cases) | `PATCH runners/:id` (`maxConcurrent`, `minFreeDiskMb` incl. explicit null, `displayName`), `POST runners/:id/{engine-update,refresh-models,rotate-token}`, `POST workspaces/:id/repo-cleanup`, `GET sessions/counts`, `DELETE runners/:id` |
+| Runner page: head (status line, host line); Needs Attention (`RunnerAttention` — offline, signed out, stuck checkout → Repair, quota, disk → Set a Reserve…, can’t update itself or install folder isn’t writable → Copy Command, updates turned off, runner update failed → Update Runner Now, engine not updating → Update Engines Now); Capacity (Max Concurrent stepper, Disk gauge, Keep Free Off/10/20/50 GB); Engines (rows → engine page, Update Engines Now + relay, Refresh Model Lists, footers); Workspaces (opens the workspace’s sessions, running counts, footer); About (Name page, Hostname, Version · Latest, Last Update, Update Runner Now, Runs As, Repos Folder, Last Check-in, Registered, root footer); Rotate Token… (shown once + Copy); Remove Runner | `RunnerDetail` with `RunnerPage.kt` (a port of the three OrbitKit files); the Needs Attention rule is checked against the web/iOS case file `src/web/src/lib/runnerAttention.cases.json` (81 cases since v4) | `PATCH runners/:id` (`maxConcurrent`, `minFreeDiskMb` incl. explicit null, `displayName`), `POST runners/:id/{engine-update,refresh-models,rotate-token,self-update}`, `POST workspaces/:id/repo-cleanup`, `GET sessions/counts`, `DELETE runners/:id` |
 | Engine page: version · update note; Accounts / Sign-In; per account: home, Signed in/out, quota windows or “No quota reported”, refused removal, Sign In / Sign In Again or pause controls; Rename… (alert), Remove (asks; Default never); Add Account (picked name, starts at once, renames once reported); Update Engines Now | `RunnerEnginePage`; Rename… and Remove are an overflow menu per account instead of long-press / swipe | `PATCH/DELETE runners/:id/accounts/:engine/:account`, `POST …/:account/pause`, `POST runners/:id/login {engine, account?, accountName?}` (Add Account signs a new one in) |
 | Sign-in card (`RunnerSignInView`): pending, device code (copy), paste-back code + Submit, verifying, done, failed/try again, Cancel; 2 s polling while in flight | `RunnerSignInCard` / `SignInRelay` (same states, same ownership rule for the shared relay) | `GET/POST/DELETE runners/:id/login`, `POST runners/:id/login/code` |
 | Account pause (`AccountPauseControls`): Paused · Until; Pause… sheet 1/2/4/8 h or custom 1 min–168 h, “Automatically resumes at …”; Resume Now; Change Duration… | `ManagementUi.kt` `AccountPauseControls` (shared by runner accounts and pool members) | `POST …/pause {durationMinutes: n|null}` |
@@ -38,7 +38,7 @@ The correspondence below is read from source. The behaviour was then run against
 | Claude account pool page: availability, headline + gauge, members (NEXT, status words, tightest window), pause, footer | `AccountPoolPage` | `GET providers/pools`, member pause |
 | Codex pool page: head (who · people · availability, Add account / Add a key), Accounts (login rows with Sign in again / Sign out; key rows with status, money/cap, Replace / Disable / Remove), Who can use it (owner only: Just me ↔ Me and people I add, people with % share, Remove from pool, Make admin/member, Add people), rules (owner only, once shared), warning card, Delete pool / Leave pool | `CodexPoolPage` (`CodexPoolView`, `WhoCanUseIt`) | `providers/pools/:id/codex-login[ /account?fingerprint=]`, `providers/shared-pools/:id{,/keys,/keys/:id,/keys/:id/secret,/people,/people/:userId,/leave}`, `DELETE providers/pools/:id` (own) |
 | Sheets: Add an account (ChatGPT / API key), Sign in with ChatGPT (consent → code → done / expired / failed / duplicate; closing gives the attempt up), Add a key (consent → form → done / duplicate) and Replace key, Share (emails, facts, own-key rule, no-key warning) | Full-screen dialogs with the same steps and words | as above |
-| Share panel (`SharePanel`): Only you / Anyone with the link (turning off asks), link + Copy Link / Share Link…, Includes per kind (nested, idle, counts, risk), Updates, Expires (Never/1/7/30 days, Until/Stops working), views line | `SharingSettings.kt` `ShareResourcePanel`; page `ShareResourceSettings(api, revision, kind, id)` | `GET/PUT/DELETE {sessions,tasks,projects}/:id/share` |
+| Share panel (`SharePanel`): Only you / Anyone with the link (turning off asks), link + Copy Link / Share Link…, Includes per kind (nested, idle, counts, risk), Updates, Expires (Never/1/7/30 days, Until/Stops working), views line | `SharingSettings.kt` `ShareResourcePanel`; page `ShareResourceSettings(api, revision, kind, id)`; dialogs: A05's session menu (`SessionSharePanel`) and, since v4, A11's task and project ⋯ → Share… (`ShareSheet` hosting `LiveSharePanel`) | `GET/PUT/DELETE {sessions,tasks,projects}/:id/share` |
 | Shared links page: Active N / Paused N / Ended N, subtitle, rows (title, where line, views line), Copy Link / Share Link… / Turn off (asks), “Link turned off” / “N links turned off” | `SharingSettings` | `GET share-links`, `POST share-links/turn-off` |
 | Admin (ADMIN only): list (name/email · ROLE, New user), user detail (Email, Name, Created, Role Member/Admin, Delete user), New user (Email, Name (optional), caption, Create) | `AdminSettings.kt` (list + detail route + dialog); the generated password is shown once | `GET users/me` then `GET admin/users`, `POST admin/users`, `PATCH admin/users/:id/role`, `DELETE admin/users/:id` |
 | Skills | No page: `SkillsView` has no reachable entry on iPhone (not in the drawer, Settings, deep links or any section switch); skills are reachable in the composer, which is A07’s | — |
@@ -57,8 +57,8 @@ recorded in task comment `34bWp9aVXd8OFkCPsJSfh`): "accept the Android conventio
   shows it.
 * New share links include tool output by default, as iOS and the server do (`PUT …/share {}`). A05's old
   directory dialog opened them with tool output off and turned links off without asking; its session menu
-  "Share…" now hosts this panel. The reader gets a Share action in the top bar. Task and project entries
-  belong to A11's pages, which can call `ShareResourceSettings`.
+  "Share…" now hosts this panel. The reader gets a Share action in the top bar. Since v4, A11's task and project
+  ⋯ → Share… host the same panel.
 * iOS defects not copied — Android offers only what the server takes:
   * "Sign in again" on a pool account: iOS asks only who signed it in (`SharedPoolPage.canSignInAgain`,
     OrbitKit `SharedPoolPage.swift:201`). The server also needs an admin, or a member while the pool lets
@@ -74,7 +74,7 @@ recorded in task comment `34bWp9aVXd8OFkCPsJSfh`): "accept the Android conventio
 * Removed from run 1 because iOS has no such control: Settings → Skills and → Manage workspaces; workspace
   account pinning, routing-engine list, standing-grant revocation and repo-status block; pool "own key first"
   switch; people/rules/role powers for non-owner pool admins; runner Install engine / Cancel install /
-  Antigravity sign-in and extra confirmations.
+  Antigravity sign-in and extra confirmations. Main's iOS has since added Antigravity sign-in (see v4, gap 12).
 
 ## Roles and states (server-decided)
 
@@ -244,9 +244,55 @@ emulator over controlled HTTP; “JVM” is the unit/shell suites.
 | UI-F13 Notifications | `NotificationsPreferences` and A10's device section | Live step 1: “When a session finishes” toggled and read back (an absent key reads as on). Fixture: the page; an unconfigured FCM build reads “Unavailable” | Live: pass (run 7, step 1). FCM delivery: A10 |
 | UI-F14 Runners → runner, Name, engine; Add Runner | `RunnerScreens.kt` | Live step 3: Add Runner approves the code `orbit register` printed; the runner registers and checks in. Step 4: rename; Max Concurrent +1; Keep Free 10 GB → Off; the Claude Default account's pause changed to 4 h, then Resume Now; Rename… there and back; Add Account starts a sign-in on the runner and Cancel gives it up. Step 8: Rotate Token shows the token once and the runner is refused after it; Remove Runner. JVM: the 69 attention cases, drag reorder, Name and Max Concurrent saves. Fixture: offline → online, deep link, Refresh Model Lists | Live: pass (run 7, steps 3, 4, 8). Signed-in accounts, Repair, engine update: gaps 3 and 5 |
 | UI-F15 Providers → pools | `ProviderManagement.kt`, `PoolLogic.kt` | Live step 7, the pool's real owner, admin and member: owner turns both member rules off; the member is offered nothing and the server refuses its key and its ChatGPT sign-in (403); owner turns keys on; the member is offered a key only, adds one, leaves; the non-creator admin sees Leave pool off with the reason and the server refuses its leave (403); owner deletes the pool. JVM: role × rule matrix, failed reads. Fixture: overview, Codex pool page | Live: pass (run 7, step 7). ChatGPT sign-in, Claude pools: gaps 3 and 6 |
-| UI-F16 Share; Shared links | `SharingSettings.kt` `ShareResourcePanel` (session menu “Share…”), Shared links page | Live step 6: Anyone with the link → ACTIVE with tool output included; tool output off; Only you → Turn off → no link. JVM: a failed or stale read stops writes. Fixture: shared links Turn off | Live: pass (run 7, step 6). Task/project entries: A11 (gap 7) |
+| UI-F16 Share; Shared links | `SharingSettings.kt` `ShareResourcePanel` (session menu “Share…”), Shared links page | Live step 6: Anyone with the link → ACTIVE with tool output included; tool output off; Only you → Turn off → no link. JVM: a failed or stale read stops writes. Fixture: shared links Turn off | Live: pass (run 7, step 6). Task/project entries: A11's ⋯ → Share… host this panel since v4; fixture device case `aTaskAndAProjectShareThroughTheOneSharePanel` (gap 7) |
 | UI-F17 Admin | `AdminSettings.kt` | Live step 2: New user → the generated password is shown once and signs in, and is gone once dismissed; Member → Admin → Member; Delete user (asks) → gone, cannot sign in; an admin demoted elsewhere loses the Admin row and gets 403. Fixture: list, detail, demotion | Live: pass (run 7, step 2) |
 | UI-C13 profile part | Photo menu (Photo library, Take photo, Choose file, Remove photo) and the crop | JVM: crop tests. `ManagementHttpTest`: upload and removal requests (multipart `file`) against MockWebServer. TalkBack: Choose photo opens the menu | Partial: picking a photo through the system picker or camera and uploading it to the real server was not run (gap 4) |
+
+## v4: on the project line (A11, D1)
+
+v3 (`e6d786f93`, accepted) conflicted when it landed on `project/34ZZn8fmemArxvl2CsCFp`. v4 merges it onto that
+line's tip and changes only what the combination needs; everything else stands as in v3.
+
+| Item | Value |
+| --- | --- |
+| Merge `e91ba3bdc` | parents: the tip `1205d8b3d` (A11 `442721b56`, main with D1's Google sign-in `c4c1d2891`) and v3 `e6d786f93` (which carries A10 `482b132e8`); merge base `51bbcc303`. Only the three files below differ from git's own merge |
+| After it | `025ce6b2c` one share panel; `73de62710` runner self-update (main's rule); `b871adf8e` D1's JVM test; `cb1aab5a8`, `02f2bbe2d` device tests; then this document |
+
+Conflicts, resolved by hand:
+- `AndroidManifest.xml`: A10's `POST_NOTIFICATIONS` and D1's Custom Tabs `<queries>`, both kept. A10's Firebase
+  service and the tip's narrowed `orbit://` hosts (with `orbit://auth/google` only for D1's redirect activity)
+  merged on their own.
+- `MainActivity.kt`: `AccountAppearance` (A13, wraps `OrbitTheme`) → `PushNoticeHost` (A10) → `OrbitShell` with
+  D1's `continueWithGoogle`; D1's activity-level `auth` (its Google callback needs it in `acceptIntent`). A11's
+  Tasks/Projects branches and A13's Settings/Runner branches; A13's `SettingsScreen` replaces the tip's interim
+  Settings column, as on A13's side.
+- `AuthViewModel.kt`: D1's shared `signIn` runs A10's `beforeSignOut()` and the attempt check before its block,
+  so the password and the Google ticket logins both get them; logout is A10's.
+
+One share panel: A11's task and project ⋯ → Share… opened A11's own `ShareSheet`, a second implementation of
+this panel. `ShareSheet` keeps its signature, title and Done and now hosts `LiveSharePanel` (this panel on the live
+connection); the panel reports every answer of the server as `{link, counts}`, which A11's menu reads for “Only
+you” / “Live link”. A11's duplicate body, layers, expiry, URL, `shareFailure` and the words only it used are gone.
+A11's fixture link names its kind, as the server's link view does. What changes for tasks and projects: writes wait
+for a fresh directory read (P2-3 above), not only a connected control stream; the expiry is a menu.
+
+Main moved the runner baseline after the audit:
+- Self-update (`f22557aff`, iOS and web): ported. The case file grew from 69 to 81 cases; Needs Attention takes the
+  runner's report at its word (install folder isn't writable → Copy Command; updates turned off, with how to turn
+  them on only for `ORBIT_NO_SELFUPDATE`; runner update failed → Update Runner Now, online only); About gains Last
+  Update and Update Runner Now (`POST runners/:id/self-update`); a runner too old to report keeps “Can’t update itself”.
+- Antigravity sign-in and several Antigravity accounts per runner (`597b5c1cf`, `712d324a8`): not ported (gap 12).
+
+Tests the merged product changed: D1's `GoogleSignInFlowTest` and A03's `AuthFlowDeviceTest` waited for the interim
+Settings column's “Signed in” (now: the account's email on Settings, and Sign out's confirmation);
+`ManagementDeviceTest`'s server refused D1's public `auth/methods` (now 404, as D1 made A05's device tests answer).
+
+| Check | Run | Result |
+| --- | --- | --- |
+| `scripts/verify.sh` on `025ce6b2c` | `bgj_0736270dcdfe` | red: the two failures above that the merge exposed (`RunnerPageTest` case file, `GoogleSignInFlowTest`) |
+| `scripts/verify.sh` on `b871adf8e` | `bgj_0321268d0a66` | 635 local tests (core 103, app debug 266, release 266), 0 failures, 0 skips; lint 0 errors |
+| API 36 on `b871adf8e` | `bgj_976a08c16053` | red: `ManagementDeviceTest` crashed on `auth/methods`; `AuthFlowDeviceTest` “Signed in”; share 2/2 |
+| API 36 on `02f2bbe2d`, one hold of the UI lock | `bgj_b075922f3123` | A13 settings and workspace/runner/providers/session-share journeys 2/2 (with the self-update card and Update Runner Now); task and project share entry and A11's N3 share case 2/2; A03 auth: secure store 3, persistence 4 phases, login UI with D1's methods 404 1; A11 real stack `s01`/`s06`/`s11` 3/3 (stack at its fixed server `d621e29aa`). Font, night mode and accessibility restored, no `adb reverse` left |
 
 ## Remaining evidence (gaps)
 
@@ -260,7 +306,7 @@ emulator over controlled HTTP; “JVM” is the unit/shell suites.
 5. On the real runner: Repair of a stuck checkout, Update Engines Now (the stack runs with
    `ORBIT_NO_ENGINE_UPDATE=1` by rule) and the outcome of Refresh Model Lists.
 6. Claude account pools (there is none on the stack); FCM delivery (A10).
-7. Task and project share entries: A11 calls `ShareResourceSettings(api, revision, "TASK"|"PROJECT", id)`.
+7. Task and project share entries (v4): run over A11's controlled fixture only, not against a real stack.
 8. A05 directory defect found on the stack: a workspace whose `position` is null (every new workspace until
    `POST workspaces/reorder`) makes `DirectoryWorkspace` fail to decode, and the whole directory reads as
    unreadable. Reported to the coordinator (task comment `34bdZd75uvZBhUR8rH6t5`); the stack's seed reorders
@@ -270,3 +316,10 @@ emulator over controlled HTTP; “JVM” is the unit/shell suites.
    poll fails until its stale connections are used up. Production's gateway keeps 75 s; already reported by D1.
 10. TalkBack visits the page before the shell's top bar and never stops on the page title (`MainActivity.kt`
     Scaffold, A05's): reported, not changed here.
+11. Runner self-update (v4): over controlled HTTP only (case file, JVM, emulator). No real runner reporting
+    `selfUpdate` was driven, so a real Update Runner Now was not run.
+12. Main's Antigravity sign-in and several Antigravity accounts per runner (`597b5c1cf`, `712d324a8`) came after the
+    audit and are not ported; raised with the coordinator.
+13. A10's foreground and tray device cases are not in this combination: `482b132e8` committed none; A10's harness is on
+    its own branch, which merges this tip next. Here: A10's JVM suites in the gate, and on the emulator Settings →
+    Notifications saying push is unavailable in this build (never “on”).
