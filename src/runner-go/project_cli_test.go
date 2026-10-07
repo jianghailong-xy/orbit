@@ -212,7 +212,10 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	// a request and starts nothing, so it needs no grant beyond being the project's coordinator.
 	// The eleventh is `request-done`, the same coordinator asking the owner to record the project
 	// done: a request again, which records nothing, for the same reason.
-	if len(specs) != 11 {
+	// The twelfth is `skip-merge-check`, the integration line's skip door: it queues one landing
+	// with the check NOT run, and only the account owner's yes makes it happen, so it is
+	// advertised as the write it is.
+	if len(specs) != 12 {
 		t.Fatalf("project capabilities = %#v", projectCLICapabilities)
 	}
 	spec, ok := specs["project_get"]

@@ -205,6 +205,10 @@ var userModeRoutes = []struct {
 		method: "POST", path: "/api/projects/P1/blockers/B1/resolve", body: `{"reason":"landed"}`},
 	{command: "project merge-evidence", args: []string{"P1", "--requirement-id", "R1", "--target-branch", "main", "--content-hash", contentSHA, "--json"},
 		method: "POST", path: "/api/projects/P1/acceptance/merge-evidence", body: `{"requirementId":"R1","targetBranch":"main","contentHash":"` + contentSHA + `"}`},
+	// As the person there is no card to answer: the owner's own token calls the task's skip route
+	// straight through, so this is the user route and not the runner's.
+	{command: "project skip-merge-check", args: []string{"P1", "T1", "--reason", "the check needs a tool this machine lacks", "--json"},
+		method: "POST", path: "/api/projects/P1/tasks/T1/integration/skip-merge-check", body: `{"reason":"the check needs a tool this machine lacks"}`},
 	{command: "project create", args: []string{"--title", "Next", "--goal", "ship it", "--workspace-id", "W1", "--json"},
 		method: "POST", path: "/api/projects", body: `{"title":"Next","goal":"ship it","workspaceId":"W1"}`},
 	{command: "project update", args: []string{"P1", "--title", "Renamed", "--json"}, method: "PATCH", path: "/api/projects/P1", body: `{"title":"Renamed"}`},
