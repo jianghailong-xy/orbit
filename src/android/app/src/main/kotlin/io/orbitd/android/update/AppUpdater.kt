@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.ResponseBody
@@ -112,7 +113,17 @@ class AppUpdater(
 
     fun start() {
         app.registerActivityLifecycleCallbacks(this)
-        if (config.enabled) scope.launch(io) { removeStaleDownloads() }
+        if (!config.enabled) return
+        // An update the user started and verified survives process death (for example while allowing
+        // unknown apps in Settings): offer it again; installing reuses the file after re-checking it.
+        val pending = prefs.getString(PENDING, null)?.let { runCatching { UpdateCatalog.json.decodeFromString<AppRelease>(it) }.getOrNull() }
+        if (pending != null && pending.manifest.versionCode > config.versionCode && apkFile(pending).isFile) {
+            mutableState.value = UpdateState.Available(pending)
+            mutablePrompt.value = pending
+        } else {
+            prefs.edit { remove(PENDING) }
+        }
+        scope.launch(io) { removeStaleDownloads() }
     }
 
     /** Automatic check: skipped when disabled, busy, rate limited, or within [UpdateConfig.interval] of the last one. */
@@ -145,7 +156,7 @@ class AppUpdater(
 
     fun dismissPrompt() {
         val release = mutablePrompt.value ?: return
-        prefs.edit { putLong(DISMISSED, release.manifest.versionCode) }
+        prefs.edit { putLong(DISMISSED, release.manifest.versionCode).remove(PENDING) }
         mutablePrompt.value = null
         if (state.value is UpdateState.PermissionRequired) mutableState.value = UpdateState.Available(release)
     }
@@ -159,12 +170,16 @@ class AppUpdater(
             else -> null
         }
         when {
-            status == PackageInstaller.STATUS_PENDING_USER_ACTION && confirm != null -> mutableConfirmation.value = confirm
+            status == PackageInstaller.STATUS_PENDING_USER_ACTION && confirm != null -> {
+                mutableConfirmation.value = confirm
+                return
+            }
             status == PackageInstaller.STATUS_SUCCESS -> { mutablePrompt.value = null; mutableState.value = UpdateState.Current }
             status == PackageInstaller.STATUS_FAILURE_ABORTED ->
                 mutableState.value = UpdateState.Failed(UpdateFailure.INSTALL_CANCELLED, release)
             else -> mutableState.value = UpdateState.Failed(UpdateFailure.INSTALL_FAILED, release)
         }
+        prefs.edit { remove(PENDING) }
     }
 
     private fun busy() = when (state.value) {
@@ -247,7 +262,7 @@ class AppUpdater(
 
     private suspend fun download(release: AppRelease) {
         val manifest = release.manifest
-        val apk = File(directory, "orbit-${manifest.versionCode}.apk")
+        val apk = apkFile(release)
         val failure = try {
             withContext(io) { fetch(release, apk) }
         } catch (e: CancellationException) {
@@ -272,6 +287,7 @@ class AppUpdater(
             return
         }
         verified = release to apk
+        prefs.edit { putString(PENDING, UpdateCatalog.json.encodeToString(release)) }
         proceed(release, apk)
     }
 
@@ -334,6 +350,8 @@ class AppUpdater(
         }
     }
 
+    private fun apkFile(release: AppRelease) = File(directory, "orbit-${release.manifest.versionCode}.apk")
+
     private fun removeStaleDownloads() {
         directory.listFiles()?.forEach { file ->
             val code = Regex("orbit-(\\d+)\\.apk").matchEntire(file.name)?.groupValues?.get(1)?.toLongOrNull()
@@ -376,6 +394,7 @@ class AppUpdater(
         const val LAST_AUTOMATIC = "lastAutomaticCheck"
         const val LIMITED_UNTIL = "rateLimitedUntil"
         const val DISMISSED = "dismissedVersionCode"
+        const val PENDING = "pendingRelease"
         const val LIST_LIMIT = 8L * 1024 * 1024
         const val MANIFEST_LIMIT = 64L * 1024
         const val PROGRESS_STEP = 256L * 1024

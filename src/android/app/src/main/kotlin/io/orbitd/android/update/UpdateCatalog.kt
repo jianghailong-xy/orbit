@@ -37,6 +37,7 @@ data class UpdateManifest(
     val notes: String = "",
 )
 
+@Serializable
 data class AppRelease(val tag: String, val manifest: UpdateManifest)
 
 /** What this installation is: the release a manifest must strictly improve on. */

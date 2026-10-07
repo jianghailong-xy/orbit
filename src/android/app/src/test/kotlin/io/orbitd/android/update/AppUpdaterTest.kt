@@ -290,6 +290,31 @@ class AppUpdaterTest {
         assertEquals(1, installed.size)
     }
 
+    @Test fun aStartedUpdateIsOfferedAgainAfterProcessDeath() {
+        github.publish("0.6.0", 6, apk(11), signer)
+        acceptArchive(6)
+        inspector.canInstall = false
+        val first = updater()
+        first.checkNow()
+        val release = (first.state.value as UpdateState.Available).release
+        first.install(release)
+        assertEquals(UpdateState.PermissionRequired(release), first.state.value)
+
+        // Android ends the process while the user is in Settings; the next process offers it again.
+        inspector.canInstall = true
+        val second = updater().also { it.start() }
+        assertEquals(UpdateState.Available(release), second.state.value)
+        assertEquals(release, second.prompt.value)
+        second.install(release)
+        assertEquals(UpdateState.Installing(release), second.state.value)
+        assertEquals("The verified file is reused", 1, github.count("/download/android-v0.6.0/orbit-android-0.6.0.apk"))
+        assertEquals(1, installed.size)
+
+        // Later, or any final installer result, forgets it.
+        updater().also { it.start() }.dismissPrompt()
+        assertNull(updater().also { it.start() }.prompt.value)
+    }
+
     @Test fun downloadsOfOlderVersionsAreRemovedOnStart() {
         val dir = File(app.noBackupFilesDir, "updates").apply { mkdirs() }
         listOf("orbit-4.apk", "orbit-5.apk", "orbit-6.apk", "orbit-6.apk.part", "other").forEach { File(dir, it).writeText("x") }

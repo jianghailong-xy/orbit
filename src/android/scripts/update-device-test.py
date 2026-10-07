@@ -173,6 +173,9 @@ def main():
     parser.add_argument('--test-apk-asset', help='same-signer instrumentation APK asset of the FROM release (seed/verify data)')
     parser.add_argument('--serial', default='emulator-5554')
     parser.add_argument('--publish-timeout', type=int, default=3600)
+    parser.add_argument('--lock-timeout', type=int, default=7200)
+    parser.add_argument('--remove-stale-disposable', action='store_true',
+                        help='record and uninstall a leftover *.upgradetest install of an earlier run first')
     parser.add_argument('--output', required=True, type=pathlib.Path)
     args = parser.parse_args()
     output = args.output.resolve()
@@ -190,7 +193,7 @@ def main():
         # subprocess closes inherited descriptors anyway; every adb call names the serial.
         subprocess.run([ADB, 'start-server'], check=True, capture_output=True, timeout=60)
         lock = open(os.environ.get('ANDROID_DEVICE_LOCK', '/var/lib/orbit/android/ui.lock'), 'w')
-        deadline = time.time() + 600
+        deadline = time.time() + args.lock_timeout
         while True:
             try:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -203,7 +206,11 @@ def main():
         device.save('device.txt', ''.join(f"{p}={device.shell(f'getprop {p}').strip()}\n" for p in (
             'ro.product.model', 'ro.build.version.release', 'ro.build.version.sdk', 'ro.build.fingerprint', 'ro.kernel.qemu')))
         before_packages = device.save('packages-before.txt', device.shell(f'pm list packages {package}'))
-        assert f'package:{package}\n' not in before_packages.replace('\r', '') + '\n', f'{package} is already installed'
+        if f'package:{package}\n' in before_packages.replace('\r', '') + '\n':
+            assert disposable and args.remove_stale_disposable, f'{package} is already installed'
+            device.save('stale-package.txt', device.package(package)[1])
+            device.save('stale-uninstall.txt', device.adb('uninstall', package) + device.adb('uninstall', f'{package}.test', check=False))
+            device.note(f'Removed a leftover disposable {package} install of an earlier run')
 
         device.save('install-from.txt', device.adb('install', old['apk']))
         assert 'Success' in (output / 'install-from.txt').read_text()
@@ -232,6 +239,7 @@ def main():
         node = device.find(texts=('Open settings', 'Waiting for Android to install the update…'), timeout=180)
         if node.get('text') == 'Open settings':
             device.screenshot('permission-guidance')
+            pid = device.shell(f'pidof {package}', check=False).strip()
             device.tap(node)
             toggle = device.find(texts=('Allow from this source',), timeout=60)
             device.screenshot('unknown-apps-setting')
@@ -240,10 +248,29 @@ def main():
             device.save('appops-granted.txt', device.shell(f'appops get {package} REQUEST_INSTALL_PACKAGES', check=False))
             device.screenshot('unknown-apps-allowed')
             device.shell('input keyevent KEYCODE_BACK')
-            device.note('Allowed installs from Orbit and returned')
-        confirm = device.find(texts=('Update', 'UPDATE', 'Install', 'INSTALL'), timeout=180)
-        device.screenshot('android-confirmation')
-        device.tap(confirm)
+            time.sleep(2)
+            result['processAfterPermission'] = dict(before=pid, after=device.shell(f'pidof {package}', check=False).strip())
+            device.note(f"Allowed installs from Orbit and returned; app pid {result['processAfterPermission']}")
+        # Android's installer asks for confirmation. If Android restarted Orbit meanwhile, Orbit offers
+        # the same verified update again first.
+        deadline, confirmed = time.time() + 240, False
+        while not confirmed:
+            assert time.time() < deadline, 'Android did not ask to confirm the update'
+            for node in device.window().iter('node'):
+                text, owner = node.get('text'), node.get('package', '')
+                if 'packageinstaller' in owner and text in ('Update', 'UPDATE', 'Install', 'INSTALL'):
+                    device.screenshot('android-confirmation')
+                    device.tap(node)
+                    confirmed = True
+                    break
+                if owner == package and text == 'Update':
+                    device.note('Orbit offered the verified update again')
+                    device.screenshot('prompt-again')
+                    device.tap(node)
+                    time.sleep(2)
+                    break
+            else:
+                time.sleep(1)
         device.note('Confirmed Android installer')
         deadline = time.time() + 180
         while device.package(package)[0]['versionCode'] != str(new['manifest']['versionCode']):
