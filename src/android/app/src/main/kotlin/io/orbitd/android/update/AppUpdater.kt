@@ -10,6 +10,7 @@ import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import androidx.core.content.edit
 import io.orbitd.android.BuildConfig
 import java.io.File
 import java.io.IOException
@@ -120,7 +121,7 @@ class AppUpdater(
         if (!config.enabled || busy() || now < prefs.getLong(LIMITED_UNTIL, 0)) return false
         // A clock set back before the last check allows a new one rather than waiting out the gap.
         if (prefs.getLong(LAST_AUTOMATIC, Long.MIN_VALUE) in (now - config.interval + 1)..now) return false
-        prefs.edit().putLong(LAST_AUTOMATIC, now).apply()
+        prefs.edit { putLong(LAST_AUTOMATIC, now) }
         scope.launch { check(manual = false) }
         return true
     }
@@ -144,7 +145,7 @@ class AppUpdater(
 
     fun dismissPrompt() {
         val release = mutablePrompt.value ?: return
-        prefs.edit().putLong(DISMISSED, release.manifest.versionCode).apply()
+        prefs.edit { putLong(DISMISSED, release.manifest.versionCode) }
         mutablePrompt.value = null
         if (state.value is UpdateState.PermissionRequired) mutableState.value = UpdateState.Available(release)
     }
@@ -193,7 +194,7 @@ class AppUpdater(
                 }
                 Outcome.Current -> mutableState.value = UpdateState.Current
                 is Outcome.Limited -> {
-                    prefs.edit().putLong(LIMITED_UNTIL, outcome.until).apply()
+                    prefs.edit { putLong(LIMITED_UNTIL, outcome.until) }
                     mutableState.value = if (manual) UpdateState.Failed(UpdateFailure.RATE_LIMITED, retryAt = outcome.until) else before
                 }
                 is Outcome.Failed -> mutableState.value = if (manual) UpdateState.Failed(outcome.reason) else before
