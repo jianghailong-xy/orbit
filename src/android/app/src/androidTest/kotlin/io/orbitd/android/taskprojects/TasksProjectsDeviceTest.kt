@@ -60,6 +60,14 @@ class TasksProjectsDeviceTest {
     private fun awaitTag(tag: String, timeout: Long = 20_000) { compose.waitUntil(timeout) { compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty() } }
     private fun awaitGone(tag: String, timeout: Long = 20_000) { compose.waitUntil(timeout) { compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isEmpty() } }
     private fun scrollTo(list: String, matcher: SemanticsMatcher) = compose.onNodeWithTag(list).performScrollToNode(matcher)
+    /** Scrolls to a row that arrives with a later read (a card once its conversation is fresh). */
+    private fun awaitScrollTo(list: String, matcher: SemanticsMatcher, timeout: Long = 20_000) {
+        val deadline = SystemClock.uptimeMillis() + timeout
+        while (true) {
+            try { compose.onNodeWithTag(list).performScrollToNode(matcher); return }
+            catch (missing: AssertionError) { if (SystemClock.uptimeMillis() > deadline) throw missing; SystemClock.sleep(250); compose.waitForIdle() }
+        }
+    }
     private fun tap(tag: String, list: String? = null) {
         if (list != null) scrollTo(list, hasTestTag(tag))
         compose.onNodeWithTag(tag).performClick()
@@ -254,7 +262,7 @@ class TasksProjectsDeviceTest {
         scrollTo("project-detail", hasTestTag("project-coordinator-section")); capture("project-coordinator-entry")
         scrollTo("project-detail", hasTestTag("open-item:x1")); compose.onNodeWithTag("open-item:x1").performClick()
         awaitTag("interaction-cards")
-        scrollTo("transcript-list", hasTestTag("item:x1")); capture("exception-existing-card")
+        awaitScrollTo("transcript-list", hasTestTag("item:x1")); capture("exception-existing-card")
         compose.onNodeWithTag("item:x1:MARK_HANDLED").performScrollTo().performClick()
         compose.onNodeWithText("Why is it no longer open?").performScrollTo().performTextInput("Checked the fixed source and current server record")
         instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
@@ -280,7 +288,7 @@ class TasksProjectsDeviceTest {
         assertEquals("seal1", start.text("criteriaDigest")); assertEquals(JsonNull, start["requestId"])
         assertEquals("PROJECT_BRANCH", start.text("line")); assertEquals("refs/heads/project/a11", start.text("projectBranchName"))
         awaitGone("project-start-sheet"); awaitGone("project-start-own")
-        scrollTo("project-detail", hasTestTag("project-settings")); capture("project-started")
+        awaitScrollTo("project-detail", hasTestTag("project-settings")); capture("project-started")
     }
 
     @Test fun aDeliveryBlockerIsReviewedWithItsReasonRecorded() = journey("project-blocker") {
@@ -319,6 +327,6 @@ class TasksProjectsDeviceTest {
         scrollTo("project-detail", hasTestTag("project-overview")); capture("tour-7-project-progress")
         scrollTo("project-detail", hasTestTag("project-coordinator-section")); capture("tour-8-coordinator-entry")
         scrollTo("project-detail", hasTestTag("open-item:x1")); compose.onNodeWithTag("open-item:x1").performClick()
-        awaitTag("interaction-cards"); scrollTo("transcript-list", hasTestTag("item:x1")); capture("tour-9-review-card")
+        awaitTag("interaction-cards"); awaitScrollTo("transcript-list", hasTestTag("item:x1")); capture("tour-9-review-card")
     }
 }
