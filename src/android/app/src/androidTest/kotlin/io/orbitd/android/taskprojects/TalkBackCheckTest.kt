@@ -133,15 +133,30 @@ class TalkBackCheckTest {
         }
     }
 
-    /** Whatever is over the app (TalkBack's permission prompt) is dismissed with Back, unanswered, and photographed first. */
+    /** TalkBack's permission prompt over the app is dismissed with Back, unanswered, after a photograph; Back is pressed only
+     * while the prompt itself is in front, and the next look waits for it to go, so a Back never reaches the app. Anything
+     * else in front (the launcher) is answered by bringing the app's task forward. */
     private fun backToTheApp(moment: String) {
-        val until = SystemClock.uptimeMillis() + 20_000
+        val prompt = "com.google.android.permissioncontroller"
+        val until = SystemClock.uptimeMillis() + 30_000
+        var photographed = false
         while (SystemClock.uptimeMillis() < until) {
             val front = automation.rootInActiveWindow?.packageName?.toString()
             if (front == app.packageName) return
             report.appendLine("over the app $moment: $front")
-            if (front != null) { capture("talkback-over-app-${moment.replace(' ', '-')}"); automation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK) }
-            SystemClock.sleep(1_500)
+            when (front) {
+                null -> SystemClock.sleep(500)
+                prompt -> {
+                    if (!photographed) { capture("talkback-over-app-${moment.replace(' ', '-')}"); photographed = true }
+                    automation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
+                    val gone = SystemClock.uptimeMillis() + 5_000
+                    while (SystemClock.uptimeMillis() < gone && automation.rootInActiveWindow?.packageName?.toString() == prompt) SystemClock.sleep(250)
+                }
+                else -> {
+                    app.startActivity(Intent(app, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+                    SystemClock.sleep(1_500)
+                }
+            }
         }
         report.appendLine("the app was not back in front $moment")
     }
