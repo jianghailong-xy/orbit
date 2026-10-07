@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>④ 和触发合入的那一下连起来</title>
+<link rel="stylesheet" href="board.css">
+<style>
+.dia svg path, .dia svg line { stroke: #8a8a92; stroke-width: 1.8; fill: none; }
+.dia svg .hot { stroke: #ff9a2e; }
+.dia svg .dash { stroke-dasharray: 6 5; }
+</style></head>
+<body>
+<h1>④ 和触发合入的那一下连起来：冲突、修复、再合入，是同一次合入的几个状态</h1>
+<p class="lede" style="width:2060px">合入冲突不是凭空来的，总有人先按了一下：<b>接受一份交付</b>（任务落到项目分支），或者<b>按了 Merge to main</b>（项目分支合进 main）。<br>
+所以冲突应该接着那一下往下走：出现在那次合入原来的位置，修好后由 Orbit 把<b>原来那一下</b>做完，最后以“已合入”收尾。不应该另起一张待办卡，等别人再按一次 Retry。下面是两种合入各自的流程，以及每个时刻出现在哪里。</p>
+
+<div class="dia" style="width:2060px;height:560px;margin-bottom:26px">
+  <div class="dia-title">任务落地（P3.2 → 项目分支）</div>
+  <div class="dia-hint">触发合入的是“接受交付”。冲突、修复、再次落地，都是这一次落地的状态</div>
+  <svg width="2060" height="560">
+    <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a8a92" stroke="none"/></marker>
+      <marker id="ahh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#ff9a2e" stroke="none"/></marker></defs>
+    <line x1="236" y1="190" x2="276" y2="190" marker-end="url(#ah)"/>
+    <line x1="532" y1="190" x2="596" y2="190" marker-end="url(#ah)"/>
+    <line x1="892" y1="190" x2="956" y2="190" marker-end="url(#ah)"/>
+    <line x1="1262" y1="190" x2="1326" y2="190" marker-end="url(#ah)"/>
+    <line x1="1612" y1="190" x2="1676" y2="190" marker-end="url(#ah)"/>
+    <path class="hot" d="M745 248 C 745 330, 820 390, 880 412" marker-end="url(#ahh)"/>
+    <path class="hot" d="M1060 248 C 1060 320, 1050 360, 1040 396" marker-end="url(#ahh)"/>
+    <path d="M1182 450 C 1290 450, 1250 300, 1200 252" marker-end="url(#ah)"/>
+    <path class="dash" d="M1470 132 C 1470 80, 1300 80, 1100 80 C 900 80, 745 80, 745 130" marker-end="url(#ah)"/>
+  </svg>
+  <div class="st pill" style="left:24px;top:148px;width:212px;height:84px"><b>接受交付</b><span class="c">协调者判定 DONE，或你在确认卡上按 Confirm</span></div>
+  <div class="st blue" style="left:280px;top:132px;width:252px;height:116px"><b>落地中 · 蓝</b><span class="c">Landing · checking</span><span class="c">进度卡里一行（现有）</span></div>
+  <div class="st amber" style="left:600px;top:132px;width:292px;height:116px"><b>暂时落不了 · 协调者在看</b><span class="c">冲突开出待办，交给协调者</span><span class="c">卡上写 Comes to you in … if no fix starts</span></div>
+  <div class="st amber" style="left:960px;top:132px;width:302px;height:116px"><b>修复中 · 琥珀</b><span class="c">退回原任务 / 修复任务 / 集成重跑在跑</span><span class="c">时钟停住，卡上是修复自己的进度</span></div>
+  <div class="st blue" style="left:1330px;top:132px;width:282px;height:116px"><b>再次落地 · 蓝</b><span class="c">修复被接受 → Orbit 自己再落一次</span><span class="c">2nd try · the conflict was fixed in round 2</span></div>
+  <div class="st green" style="left:1680px;top:132px;width:356px;height:116px"><b>已落地 · 绿</b><span class="c">卡收起；时间线一行</span><span class="c">P3.2 landed · after 1 conflict · 3c1b24f</span></div>
+  <div class="st orange" style="left:820px;top:396px;width:362px;height:134px"><b>需要你 · 橙</b><span class="c">2h 没有修复开始 · 修复失败或停滞 · 协调者交给你</span><span class="c">一句请求 + <b style="font-size:13px">Send back…</b> / Ask coordinator</span><span class="c">推送、橙点、提示条只在这一格出现</span></div>
+  <span class="al" style="left:540px;top:164px">冲突</span>
+  <span class="al" style="left:897px;top:164px">开始修</span>
+  <span class="al" style="left:1262px;top:164px">修好·接受</span>
+  <span class="al" style="left:1624px;top:164px">落下</span>
+  <span class="al r" style="left:690px;top:322px">2h 没有修复开始</span>
+  <span class="al r" style="left:1066px;top:300px">修复失败 / 停滞</span>
+  <span class="al" style="left:1236px;top:356px">Send back… 或交回协调者后开始修</span>
+  <span class="al" style="left:1040px;top:68px">再落地时又冲突（main 又动了）：回到“暂时落不了”，同一张卡，第 2 代</span>
+</div>
+
+<div class="row">
+  <div class="dia col" style="width:1640px;height:430px">
+    <div class="dia-title">合入 main（项目分支 → main）</div>
+    <div class="dia-hint">触发合入的是你按的 Merge to main。修好以后，这一下继续有效</div>
+    <svg width="1640" height="430">
+      <defs><marker id="bh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a8a92" stroke="none"/></marker>
+        <marker id="bhh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#ff9a2e" stroke="none"/></marker></defs>
+      <line x1="204" y1="180" x2="240" y2="180" marker-end="url(#bh)"/>
+      <line x1="464" y1="180" x2="500" y2="180" marker-end="url(#bh)"/>
+      <line x1="770" y1="180" x2="806" y2="180" marker-end="url(#bh)"/>
+      <line x1="1060" y1="180" x2="1096" y2="180" marker-end="url(#bh)"/>
+      <line x1="1340" y1="180" x2="1376" y2="180" marker-end="url(#bh)"/>
+      <path class="hot" d="M635 236 C 635 290, 640 310, 640 330" marker-end="url(#bhh)"/>
+      <path class="dash" d="M933 236 C 933 290, 1000 320, 1080 340" marker-end="url(#bh)"/>
+    </svg>
+    <div class="st pill" style="left:24px;top:140px;width:180px;height:80px"><b>你按 Merge to main</b></div>
+    <div class="st blue" style="left:244px;top:124px;width:220px;height:112px"><b>合入中 · 蓝</b><span class="c">Re-checking / Merging…</span><span class="c">合入卡（现有）</span></div>
+    <div class="st amber" style="left:504px;top:124px;width:266px;height:112px"><b>暂时合不了 · 琥珀</b><span class="c">协调者开同步任务修冲突</span><span class="c">卡上是修复进度 + 你的那一下还在</span></div>
+    <div class="st gray" style="left:810px;top:124px;width:250px;height:112px"><b>重新检查 · 灰</b><span class="c">修复落到项目分支后</span><span class="c">Orbit 重查合并后的树</span></div>
+    <div class="st blue" style="left:1100px;top:124px;width:240px;height:112px"><b>自动合入 · 蓝</b><span class="c">检查通过就合，<b style="font-size:12px">不用你再按一次</b></span><span class="c">You confirmed it at 00:41</span></div>
+    <div class="st green" style="left:1380px;top:124px;width:236px;height:112px"><b>已合入 · 绿</b><span class="c">时间线一行 Merged into main</span><span class="c">回执里多一句 after 1 conflict</span></div>
+    <div class="st orange" style="left:520px;top:330px;width:250px;height:80px"><b>需要你 · 橙</b><span class="c">2h 没有修复开始 / 修复失败</span></div>
+    <div class="st gray" style="left:1000px;top:330px;width:330px;height:80px;border-style:dashed"><b>等你确认 · 橙（例外）</b><span class="c">修复改了冲突文件以外的东西：重新问你</span></div>
+    <span class="al" style="left:470px;top:154px">冲突</span>
+    <span class="al" style="left:772px;top:154px">修好</span>
+    <span class="al" style="left:1062px;top:154px">通过</span>
+    <span class="al r" style="left:648px;top:282px">2h 没人修</span>
+  </div>
+  <div class="col" style="width:384px">
+    <div class="cap"><span class="tag new">方案</span>合入卡“暂时合不了”，同一套规则</div>
+    <div class="crop"><img src="shots/crop-merge.png" alt=""></div>
+    <ul class="notes"><li>原因、修复进度、一句承诺，和落地卡一样。</li><li><b>Your Merge to main still stands</b>：修好以后不再回到“等你确认”，你那一下继续把它合进去。想反悔就按 Cancel merge（推送前都可以）。</li></ul>
+  </div>
+</div>
+
+<div class="box" style="width:2060px;margin-bottom:0">
+  <h2>每个时刻在哪里出现（任务落地）</h2>
+  <p class="hint">蓝底是这次要改的地方。原则跟合入一样：<b>卡片只画在项目会话页</b>，别处只负责把你带到这张卡，或者打开同一个 Details。</p>
+  <table>
+    <tr><th style="width:150px"></th><th>落地中</th><th>协调者在看</th><th>修复中</th><th>需要你</th><th>再次落地</th><th>已落地</th></tr>
+    <tr><td class="k">项目会话页</td><td>进度卡一行 Landing · checking（现有）</td><td class="new">琥珀卡：原因 ＋ Coordinator is looking at it ＋ 何时转给你</td><td class="new">琥珀卡：修复进度行 ＋ Lands again by itself… Nothing for you to do.</td><td class="new">橙卡：一句请求 ＋ Send back… / Ask coordinator</td><td class="new">进度卡一行 ＋ 2nd try · the conflict was fixed in round 2</td><td class="new">卡收起；时间线一行 P3.2 landed</td></tr>
+    <tr><td class="k">协调会话</td><td>协调者自己的话（照旧）</td><td class="new">一行琥珀：P3.2 couldn’t land — conflict in … · Details（取代 Exception item 大卡）</td><td class="new">一行灰：Coordinator sent P3.2 back to fix it · round 2 started · Open</td><td class="new">一行橙：Merge conflict on P3.2 is waiting for you · Review（取代 Now yours 大卡）；顶部提示条计数</td><td class="new">一行蓝：Landing P3.2 again · checking · Watch</td><td class="new">一行绿：P3.2 landed · after 1 conflict · Receipt；21:34 那行变灰：conflict fixed in round 2</td></tr>
+    <tr><td class="k">会话列表 · 项目行</td><td>Landing · checking（现有）</td><td class="new">Landing stopped · conflict（琥珀字）</td><td class="new">Landing stopped · being fixed</td><td>Needs you · Merge conflict（橙点和计数，现有）</td><td>Landing · checking</td><td>照旧</td></tr>
+    <tr><td class="k">推送 / 横幅</td><td>不推</td><td>不推</td><td>不推</td><td class="new">P3.2 can’t land — needs you，点开项目会话页</td><td>不推</td><td>不推</td></tr>
+    <tr><td class="k">任务页 Landing 段</td><td>Landing onto project/…（现有）</td><td class="new">Stopped at a conflict · coordinator 3m</td><td class="new">Being fixed in round 2 · 3 of 5</td><td class="new">同一句请求 ＋ 同两个按钮</td><td class="new">Landing again · 2nd try</td><td class="new">Landed · after 1 conflict</td></tr>
+    <tr><td class="k">交付的那一轮会话</td><td>底部标签 Landing · checking ›</td><td class="new">Landing stopped · conflict ›</td><td class="new">Being fixed in round 2 ›</td><td class="new">Waiting on the owner ›</td><td class="new">Landing again ›</td><td class="new">On project/34ZZ… ✓</td></tr>
+  </table>
+</div>
+</body></html>

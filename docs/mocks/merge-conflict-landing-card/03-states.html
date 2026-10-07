@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>③ 一次落地的六个时刻</title>
+<link rel="stylesheet" href="board.css"></head>
+<body>
+<h1>③ 一次落地的六个时刻：同一个位置，颜色说明谁在动</h1>
+<p class="lede" style="width:2060px">都是项目会话页最上面那一块，截自真实控制台。颜色规则沿用合入卡：<b>灰 / 蓝 = Orbit 在跑，琥珀 = 别人在处理，橙 = 等你，绿 = 已经落下</b>。只有橙色会推送、亮橙点、带主按钮。卡片只在这次落地停下时出现，落下以后就收成时间线里的一行。</p>
+
+<div class="row" style="gap:22px">
+  <div class="col" style="width:322px">
+    <div class="cap"><span class="tag fact">a</span>落地中 · 蓝（现有）</div>
+    <div class="crop"><img src="shots/crop-landing1.png" alt=""></div>
+    <ul class="notes"><li>交付被接受的那一刻出现：<b>Landing · checking</b>，在进度卡里占一行（现在的 LandingRow，不改）。</li><li>点开是这次落地的详情。</li></ul>
+  </div>
+  <div class="col" style="width:322px">
+    <div class="cap"><span class="tag fact">b</span>协调者在看 · 琥珀</div>
+    <div class="crop"><img src="shots/crop-triage.png" alt=""></div>
+    <ul class="notes"><li>冲突后，修复还没开始的那段时间（≤ 2h）。</li><li>状态行：<b>Coordinator is looking at it · 3m</b>。副行把时钟写成一句承诺：<b>Comes to you in 1h 57m if no fix starts</b>。</li><li>没有按钮。</li></ul>
+  </div>
+  <div class="col" style="width:322px">
+    <div class="cap"><span class="tag fact">c</span>修复中 · 琥珀（这次的情况）</div>
+    <div class="crop"><img src="shots/crop-fixing.png" alt=""></div>
+    <ul class="notes"><li>退回原任务、修复任务、集成重跑，只要有一个在跑，就是修复中，<b>时钟停住</b>。</li><li>状态行是修复自己报的进度（task_progress_report），点开那一轮。</li><li><b>Nothing for you to do.</b></li></ul>
+  </div>
+  <div class="col" style="width:322px">
+    <div class="cap"><span class="tag fact">d</span>需要你 · 橙</div>
+    <div class="crop"><img src="shots/crop-yours.png" alt=""></div>
+    <ul class="notes"><li>只在三种情况出现：<b>2h 没有修复开始</b>、<b>修复失败或停滞</b>、<b>协调者把它交给你</b>（把它的说明原样写在卡上）。</li><li>一句要你做的事，一个主按钮。</li></ul>
+  </div>
+  <div class="col" style="width:322px">
+    <div class="cap"><span class="tag fact">e</span>再次落地 · 蓝</div>
+    <div class="crop"><img src="shots/crop-relanding.png" alt=""></div>
+    <ul class="notes"><li>修复被接受，<b>Orbit 自己再落一次</b>，不用谁去按 Retry。</li><li>琥珀卡收回进度卡里那一行，多一句 <b>2nd try · the conflict was fixed in round 2</b>，前后读起来是一件事。</li></ul>
+  </div>
+  <div class="col" style="width:322px">
+    <div class="cap"><span class="tag fact">f</span>已落地 · 绿</div>
+    <div class="crop"><img src="shots/crop-landed.png" alt=""></div>
+    <ul class="notes"><li>卡片收起，时间线里多一行：<b>P3.2 landed · on the project branch · after 1 conflict · 3c1b24f</b>。</li><li>点开是落地回执，里面写这次冲突怎么解的。</li></ul>
+  </div>
+</div>
+
+<div class="row" style="margin-bottom:0">
+  <div class="col" style="width:1250px">
+    <div class="box">
+      <h2>文案：现在 → 改后</h2>
+      <p class="hint">英文是界面原文；中文是说明。改后的每个值都来自服务端读到的事实（待办、作业、任务进度），客户端不自己编句子。</p>
+      <table>
+        <tr><th style="width:110px">位置</th><th style="width:500px">现在</th><th>改后</th></tr>
+        <tr><td class="k">标题</td><td class="old">Now yours — no one acted on this for 2h 8m</td><td class="new">P3.2 can’t land yet（只有 d 加 <b>Needs you</b> 徽标）</td></tr>
+        <tr><td class="k">原因</td><td class="old">Into refs/heads/project/34ZZeq0e3IR65GVm2kAs7 at da13423 · nothing landed<br>Files src/web/src/components/AccountSelect.tsx</td><td class="new">Conflicts with main in <code>AccountSelect.tsx</code><br>main changed it too, in 712d324a8<br><span class="m">分支名、sha、全路径挪进 Details</span></td></tr>
+        <tr><td class="k">谁在处理</td><td class="old">（没有；只有页脚 Owner: you）</td><td class="new">Round 2 is fixing it · step 3 of 5 · sent back 2h ago · active 1m ago<br>Coordinator is looking at it · 3m · Comes to you in 1h 57m if no fix starts</td></tr>
+        <tr><td class="k">要你做什么</td><td class="old">（没有。服务端的 requiredAction 没画）</td><td class="new"><b>Nothing for you to do.</b><br>No fix has started in 2h. Send P3.2 back to merge main and resolve it — its delivered work is kept.</td></tr>
+        <tr><td class="k">修好以后</td><td class="old"><span class="bug">After a fix: push to the task branch — Orbit re-integrates and re-checks on its own</span>（没实现）</td><td class="new">Lands again by itself once round 2 is accepted.</td></tr>
+        <tr><td class="k">按钮</td><td class="old">Ask the coordinator again · Open task session · <span class="bug">Retry</span> · <span class="bug">Cancel task</span> · Mark as handled · Chat about this</td><td class="new">b / c：无按钮（状态行可点）<br>d：<b>Send back…</b> · Ask coordinator；⋯ 里 Cancel P3.2… / Mark as handled；Details 里 Chat about this</td></tr>
+        <tr><td class="k">页脚</td><td class="old">Owner: you · waiting 2h 10m · came to the owner at 2h 8m</td><td class="new">stopped 2h 10m ago · Details ›　/　came to you 2m ago · ⋯ · Details ›</td></tr>
+        <tr><td class="k">协调会话</td><td class="old">Exception item 大卡 ＋ Now yours 大卡</td><td class="new">每个时刻一行：琥珀（停下）→ 灰（开始修）→ 橙（转给你，仅 d）→ 蓝（再次落地）→ 绿（落下）</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="col" style="width:786px">
+    <div class="box">
+      <h2>卡片的五条规则</h2>
+      <p class="hint">每张异常卡都适用（冲突、检查失败、集成错误）；本期只改冲突。</p>
+      <ol class="notes" style="margin-top:4px">
+        <li class="n" data-n="1"><b>标题说事情，不说时钟</b>：哪个任务、哪件事做不成。时间放页脚。</li>
+        <li class="n" data-n="2"><b>永远有一句“要不要你做事”</b>：要么 Nothing for you to do，并说明谁在做、接下来会怎样；要么一句具体的请求。</li>
+        <li class="n" data-n="3"><b>最多一个主按钮，只在橙色时出现。</b>对这个状态没用或者有害的门不画：冲突不画 Retry；修复在跑时，Cancel 要先说明会一起取消第 2 轮。</li>
+        <li class="n" data-n="4"><b>“谁在修”要指向活的那一轮</b>，并带它自己报的进度。不要指向已经结束的那一轮。</li>
+        <li class="n" data-n="5"><b>只写平台真会做的事。</b>“Lands again by itself” 要有代码兑现（任务再次 DONE 会自动排落地，现有）。“push … re-integrates” 没人兑现，删掉。</li>
+      </ol>
+    </div>
+  </div>
+</div>
+</body></html>

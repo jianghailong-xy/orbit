@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>⑤ Details、Send back，以及要改的逻辑</title>
+<link rel="stylesheet" href="board.css"></head>
+<body>
+<h1>⑤ Details 和 Send back 两个弹窗，以及背后要改的逻辑</h1>
+<p class="lede" style="width:2060px">卡片的 Details、协调会话里那一行、任务页 Landing 段，打开的都是<b>同一个 Details</b>，和合入的审阅 sheet 是一个道理。整件事从“接受交付”讲到“下一步”，按时间往下读，谁做了什么都在上面。<br>
+Send back… 只在橙色时出现。它就是协调者平时处理冲突的那一步：task_reopen 加说明。说明按冲突事实预先写好，你只需要看一眼、按一下。</p>
+
+<div class="row">
+  <div class="col" style="width:1010px">
+    <div class="cap"><span class="tag new">方案</span>Details：这一次落地的完整经过（修复中）</div>
+    <div class="shot"><img src="shots/dlg-details.png" alt=""></div>
+    <ul class="notes">
+      <li><b>最上面先回答“要不要你做事”</b>，和卡片同一句，旁边是 Open round 2。</li>
+      <li><b>What happened</b> 是一条时间线：接受交付 → 停在冲突 → 退回 → 第 2 轮现在到哪 → 下一步会怎样。最后一格写的是“将会发生”，所以你不用猜 Orbit 还会不会自己动。</li>
+      <li><b>The conflict</b>：文件、main 那边是哪个提交、P3.2 这边改了什么、谁在等它。分支名和 sha 只在这里出现。</li>
+      <li>Chat about this 在左下；Mark as handled、Cancel P3.2… 是右下的轻链接。原来给协调者的那段话收进 “What the coordinator was told”。</li>
+    </ul>
+  </div>
+  <div class="col" style="width:1010px">
+    <div class="cap"><span class="tag new">方案</span>Send back…：替你做协调者那一步（需要你）</div>
+    <div class="shot"><img src="shots/dlg-sendback.png" alt=""></div>
+    <ul class="notes">
+      <li><b>说明是预先写好的</b>，素材都来自待办和作业里的事实：交付分支、冲突文件、main 那边的提交。写法和这次协调者手写的那条一样：合入 main、两边的改动都保留、只复验合入碰到的部分。</li>
+      <li><b>下面一块写清楚按了以后会怎样</b>：协调者照旧审新交付；被接受后，Orbit 自己再落一次，待办自动关闭。不用回来按 Retry。</li>
+      <li>按下以后卡片立刻变成琥珀“修复中”。协调会话里多一行灰字 “You sent P3.2 back to fix it · round 2 started”。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="box" style="width:2060px;margin-bottom:0">
+  <h2>要改的逻辑（效果图背后）</h2>
+  <p class="hint">按依赖排序。S1–S5 解决“说错话、按错门”，S6–S8 是挪位置，S9 是合入 main 的连贯性。路径指向当前 main（6c6528dbb）。</p>
+  <table>
+    <tr><th style="width:56px"></th><th style="width:560px">改什么</th><th style="width:640px">为什么</th><th>在哪</th></tr>
+    <tr><td class="k">S1</td><td>升级时钟把<b>“冲突之后 reopen 了原任务、且它的工作会话还活着”</b>算作修复在进行：时钟停住，结束后从最后进展再算 2h。也可以在 reopen 时把任务挂到待办上（handledBy 里出现它）。</td><td>P3.2 这次就是这么被误升级的。退回原任务是协调者处理冲突最常用的一条路（reopen intent 也只在下一次 DONE 才把旧待办标成 handling）。</td><td><code>open-item-escalation.service.ts</code> escalatesAt；<code>project-integration-job.ts</code> reopen intent</td></tr>
+    <tr><td class="k">S2</td><td>待办行带上 <code>fix</code>：怎么修的（REOPEN / REPAIR_TASK / RERUN）、哪个任务和会话、第几轮、进度（current / total / phase）、最后活跃时间。</td><td>卡片的状态行和 Details 的时间线都从这里画。进度已经有了（task_progress_report），只是没接到待办上。</td><td><code>project-open-item.service.ts</code> list()；<code>project-progress.ts</code> ProjectOpenItemRow</td></tr>
+    <tr><td class="k">S3</td><td><b>Send back…</b> 调冲突的 RETRY 门（task_comment ＋ task_reopen，说明预填），不再调 <code>POST /tasks/:id/execute</code>。</td><td>服务端门表里，冲突的 RETRY 本来就是 task_reopen / task_create。Web 的 Retry 却调 Run Now：不会重新落地，也不关待办。</td><td><code>open-item-doors.ts</code>；<code>ProjectProgressStatus.tsx</code> ItemPress</td></tr>
+    <tr><td class="k">S4</td><td>冲突不画 Retry。Cancel 收进 ⋯，修复在跑时先确认“会一起取消第 2 轮”。Open task session 指向正在修的那一轮。</td><td>现在 6 个按钮里有两个会伤到正在进行的修复，一个打开已经结束的会话。</td><td><code>ProjectProgressStatus.tsx</code> CardActions / actionHref</td></tr>
+    <tr><td class="k">S5</td><td>删掉 “After a fix: push to the task branch — Orbit re-integrates…”。要么实现 J-T1c（新推送自动重排落地），要么不写。建议先删。</td><td>代码里没有这条路：LAND_TASK 只在任务 DONE 时排队。</td><td><code>ProjectProgressStatus.tsx</code>:1016；合约 §J-T1c</td></tr>
+    <tr><td class="k">S6</td><td>项目会话页画落地卡：读 <code>integration.landTasks</code>（已经返回停在冲突、检查失败的任务）加 open-items。顺序是合入卡 → 要你 → 修复中 → 在看，最多 3 张。</td><td>现在进度卡只画进行中的作业，落地一停这一页就什么都不说了。</td><td><code>WorkspaceView.tsx</code> SessionProjectLanding；iOS SessionProjectPage</td></tr>
+    <tr><td class="k">S7</td><td>协调会话：投递卡、升级卡都换成每个时刻一行（ReviewCard 的 preview，和合入一样），点开是 Details。</td><td>大卡夹在对话里，会把上下文顶开；同一件事出现两张卡，说法还不一样。</td><td><code>OpenItemDeliveryCard.tsx</code>；<code>exceptionCardRows</code>；<code>OpenItemDelivery.swift</code></td></tr>
+    <tr><td class="k">S8</td><td>推送、横幅、会话列表的 Needs you 都打开项目会话页，文案用卡片标题。</td><td>和合入请求在 iOS 上的处理一致：提醒只负责带你去卡那里。</td><td><code>owner-item-alert.ts</code>；Notifications.swift</td></tr>
+    <tr><td class="k">S9</td><td>合入 main 的冲突：修复通过检查后，你之前按的 Merge to main 继续生效，自动合入。修复改到冲突文件以外时才重新问你。</td><td>这就是“和触发合入的那一下连起来”：你已经同意过的事，不用因为一次冲突再同意一遍。</td><td>promotion 状态机（CONFIRMED → BLOCKED → 重查 → 合入）</td></tr>
+  </table>
+  <p class="foot">不在这一期的：检查失败（INTEGRATION_CHECK_FAILED）、集成错误也用同一张卡、同一套规则，只是原因行和修法不同。这一期按你的要求只改冲突。</p>
+</div>
+</body></html>

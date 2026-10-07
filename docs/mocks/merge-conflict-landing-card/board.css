@@ -1,0 +1,77 @@
+/* Boards for docs/mocks/merge-conflict-landing-card. Every frame under shots/ is a screenshot of the
+   real web console (vite against a fixed fake control plane shaped on project 34ZZeq0e3IR65GVm2kAs7
+   at 2026-10-06 23:44Z); the proposal was drawn into the live page with the console's own classes
+   and CSS variables. Red dashed outlines and red numbers are annotations, not UI. */
+* { box-sizing: border-box; }
+body { margin: 0; width: max-content; padding: 40px 48px 48px; background: #e9e9ee; color: #16161a;
+       font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Inter", "PingFang SC", "Noto Sans SC", sans-serif;
+       letter-spacing: -.005em; -webkit-font-smoothing: antialiased; }
+h1 { font-size: 26px; letter-spacing: -.02em; margin: 0 0 6px; line-height: 1.3; }
+p.lede { color: #4a4a52; margin: 0 0 26px; }
+p.lede b { color: #16161a; }
+.row { display: flex; gap: 36px; align-items: flex-start; margin-bottom: 30px; }
+.col { flex: none; }
+.cap { font-size: 14px; color: #3a3a40; margin: 0 0 10px; font-weight: 650; display: flex; gap: 8px; align-items: center; }
+.tag { white-space: nowrap; display: inline-block; font-size: 12.5px; font-weight: 700; border-radius: 999px; padding: 1px 10px; }
+.tag.now { background: #ffd9d4; color: #8f1d13; }
+.tag.new { background: #d6e4ff; color: #14428f; }
+.tag.fact { background: #e4e4ea; color: #3a3a40; }
+.shot { display: block; border-radius: 12px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 10px 30px rgba(0,0,0,.08); overflow: hidden; }
+.shot img { display: block; width: 100%; height: auto; }
+.phone { border-radius: 34px; border: 9px solid #1b1b1d; box-shadow: 0 18px 40px rgba(0,0,0,.2); overflow: hidden; background: #fff; }
+.phone img { display: block; width: 100%; height: auto; }
+.crop { border-radius: 12px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 8px 22px rgba(0,0,0,.07); overflow: hidden; }
+.crop img { display: block; width: 100%; height: auto; }
+.vs { flex: none; align-self: center; color: #8a8a92; font-size: 24px; }
+ul.notes, ol.notes { margin: 14px 0 0; padding-left: 0; list-style: none; color: #2a2a30; font-size: 14px; line-height: 1.6; }
+ul.notes li, ol.notes li { margin: 5px 0; padding-left: 26px; position: relative; }
+ul.notes li::before { content: '•'; position: absolute; left: 9px; color: #8a8a92; }
+ul.notes li.n::before, ol.notes li.n::before { content: attr(data-n); position: absolute; left: 0; top: 2px; width: 18px; height: 18px; border-radius: 50%; background: #f5222d;
+       color: #fff; font: 600 11px/18px Inter, -apple-system, sans-serif; text-align: center; }
+ul.notes b, ol.notes b { color: #16161a; }
+code { font: 12.5px/1 ui-monospace, "SF Mono", "DejaVu Sans Mono", monospace; background: rgba(0,0,0,.06); padding: 2px 5px; border-radius: 5px; }
+.box { background: #fff; border-radius: 16px; padding: 18px 24px 14px; box-shadow: 0 1px 0 rgba(0,0,0,.05); margin-bottom: 26px; }
+.box h2 { font-size: 17px; margin: 0 0 4px; }
+.box .hint { color: #6a6a72; font-size: 13.5px; margin: 0 0 12px; }
+.box table { border-collapse: collapse; width: 100%; font-size: 13.5px; line-height: 1.5; }
+.box th { text-align: left; color: #5a5a62; font-weight: 650; padding: 7px 10px; border-bottom: 2px solid #eee; white-space: nowrap; vertical-align: bottom; }
+.box td { padding: 8px 10px; border-bottom: 1px solid #f1f1f4; vertical-align: top; }
+.box tr:last-child td { border-bottom: 0; }
+.box td.k { font-weight: 650; white-space: nowrap; color: #16161a; }
+.box td.new { background: rgba(51,112,255,.06); }
+.box td.old { color: #6a6a72; }
+.box td .m { color: #8a8a92; }
+.bug { color: #b42318; font-weight: 650; }
+.ok { color: #1a7f37; font-weight: 650; }
+.foot { margin-top: 10px; font-size: 13.5px; color: #4a4a52; }
+/* A fact timeline, read off production. */
+.tl { margin: 0; padding: 0; list-style: none; font-size: 14px; }
+.tl li { display: grid; grid-template-columns: 54px 14px 1fr; gap: 0 10px; padding: 0 0 12px; position: relative; }
+.tl li::before { content: ''; position: absolute; left: 70px; top: 16px; bottom: -2px; width: 2px; background: #e4e4ea; }
+.tl li:last-child::before { display: none; }
+.tl .t { color: #6a6a72; text-align: right; font-variant-numeric: tabular-nums; }
+.tl .d { width: 12px; height: 12px; margin-top: 5px; border-radius: 50%; background: #c9c9d1; z-index: 1; }
+.tl .d.ok { background: #2da44e; } .tl .d.bad { background: #e5484d; } .tl .d.warn { background: #f59e0b; } .tl .d.blue { background: #3370ff; }
+.tl .b b { color: #16161a; }
+.tl .b .s { display: block; color: #6a6a72; font-size: 13px; }
+.tl li.lie .b { color: #b42318; }
+/* State diagram */
+.dia { position: relative; background: #fff; border-radius: 16px; box-shadow: 0 1px 0 rgba(0,0,0,.05); }
+.st { position: absolute; display: flex; flex-direction: column; gap: 3px; padding: 10px 14px; border-radius: 12px; border: 1.5px solid #d4d4dc;
+      background: #f7f7f9; font-size: 13px; line-height: 1.45; color: #3a3a40; }
+.st b { font-size: 14.5px; color: #16161a; }
+.st .c { font-size: 12px; color: #6a6a72; }
+.st.gray { background: #f3f3f6; border-color: #cfcfd8; }
+.st.blue { background: #eef3ff; border-color: #a9c1ff; }
+.st.amber { background: #fff8eb; border-color: #f2c66d; }
+.st.orange { background: #fff1e0; border-color: #ff9a2e; box-shadow: 0 0 0 3px rgba(255,154,46,.18); }
+.st.green { background: #ecf8ef; border-color: #8fd3a3; }
+.st.pill { border-radius: 999px; align-items: center; justify-content: center; text-align: center; background: #fff; border-style: dashed; }
+.dia svg { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.al { position: absolute; font-size: 12.5px; color: #4a4a52; background: #fff; padding: 0 4px; white-space: nowrap; }
+.al.r { color: #b45309; font-weight: 600; }
+.dia-title { position: absolute; left: 24px; top: 16px; font-size: 16px; font-weight: 700; }
+.dia-hint { position: absolute; left: 24px; top: 40px; font-size: 13px; color: #6a6a72; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: #4a4a52; margin: 0 0 12px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 4px; border: 1.5px solid; }

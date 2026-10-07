@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>② 方案：冲突是那次落地的一个状态</title>
+<link rel="stylesheet" href="board.css"></head>
+<body>
+<h1>② 方案：冲突是那次落地的一个状态，卡片挪到项目会话页，和合入卡同一个位置</h1>
+<p class="lede" style="width:2060px">和 10-06 挪合入卡的做法一样：<b>把冲突当成项目里那次落地的一件事，而不是对话里的一条消息。</b>卡片放在项目会话页进度卡下面（合入卡的位置）。协调会话里每个时刻只留一行。卡片永远先回答一句：<b>要不要你做事</b>。<br>
+上图是这次的真实情况：协调者已经退回 P3.2，第 2 轮在修，所以卡是琥珀色，写 “Nothing for you to do”。下图是另一种情况：2 小时没有任何修复开始（协调者没接），这时卡才变橙，并且只给一个主按钮。两帧都截自真实控制台，方案部分用控制台自己的样式画进页面。</p>
+
+<div class="row">
+  <div class="col" style="width:1240px">
+    <div class="cap"><span class="tag new">方案</span>有人在修（这次的真实情况）：琥珀，不打扰你</div>
+    <div class="shot"><img src="shots/after-fixing.png" alt=""></div>
+  </div>
+  <div class="col" style="width:800px;padding-top:30px">
+    <ol class="notes" style="margin-top:0">
+      <li class="n" data-n="1"><b>落地卡，在进度卡下面。</b>琥珀边框加琥珀标题，意思是“别人在处理”，跟合入卡“暂时合不了”用同一套颜色。
+        <br>· <b>标题说事情</b>：P3.2 can’t land yet。
+        <br>· <b>原因用人话</b>：Conflicts with main in <code>AccountSelect.tsx</code> · main changed it too, in 712d324a8。
+        <br>· <b>状态行说谁在修、修到哪了</b>：Round 2 is fixing it · step 3 of 5 · active 1m ago。点它直接打开第 2 轮。
+        <br>· <b>一句承诺加一句结论</b>：Lands again by itself once round 2 is accepted. <b>Nothing for you to do.</b>
+        <br>· 页脚只留时间和 Details。<b>没有任何按钮</b>，因为此刻没有该你按的。</li>
+      <li class="n" data-n="2"><b>协调会话：大卡变成一行。</b>位置在冲突发生的那一刻（21:34），琥珀色：“P3.2 couldn’t land — conflict in AccountSelect.tsx · Details”。点开就是卡片的 Details（见图 ⑤）。原来那段给 agent 的话收进 Details 底部的 “What the coordinator was told”。</li>
+      <li class="n" data-n="3"><b>修复开始也是一个时刻，留一行灰字</b>：Coordinator sent P3.2 back to fix it · round 2 started · Open。以后谁退回的、什么时候开始修的，翻对话就能找到。</li>
+      <li><b>不再出现</b> “Now yours — no one acted…” 这张卡。修复在跑，时钟就停着（改动见图 ⑤ 的 S1）。</li>
+    </ol>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col" style="width:1240px">
+    <div class="cap"><span class="tag new">方案</span>2 小时没人开始修：橙，只问你一件事</div>
+    <div class="shot"><img src="shots/after-escalated.png" alt=""></div>
+  </div>
+  <div class="col" style="width:800px;padding-top:30px">
+    <ol class="notes" style="margin-top:0">
+      <li class="n" data-n="1"><b>同一张卡，变成 Needs you。</b>橙底加徽标，和合入卡“等你确认”一样，只有这时才亮橙。
+        <br>· <b>要你做的事写成一句</b>：No fix has started in 2h. Send P3.2 back to merge main and resolve it — its delivered work is kept.
+        <br>· <b>为什么值得管</b>：Holding up P3.3 检查试点保真度与迁移收益 and 1 more。
+        <br>· <b>一个主按钮</b>：Send back…，打开退回弹窗，说明已经按冲突写好（图 ⑤）。它做的就是协调者平时做的那一步：task_reopen 加说明。
+        <br>· <b>一个次按钮</b>：Ask coordinator（交回协调者，时钟重算 2h）。
+        <br>· Cancel P3.2、Mark as handled、Chat about this 收进 ⋯ 和 Details。<b>不再有 Retry</b>：对冲突来说，Run Now 不会让它落地。</li>
+      <li class="n" data-n="2">冲突那一刻的那一行照旧。</li>
+      <li class="n" data-n="3"><b>转给你的那一刻也只是一行</b>，橙色：Merge conflict on P3.2 is waiting for you · Review，点开是同一张卡。它排在转给你的时刻（escalatedAt），不压在对话最底下。</li>
+      <li class="n" data-n="4">顶部提示条照旧计数，文案换成同一句。</li>
+      <li><b>会话列表的项目行、推送、应用内横幅</b>（现在写 “Escalated to you”）点开都进项目会话页，卡就在最上面。这和合入请求在 iOS 上的做法一样。</li>
+    </ol>
+  </div>
+</div>
+
+<div class="row" style="margin-bottom:0">
+  <div class="col" style="width:2060px">
+    <div class="cap"><span class="tag new">方案</span>手机：从会话列表点项目进来的那一页（Web 窄屏；iOS / macOS 的 SessionProjectPage 同一张卡）</div>
+    <div style="display:flex;gap:36px;align-items:flex-start">
+      <div class="phone" style="width:320px"><img src="shots/phone-fixing.png" alt=""></div>
+      <div class="phone" style="width:320px"><img src="shots/phone-yours.png" alt=""></div>
+      <ul class="notes" style="margin-top:0;width:1300px">
+        <li><b>左：有人在修。</b>卡片三块：原因、修复进度、一句结论。手机上一屏就能看完，不用进协调会话。</li>
+        <li><b>右：要你。</b>两个按钮并排，主按钮占满剩下的宽度，和合入卡的 Merge to main / Not now 一样。⋯ 里是 Cancel P3.2…（带确认）和 Mark as handled。</li>
+        <li><b>一个项目同时有几张卡时</b>，顺序是：合入卡（要你的）→ 要你的落地卡 → 修复中 → 协调者在看。最多 3 张，其余折成一行 “2 more landings stopped ›”。</li>
+        <li><b>iOS / macOS</b>：OrbitKit 的 ExceptionCards、OpenItemDelivery 和 Web 同一次提交改，文案用同一张表（parity 测试钉住）。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+</body></html>

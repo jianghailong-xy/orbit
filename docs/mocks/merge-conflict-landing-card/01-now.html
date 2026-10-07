@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>① 现在：冲突卡没说要你做什么</title>
+<link rel="stylesheet" href="board.css"></head>
+<body>
+<h1>① 现在：冲突卡没说要你做什么，放错了地方，还说错了话</h1>
+<p class="lede" style="width:2060px">左边截自真实的 Web 控制台，数据照 10-06 23:44（UTC）这个项目的真实状态摆放：P3.2 的第 1 次落地停在 <code>AccountSelect.tsx</code> 的冲突上，协调者 3 分钟后把 P3.2 退回去修，第 2 轮已经跑了 2 个多小时，时钟还是把待办转给了你。<br>
+<b>问题不在某一句文案。</b>这张卡把“发生了什么”“谁在处理”“要你做什么”“修好以后会怎样”四件事，要么没写，要么写错。而且它只出现在协调会话里，你打开项目时看到的那一页（左栏）对它一字不提。</p>
+
+<div class="row">
+  <div class="col" style="width:1240px">
+    <div class="cap"><span class="tag now">现在</span>桌面：项目会话页（左栏）＋ 协调会话（右）</div>
+    <div class="shot"><img src="shots/now-marked.png" alt=""></div>
+    <ol class="notes">
+      <li class="n" data-n="1"><b>项目会话页什么都没说。</b>进度卡只有 “13/29 done · 1 running”。落地停下以后，进度卡里那行 Landing 就消失了（只画进行中的作业），所以这一页看不出有任务卡住，也看不出下游 P3.3 在等它。</li>
+      <li class="n" data-n="2"><b>标题讲的是时钟，不是事情，而且讲错了。</b>“no one acted on this for 2h 8m”：协调者 21:37 就退回了 P3.2，第 2 轮一直在跑。原因见右边。</li>
+      <li class="n" data-n="3"><b>“After a fix: push to the task branch — Orbit re-integrates and re-checks on its own” 不成立。</b>这是合约里的 J-T1c，代码没有实现：推一个提交不会排任何作业（LAND_TASK 只在任务 DONE 时排）。</li>
+      <li class="n" data-n="4"><b>六个按钮没有一句话告诉你按哪个，其中两个此刻有害。</b>Retry 调的是 Run Now（<code>POST /tasks/:id/execute</code>），会另起一轮。它不会重新落地，也不关待办（服务端给冲突配的 RETRY 门其实是 task_reopen）。Cancel task 会把正在修冲突的第 2 轮一起取消。Open task session 打开的是已经结束的第 1 轮。服务端算好的 <code>requiredAction</code> 一句也没画。</li>
+      <li class="n" data-n="5"><b>给协调者的 Exception item 卡。</b>同一件事说了三遍：Exception item、Merge conflict、标题。有几句说的是内部实现：“git refused the merge into refs/heads/…”，“The platform will not retry it by itself”。“No merge receipt — Orbit cannot tell whether it has landed” 跟 “the target branch did not move” 自相矛盾。“The coordinator can: Retry / Cancel” 是不能点的标签。“Open the failed session” 指的那一轮其实是成功的。“Item 2zQe… · a notification, not an interruption” 是内部话。</li>
+    </ol>
+  </div>
+  <div class="col" style="width:800px">
+    <div class="box" style="margin-bottom:22px">
+      <h2>P3.2 这件事实际发生了什么</h2>
+      <p class="hint">读自生产：task 34Za39ACSBoCkYKc80Md8、待办 34bQcBBTiA3M8EID5GpXN、作业 2FEAwsKlxxLvKm1lzz9QGe（10-06，UTC）</p>
+      <ol class="tl">
+        <li><span class="t">21:33</span><span class="d ok"></span><span class="b"><b>协调者判定 P3.2 DONE</b>，Orbit 开始把它落到项目分支（第 1 代）<span class="s">这一下就是“触发合入”的动作</span></span></li>
+        <li><span class="t">21:34</span><span class="d bad"></span><span class="b"><b>落地停在冲突上</b>：<code>AccountSelect.tsx</code>。main 的 712d324a8（Antigravity 多账号）也改了它；项目分支本身和 main 不冲突<span class="s">没有落下任何东西，项目分支停在 da13423。开出例外待办，交给协调者，2 小时窗口</span></span></li>
+        <li><span class="t">21:37</span><span class="d warn"></span><span class="b"><b>协调者写退回说明并 reopen P3.2</b>；10 秒后第 2 轮会话开跑<span class="s">合入最新 main、解冲突、只复验受影响的部分。已交付的试点不重做</span></span></li>
+        <li><span class="t">22:16</span><span class="d blue"></span><span class="b"><b>第 2 轮汇报 3 / 5</b>：re-verify on the merged tree<span class="s">main 又动了一次，已经再合一次（3c1b24f，无冲突）</span></span></li>
+        <li class="lie"><span class="t">23:42</span><span class="d bad"></span><span class="b"><b>时钟到点，待办转给你：“Now yours — no one acted on this for 2h 8m”</b><span class="s">第 2 轮这时还在跑，最后一轮在 23:56</span></span></li>
+      </ol>
+      <p class="foot" style="margin-top:4px"><b>为什么会这样：</b>升级时钟（<code>escalatesAt</code>）只认三种进展：挂了 <code>fixes_open_item_id</code> 的修复任务、协调者发起的集成重跑、投递那一轮的回复。“退回原任务”是协调者处理冲突最常用的一条路，偏偏不算。所以修复跑到一半，卡片照样升级给你。</p>
+    </div>
+    <div class="cap"><span class="tag now">现在</span>手机：同一张卡，在协调会话里</div>
+    <div style="display:flex;gap:24px;align-items:flex-start">
+      <div class="phone" style="width:300px"><img src="shots/phone-now.png" alt=""></div>
+      <ul class="notes" style="margin-top:0;width:470px">
+        <li>手机上也只有协调会话里这一处。从会话列表的项目行进来，看到的是项目会话页，同样一字不提。</li>
+        <li>卡片 6 个按钮挤成 3 行，最显眼的是 <b>Ask the coordinator again</b>。可这次协调者已经在修了，再问一次只会让它重新收到这件事。</li>
+        <li>“Into / Files” 两行的分支名和路径被截断，真正有用的信息（<b>哪个文件、main 那边谁改的</b>）反而没有。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+</body></html>
