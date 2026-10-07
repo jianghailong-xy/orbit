@@ -224,14 +224,18 @@ class PushDeviceTest {
     @Test fun notificationDenialAndUnavailableChannelDoNotBreakApprovalFlow() {
         login(); openSession(); awaitCard()
         assertTrue("Host must grant notification permission for the default journey", app.push.notifications.allowed())
-        previousNotificationMode = Regex("POST_NOTIFICATION:\\s*(allow|ignore|deny|default|foreground)")
-            .find(shell("cmd appops get ${app.packageName} POST_NOTIFICATION"))?.groupValues?.get(1) ?: "default"
-        shell("cmd appops set ${app.packageName} POST_NOTIFICATION ignore")
-        awaitCondition { !app.push.notifications.allowed() }
-        background(); deliver(alert()); awaitNotifications(0)
-        shell("cmd appops set ${app.packageName} POST_NOTIFICATION $previousNotificationMode")
-        previousNotificationMode = null
-        awaitCondition { app.push.notifications.allowed() }
+        if (Build.VERSION.SDK_INT < 33) {
+            // API 29–32 block an app's notifications through this app-op. On 13+ the switch is the
+            // POST_NOTIFICATIONS grant, refused in its own process by ColdPushDeviceTest.permissionPrompt.
+            previousNotificationMode = Regex("POST_NOTIFICATION:\\s*(allow|ignore|deny|default|foreground)")
+                .find(shell("cmd appops get ${app.packageName} POST_NOTIFICATION"))?.groupValues?.get(1) ?: "default"
+            shell("cmd appops set ${app.packageName} POST_NOTIFICATION ignore")
+            awaitCondition { !app.push.notifications.allowed() }
+            background(); deliver(alert()); awaitNotifications(0)
+            shell("cmd appops set ${app.packageName} POST_NOTIFICATION $previousNotificationMode")
+            previousNotificationMode = null
+            awaitCondition { app.push.notifications.allowed() }
+        } else background()
         manager.deleteNotificationChannel(PushNotifications.NEEDS_YOU)
         assertFalse(app.push.notifications.allowed(PushNotifications.NEEDS_YOU))
         deliver(alert()); awaitNotifications(0)

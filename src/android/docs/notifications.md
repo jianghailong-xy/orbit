@@ -17,6 +17,14 @@ The coordinator subsequently fixed A07's 413 follow-up at
 composer tests/fixture, and composer documentation inherited in that merge are
 A07 work and are not A10-authored changes.
 
+The first run's handoff is `482b132e8c57053113f2e3fa467d02de2b809d95`
+(parent `51bbcc3`). That run stopped at a Codex usage limit with its device-test
+files uncommitted; the coordinator snapshotted them as
+`f71654d1eb9aeaa864646c3fd0e11db1be9a93c8` (parent `482b132e8`). The second run
+(Claude, 2026-10-07) started from the same starting SHA, fast-forwarded to
+`482b132e8`, took the snapshot commit itself into its history, and changed the
+files listed in its own commit messages. No other branch was merged.
+
 A14 `f59ab46cf223f813dbc9c0a1bed3399d8eb90649` is a separately fixed release
 input, not merged into this development input. A10 must preserve its build
 isolation when the platform integrates the branches; notification configuration
@@ -39,7 +47,7 @@ timing evidence.
 | --- | --- | --- |
 | `src/ios/Sources/Push.swift`, `PushRegistrar` | Buffer FCM token callbacks until authentication; register the current token through authenticated HTTP. | Android always uses `production`, including debug; installation and fresh registration binding keys are Android contract additions. |
 | `src/ios/Sources/Push.swift`, silent push delegate | Receive silent sync without a banner/sound; remove stale needs-you reminders and refresh authoritative state. | Android owns every display because FCM messages contain only data. |
-| `src/macos/OrbitApp/Sources/OrbitApp/NotificationManager.swift` | Notification permission, categories, display, tap routing, focused-session suppression, and removal. | Android 13+ runtime permission and API 29+ notification-channel controls replace Apple authorization/categories; an in-app Snackbar provides the foreground approval cue. |
+| `src/macos/OrbitApp/Sources/OrbitApp/NotificationManager.swift` | Notification permission, categories, display, tap routing, focused-session suppression, and removal. | Android 13+ runtime permission and API 29+ notification-channel controls replace Apple authorization/categories; `configure()` asks at launch, Android asks once after the first signed-in foreground (below); an in-app Snackbar provides the foreground approval cue. |
 | `src/macos/OrbitKit/Sources/OrbitKit/App/Notifications.swift` | Stable replacement identity, approval versus session semantics, authenticated session/card entry. | Inline Apple Allow/Deny/Reply must not become unauthenticated Android mutations; opening the existing authoritative card is the safe business entry. |
 | `src/macos/OrbitKit/Sources/OrbitKit/App/SessionGrouping.swift` | Reconcile needs-you reminders from canonical REST state, excluding `waitingKind=START_REQUEST`. | `ownerItems` may keep an AWAITING_INPUT coordinator in needs-you; do not impose the native approval RUNNING requirement on owner items. |
 | `src/apiserver/src/push/push.controller.ts`, `dto.ts` | Register/refresh/unregister wire requests with a generation-safe local binding. | Registration success proves only backend registration, not configured FCM delivery or notification permission. |
@@ -118,18 +126,40 @@ System banners are suppressed in the foreground, keeping the existing card as
 the focused session's only approval prompt. This follows the Swift separation
 between an in-app foreground cue and background system display; the current
 Android foreground cue does not independently play Swift's approval sound.
+iOS also keeps a foreground alert in Notification Center (`.list`); Android
+posts nothing to the tray while an Orbit Activity is started, so an alert that
+arrives in the foreground leaves only the in-app state (the notice, the
+drawer's needs-you counts and the card). "Foreground" means started: an alert
+that lands while the Activity is paused but still visible is treated as
+foreground.
+
+Android 13+ shows no notification until the app is granted POST_NOTIFICATIONS.
+iOS asks at launch (`NotificationManager.configure`). A configured Android build
+asks once per installation, in context: `PushNoticeHost` launches the system
+request on the first signed-in foreground (`PushController.claimPermissionPrompt`,
+flag kept in the push storage under `noBackupFilesDir`). A refusal is final for
+the automatic path; asking again is the user's choice from `NotificationSettings`
+or Android settings. Builds without Firebase configuration, and API 29–32 where
+the permission is granted at install, never prompt. Token registration does not
+depend on the permission, as on iOS, so silent sync and reconciliation still run.
+
+Channels: `orbit.needs-you` ("Needs your reply", approvals, owner items and
+confirmation problems) is `IMPORTANCE_HIGH`, so it pops up like the iOS banner;
+`orbit.sessions` and `orbit.updates` are `IMPORTANCE_DEFAULT`. Android applies an
+importance only when it creates a channel; afterwards the user's choice wins.
 
 ## Route correspondence and cross-module interfaces
 
 | Payload | Existing product entry | Integration boundary |
 | --- | --- | --- |
-| `sessionID` for approval/settled/agent-message | `orbit://session/<id>` | Reader, current pending cards, and composer are inherited A06/A08/A07 work. |
-| `sessionID` and `recordID` for confirmation problems | `orbit://session/<id>?at=<recordID>` | Reader requests the server's record anchor; inaccessible/deleted records use its existing error state. |
+| `sessionID` for approval/settled/agent-message | `orbit-session:<id>` | Reader, current pending cards, and composer are inherited A06/A08/A07 work. |
+| `sessionID` and `recordID` for confirmation problems | `orbit-session:<id>?at=<recordID>` | Reader requests the server's record anchor; inaccessible/deleted records use its existing error state. |
 | Owner item with `sessionID` | Coordinator session | `openItemID` is not a transcript record ID; do not put it into `?at=`. Card state comes from the project snapshot. |
 | Owner item without coordinator, with `projectID` | `orbit-project:<id>` | A11 owns the project product page. Its completed integration needs separate evidence. |
 | `watchID` | `orbit://watch/<id>` | A12 owns the watch product page and generation interpretation. |
 | `runnerID`/`engine` | `orbit://runner/<id>` | A13 owns runner/engine management; do not invent a notification-only editor. |
-| `wikiSpaceID` | Existing `Destination.WIKI` can name a space, but the fixed `OrbitLinks` has no space URI | A12 was asked for `orbit://wiki/<spaceId>` → `OrbitRoute(Destination.WIKI, id=canonicalSpaceId)`. This remains a route integration gap until the minimal extension and its product destination are integrated and verified. |
+| `wikiSpaceID` | `orbit://wiki/<spaceId>` | The URI handed to A12 (comment 34aIrgslPhvEl3IPNty9m): `OrbitLinks.parse` → `OrbitRoute(Destination.WIKI, id=canonicalSpaceId)` is A12's branch. Until it is integrated the fixed parser returns null, so the tap opens Orbit without navigating, as iOS does for this payload. A route integration gap until verified with A12's page. |
+| Headless `agent-message` (no `sessionID`) | Launcher `ACTION_MAIN` to MainActivity | No object to open: the tap brings Orbit forward at its current screen, like iOS opening the app. |
 
 The fixed Swift `Notifications.intent` handles session and watch payloads; it
 does not route runner or wiki-space payloads. Extending an Android route is a
@@ -137,7 +167,7 @@ documented difference, not evidence of parity with an installed iOS client.
 The existing pending-login route survives cold entry and is consumed after
 authentication; account switches discard the previous account's path.
 
-A13 owns the Settings page. A10 provides
+A13 owns the Settings page. Apart from the one-time request above, A10 provides
 `@Composable fun NotificationSettings(controller: PushController)` in
 `app/src/main/kotlin/io/orbitd/android/push/NotificationSettings.kt`; A13 can call
 `NotificationSettings(app.push)`. The component requests Android 13+ permission

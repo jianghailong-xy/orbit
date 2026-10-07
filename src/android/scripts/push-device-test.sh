@@ -146,11 +146,19 @@ fixture() {
   "$adb" -s "$serial" reverse "tcp:$port" "tcp:$port"
   owns_reverse=true
 }
-tray_tap() { # Host-driven: kill the seeded process, tap its surviving tray entry, act in the new process.
-  instrument tray-prepare "$cold#trayPrepare" --no-restart
+tray_tap() { # Host-driven: a production process posts one entry, dies, and SystemUI starts the next one.
+  instrument tray-login "$cold#trayLogin"
+  passed "$output/tray-login.txt" || { echo 'tray_tap=FAIL (sign-in)' > "$output/tray.txt"; return 1; }
+  # A launcher start: the production Application (no Firebase in this debug build) restores the login.
+  "$adb" -s "$serial" shell am start -W -n "$package/io.orbitd.android.MainActivity" > "$output/tray-launch.txt"
+  python3 "$scripts/push-host-ui.py" wait "$serial" 'Card fixture' "$output/tray-launch.xml" --timeout 30 --contains > "$output/tray.txt"
+  "$adb" -s "$serial" shell input keyevent KEYCODE_HOME
+  sleep 2
+  # --no-restart attaches to that running process and skips the force-stop that would cancel the entry.
+  instrument tray-entry io.orbitd.android.push.ColdTrayEntryTest --no-restart
   "$adb" -s "$serial" shell dumpsys notification --noredact > "$output/tray-notifications-before.txt"
-  if ! passed "$output/tray-prepare.txt" || ! grep -q "pkg=$package" "$output/tray-notifications-before.txt"; then
-    echo 'tray_tap=NOT_RUN (instrumentation finished with a force-stop or no surviving entry)' > "$output/tray.txt"
+  if ! passed "$output/tray-entry.txt" || ! grep -q "pkg=$package" "$output/tray-notifications-before.txt"; then
+    echo 'tray_tap=NOT_RUN (no surviving entry from the attached production process)' >> "$output/tray.txt"
     return 1
   fi
   local old_pid new_pid
@@ -166,7 +174,7 @@ tray_tap() { # Host-driven: kill the seeded process, tap its surviving tray entr
   "$adb" -s "$serial" shell cmd statusbar expand-notifications
   sleep 1
   "$adb" -s "$serial" exec-out screencap -p > "$output/tray-cold-shade.png"
-  python3 "$scripts/push-host-ui.py" tap "$serial" 'A10 tray approval' "$output/tray-shade.xml" --timeout 20 > "$output/tray.txt"
+  python3 "$scripts/push-host-ui.py" tap "$serial" 'A10 tray approval' "$output/tray-shade.xml" --timeout 20 >> "$output/tray.txt"
   python3 "$scripts/push-host-ui.py" wait "$serial" 'Allow' "$output/tray-card.xml" --timeout 45 >> "$output/tray.txt"
   new_pid="$("$adb" -s "$serial" shell pidof "$package" | tr -d '\r')"
   "$adb" -s "$serial" shell dumpsys activity activities > "$output/tray-activities.txt"
@@ -235,7 +243,7 @@ if [[ "$phases" == *" permission "* ]] && (( api >= 33 )); then
   if passed "$output/permission.txt"; then record permission PASS; else record permission FAIL; fi
 fi
 
-for label in suite prepare restore signed-out tray-prepare permission; do
+for label in suite prepare restore signed-out tray-login tray-entry permission; do
   pid="$(cat "$output/$label.pid" 2>/dev/null || true)"
   if [[ -n "$pid" ]]; then "$adb" -s "$serial" logcat -d -v threadtime --pid="$pid" -T "$start" > "$output/$label-logcat.txt" 2>&1 || true; fi
 done

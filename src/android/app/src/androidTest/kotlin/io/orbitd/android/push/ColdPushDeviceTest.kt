@@ -40,9 +40,9 @@ import org.junit.rules.TestName
 import org.junit.runner.RunWith
 
 /** Separate processes against the persistent push-cold-fixture.py (host owns ui.lock, the fixture and
- * its adb reverse). The host selects one method per process: prepare, force-stop, restoreAndApprove;
- * trayPrepare is followed by a host-driven tap on the surviving tray entry in a new, non-instrumented
- * process; permissionPrompt runs after the host revokes the permission and resets push storage.
+ * its adb reverse). The host selects one method per process: prepare, force-stop, restoreAndApprove,
+ * then signedOutColdLinkOpensAfterLogin; trayLogin precedes the host's cold tray tap (ColdTrayEntryTest);
+ * permissionPrompt runs after the host revokes the permission and resets push storage.
  * Controlled transport and token source only: never FCM delivery evidence. */
 @RunWith(AndroidJUnit4::class)
 class ColdPushDeviceTest {
@@ -55,14 +55,15 @@ class ColdPushDeviceTest {
     private val sessionId = "34ZaIKKTQq8IdW0pn90xH"
     private val activities = CopyOnWriteArrayList<MainActivity>()
     @Volatile private var resumed: Activity? = null
+    private val started = CopyOnWriteArrayList<Activity>()
     private var signOutAfter = false
     private val lifecycle = object : Application.ActivityLifecycleCallbacks {
         override fun onActivityCreated(activity: Activity, state: Bundle?) { if (activity is MainActivity) activities.addIfAbsent(activity) }
         override fun onActivityResumed(activity: Activity) { resumed = activity }
         override fun onActivityPaused(activity: Activity) { if (resumed === activity) resumed = null }
-        override fun onActivityDestroyed(activity: Activity) { activities.remove(activity) }
-        override fun onActivityStarted(activity: Activity) = Unit
-        override fun onActivityStopped(activity: Activity) = Unit
+        override fun onActivityDestroyed(activity: Activity) { activities.remove(activity); started.remove(activity) }
+        override fun onActivityStarted(activity: Activity) { started.addIfAbsent(activity) }
+        override fun onActivityStopped(activity: Activity) { started.remove(activity) }
         override fun onActivitySaveInstanceState(activity: Activity, state: Bundle) = Unit
     }
 
@@ -83,9 +84,11 @@ class ColdPushDeviceTest {
 
     @Test fun prepare() = seed("cold-seed.json")
 
-    /** Leaves its tray entry for the host: it kills this process and taps the entry, which starts a new
-     * process outside instrumentation (the production Application, whose debug build has no Firebase). */
-    @Test fun trayPrepare() = seed("tray-seed.json")
+    /** Signs in and stays signed in for the host's cold tray tap (ColdTrayEntryTest posts the entry). */
+    @Test fun trayLogin() {
+        launch(Intent(app, MainActivity::class.java))
+        resetAndLogin()
+    }
 
     @Test fun restoreAndApprove() {
         signOutAfter = true
@@ -173,7 +176,7 @@ class ColdPushDeviceTest {
         launch(Intent(app, MainActivity::class.java))
         resetAndLogin()
         home()
-        val data = alert(if (file.startsWith("tray")) "A10 tray approval" else "A10 cold approval")
+        val data = alert("A10 cold approval")
         runBlocking { app.push.receive(data) }
         await("tray entry") { app.push.notifications.active().size == 1 }
         val stats = http("/__stats")
@@ -224,7 +227,8 @@ class ColdPushDeviceTest {
     }
     private fun home() {
         assertTrue(instrument.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME))
-        await("background") { resumed == null }
+        // Stopped, not merely paused: only then does the controller treat an alert as background.
+        await("background") { resumed == null && started.isEmpty() }
         instrument.waitForIdleSync()
     }
     private fun awaitCard() = compose.waitUntil(15_000) { compose.onAllNodes(hasTestTag("approval:a1:ALLOW") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
