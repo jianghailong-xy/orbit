@@ -26,20 +26,22 @@ def fail(message):
     sys.exit(1)
 
 
-def request(url, token=None, accept='application/vnd.github+json'):
+def request(url, token=None, accept='application/vnd.github+json', fresh=False):
+    """GET with retries for server errors; `fresh` also waits out a 404 for something just published."""
     headers = {'Accept': accept, 'User-Agent': 'orbit-android-release', 'X-GitHub-Api-Version': '2022-11-28'}
     # Only api.github.com gets the token; release downloads redirect to storage hosts that must not see it.
     if token and url.startswith('https://api.github.com/'):
         headers['Authorization'] = f'Bearer {token}'
-    for attempt in range(4):
+    attempts = 7 if fresh else 4
+    for attempt in range(attempts):
         try:
             with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=60) as response:
                 return response.read(), response.headers
         except urllib.error.HTTPError as error:
-            if error.code not in (500, 502, 503, 504) or attempt == 3:
+            if error.code not in (500, 502, 503, 504) and not (fresh and error.code == 404) or attempt == attempts - 1:
                 raise
         except urllib.error.URLError:
-            if attempt == 3:
+            if attempt == attempts - 1:
                 raise
         time.sleep(5 * (attempt + 1))
 
@@ -169,7 +171,7 @@ def verify_published(args):
         fail('APK, .sha256 and android-update.json disagree')
     if args.tag != TAG_PREFIX + update['versionName'] or update['apkSize'] != apk.stat().st_size:
         fail('android-update.json does not describe this tag and APK')
-    release = json.loads(request(f'https://api.github.com/repos/{args.repository}/releases/tags/{args.tag}', token)[0])
+    release = json.loads(request(f'https://api.github.com/repos/{args.repository}/releases/tags/{args.tag}', token, fresh=True)[0])
     if release['draft'] or not release['prerelease']:
         fail(f'{args.tag} must be a published pre-release')
     assets = {asset['name']: asset for asset in release['assets']}
@@ -177,7 +179,7 @@ def verify_published(args):
         fail(f'Published assets {sorted(assets)} differ from {sorted(expected)}')
     lines = ['| Asset | Bytes | SHA-256 |', '| --- | --- | --- |']
     for name, path in sorted(expected.items()):
-        downloaded, _ = request(assets[name]['browser_download_url'])
+        downloaded, _ = request(assets[name]['browser_download_url'], fresh=True)
         digest = hashlib.sha256(downloaded).hexdigest()
         if digest != sha256(path) or assets[name]['size'] != path.stat().st_size:
             fail(f'{name} on GitHub differs from the verified file')
