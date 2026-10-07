@@ -1,0 +1,37 @@
+23:51:05 :8765   GET /api/auth/methods
+23:51:05 :8765 "GET /api/auth/methods HTTP/1.1" 200 -
+23:51:05 :8769   GET /api/auth/methods
+23:51:05 :8769 "GET /api/auth/methods HTTP/1.1" 200 -
+23:51:05 :8765   GET /api/auth/methods
+23:51:05 :8765 "GET /api/auth/methods HTTP/1.1" 200 -
+23:51:17 :8765   GET /api/auth/methods
+23:51:17 :8765 "GET /api/auth/methods?from=safari-warmup HTTP/1.1" 200 -
+23:51:20 :8765 "GET /favicon.ico HTTP/1.1" 404 -
+23:56:02 :8765 "POST /__reset HTTP/1.1" 200 -
+23:56:04 :8765   GET /api/auth/methods
+23:56:04 :8765 "GET /api/auth/methods HTTP/1.1" 200 -
+23:56:07 :8765 "GET /__log HTTP/1.1" 200 -
+23:56:10 :8765 "POST /__reset HTTP/1.1" 200 -
+23:56:13 :8766   GET /api/auth/methods
+23:56:13 :8766 "GET /api/auth/methods HTTP/1.1" 200 -
+23:56:15 :8765 "GET /__log HTTP/1.1" 200 -
+23:56:18 :8765 "POST /__reset HTTP/1.1" 200 -
+23:56:19 :8767   GET /api/auth/methods
+23:56:19 :8767 "GET /api/auth/methods HTTP/1.1" 200 -
+23:56:21 :8765 "GET /__log HTTP/1.1" 200 -
+23:56:24 :8765 "POST /__reset HTTP/1.1" 200 -
+23:56:25 :8768   GET /api/auth/methods
+23:56:26 :8768 "GET /api/auth/methods HTTP/1.1" 404 -
+23:56:27 :8765 "GET /__log HTTP/1.1" 200 -
+23:56:30 :8765 "POST /__reset HTTP/1.1" 200 -
+23:56:31 :8765   GET /api/auth/methods
+23:56:31 :8765 "GET /api/auth/methods HTTP/1.1" 200 -
+23:56:33 :8765 "GET /__log HTTP/1.1" 200 -
+23:56:36 :8765 "POST /__reset HTTP/1.1" 200 -
+23:56:38 :8765   GET /api/auth/methods
+23:56:38 :8765 "GET /api/auth/methods HTTP/1.1" 200 -
+23:58:11 :8765 "GET /__log HTTP/1.1" 200 -
+23:58:12 :8765 "POST /__reset HTTP/1.1" 200 -
+23:58:15 :8769   GET /api/auth/methods
+23:58:15 :8769 "GET /api/auth/methods HTTP/1.1" 200 -
+23:59:49 :8765 "GET /__log HTTP/1.1" 200 -

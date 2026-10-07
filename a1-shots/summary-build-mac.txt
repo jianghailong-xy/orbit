@@ -1,0 +1,20 @@
+Test Case '-[A1MacProbeUITests.GoogleShotTests test1GoogleOnAndOpeningAccounts]' started.
+Test Case '-[A1MacProbeUITests.GoogleShotTests test1GoogleOnAndOpeningAccounts]' passed (10.208 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test2GoogleOnForExistingAccounts]' started.
+Test Case '-[A1MacProbeUITests.GoogleShotTests test2GoogleOnForExistingAccounts]' passed (7.547 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test3GoogleOff]' started.
+Test Case '-[A1MacProbeUITests.GoogleShotTests test3GoogleOff]' passed (6.344 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test4ServerFromBeforeGoogleSignIn]' started.
+Test Case '-[A1MacProbeUITests.GoogleShotTests test4ServerFromBeforeGoogleSignIn]' passed (6.100 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test5GoogleOnDark]' started.
+Test Case '-[A1MacProbeUITests.GoogleShotTests test5GoogleOnDark]' passed (6.018 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test6ContinueWithGoogleSignsIn]' started.
+/Users/runner/work/orbit/orbit/.a1-probe/UITests/GoogleShotTests.swift:158: error: -[A1MacProbeUITests.GoogleShotTests test6ContinueWithGoogleSignsIn] : failed - Continue with Google never signed in; the stub saw ["GET /api/auth/methods"]; the page says ["", "", "", "", "", "", ""]
+Test Case '-[A1MacProbeUITests.GoogleShotTests test6ContinueWithGoogleSignsIn]' failed (95.761 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test7ARefusedGoogleSignInSaysWhy]' started.
+/Users/runner/work/orbit/orbit/.a1-probe/UITests/GoogleShotTests.swift:176: error: -[A1MacProbeUITests.GoogleShotTests test7ARefusedGoogleSignInSaysWhy] : failed - the refusal never showed; the stub saw ["GET /api/auth/methods"]
+Test Case '-[A1MacProbeUITests.GoogleShotTests test7ARefusedGoogleSignInSaysWhy]' failed (97.271 seconds).
+	 Executed 7 tests, with 2 failures (0 unexpected) in 229.249 (229.254) seconds
+	 Executed 7 tests, with 2 failures (0 unexpected) in 229.249 (229.255) seconds
+	 Executed 7 tests, with 2 failures (0 unexpected) in 229.249 (229.256) seconds
+** TEST FAILED **
