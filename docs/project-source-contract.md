@@ -424,6 +424,8 @@ apiserver 没有 checkout，runner 有。因此 ref→SHA 的解析必须在 run
 
 > 实现记（2026-09-24）：**解析期**的拒绝（`BASE_REF_NOT_FOUND` 一族，G2/G3/G4 在 fetch 那一步判出）走的是**另一扇门**，而且此前只写会话：runner 把 refusal POST 给第 3 步的 `/source/pin`，控制面写 `session.source_state='REFUSED'` + `source_refusal_code` + `source_refusal_detail` 就返回了 —— 任务行、评论、唤醒台账一概没有。2026-09-23 的项目 `34TsjwkAMVVkeEUwi2IAJ` 就是这样：一条下游任务的开工起点是集成线 `refs/heads/project/…`，而那条分支从未被创建（上一条成果的集成作业抢跑，在会话做出收尾提交之前就终态答了「已经落地」，于是这条线一直不存在），runner 的 `git fetch` 拿到 `fatal: couldn't find remote ref`，会话停在 REFUSED 空转 5.5 小时，任务行 `dispatch_refusal` 为空、零待办零唤醒。现在同一个 `/source/pin` 在**赢下那次 CAS 的同一个事务里**把拒绝也记到任务上（同一列、同一形状、同一 TASK_DISPATCH_REFUSED 事实、同一条评论与同一个 next-step 文案），赢不下 CAS 的那次什么都不写 —— 所以「重发一次丢回复的请求」仍然只留下一条记录。**拒绝本身没有放宽**：G1–G6 的谓词一个字都没动，补的只是拒绝之后的痕迹。SR50 的 `SOURCE_UNRESOLVED` blocker 仍然没有写入方。
 
+> 实现记（2026-10-07）：SR50 的两个写入方到此齐了，上面两条实现记末尾那句"没有写入方"作废。**解析期**的拒绝在 `/source/pin` 赢下那次 CAS 的同一个事务里写（`raiseSourceUnresolvedBlocker`，随后 `recordDispatchRefusal`）；**检出期**的拒绝（G4/G5/G6，runner 在 pin 冻结之后判出）在 `/finalize` 收尾这次运行的同一个事务里写同一条。两扇门写出的行同形：键是 `<kind>:<code>:<ref>`，detail 是 `{code, fixAction, ref, taskIds}`，`requiredAction` 取 §10.1 第六列那一步的同一句话（不是第二份文案），顺序也都是先 blocker 后任务 —— 那不是偏好而是锁序：blocker 的外键取 `project` 的 rank 40，任务行是 rank 50。一条线一个码只留一条已开的行（0125 的部分唯一索引），所以同一条线被两个任务拒绝、或同一个任务被拒两次，都还是那一条；任务不在任何项目里就没有行可挂，拒绝仍写在任务上。**拒绝本身没有放宽**：`/finalize` 那条路的谓词一个字都没动，补的只是拒绝之后的痕迹。断言在 `task-dispatch-refusal-visible.pg.spec.ts`。
+
 ### 10.2 为什么 `BASE_REF_NOT_FOUND` 与 `SOURCE_AUTHORITY_UNREACHABLE` 是两个码
 
 前者是"问到了，那条 ref 不在"，是**配置错误**，重试一万次都是同样结果，`fixAction` 是改 ref。后者是"没问到"，是**可用性问题**，重试可能就好了。合成一个码会让重试策略和用户提示两处都失去依据 —— 这正是 PAC §12 E2 禁止的同义码的反面：两个码的谓词互斥且结论不同，因此必须分开。

@@ -6311,11 +6311,23 @@ export class RunnerApiController {
         // Genuine failure (not a user cancel): leave a note on the task explaining it. A run the
         // runner refused at its checkout never started, so its note is the refusal itself, recorded
         // on the task beside it — the generic note says to run the task again, which is the one
-        // thing that cannot help (tasks/task-dispatch-refusal.ts).
+        // thing that cannot help (tasks/task-dispatch-refusal.ts). The project's own exception item
+        // for the refusal is opened here too (SR50: a checkout refusal names an unresolved code line
+        // exactly as a resolution refusal does, and the project is where "work has stopped" is read).
         if (effectiveStatus === RunStatus.FAILED) {
           const refused = readDispatchRefusal(dto.error, current);
           if (refused) {
-            await recordDispatchRefusal(tx, current.taskId, current, refused, new Date());
+            const at = new Date();
+            // The project's item FIRST, the task's record second, and the order is the lock order
+            // rather than a preference: this one writes a `project_blocker`, whose foreign key takes
+            // the project (rank 40) FOR KEY SHARE, and `recordDispatchRefusal` writes the task
+            // (rank 50). Cf. `pinSessionSource`, whose refusal records the same two halves.
+            await raiseSourceUnresolvedBlocker(
+              tx,
+              { taskId: current.taskId, code: refused.code, run: current },
+              at,
+            );
+            await recordDispatchRefusal(tx, current.taskId, current, refused, at);
             dispatchRefused = true;
           } else {
             await postRunFailureComment(tx, current.taskId, dto.error || dto.result || 'run failed');
