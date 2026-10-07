@@ -65,7 +65,7 @@ func cliTaskReopen(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	t, err := cliTransport()
+	t, err := cliTaskTransport()
 	if err != nil {
 		return err
 	}

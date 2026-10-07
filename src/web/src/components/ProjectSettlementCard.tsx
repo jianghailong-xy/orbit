@@ -38,6 +38,7 @@ import {
   type ProjectDoneCounts,
   type ProjectDoneDocument,
 } from '../lib/projectDone';
+import { projectStarted } from '../lib/projectStart';
 
 /**
  * WHY this project is not DONE — the projection, rendered.
@@ -256,28 +257,26 @@ export function settlementTally(project: SettlementProjectDocument): string {
 
 /**
  * Whether this project is the one the card is for: it LOOKS finished and the derivation says it is
- * not.
+ * not — OPEN and started, every stated criterion met by the work filed under it, no task under it
+ * IN_PROGRESS, and a projection that does not call it done.
  *
  * The first half is what keeps the card off every unfinished project ("the work is not done yet"
  * is not news, and a card saying it under every project forever is what the condition is shaped to
  * avoid); the second is what makes it a question rather than a status. Both halves come off the
  * same read, and the projection decides the second one — this file decides nothing about DONE.
+ * The unified read asks it the same way (`asksWhyNotDone`), and so do the native clients
+ * (`ProjectDone.slot`).
  */
 export function settlementHeldOnProject(
   project: SettlementProjectDocument | null | undefined,
 ): boolean {
-  if (!project || project.status !== 'OPEN') return false;
+  if (!project || project.status !== 'OPEN' || projectStarted(project) !== true) return false;
   const projection = project.derivedDone;
-  if (!projection || projection.criteria.length === 0) return false;
-  // The unified read model is authoritative for the current card.  Unlike the legacy projection
-  // below, it already partitions in-flight work and landing reasons, so the card is useful while
-  // work is moving too (the grouped Why-not-done view tells the reader who has it).
-  if (projection.counts) return asksWhyNotDone(project);
+  if (!projection || projection.done || projection.criteria.length === 0) return false;
   if (!projection.criteria.every((criterion) => criterion.satisfied)) return false;
   // Not while something is running: this is a question about a project that has stopped, and
   // asking it mid-sweep would put it up and take it down again for no reader's benefit.
-  if ((project.tasksByStatus?.IN_PROGRESS ?? 0) !== 0) return false;
-  return projection.withheld.length > 0;
+  return (project.tasksByStatus?.IN_PROGRESS ?? 0) === 0;
 }
 
 function plural(n: number, one: string, many: string): string {
@@ -612,14 +611,14 @@ export function ProjectSettlementCard({
 const CONFIRMATION_CLAUSE = 'STANDARD_SET_UNCONFIRMED';
 
 /**
- * Whether the conversation asks "Why is this project not done?": only of an OPEN project somebody
- * has started, with criteria to be done against, whose unified read says it is not done.
+ * Whether the conversation asks "Why is this project not done?" off the unified read: only of a
+ * project that looks finished and is not done (`settlementHeldOnProject`) — never of one with a
+ * criterion still unmet or a task still IN_PROGRESS.
  */
 export function asksWhyNotDone(project: SettlementProjectDocument | null | undefined): boolean {
-  if (!project || project.status !== 'OPEN' || project.startedAt === null) return false;
-  const projection = project.derivedDone;
-  if (!projection || !('counts' in projection) || projection.done) return false;
-  return projection.criteria.length > 0;
+  const projection = project?.derivedDone;
+  if (!projection || !('counts' in projection)) return false;
+  return settlementHeldOnProject(project);
 }
 
 /**
@@ -688,10 +687,15 @@ export function SessionProjectSettlementCard({
   }, [coordinator, doneRequestRow?.itemId, doneReceipt, hasDoneSignal]);
   const held = settlementHeldOnProject(document);
   const settled = document?.derivedDone?.done === true;
+  // Delivered once and kept: the older projection's card, which has a settled state to go to rather
+  // than vanishing. The unified read is asked per read instead (`asksWhyNotDone`, below): up exactly
+  // while the project looks finished. Kept past that, it would hold the keys and fall through to the
+  // owner's card, unasked, the moment a task started or a criterion stopped being met.
+  const unified = document?.derivedDone != null && 'counts' in document.derivedDone;
   useEffect(() => {
-    if (held) setDelivered(true);
-  }, [held]);
-  const shown = delivered || held;
+    if (held && !unified) setDelivered(true);
+  }, [held, unified]);
+  const shown = (delivered && !unified) || held;
 
   // The confirmation standing, read only when the card is up AND the clause withholding settlement
   // is the one a person clears — the same key and door the start card uses.
@@ -1307,8 +1311,9 @@ export interface ProjectWhyNotDoneCardProps {
 
 /**
  * The compact explanation card used where a project is visible outside the coordinator transcript.
- * It consumes the reason partition from `derivedDone.counts` and the criterion answers themselves;
- * it never turns task statuses or merge receipts into a second client-side count.
+ * It consumes the criterion answers on `derivedDone` themselves — its tally included
+ * (`projectWhyNotDoneTally`); it never turns task statuses or merge receipts into a second
+ * client-side count.
  */
 export function ProjectWhyNotDoneCard({
   project,
@@ -1334,7 +1339,6 @@ export function ProjectWhyNotDoneCard({
   const onlyInFlight = waiting.length > 0 && waiting.every((criterion) => criterion.landingReason === 'IN_FLIGHT');
   const coordinatorOnIt = onlyInFlight || (openItems?.withCoordinator?.length ?? 0) > 0;
   const hasGaps = waiting.length > 0 || needsCall.length > 0;
-  const counts = project.derivedDone?.counts;
   // A DONE project is done whatever its criteria still say: nothing is left to ask "why not".
   if (project.status === 'DONE' || (!hasGaps && project.derivedDone?.done === true)) {
     return (
@@ -1344,7 +1348,7 @@ export function ProjectWhyNotDoneCard({
           <span className="criteria-provenance">{project.doneBy === 'OWNER' ? PROJECT_DONE_COPY.recordedByYou : PROJECT_DONE_COPY.recordedByOrbit}</span>
         </div>
         <div className="approval-body is-questions project-settlement-body">
-          <p className="project-done-tally">{projectWhyNotDoneTally(counts)}</p>
+          <p className="project-done-tally">{projectWhyNotDoneTally(project.derivedDone)}</p>
         </div>
       </div>
     );
@@ -1394,7 +1398,7 @@ export function ProjectWhyNotDoneCard({
       <div className="approval-body is-questions project-settlement-body">
         {group(PROJECT_DONE_COPY.waitingOnWork, waiting, true)}
         {group(PROJECT_DONE_COPY.needsYourCall, needsCall, false)}
-        <p className="project-done-tally">{projectWhyNotDoneTally(counts)}</p>
+        <p className="project-done-tally">{projectWhyNotDoneTally(project.derivedDone)}</p>
       </div>
       <div className="approval-actions project-settlement-actions">
         {openItems?.doneRequest && onReview ? (

@@ -231,7 +231,11 @@ type sessionMeta struct {
 	// reader of the session's transcripts has to resolve through, and what a removal refuses to
 	// delete while the session is running.
 	ClaudeConfigDir string `json:"claudeConfigDir,omitempty"`
-	WorkDir         string `json:"workDir"`
+	// AntigravityGoogleDir is the Gemini directory of the added Antigravity account this session runs
+	// on (antigravitySessionGoogleDirToRecord): what a removal of that account refuses to take while
+	// the session is running. Empty on Default.
+	AntigravityGoogleDir string `json:"antigravityGoogleDir,omitempty"`
+	WorkDir              string `json:"workDir"`
 	// PreviousWorkDir is the WorkDir before the last write that changed it: where a session moved
 	// to another of this machine's workspaces last ran, and so where its Claude conversation is
 	// (carryMovedClaudeConversation). Each run records its own WorkDir before its engine starts.
@@ -302,6 +306,7 @@ func writeSessionMetaWithCodexState(scratch string, job *ClaimedSession, execDir
 	// the Codex state scope learned by an earlier successful start so a resume never
 	// falls back from runner-shared state to a stale legacy session directory.
 	claudeDir := claudeSessionConfigDirToRecord(job, execDir)
+	antigravityDir := antigravitySessionGoogleDirToRecord(job)
 	existing := readSessionMeta(filepath.Join(scratch, "meta.json"))
 	if layout == "" || claudeDir == "" {
 		if existing != nil {
@@ -327,16 +332,17 @@ func writeSessionMetaWithCodexState(scratch string, job *ClaimedSession, execDir
 		}
 	}
 	meta := sessionMeta{
-		Provider:            runtimeProvider(job),
-		SessionUUID:         job.SessionUUID,
-		RuntimeSessionID:    currentRuntimeSessionID(job),
-		CodexStateLayout:    layout,
-		CodexStatePartition: partition,
-		CodexStateHome:      codexHome,
-		ClaudeConfigDir:     claudeDir,
-		WorkDir:             execDir,
-		PreviousWorkDir:     previousWorkDir,
-		Title:               job.Title,
+		Provider:             runtimeProvider(job),
+		SessionUUID:          job.SessionUUID,
+		RuntimeSessionID:     currentRuntimeSessionID(job),
+		CodexStateLayout:     layout,
+		CodexStatePartition:  partition,
+		CodexStateHome:       codexHome,
+		ClaudeConfigDir:      claudeDir,
+		AntigravityGoogleDir: antigravityDir,
+		WorkDir:              execDir,
+		PreviousWorkDir:      previousWorkDir,
+		Title:                job.Title,
 	}
 	if b, err := json.Marshal(meta); err == nil {
 		_ = writeFileAtomically(filepath.Join(scratch, "meta.json"), b, 0o644)
@@ -1450,11 +1456,12 @@ func envWithAgent(agentEnv map[string]string) []string {
 	// launchd/the runner or from agent-configured environment. Their MCP child reads
 	// the private session file and refreshes it lazily instead. Already-running
 	// providers retain the environment fallback for compatibility. A person's own
-	// credential (userCredentialEnvKey) is dropped from both sources too.
+	// credential is dropped from both sources too, and the process is marked as the
+	// runner's (runnerChildEnv).
 	env := make([]string, 0, len(os.Environ())+len(agentEnv))
 	for _, entry := range os.Environ() {
 		key, _, _ := strings.Cut(entry, "=")
-		if !sessionContextEnvKey(key) && !userCredentialEnvKey(key) {
+		if !sessionContextEnvKey(key) {
 			env = append(env, entry)
 		}
 	}
@@ -1463,12 +1470,12 @@ func envWithAgent(agentEnv map[string]string) []string {
 		// credential store. It is runner context, not an agent-customizable value.
 		// EqualFold also preserves this rule on Windows, whose environment keys are
 		// case-insensitive.
-		if sessionContextEnvKey(k) || userCredentialEnvKey(k) || strings.EqualFold(k, "ORBIT_HOME") {
+		if sessionContextEnvKey(k) || strings.EqualFold(k, "ORBIT_HOME") {
 			continue
 		}
 		env = append(env, k+"="+v)
 	}
-	return env
+	return runnerChildEnv(env)
 }
 
 func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, emitFor emitTurnFn, setTurn func(string), firstSpawn bool, bg *bgTailer, onCodexRateLimits codexRateLimitSink, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {

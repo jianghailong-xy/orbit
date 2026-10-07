@@ -1,4 +1,6 @@
 import type {
+  ProjectOpenItemRow,
+  ProjectOpenItemsView,
   ProjectStartFinding,
   ProjectStartSettingKey,
   ProjectStartSettings,
@@ -107,6 +109,24 @@ export function repositoryLabel(url: string): string {
  */
 export function projectStarted(project: { startedAt?: string | null }): boolean | null {
   return project.startedAt === undefined ? null : project.startedAt !== null;
+}
+
+/** The start's row on a page about the project: the coordinator's open request, or the owner's own
+ *  Start… while nobody has asked. */
+export type StartPageRow = { kind: 'asked'; row: ProjectOpenItemRow } | { kind: 'own' };
+
+/**
+ * Which start row a page draws — the project page's Open items and the project's sessions page alike
+ * (OrbitKit `StartProject.pageRow`). Only a project nobody has started draws one: a read that does not
+ * say whether it started is not a project waiting to be started. And the owner's own Start… only once
+ * the open-items read has answered: a request still on its way is not a project nobody asked about.
+ */
+export function startPageRow(
+  started: boolean | null | undefined,
+  items: Pick<ProjectOpenItemsView, 'startRequest'> | undefined,
+): StartPageRow | null {
+  if (started !== false || items === undefined) return null;
+  return items.startRequest ? { kind: 'asked', row: items.startRequest } : { kind: 'own' };
 }
 
 /**
@@ -292,8 +312,8 @@ export interface PlanTask {
 
 /**
  * What the order line calls a task: the marker its title opens with — "A · …", "① 服务端 · …",
- * "3) …", "B：…" — and otherwise the title itself, cut short. A plan is written with those markers
- * when its tasks are meant to be named by them, and a title with none is named whole.
+ * "3) …", "B：…", "P1 Web：…" — and otherwise the title itself, cut short. A plan is written with
+ * those markers when its tasks are meant to be named by them, and a title with none is named whole.
  */
 export function planTaskLabel(title: string): string {
   const text = title.trim();
@@ -301,6 +321,10 @@ export function planTaskLabel(title: string): string {
   if (circled) return circled[1]!;
   const marked = /^([A-Za-z]|\d{1,2})(?:[.):：]|\s+[·\-–—:：|](?:\s|$))/u.exec(text);
   if (marked) return marked[1]!;
+  // A capital and one or two digits — "P1", "D12" — is a code rather than a word, so a space after
+  // it is separator enough.
+  const coded = /^([A-Z]\d{1,2})(?:[.):：]|\s)/u.exec(text);
+  if (coded) return coded[1]!;
   return [...text].length > 24 ? `${[...text].slice(0, 23).join('')}…` : text;
 }
 

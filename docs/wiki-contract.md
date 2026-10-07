@@ -152,6 +152,20 @@ pg spec 用执行计划钉住了这一点。它声明为 IMMUTABLE（里面的 `
   - `reviewModeChangedAt` / `reviewModeChangedBy`（`owner`、`spot_checks` 或 `verification`）：服务端写，记录模式最近一次
     在何时、被谁改——`verification` 是核实拒绝率超阈值把 Automatic 退回 Tiered；
   - `maintenance`、`embedding` 留给阶段 2。
+- **列表**（`space.list`）：`GET /api/wiki/spaces` 按 slug 列出 owner 的全部 space，每行是单个 space 的读，外加四个字段（单个
+  space 的读不带它们；老服务器没有后三个，客户端读作没有）：
+  - `pendingOps`：这个 space 变更集里等 owner 决定的 op 数（Review 的数）。plan 的修改建议不是 op，不算在里面。所有 space
+    的 `pendingOps` 之和，就是 Activity 页第一条横幅和 Review 页头的数；
+  - `planWaiting`：这个 space 的 plan 里等 owner 的件数，各算一件：在途的起草、修订或生成作业（plan 读给出的那个作业）被挡住——
+    服务端挂起（`plan.jobs.held`），或已建任务还没开跑而维护 workspace 的 runner 不在线；起草或修订失败、之后没有存过新版本；
+    等确认的草稿；每条待处理的修改建议。只是在进行中的（排队、起草中、写文档中）和失败的生成不算。runner 是维护 workspace 所在的
+    那台，在线与否用 runners 列表的同一条规则（`isRunnerOnline`）；没设维护 workspace、它已删除或没有 runner，就是不知道，
+    不知道不算不在线。口径与 web `wikiPlanPending`、OrbitKit `WikiPlanLogic.pending` 相同，三方都钉在
+    `src/shared/src/wiki-docs.fixture.json` 的 `plan.states`（每个用例的 `pending`）上，服务端是 `wiki-plan-waiting.spec.ts`。
+    所有 space 的 `pendingOps + planWaiting` 之和，就是抽屉、web 侧栏和 Wiki 页头 Activity 角标的那个「等你」数，等于
+    Activity 页琥珀横幅之和；
+  - `workspaceIds`：绑在这个 space 上、没被删的 workspace，按绑定的先后，和 user 门上所有 id 一样是 public id；
+  - `docs`：`{ written, total }`，已确认 plan 的篇数与已写篇数，算法同目录（§22.7）；没有已确认的 plan 时为 null。
 
 ---
 
@@ -656,7 +670,7 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
   单独调用时这个退出码的语义不变。维护运行不看它：它在自己的进程里核实本次运行的 op，没结论的再问一遍，仍没结论的不让运行失败（19.4 第 8 步）。
   描述文案把「只核实本会话的 op、绝不手写结论」写成前置条件（`agentSurface.verify.precondition`），逐词测试。
 - **`wiki_propose` 的描述**把「这是提议、要等 owner 审」写成前置条件（JSON 的 `agentSurface.proposeDescription`），T5 做逐词测试。
-- **用户门** `/api/wiki`（JwtAuthGuard，owner 本人）：spaces 列表与待审数、建 space、改设置（含审阅模式）、绑 workspace、首页、条目列表、主题、
+- **用户门** `/api/wiki`（JwtAuthGuard，owner 本人）：spaces 列表（待审数、plan 等你数、绑定的 workspace、文档数，§2）、建 space、改设置（含审阅模式）、绑 workspace、首页、条目列表、主题、
   时间线、owner 的变更集（立即生效，带 CAS）、条目详情、pin / unpin、逐条 Reject 与 Confirm、`GET /api/wiki/search`（⌘K 的独立端点）、Review、
   按 id 读一次运行（`GET /api/wiki/changesets/:id`，§7.6）、decide、整次撤回、重开核实（§7.5）。
 - **runner 门** `/api/runner/wiki`（RunnerAuthGuard，外加照 `runner-watches.controller.ts` 校验调用会话）：search（只返回 active 条目，
@@ -1593,7 +1607,10 @@ runner 门在 `runner-api/runner-wiki-docs.controller.ts`；共享类型在 `src
 
 - **user 门**（JWT，owner 本人；别的 owner 的 space 或文档一律 404）：
   - `GET /api/wiki/spaces/:id/docs`：目录。已确认 plan 的大类（编号从 1 起）→ 篇（编号 `<大类>.<序号>`、标题、读者的问题、是否写了、
-    状态、更新时间、依据的 plan 版本）→ 节（编号、标题、类别、是否写了、是否待重写）。没有已确认的 plan 时 `plan` 为 null、目录为空。
+    状态、更新时间、依据的 plan 版本、导语）→ 节（编号、标题、类别、是否写了、是否待重写）。没有已确认的 plan 时 `plan` 为 null、目录为空。
+    **导语**（`lead`，`docs.lead`）是首页上每篇的两行：已写的篇取第一节（按已确认 plan 里节的顺序）按位置排、不是 `withdrawn`
+    的头两句，照原样连起来（英文句号后空一格，全角句号后不空），超过 200 字（code point）就截断、末尾加「…」；句子是文档页上的
+    原文，行内标记照留。没写的篇为 null；写了但第一节没写、或第一节的句子都撤下了，也为 null。
   - `GET /api/wiki/spaces/:id/docs/:slug`：文档页。编号、标题、读者的问题、写给谁、含与不含（不含的篇给出编号和标题）、大类、篇幅、
     状态、依据的 plan 版本与当前版本、`repoSha`、更新时间；各节按 plan 的顺序，带 `repoSha`、块和句子（状态、脚注号、新事实记号、
     撤下的原因与条目）；脚注按首次出现编号（同一原文、同一位置、同一引文只编一个号），每个带种类、结论、谁核对的、引文、位置字符串

@@ -5,6 +5,7 @@ import {
   Controller,
   Delete,
   Get,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -13,6 +14,7 @@ import {
 import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden } from '../auth/pat-scope.decorator';
+import { PatService } from '../auth/pat.service';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdminRoleGuard } from './admin-role.guard';
@@ -28,7 +30,10 @@ import { createOrResetUser } from './users.util';
 @PatForbidden('ADMIN')
 @Controller('admin')
 export class AdminController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pats: PatService,
+  ) {}
 
   @Get('users')
   listUsers() {
@@ -79,5 +84,20 @@ export class AdminController {
       throw new ConflictException('user still owns runners, workspaces, or tasks — remove those first');
     }
     return { id, deleted: true };
+  }
+
+  /** A user's personal access tokens, as their own list shows them (§11.4). Never the token itself:
+   *  it is not kept. */
+  @Get('users/:id/access-tokens')
+  async listAccessTokens(@Param('id', PublicIdPipe) id: string) {
+    const user = await this.prisma.user.findUnique({ where: { id }, select: { id: true } });
+    if (!user) throw new NotFoundException('user not found');
+    return { tokens: await this.pats.list(id) };
+  }
+
+  /** Revoke one of a user's tokens at once, recorded as revoked by an administrator. Idempotent. */
+  @Delete('users/:id/access-tokens/:tokenId')
+  revokeAccessToken(@Param('id', PublicIdPipe) id: string, @Param('tokenId', PublicIdPipe) tokenId: string) {
+    return this.pats.revoke(id, tokenId, 'ADMIN');
   }
 }

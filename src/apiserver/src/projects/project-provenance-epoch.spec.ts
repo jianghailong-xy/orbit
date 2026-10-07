@@ -184,10 +184,17 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
     'renders completion-evidence source provenance on the human review face; grants no project authority',
   'src/apiserver/src/runner-api/runner-task-completion-evidence.controller.ts':
     'forwards the authenticated runner session as completion-evidence provenance',
+  // The CLI acting as the person (docs/personal-access-token-design.md §7.3) sends the same N10 field
+  // in the user door's body — `orbit task evidence-submit --source-session-id`, which the runner door
+  // carries in a header. It forwards what the caller named and reads no task project provenance.
+  'src/runner-go/user_mode.go':
+    "forwards the caller's completion-evidence source session to the user door; reads no task project provenance",
   'src/apiserver/src/runner-api/runner-api.controller.ts':
     'persists and replay-checks completion-evidence source provenance; grants no project authority',
   'src/apiserver/src/tasks/task-completion-test-helper.ts':
     'drives fixture tasks to DONE through VERIFICATION for PostgreSQL tests; does not read Task provenance',
+  'src/apiserver/src/auth/tenant-isolation-cases.ts':
+    "sends another account's evidence source Session in the tenant isolation census's requests; does not read Task provenance",
   // Unit L7, the far side of the API. These render what the surface sent and are the reason the
   // rule has to travel IN the payload rather than in a comment: a client is where "I found this
   // here" would most plausibly be mistaken for "so it belongs here", and the card prints the

@@ -99,7 +99,9 @@ export async function settingsScenario({ page, expect, capture }) {
   const previous = await firstSwitch.getAttribute('aria-checked');
   await firstSwitch.click();
   await expect(firstSwitch).toHaveAttribute('aria-checked', previous === 'true' ? 'false' : 'true');
-  await expect(page.getByText('Setting saved', { exact: true })).toBeVisible();
+  // 50ms after a toast, lib/toast.tsx repeats its text in a body-level screen-reader live region;
+  // the visible feedback is the copy inside the Notifications region.
+  await expect(page.getByRole('region', { name: 'Notifications', exact: true }).getByText('Setting saved', { exact: true })).toBeVisible();
   await capture('settings-saved', { switch: firstSwitch });
 }
 
@@ -117,7 +119,7 @@ export async function profileScenario({ page, expect, capture, measure }) {
     await expect(save).toBeEnabled();
   });
   await save.click();
-  await expect(page.getByText('Name saved', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Notifications', exact: true }).getByText('Name saved', { exact: true })).toBeVisible();
   await expect(name).toHaveValue('Baseline Reviewer Updated');
   await expect(save).toBeDisabled();
   await page.getByRole('button', { name: 'Change password', exact: true }).click();

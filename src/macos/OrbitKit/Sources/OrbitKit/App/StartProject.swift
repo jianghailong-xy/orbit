@@ -349,8 +349,9 @@ public enum StartProject {
     // MARK: the plan, in one line
 
     /// What the order line calls a task: the marker its title opens with — "A · …", "① 服务端 · …",
-    /// "3) …", "B：…" — and otherwise the title itself, cut short. A plan is written with those
-    /// markers when its tasks are meant to be named by them, and a title with none is named whole.
+    /// "3) …", "B：…", "P1 Web：…" — and otherwise the title itself, cut short. A plan is written
+    /// with those markers when its tasks are meant to be named by them, and a title with none is
+    /// named whole.
     public static func planTaskLabel(_ title: String) -> String {
         let text = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let scalars = Array(text.unicodeScalars)
@@ -359,6 +360,7 @@ public enum StartProject {
             return String(Character(first))
         }
         if let marker = leadingMarker(scalars) { return marker }
+        if let code = leadingCode(scalars) { return code }
         guard scalars.count > 24 else { return text }
         var cut = String.UnicodeScalarView()
         cut.append(contentsOf: scalars.prefix(23))
@@ -384,6 +386,20 @@ public enum StartProject {
             return String(marker)
         }
         return nil
+    }
+
+    /// A capital and one or two digits — "P1", "D12" — followed at once by `.`, `)`, `:`, `：` or a
+    /// space: a code rather than a word, so a space is separator enough — the browser's
+    /// `/^([A-Z]\d{1,2})(?:[.):：]|\s)/u`, spelled out.
+    private static func leadingCode(_ s: [Unicode.Scalar]) -> String? {
+        guard s.count > 2, ("A"..."Z").contains(s[0]), isDigit(s[1]) else { return nil }
+        let length = isDigit(s[2]) ? 3 : 2
+        guard length < s.count,
+              ".):：".unicodeScalars.contains(s[length]) || s[length].properties.isWhitespace
+        else { return nil }
+        var code = String.UnicodeScalarView()
+        code.append(contentsOf: s[0..<length])
+        return String(code)
     }
 
     private static func isDigit(_ scalar: Unicode.Scalar) -> Bool {

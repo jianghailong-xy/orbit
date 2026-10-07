@@ -138,9 +138,6 @@ struct EngineSwitchSheet: View {
                 Group {
                     ProviderMark(provider: engine.slug, size: 28, brandKey: engine.brandKey, label: engine.label)
                     Text(engine.label).foregroundStyle(.primary).lineLimit(1)
-                    if let detail = engine.providerDetail {
-                        Text(detail).font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
-                    }
                 }
                 .opacity(greyed ? 0.5 : 1)
                 Spacer(minLength: 8)

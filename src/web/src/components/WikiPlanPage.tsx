@@ -23,6 +23,7 @@ import {
 import { WIKI_PLAN_SECTION_KINDS, type WikiPlanProposal, type WikiPlanSectionKind } from '@orbit/shared';
 import { relTime } from './Transcript';
 import { WikiContentsButton } from './WikiDirectory';
+import { WikiDocRow } from './WikiDocList';
 import { WikiSourceCard } from './WikiSources';
 import {
   wikiDocsQuery,
@@ -830,22 +831,21 @@ function PlanDocuments({
             const marked = diff?.docs.get(doc.slug);
             if (phone) {
               return (
-                <Link className="wk-pl-doc phone" key={doc.slug} to={wikiPlanDocPath(spaceSlug, doc.slug, version)}>
-                  <span className="no">{doc.number}</span>
-                  <span className="main">
-                    <span className="t">
-                      <span className="tt">{doc.title}</span>
-                      {doc.protected && <LockOutlined className="ic lock" />}
-                    </span>
-                    <span className="q">{doc.question}</span>
+                <WikiDocRow
+                  key={doc.slug}
+                  to={wikiPlanDocPath(spaceSlug, doc.slug, version)}
+                  number={doc.number}
+                  title={doc.title}
+                  locked={doc.protected}
+                  line={doc.question}
+                  extra={
                     <span className="l3">
                       {errors > 0 && <span className="errn">{wikiPlanErrorCount(errors)}</span>}
                       {errors > 0 && ' · '}
                       {wikiPlanDocLine(doc)}
                     </span>
-                  </span>
-                  <RightOutlined className="chev" />
-                </Link>
+                  }
+                />
               );
             }
             const isOpen = open === doc.slug;

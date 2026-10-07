@@ -88,6 +88,8 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let codexAccount: String?
     /// The same for its Claude sessions: one of the runner's Claude accounts, or nil for Automatic.
     public let claudeAccount: String?
+    /// The same for its Antigravity sessions: one of the runner's Google accounts, or nil for Automatic.
+    public let antigravityAccount: String?
 
     public let enableWorktree: Bool?
     /// Smart model selection (docs/model-routing-design.md §7.2): on, a fresh task run here gets the
@@ -108,7 +110,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         case description, appendSystemPrompt, systemPrompt, allowedTools, disallowedTools
         case maxTurns, maxBudgetUsd, targetRunnerId, targetLabels, runnerId, env, enabled
         case antigravityKeyAvailableByRunner
-        case autoInitGit, codexAccount, claudeAccount, enableWorktree, modelRouting, workDirExists, workDirIsGit
+        case autoInitGit, codexAccount, claudeAccount, antigravityAccount, enableWorktree, modelRouting, workDirExists, workDirIsGit
         case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup
     }
 
@@ -139,6 +141,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         autoInitGit = try c.decodeIfPresent(Bool.self, forKey: .autoInitGit)
         codexAccount = try c.decodeIfPresent(String.self, forKey: .codexAccount)
         claudeAccount = try c.decodeIfPresent(String.self, forKey: .claudeAccount)
+        antigravityAccount = try c.decodeIfPresent(String.self, forKey: .antigravityAccount)
         enableWorktree = try c.decodeIfPresent(Bool.self, forKey: .enableWorktree)
         modelRouting = try c.decodeIfPresent(Bool.self, forKey: .modelRouting)
         workDirExists = try c.decodeIfPresent(Bool.self, forKey: .workDirExists)
@@ -205,8 +208,10 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// a runner too old to report it, which the Runners pages judge by `runsAsRoot` as they always have.
     public var selfUpdate: RunnerSelfUpdate? = nil
     /// What the runner declared it can do on its last poll — `codex-account-move/v1` and
-    /// `claude-account-move/v1` say it carries a session's conversation to another of its accounts.
-    /// Nil from an older server, which claims nothing.
+    /// `claude-account-move/v1` say it carries a session's conversation to another of its accounts;
+    /// `antigravity-account-login/v1`, that it signs in Antigravity accounts of their own, which is all
+    /// a session needs to move between them (`CodexAccounts.moveCapability`). Nil from an older server,
+    /// which claims nothing.
     public var capabilities: [String]? = nil
     /// Engine install/update relay and account-removal relay. Their string-valued states stay raw
     /// so a newer control plane cannot make the runner list undecodable.
@@ -319,6 +324,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// The same pair for a session on the built-in Claude engine: one of the runner's Claude accounts.
     public let claudeAccount: String?
     public let claudeAccountPinned: Bool?
+    /// The same pair for a session on the built-in Antigravity engine: one of the runner's Google
+    /// accounts.
+    public let antigravityAccount: String?
+    public let antigravityAccountPinned: Bool?
     public let pendingApprovals: Int?
     /// What `pendingApprovals` is counting, when one word says it better than "approval":
     /// `OWNER_CONFIRMATION` when everything counted is an OWNER_CONFIRMED task's run waiting for its
@@ -501,6 +510,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         codexAccountPinned = try values.decodeIfPresent(Bool.self, forKey: .codexAccountPinned)
         claudeAccount = try values.decodeIfPresent(String.self, forKey: .claudeAccount)
         claudeAccountPinned = try values.decodeIfPresent(Bool.self, forKey: .claudeAccountPinned)
+        antigravityAccount = try values.decodeIfPresent(String.self, forKey: .antigravityAccount)
+        antigravityAccountPinned = try values.decodeIfPresent(Bool.self, forKey: .antigravityAccountPinned)
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
         ownerItems = try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems)
@@ -564,6 +575,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 poolCodexLogin: CodexLogin? = nil,
                 codexAccount: String? = nil, codexAccountPinned: Bool? = nil,
                 claudeAccount: String? = nil, claudeAccountPinned: Bool? = nil,
+                antigravityAccount: String? = nil, antigravityAccountPinned: Bool? = nil,
                 awaitingReplyFrom: [SessionRequestPeer]? = nil, owesReplyTo: [SessionRequestPeer]? = nil,
                 folderId: String? = nil,
                 confirmationUnderReview: ConfirmationUnderReview? = nil,
@@ -589,6 +601,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.codexAccountPinned = codexAccountPinned
         self.claudeAccount = claudeAccount
         self.claudeAccountPinned = claudeAccountPinned
+        self.antigravityAccount = antigravityAccount
+        self.antigravityAccountPinned = antigravityAccountPinned
         self.pendingApprovals = pendingApprovals
         self.waitingKind = waitingKind
         self.ownerItems = ownerItems
@@ -669,6 +683,8 @@ public struct SessionAgentRef: Codable, Equatable, Sendable, Identifiable {
     public var codexAccount: String? = nil
     /// Its Claude account, the same way (`Agent.claudeAccount`).
     public var claudeAccount: String? = nil
+    /// Its Antigravity account, the same way (`Agent.antigravityAccount`).
+    public var antigravityAccount: String? = nil
     /// Its environment, which can decide the account too — a config directory or a key of its own
     /// (`CodexAccounts.automaticOffered`). Carried by the detail payload's workspace row.
     public var env: [String: String]? = nil
@@ -940,6 +956,8 @@ public struct CreateSessionRequest: Codable, Sendable {
     public let codexAccount: String?
     /// The same for a session on the built-in Claude engine: one of the runner's Claude accounts.
     public let claudeAccount: String?
+    /// The same for a session on the built-in Antigravity engine: one of the runner's Google accounts.
+    public let antigravityAccount: String?
     /// The folder the new session is filed in — one started from a folder's page lands in that
     /// folder (docs/session-folders-move-design.md §3.2). It has to be one of this workspace's
     /// folders, else the server answers 400. Nil omits it: the session is in no folder.
@@ -949,7 +967,7 @@ public struct CreateSessionRequest: Codable, Sendable {
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                 fastMode: Bool? = nil,
                 shell: Bool? = nil, attachmentIds: [String]? = nil, codexAccount: String? = nil,
-                claudeAccount: String? = nil, folderId: String? = nil) {
+                claudeAccount: String? = nil, antigravityAccount: String? = nil, folderId: String? = nil) {
         self.prompt = prompt
         self.title = title
         self.agentId = agentId
@@ -963,6 +981,7 @@ public struct CreateSessionRequest: Codable, Sendable {
         self.attachmentIds = attachmentIds
         self.codexAccount = codexAccount
         self.claudeAccount = claudeAccount
+        self.antigravityAccount = antigravityAccount
         self.folderId = folderId
     }
 }

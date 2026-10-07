@@ -45,6 +45,7 @@ export const WHY_NOT_DONE_WAITING_DETAIL = 'Goes to main after the merge check �
 export const WHY_NOT_DONE_NEEDS_CALL_DETAIL = 'Orbit saw no merge for it. The coordinator checked main has it and asked you to record the project done.';
 export const WHY_NOT_DONE_NOT_MET_YET = 'Not met yet';
 export const WHY_NOT_DONE_NOT_MET_DETAIL = 'Its work has not met this criterion yet.';
+export const WHY_NOT_DONE_NOT_MET = 'not met';
 export const PROJECT_DONE_RECORDED_BY_YOU = 'recorded by you';
 export const PROJECT_DONE_RECORDED_BY_ORBIT = 'recorded by Orbit';
 export const READY_TO_CLOSE = 'Ready to close';
@@ -96,6 +97,7 @@ export const PROJECT_DONE_COPY = {
   needsCallDetail: WHY_NOT_DONE_NEEDS_CALL_DETAIL,
   notMetYet: WHY_NOT_DONE_NOT_MET_YET,
   notMetDetail: WHY_NOT_DONE_NOT_MET_DETAIL,
+  notMet: WHY_NOT_DONE_NOT_MET,
   onMain: WHY_NOT_DONE_ON_MAIN,
   whyHeading: WHY_NOT_DONE_HEADING,
   landedOnMain: 'landed on main',
@@ -170,7 +172,7 @@ const REASON_LABELS: Record<CriterionLandingReason, string> = {
   CODELESS: 'no code to land',
 };
 
-function reasonParts(counts: ProjectDoneCounts): string[] {
+function reasonParts(counts: Pick<ProjectDoneCounts, 'byReason'>): string[] {
   return REASON_ORDER.flatMap((reason) => {
     const count = counts.byReason?.[reason] ?? 0;
     return count > 0 ? [`${count} ${REASON_LABELS[reason]}`] : [];
@@ -219,14 +221,28 @@ export function projectDoneReceiptTally(
   ].join(' · ');
 }
 
-/** The Why-not-done tally uses the mock's shorter "on main" wording. */
-export function projectWhyNotDoneTally(counts: ProjectDoneCounts | undefined): string {
-  if (!counts) return '';
+/**
+ * The Why-not-done tally: the criteria, then where each one stands, in parts that add up to them.
+ * A met criterion is counted where its work is — the mock's shorter "on main", or the reason it is
+ * not (`REASON_LABELS`). An unmet one is counted as not met and never by its landing lane, which for
+ * work still to do describes nothing that happened (no receipt, no code to land). Read off the
+ * criteria's own answers in the unified read (`satisfied`, `landingReason`); never off tasks.
+ */
+export function projectWhyNotDoneTally(
+  derivedDone: Pick<ProjectDerivedDone, 'criteria'> | undefined,
+): string {
+  if (!derivedDone) return '';
+  const met = derivedDone.criteria.filter((criterion) => criterion.satisfied);
+  const notMet = derivedDone.criteria.length - met.length;
+  const byReason = Object.fromEntries(REASON_ORDER.map((reason) => [
+    reason,
+    met.filter((criterion) => criterion.landingReason === reason).length,
+  ])) as Record<CriterionLandingReason, number>;
   return [
-    `${counts.criteria} criteria`,
-    `${counts.met} met`,
-    `${counts.onMain} ${PROJECT_DONE_COPY.onMain}`,
-    ...reasonParts(counts),
+    `${derivedDone.criteria.length} criteria`,
+    `${met.filter((criterion) => criterion.landingReason == null).length} ${PROJECT_DONE_COPY.onMain}`,
+    ...reasonParts({ byReason }),
+    ...(notMet > 0 ? [`${notMet} ${PROJECT_DONE_COPY.notMet}`] : []),
   ].join(' · ');
 }
 

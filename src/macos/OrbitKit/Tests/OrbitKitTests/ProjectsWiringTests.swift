@@ -245,7 +245,7 @@ final class ProjectsWiringTests: XCTestCase {
         let page = try slice(view, from: "private func page(", to: ".projectPageListStyle()")
         let order = ["openItemsAttention(", "overviewSection(", "coordinatorSection(", "runSettingsSection(",
                      "goalSection(", "graphSection(", "blockersSection(", "runQueueSection(", "criteriaSection(",
-                     "instructionsSection(", "tasksSection("]
+                     "instructionsSection(", "tasksSection(", "crossingsSection("]
         let positions = order.map { page.range(of: $0)?.lowerBound }
         XCTAssertFalse(positions.contains(nil), "the page lost one of \(order)")
         XCTAssertEqual(positions.compactMap { $0 }, positions.compactMap { $0 }.sorted(),
@@ -320,7 +320,7 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(spend.contains("requestScroll(to: card.id)"))
 
         // Start… opens the same card, set by the default rule, saying nothing a coordinator said.
-        let sheet = try slice(view, from: "private struct OwnerStartProjectSheet: View {",
+        let sheet = try slice(view, from: "struct OwnerStartProjectSheet: View {",
                               to: "private struct MergeCheckEditor: View {")
         XCTAssertTrue(sheet.contains("StartProjectCard("))
         XCTAssertTrue(sheet.contains("askedAt: nil,"))
