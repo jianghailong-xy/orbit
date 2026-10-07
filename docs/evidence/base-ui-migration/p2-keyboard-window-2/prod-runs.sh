@@ -18,7 +18,9 @@
 #            directory is src/web/.ui-migration-results, which every probe's globalSetup also writes, so it runs
 #            when no other browser run of this tree is going.
 # The runs are in their own network namespace at nice -10. Each step's output is checks/prod-<label>-<step>.txt and
-# its command, tree, times, load and exit code checks/prod-<label>-<step>.json; an existing record is never replaced.
+# its command, tree, times, load and exit code checks/prod-<label>-<step>.json; an existing record is never replaced:
+# a recorded step is skipped, so the same command resumes after an interruption. Each step starts only with at
+# least 6 GB free on / (the coordinator's floor for this shared disk), waiting until then.
 set -u
 label=$1; shift
 here=$(cd "$(dirname "$0")" && pwd)
@@ -28,7 +30,10 @@ mkdir -p "$raw/runs" "$raw/pilot" "$here/checks"
 cd "$root"
 run() {  # run <record name> <command>
   local name=$1 command=$2 record="$here/checks/prod-$label-$1"
-  [ -e "$record.json" ] && { echo "$record.json exists"; return 1; }
+  [ -e "$record.json" ] && { echo "$record.json exists; skipped"; return 1; }
+  while [ "$(df --output=avail -B1M / | tail -1 | tr -d ' ')" -lt 6144 ]; do
+    echo "$(date -u +%FT%TZ) $name waits for 6 GB free on /"; sleep 60
+  done
   local start; start=$(date -u +%FT%TZ)
   local load; load=$(cut -d' ' -f1-3 /proc/loadavg)
   bash -c "$command" > "$record.txt" 2>&1
@@ -47,13 +52,13 @@ EOF
 }
 for step in "$@"; do
   case $step in
-    build) run build 'nice -n 10 npm run build -w @orbit/shared && nice -n 10 npm run build -w @orbit/web' ;;
+    build) run build 'nice -n 10 npm run build -w @orbit/shared && nice -n 10 npm run build -w @orbit/web' || continue ;;
     pilot) for n in 1 2; do
-        run "pilot-$n" "unshare -n bash -c 'ip link set lo up && cd src/web && P32_SNAPSHOTS=$raw/pilot/$label-$n-shots P32_OUTPUT=$raw/runs/pilot-$label-$n NO_COLOR=1 nice -n -10 npx playwright test -c ui-migration/pilot.config.mjs ui-migration/pilot.browser.mjs --update-snapshots=all'"
+        run "pilot-$n" "unshare -n bash -c 'ip link set lo up && cd src/web && P32_SNAPSHOTS=$raw/pilot/$label-$n-shots P32_OUTPUT=$raw/runs/pilot-$label-$n NO_COLOR=1 nice -n -10 npx playwright test -c ui-migration/pilot.config.mjs ui-migration/pilot.browser.mjs --update-snapshots=all'" || continue
         cp src/web/.ui-migration-results/environment.json "$raw/runs/pilot-$label-$n/environment.json"
         python3 -B "$here/slim.py" "$raw/runs/pilot-$label-$n" "$here/pilot-$label-$n" > /dev/null
       done ;;
-    p0) run p0 "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 npm run test:ui-migration -w @orbit/web'"
+    p0) run p0 "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 npm run test:ui-migration -w @orbit/web'" || continue
         rm -rf "$raw/runs/p0-$label" && cp -r src/web/.ui-migration-results "$raw/runs/p0-$label"
         python3 -B "$here/slim.py" "$raw/runs/p0-$label" "$here/p0-$label" > /dev/null ;;
     choices-entry|choices-full|overlays)
@@ -62,12 +67,12 @@ for step in "$@"; do
           choices-full) script=test:ui-choices; grep=''; results=.choices-results ;;
           overlays) script=test:ui-overlays; grep=''; results=.overlays-results ;;
         esac
-        run "$step" "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 npm run $script -w @orbit/web$grep'"
+        run "$step" "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 npm run $script -w @orbit/web$grep'" || continue
         rm -rf "$raw/runs/$step-$label" && cp -r "src/web/$results" "$raw/runs/$step-$label"
         cp src/web/.ui-migration-results/environment.json "$raw/runs/$step-$label/environment.json"
         python3 -B "$here/slim.py" "$raw/runs/$step-$label" "$here/$step-$label" > /dev/null ;;
-    choices-list) run choices-list 'cd src/web && NO_COLOR=1 npx playwright test --config ui-migration/choices.config.mjs --list' ;;
-    entry-repeat) run entry-repeat "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 npm run test:ui-choices -w @orbit/web -- --grep \"Dialog Popover Select exits\" --project chromium-light-desktop --project webkit-dark-phone --repeat-each 10'"
+    choices-list) run choices-list 'cd src/web && NO_COLOR=1 npx playwright test --config ui-migration/choices.config.mjs --list' || continue ;;
+    entry-repeat) run entry-repeat "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 npm run test:ui-choices -w @orbit/web -- --grep \"Dialog Popover Select exits\" --project chromium-light-desktop --project webkit-dark-phone --repeat-each 10'" || continue
         rm -rf "$raw/runs/entry-repeat-$label" && cp -r src/web/.choices-results "$raw/runs/entry-repeat-$label"
         cp src/web/.ui-migration-results/environment.json "$raw/runs/entry-repeat-$label/environment.json"
         python3 -B "$here/slim.py" "$raw/runs/entry-repeat-$label" "$here/entry-repeat-$label" > /dev/null ;;

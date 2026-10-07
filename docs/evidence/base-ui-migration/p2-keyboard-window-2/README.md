@@ -181,7 +181,26 @@ burst 也一样：`after-sub-a` 里会话菜单和字段页的 →⏎、→↑�
 
 ## 修复前后对照
 
-【待补：对照】
+同一探针、同样条件，修复前后各采一次。
+
+| 探针 | 修复前 | 第一版修复（`069601b67`） | 终版（`aed0a7bab`） |
+| --- | --- | --- | --- |
+| burst/paced，Chromium（Orbit 目标；每组合 20+20） | Orbit 有 74 个组合 burst 与 paced 不同，全是 20/20：要修的 62 个（规则 16、子菜单 36、顶层 Menu ⏎Tab/⏎Shift+Tab 4、Home/End 6），只记录的 12 个 | 菜单、Select、Dialog/ConfirmDialog、Popconfirm 全部重采（`after-*`，3200 样本）：要修的组合 0/20；只记录的组合与修复前相同；子菜单第一块（`after-sub-a`）见上节 | 子菜单三块重采（`after2-sub-*`）：【待补】。其余组件没有改动（`aed0a7bab` 只动子菜单触发器的 ⏎/Space），沿用 `069601b67` 上的 `after-*` |
+| 冻结帧，八环境（49 例 × 8） | 72/392（[before](checks/fix-held-frames-before.txt)、[before-home-end](checks/fix-held-frames-before-home-end.txt)）：通过的 9 例是本来就相同的（Dialog/ConfirmDialog 的 ⏎Escape、Dialog ⏎⏎、Popconfirm 6 例） | 312/392（[after](checks/fix-held-frames-after.txt)）：子菜单 10 例焦点落到 body | **392/392**（[after2](checks/fix-held-frames-after2.txt)） |
+| jsdom 单测 `keyboardWindow.test.tsx` | 0594f6d2c 上 23/52 失败（[unit-window-before](checks/unit-window-before.txt)）；加入 Home/End 后 4d54fbe5f 上 26/58 失败（[unit-window-before-2](checks/unit-window-before-2.txt)）。失败的全是窗口用例，参照全过 | 58/58（[unit-window-after](checks/unit-window-after.txt)） | **58/58**（[unit-window-final](checks/unit-window-final.txt)） |
+| 前任务 Select 探针（↓/↑/⏎，276 样本） | 276/276，burst 0 错（[prior-select-keys-before](checks/prior-select-keys-before.txt)） | 276/276（[prior-select-keys-after](checks/prior-select-keys-after.txt)） | Select 未再改动，沿用 |
+| 前任务 Menu 冻结帧（10 例 × 8） | 80/80（[prior-menu-held-frames-before](checks/prior-menu-held-frames-before.txt)） | 80/80（[after](checks/prior-menu-held-frames-after.txt)） | **80/80**（[after2](checks/prior-menu-held-frames-after2.txt)） |
+| `Menu.test.tsx`（前任务的确定性单测） | 18/18 | 18/18 | **18/18** |
+
+修复前 jsdom 的失败（[unit-window-before](checks/unit-window-before.txt)）逐项对应探针看到的错误：
+- 子菜单 9 个：执行了父菜单项（group、default、delete），或子菜单没有执行；
+- 顶层 Menu Tab/Shift+Tab 4 个；
+- Select Tab/Shift+Tab 3 个；
+- Dialog Tab/Shift+Tab 3 个；
+- ConfirmDialog ⏎/Space/Tab 4 个；
+- Home/End 3 个：⏎End⏎、↓End⏎ 执行 File 而不是 /Command，↑Home⏎ 执行 /Command 而不是 File（[unit-window-before-2](checks/unit-window-before-2.txt)）。
+
+本来就相同的 3 个窗口用例（Dialog ⏎⏎、Dialog ⏎Escape、ConfirmDialog ⏎Escape）在修复前也通过，说明测试不是只认修复后的写法。
 
 ## 已验收行为的回归
 
@@ -189,7 +208,21 @@ burst 也一样：`after-sub-a` 里会话菜单和字段页的 →⏎、→↑�
 
 ## 清单复扫与 2026-10-07d.json
 
-【待补：清单】
+作业指导要求各批开工时和交证据前都运行 `src/web/scripts/audit-antd.mjs`。本任务开工时漏跑了，这里在开工提交 `7732f14f8` 的源码上补跑。审计只读源码，所以结果与当时跑的相同。
+
+[antd-audit.sh](antd-audit.sh) 用 git archive 取出审计的输入，在三棵树上各跑一次；[antd-audit-compare.py](antd-audit-compare.py) 写出对照 [antd-audit.json](antd-audit.json)，运行记录在 [checks/antd-audit](checks/antd-audit.txt)。
+- 开工 `7732f14f8` → 终版 `aed0a7bab`：
+  - 计数只有 scannedFiles、testFiles 各 +1，即新增的 `keyboardWindow.test.tsx`，它不含 antd 文本；
+  - 直接引用 antd 的生产文件 100 → 100，`--check-retired` 阻塞文件 241 → 241；
+  - antd 系列依赖的声明与锁定版本不变。
+- 改动的 5 个文件里，只有 `ChoicesFixture.tsx` 的 antd 导入有变化：多了 `Popconfirm`（5cd02c2ae，Popconfirm 基线的旧实现参照）。`Menu.tsx`、`Overlay.tsx` 没有 antd 文本；`Select.tsx` 原有一处「as with AntD」注释，本次只在同一注释后面续写，命中数不变。
+- 本分支与当时项目 tip `3aa26fb97` 的合并树（git merge-tree，不提交），用 tip 的脚本跑 `--check-owners`：2 个未归属点，都不是本分支带来的，而是随 tip 合并 main 进来的 `ProjectDoneConversation.test.tsx` 和 `RunnerEngines.accountFold.test.tsx`。已报告协调者，他判定这两个由 P4.2 用 `2026-10-07c.json` 登记，不归本任务。
+
+协调者要求把 `ChoicesFixture.tsx` 新增的 antd Popconfirm 导入登记为 `inventory-delta/2026-10-07d.json`，owner 仍为 P6：
+- 这个文件已由 `2026-10-07.json` 登记（status new，owner P6）。`--check-owners` 只对 P0.1 归属的文件检查符号增长，所以多出 Popconfirm 时它没有失去归属，新条目也就不是归属所必需的。
+- 如果照 07 的格式写成 `changed`，`verify-record.mjs` 第 3 项（每个新增/改动条目都必需）会失败；在临时目录里实测确实如此。
+- 协调者选了 B（请求 `34bt5NJy7hlys1RIl41ij`）：条目 status 用 `amended`，表示「重述已登记条目的当前事实，owner 不变，不是归属所必需」，所以第 3 项不适用；`added` 照写，相对被重述的条目计算。记录本身（`statusMeaning`）和 `inventory-delta/README.md` 都写明了这个含义；README 只在产物表追加一行、在 status 取值处补一条，不重排已有内容。
+- 记录由 [build-inventory-record.py](build-inventory-record.py) 从本分支源码的审计生成，scan 是 `aed0a7bab` 的源码；[inventory-check.sh](inventory-check.sh) 做核对。结果：【待补】
 
 ## 合入项目 tip 之后
 
@@ -197,7 +230,20 @@ burst 也一样：`after-sub-a` 里会话菜单和字段页的 →⏎、→↑�
 
 ## 边界
 
-【待补：边界】
+本证据**不**证明下面这些：
+- **浏览器与设备**：burst/paced 依赖 CDP 输入队列，只在 Chromium（`chromium-dark-desktop`）上采。WebKit 和手机视口由冻结帧覆盖（八个环境）。项目环境里没有 Firefox。真实设备、触摸和读屏软件都没有覆盖。
+- **窗口出现的频率**：burst 让按键排在输入队列里，冻结帧扣住动画帧，两者都能稳定地造出窗口。真实使用中窗口多久出现一次取决于负载，本证据不测量。
+- **jsdom 的近似**：测试按浏览器规则补的默认动作（⏎ 激活 button、Space 在 keyup 时激活、Tab 顺序）是近似。子菜单项执行后焦点能否回到菜单按钮，jsdom 复现不了，由冻结帧覆盖。
+- **只记录的组合**修复后 burst 仍与 paced 不同；旧 AntD 在这些组合上也不处理该键，按规则不改：
+  - 顶层 Menu ⏎Space：burst 不执行 File，菜单关上；
+  - Select ↓Home⏎、↓End⏎：burst 时 Home/End 没有移动高亮，⏎ 选的是 ↓ 停的那一项；
+  - Select ↓Space（从空值起）；
+  - Popconfirm ⏎⏎、⏎Space、⏎Shift+Tab：burst 关上确认框，不回答问题。
+- **Menu 的 Tab 约定**：⏎Tab⏎ 的 Orbit 结果与旧 Dropdown 不同。Orbit 是 Tab 离开并关闭菜单，⏎ 落在页面下一个按钮上；旧 Dropdown 是 Tab 进菜单，⏎ 执行 File。这是 10-07 约定带来的，不是回归。
+- **字符检索**（`s`、`c`、`7`、`n`）：顶层 Menu 与 Select 的检索序列在基线上 Orbit 的 burst 已与 paced 一致，无需处理；子菜单的 →c⏎ 随子菜单窗口一起修。
+- **P0**：`profile` 在八个环境都失败，是 P0 fixture 的漂移（`GET /api/auth/methods` 没有浏览器 fixture）。修复前后相同，与本任务无关。【待补：终版与合并树】
+- **清单**：合并树上那 2 个未归属点要等 P4.2 的 `2026-10-07c.json` 落地后才消失。
+【待补：其余】
 
 ## 文件与原始数据
 
