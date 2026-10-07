@@ -247,7 +247,11 @@ test('both exits map the body: the interceptor for returns, the filter for throw
   const main = readFileSync(path.resolve(SRC, 'main.ts'), 'utf8');
   assert.match(
     main,
-    /useGlobalInterceptors\(.*new PublicIdInterceptor\(\)/,
+    // `[\s\S]{0,300}?` rather than `.*`: the registration is a multi-line call — a third global
+    // interceptor (the slow-request line) put it over the width one line allows — and `.` stops
+    // at the newline it is now wrapped on. The bounded, non-greedy gap keeps the claim the
+    // original had: this construction inside THAT call, not somewhere later in the file.
+    /useGlobalInterceptors\([\s\S]{0,300}?new PublicIdInterceptor\(\)/,
     'the success path stopped mapping ids',
   );
   // Reached through the conflict boundary, which is registered in front of it: Nest runs exactly

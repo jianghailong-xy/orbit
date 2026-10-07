@@ -42,6 +42,7 @@ Usage:
   orbit project request-start PROJECT_ID --line LINE --automatic[=BOOL] --max-concurrent-tasks N --why TEXT [options]
   orbit project request-done PROJECT_ID --judgment TEXT (--gaps JSON | --gaps-file -) [--json]
   orbit project merge-evidence PROJECT_ID --requirement-id ID --target-branch REF --content-hash SHA256 [options]
+  orbit project skip-merge-check PROJECT_ID TASK_ID --reason TEXT [--json]
   orbit project create --title TITLE [options]
   orbit project update PROJECT_ID [options]
   orbit project delete PROJECT_ID [--json]

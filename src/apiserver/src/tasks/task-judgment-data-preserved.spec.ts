@@ -1986,7 +1986,31 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `task`, `session`, `project`, `session_merge_receipt` or `project_acceptance_*` object is
       // named. No INSERT, UPDATE or DELETE: no stored row is read, locked, backfilled or rewritten —
       // the columns are catalog-only, and every existing row keeps the flag false.
-      '0393_integration_job_skip_merge_check'],
+      '0393_integration_job_skip_merge_check',
+      // `task_project_rollup_covering_idx`, rebuilt (0395): 0178's five key columns and its
+      // predicate kept exactly, and the six columns the rollup's classifier reads
+      // (`completion_policy`, `verifies_task_id`, `assignee_id`, `dispatch_hold`, `terminal_reason`,
+      // `superseded_by_task_id`) added as INCLUDE payload, so `GET /projects` classifies a project's
+      // tasks from the index instead of fetching a heap row per task. Read against every claim
+      // above: one `DROP INDEX` and one `CREATE INDEX` and nothing else — no function, trigger,
+      // type, column or constraint is created, altered or dropped, so it is not another writer of
+      // the DONE fence and names none of the six preserved objects. `task` IS one of the preserved
+      // relations, and it is named only as the table the index is rebuilt on, as in 0283, 0305 and
+      // 0361: an index is a relation beside the table, and with the key columns unchanged no column
+      // of `task` is added, dropped or retyped — `task.acceptance_command`,
+      // `task.acceptance_expected_exit_code`, `task_executable_acceptance_pair` and
+      // `task_completion_criterion` are not named, and no `project_acceptance_*` object is. No
+      // INSERT, UPDATE or DELETE: the build reads every task row once and writes none, and the DROP
+      // takes the index away inside the migration's own transaction, so no reader sees it missing.
+      '0395_project_rollup_covering_idx_columns',
+      // `runner.login_region` (0397): one nullable TEXT column, no default, on `runner`, beside the
+      // sign-in relay's `login_account` (0296) — which of Kimi Code's two sites the relay signs in
+      // on. Read against every claim above: one `ADD COLUMN` statement and nothing else — no
+      // function, trigger, type, index or constraint is created or dropped, so it is not another
+      // writer of the DONE fence and names none of the six preserved objects; `runner` is not a
+      // preserved relation, and no `task`, `project` or `project_acceptance_*` object is named. No
+      // INSERT, UPDATE or DELETE: no stored row is read, locked, backfilled or rewritten.
+      '0397_runner_login_region'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

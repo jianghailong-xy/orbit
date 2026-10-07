@@ -357,6 +357,16 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         sourceSha: 'a'.repeat(40), upstreamRef: 'refs/heads/main', state: 'READY', includedTaskIds: [],
       },
     })).id;
+    // A landing of the project's task, still queued: what the job list's Retry names (§2.2 J-T9). It
+    // names no session, so no runner of the census is ever handed it.
+    const integrationJobId = (await db.projectIntegrationJob.create({
+      data: {
+        projectId, ownerId, codebaseId: codebase.id, kind: 'LAND_TASK', taskId: projectTaskId,
+        serialKey: `https://census.invalid/${name}#refs/heads/project/${projectId}`,
+        targetRef: `refs/heads/project/${projectId}`, upstreamRef: 'refs/heads/main',
+        sourceRef: 'refs/heads/orbit/census', idempotencyKey: `ij:v1:census:${projectId}`,
+      },
+    })).id;
     const contract = await db.projectCompletionContract.findUniqueOrThrow({ where: { projectId } });
     const criteriaIntentId = randomUUID();
     const criteriaCommitToken = randomUUID();
@@ -580,6 +590,7 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       fuseEpisodeId,
       handoffId,
       promotionId,
+      integrationJobId,
       criteriaIntentId,
       criteriaCommitToken,
       providerId,

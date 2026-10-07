@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import type { PlanUsage, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
 import { formatResetTime } from '../lib/providerPools';
 import { RunnerEngines, summaryOf } from './RunnerEngines';
-import { clickRunnerMenuItem, openRunnerMenu } from './RunnerEngines.test-helpers';
+import { clickRunnerMenuItem, openRunnerCards, openRunnerMenu } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -92,7 +92,7 @@ afterEach(() => {
 });
 
 function mount(runners: Runner[]) {
-  localStorage.setItem('orbit:providers-expanded-runners', JSON.stringify(runners.map((r) => r.id)));
+  openRunnerCards(runners);
   apiMock.mockImplementation(async (path: string, options?: { method?: string }) => {
     if (path === '/runners') return runners;
     if (path.endsWith('/login') && (options?.method ?? 'GET') === 'GET') {

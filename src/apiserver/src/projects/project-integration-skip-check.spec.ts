@@ -17,8 +17,7 @@ import {
   INTEGRATION_RETRY_NOT_APPLICABLE,
   INTEGRATION_RETRY_OWNER_ITEM,
 } from './project-integration-retry';
-import { IntegrationJobRow, integrationJobView, skippedMergeCheck } from './project-integration-job';
-import { checksFor } from '../runner-api/integration-job-relay';
+import { IntegrationJobRow, checksFor, integrationJobView, skippedMergeCheck } from './project-integration-job';
 
 /**
  * `integration_skip_merge_check` (contract §2.4 J-S5): the one generation of a landing that runs

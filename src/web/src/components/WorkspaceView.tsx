@@ -318,6 +318,7 @@ import {
 import { ProjectMergeStrip, ProjectMergeTimelineRow } from './ProjectMergeStrip';
 import { isMergeJob, projectTimelineSections } from '../lib/projectMerge';
 import { LandingRow, landingLine } from './ProjectPanoramaHeader';
+import { LandingJobsSheet } from './LandingJobsSheet';
 import { ProjectStartDialog } from './StartProjectCard';
 import {
   CHAT_FACTS_AS_ARMED,
@@ -1234,12 +1235,15 @@ function SessionProjectStartRow({ start, projectId }: { start: StartPageRow; pro
 
 /** The landing line inside the progress card while a task lands on the project branch (iOS
  *  `SessionProjectPage.landingLine`): the project page's own row, ticking once a second, and a press
- *  that opens the project page. A merge job's line is the merge card's (`ProjectMergeStrip`). Its own
+ *  that lists every job in flight (`LandingJobsSheet`) — or, from a server that does not list them,
+ *  opens the project page. A merge job's line is the merge card's (`ProjectMergeStrip`). Its own
  *  component, so the second hand redraws this line and not the console around it. */
 function SessionProjectLanding({ projectId, onOpen }: { projectId: string; onOpen: () => void }) {
   const integration = useQuery(projectIntegrationQuery(projectId));
   const view = integration.data && typeof integration.data === 'object' ? integration.data : null;
   const live = view?.inFlight != null && !isMergeJob(view.inFlight);
+  const listed = view?.inFlightJobs !== undefined;
+  const [jobsOpen, setJobsOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!live) return undefined;
@@ -1250,12 +1254,21 @@ function SessionProjectLanding({ projectId, onOpen }: { projectId: string; onOpe
   const line = live && view
     ? landingLine(view, now, { updatedAt: integration.dataUpdatedAt, failed: integration.isError })
     : null;
-  if (!line) return null;
   return (
-    <button type="button" className="session-project-page-landing" onClick={onOpen}>
-      <LandingRow line={line} />
-      <RightOutlined className="session-project-page-landing-chev" aria-hidden />
-    </button>
+    <>
+      {line ? (
+        <button type="button" className="session-project-page-landing" aria-haspopup={listed ? 'dialog' : undefined}
+          onClick={listed ? () => setJobsOpen(true) : onOpen}>
+          <LandingRow line={line} />
+          <RightOutlined className="session-project-page-landing-chev" aria-hidden />
+        </button>
+      ) : null}
+      {/* Portalled out of the card, and kept while open even if the line goes, so a list being read
+          does not vanish under the reader when its last job lands. */}
+      {listed || jobsOpen ? (
+        <LandingJobsSheet projectId={projectId} open={jobsOpen} onClose={() => setJobsOpen(false)} />
+      ) : null}
+    </>
   );
 }
 
@@ -7348,16 +7361,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     });
     setTimeout(() => taRef.current?.focus(), 0);
   };
-  // The project settlement card's "Ask the coordinator to handle it": the card's own facts — the
-  // blocked criteria, what each is waiting on and what would clear them — go out as one ordinary
-  // turn. Ordinary because nothing is waiting on an answer: the card explains a projection, and the
-  // work that would clear it is this agent's. The facts ARE the message, so unlike the armed
-  // replies above there is nothing to type first; the composer stays free for anything they leave
-  // out. The card stays where it is, with its own Confirm still live.
-  const delegateProjectSettlement = (talk: { facts: string }): void => {
-    if (send.isPending) return;
-    send.mutate({ content: talk.facts, images: [], intent: defaultSendIntent });
-  };
   // A LIVE session's pills show its stored choice (editable any time the runner is
   // online — see configEditable); otherwise they're editable and reflect local state.
   const selectedWorkspace = workspacesForRunner.find((a) => a.id === selected?.workspace?.id);
@@ -9822,14 +9825,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   onViewTasks={(createdTasks.data?.total ?? 0) > 0 ? viewCreatedTasks : undefined}
                 />
               )}
-              {/* The other end of that question: the work filed under this project has met every
-                  criterion it states and no task under it is IN_PROGRESS, so is the project done?
-                  Drawn from the
-                  project page's own `['project', id]` read and pressed straight at the status door
-                  with the browser's credential — the one shape that door accepts from a
-                  conversation. Keyed by the session, because whether it was delivered belongs to
-                  this conversation, and by a key none of its siblings carries, for the reason the
-                  evidence card's note above gives. */}
+              {/* The owner's end of the close-out, and the only card this slot draws since the
+                  owner's ruling of 2026-10-07 04:20Z took "Why is this project not done?" out of
+                  the conversation: "Is this project done?" while the coordinator has asked (or the
+                  row says Record as done…), and the receipt in its place once it is recorded. A
+                  project nobody has asked about draws nothing here — its gaps and the entries that
+                  act on them are the project page's Open items row and the Needs you hint. Keyed
+                  by the session, because whether it was delivered belongs to this conversation,
+                  and by a key none of its siblings carries, for the reason the evidence card's
+                  note above gives. */}
               {selected && selectedId && !selectedTrashed && (
                 <SessionProjectSettlementCard
                   key={`settlement:${selectedId}`}
@@ -9839,7 +9843,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       || selectedSession?.projectMembership?.role === 'COORDINATOR'
                   }
                   waitingKind={selectedSession?.waitingKind ?? null}
-                  onDelegate={delegateProjectSettlement}
                 />
               )}
               {selected &&

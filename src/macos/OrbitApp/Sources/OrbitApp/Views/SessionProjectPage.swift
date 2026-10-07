@@ -244,6 +244,8 @@ struct SessionProjectPage: View {
     @State private var promotionReview: PromotionReviewTarget?
     @State private var promotionReceipt: PromotionReceiptTarget?
     @State private var startSheet: StartSheet?
+    /// The jobs a landing row counts, opened by pressing that row on a server that lists them.
+    @State private var showsLandingJobs = false
 
     /// Which start card the start row opened over the page.
     private enum StartSheet: String, Identifiable {
@@ -398,6 +400,26 @@ struct SessionProjectPage: View {
                 .task { await store.load() }
             }
         }
+        // The jobs a landing row counts (docs/mocks/landing-jobs-sheet), hosted here rather than by
+        // either row, so neither their clocks nor the 4-second poll can take it down. It reads the
+        // page's own landing read at every tick; a Retry that went through reads it again at once.
+        .sheet(isPresented: $showsLandingJobs) {
+            ProjectLandingJobsSheet(
+                lines: { now in
+                    app.projectSessionsIntegration.map {
+                        ProjectPage.landingJobLines($0, now: now, updatedAt: app.projectSessionsIntegrationReadAt,
+                                                    refreshFailed: app.projectSessionsIntegrationReadFailed)
+                    } ?? []
+                },
+                retry: { jobID in
+                    try await app.retryIntegrationJob(address.projectID, jobID: jobID)
+                    await app.loadProjectIntegration(address)
+                },
+                openTask: { taskID in
+                    showsLandingJobs = false
+                    app.openFromConversation(.task(taskID), overConsole: rowNavigation == .push)
+                })
+        }
         // Side by side, each on its own 4-second poll: the landing line, the merge card and the start
         // row never wait behind the member lists, the slowest reads the page makes, and a poll of the
         // members asks for neither list again unless something moved (`pollProjectSessions`).
@@ -546,9 +568,10 @@ struct SessionProjectPage: View {
         openProject()
     }
 
-    /// The project page's landing line, drawn only while something is in flight; a tap opens the
-    /// project page, whose Work overview carries the same row. A merge job's line is the merge
-    /// card's (`mergeCard`), so this one stays about tasks landing on the project branch.
+    /// The project page's landing line, drawn only while something is in flight. A tap opens the
+    /// jobs it counts over this page (docs/mocks/landing-jobs-sheet) — or, from a server that does
+    /// not list them, the project page, whose Work overview carries the same row. A merge job's line
+    /// is the merge card's (`mergeCard`), so this one stays about tasks landing on the project branch.
     @ViewBuilder private var landingLine: some View {
         if let integration = app.projectSessionsIntegration, integration.inFlight != nil,
            !ProjectMergeCard.isMergeJob(integration.inFlight) {
@@ -557,7 +580,13 @@ struct SessionProjectPage: View {
                 if let line = ProjectMergeCard.progressLandingLine(integration, now: context.date,
                                                      updatedAt: app.projectSessionsIntegrationReadAt,
                                                      refreshFailed: app.projectSessionsIntegrationReadFailed) {
-                    Button { app.openProject(address.projectID) } label: {
+                    Button {
+                        if integration.inFlightJobs != nil {
+                            showsLandingJobs = true
+                        } else {
+                            app.openProject(address.projectID)
+                        }
+                    } label: {
                         HStack(spacing: 8) {
                             ProjectLandingRow(line: line)
                             Image(systemName: "chevron.right")
@@ -589,6 +618,10 @@ struct SessionProjectPage: View {
                                                           refreshFailed: app.projectSessionsIntegrationReadFailed)
                     },
                     now: context.date,
+                    // The merge job's row opens the same jobs the progress card's does — on a
+                    // server that lists them; on an older one it stays a row.
+                    onLanding: app.projectSessionsIntegration?.inFlightJobs == nil
+                        ? nil : { showsLandingJobs = true },
                     onDetails: { promotionReview = PromotionReviewTarget(id: $0) },
                     onCoordinator: coordinator.map { coordinator in
                         { app.openProjectMember(coordinator, push: rowNavigation == .push) }
@@ -645,6 +678,8 @@ private struct ProjectMergeCardView: View {
     /// The merge job's live line, drawn inside the card while one is in flight.
     let landing: ProjectPage.LandingLine?
     let now: Date
+    /// Opens the jobs in flight from that line; nil from a server that does not list them.
+    let onLanding: (() -> Void)?
     let onDetails: (String) -> Void
     /// Opens the coordinator, for a blocked candidate; nil when the page has no coordinator row.
     let onCoordinator: (() -> Void)?
@@ -663,7 +698,7 @@ private struct ProjectMergeCardView: View {
         VStack(alignment: .leading, spacing: 8) {
             switch shape {
             case .checking:
-                if let landing { ProjectLandingRow(line: landing) }
+                if let landing { landingRow(landing) }
             case .asking:
                 if let view = merge.current { asking(view) }
             case .merging:
@@ -687,6 +722,24 @@ private struct ProjectMergeCardView: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    /// The merge job's live row: a press opens the jobs in flight, where the server lists them.
+    @ViewBuilder private func landingRow(_ line: ProjectPage.LandingLine) -> some View {
+        if let onLanding {
+            Button(action: onLanding) {
+                HStack(spacing: 8) {
+                    ProjectLandingRow(line: line)
+                    Image(systemName: "chevron.right")
+                        .font(.orbitMeta.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } else {
+            ProjectLandingRow(line: line)
+        }
     }
 
     private func header(_ title: String, symbol: String, badge: String? = nil) -> some View {
@@ -760,7 +813,7 @@ private struct ProjectMergeCardView: View {
     @ViewBuilder private func merging(_ view: ProjectPromotionView) -> some View {
         header(PromotionCards.pageTitle(view), symbol: "arrow.triangle.merge")
         Text(PromotionCards.mergingStatusLine(view)).font(.orbitLabel)
-        if let landing { ProjectLandingRow(line: landing) }
+        if let landing { landingRow(landing) }
         Text(PromotionCards.pageNothingToDo).font(.orbitMeta).foregroundStyle(.secondary)
         HStack {
             Spacer()
