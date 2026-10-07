@@ -56,6 +56,8 @@ internal fun WikiEntryScreen(store: WikiStore, route: OrbitRoute, data: Director
     LaunchedEffect(entryId) { store.loadEntry(entryId) }
     DisposableEffect(entryId) { store.entryAppeared(entryId); onDispose { store.entryDisappeared(entryId) } }
     val detail = state.detail(entryId)
+    // The cards this page names are asked for whenever what it names changes — on the first read and after every re-read.
+    LaunchedEffect(detail) { detail?.let { store.noteLinkCards(wikiEntryCardRefs(it)) } }
     fun finish(answer: String?, done: String) { if (answer != null) notice = answer else WikiToast.show(done) }
     PageBar.Bind(route, title = "", actions = if (detail == null) null else ({
         TextButton(onClick = { form = "edit" }, enabled = !state.busy, modifier = Modifier.testTag("wiki-entry-edit")) { Text(WikiCopy.edit) }
@@ -86,8 +88,9 @@ internal fun WikiEntryScreen(store: WikiStore, route: OrbitRoute, data: Director
     }, modifier = Modifier.fillMaxSize().testTag("wiki-entry")) {
         when {
             detail != null -> WikiEntryPage(detail, now, state.busy, sessionTitle = { id ->
-                data.sessions.values.flatten().firstOrNull { ObjectId.same(it.id, id) }?.name
-            }, openSession = nav::session, openTask = nav::task,
+                state.linkTitle("session", id) ?: data.sessions.values.flatten().firstOrNull { ObjectId.same(it.id, id) }?.name
+            }, sourceTitle = { source -> wikiSourceCard(source)?.let { (kind, id) -> state.linkTitle(kind, id) } },
+                openSession = nav::session, openTask = nav::task,
                 confirm = { scope.launch { finish(store.confirm(detail.entry), WikiModeCopy.confirmed) } },
                 reject = { why -> scope.launch { finish(store.reject(detail.entry.id, why), WikiModeCopy.rejected) } })
             state.isMissing(entryId) -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { StatusMessage(WikiCopy.noEntrySelected, "") }
@@ -162,7 +165,7 @@ internal fun SheetBar(title: String, cancelLabel: String, confirmLabel: String?,
 /** One entry, as an inset-grouped page: the head, then Details, Sources, Anchors, Where it's used and History. */
 @Composable
 private fun WikiEntryPage(detail: WikiEntryDetail, now: Instant, busy: Boolean, sessionTitle: (String) -> String?,
-    openSession: (String) -> Unit, openTask: (String) -> Unit, confirm: () -> Unit, reject: (String) -> Unit) {
+    sourceTitle: (WikiSource) -> String?, openSession: (String) -> Unit, openTask: (String) -> Unit, confirm: () -> Unit, reject: (String) -> Unit) {
     val entry = detail.entry
     LazyColumn(Modifier.fillMaxSize().testTag("wiki-entry-list"), contentPadding = PaddingValues(bottom = 24.dp)) {
         item(key = "head") { EntryHead(detail, now, busy, confirm, reject) }
@@ -186,7 +189,7 @@ private fun WikiEntryPage(detail: WikiEntryDetail, now: Instant, busy: Boolean, 
                 if (detail.sources.isEmpty()) CardNote(WikiCopy.noSources)
                 detail.sources.forEachIndexed { i, source ->
                     if (i > 0) HorizontalDivider(Modifier.padding(start = 16.dp))
-                    SourceRow(source, openSession, openTask)
+                    SourceRow(source, sourceTitle(source), openSession, openTask)
                 }
             }
         }
@@ -336,22 +339,46 @@ internal fun wikiKindGlyph(kind: String?) = when (kind) {
     "principle" -> "📌"; "convention" -> "📏"; "decision" -> "⑂"; "pitfall" -> "⚠"; "recipe" -> "☰"; "concept" -> "📖"; else -> "▤"
 }
 
+/** The task or session a source cites, as the link card the web draws for it — a turn names its session. */
+internal fun wikiSourceCard(source: WikiSource): Pair<String, String>? {
+    val ref = source.ref?.takeIf { ObjectId.canonical(it) != null } ?: return null
+    return when (source.kind) {
+        "task" -> "task" to ref
+        "turn" -> if (source.locator["turnId"] == null) null else "session" to ref
+        else -> null
+    }
+}
+
+/** Every card an entry's page names: its sources' tasks and sessions, and the sessions it was handed to. */
+internal fun wikiEntryCardRefs(detail: WikiEntryDetail): List<Pair<String, String>> =
+    detail.sources.mapNotNull(::wikiSourceCard) +
+        detail.exposure.mapNotNull { it.sessionId?.takeIf { id -> ObjectId.canonical(id) != null }?.let { id -> "session" to id } }
+
+/** A source kind's glyph (iOS `WikiGlyph.source`). */
+private fun sourceGlyph(kind: String?) = when (kind) {
+    "turn" -> "💬"; "task" -> "☑"; "commit" -> "⑂"; "merge_receipt" -> "⤚"; "tool_call" -> "🔧"; else -> "▤"
+}
+
 /** A source: the record it cites, and the quote it was cited for with whether the server found it there. A task or a session opens. */
 @Composable
-private fun SourceRow(source: WikiSource, openSession: (String) -> Unit, openTask: (String) -> Unit) {
+private fun SourceRow(source: WikiSource, title: String?, openSession: (String) -> Unit, openTask: (String) -> Unit) {
     val opens = source.kind == "task" || (source.kind == "turn" && source.locator["turnId"] != null)
     val ref = source.ref
     Column(Modifier.fillMaxWidth().clickable(enabled = opens && ref != null, role = Role.Button) {
         if (ref != null) { if (source.kind == "task") openTask(ref) else if (source.kind == "turn") openSession(ref) }
     }.padding(horizontal = 16.dp, vertical = 10.dp).testTag("wiki-source:${source.id}"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(sourceGlyph(source.kind), style = WikiType.meta, color = MaterialTheme.colorScheme.primary)
             // A turn is shown as the session it is in when it names one, as the web's card does.
-            Text(if (source.kind == "turn" && opens) "Session" else WikiLogic.sourceWord(source.kind), style = WikiType.label.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.primary)
-            Text(WikiLogic.sourceRef(source), Modifier.weight(1f), style = WikiType.mono.copy(fontSize = WikiType.meta.fontSize), color = WikiPalette.secondary,
+            Text(if (source.kind == "turn" && opens) "Session" else WikiLogic.sourceWord(source.kind), style = WikiType.label.copy(fontWeight = FontWeight.SemiBold))
+            if (title == null) Text(WikiLogic.sourceRef(source), Modifier.weight(1f), style = WikiType.mono.copy(fontSize = WikiType.meta.fontSize), color = WikiPalette.secondary,
                 maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+            else Spacer(Modifier.weight(1f))
             if (opens) Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.size(12.dp), tint = WikiPalette.secondary)
         }
+        if (title != null) Text(title, Modifier.testTag("wiki-source-title:${source.id}"), maxLines = 3, overflow = TextOverflow.Ellipsis,
+            style = WikiType.prose.copy(fontWeight = FontWeight.SemiBold),
+            color = if (opens) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
         val quote = source.quote
         if (!quote.isNullOrEmpty()) {
             SelectionContainer {

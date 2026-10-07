@@ -86,6 +86,13 @@ internal class WikiClient(private val api: OrbitApi, private val handle: Session
         return answer["draft"]?.takeIf { it !is JsonNull }?.let { Wire.json.decodeFromJsonElement(WikiPlanVersion.serializer(), it) }
     }
 
+    /** `POST /link-previews`: the cards for the objects a page names, at most 50 refs a request. Each answer is
+     * `ok` with the object's fields, or `unavailable` — the same for another account's, a deleted or no object. */
+    suspend fun linkPreviews(refs: List<Pair<String, String>>): JsonArray =
+        json(listOf("link-previews"), method = HttpMethod.POST, body = buildJsonObject {
+            putJsonArray("refs") { refs.forEach { (kind, id) -> add(buildJsonObject { put("kind", kind); put("id", id) }) } }
+        })["previews"] as? JsonArray ?: JsonArray(emptyList())
+
     /** The options a maintenance form offers: the account's workspaces and runners, and its providers. */
     suspend fun workspaces(): JsonArray = json(listOf("workspaces")) as? JsonArray ?: JsonArray(emptyList())
     suspend fun runners(): JsonArray = json(listOf("runners")) as? JsonArray ?: JsonArray(emptyList())

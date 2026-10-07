@@ -49,7 +49,10 @@ internal data class WikiState(
     val plan: WikiPlanState? = null, val planState: LoadState = LoadState(), val planMissing: Boolean = false,
     val planVersions: List<WikiPlanVersionSummary> = emptyList(), val planVersionReads: Map<Int, WikiPlanVersion> = emptyMap(),
     val selectedSlug: String? = null,
+    /** The titles the link-preview cards gave the tasks and sessions a page names, by `kind:key` (iOS `model.linkCards`). */
+    val linkTitles: Map<String, String> = emptyMap(),
 ) {
+    fun linkTitle(kind: String, id: String): String? = linkTitles["$kind:${wikiKey(id)}"]
     /** The space the home page is about: the one picked, else the first by slug. */
     val currentSpace: WikiSpace? get() = spaces.firstOrNull { it.slug == selectedSlug } ?: spaces.firstOrNull()
     val proposalsToReview: Int get() = WikiLogic.proposalsToReview(spaces)
@@ -153,6 +156,23 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
             // what is on screen, and says so only when there is nothing on screen (`WikiModel.loadEntry`).
             if (error is ApiError && error.status == 404) set { it.copy(missing = it.missing + key) }
             else set { it.copy(failed = it.failed + key) }
+        }
+    }
+
+    /** Ask for the cards of the objects a page names — one batched read, nothing re-read that is already held
+     * (iOS `WikiEntryView.noteCards` over the app's card store). A failed read leaves the rows on their ids. */
+    suspend fun noteLinkCards(refs: List<Pair<String, String>>) {
+        val wanted = refs.distinctBy { (kind, id) -> "$kind:${wikiKey(id)}" }
+            .filter { (kind, id) -> current.linkTitle(kind, id) == null }
+        wanted.chunked(50).forEach { batch ->
+            val answers = optional { client.linkPreviews(batch) } ?: return@forEach
+            // One preview per ref, in the order they were asked for.
+            val titles = batch.zip(answers).mapNotNull { (ref, preview) ->
+                if (preview["state"].text() != "ok") return@mapNotNull null
+                val title = preview[ref.first]["title"].text()?.takeIf { it.isNotBlank() } ?: wikiPublicId(ref.second)
+                "${ref.first}:${wikiKey(ref.second)}" to title
+            }
+            if (titles.isNotEmpty()) set { it.copy(linkTitles = it.linkTitles + titles) }
         }
     }
 

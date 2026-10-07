@@ -79,7 +79,10 @@ internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: Directory
             store.select(linked.slug); store.loadHome(); store.loadPlan(); store.loadDocsDirectory()
         }
     }
-    PageBar.Bind(route, title = "") {
+    // The page's own header carries the title; the bar takes it once the header scrolls away (iOS's large title).
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val headerOnScreen by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
+    PageBar.Bind(route, title = if (headerOnScreen || state.home == null) "" else WikiCopy.title) {
         BarIcon(R.drawable.ic_contents, WikiArticleCopy.contents, "wiki-bar-contents") { contentsShown = true }
         BarIcon(R.drawable.ic_settings, WikiModeCopy.settings, "wiki-bar-settings") { nav.open(OrbitRoute(Destination.WIKI_SETTINGS)) }
     }
@@ -94,7 +97,7 @@ internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: Directory
                 val docs = state.docsDirectory?.takeIf { it.plan != null }?.docs?.let { it.written to it.total }
                 WikiPlanLogic.banner(look, p, now, docs, runnerOnline)
             } }
-            WikiHomePage(home, now, banner, store, nav, openSettings = { nav.open(OrbitRoute(Destination.WIKI_SETTINGS)) }) { slug ->
+            WikiHomePage(home, now, banner, store, nav, listState, openSettings = { nav.open(OrbitRoute(Destination.WIKI_SETTINGS)) }) { slug ->
                 store.select(slug)
                 // iOS reloads only the home here; the plan banner and the docs counts are read again too, so they never speak for the old space.
                 scope.launch { store.loadHome(); store.loadPlan(); store.loadDocsDirectory() }
@@ -121,7 +124,7 @@ private fun WikiHomePlaceholder(state: WikiState, retry: () -> Unit) {
 
 @Composable
 private fun WikiHomePage(content: WikiHomeContent, now: Instant, planBanner: WikiPlanLogic.Banner?, store: WikiStore,
-    nav: WikiNav, openSettings: () -> Unit, pickSpace: (String) -> Unit) {
+    nav: WikiNav, listState: androidx.compose.foundation.lazy.LazyListState, openSettings: () -> Unit, pickSpace: (String) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     var hits by remember { mutableStateOf<List<WikiSearchHit>>(emptyList()) }
     var searched by rememberSaveable { mutableStateOf("") }
@@ -135,7 +138,7 @@ private fun WikiHomePage(content: WikiHomeContent, now: Instant, planBanner: Wik
         hits = found; searched = text
     }
     fun openEntry(id: String) = nav.entry(id)
-    LazyColumn(Modifier.fillMaxSize().testTag("wiki-home-list")) {
+    LazyColumn(Modifier.fillMaxSize().testTag("wiki-home-list"), state = listState) {
         item(key = "header") { HomeHeader(content, now, openSettings, { content.health?.maintenance?.lastRun?.sessionId?.let(nav::session) }, pickSpace) }
         item(key = "search") { SearchField(query) { query = it } }
         if (!searching) {
