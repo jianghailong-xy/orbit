@@ -1,0 +1,763 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/var/tmp/p4.1-293463/tip/node_modules/.bin/playwright",
+   "test",
+   "breakpoints.browser.mjs",
+   "pages.browser.mjs",
+   "--config",
+   "ui-migration/p32-reference.config.mjs",
+   "--update-snapshots=all",
+   "--project",
+   "chromium-dark-desktop",
+   "--project",
+   "chromium-light-phone",
+   "-g",
+   "both sides| task$"
+  ],
+  "configFile": "/var/tmp/p4.1-293463/tip/src/web/ui-migration/p32-reference.config.mjs",
+  "rootDir": "/var/tmp/p4.1-293463/tip/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/var/tmp/p4.1-293463/tip/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/n-ref-1-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/var/tmp/p4.1-293463/tip/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs",
+     "p41*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/n-ref-1-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/var/tmp/p4.1-293463/tip/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs",
+     "p41*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/n-ref-1-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/var/tmp/p4.1-293463/tip/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs",
+     "p41*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/n-ref-1-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/var/tmp/p4.1-293463/tip/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs",
+     "p41*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/n-ref-1-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/var/tmp/p4.1-293463/tip/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs",
+     "p41*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/n-ref-1-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/var/tmp/p4.1-293463/tip/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs",
+     "p41*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/n-ref-1-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/var/tmp/p4.1-293463/tip/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs",
+     "p41*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/n-ref-1-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/var/tmp/p4.1-293463/tip/src/web/ui-migration",
+    "testIgnore": [
+     "foundation*.browser.mjs",
+     "controls*.browser.mjs",
+     "overlays*.browser.mjs",
+     "choices*.browser.mjs",
+     "toasts*.browser.mjs",
+     "composer*.browser.mjs",
+     "pilot*.browser.mjs",
+     "p41*.browser.mjs"
+    ],
+    "testMatch": [
+     "*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/var/tmp/p4.1-293463/runs/n-ref-1-out/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "all",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run preview -- --host 127.0.0.1 --port 4173 --strictPort",
+   "cwd": "/var/tmp/p4.1-293463/tip/src/web/",
+   "url": "http://127.0.0.1:4173",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "breakpoints.browser.mjs",
+   "file": "breakpoints.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "both sides of existing 600, 640 and 960px rules",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "skip",
+         "description": "Phone/touch is covered at 390px; boundary probes use a desktop pointer.",
+         "location": {
+          "file": "/var/tmp/p4.1-293463/tip/src/web/ui-migration/breakpoints.browser.mjs",
+          "line": 5,
+          "column": 8
+         }
+        }
+       ],
+       "expectedStatus": "skipped",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "skipped",
+         "duration": 42,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T14:52:03.306Z",
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Phone/touch is covered at 390px; boundary probes use a desktop pointer.",
+           "location": {
+            "file": "/var/tmp/p4.1-293463/tip/src/web/ui-migration/breakpoints.browser.mjs",
+            "line": 5,
+            "column": 8
+           }
+          }
+         ],
+         "attachments": [
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-phone/attachments/computed-styles-and-timings-368ba9d43a59b93533ab6f1e83d2c254be8c028d.json"
+          }
+         ]
+        }
+       ],
+       "status": "skipped"
+      }
+     ],
+     "id": "1fb9f280f3256816d545-eaa6328b99ab1a936e29",
+     "file": "breakpoints.browser.mjs",
+     "line": 4,
+     "column": 1
+    },
+    {
+     "title": "both sides of existing 600, 640 and 960px rules",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 8950,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-599-share.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-599-dialog.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-601-share.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-601-dialog.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-639-projects.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-639-graph.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-641-projects.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-641-graph.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-959-wiki.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-959-session.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-961-wiki.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-961-session.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T14:52:05.926Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "breakpoint-599-share-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-599-share.png"
+          },
+          {
+           "name": "breakpoint-599-share-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-599-share-actual.png"
+          },
+          {
+           "name": "breakpoint-599-dialog-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-599-dialog.png"
+          },
+          {
+           "name": "breakpoint-599-dialog-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-599-dialog-actual.png"
+          },
+          {
+           "name": "breakpoint-601-share-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-601-share.png"
+          },
+          {
+           "name": "breakpoint-601-share-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-601-share-actual.png"
+          },
+          {
+           "name": "breakpoint-601-dialog-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-601-dialog.png"
+          },
+          {
+           "name": "breakpoint-601-dialog-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-601-dialog-actual.png"
+          },
+          {
+           "name": "breakpoint-639-projects-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-639-projects.png"
+          },
+          {
+           "name": "breakpoint-639-projects-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-639-projects-actual.png"
+          },
+          {
+           "name": "breakpoint-639-graph-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-639-graph.png"
+          },
+          {
+           "name": "breakpoint-639-graph-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-639-graph-actual.png"
+          },
+          {
+           "name": "breakpoint-641-projects-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-641-projects.png"
+          },
+          {
+           "name": "breakpoint-641-projects-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-641-projects-actual.png"
+          },
+          {
+           "name": "breakpoint-641-graph-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-641-graph.png"
+          },
+          {
+           "name": "breakpoint-641-graph-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-641-graph-actual.png"
+          },
+          {
+           "name": "breakpoint-959-wiki-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-959-wiki.png"
+          },
+          {
+           "name": "breakpoint-959-wiki-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-959-wiki-actual.png"
+          },
+          {
+           "name": "breakpoint-959-session-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-959-session.png"
+          },
+          {
+           "name": "breakpoint-959-session-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-959-session-actual.png"
+          },
+          {
+           "name": "breakpoint-961-wiki-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-961-wiki.png"
+          },
+          {
+           "name": "breakpoint-961-wiki-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-961-wiki-actual.png"
+          },
+          {
+           "name": "breakpoint-961-session-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/breakpoint-961-session.png"
+          },
+          {
+           "name": "breakpoint-961-session-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-961-session-actual.png"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/attachments/computed-styles-and-timings-9aff9ca346bda90266fae167a6b2f475748118e0.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "1fb9f280f3256816d545-92aeb4368a82b2586d22",
+     "file": "breakpoints.browser.mjs",
+     "line": 4,
+     "column": 1
+    }
+   ]
+  },
+  {
+   "title": "pages.browser.mjs",
+   "file": "pages.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "task",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2249,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-light-phone/task-detail.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-light-phone/task-action-hover.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-light-phone/task-action-focus.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-light-phone/task-action-menu.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-light-phone/task-share-dialog.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T14:52:03.403Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "task-detail-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-light-phone/task-detail.png"
+          },
+          {
+           "name": "task-detail-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/pages.browser.mjs-task-chromium-light-phone/task-detail-actual.png"
+          },
+          {
+           "name": "task-action-hover-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-light-phone/task-action-hover.png"
+          },
+          {
+           "name": "task-action-hover-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/pages.browser.mjs-task-chromium-light-phone/task-action-hover-actual.png"
+          },
+          {
+           "name": "task-action-focus-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-light-phone/task-action-focus.png"
+          },
+          {
+           "name": "task-action-focus-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/pages.browser.mjs-task-chromium-light-phone/task-action-focus-actual.png"
+          },
+          {
+           "name": "task-action-menu-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-light-phone/task-action-menu.png"
+          },
+          {
+           "name": "task-action-menu-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/pages.browser.mjs-task-chromium-light-phone/task-action-menu-actual.png"
+          },
+          {
+           "name": "task-share-dialog-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-light-phone/task-share-dialog.png"
+          },
+          {
+           "name": "task-share-dialog-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/pages.browser.mjs-task-chromium-light-phone/task-share-dialog-actual.png"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/pages.browser.mjs-task-chromium-light-phone/attachments/computed-styles-and-timings-cb167d47e0393298b1a2a471b84c858b6ed101ea.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-d72b333ee0e52bfd484c",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    },
+    {
+     "title": "task",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2610,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/task-detail.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/task-action-hover.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/task-action-focus.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/task-action-menu.png, writing actual.\n"
+          },
+          {
+           "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/task-share-dialog.png, writing actual.\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-07T14:52:14.935Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "task-detail-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/task-detail.png"
+          },
+          {
+           "name": "task-detail-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/pages.browser.mjs-task-chromium-dark-desktop/task-detail-actual.png"
+          },
+          {
+           "name": "task-action-hover-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/task-action-hover.png"
+          },
+          {
+           "name": "task-action-hover-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/pages.browser.mjs-task-chromium-dark-desktop/task-action-hover-actual.png"
+          },
+          {
+           "name": "task-action-focus-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/task-action-focus.png"
+          },
+          {
+           "name": "task-action-focus-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/pages.browser.mjs-task-chromium-dark-desktop/task-action-focus-actual.png"
+          },
+          {
+           "name": "task-action-menu-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/task-action-menu.png"
+          },
+          {
+           "name": "task-action-menu-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/pages.browser.mjs-task-chromium-dark-desktop/task-action-menu-actual.png"
+          },
+          {
+           "name": "task-share-dialog-expected.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-shots/chromium-dark-desktop/task-share-dialog.png"
+          },
+          {
+           "name": "task-share-dialog-actual.png",
+           "contentType": "image/png",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/pages.browser.mjs-task-chromium-dark-desktop/task-share-dialog-actual.png"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/var/tmp/p4.1-293463/runs/n-ref-1-out/pages.browser.mjs-task-chromium-dark-desktop/attachments/computed-styles-and-timings-a95fb476593547da0ba968c3d24f6caa58ee8531.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "6fad8abc2ede1d71a0ca-dfa74c73a5977d977265",
+     "file": "pages.browser.mjs",
+     "line": 6,
+     "column": 3
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-07T14:52:02.451Z",
+  "duration": 15154.291000000001,
+  "expected": 3,
+  "skipped": 1,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}
