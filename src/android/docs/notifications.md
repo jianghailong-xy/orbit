@@ -233,48 +233,70 @@ processing through WorkManager. Scheduling and the OS's execution window still
 need actual-device validation; these deadlines do not prove delivery reliability.
 [Firebase receiving guidance](https://firebase.google.com/docs/cloud-messaging/android/receive-messages)
 
-## Local verification plan
+## Local verification
 
-The development handoff on the fixed `51bbcc3` base passed the original
-`test lintDebug assembleDebug` gate and compiled the controlled instrumentation
-APK: 90 core checks, 108 debug app checks, and 108 release app checks, with no
-failures or skips. The 29 new notification cases run in both app variants.
-Lint reported no errors. The unchanged fixed A09 push backend also passed 87
-local non-Postgres regression cases. These checks do not establish device UI or
-transport delivery. The first two emulator attempts retained runner/lifecycle
-harness failures; their fixes and further device results are follow-up evidence.
+The original gate is unchanged and must pass on every handoff:
 
-Run the original Android gate with `--max-workers=2`; do not replace it with
-only notification tests. Build and unit/HTTP checks can proceed without a device.
-Use the shared fixture as input, with independent assertions about registration,
-payload decoding, replacement/removal, and routes. Cover:
+```sh
+env JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ANDROID_HOME=/opt/android-sdk ANDROID_SDK_ROOT=/opt/android-sdk \
+  bash src/android/gradlew -p src/android --no-daemon --max-workers=2 test lintDebug assembleDebug
+```
 
-- Registration before/after token arrival, refresh, uncertain responses,
-  same-token new binding, late old responses/logout, server/account switch,
-  persistence after process restart, and installation storage exclusion.
-- Binding rejection before display; duplicate event, same-tag replacement, and a
-  new approval after clearing; UUID/public-ID equivalence; unsupported data.
-- Native approval and exact owner-item authoritative reads; resolved, inaccessible,
-  offline, and malformed responses; `clearSessions` preserving unrelated notes.
-- Notification permission denied, individual channel blocked, global notifications
-  blocked, missing Firebase configuration, and restored permission/channel state.
-  Foreground login, reading, approvals, and sending must remain usable.
-- Existing ACTION_VIEW cold entry, pending-login entry, real session/card actions,
-  another device's resolution signal, foreground recovery, and account isolation.
+It runs the 33 notification unit cases in both app variants: registration and
+binding generations, installation identity, the once-per-installation permission
+claim, payload parsing against the shared fixture, authority reads for every
+alert kind, sync/clear semantics, worker expiry, channels, content intents and
+dedup/replacement under Robolectric. They establish logic and wire shape only.
+
+Device checks use the debug APK and an instrumentation APK whose runner swaps in
+a controlled token source (the debug build has no Firebase configuration, so the
+production app keeps push disabled):
+
+```sh
+bash src/android/gradlew -p src/android --max-workers=2 :app:assembleDebug :app:assembleDebugAndroidTest \
+  -PorbitTestRunner=io.orbitd.android.push.PushTestRunner
+bash src/android/scripts/push-device-test.sh APP_APK TEST_APK NEW_EVIDENCE_DIR 36
+```
+
+Messages are contract-shaped data handed to `PushController.receive`, never an
+FCM delivery. HTTP goes to controlled fixtures: an in-process MockWebServer for
+the warm suite and `push-cold-fixture.py` (A08's cards fixture plus the push
+registration contract, reached through `adb reverse`) for the multi-process
+phases. The script holds `ui.lock` for the whole run, refuses a serial that is
+not an emulator, reinstalls both APKs, records device/APK/input hashes, and
+restores what it changed (night mode, font scale, reverse mapping, fixture).
+`A10_PHASES`, `A10_TESTS`, `A10_NIGHT` and `A10_FONT_SCALE` select a subset or an
+appearance pass. Every phase records PASS/FAIL/NOT_RUN in `result.txt`.
+
+| Phase | Processes | What it exercises |
+| --- | --- | --- |
+| `suite` (`PushDeviceTest`) | one instrumented process | Background alert → real tray entry → real touch → reader card → approval endpoint; duplicate event and same-tag replacement; foreground alert deduplicated, then another end's resolution clears tray and card through sync and, separately, through foreground REST; a PendingIntent captured before sign-out survives login and Activity recreation; 403/404/503/stale authority before display and on tap; channel deleted (plus the app-op on API 29–32) while approval keeps working; account switch rejects the old binding, keeps the installation and unregisters; foreground notice opens an unfocused session; WorkManager retry after 503 and old-binding rejection after an account switch. |
+| `cold` (`ColdPushDeviceTest`) | three processes | Sign in and post in the background; force-stop; a new process whose first Activity is the notification's ACTION_VIEW restores the login, binding and event history, shows the card and approves; then a signed-out new process keeps the route through the login screen and opens it after authentication. |
+| `tray` | launcher start + `--no-restart` attachment + SystemUI start | The production builder posts an entry in a launcher-started process, which is killed; a host tap on the surviving entry starts a new, uninstrumented process that restores the login and opens the session card; the host taps Allow and the fixture records the decision. |
+| `permission` (API 33+) | fresh app data | The first signed-in foreground shows the system request once; "Don't allow" leaves no tray entry; approval still works; a second sign-in does not ask again. |
+
+Platform limits seen on the emulator: finishing an instrumentation force-stops
+the target, which cancels its notifications, so the tray phase attaches to a
+process the launcher started (`am instrument --no-restart` attaches; it does
+not start one). On API 33+ the app-op no longer turns notifications off; the
+runtime permission does, and revoking it is done between processes. Under heavy
+host load the emulator stalled system-wide once (an `onStopJob` ANR during the
+worker case, with system_server itself delayed by tens of seconds); such a run is
+repeated rather than counted.
 
 Any emulator operation must hold `flock /var/lib/orbit/android/ui.lock`
-exclusively for the whole device flow. If unavailable, continue non-device work.
-Use production app/HTTP/navigation paths with a controlled server; injected
-messages are transport substitutes only. Retain the APK/source/server/fixture
-identities and failures. Restore settings, stop owned fixtures, remove owned adb
-reverse mappings, and release the lock when finished. A fixture assertion or
-shell notification injection is never an FCM receipt.
+exclusively for the whole device flow and name `emulator-5554` (or the API
+29–35 AVD the script starts) explicitly; a physical phone on the same adb server
+is scheduled by the coordinator. A fixture assertion or injected message is
+never an FCM receipt.
 
 ## Remaining real-device evidence and platform limits
 
 Current resources do not include the target physical phones, matching live FCM
 client/server credentials, deployment role accounts, or an installed iOS build
-identity. The following steps remain even if every local check succeeds:
+identity. On 2026-10-07 the account owner asked for emulator testing with
+screenshots first and deferred the physical phone, which the coordinator
+schedules. The following steps remain even if every local check succeeds:
 
 1. Integrate the exact A10 client commit with the fixed backend/shared inputs and
    A14 release isolation. Record each source SHA, APK hash/package/build/signature,
