@@ -1,5 +1,6 @@
 import { Prisma, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { notifyRunnerWakeOnCommit } from '../realtime/runner-wake';
 import { LANDING_SESSION_CANDIDATES, LANDING_WORK_SESSION_SELECT, landingWorkSession } from './landing-source-branch';
 import { startOnFirstIntegration } from './project-integration-line';
 import {
@@ -1030,7 +1031,28 @@ async function queueLandTask(
     skipDuplicates: true,
     select: { id: true },
   });
+  // Wake the machine that will run it, from this transaction (see notifyRunnerWakeOnCommit): a
+  // landing queued by a DONE otherwise sits until that runner's next 30s heartbeat before it even
+  // starts — the floor a Merge press had until sessions.service woke its runner, on the path that
+  // runs for every task the platform completes. Only when a row was really written: a duplicate
+  // (`skipDuplicates`) means the generation is already queued and already someone's to run.
+  if (created[0]?.id) await notifyRunnerWakeOnCommit(tx, await jobRunnerId(tx, input.session.id));
   return created[0]?.id ?? null;
+}
+
+/**
+ * The runner whose heartbeat carries a queued job: the one the job's session checkout lives on.
+ * integration-job-relay.ts#claimOne joins exactly this path — `project_integration_job.session_id`
+ * → `session.workspace_id` → `workspace.runner_id` — so a wake for anybody else would nudge a
+ * machine that cannot claim the job, and the job would wait out its tick regardless.
+ */
+async function jobRunnerId(tx: Prisma.TransactionClient, sessionId: string | null): Promise<string | null> {
+  if (!sessionId) return null;
+  const row = await tx.session.findUnique({
+    where: { id: sessionId },
+    select: { workspace: { select: { runnerId: true } } },
+  });
+  return row?.workspace?.runnerId ?? null;
 }
 
 /**
@@ -1280,5 +1302,8 @@ export async function queuePromotionJob(
     skipDuplicates: true,
     select: { id: true },
   });
+  // As for a landing: the runner that will run this check (or landing) is woken when this
+  // transaction commits, rather than up to 30s from now on its heartbeat.
+  if (created?.id) await notifyRunnerWakeOnCommit(tx, await jobRunnerId(tx, input.promotion.sessionId));
   return created?.id ?? jobId;
 }

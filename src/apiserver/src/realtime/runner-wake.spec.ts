@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import type { Prisma } from '@prisma/client';
 import { RunnerStatus } from '@orbit/shared';
 import { RunnersService } from '../runners/runners.service';
 import { CLAUDE_ACCOUNT_REMOVE_V1 } from '../runner-api/runner-api.controller';
 import { RealtimeService } from './realtime.service';
+import { notifyRunnerWakeOnCommit } from './runner-wake';
 
 /**
  * A sign-in from the web reaches the runner on its heartbeat, which used to mean up to thirty seconds
@@ -12,6 +14,17 @@ import { RealtimeService } from './realtime.service';
  */
 
 const RUNNER = 'runner-1';
+
+/** Deliver a payload the way the LISTEN connection does (RealtimeService.onNotify is private). */
+function deliver(realtime: RealtimeService, payload: unknown): void {
+  (realtime as unknown as { onNotify: (channel: string, payload: string) => void })
+    .onNotify('orbit_runner_wake', JSON.stringify(payload));
+}
+
+/** The instance id the service stamps on the payloads it emits locally. */
+function instanceIdOf(realtime: RealtimeService): string {
+  return (realtime as unknown as { instanceId: string }).instanceId;
+}
 
 function hub(): { realtime: RealtimeService; notified: string[] } {
   const notified: string[] = [];
@@ -107,4 +120,43 @@ test('asking to remove an account wakes the runner, so the account goes now rath
   const state = await runners.removeAccount('owner-1', RUNNER, 'claude', 'a1b2c3d4');
   assert.equal(state.status, 'pending');
   assert.deepEqual(woken, [RUNNER]);
+});
+
+test('a wake a queue writes in its own transaction names the runner that will run the job', async () => {
+  const calls: unknown[][] = [];
+  const tx = {
+    $executeRawUnsafe: async (...args: unknown[]) => {
+      calls.push(args);
+      return 0;
+    },
+  } as unknown as Prisma.TransactionClient;
+
+  await notifyRunnerWakeOnCommit(tx, RUNNER);
+  assert.equal(calls.length, 1, 'one notification per queued job');
+  assert.match(String(calls[0][0]), /pg_notify/);
+  assert.equal(calls[0][1], 'orbit_runner_wake');
+  assert.deepEqual(JSON.parse(String(calls[0][2])), { r: RUNNER, c: true });
+
+  // A job whose session names no runner (a workspace removed under it) wakes nobody, and must not
+  // emit a notification that would wake the wrong thing.
+  await notifyRunnerWakeOnCommit(tx, null);
+  await notifyRunnerWakeOnCommit(tx, undefined);
+  assert.equal(calls.length, 1);
+});
+
+test('a committed wake is delivered to the replica that wrote it, unlike the one it already emitted', async () => {
+  const { realtime } = hub();
+  const mine = instanceIdOf(realtime);
+
+  // A payload from our own instance is one this replica emitted locally a moment ago: delivering it
+  // again would be the second wake of the same fact.
+  const alreadyEmitted = realtime.waitForRunnerWake(RUNNER, 60);
+  deliver(realtime, { i: mine, r: RUNNER });
+  assert.equal(await alreadyEmitted, false);
+
+  // A committed wake has had no local emission — nobody has been woken yet — so this replica takes
+  // its own delivery. That is the whole reason the payload carries `c`.
+  const committed = realtime.waitForRunnerWake(RUNNER, 5_000);
+  deliver(realtime, { r: RUNNER, c: true });
+  assert.equal(await committed, true);
 });

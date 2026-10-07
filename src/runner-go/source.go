@@ -141,7 +141,12 @@ func resolveSourceSha(job *ClaimedSession) (string, *SourcePinRefusal) {
 			Detail: map[string]interface{}{"ref": "", "refAuthority": src.RefAuthority},
 		}
 	}
-	dir := job.WorkDir
+	// An agent's workDir may carry a leading ~, which the session path expands before the engine
+	// chdirs into it (sessionExecDir, runloop.go). Gate G2 has to expand it too, or the answer stops
+	// being about this machine and starts being about how the directory was spelled: as written,
+	// "~/orbit" is not a path that exists, so every project task on an agent configured that way was
+	// refused SOURCE_AUTHORITY_UNREACHABLE by a repository this machine holds (2026-10-07).
+	dir := expandTilde(job.WorkDir)
 	if dir == "" || !isGitRepo(dir) {
 		// Not "the ref is missing" and not "the object is gone": this machine cannot ask the
 		// authority at all, which is gate G2 (§5). Keeping it separate from G3 is what lets a

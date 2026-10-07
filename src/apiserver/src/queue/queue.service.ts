@@ -738,12 +738,18 @@ export class QueueService {
           : ((await this.resolveLoginPool(this.prisma, session, declared!, true)) ??
             (await this.resolvePoolMember(this.prisma, session, declared!, true)) ??
             (await this.resolveSharedPool(this.prisma, session, declared!, true)))));
+    // A Claude pool of the owner's own that none of its members can run still dispatches, on the Claude
+    // default: the line resolvePoolMember just owed the transcript says so. Any other slug nothing holds
+    // is refused by resolveProviderExec. A Codex pool always resolves to its gateway above, never to the
+    // runner's own login.
+    const poolFallback = !declaredIsBuiltin && !customRow
+      && (await accountPoolRuntime(this.prisma, session.ownerId, declared!)) === AgentProvider.CLAUDE;
     // An OpenCode model may name one of the owner's configured keys, which the exec writes in.
     const openCodeKeys = declared === AgentProvider.OPENCODE ? await openCodeKeyRows(this.prisma, session.ownerId) : undefined;
     const resolveExec = (sessionModel: string | null) =>
       resolveProviderExec({
-        declaredProvider: declared,
-        declaredProviderBuiltin,
+        declaredProvider: poolFallback ? AgentProvider.CLAUDE : declared,
+        declaredProviderBuiltin: poolFallback || declaredProviderBuiltin,
         customRow,
         openCodeKeys,
         sessionModel,
@@ -1259,9 +1265,10 @@ export class QueueService {
 
   /**
    * The member an account pool dispatches this claim on (providers/pool-select.ts), or null when `slug`
-   * names no pool of this session's owner or none of its members can run. Null dispatches as a deleted
-   * provider does, on the Claude default, so a pool deleted or emptied under a session never fails the
-   * claim.
+   * names no pool of this session's owner or none of its members can run. A pool of theirs with none that
+   * can run dispatches on the Claude default (each door's `poolFallback`), so a pool emptied under a
+   * session never fails the claim; a slug that names no pool of theirs — another owner's, or one deleted —
+   * is never claimed at all (trySessionClaim), and waits as PROVIDER_UNAVAILABLE_ERROR.
    *
    * A pool is personal: only its owner's sessions resolve it, or naming its slug would spend another
    * user's keys. The member chosen is recorded on the session, which is what the next claim stays on,

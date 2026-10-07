@@ -87,6 +87,12 @@ public struct CreateApprovalPreview: Equatable, Sendable {
         preview.map(Approvals.batchImpactLines) ?? []
     }
 
+    /// The same lines with their kinds, which is what the card draws: a mark per kind, the count in
+    /// bold, the reason under it.
+    public var impactRows: [BatchImpactRow] {
+        preview.map(Approvals.batchImpactRows) ?? []
+    }
+
     /// Where it lands and how it settles, under the pill. The assignee is deliberately not named:
     /// the create defaults it to the calling agent, so "unassigned" is a claim this card cannot
     /// make from the input — and when nothing can run it, the pill already says so.
@@ -286,22 +292,10 @@ public extension Approvals {
     /// cost none at all, and both look the same as a list of names.
     ///
     /// Written to survive n = 1, which is what a single create is: the card that shows one task
-    /// reads these lines too, and "1 wait on a prerequisite" is not a sentence anybody wrote.
+    /// reads these lines too, and "1 wait on a prerequisite" is not a sentence anybody wrote. The
+    /// sentences themselves live in `batchImpactRows`, which also says which kind each one is.
     static func batchImpactLines(_ p: BatchApprovalPreview) -> [String] {
-        var lines: [String] = []
-        if p.startingNow > 0 {
-            lines.append("\(p.startingNow) start\(p.startingNow == 1 ? "s" : "") running within the minute")
-        }
-        if p.blocked > 0 {
-            lines.append("\(p.blocked) wait\(p.blocked == 1 ? "s" : "") on a prerequisite")
-        }
-        if p.needsManualStart > 0 {
-            lines.append("\(p.needsManualStart) need\(p.needsManualStart == 1 ? "s" : "") a manual start — nothing will trigger \(p.needsManualStart == 1 ? "it" : "them")")
-        }
-        if p.notDispatchable > 0 {
-            lines.append("\(p.notDispatchable) cannot run — unassigned, no runner, auto-run off, or the list is paused")
-        }
-        return lines
+        batchImpactRows(p).map(\.text)
     }
 
     /// Same, for a restructure.
