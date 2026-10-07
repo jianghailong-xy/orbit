@@ -116,3 +116,37 @@ test('a scheduled retry is announced; a passed one is not', () => {
   const passed = managedRunnerStatus({ enabled: true, available: true, mapping: backingOff, runner: null, now: new Date(later.getTime() + 1), heartbeatFreshMs: FRESH });
   assert.equal(passed.retryAfter, null);
 });
+
+test('an account the server does not give a managed runner is told so and offered no ensure; one with a mapping is not asked', () => {
+  const refused = managedRunnerStatus({ enabled: true, available: true, eligible: false, mapping: null, runner: null, now: NOW, heartbeatFreshMs: FRESH });
+  assert.equal(refused.managementState, 'NOT_PROVISIONED');
+  assert.equal(refused.reason?.code, 'MANAGED_RUNNER_NOT_ELIGIBLE');
+  assert.equal(refused.reason?.retryable, false);
+  assert.equal(refused.actions.canEnsure, false);
+  // Off, the switch is the reason, whatever the decision would say.
+  const off = managedRunnerStatus({ enabled: false, available: false, eligible: false, mapping: null, runner: null, now: NOW, heartbeatFreshMs: FRESH });
+  assert.equal(off.reason?.code, 'MANAGED_RUNNER_DISABLED');
+  const mapped = managedRunnerStatus({ enabled: true, available: true, eligible: false, mapping: mapping(), runner: beat(1000), now: NOW, heartbeatFreshMs: FRESH });
+  assert.equal(mapped.managementState, 'READY');
+  assert.equal(mapped.reason, null);
+});
+
+test('READY reports the runtime it was found ready with; waiting on model supply says MODEL_UNAVAILABLE and is unusable', () => {
+  const ready = managedRunnerStatus({ enabled: true, available: true, mapping: mapping({ initialProvider: 'codex' }), runner: beat(1000), now: NOW, heartbeatFreshMs: FRESH });
+  assert.equal(ready.initialProvider, 'codex');
+  assert.equal(ready.usable, true);
+  const waiting = managedRunnerStatus({
+    enabled: true,
+    available: true,
+    mapping: mapping({ managementState: 'STARTING', lastError: managedRunnerReason('MODEL_UNAVAILABLE') as never }),
+    runner: beat(1000),
+    now: NOW,
+    heartbeatFreshMs: FRESH,
+  });
+  assert.equal(waiting.managementState, 'STARTING');
+  assert.equal(waiting.usable, false);
+  assert.equal(waiting.initialProvider, null);
+  assert.deepEqual(waiting.reason, managedRunnerReason('MODEL_UNAVAILABLE'));
+  assert.equal(waiting.reason?.retryable, true);
+  assert.equal(waiting.actions.canRetry, false, 'nothing to retry while it is still waiting');
+});

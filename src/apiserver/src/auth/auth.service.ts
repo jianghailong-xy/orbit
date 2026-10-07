@@ -1,12 +1,15 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { randomBytes } from 'node:crypto';
 import { generateToken, hashPassword, sha256, verifyPassword } from '../common/crypto.util';
+import { MANAGED_RUNNER_SIGN_IN, type ManagedRunnerSignIn } from '../managed-runners/managed-runner-sign-in';
 import { PrismaService } from '../prisma/prisma.service';
 import { PatService } from './pat.service';
 
@@ -26,6 +29,8 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly pats: PatService,
+    // What a sign-in asks of managed runners; a module graph without them has nothing here.
+    @Optional() @Inject(MANAGED_RUNNER_SIGN_IN) private readonly managedRunners?: ManagedRunnerSignIn,
   ) {}
 
   async login(email: string, password: string) {
@@ -44,7 +49,10 @@ export class AuthService {
    * issued. A refresh is not a sign-in and does not come through here.
    */
   async completeLogin(user: { id: string; email: string; name: string }) {
-    return this.tokenFor(user.id, user.email, user.name);
+    const issued = await this.tokenFor(user.id, user.email, user.name);
+    // Off, it returns at once; on, it records intent and never throws, so the session above stands.
+    await this.managedRunners?.signedIn(user);
+    return issued;
   }
 
   /** Whether the deployment still has zero users — drives the web's first-run /setup flow. */
