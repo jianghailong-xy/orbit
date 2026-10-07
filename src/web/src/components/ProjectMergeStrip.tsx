@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ProjectPromotionView } from '@orbit/shared';
 import { api } from '../api';
 import { Dialog } from './ui/Dialog';
-import { LandingRow, landingLine } from './ProjectPanoramaHeader';
+import { LandingJobsSheet } from './LandingJobsSheet';
+import { LandingRow, LandingRowButton, landingLine } from './ProjectPanoramaHeader';
 import {
   CANCEL_MERGE,
   MERGE_TO_MAIN,
@@ -96,6 +97,9 @@ export function ProjectMergeStrip({
   const criteriaLine = project.isError ? null : promotionCriteriaLine(project.data ?? null);
   const [now, setNow] = useState(() => Date.now());
   const [detailsOpen, setDetailsOpen] = useState(false);
+  // A server that lists the jobs in flight is one whose landing row opens that list.
+  const listed = integration.data && typeof integration.data === 'object' && integration.data.inFlightJobs !== undefined;
+  const [jobsOpen, setJobsOpen] = useState(false);
   // The clocks move while a job runs, once a second and only then.
   const ticking = shape === 'checking' || shape === 'merging';
   useEffect(() => {
@@ -116,9 +120,18 @@ export function ProjectMergeStrip({
       ]),
   });
 
-  if (shape === null) return null;
+  // Kept while open even when the card goes, so a list being read does not vanish under the reader
+  // when the merge job it was opened from finishes — and in the same place either way, beside the
+  // card, so going does not remount it.
+  const jobs = listed || jobsOpen
+    ? <LandingJobsSheet projectId={projectId} open={jobsOpen} onClose={() => setJobsOpen(false)} />
+    : null;
+  if (shape === null) return <>{null}{jobs}</>;
   const line = integration.data && isMergeJob(inFlight)
     ? landingLine(integration.data, now, { updatedAt: integration.dataUpdatedAt, failed: integration.isError })
+    : null;
+  const landing = line
+    ? listed ? <LandingRowButton line={line} onPress={() => setJobsOpen(true)} /> : <LandingRow line={line} />
     : null;
   const rows = [...(items.data?.needsYou ?? []), ...(items.data?.withCoordinator ?? [])];
   const item = current ? rows.find((row) => row.promotionId === current.promotionId) ?? null : null;
@@ -128,7 +141,7 @@ export function ProjectMergeStrip({
 
   return (
     <div className={`session-project-merge is-${shape}`} data-shape={shape}>
-      {shape === 'checking' && line ? <LandingRow line={line} /> : null}
+      {shape === 'checking' ? landing : null}
       {shape === 'asking' && current ? (
         <>
           <div className="session-project-merge-head">
@@ -164,7 +177,7 @@ export function ProjectMergeStrip({
             <span className="session-project-merge-title">{promotionPageTitle(current)}</span>
           </div>
           <div className="session-project-merge-status">{promotionMergingStatus(current)}</div>
-          {line ? <LandingRow line={line} /> : null}
+          {landing}
           <div className="session-project-merge-note">{PAGE_NOTHING_TO_DO}</div>
           <div className="session-project-merge-foot">
             <button type="button" className="session-project-merge-link" onClick={() => setDetailsOpen(true)}>
@@ -213,6 +226,7 @@ export function ProjectMergeStrip({
           ) : null}
         </Dialog>
       ) : null}
+      {jobs}
     </div>
   );
 }
