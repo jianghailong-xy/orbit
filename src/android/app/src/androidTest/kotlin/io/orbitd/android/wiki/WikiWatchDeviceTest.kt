@@ -78,8 +78,9 @@ class WikiWatchDeviceTest {
         val ids = http("/__ids")
         instrument.sendStatus(0, Bundle().apply { putString("a12_pid", Process.myPid().toString()) })
         File(output, "$name-identity.txt").writeText("sha=${BuildConfig.SOURCE_SHA}\ndirty=${BuildConfig.SOURCE_DIRTY}\nfixture=loopback-18770\nlink=${target(ids)}\n")
-        compose.waitUntil(10_000) { app.session.state.value !is AuthState.Restoring }
-        runBlocking { app.session.logout() }
+        // Restore is the Activity's to start; it is idempotent, so the journey starts it, then signs out.
+        runBlocking { app.session.restore(); app.session.logout() }
+        assertTrue(app.session.state.value is AuthState.SignedOut)
         ActivityScenario.launch<MainActivity>(launch(target(ids))).use { scenario ->
             try {
                 await("Email")

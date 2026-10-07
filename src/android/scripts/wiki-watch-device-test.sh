@@ -58,6 +58,8 @@ sha256sum "$apk" "$tests" "$scripts/wiki-watch-fixture.py" > "$output/artifacts.
 "$adb" -s "$serial" install -r "$apk" > "$output/install-app.txt"
 "$adb" -s "$serial" install -r "$tests" > "$output/install-tests.txt"
 "$adb" -s "$serial" shell am force-stop "$package"
+# A dedicated signed-out installation: other tasks share this emulator and leave their own login behind.
+"$adb" -s "$serial" shell pm clear "$package" > "$output/clear-app.txt"
 "$adb" -s "$serial" shell input keyevent KEYCODE_WAKEUP
 "$adb" -s "$serial" shell wm dismiss-keyguard
 old_font="$("$adb" -s "$serial" shell settings get system font_scale | tr -d '\r')"

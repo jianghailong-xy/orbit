@@ -30,6 +30,7 @@ import io.orbitd.android.core.BuildIdentity
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.reader.SessionReader
 import io.orbitd.android.wiki.PageBar
+import io.orbitd.android.wiki.WikiDrawerCount
 import io.orbitd.android.wiki.WikiDestination
 import io.orbitd.android.watch.WatchDestination
 import io.orbitd.android.composer.NewSessionComposer
@@ -140,7 +141,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         listOf(Triple("Projects", Destination.PROJECTS, R.drawable.ic_project), Triple("Tasks", Destination.TASKS, R.drawable.ic_task),
                             Triple("Wiki", Destination.WIKI, R.drawable.ic_wiki)).forEach { (name, dest, icon) ->
                             NavigationDrawerItem(label = { Text(name) }, selected = navigation.section == name,
-                                icon = { Icon(painterResource(icon), null) }, onClick = { select(name, OrbitRoute(dest, origin = Origin.DRAWER)) })
+                                icon = { Icon(painterResource(icon), null) }, onClick = { select(name, OrbitRoute(dest, origin = Origin.DRAWER)) },
+                                badge = if (dest == Destination.WIKI) ({ WikiDrawerCount(app, signedIn.handle, drawer.isOpen) }) else null)
                         }
                         SectionHeading("Workspaces")
                         DirectoryStatus(data) { app.realtime.refreshDirectory() }

@@ -9,6 +9,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.directory.DirectoryData
@@ -85,4 +87,18 @@ fun WikiDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRo
         }
         WikiToast.Host()
     }
+}
+
+/** The drawer's Wiki row's amber number: the proposals waiting for review, summed over every space — the home
+ * banner's and Review's own count — and nothing at zero (iOS `CompactShell.wikiRow`). The drawer reads the spaces
+ * it counts each time it opens; deciding a proposal, not opening the Wiki, is what lowers it. */
+@Composable
+fun WikiDrawerCount(app: OrbitApplication, handle: SessionHandle, drawerOpen: Boolean) {
+    val store = remember(handle) { WikiStore.of(app.session, handle, app.processScope) }
+    val state by store.state.collectAsState()
+    LaunchedEffect(store, drawerOpen) { if (drawerOpen && store.live()) store.loadSpaces() }
+    val waiting = state.proposalsToReview
+    if (waiting > 0) androidx.compose.material3.Text("$waiting", color = androidx.compose.ui.graphics.Color(0xFFFF9500),
+        style = androidx.compose.material3.MaterialTheme.typography.labelSmall.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
+        modifier = Modifier.testTag("wiki-drawer-count").semantics { contentDescription = WikiCopy.proposalsToReview(waiting) })
 }
