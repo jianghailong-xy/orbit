@@ -57,7 +57,9 @@ class ManagementPanelTest {
         compose.waitUntil(10_000) { fixture.calls.count { it == "GET providers/shared-pools/${fixture.POOL}" } >= 2 }
         compose.waitForIdle()
         compose.onNodeWithText("Me and 1 person", substring = true).assertExists()
-        compose.onAllNodesWithText("Just me", substring = true).assertCountEquals(0)
+        // Not said to be the owner's alone: no "Just me ·" line, and the owner's mode switch is not on Just me.
+        compose.onAllNodesWithText("Just me ·", substring = true).assertCountEquals(0)
+        compose.onAllNodes(hasText("Just me") and isSelected()).assertCountEquals(0)
         compose.onNodeWithText("pool read failed", substring = true).assertExists()
     }
 

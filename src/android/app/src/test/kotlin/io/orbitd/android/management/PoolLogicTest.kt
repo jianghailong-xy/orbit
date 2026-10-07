@@ -42,6 +42,7 @@ class PoolLogicTest {
         val adminView = CodexPoolView(null, asAdmin.pool, now)
         assertEquals("Leave pool", adminView.exitLabel)
         assertEquals("Your keys leave with you.", adminView.outNote)
+        assertNotNull("The server refuses an admin's leave (shared-pools.service leave)", adminView.exitBlocked)
         assertEquals("Delete pool", CodexPoolView(null, asOwner.pool, now).exitLabel)
     }
 
@@ -57,10 +58,46 @@ class PoolLogicTest {
         val admin = pool("ADMIN", people)
         assertTrue(PoolPage.canRemove(theirs, admin)); assertFalse(PoolPage.canSwitch(theirs))
         val ownLogin = login("a1", "me"); val otherLogin = login("b2", "owner")
-        assertTrue(PoolPage.canSignInAgain(ownLogin, member) && PoolPage.canSignOut(ownLogin, member))
+        // Signing in again is an add (codex-login.service assertMayAddAccount): this member's rule lets in keys, not accounts.
+        assertFalse(PoolPage.canSignInAgain(ownLogin, member)); assertTrue(PoolPage.canSignOut(ownLogin, member))
         assertFalse(PoolPage.canSignInAgain(otherLogin, admin)); assertTrue(PoolPage.canSignOut(otherLogin, admin))
         assertFalse(PoolPage.canSignOut(otherLogin, member))
         assertNull(CodexPoolView(null, pool("MEMBER", people), now).adding)
+    }
+
+    /** What the server takes from each role (shared-pools.service addKey/leave, codex-login.service assertMayAddAccount),
+     *  and so what each is offered. iOS offers more than the server takes; Android does not copy that. */
+    @Test fun eachRoleIsOfferedOnlyWhatTheServerTakes() {
+        fun as_(role: String, creator: Boolean, keys: Boolean = false, accounts: Boolean = false): Pair<JsonObject, CodexPoolView> {
+            val people = listOf(person("me", "Mia", role, creator = creator, you = true), person("other", "Olive", if (creator) "MEMBER" else "ADMIN", creator = !creator))
+            val p = pool(role, people, membersCanAdd = keys, membersCanAddAccounts = accounts, logins = listOf(login("a1", "me", state = "SIGNED_OUT")))
+            return p to CodexPoolView(null, p, now)
+        }
+        val signedOut = login("a1", "me", state = "SIGNED_OUT")
+        // Owner: everything, and deleting rather than leaving.
+        as_("ADMIN", creator = true).let { (p, v) ->
+            assertEquals("choose", v.adding); assertTrue(PoolPage.canSignInAgain(signedOut, p)); assertNull(v.exitBlocked); assertEquals("Delete pool", v.exitLabel)
+        }
+        // An admin who did not make it: adds anything, but cannot leave until made a member.
+        as_("ADMIN", creator = false).let { (p, v) ->
+            assertEquals("choose", v.adding); assertTrue(PoolPage.canSignInAgain(signedOut, p)); assertEquals("Leave pool", v.exitLabel); assertNotNull(v.exitBlocked)
+        }
+        // Members: what the two rules allow, and leaving.
+        as_("MEMBER", creator = false).let { (p, v) ->
+            assertNull(v.adding); assertFalse(PoolPage.canSignInAgain(signedOut, p)); assertNull(v.exitBlocked)
+        }
+        as_("MEMBER", creator = false, keys = true).let { (p, v) -> assertEquals("key", v.adding); assertFalse(PoolPage.canSignInAgain(signedOut, p)) }
+        as_("MEMBER", creator = false, accounts = true).let { (p, v) -> assertEquals("signIn", v.adding); assertTrue(PoolPage.canSignInAgain(signedOut, p)) }
+        as_("MEMBER", creator = false, keys = true, accounts = true).let { (p, v) -> assertEquals("choose", v.adding); assertTrue(PoolPage.canSignInAgain(signedOut, p)) }
+    }
+
+    @Test fun anOwnPoolWhosePeopleWereNotReadIsNotCalledJustMine() {
+        val own = ProviderPools.own(buildJsonObject {
+            put("id", "pool"); put("slug", "team"); put("label", "Team pool"); put("engine", "codex"); put("logins", JsonArray(listOf(login("a1", "me"))))
+        }, now)
+        val unread = CodexPoolView(own, null, now, peopleUnread = true)
+        assertNull(unread.who); assertNotNull(unread.exitBlocked); assertEquals("signIn", unread.adding)
+        assertEquals(CodexPoolView.justMe, CodexPoolView(own, null, now).who)
     }
 
     @Test fun keyStatusesCapsAndMoneyReadAsOnIos() {

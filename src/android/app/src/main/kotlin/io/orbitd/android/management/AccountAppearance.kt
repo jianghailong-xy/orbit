@@ -1,5 +1,10 @@
 package io.orbitd.android.management
 
+import android.graphics.Color
+import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.compose.LocalActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.*
 import androidx.lifecycle.Lifecycle
@@ -14,6 +19,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.JsonObject
 
 val LocalAppearanceChanged = staticCompositionLocalOf<(String) -> Unit> { {} }
+
+// androidx.activity's own defaults for the navigation bar's scrim (EdgeToEdge.kt).
+private val LightScrim = Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
+private val DarkScrim = Color.argb(0x80, 0x1b, 0x1b, 0x1b)
 
 /** The server owns the preference. A new login cannot inherit the previous account's theme. */
 @Composable
@@ -43,6 +52,15 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
         }
     }
     val dark = when (theme) { "dark" -> true; "light" -> false; else -> isSystemInDarkTheme() }
+    // enableEdgeToEdge() sized the bars' icons for the system's mode; the account's own appearance decides them,
+    // or a dark app under a light system keeps dark icons on a dark bar. Same transparent bars and scrims as before.
+    val activity = LocalActivity.current as? ComponentActivity
+    DisposableEffect(activity, dark) {
+        activity?.enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
+            navigationBarStyle = SystemBarStyle.auto(LightScrim, DarkScrim) { dark })
+        onDispose { }
+    }
     CompositionLocalProvider(LocalAppearanceChanged provides { appearanceVersion++; theme = it }) {
         OrbitTheme(darkTheme = dark, content = content)
     }

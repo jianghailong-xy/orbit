@@ -1,6 +1,7 @@
 package io.orbitd.android.management
 
 import android.content.Intent
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -541,17 +542,23 @@ private fun RunnerNamePage(api: ManagementApi, id: String, revision: Long, back:
     val runner = model.runner(id)
     if (runner == null) { if (model.loaded) RunnerGone(RunnerCopy.ABOUT_NAME); return }
     var name by rememberSaveable(id) { mutableStateOf<String?>(null) }
-    LaunchedEffect(runner) { if (name == null) name = RunnerPage.displayName(runner) }
+    var seeded by rememberSaveable(id) { mutableStateOf<String?>(null) }
+    LaunchedEffect(runner) { if (name == null) RunnerPage.displayName(runner).let { name = it; seeded = it } }
     val latest by rememberUpdatedState(name)
+    val untouched by rememberUpdatedState(seeded)
     val current by rememberUpdatedState(RunnerPage.displayName(runner))
     var saved by remember { mutableStateOf(false) }
     fun save() {
         val typed = latest?.trim() ?: return
-        if (saved || typed == current) return
+        // Only what was typed here goes out. iOS sends any difference from the live name (RunnerNamePage.save), which
+        // writes an untouched field back over a rename made elsewhere while the page was open.
+        if (saved || typed == untouched?.trim() || typed == current) return
         saved = true
         api.background.launch { try { api.patch("runners/$id", buildJsonObject { put("displayName", typed) }) } catch (_: Exception) { } }
     }
-    DisposableEffect(id) { onDispose { save() } }
+    // Leaving saves; a rotation does not leave.
+    val activity = LocalActivity.current
+    DisposableEffect(id) { onDispose { if (activity?.isChangingConfigurations != true) save() } }
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(name.orEmpty(), { name = it }, Modifier.fillMaxWidth(), placeholder = { Text(runner.text("name")) }, singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { save(); back() }))

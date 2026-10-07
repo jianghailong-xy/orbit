@@ -80,6 +80,7 @@ internal object ShareCopy {
     const val turnOffDetail = "Anyone who has it loses access right away."
     const val conversationsRisk = "Can include command output and file contents."
     const val live = "Live — viewers see changes as they happen"
+    const val notCurrent = "Not up to date — sharing can’t be changed until Orbit reconnects."
     const val privateDetail = "Only you can open it, signed in. Choose “Anyone with the link” to make a public link."
     const val listSubtitle = "Everything you’ve made viewable by link. Anyone who has one of these links can open what it includes — no sign-in."
     fun title(kind: String) = "Share ${kind.lowercase()}"
@@ -247,8 +248,16 @@ fun SharingSettings(api: ManagementApi, revision: Long) {
 fun ShareResourceSettings(api: ManagementApi, revision: Long, kind: String, id: String) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Text(ShareCopy.title(kind), style = MaterialTheme.typography.titleLarge)
-        ShareResourcePanel(api, revision, kind, id)
+        ShareResourcePanel(api, revision, kind, id, fresh = rememberLiveFor(api).second)
     }
+}
+
+/** The account's live connection, as (invalidation revision, current): while it is not current nothing tells a panel what a link became meanwhile. */
+@Composable
+private fun rememberLiveFor(api: ManagementApi): Pair<Long, Boolean> {
+    val app = LocalContext.current.applicationContext as? OrbitApplication ?: return 0L to true
+    val live by app.realtime.state.collectAsState()
+    return if (live.handle === api.handle) live.invalidationRevision to live.directoryFresh else 0L to false
 }
 
 /** The directory's session Share dialog hosts the same panel, on the signed-in account's own handle. */
@@ -257,12 +266,13 @@ fun SessionSharePanel(sessionId: String) {
     val app = LocalContext.current.applicationContext as OrbitApplication
     val handle = (app.session.state.collectAsState().value as? AuthState.SignedIn)?.handle ?: return
     val api = remember(handle) { ManagementApi(app.session, handle, app.processScope) }
-    ShareResourcePanel(api, 0L, "SESSION", sessionId)
+    val (revision, fresh) = rememberLiveFor(api)
+    ShareResourcePanel(api, revision, "SESSION", sessionId, fresh)
 }
 
 /** SharePanel: access, the link, what it includes, when it stops, and how often it was opened. */
 @Composable
-fun ShareResourcePanel(api: ManagementApi, revision: Long, kind: String, id: String) {
+fun ShareResourcePanel(api: ManagementApi, revision: Long, kind: String, id: String, fresh: Boolean = true) {
     val path = remember(kind, id) { sharingPath(kind, id) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -277,6 +287,8 @@ fun ShareResourcePanel(api: ManagementApi, revision: Long, kind: String, id: Str
     var confirmingOff by remember(path) { mutableStateOf(false) }
     var copied by remember(path) { mutableStateOf(false) }
     var busy by remember(path) { mutableStateOf(false) }
+    // Writes need a read that held and a live connection, as the directory's own Share did (fresh && !busy).
+    val writable = fresh && !busy
     fun open(value: JsonObject?) = value?.takeIf { it.text("state") != "ENDED" }
     suspend fun load() {
         try {
@@ -295,16 +307,17 @@ fun ShareResourcePanel(api: ManagementApi, revision: Long, kind: String, id: Str
     LaunchedEffect(path, revision, rememberResumed()) { load() }
     LaunchedEffect(copied) { if (copied) { delay(1_500); copied = false } }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (!loaded) {
-            loadFailure?.let {
-                Text("Couldn’t load this link: $it", color = Ink.muted)
-                TextButton(onClick = { scope.launch { load() } }) { Text("Retry") }
-            } ?: CircularProgressIndicator(Modifier.size(24.dp))
+        // As iOS: a read that failed, the first or a later one, shows why and Retry, and nothing to change.
+        loadFailure?.let {
+            Text("Couldn’t load this link: $it", color = Ink.muted)
+            TextButton(onClick = { scope.launch { load() } }) { Text("Retry") }
             return@Column
         }
+        if (!loaded) { CircularProgressIndicator(Modifier.size(24.dp)); return@Column }
+        if (!fresh) Text(ShareCopy.notCurrent, style = MaterialTheme.typography.bodySmall, color = Ink.amber)
         Text("Access", style = MaterialTheme.typography.titleMedium)
         listOf(false to "Only you", true to "Anyone with the link").forEach { (public, label) ->
-            Row(Modifier.fillMaxWidth().selectable(selected = (link != null) == public, enabled = !busy, role = Role.RadioButton) {
+            Row(Modifier.fillMaxWidth().selectable(selected = (link != null) == public, enabled = writable, role = Role.RadioButton) {
                 if (public && link == null) save(JsonObject(emptyMap())) else if (!public && link != null) confirmingOff = true
             }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(selected = (link != null) == public, onClick = null); Spacer(Modifier.width(8.dp)); Text(label)
@@ -324,7 +337,7 @@ fun ShareResourcePanel(api: ManagementApi, revision: Long, kind: String, id: Str
             val include = JsonObject((current.obj("include") ?: JsonObject(emptyMap())) + pending.mapValues { JsonPrimitive(it.value) })
             ShareCopy.layers(kind, include, counts).forEach { layer ->
                 Row(Modifier.fillMaxWidth().padding(start = if (layer.nested) 16.dp else 0.dp, top = 4.dp, bottom = 4.dp)
-                    .let { if (layer.key != null) it.toggleable(layer.on, enabled = layer.editable && !busy, role = Role.Switch) { on ->
+                    .let { if (layer.key != null) it.toggleable(layer.on, enabled = layer.editable && writable, role = Role.Switch) { on ->
                         pending = pending + (layer.key to on); save(buildJsonObject { put("include", buildJsonObject { put(layer.key, on) }) })
                     } else it }, verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -332,7 +345,7 @@ fun ShareResourcePanel(api: ManagementApi, revision: Long, kind: String, id: Str
                         Text(layer.detail, style = MaterialTheme.typography.bodySmall, color = if (layer.warns) Ink.amber else Ink.muted)
                         layer.count?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.muted) }
                     }
-                    if (layer.key != null) Switch(checked = layer.on, onCheckedChange = null, enabled = layer.editable && !busy)
+                    if (layer.key != null) Switch(checked = layer.on, onCheckedChange = null, enabled = layer.editable && writable)
                 }
             }
             Text("Updates", style = MaterialTheme.typography.titleMedium)
@@ -344,7 +357,7 @@ fun ShareResourcePanel(api: ManagementApi, revision: Long, kind: String, id: Str
                 if (selection == "until" && until != null) listOf("until" to until) else emptyList()
             var expanded by remember { mutableStateOf(false) }
             Box {
-                OutlinedButton(onClick = { expanded = true }, enabled = !busy) { Text(options.firstOrNull { it.first == selection }?.second ?: "Never") }
+                OutlinedButton(onClick = { expanded = true }, enabled = writable) { Text(options.firstOrNull { it.first == selection }?.second ?: "Never") }
                 DropdownMenu(expanded, { expanded = false }) {
                     options.filter { it.first != "until" }.forEach { (value, label) ->
                         DropdownMenuItem(text = { Text(label) }, trailingIcon = if (value == selection) { { Text("✓") } } else null, onClick = {
@@ -361,7 +374,7 @@ fun ShareResourcePanel(api: ManagementApi, revision: Long, kind: String, id: Str
         }
     }
     if (confirmingOff) AlertDialog(onDismissRequest = { confirmingOff = false }, title = { Text(ShareCopy.turnOffTitle) }, text = { Text(ShareCopy.turnOffDetail) },
-        confirmButton = { TextButton(onClick = {
+        confirmButton = { TextButton(enabled = writable, onClick = {
             confirmingOff = false; busy = true; failure = null
             scope.launch {
                 try { api.delete(path); link = null; expiryChoice = null; pending = emptyMap() }

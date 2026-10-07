@@ -120,6 +120,15 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             .collectAsState(null to 0L)
         val revision = if (live.first === signedIn.handle) live.second else 0L
         val holder = rememberSaveableStateHolder()
+        // A13's settings and runner pages are built anew each time they are pushed, as on iOS: once such a route has
+        // left every stack, its saved state goes too, so a cancelled edit or an old draft never comes back.
+        val held = remember { mutableSetOf<OrbitRoute>() }
+        LaunchedEffect(navigation.stacks) {
+            val kept = navigation.stacks.values.flatten().toSet()
+            held.filterNot(kept::contains).forEach { holder.removeState(Wire.json.encodeToString(it)) }
+            held.retainAll(kept)
+            held += kept.filter { it.destination == Destination.SETTINGS || it.destination == Destination.RUNNER }
+        }
         val route = navigation.current
         fun open(next: OrbitRoute) { keyboard?.hide(); focus.clearFocus(); navigation = navigation.push(next) }
         fun select(key: String, root: OrbitRoute) {

@@ -185,14 +185,18 @@ private fun PoolScreen(api: ManagementApi, revision: Long, ownId: String?, share
     var loaded by remember { mutableStateOf(false) }
     var gone by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var accessError by remember { mutableStateOf<String?>(null) }
     val accessId = ownId ?: sharedId!!
     suspend fun load() {
         try {
             if (ownId != null) {
                 own = providerObjects(api.get("providers/pools")).firstOrNull { ObjectId.same(it.text("id"), ownId) }
                 gone = own == null
-                access = if (own?.str("engine") == "codex") try { api.get("providers/shared-pools/$ownId").jsonObject }
-                    catch (e: CancellationException) { throw e } catch (_: Exception) { null } else null
+                // Who can use it is a read of its own. A failure keeps what was read before and says so, as iOS keeps
+                // the last good read (SharedPoolsModel.loadAccess); it is never taken for a pool of the owner's alone.
+                if (own?.str("engine") == "codex") try { access = api.get("providers/shared-pools/$ownId").jsonObject; accessError = null }
+                    catch (e: CancellationException) { throw e } catch (e: Exception) { accessError = personalFailure(e) }
+                else access = null
             } else access = api.get("providers/shared-pools/$sharedId").jsonObject
             loaded = true; error = null
         } catch (e: CancellationException) { throw e }
@@ -208,27 +212,36 @@ private fun PoolScreen(api: ManagementApi, revision: Long, ownId: String?, share
     suspend fun press(done: String? = null, action: suspend () -> Unit) {
         try { action(); load(); done?.let(notice::show) } catch (e: CancellationException) { throw e } catch (e: Exception) { notice.show(personalFailure(e)) }
     }
-    Box(Modifier.fillMaxSize()) {
-        when {
-            gone -> Text("That pool no longer exists.", Modifier.padding(24.dp), color = Ink.muted)
-            !loaded -> Text(error ?: "Loading…", Modifier.padding(24.dp), color = if (error != null) Ink.red else Ink.muted)
-            ownPool != null && !CodexLogins.isLoginPool(ownPool) && ownPool.engine != "codex" -> AccountPoolPage(ownPool, now) { member, minutes ->
-                pauseMember(api, ownPool.id, member.id, minutes) { load() }
-            }
-            else -> {
-                val view = CodexPoolView(ownPool, access, now)
-                CodexPoolPage(api, view, now, notice, reload = { load() }, press = { done, action -> scope.launch { press(done, action) } },
-                    pause = { member, minutes -> pauseMember(api, view.pool.id, member.id, minutes) { load() } },
-                    exit = {
-                        try {
-                            when { ownId != null -> api.delete("providers/pools/$ownId"); view.mine -> api.delete("providers/shared-pools/$accessId")
-                                else -> api.post("providers/shared-pools/$accessId/leave") }
-                            back(); null
-                        } catch (e: CancellationException) { throw e } catch (e: Exception) { personalFailure(e) }
-                    })
+    Column(Modifier.fillMaxSize()) {
+        // A later read that failed: the page stays as last read, and says so.
+        (error ?: accessError).takeIf { loaded && !gone }?.let { failure ->
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Couldn’t refresh this pool: $failure", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = Ink.red)
+                TextButton(onClick = { scope.launch { load() } }) { Text("Retry") }
             }
         }
-        notice.Host(Modifier.align(Alignment.BottomCenter))
+        Box(Modifier.fillMaxWidth().weight(1f)) {
+            when {
+                gone -> Text("That pool no longer exists.", Modifier.padding(24.dp), color = Ink.muted)
+                !loaded -> Text(error ?: "Loading…", Modifier.padding(24.dp), color = if (error != null) Ink.red else Ink.muted)
+                ownPool != null && !CodexLogins.isLoginPool(ownPool) && ownPool.engine != "codex" -> AccountPoolPage(ownPool, now) { member, minutes ->
+                    pauseMember(api, ownPool.id, member.id, minutes) { load() }
+                }
+                else -> {
+                    val view = CodexPoolView(ownPool, access, now, peopleUnread = ownPool != null && access == null && accessError != null)
+                    CodexPoolPage(api, view, now, notice, reload = { load() }, press = { done, action -> scope.launch { press(done, action) } },
+                        pause = { member, minutes -> pauseMember(api, view.pool.id, member.id, minutes) { load() } },
+                        exit = {
+                            try {
+                                when { ownId != null -> api.delete("providers/pools/$ownId"); view.mine -> api.delete("providers/shared-pools/$accessId")
+                                    else -> api.post("providers/shared-pools/$accessId/leave") }
+                                back(); null
+                            } catch (e: CancellationException) { throw e } catch (e: Exception) { personalFailure(e) }
+                        })
+                }
+            }
+            notice.Host(Modifier.align(Alignment.BottomCenter))
+        }
     }
 }
 
@@ -318,8 +331,10 @@ private fun CodexPoolPage(api: ManagementApi, page: CodexPoolView, now: Long, no
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Codex pool", style = MaterialTheme.typography.titleMedium); if (page.people) Chip("SHARED", brand = true)
             }
-            Text(buildAnnotatedString { withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(page.who) }; append(page.subtitleRest(now)) },
-                style = MaterialTheme.typography.bodySmall, color = Ink.muted)
+            Text(buildAnnotatedString {
+                page.who?.let { who -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(who) }; append(page.subtitleRest(now)) }
+                    ?: append(page.subtitleRest(now).removePrefix(" · "))
+            }, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
             page.adding?.let { adding ->
                 Button(onClick = { sheet = when (adding) { "choose" -> PoolSheet.Choose; "signIn" -> PoolSheet.SignIn(null); else -> PoolSheet.AddKey } },
                     Modifier.fillMaxWidth()) { Text(page.addLabel) }
@@ -336,7 +351,12 @@ private fun CodexPoolPage(api: ManagementApi, page: CodexPoolView, now: Long, no
                     val canSignInAgain = access?.let { PoolPage.canSignInAgain(login, it) } ?: page.mine
                     val canSignOut = access?.let { PoolPage.canSignOut(login, it) } ?: page.mine
                     val contributor = access?.let { a -> login.str("userId")?.let { id -> PoolPage.people(a).firstOrNull { ObjectId.same(it.str("userId"), id) }?.text("name") } }
-                    CodexAccountRow(member, login, CodexLogins.showsNext(member, pool), page.tagged, canSignInAgain, canSignOut, contributor, now,
+                    val signedOutNote = when {
+                        canSignInAgain -> CodexLogins.signedOutReason
+                        access != null && PoolPage.signedIn(login, access) -> CodexLogins.signedOutReasonNoRule
+                        else -> CodexLogins.signedOutReasonNotYours(contributor)
+                    }
+                    CodexAccountRow(member, login, CodexLogins.showsNext(member, pool), page.tagged, canSignInAgain, signedOutNote, canSignOut, contributor, now,
                         signInAgain = { sheet = PoolSheet.SignIn(login) }, signOut = { signingOut = login })
                     AccountPauseControls(member.label, member.pausedUntil, if (page.people) "Pool account · Paused for everyone in this pool" else "Pool account · This pool",
                         canManage = canSignOut) { minutes -> pause(member, minutes) }
@@ -390,8 +410,10 @@ private fun CodexPoolPage(api: ManagementApi, page: CodexPoolView, now: Long, no
                 }
             }
         }
-        FormSection(footer = page.outNote) {
-            TextButton(onClick = { confirmingExit = true }, Modifier.fillMaxWidth()) { Text(page.exitLabel, color = Ink.red) }
+        FormSection(footer = page.exitBlocked ?: page.outNote) {
+            TextButton(onClick = { confirmingExit = true }, Modifier.fillMaxWidth(), enabled = page.exitBlocked == null) {
+                Text(page.exitLabel, color = if (page.exitBlocked == null) Ink.red else Ink.muted)
+            }
         }
         Spacer(Modifier.height(48.dp))
     }
@@ -449,8 +471,8 @@ private fun SharedLine(line: String, tagged: Boolean) {
 }
 
 @Composable
-private fun CodexAccountRow(member: PoolMember, login: JsonObject, next: Boolean, tagged: Boolean, canSignInAgain: Boolean, canSignOut: Boolean,
-                            contributor: String?, now: Long, signInAgain: () -> Unit, signOut: () -> Unit) {
+private fun CodexAccountRow(member: PoolMember, login: JsonObject, next: Boolean, tagged: Boolean, canSignInAgain: Boolean, signedOutNote: String,
+                            canSignOut: Boolean, contributor: String?, now: Long, signInAgain: () -> Unit, signOut: () -> Unit) {
     val status = ProviderPools.memberStatus(member, now)
     val windows = CodexLogins.windows(login)
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -463,8 +485,7 @@ private fun CodexAccountRow(member: PoolMember, login: JsonObject, next: Boolean
                 Text(if (RunnerPage.isPaused(member.pausedUntil, now) && CodexLogins.active(login)) "Signed in" else status.label,
                     style = MaterialTheme.typography.bodySmall, color = poolTone(status.tone))
                 if (member.state == "SIGNED_OUT") {
-                    Text(if (canSignInAgain) CodexLogins.signedOutReason else CodexLogins.signedOutReasonNotYours(contributor),
-                        style = MaterialTheme.typography.labelMedium, color = Ink.red)
+                    Text(signedOutNote, style = MaterialTheme.typography.labelMedium, color = Ink.red)
                     if (canSignInAgain) Button(onClick = signInAgain) { Text("Sign in again") }
                 }
             }

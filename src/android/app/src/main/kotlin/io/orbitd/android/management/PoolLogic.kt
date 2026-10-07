@@ -38,6 +38,7 @@ internal object CodexLogins {
     const val signedOutReason = "OpenAI signed this account out — sign in again to put it back in the pool."
     fun signedOutReasonNotYours(contributor: String?) =
         "OpenAI signed this account out — only ${contributor ?: "the person who signed it in"} can sign it in again."
+    const val signedOutReasonNoRule = "OpenAI signed this account out — the pool doesn’t let members sign accounts in; one of its admins can turn that on."
     const val noAccount = "No account yet — no session can start on this pool until you sign in with ChatGPT."
     const val noAccountOwner = "No account yet — no session can start on this pool until its owner signs in with ChatGPT."
 
@@ -158,7 +159,9 @@ internal object PoolPage { // SharedPoolPage
         return ObjectId.same(viewer, userId)
     }
     fun canSignOut(login: JsonObject, pool: JsonObject) = signedIn(login, pool) || isAdmin(pool)
-    fun canSignInAgain(login: JsonObject, pool: JsonObject) = signedIn(login, pool)
+    /** The person who signed it in, while the server lets them add an account (codex-login.service assertMayAddAccount:
+     *  an admin, or a member while the pool's rule is on). iOS asks only the first (SharedPoolPage.canSignInAgain). */
+    fun canSignInAgain(login: JsonObject, pool: JsonObject) = signedIn(login, pool) && canAddAccount(pool)
     fun canRemove(key: JsonObject, pool: JsonObject) = contributor(key).bool("you") == true || isAdmin(pool)
     fun canReplace(key: JsonObject, pool: JsonObject) = canRemove(key, pool)
     fun canSwitch(key: JsonObject) = contributor(key).bool("you") == true
@@ -347,7 +350,7 @@ internal object ProviderPools {
 }
 
 /** CodexPoolPage: what a Codex pool's page says and offers, for its owner or for one of its people. */
-internal class CodexPoolView(val own: Pool?, val access: JsonObject?, nowMs: Long) {
+internal class CodexPoolView(val own: Pool?, val access: JsonObject?, nowMs: Long, val peopleUnread: Boolean = false) {
     val pool: Pool = own?.let { o -> access?.let { ProviderPools.withAccess(o, it, nowMs) } ?: o }
         ?: access?.let { ProviderPools.shared(it, nowMs) } ?: error("A Codex pool needs its own row or its access")
     val mine = access?.let(PoolPage::ownsPool) ?: true
@@ -355,7 +358,9 @@ internal class CodexPoolView(val own: Pool?, val access: JsonObject?, nowMs: Lon
     val logins: List<JsonObject> = own?.let(CodexLogins::logins) ?: access?.objects("logins").orEmpty()
     val accounts: Int? = if (pool.engine == "codex") logins.size else null
     val owner = access?.let(PoolPage::owner)
-    val who = when { !mine -> whose(owner?.text("name").orEmpty()); access != null && people -> "Me and ${PoolPage.plural(PoolPage.people(access).size - 1, "person", "people")}"; else -> justMe }
+    /** Null while the people of an own pool could not be read: then it is not called just the owner's. */
+    val who: String? = when { !mine -> whose(owner?.text("name").orEmpty()); access != null && people -> "Me and ${PoolPage.plural(PoolPage.people(access).size - 1, "person", "people")}"
+        peopleUnread -> null; else -> justMe }
     fun subtitleRest(nowMs: Long) = (if (mine) "" else " · " + PoolPage.plural(access?.let { PoolPage.people(it).size } ?: 0, "person", "people")) +
         " · ${ProviderPools.availability(pool, nowMs)}"
     private val how = when {
@@ -372,8 +377,8 @@ internal class CodexPoolView(val own: Pool?, val access: JsonObject?, nowMs: Lon
     val adding: String? = when {
         !mayAddAccount && !mayAddKey -> null
         !mayAddAccount -> "key"
-        !mine -> "choose"
-        access == null -> "signIn"
+        // Only offered what the server takes (shared-pools.service addKey): iOS still offers a key here (CodexPoolPage.adding).
+        !mayAddKey || access == null -> "signIn"
         else -> "choose"
     }
     val addLabel = if (mayAddAccount) "Add account" else "Add a key"
@@ -386,6 +391,13 @@ internal class CodexPoolView(val own: Pool?, val access: JsonObject?, nowMs: Lon
         else -> CodexLogins.noAccountOwner
     }
     val exitLabel = if (mine) "Delete pool" else "Leave pool"
+    /** Why the exit is off, or null. The server keeps an admin in (shared-pools.service leave), and an own pool whose
+     *  people were never read cannot say what deleting it takes with it. iOS offers both (CodexPoolPage.exitLabel). */
+    val exitBlocked: String? = when {
+        !mine && access?.let(PoolPage::isAdmin) == true -> "An admin leaves by being made a member first — another admin can do that, or delete the pool."
+        mine && peopleUnread -> "Who can use this pool couldn’t be read, so deleting it is off until it is."
+        else -> null
+    }
     val exitConfirm = if (mine) "Delete" else "Leave"
     val exitTitle = if (mine) "Delete ${pool.label}?" else "Leave ${pool.label}?"
     val outNote: String = if (!mine) "Your keys leave with you." else {
