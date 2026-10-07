@@ -1,12 +1,12 @@
 import type { ReportedEngine, RunnerEngineUpdate } from '@orbit/shared';
 
 /**
- * Facts about a runner's engine CLIs that two pages both need, owned by neither.
+ * Facts about a runner's engine CLIs that more than one place needs, owned by none of them.
  *
- * The Providers page asks which engines are signed in; the runner's own page asks what is
- * installed on that machine and whether it is current. Those are different questions about the
- * same four CLIs, so the rule for reading an update record lives here rather than in whichever
- * page happened to render it first.
+ * A machine's engine rows (RunnerEngines, on Infrastructure and on the runner's own page) say what
+ * is installed there and whether it is current; Needs Attention (runnerAttention) says when one has
+ * stopped being. Both read the same update records of the same CLIs, so the rule for reading one
+ * lives here rather than in whichever of them happened to render it first.
  */
 
 /** The CLIs' own product names. Keyed by ReportedEngine so a page that shows every engine on a

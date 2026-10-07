@@ -41,10 +41,10 @@ function LegacySessionRedirect() {
   return <Navigate to={to} replace />;
 }
 
-// The Runners and Providers pages are one page now, Infrastructure, and their addresses land on it
-// with the query they carried: older macOS/iOS clients open `/providers?runner=<id>&engine=<engine>`
-// to sign an engine in, and that card still opens on that engine. Bare `/providers` meant the keys,
-// so it lands on them.
+// Runners and Providers are one page now, Infrastructure, and their addresses land on it
+// with the query they carried: older macOS/iOS clients open `/providers` with
+// `?runner=<id>&engine=<engine>` to sign an engine in, and that card still opens on that engine.
+// Bare `/providers` meant the keys, so it lands on them.
 function InfrastructureRedirect({ keys = false }: { keys?: boolean }) {
   const { search } = useLocation();
   const hash = keys && !new URLSearchParams(search).has('runner') ? '#keys' : '';
@@ -67,9 +67,9 @@ function LoginRedirect() {
 // list — the same destination as clicking that workspace in the sidebar. Resolving "the first workspace"
 // needs the workspaces list, so this is a component (not a static <Navigate>). With no workspace to open
 // yet, fall back to onboarding: a brand-new account (no runners) → the registration guide; a
-// single runner → that runner's page, where its first workspace is created; several runners → the
-// list, since there's a machine to pick first. BootGate pre-warms both queries, so on a fresh
-// load these read straight from cache and redirect in one shot.
+// single runner → that runner's page, where its first workspace is created; several runners →
+// Infrastructure, which lists them, since there's a machine to pick first. BootGate pre-warms both
+// queries, so on a fresh load these read straight from cache and redirect in one shot.
 function DefaultLanding() {
   const workspaces = useQuery(workspacesQuery());
   const runners = useQuery(runnersQuery());
@@ -92,7 +92,7 @@ function DefaultLanding() {
   if (runnerList.length === 1) {
     return <Navigate to={`/runners/${encodeId(runnerList[0].id)}`} replace />;
   }
-  return <Navigate to="/runners" replace />;
+  return <Navigate to="/infrastructure" replace />;
 }
 
 export function App() {
@@ -242,7 +242,7 @@ export function App() {
                 </DocView>
               }
             />
-            <Route path="admin/providers" element={<Navigate to="/providers" replace />} />
+            <Route path="admin/providers" element={<InfrastructureRedirect keys />} />
             {/* Everything this account follows: watches, filed Active / Needs attention / Triggered
                 history. `?watch=<id>` opens one watch's card. */}
             <Route

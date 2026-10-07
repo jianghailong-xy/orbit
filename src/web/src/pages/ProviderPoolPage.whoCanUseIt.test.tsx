@@ -364,7 +364,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     expect(button('Add people', who())).not.toBeNull();
     expect(setting()).toBe('Me and people I add');
     expect(text(who().querySelector('.who-mode-h'))).toBe(
-      'They see Codex Pool on their Providers page and in the session picker.',
+      'They see Codex Pool on their Infrastructure page and in the session picker.',
     );
     expect(
       ['jianghailong', 'Zhang Min', 'Lin Wei'].map((name) => [
@@ -488,7 +488,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     expect(text(modal.querySelector('.ant-modal-title'))).toBe('Share Codex Pool');
     expect(text(modal.querySelector('.np-field-l'))).toBe('Emails of their Orbit accounts');
     expect(Array.from(modal.querySelectorAll('.pa-facts li')).map((li) => li.textContent)).toEqual([
-      'They see Codex Pool on their Providers page and in the session picker, and can start sessions on it.',
+      'They see Codex Pool on their Infrastructure page and in the session picker, and can start sessions on it.',
       'Their sessions start on your ChatGPT accounts, and fall to the pool’s API keys — orbit-org-1 — when none of them can run.',
       'They can sign in ChatGPT accounts of their own, which then run everyone’s sessions here too — theirs and yours — until they take them out again.',
       'Everyone sees each person’s share of this month’s API key use.',
@@ -518,7 +518,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     expect(text(modal.querySelector('.ant-modal-title'))).toBe('Share Codex Pool');
     expect(modal.querySelector('.pa-risk')).toBeNull();
     expect(Array.from(modal.querySelectorAll('.pa-facts li')).map((li) => li.textContent)).toEqual([
-      'They see Codex Pool on their Providers page and in the session picker, and can start sessions on it.',
+      'They see Codex Pool on their Infrastructure page and in the session picker, and can start sessions on it.',
       'Their sessions start on your ChatGPT accounts, and wait when none of them can run — the pool has no API key to fall to yet.',
       'They can sign in ChatGPT accounts of their own, which then run everyone’s sessions here too — theirs and yours — until they take them out again.',
       'Everyone sees each person’s share of this month’s API key use.',

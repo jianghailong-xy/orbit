@@ -317,7 +317,7 @@ struct AuthErrorCardView: View {
         case .connectGemini:
             EmptyView()
         case .apiKey(let slug):
-            Text("The API key for \(Text(slug).font(.orbitMono)) was rejected. Update it in Providers on the Orbit web app, then send your message again.")
+            Text("The API key for \(Text(slug).font(.orbitMono)) was rejected. Update it in Infrastructure on the Orbit web app, then send your message again.")
                 .font(.orbitLabel).foregroundStyle(.secondary)
         }
     }
@@ -386,7 +386,7 @@ struct AntigravityRepairCardView: View {
                             .buttonStyle(.borderedProminent)
                             .disabled(!console.canInstallAntigravity)
                     }
-                    Button("Open in Providers") {
+                    Button("Open in Infrastructure") {
                         if let url = console.antigravityProvidersURL { openURL(url) }
                     }
                     .buttonStyle(.bordered)
