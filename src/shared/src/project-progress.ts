@@ -86,6 +86,13 @@ export interface ProjectIntegrationView<Instant = string> extends ProjectIntegra
    */
   inFlight: ProjectIntegrationInFlight<Instant> | null;
   /**
+   * Every job the two counts count, in `inFlight`'s order — running first, then the queue oldest
+   * first — so its first entry is the job `inFlight` describes. What the landing row's job list
+   * draws when "N jobs" is pressed: which task each one lands, how far it got, and whether its
+   * runner stopped reporting. Absent on servers that predate it.
+   */
+  inFlightJobs?: ProjectIntegrationJob<Instant>[];
+  /**
    * The project's current `LAND_TASK`s (§2.7a), each through the same read model the task's own
    * page reads: every task's newest generation that is queued or running, every done task whose
    * newest generation stopped at a conflict, a failed check or an error nothing has landed since,
@@ -121,6 +128,45 @@ export interface ProjectIntegrationInFlight<Instant = string> {
   startedAt: Instant;
   /** Last report from the runner; absent on older servers and null before a claim. */
   heartbeatAt?: Instant | null;
+}
+
+/**
+ * One RUNNING or QUEUED job on the project's integration view (`inFlightJobs`, §1.6).
+ *
+ * `timedOut` is decided where the job is read, never stored: a running job whose runner has said
+ * nothing for longer than `limitSeconds`. The limit is the claim lease for a git step, and the job's
+ * check budgets plus the lease while it checks — the runner reports only when a step starts, so a
+ * healthy check is silent for as long as it runs. A timed-out job is still RUNNING; only a retry
+ * ends it (§2.2 J-T9).
+ */
+export interface ProjectIntegrationJob<Instant = string> {
+  jobId: string;
+  kind: IntegrationJobKind;
+  state: 'RUNNING' | 'QUEUED';
+  /** The step it last reported, or the one a claim starts at; null before its first claim. */
+  phase: IntegrationJobPhase | null;
+  /** The task it lands; null for a promotion or a merge check, which land no single task. */
+  taskId: string | null;
+  taskTitle: string | null;
+  /** Which landing of its subject this is, counting from 1. */
+  generation: number;
+  /** What "for how long" counts from, as on `inFlight`: the claim, or the enqueue. */
+  startedAt: Instant;
+  /** When it joined the queue — for a retried job, when the retry was asked for. */
+  queuedAt: Instant;
+  /** Its runner's last report; null before its first claim. */
+  heartbeatAt: Instant | null;
+  /** The runner holding the claim; null while queued, or when that runner is gone. */
+  runnerName: string | null;
+  /** Who asked for this run when it reruns a failed or timed-out one; null for an ordinary landing. */
+  retriedBy: 'OWNER' | 'COORDINATOR' | null;
+  timedOut: boolean;
+  /** How long the current step may go without a report; null while queued. */
+  limitSeconds: number | null;
+  /** Whether the owner's Retry (`POST /projects/:id/integration/jobs/:jobId/retry`) takes this job
+   *  now. Clients draw the button from this rather than from `timedOut`, so which timed-out jobs a
+   *  retry can end is the server's to say. */
+  retryable: boolean;
 }
 
 /** The integration claim's existing lease window, also used to stop stale activity indicators. */

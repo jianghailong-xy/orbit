@@ -244,6 +244,9 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     public let installationError: String?
     /// DeepSeek Harness only: what the runner's probe established, kept apart from a key's validity.
     public let dsh: DshRuntimeHealth?
+    /// Kimi only: the site its login is on, `mainland-cn` (kimi.com) or `global` (kimi.ai) — see
+    /// `KimiSite`. Absent before the first Kimi sign-in on that machine, and from an older runner.
+    public let kimiRegion: String?
     public var id: String { engine }
     /// Only the CLI's own "yes" counts — the third state exists precisely so an engine that
     /// wouldn't answer is never shown as signed in (web's `rowKindOf`).
@@ -252,10 +255,11 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     public init(engine: String, installed: Bool? = nil, version: String? = nil, auth: String? = nil,
                 accounts: [RunnerEngineAccount]? = nil, update: RunnerEngineUpdate? = nil,
                 authSource: String? = nil, planUsage: PlanUsageSnapshot? = nil,
-                installationError: String? = nil, dsh: DshRuntimeHealth? = nil) {
+                installationError: String? = nil, dsh: DshRuntimeHealth? = nil, kimiRegion: String? = nil) {
         self.engine = engine
         self.installationError = installationError
         self.dsh = dsh
+        self.kimiRegion = kimiRegion
         self.installed = installed
         self.version = version
         self.auth = auth
@@ -446,11 +450,14 @@ public struct StartLoginRequest: Encodable, Sendable {
     public let engine: String
     public let account: String?
     public let accountName: String?
+    /// Kimi only: the site to sign in on (`KimiSite`). Absent: a bare `kimi login`.
+    public let region: String?
 
-    public init(engine: LoginEngine, account: String? = nil, accountName: String? = nil) {
+    public init(engine: LoginEngine, account: String? = nil, accountName: String? = nil, region: String? = nil) {
         self.engine = engine.rawValue
         self.account = account
         self.accountName = accountName
+        self.region = region
     }
 }
 

@@ -163,6 +163,9 @@ type EngineHealthReport struct {
 	// Antigravity only: selected credentials and the quota read made with its Google auth probe.
 	AuthSource string     `json:"authSource,omitempty"` // "google" | "env_key"
 	PlanUsage  *PlanUsage `json:"planUsage,omitempty"`
+	// Kimi only: the site its own login is on, "mainland-cn" (kimi.com) or "global" (kimi.ai).
+	// Omitted when it has none (kimi_region.go).
+	KimiRegion string `json:"kimiRegion,omitempty"`
 	// What the updater last did to this engine. Nil until it has run once — which the UI shows
 	// as "not reported yet", never as a problem.
 	Update *EngineUpdateReport `json:"update,omitempty"`
@@ -580,6 +583,9 @@ type LoginCommand struct {
 	Account string `json:"account,omitempty"`
 	// Sign in a NEW Codex account: the runner adds a slot under this name and signs into that.
 	AccountName string `json:"accountName,omitempty"`
+	// Kimi only: the site to sign in on, "mainland-cn" (kimi.com) or "global" (kimi.ai). Empty is
+	// a bare `kimi login`, which goes wherever the CLI decides — what every start was before it.
+	Region string `json:"region,omitempty"`
 }
 
 // CodexAccountRemoveCommand mirrors @orbit/shared: the Codex account slot the control plane asked

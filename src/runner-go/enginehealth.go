@@ -76,6 +76,7 @@ func probeEngines(specs []engineSpec, servicePath string) []EngineHealthReport {
 			AuthSource:        h.authSource,
 			PlanUsage:         h.planUsage,
 			InstallationError: h.installError,
+			KimiRegion:        h.kimiRegion,
 		}
 		if spec.bin == providerDsh {
 			report.Auth = "unknown"
@@ -302,6 +303,10 @@ type engineHealthProbe struct {
 	// An "unknown" isn't conclusive — a CLI that wouldn't say this time says nothing about its
 	// login — so it neither ends a sign-out nor starts one.
 	wasSignedOut map[string]bool
+	// The site Kimi's login was on at the last probe that read one, kept the same way. A sign-in on
+	// the other site rewrites the models Kimi's config lists, so it is a sign-in the catalog has to
+	// hear about even though the engine was never signed out (kimi_region.go).
+	kimiRegion string
 }
 
 func (p *engineHealthProbe) refresh() {
@@ -366,7 +371,7 @@ func (p *engineHealthProbe) refreshEngine(engine string) {
 }
 
 // signedInSinceLastProbe records each engine's answer and says whether one the probe last found
-// signed out is signed in now.
+// signed out is signed in now — or, for Kimi, signed in on the other site.
 func (p *engineHealthProbe) signedInSinceLastProbe(reports []EngineHealthReport) bool {
 	if p.wasSignedOut == nil {
 		p.wasSignedOut = map[string]bool{}
@@ -379,6 +384,10 @@ func (p *engineHealthProbe) signedInSinceLastProbe(reports []EngineHealthReport)
 		case r.signedIn():
 			signedIn = signedIn || p.wasSignedOut[r.Engine]
 			delete(p.wasSignedOut, r.Engine)
+		}
+		if r.Engine == providerKimi && r.KimiRegion != "" {
+			signedIn = signedIn || (r.signedIn() && p.kimiRegion != "" && p.kimiRegion != r.KimiRegion)
+			p.kimiRegion = r.KimiRegion
 		}
 	}
 	return signedIn

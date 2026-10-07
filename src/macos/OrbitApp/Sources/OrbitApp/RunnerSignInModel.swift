@@ -40,6 +40,13 @@ final class RunnerSignInModel {
     private(set) var errorText: String?
     /// The authorization code the user pastes back (claude's flow).
     var code = ""
+    /// Kimi only: the runner as the server last described it — whether it can be told a site, and
+    /// which one its login is on (`KimiSite`). Read when the card appears, so every card that signs
+    /// Kimi in offers the same choice (web RunnerSignIn reads the same list).
+    private(set) var runner: Runner?
+    /// Set once that read has been tried: until then the choice waits, rather than start a sign-in on
+    /// a runner it can't yet say anything about.
+    private(set) var runnerRead = false
     /// Set once a code has been handed over and this card is waiting on the outcome.
     private var sent = false
     /// Set once this card has seen a sign-in actually running — see `status`.
@@ -107,26 +114,34 @@ final class RunnerSignInModel {
     /// The runner's own last word — a rejected code, or why an attempt failed.
     var relayMessage: String? { mine ? relay?.message : nil }
 
+    /// Kimi: whether this runner signs in on the site a start names.
+    var choosesSite: Bool { KimiSite.choosable(on: runner) }
+    /// Kimi: the site the runner's login is on now, marked on the choice.
+    var currentSite: KimiSite? { KimiSite.current(on: runner) }
+    /// Kimi: the site of the page the one-time code is for, read off its address.
+    var site: KimiSite? { engine == .kimi ? KimiSite.of(url: url) : nil }
+
     // MARK: actions
 
     /// Read the relay once, when the card appears: a sign-in already under way (started from
     /// another device, or before this console was opened) is then picked up and followed, rather
     /// than the card offering a button that would preempt it.
     func refresh() async {
+        if engine == .kimi { await readRunner() }
         guard let next = try? await api.runnerLoginState(runnerID) else { return }
         adopt(next)
     }
 
     /// Start signing in: this card's account, or — on a card adding one — a new account the runner
-    /// adds under `accountName`.
-    func begin(accountName: String? = nil) async {
+    /// adds under `accountName`. Kimi's names the site it signs in on, where the runner can be told one.
+    func begin(accountName: String? = nil, site: KimiSite? = nil) async {
         errorText = nil
         busy = true
         defer { busy = false }
         startedHere = true
         let name = adding ? accountName?.trimmingCharacters(in: .whitespacesAndNewlines) : nil
         do {
-            adopt(try await api.startRunnerLogin(runnerID, engine: engine, account: account, accountName: name))
+            adopt(try await api.startRunnerLogin(runnerID, engine: engine, account: account, accountName: name, region: site?.rawValue))
         } catch {
             errorText = friendly(error)
         }
@@ -165,6 +180,13 @@ final class RunnerSignInModel {
     }
 
     // MARK: internals
+
+    /// A failed read leaves the runner unknown: kimi.com then signs in as it always did, with no site
+    /// named, and kimi.ai waits for a runner that can be told it.
+    private func readRunner() async {
+        runner = try? await api.runner(runnerID)
+        runnerRead = true
+    }
 
     private func adopt(_ next: RunnerLoginState) {
         relay = next

@@ -79,6 +79,8 @@ export interface Tenant {
   fuseEpisodeId: string;
   handoffId: string;
   promotionId: string;
+  /** A queued landing of `projectTaskId`. */
+  integrationJobId: string;
   criteriaIntentId: string;
   /** The token that binds a decision to that proposal — what the owner's card answers it with. */
   criteriaCommitToken: string;
@@ -335,6 +337,10 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /projects/:id/share': { request: (of) => ({ params: { id: of.projectId } }) },
   'PUT /projects/:id/share': { request: (of) => ({ params: { id: of.projectId }, body: {} }) },
   'DELETE /projects/:id/share': { request: (of) => ({ params: { id: of.projectId } }) },
+  'POST /projects/:id/integration/jobs/:jobId/retry': {
+    request: (of) => ({ params: { id: of.projectId, jobId: of.integrationJobId } }),
+    nested: ['jobId'],
+  },
   'POST /projects/:id/promotions/:promotionId/integration/retry': {
     request: (of) => ({ params: { id: of.projectId, promotionId: of.promotionId }, body: { reason: 'the census' } }),
     nested: ['promotionId'],

@@ -1,6 +1,8 @@
 import {
   AgentProvider,
+  KIMI_REGIONS,
   type InstallEngine,
+  type KimiRegion,
   type LoginEngine,
   type PlanUsageBucket,
   type PlanUsageSnapshot,
@@ -34,6 +36,10 @@ export function engineKeepsAccounts(engine: unknown): engine is LoginEngine {
 
 export function isLoginEngine(value: unknown): value is LoginEngine {
   return typeof value === 'string' && LOGIN_ENGINES.includes(value as LoginEngine);
+}
+
+export function isKimiRegion(value: unknown): value is KimiRegion {
+  return typeof value === 'string' && KIMI_REGIONS.includes(value as KimiRegion);
 }
 
 export function isInstallEngine(value: unknown): value is InstallEngine {
@@ -103,6 +109,8 @@ export function sanitizeRunnerEngines(value: unknown): RunnerEngineHealth[] | nu
     const planUsage = entry.engine === 'antigravity'
       ? sanitizeGooglePlanUsage(entry.planUsage, authSource === 'google' && auth === 'yes')
       : undefined;
+    // Kimi alone says which of its two sites its login is on (kimi.com or kimi.ai).
+    const kimiRegion = entry.engine === 'kimi' && isKimiRegion(entry.kimiRegion) ? entry.kimiRegion : undefined;
     byEngine.set(entry.engine, {
       engine: entry.engine,
       installed: entry.installed === true,
@@ -112,6 +120,7 @@ export function sanitizeRunnerEngines(value: unknown): RunnerEngineHealth[] | nu
       ...(accounts ? { accounts } : {}),
       ...(authSource ? { authSource } : {}),
       ...(planUsage ? { planUsage } : {}),
+      ...(kimiRegion ? { kimiRegion } : {}),
       ...(dsh ? { dsh } : {}),
       ...(installationError ? { installationError } : {}),
     });

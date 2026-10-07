@@ -42,7 +42,7 @@ import { ago, engineVersionNumber, updateNoteOf } from '../lib/runnerEngines';
 import { ENGINE_PRESET, ENGINE_SLUGS } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 import { ProviderTile } from './ProviderGallery';
-import { ENGINE_NAME, GoogleSignInTerms, RunnerSignIn } from './RunnerSignIn';
+import { ENGINE_NAME, GoogleSignInTerms, KIMI_SITE, RunnerSignIn } from './RunnerSignIn';
 import type { Runner } from './TasksSidePanel';
 
 const ENGINES = Object.keys(ENGINE_NAME) as LoginEngine[];
@@ -135,6 +135,9 @@ function metaFor(kind: RowKind, engine: LoginEngine, health?: RunnerEngineHealth
     return kind === 'missing' ? 'Not installed — Orbit can install it here' : 'Not installed';
   }
   if (kind === 'unknown') return `${versionOf(engine, health)} · the CLI wouldn't say`;
+  // Which of Kimi's two sites the login is on: the same CLI signs in to either, and a session spends
+  // that site's subscription.
+  if (engine === 'kimi' && health.kimiRegion) return `${versionOf(engine, health)} · ${KIMI_SITE[health.kimiRegion].domain}`;
   return versionOf(engine, health);
 }
 

@@ -1031,6 +1031,19 @@ export interface CodexRateLimitResetResultRefusal {
  */
 export type LoginEngine = 'claude' | 'codex' | 'kimi' | 'antigravity';
 
+/**
+ * Kimi Code's two sign-in sites, as `kimi login --region` names them: `mainland-cn` is kimi.com,
+ * `global` is kimi.ai. Each keeps accounts, a sign-in page and an API of its own, so an account of
+ * one cannot sign in on the other.
+ */
+export type KimiRegion = 'mainland-cn' | 'global';
+export const KIMI_REGIONS: readonly KimiRegion[] = ['mainland-cn', 'global'];
+
+/** Runner signs Kimi Code in on the site a login `start` names (`region`). One that does not runs a
+ *  bare `kimi login`, which goes wherever the CLI decides — the site it last signed in to, or the one
+ *  its installer came from — so it is handed no start naming a site. */
+export const KIMI_LOGIN_REGION_V1 = 'kimi-login-region/v1';
+
 /** Engines with an install action in Providers: every engine a runner signs in with, plus `dsh` and
  *  OpenCode, which are installed without one — the relay needs an install command, not a way in. */
 export type InstallEngine = LoginEngine | 'opencode' | 'dsh';
@@ -1113,6 +1126,10 @@ export interface LoginCommand {
   account?: string;
   /** Codex only: sign in a NEW account, which the runner adds under this name. */
   accountName?: string;
+  /** Kimi only: the site to sign in on (`kimi login --region`). Only a runner that declares
+   *  `kimi-login-region/v1` is handed a start naming one; absent, the runner runs a bare `kimi login`,
+   *  exactly as before the choice. */
+  region?: KimiRegion;
 }
 
 /**
@@ -1207,6 +1224,11 @@ export interface RunnerEngineHealth {
    *  sign-in. Default's `buckets` (with `fetchedAt`) are present only while the runner's own Google
    *  sign-in answers `yes`; every other signed-in account's are under `accounts`, by its id. */
   planUsage?: PlanUsageSnapshot;
+  /** Kimi only: the site the CLI's own login is on, read from the managed Kimi Code provider it keeps
+   *  in config.toml — still reported once that login has expired, and absent before the first sign-in
+   *  on this machine (an installer's default is not a sign-in), after a logout, and from an older
+   *  runner. */
+  kimiRegion?: KimiRegion;
 }
 
 export interface DshRuntimeHealth {

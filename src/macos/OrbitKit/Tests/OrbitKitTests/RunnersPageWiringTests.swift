@@ -376,14 +376,15 @@ final class RunnersPageWiringTests: XCTestCase {
         XCTAssertTrue(signIn.contains("var accountName: String? = nil"), "or a new account's name")
         XCTAssertTrue(signIn.contains("Task { await model.begin(accountName: accountName) }"))
         XCTAssertTrue(signIn.contains("var autoStart = false"), "or starts as it appears")
-        try assertInOrder(code(signIn), ["let fresh = model == nil", "if autoStart, fresh {",
+        try assertInOrder(code(signIn), ["let fresh = model == nil", "if autoStart, fresh, engine != .kimi {",
                                          "if accountName == nil { await m.refresh() }",
                                          "if m.status?.inFlight != true { await m.begin(accountName: accountName) }",
                                          "} else {", "await m.refresh()"],
                           "a card its press raised starts its sign-in on its first appearance only — and one for an "
                               + "account the runner has follows a sign-in already under way for it instead")
         let model = code(try appSource("RunnerSignInModel.swift"))
-        XCTAssertTrue(model.contains("api.startRunnerLogin(runnerID, engine: engine, account: account, accountName: name)"))
+        // …and, for Kimi, the site the card's press picked (KimiSite).
+        XCTAssertTrue(model.contains("api.startRunnerLogin(runnerID, engine: engine, account: account, accountName: name, region: site?.rawValue)"))
         XCTAssertTrue(model.contains("if adding { return startedHere }"),
                       "a card adding an account owns only the sign-in it started")
     }
@@ -444,9 +445,9 @@ final class RunnersPageWiringTests: XCTestCase {
         XCTAssertTrue(paste.contains("if phase == .active, opened { returned = true }"),
                       "back from the page it opened, Paste is the prominent press")
         let device = try slice(signIn, from: "private func deviceFlow(", to: "private func idle(")
-        try assertInOrder(device, ["Text(\"Enter this one-time code on the sign-in page:\")", "Text(code)",
+        try assertInOrder(device, ["Text(site?.enterCode ?? \"Enter this one-time code on the sign-in page:\")", "Text(code)",
                                    "PlatformPasteboard.copyString(code)", "openURL(url)",
-                                   "Label(\"Copy Code & Open Sign-In Page\", systemImage: \"doc.on.doc\")"],
+                                   "Label(site?.copyCodeAndOpen ?? \"Copy Code & Open Sign-In Page\", systemImage: \"doc.on.doc\")"],
                           "the code first, then the press that copies it and opens its page")
 
         let page = code(try appSource("Views/RunnerEnginePage.swift"))
