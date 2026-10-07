@@ -1,0 +1,207 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2.2/revision-8/attention-link/<name>",
+ "files": [
+  {
+   "name": "chromium-dark-desktop--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--attention-link.json",
+   "bytes": 299,
+   "sha256": "5a4c2ce753ee562f1b3bc9238032432109b54d7fa14250ac88ae47dca5dabfcd",
+   "fields": {
+    "how": "keyboard",
+    "inDialog": true,
+    "inOverlay": true,
+    "cursor": "pointer",
+    "tabPresses": 5,
+    "path": "/sessions/2zr7BFsBKPRa35MeIQQwz"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--attention-link.json",
+   "bytes": 277,
+   "sha256": "8351f87eb299d99a767a74bd2453751ed6647c773c018d62699e839369103cc4",
+   "fields": {
+    "how": "click",
+    "inDialog": true,
+    "inOverlay": true,
+    "cursor": "pointer",
+    "path": "/sessions/2zr7BFsBKPRa35MeIQQwz"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--attention-link.json",
+   "bytes": 297,
+   "sha256": "63e51b0fe1eca1cfe04c7546a776f427de28babf504ee48f5cfe099fb53596e6",
+   "fields": {
+    "how": "keyboard",
+    "inDialog": true,
+    "inOverlay": true,
+    "cursor": "pointer",
+    "tabPresses": 5,
+    "path": "/sessions/2zr7BFsBKPRa35MeIQQwz"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--attention-link.json",
+   "bytes": 273,
+   "sha256": "fd8718757f962c81251ba942b869c156cab71b090885ecf1dd9661576ee46733",
+   "fields": {
+    "how": "tap",
+    "inDialog": true,
+    "inOverlay": true,
+    "cursor": "pointer",
+    "path": "/sessions/2zr7BFsBKPRa35MeIQQwz"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--attention-link.json",
+   "bytes": 299,
+   "sha256": "5a4c2ce753ee562f1b3bc9238032432109b54d7fa14250ac88ae47dca5dabfcd",
+   "fields": {
+    "how": "keyboard",
+    "inDialog": true,
+    "inOverlay": true,
+    "cursor": "pointer",
+    "tabPresses": 5,
+    "path": "/sessions/2zr7BFsBKPRa35MeIQQwz"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--attention-link.json",
+   "bytes": 277,
+   "sha256": "8351f87eb299d99a767a74bd2453751ed6647c773c018d62699e839369103cc4",
+   "fields": {
+    "how": "click",
+    "inDialog": true,
+    "inOverlay": true,
+    "cursor": "pointer",
+    "path": "/sessions/2zr7BFsBKPRa35MeIQQwz"
+   }
+  },
+  {
+   "name": "chromium-light-phone--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--attention-link.json",
+   "bytes": 297,
+   "sha256": "63e51b0fe1eca1cfe04c7546a776f427de28babf504ee48f5cfe099fb53596e6",
+   "fields": {
+    "how": "keyboard",
+    "inDialog": true,
+    "inOverlay": true,
+    "cursor": "pointer",
+    "tabPresses": 5,
+    "path": "/sessions/2zr7BFsBKPRa35MeIQQwz"
+   }
+  },
+  {
+   "name": "chromium-light-phone--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--attention-link.json",
+   "bytes": 273,
+   "sha256": "fd8718757f962c81251ba942b869c156cab71b090885ecf1dd9661576ee46733",
+   "fields": {
+    "how": "tap",
+    "inDialog": true,
+    "inOverlay": true,
+    "cursor": "pointer",
+    "path": "/sessions/2zr7BFsBKPRa35MeIQQwz"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--attention-link.json",
+   "bytes": 299,
+   "sha256": "40798ea75931b90345b4c24b9ef2b84e87a36a26e35065776c924c1fe09cce61",
+   "fields": {
+    "how": "keyboard",
+    "inDialog": true,
+    "inOverlay": true,
+    "cursor": "pointer",
+    "tabPresses": 5,
+    "path": "/sessions/2zr7BFsBKPRa35MeIQQwz"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--attention-link.json",
+   "bytes": 277,
+   "sha256": "38330b4f26b87c1c7ae992471c9a496b4a816e944237ff80bd13bc08ced96914",
+   "fields": {
+    "how": "click",
+    "inDialog": true,
+    "inOverlay": true,
+    "cursor": "pointer",
+    "path": "/sessions/2zr7BFsBKPRa35MeIQQwz"
+   }
+  },
+  {
+   "name": "webkit-dark-phone--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--attention-link.json",
+   "bytes": 297,
+   "sha256": "0aaf70d334ebed60d2b1d52f25e6fd3dfca6a731e80005810a671de5542eea70",
+   "fields": {
+    "how": "keyboard",
+    "inDialog": true,
+    "inOverlay": true,
+    "cursor": "pointer",
+    "tabPresses": 5,
+    "path": "/sessions/2zr7BFsBKPRa35MeIQQwz"
+   }
+  },
+  {
+   "name": "webkit-dark-phone--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--attention-link.json",
+   "bytes": 273,
+   "sha256": "213bb8d67a171a2bb6d8f0943e8c6d7cb74af81bd12f0d4b96dc1fb147cdc34d",
+   "fields": {
+    "how": "tap",
+    "inDialog": true,
+    "inOverlay": true,
+    "cursor": "pointer",
+    "path": "/sessions/2zr7BFsBKPRa35MeIQQwz"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--attention-link.json",
+   "bytes": 299,
+   "sha256": "40798ea75931b90345b4c24b9ef2b84e87a36a26e35065776c924c1fe09cce61",
+   "fields": {
+    "how": "keyboard",
+    "inDialog": true,
+    "inOverlay": true,
+    "cursor": "pointer",
+    "tabPresses": 5,
+    "path": "/sessions/2zr7BFsBKPRa35MeIQQwz"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--attention-link.json",
+   "bytes": 277,
+   "sha256": "38330b4f26b87c1c7ae992471c9a496b4a816e944237ff80bd13bc08ced96914",
+   "fields": {
+    "how": "click",
+    "inDialog": true,
+    "inOverlay": true,
+    "cursor": "pointer",
+    "path": "/sessions/2zr7BFsBKPRa35MeIQQwz"
+   }
+  },
+  {
+   "name": "webkit-light-phone--failure-copy-link-is-reached-with-Tab-inside-the-Dialog-and-opens-its-session-with-Enter--attention-link.json",
+   "bytes": 297,
+   "sha256": "0aaf70d334ebed60d2b1d52f25e6fd3dfca6a731e80005810a671de5542eea70",
+   "fields": {
+    "how": "keyboard",
+    "inDialog": true,
+    "inOverlay": true,
+    "cursor": "pointer",
+    "tabPresses": 5,
+    "path": "/sessions/2zr7BFsBKPRa35MeIQQwz"
+   }
+  },
+  {
+   "name": "webkit-light-phone--failure-copy-link-opens-its-session-from-a-Dialog-owned-notification-by-pointer--attention-link.json",
+   "bytes": 273,
+   "sha256": "213bb8d67a171a2bb6d8f0943e8c6d7cb74af81bd12f0d4b96dc1fb147cdc34d",
+   "fields": {
+    "how": "tap",
+    "inDialog": true,
+    "inOverlay": true,
+    "cursor": "pointer",
+    "path": "/sessions/2zr7BFsBKPRa35MeIQQwz"
+   }
+  }
+ ]
+}

@@ -54,7 +54,8 @@ export interface SourceResolutionInput {
   };
   codebase: SourceCodebaseInput | null;
   /**
-   * Has THIS project already landed anything on its own integration line? P5's one input (v1.1).
+   * Has THIS project already landed anything on its own integration line? P4's and P5's one input
+   * (v1.1; read by P4 since v1.2, which reads the same line).
    *
    * A fact about the project, never about the machine: it says whether that line exists as a
    * branch yet, not where any checkout currently is, so SR17's forbidden five stay unrepresentable.
@@ -241,22 +242,33 @@ export function resolveSource(input: SourceResolutionInput): SourceResolution {
     };
   }
 
-  // P4 — has code prerequisites: start from the integration tip AND require it to contain each
-  // prerequisite's accepted product. `requiredContains` is what makes "landed" mean containment
-  // rather than "somebody reported a merge" (SR26).
+  // P4 — has code prerequisites: start from this project's integration line AND require it to
+  // contain each prerequisite's accepted product. `requiredContains` is what makes "landed" mean
+  // containment rather than "somebody reported a merge" (SR26).
+  //
+  // Same two spellings of ONE line as P5, for the same reason (§1.5 L10, first row): the project
+  // branch is created by the first landing on it, and until then upstream IS that line. P4 reads
+  // the same line P5 does — D5 says the two ROWS are structurally exclusive, not that they are two
+  // lines. And the moment a task with prerequisites is dispatched is exactly when the prerequisite
+  // has just landed on upstream and this project's line has no landing yet, so naming only
+  // `integrationRef` pinned a ref nobody had created and the runner's fetch answered
+  // BASE_REF_NOT_FOUND.
   if (requiredContains.length > 0) {
+    const ref = input.integrationLineHasLanding ? codebase.integrationRef : codebase.upstreamRef;
     return {
       state: 'SELECTED',
       selector: {
         ...base,
         kind: 'DEPENDENCY_CLOSURE',
-        ref: codebase.integrationRef,
+        ref,
         revisionSha: null,
         requiredContains,
       },
       reason: {
         rank: 'P4',
-        because: `it depends on work that must already be in ${codebase.integrationRef} (${requiredContains.length} commit(s))`,
+        because: ref === codebase.integrationRef
+          ? `it depends on work that must already be in ${ref} (${requiredContains.length} commit(s))`
+          : `it depends on work that must already be in ${ref}, which is this project's integration line until something lands on ${codebase.integrationRef} (${requiredContains.length} commit(s))`,
       },
     };
   }

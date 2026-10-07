@@ -1,5 +1,13 @@
 # P2.2 第二版：动效与手机实测布局
 
+> **证据瘦身（2026-10-07）**：完整原件见提交 `7732f14f82d4e6b4406d7d164c4b672f63aa0f56`（瘦身前最后一个含完整文件的提交）。取回单个文件用 `git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2.2/revision-2/<路径> > <文件>`，整个目录用 `git archive 7732f14f82d4e6b4406d7d164c4b672f63aa0f56 docs/evidence/base-ui-migration/p2.2/revision-2 | tar -x -C <空目录>`。
+>
+> 本目录在瘦身中：22 份 Playwright 报告换成同目录的 `report.summary.json`，另有 2 份其他文件名的报告换成 `<原名>.summary.json`，都只删附件正文；删除 27 个 trace 压缩包；删除被取代修订的 2889 个原始运行文件（截图、逐用例 JSON、运行压缩包）。下文链接若指向这些文件，按上面的命令从该提交取回；读取它们的脚本要在取回的目录里运行。
+>
+> 第 2 版当时判定 CONFIRM，后被第 3–8 版取代，被采用的是[第 8 版](../revision-8/README.md)。本版运行的截图、逐用例 JSON 已删除。
+>
+> 目录里的 SHA256SUMS 类清单（`*.sha256`、`artifact-index*.json`、`manifest.json`、各运行 `summary.json` 里的附件哈希等）保留原文件，核验的是提交 `7732f14f8` 里的文件。做法、保留理由和逐文件删除清单见 [evidence-slimming](../../evidence-slimming/README.md)。
+
 服务于 [P2.2 实现菜单、浮层与选择控件](orbit-task:34Za394q2ZEgr7TKprjkF)，沿用项目验收条目：`1BvO6hYrlFnU60JqxQPUHt`，**P2：Orbit 自有弹层、选择及反馈组件保持现有键盘、焦点、通知和确认行为。** 本证据仅承担菜单、浮层与选择控件子范围。
 
 本版回应评论 `34ZyYZarpd4lBl60cQxzg`、`34ZycYWDQCZjHyE1eez9y` 的两项返工。首版 `43db5d2e` 的 SEND_BACK 判定为 `5XTttqDHYacHEkzpwR1FPb`。保留首版实现和原证据，不以其静态通过结果代替动效验收。[上级说明](../README.md)已撤回“手机额外布局差异获得授权”的错误判断。

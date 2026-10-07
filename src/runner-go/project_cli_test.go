@@ -212,7 +212,12 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	// a request and starts nothing, so it needs no grant beyond being the project's coordinator.
 	// The eleventh is `request-done`, the same coordinator asking the owner to record the project
 	// done: a request again, which records nothing, for the same reason.
-	if len(specs) != 11 {
+	// The twelfth is `skip-merge-check`, the door for the red that is about the CHECK rather than
+	// the delivery — a command that cannot pass where the runner runs it. It is the owner's: it
+	// queues ONE landing with the check not run, after a card naming the check and the task, and
+	// writes the reason and the approval onto the generation it queues. Mutating for that reason
+	// alone — the project does not change, and one landing does.
+	if len(specs) != 12 {
 		t.Fatalf("project capabilities = %#v", projectCLICapabilities)
 	}
 	spec, ok := specs["project_get"]

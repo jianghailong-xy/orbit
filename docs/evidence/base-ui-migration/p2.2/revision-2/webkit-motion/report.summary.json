@@ -1,0 +1,1240 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/choices.config.mjs",
+   "choices-motion.browser.mjs",
+   "--project=webkit-dark-phone",
+   "--max-failures=1"
+  ],
+  "configFile": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 1,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+   "cwd": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/",
+   "url": "http://127.0.0.1:4177",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "choices-motion.browser.mjs",
+   "file": "choices-motion.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "normal bottom entrance and exit motion matches attachment",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1778,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:02:30.284Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-14ca8e37b211ca054c24",
+     "file": "choices-motion.browser.mjs",
+     "line": 100,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches attachment",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1977,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:02:32.133Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-fb4fb820457c71c8bfeb",
+     "file": "choices-motion.browser.mjs",
+     "line": 100,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches attachment",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1932,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:02:34.115Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-c94b3050f012329459d0",
+     "file": "choices-motion.browser.mjs",
+     "line": 100,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1648,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:02:36.051Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-14601e4fa8ebc3a0fa51",
+     "file": "choices-motion.browser.mjs",
+     "line": 100,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1976,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:02:37.704Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-d66e900e0a62816007d7",
+     "file": "choices-motion.browser.mjs",
+     "line": 100,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2175,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:02:39.685Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-0518fa1a81bf059bf0ce",
+     "file": "choices-motion.browser.mjs",
+     "line": 100,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1773,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:02:41.866Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-40dad19ccadef8f5bc0f",
+     "file": "choices-motion.browser.mjs",
+     "line": 100,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1996,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:02:43.648Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-8515f2ec0f64889e3669",
+     "file": "choices-motion.browser.mjs",
+     "line": 100,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1995,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:02:45.649Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-f018bdb649cfacfcc045",
+     "file": "choices-motion.browser.mjs",
+     "line": 100,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches multiple",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1604,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:02:47.648Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-16c76cde3e0cdb0843df",
+     "file": "choices-motion.browser.mjs",
+     "line": 100,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches multiple",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2078,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:02:49.258Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-084f513a3579f71c6710",
+     "file": "choices-motion.browser.mjs",
+     "line": 100,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches multiple",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2043,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:02:51.340Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-a389f2304f21366ec3eb",
+     "file": "choices-motion.browser.mjs",
+     "line": 100,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches popover",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1615,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:02:53.388Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-2954bfeee7f40444fae9",
+     "file": "choices-motion.browser.mjs",
+     "line": 100,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches popover",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2038,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:02:55.009Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-a5f7d5739111cdf5a4ed",
+     "file": "choices-motion.browser.mjs",
+     "line": 100,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches popover",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1957,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:02:57.050Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-c4cd2300dbe550e60cb6",
+     "file": "choices-motion.browser.mjs",
+     "line": 100,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches tooltip",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1907,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:02:59.011Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-acdb926f5fc01cfffa1f",
+     "file": "choices-motion.browser.mjs",
+     "line": 100,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches tooltip",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1974,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:03:00.922Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-c7d4eb4a55ae93b54fc5",
+     "file": "choices-motion.browser.mjs",
+     "line": 100,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches tooltip",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2014,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:03:02.901Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-c6f5fc2ab10192ce4799",
+     "file": "choices-motion.browser.mjs",
+     "line": 100,
+     "column": 3
+    },
+    {
+     "title": "popover center zoom origin matches",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2075,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:03:04.921Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-29c05595e6f4b2f038b8",
+     "file": "choices-motion.browser.mjs",
+     "line": 136,
+     "column": 83
+    },
+    {
+     "title": "popover end zoom origin matches",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2053,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:03:07.002Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-43c7b940d4dc68a4681b",
+     "file": "choices-motion.browser.mjs",
+     "line": 136,
+     "column": 83
+    },
+    {
+     "title": "tooltip center zoom origin matches",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2059,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:03:09.059Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-3eb70bda7ce26c635867",
+     "file": "choices-motion.browser.mjs",
+     "line": 136,
+     "column": 83
+    },
+    {
+     "title": "tooltip end zoom origin matches",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2030,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:03:11.123Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-edd8408cd32261bc59cb",
+     "file": "choices-motion.browser.mjs",
+     "line": 136,
+     "column": 83
+    },
+    {
+     "title": "submenu left edge zoom matches and stays in view",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2930,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:03:13.158Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-31cb4f5eeb6cef4fb302",
+     "file": "choices-motion.browser.mjs",
+     "line": 155,
+     "column": 41
+    },
+    {
+     "title": "submenu right edge zoom matches and stays in view",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3209,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T09:03:16.093Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-b6ab32d3bd7c58da76a3",
+     "file": "choices-motion.browser.mjs",
+     "line": 155,
+     "column": 41
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T09:02:29.556Z",
+  "duration": 49898.727,
+  "expected": 24,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

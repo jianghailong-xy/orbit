@@ -3493,10 +3493,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"a criterion served only by work that looks like it produces no code (OWNER_CONFIRMED, or " +
 				"EVIDENCE_JUDGMENT with no acceptance command) and does not declare codeless; tasks set " +
 				"to start by hand (autoRunWhenReady=false); and Automatic on a project branch with no " +
-				"merge check. Declare the work that commits nothing codeless before asking, and the " +
-				"first goes away. The owner then sees a \"Start this project?\" card with your " +
-				"settings as suggestions, may change any of them, and presses Start; you are told when " +
-				"the project starts. Suggest what you would choose and say why in one sentence. Asking " +
+				"merge check. The warnings are yours: the owner's card does not show them, so act on " +
+				"the ones that are right and leave the rest — declare the work that commits nothing " +
+				"codeless, and the first goes away. The owner then sees a \"Start this project?\" card " +
+				"with your settings as suggestions — Automatic on whatever you send — may change any of " +
+				"them, and presses Start; you are told when the project starts. Suggest what you would " +
+				"choose and say why in one sentence. Asking " +
 				"again replaces the open request, and changing the plan before the start — tasks, " +
 				"dependencies or criteria — voids it, so ask again after the plan changes. Only the " +
 				"conversation the project is coordinated from may ask, and only before it has started.",
@@ -3522,8 +3524,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"type": "boolean",
 					"description": "Whether you run the project for the owner: you decide when each task is " +
 						"done, handle conflicts and failed checks, and the project branch merges into main " +
-						"once its merge check passes. false brings those to the owner; the project runs " +
-						"either way.",
+						"once its merge check passes (with none, once it rebases cleanly). false brings those " +
+						"to the owner; the project runs either way. Leave it out for on. The owner's card " +
+						"opens with Automatic on whatever you send; if you would keep it off, say why in why.",
 				},
 				"maxConcurrentTasks": map[string]interface{}{
 					"type":        "integer",
@@ -3542,7 +3545,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "One sentence on why the plan is ready and why these settings, shown " +
 						"to the owner on the card as written.",
 				},
-			}, "projectId", "line", "automatic", "maxConcurrentTasks", "why"),
+			}, "projectId", "line", "maxConcurrentTasks", "why"),
 		},
 		{
 			"name": "project_request_done",
@@ -3694,7 +3697,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"open_item_hand_over with an explanation; if changing a merge-check command, time limit or " +
 				"another owner-only choice is required, use ask_owner with options. This tool never hands " +
 				"an item to the owner and never answers that choice. Refused with the reason when the task's landing or the " +
-				"candidate is already queued or running, when the failure's item is the account owner's " +
+				"candidate is already queued or running (a task's landing whose runner stopped reporting " +
+				"past its limit is the exception: it is ended as ERROR RUNNER_LOST and run again), when " +
+				"the failure's item is the account owner's " +
 				"(escalated, or a project that is not Automatic), when the owner has an open blocker on " +
 				"the task, or when the task or candidate is not this project's. Only the conversation the " +
 				"project is coordinated from may call it.",

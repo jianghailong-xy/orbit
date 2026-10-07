@@ -1,6 +1,7 @@
-/* The replaced alert as measured with a description: 20px/24px padding, 8px radius, 24px icon. */
+/* The replaced alert as measured: 8px/12px padding and a 14px icon centred on the text; with a
+   description 20px/24px padding, a 24px icon at the top and a 16px title. 8px radius. */
 .orbit-alert {
-  position: relative; display: flex; align-items: flex-start; box-sizing: border-box; margin: 0; padding: 8px 12px;
+  position: relative; display: flex; align-items: center; box-sizing: border-box; margin: 0; padding: 8px 12px;
   border: 1px solid transparent; border-radius: var(--orbit-radius-popup); color: var(--text-1);
   font-family: var(--orbit-font-family); font-size: var(--orbit-font-size); line-height: var(--orbit-line-height);
   word-wrap: break-word;
@@ -8,7 +9,9 @@
 .orbit-alert-error { background: var(--orbit-control-error-bg); border-color: var(--orbit-control-error-bg-active); }
 .orbit-alert-icon { margin-inline-end: 8px; line-height: 0; }
 .orbit-alert-error .orbit-alert-icon { color: var(--orbit-control-error); }
+.orbit-alert-warning { background: var(--orbit-badge-warning-bg); border-color: var(--orbit-alert-warning-border); }
+.orbit-alert-warning .orbit-alert-icon { color: var(--orbit-badge-warning); }
 .orbit-alert-section { flex: 1; min-width: 0; }
-.orbit-alert-with-description { padding: 20px 24px; }
+.orbit-alert-with-description { align-items: flex-start; padding: 20px 24px; }
 .orbit-alert-with-description .orbit-alert-icon { margin-inline-end: 12px; font-size: 24px; }
 .orbit-alert-with-description .orbit-alert-title { margin-bottom: 8px; font-size: 16px; line-height: 1.5714285714285714; }

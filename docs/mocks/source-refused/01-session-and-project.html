@@ -138,6 +138,10 @@
   .srow .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); flex: none; }
   .srow .ttl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .srow .st { flex: none; font-size: 12.5px; color: var(--label-2); }
+  /* 卡里的受影响任务行：与页面上的行同构，只是缩进在卡内（实现里是 .project-blockers-tasks）。 */
+  .card .rows { margin-top: 8px; }
+  .card .srow { padding: 3px 0; border-top: 0; font-size: 12.5px; }
+  .card .srow .dot { width: 6px; height: 6px; }
   .note { max-width: 1330px; font-size: 13.5px; line-height: 1.65; color: #55555e; margin-top: 8px; }
   .note b { color: #16161a; }
 </style>
@@ -202,7 +206,7 @@
       <div class="nav">
         <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
         <span class="titles"><span class="t">执行任务：两端引擎牌常驻 Open…</span>
-          <span class="s"><span class="chiprun refused">✕ Refused</span>Task · Ended · 37m ago</span></span>
+          <span class="s"><span class="chiprun refused">✕ Failed</span>Task · Ended · 37m ago</span></span>
         <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M12 16V4M8 8l4-4 4 4M5 20h14"/></svg></span>
       </div>
       <div class="thread">
@@ -219,8 +223,9 @@
           <div class="detail">
             <span class="mono">git: fatal: couldn't find remote ref refs/heads/project/34bZ3i4AvgJaaoaw5E9tH</span>
           </div>
-          <div class="next">Create the branch (the first landing on the line creates it) or point the project’s
-            integration line at one that exists. Starting again before that returns the same refusal.</div>
+          <div class="next">解析的时候仓库里没有 <code>refs/heads/project/34bZ3i4AvgJaaoaw5E9tH</code>：它还不存在、
+            已经被删掉，或者和项目绑定里的名字对不上。先把它建出来（这个项目在这条线上的第一次落地会创建它），
+            或者把绑定的 integrationRef 改成实际存在的那一条，再开工。在那之前重新开工只会得到同一个拒绝。</div>
           <div class="btn primary">Start it again</div>
           <div class="btn tinted">Chat about this</div>
           <div class="foot">Ended · no engine ran · 0 turns</div>
@@ -231,11 +236,17 @@
     <figcaption><b>② 会话页：把拒绝画成一张卡，运行也是收过尾的</b>
       两件事一起做：<b>(a)</b> 客户端读 <code>sourceState=REFUSED</code> + <code>sourceRefusalCode</code> +
       <code>sourceRefusalDetail</code>（码、ref、git 原话、<code>fixAction</code> 都在库里，一个字不用新造），
-      按 <code>fixAction</code> 的封闭集合出下一步（FIX_REF 这档的句子今天已经写在
-      <code>task-dispatch-refusal.ts:220</code> 的任务评论里，两边共用一句）；
+      按 <code>fixAction</code> 的封闭集合出下一步 —— 那句话是任务评论里同一句，已经从
+      <code>task-dispatch-refusal.ts</code> 挪到 <code>@orbit/shared/src/source-refusal.ts</code>，
+      任务评论、协调者消息与会话卡片共用一个函数（所以这里是中文的，卡片其余文案仍是英文）；
       <b>(b)</b> 控制面在拒绝赢下 CAS 的<b>同一个事务</b>里把这次运行收尾（FAILED + error，释放执行权），
-      标题栏因此是 <code>Refused/Ended</code> 而不是 Starting，列表行同理。
-      「Start it again」= 新建一次运行（SR34 的恢复路径，不是重新解析这一条）。</figcaption>
+      标题栏与列表行因此是它们本来就有的 <code>Failed/Ended</code> 而不是 Starting ——
+      web 侧不给这类会话造新词，卡片负责讲清原因。
+      「Start it again」= 新建一次运行（SR34 的恢复路径，不是重新解析这一条）。
+      <br><br><b>这条规则不依赖 (b) 已经落地</b>：库里还有拒绝已写、运行却仍留在 <code>RUNNING</code> 的行
+      （例如 <code>2PLgNAQaH00wZ56CN8J03M</code>）。只要 <code>source_state='REFUSED'</code>
+      （或 <code>source_refusal_code</code> 非空），客户端就不出等待条、不出 Starting，
+      行与标题栏按「这次运行已经结束」的说法渲染（<code>Failed</code>）—— 卡片是这一档唯一要说的话。</figcaption>
   </figure>
 
   <!-- ③ after: project page -->
@@ -260,25 +271,25 @@
             <div class="icon">⚠</div>
             <div class="title">Integration line not created</div>
           </div>
-          <div class="prov">FROM ORBIT</div>
-          <div class="why">Runs pinned to this project’s line are refused: the branch doesn’t exist, and no
-            landing has recorded it.</div>
+          <div class="why">Its baseline is a branch that doesn’t exist yet — this project’s integration line
+            has not been created.</div>
           <div class="subject"><code>SOURCE_UNRESOLVED</code> · refs/heads/project/34bZ3i4AvgJaaoaw5E9tH</div>
-          <div class="detail">2 starts refused at 07:45 · first landing still pending · the last three
-            landing jobs ended CHECK_FAILED</div>
-          <div class="btn primary">Open the project’s line settings</div>
-          <div class="btn tinted">Chat about this</div>
-          <div class="foot">Owner: you · coordinator is off — this stays with you</div>
+          <div class="next"><b>Next step</b>　把这条线建出来，或把绑定指到存在的那一条；在那之前重新开工只会得到同一个拒绝。</div>
+          <div class="rows">
+            <div class="srow"><span class="dot"></span><span class="ttl">web Providers 页给 OpenCode 一行：未装可 Install，装了指路</span><span class="st">Refused</span></div>
+            <div class="srow"><span class="dot"></span><span class="ttl">两端引擎牌常驻 OpenCode 行：未装只写原因，不再假装能 sign in</span><span class="st">Refused</span></div>
+          </div>
+          <div class="foot">Needs you · since 1d · coordinator is off — this stays with you</div>
         </div>
-        <div class="srow"><span class="dot"></span><span class="ttl">web Providers 页给 OpenCode 一行：未装可 Install，装了指路</span><span class="st">Refused</span></div>
-        <div class="srow"><span class="dot"></span><span class="ttl">两端引擎牌常驻 OpenCode 行：未装只写原因，不再假装能 sign in</span><span class="st">Refused</span></div>
-        <div class="srow"><span class="dot" style="background:var(--label-3)"></span><span class="ttl">iOS/macOS 修复跳转：不可用引擎行落到 web Providers 深链</span><span class="st">Blocked</span></div>
       </div>
     </div>
     <figcaption><b>③ 项目页：把「这条线不存在」变成项目层的异常</b>
       契约 §10.3 / SR50 早就把 <code>project_blocker.kind='SOURCE_UNRESOLVED'</code> 设计好、
       迁移 0231 也已经把它加进封闭集合 —— <b>至今没有一个地方写它</b>（文档两处实现记都点名了）。
-      把它接上：拒绝发生时落一条 blocker，项目页就有一张卡说清楚缺什么、影响哪几个任务。
+      写入方是那条被拒开工的收尾事务（<code>detail = { code, fixAction, ref, taskIds }</code>）；
+      项目页画的这一行：标题按 <code>fixAction</code>、why 与会话页同一张表（<code>lib/sourceRefusal</code>）、
+      次行点出 kind 与那条 ref、下一步是服务端写的 <code>requiredAction</code>、
+      下面是这次被拒的那几个任务行（<code>detail.taskIds</code>，行列的仍是既有卡片的 Resolve…）。
       这一步同时回答「为什么没人告诉我」：本项目的协调开关是关的，
       TASK_DISPATCH_REFUSED 那条唤醒根本投不出去，而异常卡不依赖它。</figcaption>
   </figure>

@@ -403,55 +403,58 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         XCTAssertEqual(ProjectDone.settledBadge(.derived), ProjectDone.recordedByOrbit)
     }
 
-    /// Which card the conversation draws, state by state, is the browser's: the question for an
-    /// OPEN, started project that looks finished — every criterion met by its work, no task
-    /// IN_PROGRESS — and that the projection does not call done (the owner's ruling of 2026-10-06
-    /// 09:29Z, which put back the condition the browser had before 0f47238c1); the owner's card
-    /// while asked or just pressed; the owner's DONE as its receipt; and a DONE Orbit recorded itself
-    /// as the Why-not-done card's terminal state — the coordinator's rulings of 2026-10-06, which the
-    /// web carries since ccb406ad0.
+    /// Which card the conversation draws, state by state, is the browser's: the owner's card while
+    /// the coordinator's request stands (or the row says Record as done…, or this conversation has
+    /// just recorded it — `adoptDoneSlot` on this client); the owner's DONE as its receipt; a DONE
+    /// Orbit recorded itself as the old card's terminal state; and NOTHING for an OPEN project
+    /// nobody has asked about, however finished it looks. At what the old question was asked of, the
+    /// browser and this client now agree by both drawing nothing — the owner's ruling of 2026-10-07
+    /// 04:20Z, which took "Why is this project not done?" out of the conversation.
     func testTheConversationDrawsTheWebsCardForEachState() throws {
         let card = try flat(Self.card)
         for part in [
-            "if (!project || project.status !== 'OPEN' || projectStarted(project) !== true) return false;",
-            "if (!projection || projection.done || projection.criteria.length === 0) return false;",
-            "if (!projection.criteria.every((criterion) => criterion.satisfied)) return false;",
-            "return (project.tasksByStatus?.IN_PROGRESS ?? 0) === 0;",
-            "if (!projection || !('counts' in projection)) return false;\n  return settlementHeldOnProject(project);",
-            // Asked of each read, never kept up past its condition (this client: `adoptDoneSlot`).
-            "const shown = (delivered && !unified) || held;",
             "&& document?.status === 'DONE'\n    && document.doneBy !== 'OWNER'",
-            "return <ProjectWhyNotDoneCard project={document as unknown as ProjectDoneDocument} />;",
             "const ownerRecordedDone = document?.status === 'DONE' && document.doneBy === 'OWNER';",
             "const ownerRecorded = receipt != null || (project.status === 'DONE' && project.doneBy === 'OWNER');",
             "const recorded = receipt != null || project.status === 'DONE';",
+            // Nothing else draws: the last thing every other read gets is the no-card return.
+            "  return null;\n}",
         ] {
             XCTAssertTrue(card.contains(part), "the conversation's card rule drifted: no \(part.debugDescription)")
         }
+        // The old question's card is rendered in the conversation exactly ONCE — its terminal
+        // state — and nothing asks it any more: not the gate, not the older projection.
+        XCTAssertEqual(card.components(separatedBy:
+            "return <ProjectWhyNotDoneCard project={document as unknown as ProjectDoneDocument} />;").count - 1, 1,
+                       "the Why-not-done card is rendered in the conversation again")
+        // The prose may still name the condition the question was asked by; the declaration itself
+        // is gone, which is what this reads.
+        XCTAssertFalse(card.contains("export function asksWhyNotDone("),
+                       "something asks why the project is not done again")
+        XCTAssertFalse(card.contains("if (!projection || !('counts' in projection)) return false;"),
+                       "the question's own gate is declared again")
+        XCTAssertFalse(card.contains("const shown = (delivered && !unified) || held;"),
+                       "the older projection's card is drawn in the conversation again")
+        XCTAssertFalse(card.contains("onAskCoordinator={delegate}"),
+                       "the conversation hands the card's facts over again")
         // …and this client's slot answers the same, state by state.
         func subject(_ status: String, doneBy: ProjectDoneBy? = nil, done: Bool = false,
-                     criteria: [ProjectDoneCriterion] = [ProjectDoneCriterion(definitionId: "c1", satisfied: true)],
-                     tasksByStatus: [String: Int]? = nil)
+                     criteria: [ProjectDoneCriterion] = [ProjectDoneCriterion(definitionId: "c1", satisfied: true)])
             -> ProjectDoneSubject {
             ProjectDoneSubject(title: "t", status: status, derivedDone: ProjectDerivedDone(
                 done: done, withheld: done ? [] : ["CRITERION_UNLANDED"], criteria: criteria,
                 counts: ProjectDoneCounts(criteria: criteria.count, met: criteria.filter(\.satisfied).count,
                                           landed: 0, onMain: 0, byReason: [:])),
-                doneBy: doneBy, tasksByStatus: tasksByStatus)
+                doneBy: doneBy)
         }
-        func slot(_ subject: ProjectDoneSubject, started: Bool? = true) -> ProjectDone.Slot {
-            ProjectDone.slot(subject: subject, request: nil, waitingKind: nil, record: nil, started: started)
+        func slot(_ subject: ProjectDoneSubject) -> ProjectDone.Slot {
+            ProjectDone.slot(subject: subject, request: nil, waitingKind: nil, record: nil)
         }
-        XCTAssertEqual(slot(subject("OPEN")), .notDone)
-        XCTAssertEqual(slot(subject("OPEN", tasksByStatus: ["DONE": 3, "OPEN": 1])), .notDone,
-                       "only IN_PROGRESS holds it back")
+        XCTAssertEqual(slot(subject("OPEN")), .none,
+                       "an OPEN project nobody asked about draws nothing, however finished it looks")
         XCTAssertEqual(slot(subject("OPEN", criteria: [ProjectDoneCriterion(definitionId: "c1", satisfied: true),
                                                        ProjectDoneCriterion(definitionId: "c2", satisfied: false)])),
-                       .none, "a criterion still unmet: the project does not look finished")
-        XCTAssertEqual(slot(subject("OPEN", tasksByStatus: ["IN_PROGRESS": 1, "DONE": 3])), .none,
-                       "a task still IN_PROGRESS: the project has not stopped")
-        XCTAssertEqual(slot(subject("OPEN"), started: false), .none, "not started: the start card asks")
-        XCTAssertEqual(slot(subject("OPEN"), started: nil), .none, "a read that does not say it started")
+                       .none, "a criterion still unmet is no more a reason than every criterion met")
         XCTAssertEqual(slot(subject("OPEN", criteria: [])), .none, "no criteria: nothing to explain")
         XCTAssertEqual(slot(subject("OPEN", done: true)), .none, "the projection already says done")
         XCTAssertEqual(slot(subject("DONE", doneBy: .owner)), .done(requestID: nil), "the owner's receipt")
@@ -461,7 +464,7 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         XCTAssertEqual(ProjectDone.settledBadge(terminal.doneBy), ProjectDone.recordedByOrbit)
         XCTAssertTrue(ProjectDone.recorded(subject("DONE"), record: nil))
         XCTAssertFalse(ProjectDone.recorded(subject("OPEN", doneBy: .owner, done: true), record: nil),
-                       "an OPEN project is asked, whatever its projection or a leftover doneBy says")
+                       "an OPEN project is not recorded done, whatever its projection or a leftover doneBy says")
     }
 
     /// Orbit checked counts what the browser's `orbitCheckedOpenItemCount` counts: every row of the

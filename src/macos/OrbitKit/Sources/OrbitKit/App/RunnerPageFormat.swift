@@ -281,6 +281,13 @@ public enum RunnerPageFormat {
         return auths.contains("no") ? authStatus("no") : nil
     }
 
+    /// Which of Kimi's two sites its login is on, said after the version on its Engines row (web's
+    /// `2.1.1 · kimi.ai`): the same CLI signs in to either, and a session spends that site's
+    /// subscription. Nil for every other engine, and before Kimi's first sign-in.
+    public static func engineSite(_ health: RunnerEngineHealth) -> String? {
+        KimiSite.current(of: health)?.domain
+    }
+
     /// Whether the Engines row offers Sign In: an engine Orbit signs in, installed, with a login
     /// signed out — never Antigravity's Default on a runner that runs on its own Gemini key
     /// (`runsOnEnvKey`), which is not out.
@@ -411,16 +418,20 @@ public enum RunnerPageFormat {
         /// signed in nor out, with nothing to sign in or pause, its line says what it runs on instead.
         public let envKey: Bool
         public var isDefault: Bool { id == CodexAccounts.defaultID }
-        /// The line under the name: where its login lives — and, for a Default renamed in Orbit, that
-        /// it is still the machine's own login (web's DEFAULT mark).
+        /// The line under the name: where its login lives — Kimi's, which keeps no directory of its
+        /// own, on which site — and, for a Default renamed in Orbit, that it is still the machine's
+        /// own login (web's DEFAULT mark).
         public var subtitle: String? {
-            guard isDefault, name != "Default" else { return home }
-            return [home, "Default"].compactMap { $0 }.joined(separator: " · ")
+            let place = home ?? site
+            guard isDefault, name != "Default" else { return place }
+            return [place, "Default"].compactMap { $0 }.joined(separator: " · ")
         }
         /// What a sign-in on this line names: the account, when the runner lists more than one; nil —
         /// the runner's own login, as every sign-in was before accounts — when it doesn't.
         public let signInAccount: String?
         public let pausedUntil: String?
+        /// Kimi only: the site its login is on, `kimi.com` or `kimi.ai` (`KimiSite`).
+        public var site: String? = nil
     }
 
     /// Every account an engine is signed into on that runner, Default first. One line for the
@@ -435,7 +446,8 @@ public enum RunnerPageFormat {
                                 name: CodexAccounts.label(CodexAccounts.defaultID, accounts: accounts),
                                 home: (own?.home ?? own?.codexHome).map(tildePath),
                                 auth: envKey ? nil : health.auth, envKey: envKey,
-                                signInAccount: nil, pausedUntil: own?.pausedUntil)]
+                                signInAccount: nil, pausedUntil: own?.pausedUntil,
+                                site: engineSite(health))]
         }
         return accounts.map { account in
             let envKey = runsOnEnvKey(health, account: account.id, auth: account.auth)

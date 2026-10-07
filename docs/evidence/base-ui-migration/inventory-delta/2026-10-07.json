@@ -1,0 +1,5211 @@
+{
+ "schemaVersion": 1,
+ "kind": "antd-inventory-delta",
+ "date": "2026-10-07",
+ "task": "34bkjldwhL7rVdYPgWBwz",
+ "p01": {
+  "commit": "1068a14b899911838526111b6814394e99762aaf",
+  "scopeHash": "ddd5a6c0906ca6c0f23f790a741d01429e1f8c79308e082b19648888135737df",
+  "readOnly": [
+   "audit-baseline.json",
+   "ownership.json",
+   "css-ownership.json",
+   "routes-and-tests.md",
+   "component-contracts.md"
+  ]
+ },
+ "scan": {
+  "commit": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+  "scopeHash": "bb238f9ed5588bd9e5c3ae2d4f32a9302b85fe7d219d5c05c6b1f16e024d5a2a",
+  "command": "node src/web/scripts/audit-antd.mjs --json",
+  "counts": {
+   "scannedFiles": 690,
+   "productionFiles": 343,
+   "testFiles": 345,
+   "antdProductionFiles": 100,
+   "antdTestFiles": 76,
+   "antSelectorTestFiles": 62,
+   "antClassTestFiles": 69,
+   "iconProductionFiles": 97,
+   "iconTestFiles": 0,
+   "relevantSourceFiles": 285,
+   "hitLines": {
+    "ant-class": 457,
+    "ant-design-support": 19,
+    "ant-selector": 428,
+    "antd-reference": 351,
+    "icon-class": 77,
+    "icon-reference": 108,
+    "imperative-confirm": 22,
+    "imperative-feedback": 218,
+    "internal-ref": 5,
+    "provider": 88,
+    "rc-support": 231,
+    "ref-focus": 25,
+    "theme": 2,
+    "use-app": 16,
+    "use-token": 1
+   },
+   "retirementBlockingFiles": 241
+  }
+ },
+ "rule": {
+  "useFile": "生产或测试文件导入 antd（或 v5 patch），或含以下任一命中：antd-reference、ant-class、ant-selector、internal-ref、use-app、use-token、react19-patch",
+  "useCss": "src/web/src/index.css 按行判定，只看 antd-reference、ant-class（与 css-ownership.json 相同），按命中原文对照，不用行号",
+  "candidates": "provider、theme、imperative-confirm、imperative-feedback、ref-focus 只在文件已是使用点时随文件归属；单独出现的已人工复核，见 reviewedNotUse",
+  "icons": "@ant-design/icons 与 .anticon 按项目约定保留，不是使用点"
+ },
+ "batches": {
+  "P4.1": [
+   "34Za39Do3N6tkmIMP0GBP",
+   "登录、初始化、个人资料、设置"
+  ],
+  "P4.2": [
+   "34Za39Feocgj42rrBYwzl",
+   "Provider、Runner、账号池、用户管理"
+  ],
+  "P4.3a": [
+   "34Za39GvWRQ08ZmKOpFNe",
+   "任务与项目的列表、详情页和工具栏（含其中的状态、调度、分享入口组件）"
+  ],
+  "P4.3b": [
+   "34blYpxEcHMAf4oafuC2W",
+   "任务/项目依赖图与业务决策、审阅、结算、确认类卡片"
+  ],
+  "P4.4": [
+   "34Za39J4QY3kDa5p2Wsau",
+   "Wiki、共享链接和公开只读页面，以及其余非会话入口"
+  ],
+  "P5.1": [
+   "34Za39L1H6V82d2sobzPY",
+   "会话导航、搜索、输出与选择控件"
+  ],
+  "P5.2": [
+   "34Za39Mm04q5p66pqUTtj",
+   "消息图片预览与富内容（Transcript）"
+  ],
+  "P5.3": [
+   "34Za39Ov1yysHZaYL6wgJ",
+   "会话工作区完整迁移（WorkspaceView）"
+  ],
+  "P6": [
+   "34Za39RS6A28G7xPqMD0p",
+   "AntD 运行时、Provider、主题与遗留说明退役"
+  ]
+ },
+ "inactiveOwners": {
+  "P1": "DONE",
+  "P1.1": "DONE",
+  "P1.2": "DONE",
+  "P2": "DONE",
+  "P2.1": "DONE",
+  "P2.2": "DONE",
+  "P2.3": "DONE",
+  "P3.1": "DONE",
+  "P3.2": "DONE",
+  "P3.3": "DONE",
+  "P4.3": "2026-10-07 拆成 P4.3a（34Za39GvWRQ08ZmKOpFNe）与 P4.3b（34blYpxEcHMAf4oafuC2W）"
+ },
+ "files": {
+  "src/web/src/components/AcceptanceConfirmationCard.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3b",
+   "reason": "验收确认卡，业务确认类卡片。"
+  },
+  "src/web/src/components/AccessTokenTable.tsx": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Button",
+    "Popconfirm",
+    "Table",
+    "TableColumnsType",
+    "Tag"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+     "short": "d233a6cd0",
+     "date": "2026-10-06",
+     "subject": "feat(auth): add access token management and /pat/self introspection",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.1",
+   "reason": "令牌表（Table、Tag、Popconfirm），主调用方是设置下的 /settings/access-tokens（P4.1），AdminUsersPage（P4.2）也复用；按 P0.1 AccountSelect 的先例由最先到达的调用方批次迁移、后到的批次复核。",
+   "reviewPhase": "P4.2"
+  },
+  "src/web/src/components/AccountPause.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "ant-selector"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 3,
+    "ant-selector": 3
+   },
+   "introducedBy": [
+    {
+     "commit": "0ba581f316e2aebe1f3ca06e75f25ebee3232bb2",
+     "short": "0ba581f31",
+     "date": "2026-10-04",
+     "subject": "feat: add manual account pause for runners and pool credentials",
+     "line": "main"
+    },
+    {
+     "commit": "c8cee9c19fcbbc61c127942eb1b54228f4cd7863",
+     "short": "c8cee9c19",
+     "date": "2026-10-04",
+     "subject": "refactor(web): move runner account actions into an overflow menu",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.2",
+   "reason": "AccountPause 的测试。"
+  },
+  "src/web/src/components/AccountPause.tsx": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Button",
+    "InputNumber",
+    "Modal",
+    "Radio",
+    "Tag"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "imperative-feedback": 2
+   },
+   "introducedBy": [
+    {
+     "commit": "0ba581f316e2aebe1f3ca06e75f25ebee3232bb2",
+     "short": "0ba581f31",
+     "date": "2026-10-04",
+     "subject": "feat: add manual account pause for runners and pool credentials",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.2",
+   "reason": "Runner 与账号池凭据的手动暂停（Modal、Radio、InputNumber、Tag、Button），只在 RunnerEngines 与 AccountPools 里渲染。"
+  },
+  "src/web/src/components/ConfirmationReviewTurnCards.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Button"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3b",
+   "reason": "复审请求/答复卡，审阅类卡片。"
+  },
+  "src/web/src/components/CoordinatorQuestionCard.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert",
+    "Input"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3b",
+   "reason": "协调者提问卡，业务决策卡片。"
+  },
+  "src/web/src/components/CriteriaChangeCard.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3b",
+   "reason": "验收项变更确认卡。"
+  },
+  "src/web/src/components/CriteriaDecisionCard.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3b",
+   "reason": "验收项提案的决定卡。"
+  },
+  "src/web/src/components/DecisionRail.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Typography"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3b",
+   "reason": "待回答事项固定栏，承载各决策卡的投影。"
+  },
+  "src/web/src/components/EvidenceDecisionCard.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3b",
+   "reason": "证据裁决卡。"
+  },
+  "src/web/src/components/MentionDeliveryNotes.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Tooltip"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "任务详情评论里 @ 提及的投递说明，只由 TaskDetailPanel 渲染。"
+  },
+  "src/web/src/components/NewAccessTokenDialog.tsx": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert",
+    "Button",
+    "Checkbox",
+    "Input",
+    "Modal",
+    "Radio",
+    "Select"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+     "short": "d233a6cd0",
+     "date": "2026-10-06",
+     "subject": "feat(auth): add access token management and /pat/self introspection",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.1",
+   "reason": "只由 AccessTokensPage 打开的新建令牌弹窗（Modal、Input、Radio、Select、Checkbox、Alert），属设置页的表单、校验与提交。"
+  },
+  "src/web/src/components/OwnerConfirmationCard.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3b",
+   "reason": "任务完成确认卡。"
+  },
+  "src/web/src/components/OwnerConfirmationReopen.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert",
+    "Button",
+    "Modal",
+    "Typography"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3b",
+   "reason": "确认复审后重新打开任务的弹窗，属确认卡流程。"
+  },
+  "src/web/src/components/OwnerConfirmationReview.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Input"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3b",
+   "reason": "确认卡的复审栏。"
+  },
+  "src/web/src/components/ProjectAcceptanceCard.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "ant-class",
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 2,
+    "antd-reference": 2
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "渲染 ProjectAcceptanceCard，随其批次。项目详情页的验收条目区块，只展示状态与跳转、不做决定（ProjectsPage、SharedProjectPage）。"
+  },
+  "src/web/src/components/ProjectAcceptanceCard.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert",
+    "Button",
+    "Card",
+    "Skeleton",
+    "Typography"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "项目详情页的验收条目区块，只展示状态与跳转、不做决定（ProjectsPage、SharedProjectPage）。"
+  },
+  "src/web/src/components/ProjectBlockers.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "ant-selector",
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 2,
+    "ant-selector": 2,
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": null,
+   "pending": {
+    "candidates": [
+     "P4.3a",
+     "P4.3b"
+    ],
+    "recommendation": "P4.3a",
+    "question": "项目阻塞区块在 ProjectsPage 详情页渲染（P4.3a），也嵌在 ProjectPromotionCard 晋升确认卡里（P4.3b），并带“解决说明”表单；按详情页区块归 P4.3a、由 P4.3b 复核卡内集成，还是随决策卡归 P4.3b？"
+   }
+  },
+  "src/web/src/components/ProjectBlockers.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert",
+    "Button",
+    "Input",
+    "Modal",
+    "Tag",
+    "Typography"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": null,
+   "pending": {
+    "candidates": [
+     "P4.3a",
+     "P4.3b"
+    ],
+    "recommendation": "P4.3a",
+    "question": "项目阻塞区块在 ProjectsPage 详情页渲染（P4.3a），也嵌在 ProjectPromotionCard 晋升确认卡里（P4.3b），并带“解决说明”表单；按详情页区块归 P4.3a、由 P4.3b 复核卡内集成，还是随决策卡归 P4.3b？"
+   }
+  },
+  "src/web/src/components/ProjectChainProgress.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Typography"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "项目详情页的链式进度文字区块，不是依赖图。"
+  },
+  "src/web/src/components/ProjectCoordinatorCard.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "渲染 ProjectCoordinatorCard，随其批次。项目详情页的协调会话卡：状态、导航和更多操作，不做业务决定。"
+  },
+  "src/web/src/components/ProjectCoordinatorCard.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Button",
+    "Dropdown",
+    "Space"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "项目详情页的协调会话卡：状态、导航和更多操作，不做业务决定。"
+  },
+  "src/web/src/components/ProjectCrossingsCard.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert",
+    "Button",
+    "Card",
+    "Skeleton",
+    "Space",
+    "Tag",
+    "Typography"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": null,
+   "pending": {
+    "candidates": [
+     "P4.3a",
+     "P4.3b"
+    ],
+    "recommendation": "P4.3b",
+    "question": "跨项目依赖卡带批准/拒绝确认（决策类，P4.3b），但渲染在 ProjectsPage 详情页和 TaskAttributionCard 里（P4.3a 的页面）；按决策功能归 P4.3b，还是按所在页面归 P4.3a？"
+   }
+  },
+  "src/web/src/components/ProjectDependencyGraph.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert",
+    "Button",
+    "Empty",
+    "Modal",
+    "Popover",
+    "Spin",
+    "Tooltip"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3b",
+   "reason": "项目任务依赖图。"
+  },
+  "src/web/src/components/ProjectGoalCard.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Typography"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "项目详情页的目标区块。"
+  },
+  "src/web/src/components/ProjectPanoramaHeader.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "ant-class"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "渲染 ProjectPanoramaHeader，随其批次。项目详情页头部的状态计数与操作入口。"
+  },
+  "src/web/src/components/ProjectPanoramaHeader.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert",
+    "Button",
+    "Spin",
+    "Typography"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "项目详情页头部的状态计数与操作入口。"
+  },
+  "src/web/src/components/ProjectProgressStatus.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "ant-class",
+    "ant-selector",
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 4,
+    "ant-selector": 2,
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": null,
+   "pending": {
+    "candidates": [
+     "P4.3a",
+     "P4.3b"
+    ],
+    "recommendation": "P4.3a",
+    "question": "项目进度状态（仍欠事项、预算、异常/修复表单）在 ProjectsPage、ProjectCoordinatorCard（P4.3a）、ProjectPromotionCard（P4.3b）和 WorkspaceView（P5.3）里都渲染；按项目详情区块归 P4.3a，还是随决策卡归 P4.3b？"
+   }
+  },
+  "src/web/src/components/ProjectProgressStatus.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert",
+    "Button",
+    "Input",
+    "Modal"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": null,
+   "pending": {
+    "candidates": [
+     "P4.3a",
+     "P4.3b"
+    ],
+    "recommendation": "P4.3a",
+    "question": "项目进度状态（仍欠事项、预算、异常/修复表单）在 ProjectsPage、ProjectCoordinatorCard（P4.3a）、ProjectPromotionCard（P4.3b）和 WorkspaceView（P5.3）里都渲染；按项目详情区块归 P4.3a，还是随决策卡归 P4.3b？"
+   }
+  },
+  "src/web/src/components/ProjectPromotionCard.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3b",
+   "reason": "Merge to main 等晋升确认卡。"
+  },
+  "src/web/src/components/ProjectReadyToRun.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "ant-selector",
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 4,
+    "ant-selector": 4,
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "渲染 ProjectReadyToRun，随其批次。项目详情页的手动运行/恢复/暂停调度区块。"
+  },
+  "src/web/src/components/ProjectReadyToRun.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert",
+    "Button",
+    "Popconfirm",
+    "Spin",
+    "Tag",
+    "Typography"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "imperative-feedback": 4
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "项目详情页的手动运行/恢复/暂停调度区块。"
+  },
+  "src/web/src/components/ProjectRunSettings.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert",
+    "Button",
+    "Input",
+    "InputNumber",
+    "Radio",
+    "Select",
+    "Spin",
+    "Switch"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "项目详情页的运行设置（调度参数）。"
+  },
+  "src/web/src/components/ProjectSections.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "渲染 ProjectSections，随其批次。项目列表的生命周期分组。"
+  },
+  "src/web/src/components/ProjectSections.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Button",
+    "List"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "项目列表的生命周期分组。"
+  },
+  "src/web/src/components/ProjectSettlementCard.tsx": {
+   "status": "changed",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert",
+    "Input",
+    "Modal"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "added": {
+    "antdImports": [
+     "Input",
+     "Modal"
+    ],
+    "hitKinds": {}
+   },
+   "introducedBy": [
+    {
+     "commit": "0f47238c1c6e39b7d1c4db8a8cbd8a6296b38832",
+     "short": "0f47238c1",
+     "date": "2026-10-04",
+     "subject": "feat(web): add project done settlement flow",
+     "line": "main"
+    }
+   ],
+   "p01Owner": "P4.3",
+   "owner": "P4.3b",
+   "reason": "P0.1 归 P4.3；结算卡属 P4.3b；main 0f47238c1 为项目完成结算流程新增的 Input/Modal 也在卡内。"
+  },
+  "src/web/src/components/ProjectShareControls.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "ant-selector"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 2,
+    "ant-selector": 2
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "渲染 ProjectShareControls，随其批次。项目页的分享入口与导出。"
+  },
+  "src/web/src/components/ProjectShareControls.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Button",
+    "Dropdown"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "项目页的分享入口与导出。"
+  },
+  "src/web/src/components/ProjectTasksGraph.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "ant-selector",
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 1,
+    "ant-selector": 1,
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3b",
+   "reason": "渲染 ProjectTasksGraph，随其批次。项目页与公开项目页的任务图分区。"
+  },
+  "src/web/src/components/ProjectTasksGraph.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Typography"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3b",
+   "reason": "项目页与公开项目页的任务图分区。"
+  },
+  "src/web/src/components/ProjectWhyNotDoneGate.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "antd-reference": 2
+   },
+   "introducedBy": [
+    {
+     "commit": "ff68293bb7ba377ad6e3155a4e15a82dd72d44a7",
+     "short": "ff68293bb",
+     "date": "2026-10-06",
+     "subject": "fix(web,ios,macos): ask why a project is not done only when it looks finished, and make the tally add up",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "只有测试数据里的 “antd migration”（以本项目为例的固定数据名），不是 antd 依赖；组件行为随 ProjectSettlementCard 由 P4.3b 复核，退役扫描里的这处文字由 P6 改名或登记为允许的说明。"
+  },
+  "src/web/src/components/ProjectsToolbar.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Button",
+    "Input",
+    "Segmented"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "项目列表工具栏。"
+  },
+  "src/web/src/components/QueuedUserTurn.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "antd-import",
+    "antd-provider",
+    "antd-text"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "antd-reference": 2,
+    "provider": 2
+   },
+   "introducedBy": [
+    {
+     "commit": "118fd4ce703f2211681d1dda09d698b3afe8d848",
+     "short": "118fd4ce7",
+     "date": "2026-10-06",
+     "subject": "refactor(web): draw the queued tail by the transcript's own dispatch",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P5.2",
+   "reason": "渲染 Transcript 的排队消息尾部（QueuedUserTurn 由 Transcript 导出），随 Transcript 归 P5.2。"
+  },
+  "src/web/src/components/RunnerEngines.antigravityAccounts.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "ant-selector"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 2,
+    "ant-selector": 2
+   },
+   "introducedBy": [
+    {
+     "commit": "712d324a8c3b0b2ecf7fd4d0f584587ae51dcb78",
+     "short": "712d324a8",
+     "date": "2026-10-06",
+     "subject": "feat(antigravity): keep several Google accounts per runner, like Claude Code and Codex",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.2",
+   "reason": "RunnerEngines 的 Antigravity 多账号测试。"
+  },
+  "src/web/src/components/RunnerEngines.test-helpers.ts": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "ant-selector",
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 2,
+    "ant-selector": 2,
+    "antd-reference": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "c8cee9c19fcbbc61c127942eb1b54228f4cd7863",
+     "short": "c8cee9c19",
+     "date": "2026-10-04",
+     "subject": "refactor(web): move runner account actions into an overflow menu",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.2",
+   "reason": "RunnerEngines 各测试共用的 .ant-dropdown 菜单查找辅助；文件名不是 test/spec，审计记为生产，实际随 RunnerEngines 的测试迁移。"
+  },
+  "src/web/src/components/RunnerEngines.tsx": {
+   "status": "changed",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Button",
+    "Dropdown",
+    "MenuProps",
+    "Popconfirm",
+    "Tag"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "imperative-feedback": 5
+   },
+   "added": {
+    "antdImports": [
+     "Dropdown",
+     "MenuProps"
+    ],
+    "hitKinds": {}
+   },
+   "introducedBy": [
+    {
+     "commit": "c8cee9c19fcbbc61c127942eb1b54228f4cd7863",
+     "short": "c8cee9c19",
+     "date": "2026-10-04",
+     "subject": "refactor(web): move runner account actions into an overflow menu",
+     "line": "main"
+    }
+   ],
+   "p01Owner": "P4.2",
+   "owner": "P4.2",
+   "reason": "P0.1 已归 P4.2；main c8cee9c19 把账号操作收进 Dropdown 溢出菜单，新增 Dropdown/MenuProps，归属不变。"
+  },
+  "src/web/src/components/StartProjectCard.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert",
+    "Input",
+    "InputNumber",
+    "Modal",
+    "Radio",
+    "Spin",
+    "Switch"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3b",
+   "reason": "项目启动确认卡；ProjectRunSettings 只从这里引用并发上限常量。"
+  },
+  "src/web/src/components/StatusTag.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Tag"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P1.2",
+   "owner": "P6",
+   "reason": "死代码：src/web 里没有任何引用（P0.1 基线时也没有，当时的 StatusTag 只是 RunnerEngines 内的同名局部函数），P1.2 也未切换它；P6 删除该文件即关闭这处 antd Tag 导入。",
+   "action": "delete"
+  },
+  "src/web/src/components/TaskAttributionCard.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert",
+    "Card",
+    "Skeleton",
+    "Tag",
+    "Typography"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "任务详情里的归属/来源区块（TaskDetailPanel 渲染），不是决策卡。"
+  },
+  "src/web/src/components/TaskDependencyGraph.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Modal",
+    "Popconfirm",
+    "Tooltip"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3b",
+   "reason": "任务依赖图（TaskDetailPanel 与 ProjectDependencyGraph 渲染）。"
+  },
+  "src/web/src/components/TaskDependencyList.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Popconfirm"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": null,
+   "pending": {
+    "candidates": [
+     "P4.3a",
+     "P4.3b"
+    ],
+    "recommendation": "P4.3a",
+    "question": "任务依赖列表（链接、状态、移除确认）在 TaskDetailPanel 的依赖视图里与依赖图切换显示；它不是图，按任务详情归 P4.3a，还是随依赖主题归 P4.3b？"
+   }
+  },
+  "src/web/src/components/TaskDetailPanel.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P3.2",
+   "owner": "P6",
+   "reason": "P3.2 已关闭此测试的 .ant-* 选择器（见 p3.2/inventory-closure.json），剩一句说明 antd Tooltip 空标题行为的注释；P6 改写。"
+  },
+  "src/web/src/components/TaskScheduleEditor.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "ant-class"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 2
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "渲染 TaskScheduleEditor，随其批次。任务详情的开始时间调度编辑。"
+  },
+  "src/web/src/components/TaskScheduleEditor.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Button",
+    "Input",
+    "Typography"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "imperative-feedback": 4
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "任务详情的开始时间调度编辑。"
+  },
+  "src/web/src/components/ToastViewport.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P2.3",
+   "owner": "P6",
+   "reason": "P2.3 已完成且按 P0.1 只保留验证；剩下的是说明替代 AntD message 的注释，P6 退役时改写或移入证据目录。"
+  },
+  "src/web/src/components/WikiActivityPage.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "ant-class"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 2
+   },
+   "introducedBy": [
+    {
+     "commit": "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+     "short": "6c4e0ac0e",
+     "date": "2026-10-06",
+     "subject": "feat(wiki): Activity page, the head's Activity badge, one number waiting, space names and defaults",
+     "line": "main"
+    },
+    {
+     "commit": "a884fda36851b6257d6777efbc038c325cd75a45",
+     "short": "a884fda36",
+     "date": "2026-10-07",
+     "subject": "feat(wiki): show other spaces' pending work on the desktop Activity page",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.4",
+   "reason": "Wiki Activity 页测试。"
+  },
+  "src/web/src/components/WikiActivityPage.tsx": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Button"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+     "short": "6c4e0ac0e",
+     "date": "2026-10-06",
+     "subject": "feat(wiki): Activity page, the head's Activity badge, one number waiting, space names and defaults",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.4",
+   "reason": "WikiPage 里的 Wiki Activity 页（Button）。"
+  },
+  "src/web/src/components/WikiHome.window.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "provider": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "b854735466b1de2b92bde475d453b87afbcaf3e0",
+     "short": "b85473546",
+     "date": "2026-10-06",
+     "subject": "fix(wiki): read the home's principles and decisions by kind, name Review's entries, hide the iOS Wiki row when the wiki is off",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.4",
+   "reason": "渲染 WikiPage 首页的测试（AntApp 包裹）。"
+  },
+  "src/web/src/components/WikiHomeContent.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "ant-selector",
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "ant-class": 1,
+    "ant-selector": 1,
+    "antd-reference": 1,
+    "provider": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+     "short": "2f9cc095f",
+     "date": "2026-10-07",
+     "subject": "refactor(wiki): list topic articles on the Wiki home, drop status cards",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.4",
+   "reason": "渲染 WikiPage 首页内容的测试（AntApp 包裹、.ant-* 选择器）。"
+  },
+  "src/web/src/components/WorkspaceView.composerMenu.test.tsx": {
+   "status": "changed",
+   "category": "test",
+   "types": [
+    "ant-class",
+    "ant-selector",
+    "antd-import",
+    "antd-provider",
+    "antd-text"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "ant-class": 13,
+    "ant-selector": 12,
+    "antd-reference": 4,
+    "provider": 1
+   },
+   "added": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "introducedBy": [
+    {
+     "commit": "81f15bef1a60927925e56b1916b82df490da940b",
+     "short": "81f15bef1",
+     "date": "2026-10-06",
+     "subject": "feat(web): auto-sizing Orbit Textarea with a native ref and borderless variant",
+     "line": "project"
+    }
+   ],
+   "p01Owner": "P5.3",
+   "owner": "P5.3",
+   "reason": "P0.1 已归 P5.3；P3.1（81f15bef1）把对 textarea.ant-input 规则的源码断言改成选择器列表并加了一处说明，归属不变。"
+  },
+  "src/web/src/components/WorkspaceView.coordinatorChat.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "provider": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "00cf1c7d93f835bdbeabf42e345093381bc13cfa",
+     "short": "00cf1c7d9",
+     "date": "2026-10-04",
+     "subject": "feat(projects): add \"Chat about this\" to open-item exception cards",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P5.3",
+   "reason": "渲染 WorkspaceView 的 “Chat about this” 测试（AntApp 包裹）。"
+  },
+  "src/web/src/components/WorkspaceView.loginPool.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "antd-import",
+    "antd-provider",
+    "antd-text"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "antd-reference": 2,
+    "provider": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "f929ab1e49d4db13a9ca9c713811d3a2dd2bf344",
+     "short": "f929ab1e4",
+     "date": "2026-10-05",
+     "subject": "feat(pools): name the ChatGPT account a login-pool session runs on in its composer",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P5.3",
+   "reason": "渲染 WorkspaceView 输入框的登录池账号测试（AntApp 包裹）。"
+  },
+  "src/web/src/components/WorkspaceView.projectSessions.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "ant-class",
+    "ant-selector",
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "ant-class": 8,
+    "ant-selector": 6,
+    "antd-reference": 1,
+    "provider": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "68883c7cc78d56f8606d204d163adaadc4faf291",
+     "short": "68883c7cc",
+     "date": "2026-10-04",
+     "subject": "feat(web): navigate project entries and list project sessions",
+     "line": "main"
+    },
+    {
+     "commit": "609d4f22660fd4756915f498c72a8f3aed380b95",
+     "short": "609d4f226",
+     "date": "2026-10-05",
+     "subject": "fix: show all project sessions and align Web iOS actions",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P5.1",
+   "reason": "实际渲染 SessionSearch 会话列表里的项目条目与其 .ant-dropdown 行菜单，属会话导航（P5.1）。"
+  },
+  "src/web/src/components/WorkspaceView.sessionProjects.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "ant-selector",
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "ant-class": 3,
+    "ant-selector": 3,
+    "antd-reference": 1,
+    "provider": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "634c8cb0ced5f053c68946b5556bb6d58231bf4c",
+     "short": "634c8cb0c",
+     "date": "2026-10-04",
+     "subject": "feat(web): group project sessions into compact list entries",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P5.1",
+   "reason": "实际渲染 SessionSearch 会话列表的项目分组与筛选子菜单，属会话导航（P5.1）。"
+  },
+  "src/web/src/components/WorkspaceView.taskStartWaiting.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "provider": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "9a7e818a2de1dcb2ec3116ffc9609167beecdbf9",
+     "short": "9a7e818a2",
+     "date": "2026-10-06",
+     "subject": "test: a resumed run's brief waits as its TaskStart card, and the web placeholder carries every card",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P5.3",
+   "reason": "渲染 WorkspaceView 的 TaskStart 等待卡测试（AntApp 包裹）。"
+  },
+  "src/web/src/components/ui/Floating.css": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "1a70fbb902d6b24453a57994f782a40546d67c94",
+     "short": "1a70fbb90",
+     "date": "2026-10-04",
+     "subject": "feat(web): add Orbit menus, popovers and choice controls",
+     "line": "project"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "Orbit 浮层样式里说明与 AntD 对齐的注释（P2.2）；P6 退役时改写或移入证据目录。"
+  },
+  "src/web/src/components/ui/MultiSelect.tsx": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "1a70fbb902d6b24453a57994f782a40546d67c94",
+     "short": "1a70fbb90",
+     "date": "2026-10-04",
+     "subject": "feat(web): add Orbit menus, popovers and choice controls",
+     "line": "project"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "Orbit MultiSelect 里说明与 AntD 对齐的注释（P2.2）；P6 退役时改写。"
+  },
+  "src/web/src/components/ui/README.md": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "ant-selector",
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 2,
+    "ant-selector": 2,
+    "antd-reference": 11,
+    "ref-focus": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "1a70fbb902d6b24453a57994f782a40546d67c94",
+     "short": "1a70fbb90",
+     "date": "2026-10-04",
+     "subject": "feat(web): add Orbit menus, popovers and choice controls",
+     "line": "project"
+    },
+    {
+     "commit": "297d33e97729c66ebdc8f2b63b0e094db1d9e8df",
+     "short": "297d33e97",
+     "date": "2026-10-04",
+     "subject": "feat(web): add Orbit basic controls and state comparisons",
+     "line": "project"
+    },
+    {
+     "commit": "5bea0a3f6a4e51997cba50c9da90be7cfd16f3b8",
+     "short": "5bea0a3f6",
+     "date": "2026-10-04",
+     "subject": "feat(web): add Base UI theme foundations and coexistence checks",
+     "line": "project"
+    },
+    {
+     "commit": "df79e55f7304754ac9a2ebe66df5381cc8d3d004",
+     "short": "df79e55f7",
+     "date": "2026-10-04",
+     "subject": "feat(web): add Orbit dialogs drawers and async confirmation",
+     "line": "project"
+    },
+    {
+     "commit": "3389ce2993d91015f76a2e2fa777f6bda6c83670",
+     "short": "3389ce299",
+     "date": "2026-10-06",
+     "subject": "docs(web): describe the Textarea ref without naming the AntD internal",
+     "line": "project"
+    },
+    {
+     "commit": "81f15bef1a60927925e56b1916b82df490da940b",
+     "short": "81f15bef1",
+     "date": "2026-10-06",
+     "subject": "feat(web): auto-sizing Orbit Textarea with a native ref and borderless variant",
+     "line": "project"
+    },
+    {
+     "commit": "5311a0cf78bd244126723244538e5308ce389d7c",
+     "short": "5311a0cf7",
+     "date": "2026-10-07",
+     "subject": "fix(web): keep the shared dialog shell at 22px, unitless only in the pilot's dialogs",
+     "line": "project"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "components/ui 使用约定里与 AntD 对照、说明替代关系的文字（P1.1–P3.1 写入）；不是运行时依赖，但退役扫描会拦，P6 移除 AntD 时改写或移入证据目录。"
+  },
+  "src/web/src/components/ui/Select.tsx": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "antd-reference": 1,
+    "ref-focus": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "1a70fbb902d6b24453a57994f782a40546d67c94",
+     "short": "1a70fbb90",
+     "date": "2026-10-04",
+     "subject": "feat(web): add Orbit menus, popovers and choice controls",
+     "line": "project"
+    },
+    {
+     "commit": "31aa07c913fc3833935d6f17ecb1064a790b8503",
+     "short": "31aa07c91",
+     "date": "2026-10-06",
+     "subject": "fix(web): let Select keys that beat the focus move act on the open list",
+     "line": "project"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "Orbit Select 里说明与 AntD 对齐的注释（P2.2）；P6 退役时改写。"
+  },
+  "src/web/src/components/ui/SelectEmpty.tsx": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "1a70fbb902d6b24453a57994f782a40546d67c94",
+     "short": "1a70fbb90",
+     "date": "2026-10-04",
+     "subject": "feat(web): add Orbit menus, popovers and choice controls",
+     "line": "project"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "Orbit Select 空状态里说明与 AntD 对齐的注释（P2.2）；P6 退役时改写。"
+  },
+  "src/web/src/components/ui/TextControls.css": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "antd-reference": 5
+   },
+   "introducedBy": [
+    {
+     "commit": "297d33e97729c66ebdc8f2b63b0e094db1d9e8df",
+     "short": "297d33e97",
+     "date": "2026-10-04",
+     "subject": "feat(web): add Orbit basic controls and state comparisons",
+     "line": "project"
+    },
+    {
+     "commit": "3dd6e9b5185b0dfd98dd678fbde0df560a29bba5",
+     "short": "3dd6e9b51",
+     "date": "2026-10-06",
+     "subject": "fix(web): keep Orbit text-field focus over hover and 16px up to 960px",
+     "line": "project"
+    },
+    {
+     "commit": "81f15bef1a60927925e56b1916b82df490da940b",
+     "short": "81f15bef1",
+     "date": "2026-10-06",
+     "subject": "feat(web): auto-sizing Orbit Textarea with a native ref and borderless variant",
+     "line": "project"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "Orbit 文本控件样式里说明与 AntD 对齐的注释（P1.2/P3.1）；P6 退役时改写或移入证据目录。"
+  },
+  "src/web/src/components/ui/Textarea.tsx": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "antd-reference": 2
+   },
+   "introducedBy": [
+    {
+     "commit": "297d33e97729c66ebdc8f2b63b0e094db1d9e8df",
+     "short": "297d33e97",
+     "date": "2026-10-04",
+     "subject": "feat(web): add Orbit basic controls and state comparisons",
+     "line": "project"
+    },
+    {
+     "commit": "81f15bef1a60927925e56b1916b82df490da940b",
+     "short": "81f15bef1",
+     "date": "2026-10-06",
+     "subject": "feat(web): auto-sizing Orbit Textarea with a native ref and borderless variant",
+     "line": "project"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "Orbit Textarea 里说明与 AntD 对齐的注释（P3.1）；P6 退役时改写。"
+  },
+  "src/web/src/components/ui/__fixtures__/ChoicesFixture.css": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "ant-selector",
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 1,
+    "ant-selector": 1,
+    "antd-reference": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "1a70fbb902d6b24453a57994f782a40546d67c94",
+     "short": "1a70fbb90",
+     "date": "2026-10-04",
+     "subject": "feat(web): add Orbit menus, popovers and choice controls",
+     "line": "project"
+    },
+    {
+     "commit": "6e3e4f46413debb5702386baed3823d8cdf3ae64",
+     "short": "6e3e4f464",
+     "date": "2026-10-06",
+     "subject": "feat(web): Orbit components and fidelity fixes for the task panel pilot",
+     "line": "project"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "ChoicesFixture 的 AntD 参照样式（P2.2/P3.2），随该样例由 P6 处理。"
+  },
+  "src/web/src/components/ui/__fixtures__/ChoicesFixture.tsx": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App",
+    "Button",
+    "ConfigProvider",
+    "Dropdown",
+    "Modal",
+    "Popover",
+    "Select",
+    "Tooltip"
+   ],
+   "hitKinds": {
+    "antd-reference": 2,
+    "provider": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "1a70fbb902d6b24453a57994f782a40546d67c94",
+     "short": "1a70fbb90",
+     "date": "2026-10-04",
+     "subject": "feat(web): add Orbit menus, popovers and choice controls",
+     "line": "project"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "ui-migration 浏览器对照用的 AntD 参照样例（P2.2），故意导入 antd 渲染旧实现；antd 移除时须一并删除或改为只渲染 Orbit 组件。"
+  },
+  "src/web/src/components/ui/__fixtures__/ComposerFixture.css": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "ant-selector",
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 1,
+    "ant-selector": 1,
+    "antd-reference": 2
+   },
+   "introducedBy": [
+    {
+     "commit": "e207a13ebae835b5e0e0baa99debf70879fdb726",
+     "short": "e207a13eb",
+     "date": "2026-10-06",
+     "subject": "test(web): compare the Orbit Textarea with the AntD field in the real composers",
+     "line": "project"
+    },
+    {
+     "commit": "076e4ad0cc3e43cbc1a1dcaec3b0a609760dabe8",
+     "short": "076e4ad0c",
+     "date": "2026-10-07",
+     "subject": "test(web): keep the comment field's flex rule for the composer fixture's AntD sample",
+     "line": "project"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "ComposerFixture 的 AntD 参照样式（P3.1/P3.2），随该样例由 P6 处理。"
+  },
+  "src/web/src/components/ui/__fixtures__/ComposerFixture.tsx": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "antd-import",
+    "antd-provider",
+    "antd-text",
+    "internal-ref"
+   ],
+   "antdImports": [
+    "App",
+    "Avatar",
+    "Button",
+    "ConfigProvider",
+    "Image",
+    "Input"
+   ],
+   "hitKinds": {
+    "antd-reference": 3,
+    "internal-ref": 1,
+    "provider": 1,
+    "ref-focus": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "e207a13ebae835b5e0e0baa99debf70879fdb726",
+     "short": "e207a13eb",
+     "date": "2026-10-06",
+     "subject": "test(web): compare the Orbit Textarea with the AntD field in the real composers",
+     "line": "project"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "ui-migration 输入框对照用的 AntD 参照样例（P3.1），含 TextArea 内部 ref；antd 移除时须一并处理。"
+  },
+  "src/web/src/components/ui/__fixtures__/ControlsFixture.css": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "ant-selector"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 1,
+    "ant-selector": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "297d33e97729c66ebdc8f2b63b0e094db1d9e8df",
+     "short": "297d33e97",
+     "date": "2026-10-04",
+     "subject": "feat(web): add Orbit basic controls and state comparisons",
+     "line": "project"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "ControlsFixture 的 AntD 参照样式（P1.2），随该样例由 P6 处理。"
+  },
+  "src/web/src/components/ui/__fixtures__/ControlsFixture.tsx": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "antd-import",
+    "antd-provider",
+    "antd-text"
+   ],
+   "antdImports": [
+    "App",
+    "Button",
+    "Checkbox",
+    "ConfigProvider",
+    "Input",
+    "Radio",
+    "Spin",
+    "Switch",
+    "Tag"
+   ],
+   "hitKinds": {
+    "antd-reference": 2,
+    "provider": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "297d33e97729c66ebdc8f2b63b0e094db1d9e8df",
+     "short": "297d33e97",
+     "date": "2026-10-04",
+     "subject": "feat(web): add Orbit basic controls and state comparisons",
+     "line": "project"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "ui-migration 基础控件对照用的 AntD 参照样例（P1.2）。"
+  },
+  "src/web/src/components/ui/__fixtures__/FoundationFixture.tsx": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "antd-import",
+    "antd-provider",
+    "antd-text"
+   ],
+   "antdImports": [
+    "App",
+    "Button",
+    "ConfigProvider",
+    "Modal"
+   ],
+   "hitKinds": {
+    "antd-reference": 7,
+    "provider": 2
+   },
+   "introducedBy": [
+    {
+     "commit": "5bea0a3f6a4e51997cba50c9da90be7cfd16f3b8",
+     "short": "5bea0a3f6",
+     "date": "2026-10-04",
+     "subject": "feat(web): add Base UI theme foundations and coexistence checks",
+     "line": "project"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "ui-migration 主题基础对照用的 AntD 参照样例（P1.1）。"
+  },
+  "src/web/src/components/ui/__fixtures__/OverlaysFixture.tsx": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "antd-imperative",
+    "antd-import",
+    "antd-provider",
+    "antd-text",
+    "antd-use-app"
+   ],
+   "antdImports": [
+    "App",
+    "Button",
+    "ConfigProvider",
+    "Drawer",
+    "Input",
+    "Modal",
+    "Popconfirm",
+    "Select"
+   ],
+   "hitKinds": {
+    "antd-reference": 5,
+    "imperative-confirm": 1,
+    "provider": 1,
+    "use-app": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "df79e55f7304754ac9a2ebe66df5381cc8d3d004",
+     "short": "df79e55f7",
+     "date": "2026-10-04",
+     "subject": "feat(web): add Orbit dialogs drawers and async confirmation",
+     "line": "project"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "ui-migration 弹层对照用的 AntD 参照样例（P2.1），含 useApp 与 modal.confirm。"
+  },
+  "src/web/src/components/ui/__fixtures__/ToastsFixture.tsx": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "antd-imperative",
+    "antd-import",
+    "antd-provider",
+    "antd-use-app"
+   ],
+   "antdImports": [
+    "App",
+    "ConfigProvider"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "imperative-confirm": 1,
+    "provider": 1,
+    "use-app": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "e361ee3734bee190daf62cfb2f54bc3739df18df",
+     "short": "e361ee373",
+     "date": "2026-10-04",
+     "subject": "fix(web): keep Orbit notifications accessible inside modal overlays",
+     "line": "project"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "ui-migration 通知对照用的 AntD 参照样例（P2.3），含 useApp 与 modal.confirm。"
+  },
+  "src/web/src/components/ui/boundary.test.ts": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "antd-reference": 3
+   },
+   "introducedBy": [
+    {
+     "commit": "5bea0a3f6a4e51997cba50c9da90be7cfd16f3b8",
+     "short": "5bea0a3f6",
+     "date": "2026-10-04",
+     "subject": "feat(web): add Base UI theme foundations and coexistence checks",
+     "line": "project"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "断言 components/ui 不导入 antd 的负向测试（P1.1）；P6 决定保留为允许的负向断言还是改写，不得为过扫描删掉有效断言。"
+  },
+  "src/web/src/indexCss.test.ts": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P1",
+   "owner": "P6",
+   "reason": "P0.1 的 P1 测试；剩一句提到 AntD 通知规则历史的注释，P6 改写。"
+  },
+  "src/web/src/lib/toast.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P2",
+   "owner": "P6",
+   "reason": "P0.1 的 P2 测试；剩一句对比 AntD 关闭回调的注释，P6 改写。"
+  },
+  "src/web/src/lib/toast.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "antd-reference": 1,
+    "imperative-feedback": 1
+   },
+   "p01Owner": "P2.3",
+   "owner": "P6",
+   "reason": "同 ToastViewport：P2.3 已完成，剩余为说明 AntD 历史的注释。"
+  },
+  "src/web/src/lib/toastStore.ts": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P2.3",
+   "owner": "P6",
+   "reason": "同 ToastViewport：P2.3 已完成，剩余为说明 AntD 历史的注释。"
+  },
+  "src/web/src/pages/AccessTokensPage.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "ant-selector"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 10,
+    "ant-selector": 10
+   },
+   "introducedBy": [
+    {
+     "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+     "short": "d233a6cd0",
+     "date": "2026-10-06",
+     "subject": "feat(auth): add access token management and /pat/self introspection",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.1",
+   "reason": "覆盖 AccessTokensPage 与新建令牌弹窗，.ant-* 选择器随页面迁移改为角色/标签。"
+  },
+  "src/web/src/pages/AccessTokensPage.tsx": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Button",
+    "Spin"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "imperative-feedback": 4
+   },
+   "introducedBy": [
+    {
+     "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+     "short": "d233a6cd0",
+     "date": "2026-10-06",
+     "subject": "feat(auth): add access token management and /pat/self introspection",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.1",
+   "reason": "/settings/access-tokens 设置页（Button、Spin）。"
+  },
+  "src/web/src/pages/AdminUsersPage.accessTokens.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "ant-selector",
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "ant-class": 9,
+    "ant-selector": 9,
+    "antd-reference": 1,
+    "provider": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+     "short": "d233a6cd0",
+     "date": "2026-10-06",
+     "subject": "feat(auth): add access token management and /pat/self introspection",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.2",
+   "reason": "管理员用户页里的令牌表测试，随 AdminUsersPage 归 P4.2。"
+  },
+  "src/web/src/pages/AdminUsersPage.signIn.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "ant-selector",
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "ant-class": 4,
+    "ant-selector": 4,
+    "antd-reference": 1,
+    "provider": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "558a8ba1fcd15bb40c187460bbebc2a5e0c37d61",
+     "short": "558a8ba1f",
+     "date": "2026-10-07",
+     "subject": "feat(auth): link and unlink Google from the profile page, admin unlink, signInMethods, Sign-in settings (S4)",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.2",
+   "reason": "管理员用户页的登录方式测试，随 AdminUsersPage 归 P4.2。"
+  },
+  "src/web/src/pages/AdminUsersPage.tsx": {
+   "status": "changed",
+   "category": "production",
+   "types": [
+    "antd-import",
+    "antd-use-app"
+   ],
+   "antdImports": [
+    "App",
+    "Button",
+    "Input",
+    "Modal",
+    "Popconfirm",
+    "Space",
+    "Spin",
+    "Table",
+    "TableColumnsType",
+    "Tag"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "imperative-feedback": 10,
+    "use-app": 1
+   },
+   "added": {
+    "antdImports": [
+     "Spin"
+    ],
+    "hitKinds": {}
+   },
+   "introducedBy": [
+    {
+     "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+     "short": "d233a6cd0",
+     "date": "2026-10-06",
+     "subject": "feat(auth): add access token management and /pat/self introspection",
+     "line": "main"
+    },
+    {
+     "commit": "558a8ba1fcd15bb40c187460bbebc2a5e0c37d61",
+     "short": "558a8ba1f",
+     "date": "2026-10-07",
+     "subject": "feat(auth): link and unlink Google from the profile page, admin unlink, signInMethods, Sign-in settings (S4)",
+     "line": "main"
+    }
+   ],
+   "p01Owner": "P4.2",
+   "owner": "P4.2",
+   "reason": "P0.1 已归 P4.2；main 为令牌与 Google 解绑新增 Spin，归属不变。"
+  },
+  "src/web/src/pages/CliLoginPage.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "ant-selector"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 1,
+    "ant-selector": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "cf98836d4142767159547af9e7aa5c07db3d45b1",
+     "short": "cf98836d4",
+     "date": "2026-10-06",
+     "subject": "feat: orbit login through the browser (PAT device flow)",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.1",
+   "reason": "CliLoginPage 的测试。"
+  },
+  "src/web/src/pages/CliLoginPage.tsx": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert",
+    "Button",
+    "Card",
+    "Descriptions",
+    "Result",
+    "Space",
+    "Spin",
+    "Tag"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "imperative-feedback": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "cf98836d4142767159547af9e7aa5c07db3d45b1",
+     "short": "cf98836d4",
+     "date": "2026-10-06",
+     "subject": "feat: orbit login through the browser (PAT device flow)",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.1",
+   "reason": "/cli-login 在浏览器里批准 orbit login（PAT device flow）的登录类页面（Card、Descriptions、Result、Alert、Tag、Spin、Space、Button）。"
+  },
+  "src/web/src/pages/ProfilePage.revokeAccessTokens.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "ant-selector"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 2,
+    "ant-selector": 2
+   },
+   "introducedBy": [
+    {
+     "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+     "short": "d233a6cd0",
+     "date": "2026-10-06",
+     "subject": "feat(auth): add access token management and /pat/self introspection",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.1",
+   "reason": "个人资料页改密码时撤销令牌的测试。"
+  },
+  "src/web/src/pages/ProfilePage.signInMethods.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "ant-selector",
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 1,
+    "ant-selector": 1,
+    "antd-reference": 1,
+    "imperative-confirm": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "558a8ba1fcd15bb40c187460bbebc2a5e0c37d61",
+     "short": "558a8ba1f",
+     "date": "2026-10-07",
+     "subject": "feat(auth): link and unlink Google from the profile page, admin unlink, signInMethods, Sign-in settings (S4)",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.1",
+   "reason": "个人资料页的登录方式（Google 关联/解绑）测试。"
+  },
+  "src/web/src/pages/ProfilePage.tsx": {
+   "status": "changed",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Avatar",
+    "Button",
+    "Card",
+    "Checkbox",
+    "Form",
+    "Input"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "imperative-feedback": 7
+   },
+   "added": {
+    "antdImports": [
+     "Checkbox"
+    ],
+    "hitKinds": {}
+   },
+   "introducedBy": [
+    {
+     "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+     "short": "d233a6cd0",
+     "date": "2026-10-06",
+     "subject": "feat(auth): add access token management and /pat/self introspection",
+     "line": "main"
+    }
+   ],
+   "p01Owner": "P4.1",
+   "owner": "P4.1",
+   "reason": "P0.1 已归 P4.1；main d233a6cd0 为改密码时撤销令牌新增 Checkbox，归属不变。"
+  },
+  "src/web/src/pages/ProjectCoordinatorSection.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "ant-selector",
+    "antd-import",
+    "antd-provider",
+    "antd-text",
+    "antd-use-app"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "ant-class": 6,
+    "ant-selector": 6,
+    "antd-reference": 7,
+    "provider": 1,
+    "use-app": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "渲染 ProjectsPage，随其批次。项目列表与项目详情页。"
+  },
+  "src/web/src/pages/ProjectDetailPanorama.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "渲染 ProjectsPage，随其批次。项目列表与项目详情页。"
+  },
+  "src/web/src/pages/ProjectTasksTopology.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "ant-selector"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 1,
+    "ant-selector": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "渲染 ProjectsPage，随其批次。项目列表与项目详情页。"
+  },
+  "src/web/src/pages/ProjectsPage.delete.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "ant-selector",
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 1,
+    "ant-selector": 1,
+    "antd-reference": 3
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "渲染 ProjectsPage，随其批次。项目列表与项目详情页。"
+  },
+  "src/web/src/pages/ProjectsPage.newTask.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "antd-import",
+    "antd-provider",
+    "antd-text",
+    "antd-use-app"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "antd-reference": 4,
+    "provider": 1,
+    "use-app": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "渲染 ProjectsPage，随其批次。项目列表与项目详情页。"
+  },
+  "src/web/src/pages/ProjectsPage.status.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "ant-class",
+    "ant-selector",
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 3,
+    "ant-selector": 2,
+    "antd-reference": 4
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "渲染 ProjectsPage，随其批次。项目列表与项目详情页。"
+  },
+  "src/web/src/pages/ProjectsPage.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "ant-class"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 5
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "渲染 ProjectsPage，随其批次。项目列表与项目详情页。"
+  },
+  "src/web/src/pages/ProjectsPage.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-imperative",
+    "antd-import",
+    "antd-text",
+    "antd-use-app"
+   ],
+   "antdImports": [
+    "Alert",
+    "App",
+    "Button",
+    "Empty",
+    "List",
+    "Modal",
+    "Popconfirm",
+    "Select",
+    "Spin",
+    "Tag",
+    "Typography"
+   ],
+   "hitKinds": {
+    "antd-reference": 2,
+    "imperative-confirm": 1,
+    "use-app": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "项目列表与项目详情页。"
+  },
+  "src/web/src/pages/ProjectsPagePhone.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "ant-selector",
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 2,
+    "ant-selector": 2,
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "渲染 ProjectsPage，随其批次。项目列表与项目详情页。"
+  },
+  "src/web/src/pages/ProjectsPageToolbar.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "ant-selector",
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 11,
+    "ant-selector": 11,
+    "antd-reference": 3
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "渲染 ProjectsToolbar，随其批次。项目列表工具栏。"
+  },
+  "src/web/src/pages/RunnerDetailPage.antigravityAccount.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "provider": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "712d324a8c3b0b2ecf7fd4d0f584587ae51dcb78",
+     "short": "712d324a8",
+     "date": "2026-10-06",
+     "subject": "feat(antigravity): keep several Google accounts per runner, like Claude Code and Codex",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.2",
+   "reason": "RunnerDetailPage 的 Antigravity 账号测试（AntApp 包裹）。"
+  },
+  "src/web/src/pages/RunnerDetailPage.selfUpdate.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "provider": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "f22557aff9cdb5fb83611007d7c28edd861e7f2b",
+     "short": "f22557aff",
+     "date": "2026-10-06",
+     "subject": "feat(runners): add Update Runner Now and surface self-update state",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.2",
+   "reason": "RunnerDetailPage 的自更新测试（AntApp 包裹）。"
+  },
+  "src/web/src/pages/SettingsPage.accessTokens.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "ant-selector"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 2,
+    "ant-selector": 2
+   },
+   "introducedBy": [
+    {
+     "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+     "short": "d233a6cd0",
+     "date": "2026-10-06",
+     "subject": "feat(auth): add access token management and /pat/self introspection",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.1",
+   "reason": "设置页里的访问令牌入口测试。"
+  },
+  "src/web/src/pages/SettingsPage.modelRouting.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "ant-selector"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 2,
+    "ant-selector": 2
+   },
+   "introducedBy": [
+    {
+     "commit": "82c7e92ffb947549f9e4864f8793a5ec9aa52ef8",
+     "short": "82c7e92ff",
+     "date": "2026-10-05",
+     "subject": "feat(routing): gate model hint instructions on owner's smart model selection",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.1",
+   "reason": "设置页的模型路由开关测试（main 82c7e92ff）。"
+  },
+  "src/web/src/pages/TaskDetailPage.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Button",
+    "Input",
+    "Typography"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "imperative-feedback": 2
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "任务详情页。"
+  },
+  "src/web/src/pages/TaskListView.createdIn.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "ant-selector",
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "ant-class": 1,
+    "ant-selector": 1,
+    "antd-reference": 1,
+    "provider": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "渲染 TaskListView，随其批次。任务列表。"
+  },
+  "src/web/src/pages/TaskListView.outsideProjects.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "provider": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "渲染 TaskListView，随其批次。任务列表。"
+  },
+  "src/web/src/pages/TaskListView.scopeMenu.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "ant-class",
+    "ant-selector",
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "ant-class": 4,
+    "ant-selector": 2,
+    "antd-reference": 1,
+    "provider": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "渲染 TaskListView，随其批次。任务列表。"
+  },
+  "src/web/src/pages/TaskListView.taskUrl.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "provider": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "渲染 TaskListView，随其批次。任务列表。"
+  },
+  "src/web/src/pages/TaskListView.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "provider": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "渲染 TaskListView，随其批次。任务列表。"
+  },
+  "src/web/src/pages/TaskListView.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Avatar",
+    "Button",
+    "Checkbox",
+    "Dropdown",
+    "Input",
+    "InputNumber",
+    "MenuProps",
+    "Modal",
+    "Popconfirm",
+    "Segmented",
+    "Select",
+    "Spin",
+    "Tag",
+    "Tooltip"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "imperative-feedback": 11
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "任务列表。"
+  },
+  "src/web/src/pages/TaskRoute.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "ant-selector"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 1,
+    "ant-selector": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "渲染 TaskRoute，随其批次。任务路由与加载。"
+  },
+  "src/web/src/pages/TaskRoute.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Spin"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "任务路由与加载。"
+  }
+ },
+ "css": [
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".composer-field textarea.ant-input,",
+   "count": 2,
+   "lines": [
+    6348,
+    6371
+   ],
+   "status": "changed",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "81f15bef1a60927925e56b1916b82df490da940b",
+     "short": "81f15bef1",
+     "date": "2026-10-06",
+     "subject": "feat(web): auto-sizing Orbit Textarea with a native ref and borderless variant",
+     "line": "project"
+    }
+   ],
+   "p01Group": "WorkspaceView 输入框试点与完整切换（P3.1 → P5.3）",
+   "owner": "P5.3",
+   "reason": "P3.1（81f15bef1）把输入框 textarea.ant-input 规则改成选择器列表、加上 Orbit Textarea；.ant-input 部分仍服务现有 AntD 输入框，按 P0.1 区段「WorkspaceView 输入框试点与完整切换（P3.1 → P5.3）」由 P5.3 清理。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".composer-field textarea.ant-input::placeholder,",
+   "count": 1,
+   "lines": [
+    6382
+   ],
+   "status": "changed",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "81f15bef1a60927925e56b1916b82df490da940b",
+     "short": "81f15bef1",
+     "date": "2026-10-06",
+     "subject": "feat(web): auto-sizing Orbit Textarea with a native ref and borderless variant",
+     "line": "project"
+    }
+   ],
+   "p01Group": "WorkspaceView 输入框试点与完整切换（P3.1 → P5.3）",
+   "owner": "P5.3",
+   "reason": "P3.1（81f15bef1）把输入框 textarea.ant-input 规则改成选择器列表、加上 Orbit Textarea；.ant-input 部分仍服务现有 AntD 输入框，按 P0.1 区段「WorkspaceView 输入框试点与完整切换（P3.1 → P5.3）」由 P5.3 清理。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".composer-field textarea.ant-input::selection,",
+   "count": 1,
+   "lines": [
+    6386
+   ],
+   "status": "changed",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "81f15bef1a60927925e56b1916b82df490da940b",
+     "short": "81f15bef1",
+     "date": "2026-10-06",
+     "subject": "feat(web): auto-sizing Orbit Textarea with a native ref and borderless variant",
+     "line": "project"
+    }
+   ],
+   "p01Group": "WorkspaceView 输入框试点与完整切换（P3.1 → P5.3）",
+   "owner": "P5.3",
+   "reason": "P3.1（81f15bef1）把输入框 textarea.ant-input 规则改成选择器列表、加上 Orbit Textarea；.ant-input 部分仍服务现有 AntD 输入框，按 P0.1 区段「WorkspaceView 输入框试点与完整切换（P3.1 → P5.3）」由 P5.3 清理。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".composer-field textarea.ant-input:focus-visible,",
+   "count": 1,
+   "lines": [
+    6395
+   ],
+   "status": "changed",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "81f15bef1a60927925e56b1916b82df490da940b",
+     "short": "81f15bef1",
+     "date": "2026-10-06",
+     "subject": "feat(web): auto-sizing Orbit Textarea with a native ref and borderless variant",
+     "line": "project"
+    }
+   ],
+   "p01Group": "WorkspaceView 输入框试点与完整切换（P3.1 → P5.3）",
+   "owner": "P5.3",
+   "reason": "P3.1（81f15bef1）把输入框 textarea.ant-input 规则改成选择器列表、加上 Orbit Textarea；.ant-input 部分仍服务现有 AntD 输入框，按 P0.1 区段「WorkspaceView 输入框试点与完整切换（P3.1 → P5.3）」由 P5.3 清理。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".composer-box-shell .composer-field textarea.ant-input,",
+   "count": 1,
+   "lines": [
+    6424
+   ],
+   "status": "changed",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "81f15bef1a60927925e56b1916b82df490da940b",
+     "short": "81f15bef1",
+     "date": "2026-10-06",
+     "subject": "feat(web): auto-sizing Orbit Textarea with a native ref and borderless variant",
+     "line": "project"
+    }
+   ],
+   "p01Group": "WorkspaceView 输入框试点与完整切换（P3.1 → P5.3）",
+   "owner": "P5.3",
+   "reason": "P3.1（81f15bef1）把输入框 textarea.ant-input 规则改成选择器列表、加上 Orbit Textarea；.ant-input 部分仍服务现有 AntD 输入框，按 P0.1 区段「WorkspaceView 输入框试点与完整切换（P3.1 → P5.3）」由 P5.3 清理。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".composer-box textarea.ant-input,",
+   "count": 1,
+   "lines": [
+    6432
+   ],
+   "status": "changed",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "81f15bef1a60927925e56b1916b82df490da940b",
+     "short": "81f15bef1",
+     "date": "2026-10-06",
+     "subject": "feat(web): auto-sizing Orbit Textarea with a native ref and borderless variant",
+     "line": "project"
+    }
+   ],
+   "p01Group": "WorkspaceView 输入框试点与完整切换（P3.1 → P5.3）",
+   "owner": "P5.3",
+   "reason": "P3.1（81f15bef1）把输入框 textarea.ant-input 规则改成选择器列表、加上 Orbit Textarea；.ant-input 部分仍服务现有 AntD 输入框，按 P0.1 区段「WorkspaceView 输入框试点与完整切换（P3.1 → P5.3）」由 P5.3 清理。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".project-done-not-yet .ant-input { font: inherit; font-size: 13px; }",
+   "count": 1,
+   "lines": [
+    10764
+   ],
+   "status": "new",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "0f47238c1c6e39b7d1c4db8a8cbd8a6296b38832",
+     "short": "0f47238c1",
+     "date": "2026-10-04",
+     "subject": "feat(web): add project done settlement flow",
+     "line": "main"
+    }
+   ],
+   "p01Group": null,
+   "owner": "P4.3b",
+   "reason": "main 0f47238c1 项目完成结算流程里 ProjectSettlementCard 的 Input/Modal 覆盖样式，随结算卡归 P4.3b。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".project-done-dialog .ant-modal-content { padding: 0; overflow: hidden; }",
+   "count": 1,
+   "lines": [
+    10777
+   ],
+   "status": "new",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "0f47238c1c6e39b7d1c4db8a8cbd8a6296b38832",
+     "short": "0f47238c1",
+     "date": "2026-10-04",
+     "subject": "feat(web): add project done settlement flow",
+     "line": "main"
+    }
+   ],
+   "p01Group": null,
+   "owner": "P4.3b",
+   "reason": "main 0f47238c1 项目完成结算流程里 ProjectSettlementCard 的 Input/Modal 覆盖样式，随结算卡归 P4.3b。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "antd-reference",
+   "text": "/* The Reopen question replaced an AntD Modal, whose line height is unitless: text of another size",
+   "count": 1,
+   "lines": [
+    12019
+   ],
+   "status": "new",
+   "type": "antd-text",
+   "introducedBy": [
+    {
+     "commit": "5311a0cf78bd244126723244538e5308ce389d7c",
+     "short": "5311a0cf7",
+     "date": "2026-10-07",
+     "subject": "fix(web): keep the shared dialog shell at 22px, unitless only in the pilot's dialogs",
+     "line": "project"
+    }
+   ],
+   "p01Group": null,
+   "owner": "P6",
+   "reason": "P3.2（5311a0cf7）为 .tdp-reopen-dialog 写的、说明与被替换的 AntD Modal 行高一致的注释；不是依赖，P6 退役时改写或移入证据目录。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "antd-reference",
+   "text": "/* Unitless line height, as the AntD Modal this dialog replaced: smaller text inside keeps its own",
+   "count": 1,
+   "lines": [
+    14170
+   ],
+   "status": "new",
+   "type": "antd-text",
+   "introducedBy": [
+    {
+     "commit": "5311a0cf78bd244126723244538e5308ce389d7c",
+     "short": "5311a0cf7",
+     "date": "2026-10-07",
+     "subject": "fix(web): keep the shared dialog shell at 22px, unitless only in the pilot's dialogs",
+     "line": "project"
+    }
+   ],
+   "p01Group": null,
+   "owner": "P6",
+   "reason": "P3.2（5311a0cf7）为 .share-dialog 写的同类注释；P6 退役时改写或移入证据目录。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".re-runner-status > .ant-tag {",
+   "count": 1,
+   "lines": [
+    14821
+   ],
+   "status": "new",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "f9dcb88078bf011e912301a6b6391ed4bccd1fa3",
+     "short": "f9dcb8807",
+     "date": "2026-10-04",
+     "subject": "refactor(web): redesign runner engine card header and trim copy",
+     "line": "main"
+    }
+   ],
+   "p01Group": null,
+   "owner": "P4.2",
+   "reason": "RunnerEngines 卡头运行状态与账号行里 Tag 的覆盖样式（main 重画卡头、收拢账号操作时加入），随 RunnerEngines 归 P4.2。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".re-runner-card .re-row > .ant-tag {",
+   "count": 1,
+   "lines": [
+    14971
+   ],
+   "status": "new",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "c8cee9c19fcbbc61c127942eb1b54228f4cd7863",
+     "short": "c8cee9c19",
+     "date": "2026-10-04",
+     "subject": "refactor(web): move runner account actions into an overflow menu",
+     "line": "main"
+    }
+   ],
+   "p01Group": null,
+   "owner": "P4.2",
+   "reason": "RunnerEngines 卡头运行状态与账号行里 Tag 的覆盖样式（main 重画卡头、收拢账号操作时加入），随 RunnerEngines 归 P4.2。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".re-action.ant-btn {",
+   "count": 1,
+   "lines": [
+    15075
+   ],
+   "status": "new",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "c8cee9c19fcbbc61c127942eb1b54228f4cd7863",
+     "short": "c8cee9c19",
+     "date": "2026-10-04",
+     "subject": "refactor(web): move runner account actions into an overflow menu",
+     "line": "main"
+    }
+   ],
+   "p01Group": null,
+   "owner": "P4.2",
+   "reason": "main c8cee9c19 RunnerEngines 账号溢出菜单（Dropdown）与操作按钮的覆盖样式，随 RunnerEngines 归 P4.2。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".re-action.ant-btn-default:not(:disabled) {",
+   "count": 1,
+   "lines": [
+    15084
+   ],
+   "status": "new",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "c8cee9c19fcbbc61c127942eb1b54228f4cd7863",
+     "short": "c8cee9c19",
+     "date": "2026-10-04",
+     "subject": "refactor(web): move runner account actions into an overflow menu",
+     "line": "main"
+    }
+   ],
+   "p01Group": null,
+   "owner": "P4.2",
+   "reason": "main c8cee9c19 RunnerEngines 账号溢出菜单（Dropdown）与操作按钮的覆盖样式，随 RunnerEngines 归 P4.2。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".re-action.re-more.ant-dropdown-open {",
+   "count": 1,
+   "lines": [
+    15116
+   ],
+   "status": "new",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "c8cee9c19fcbbc61c127942eb1b54228f4cd7863",
+     "short": "c8cee9c19",
+     "date": "2026-10-04",
+     "subject": "refactor(web): move runner account actions into an overflow menu",
+     "line": "main"
+    }
+   ],
+   "p01Group": null,
+   "owner": "P4.2",
+   "reason": "main c8cee9c19 RunnerEngines 账号溢出菜单（Dropdown）与操作按钮的覆盖样式，随 RunnerEngines 归 P4.2。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".re-account-menu .ant-dropdown-menu {",
+   "count": 1,
+   "lines": [
+    15126
+   ],
+   "status": "new",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "c8cee9c19fcbbc61c127942eb1b54228f4cd7863",
+     "short": "c8cee9c19",
+     "date": "2026-10-04",
+     "subject": "refactor(web): move runner account actions into an overflow menu",
+     "line": "main"
+    }
+   ],
+   "p01Group": null,
+   "owner": "P4.2",
+   "reason": "main c8cee9c19 RunnerEngines 账号溢出菜单（Dropdown）与操作按钮的覆盖样式，随 RunnerEngines 归 P4.2。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".re-account-menu .ant-dropdown-menu .ant-dropdown-menu-item {",
+   "count": 1,
+   "lines": [
+    15133
+   ],
+   "status": "new",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "c8cee9c19fcbbc61c127942eb1b54228f4cd7863",
+     "short": "c8cee9c19",
+     "date": "2026-10-04",
+     "subject": "refactor(web): move runner account actions into an overflow menu",
+     "line": "main"
+    }
+   ],
+   "p01Group": null,
+   "owner": "P4.2",
+   "reason": "main c8cee9c19 RunnerEngines 账号溢出菜单（Dropdown）与操作按钮的覆盖样式，随 RunnerEngines 归 P4.2。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".re-account-menu .ant-dropdown-menu .ant-dropdown-menu-item-icon {",
+   "count": 1,
+   "lines": [
+    15140
+   ],
+   "status": "new",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "c8cee9c19fcbbc61c127942eb1b54228f4cd7863",
+     "short": "c8cee9c19",
+     "date": "2026-10-04",
+     "subject": "refactor(web): move runner account actions into an overflow menu",
+     "line": "main"
+    }
+   ],
+   "p01Group": null,
+   "owner": "P4.2",
+   "reason": "main c8cee9c19 RunnerEngines 账号溢出菜单（Dropdown）与操作按钮的覆盖样式，随 RunnerEngines 归 P4.2。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".re-account-menu .ant-dropdown-menu .ant-dropdown-menu-item-danger .ant-dropdown-menu-item-icon {",
+   "count": 1,
+   "lines": [
+    15144
+   ],
+   "status": "new",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "c8cee9c19fcbbc61c127942eb1b54228f4cd7863",
+     "short": "c8cee9c19",
+     "date": "2026-10-04",
+     "subject": "refactor(web): move runner account actions into an overflow menu",
+     "line": "main"
+    }
+   ],
+   "p01Group": null,
+   "owner": "P4.2",
+   "reason": "main c8cee9c19 RunnerEngines 账号溢出菜单（Dropdown）与操作按钮的覆盖样式，随 RunnerEngines 归 P4.2。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "antd-reference",
+   "text": "/* A card drawn without AntD, which components/ui has none of (docs/evidence/base-ui-migration/",
+   "count": 1,
+   "lines": [
+    18476
+   ],
+   "status": "new",
+   "type": "antd-text",
+   "introducedBy": [
+    {
+     "commit": "558a8ba1fcd15bb40c187460bbebc2a5e0c37d61",
+     "short": "558a8ba1f",
+     "date": "2026-10-07",
+     "subject": "feat(auth): link and unlink Google from the profile page, admin unlink, signInMethods, Sign-in settings (S4)",
+     "line": "main"
+    }
+   ],
+   "p01Group": null,
+   "owner": "P4.1",
+   "reason": "main 558a8ba1f 为个人资料页 .orbit-card 写的注释，以旁边的 AntD Card 为对照；P4.1 迁移资料页 Card 时一并改写。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "antd-reference",
+   "text": "the AntD Card it sits beside on the profile page, from the same tokens. */",
+   "count": 1,
+   "lines": [
+    18478
+   ],
+   "status": "new",
+   "type": "antd-text",
+   "introducedBy": [
+    {
+     "commit": "558a8ba1fcd15bb40c187460bbebc2a5e0c37d61",
+     "short": "558a8ba1f",
+     "date": "2026-10-07",
+     "subject": "feat(auth): link and unlink Google from the profile page, admin unlink, signInMethods, Sign-in settings (S4)",
+     "line": "main"
+    }
+   ],
+   "p01Group": null,
+   "owner": "P4.1",
+   "reason": "main 558a8ba1f 为个人资料页 .orbit-card 写的注释，以旁边的 AntD Card 为对照；P4.1 迁移资料页 Card 时一并改写。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".access-token-field .ant-radio-group {",
+   "count": 1,
+   "lines": [
+    18726
+   ],
+   "status": "new",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+     "short": "d233a6cd0",
+     "date": "2026-10-06",
+     "subject": "feat(auth): add access token management and /pat/self introspection",
+     "line": "main"
+    }
+   ],
+   "p01Group": null,
+   "owner": "P4.1",
+   "reason": "main d233a6cd0 NewAccessTokenDialog 里 Radio.Group 的覆盖样式，随该弹窗归 P4.1。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".wk-activity-btn.ant-btn { position: relative; overflow: visible; }",
+   "count": 1,
+   "lines": [
+    20935
+   ],
+   "status": "new",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+     "short": "6c4e0ac0e",
+     "date": "2026-10-06",
+     "subject": "feat(wiki): Activity page, the head's Activity badge, one number waiting, space names and defaults",
+     "line": "main"
+    }
+   ],
+   "p01Group": null,
+   "owner": "P4.4",
+   "reason": "main 6c4e0ac0e WikiPage 头部 Activity 按钮的 Button 覆盖样式，归 P4.4。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".wk-activity-btn.on.ant-btn, .wk-activity-btn.on.ant-btn:hover { border-color: var(--brand-border); background: var(--brand-tint); color: var(--brand); }",
+   "count": 1,
+   "lines": [
+    20937
+   ],
+   "status": "new",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+     "short": "6c4e0ac0e",
+     "date": "2026-10-06",
+     "subject": "feat(wiki): Activity page, the head's Activity badge, one number waiting, space names and defaults",
+     "line": "main"
+    }
+   ],
+   "p01Group": null,
+   "owner": "P4.4",
+   "reason": "main 6c4e0ac0e WikiPage 头部 Activity 按钮的 Button 覆盖样式，归 P4.4。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".account-pause-durations .ant-radio-button-wrapper {",
+   "count": 1,
+   "lines": [
+    22281
+   ],
+   "status": "new",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "0ba581f316e2aebe1f3ca06e75f25ebee3232bb2",
+     "short": "0ba581f31",
+     "date": "2026-10-04",
+     "subject": "feat: add manual account pause for runners and pool credentials",
+     "line": "main"
+    }
+   ],
+   "p01Group": null,
+   "owner": "P4.2",
+   "reason": "main 0ba581f31 AccountPause 里 Radio.Button 的覆盖样式，随 AccountPause 归 P4.2。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "antd-reference",
+   "text": "/* Qualified by antd's own class: its injected menu styles outrank a single-class rule. */",
+   "count": 1,
+   "lines": [
+    1429
+   ],
+   "status": "reassigned",
+   "type": "antd-text",
+   "p01Group": "TaskListView 范围菜单（P4.3）",
+   "owner": "P4.3a",
+   "reason": "TaskListView 范围菜单。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".ant-dropdown-menu.tasks-scope-menu {",
+   "count": 1,
+   "lines": [
+    1430
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "TaskListView 范围菜单（P4.3）",
+   "owner": "P4.3a",
+   "reason": "TaskListView 范围菜单。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".ant-segmented-item-selected .seg-count {",
+   "count": 1,
+   "lines": [
+    1708
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "任务过滤分段计数（P4.3）",
+   "owner": "P4.3a",
+   "reason": "TaskListView 过滤分段的计数。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "antd-reference",
+   "text": "/* The two lines, one under the other; the class makes these rules outrank antd's own",
+   "count": 1,
+   "lines": [
+    10300
+   ],
+   "status": "reassigned",
+   "type": "antd-text",
+   "p01Group": "StartProjectCard/ProjectRunSettings（P4.3）",
+   "owner": "P4.3b",
+   "reason": "StartProjectCard 与 ProjectRunSettings 共用的单选规则说明，记在启动卡（P4.3b）；先完成的一批只删自己的选择器，说明由后完成的一批删除并写入关闭记录。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": "`.ant-radio-group` / `.ant-radio-wrapper` ones, which would otherwise win on order. How it runs",
+   "count": 1,
+   "lines": [
+    10301
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "StartProjectCard/ProjectRunSettings（P4.3）",
+   "owner": "P4.3b",
+   "reason": "StartProjectCard 与 ProjectRunSettings 共用的单选规则说明，记在启动卡（P4.3b）；先完成的一批只删自己的选择器，说明由后完成的一批删除并写入关闭记录。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".start-card-settings .start-card-lines .ant-radio-wrapper,",
+   "count": 1,
+   "lines": [
+    10309
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "StartProjectCard/ProjectRunSettings（P4.3）",
+   "owner": "P4.3b",
+   "reason": "StartProjectCard 执行模式单选；与 .project-run-* 同一条规则，各批只删自己的选择器。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".project-run-settings .project-run-lines .ant-radio-wrapper {",
+   "count": 1,
+   "lines": [
+    10310
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "StartProjectCard/ProjectRunSettings（P4.3）",
+   "owner": "P4.3a",
+   "reason": "ProjectRunSettings 执行模式单选与 merge check 字段。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".start-card-settings .start-card-lines .ant-radio,",
+   "count": 1,
+   "lines": [
+    10314
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "StartProjectCard/ProjectRunSettings（P4.3）",
+   "owner": "P4.3b",
+   "reason": "StartProjectCard 执行模式单选；与 .project-run-* 同一条规则，各批只删自己的选择器。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".project-run-settings .project-run-lines .ant-radio {",
+   "count": 1,
+   "lines": [
+    10315
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "StartProjectCard/ProjectRunSettings（P4.3）",
+   "owner": "P4.3a",
+   "reason": "ProjectRunSettings 执行模式单选与 merge check 字段。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".pdg-section-title.ant-typography {",
+   "count": 1,
+   "lines": [
+    12831
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "ProjectDependencyGraph/TaskDependencyGraph（P4.3）",
+   "owner": "P4.3b",
+   "reason": "项目/任务依赖图的标题与全屏弹窗。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".ant-modal.tdg-modal {",
+   "count": 2,
+   "lines": [
+    12861,
+    12881
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "ProjectDependencyGraph/TaskDependencyGraph（P4.3）",
+   "owner": "P4.3b",
+   "reason": "项目/任务依赖图的标题与全屏弹窗。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".tdg-modal .ant-modal-body {",
+   "count": 2,
+   "lines": [
+    12866,
+    12911
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "ProjectDependencyGraph/TaskDependencyGraph（P4.3）",
+   "owner": "P4.3b",
+   "reason": "项目/任务依赖图的标题与全屏弹窗。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".tdg-modal .ant-modal-container {",
+   "count": 1,
+   "lines": [
+    12888
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "ProjectDependencyGraph/TaskDependencyGraph（P4.3）",
+   "owner": "P4.3b",
+   "reason": "项目/任务依赖图的标题与全屏弹窗。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".tdg-modal .ant-modal-header {",
+   "count": 1,
+   "lines": [
+    12900
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "ProjectDependencyGraph/TaskDependencyGraph（P4.3）",
+   "owner": "P4.3b",
+   "reason": "项目/任务依赖图的标题与全屏弹窗。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".tdg-modal .ant-modal-title {",
+   "count": 1,
+   "lines": [
+    12904
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "ProjectDependencyGraph/TaskDependencyGraph（P4.3）",
+   "owner": "P4.3b",
+   "reason": "项目/任务依赖图的标题与全屏弹窗。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".tdg-modal .ant-modal-close {",
+   "count": 1,
+   "lines": [
+    12907
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "ProjectDependencyGraph/TaskDependencyGraph（P4.3）",
+   "owner": "P4.3b",
+   "reason": "项目/任务依赖图的标题与全屏弹窗。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".project-detail-meta .ant-tag {",
+   "count": 1,
+   "lines": [
+    16751
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "项目详情页的元信息、目标、待运行区块和任务行。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".project-goal-heading .ant-typography {",
+   "count": 1,
+   "lines": [
+    16972
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "项目详情页的元信息、目标、待运行区块和任务行。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".project-goal-empty.ant-typography {",
+   "count": 1,
+   "lines": [
+    16983
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "项目详情页的元信息、目标、待运行区块和任务行。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".project-blockers-heading.ant-typography {",
+   "count": 1,
+   "lines": [
+    16999
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": null,
+   "pending": {
+    "candidates": [
+     "P4.3a",
+     "P4.3b"
+    ],
+    "recommendation": "P4.3a",
+    "question": "项目阻塞区块在 ProjectsPage 详情页渲染（P4.3a），也嵌在 ProjectPromotionCard 晋升确认卡里（P4.3b），并带“解决说明”表单；按详情页区块归 P4.3a、由 P4.3b 复核卡内集成，还是随决策卡归 P4.3b？"
+   }
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".project-blockers-summary.ant-typography {",
+   "count": 1,
+   "lines": [
+    17009
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": null,
+   "pending": {
+    "candidates": [
+     "P4.3a",
+     "P4.3b"
+    ],
+    "recommendation": "P4.3a",
+    "question": "项目阻塞区块在 ProjectsPage 详情页渲染（P4.3a），也嵌在 ProjectPromotionCard 晋升确认卡里（P4.3b），并带“解决说明”表单；按详情页区块归 P4.3a、由 P4.3b 复核卡内集成，还是随决策卡归 P4.3b？"
+   }
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".project-blockers-headline .ant-tag {",
+   "count": 1,
+   "lines": [
+    17038
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": null,
+   "pending": {
+    "candidates": [
+     "P4.3a",
+     "P4.3b"
+    ],
+    "recommendation": "P4.3a",
+    "question": "项目阻塞区块在 ProjectsPage 详情页渲染（P4.3a），也嵌在 ProjectPromotionCard 晋升确认卡里（P4.3b），并带“解决说明”表单；按详情页区块归 P4.3a、由 P4.3b 复核卡内集成，还是随决策卡归 P4.3b？"
+   }
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".project-ready-heading.ant-typography {",
+   "count": 1,
+   "lines": [
+    17216
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "项目详情页的元信息、目标、待运行区块和任务行。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".project-ready-summary.ant-typography {",
+   "count": 1,
+   "lines": [
+    17226
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "项目详情页的元信息、目标、待运行区块和任务行。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".project-run-settings-grid .project-run-lines .ant-radio-wrapper-disabled {",
+   "count": 1,
+   "lines": [
+    17454
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "ProjectRunSettings 执行模式单选与 merge check 字段。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".project-run-settings-grid .project-run-lines .ant-radio-wrapper-disabled .ant-radio-disabled + span {",
+   "count": 1,
+   "lines": [
+    17458
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "ProjectRunSettings 执行模式单选与 merge check 字段。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".project-run-settings-grid .project-run-lines .ant-radio-disabled.ant-radio-checked .ant-radio-inner {",
+   "count": 1,
+   "lines": [
+    17461
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "ProjectRunSettings 执行模式单选与 merge check 字段。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".project-run-settings-grid .project-run-lines .ant-radio-disabled.ant-radio-checked .ant-radio-inner::after {",
+   "count": 1,
+   "lines": [
+    17465
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "ProjectRunSettings 执行模式单选与 merge check 字段。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".project-run-settings-grid .project-integration-setting.is-warn .ant-input {",
+   "count": 1,
+   "lines": [
+    17472
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "ProjectRunSettings 执行模式单选与 merge check 字段。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "antd-reference",
+   "text": "/* A task row has flexible copy followed by a fixed count and, sometimes, a disclosure. AntD's",
+   "count": 1,
+   "lines": [
+    17510
+   ],
+   "status": "reassigned",
+   "type": "antd-text",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "项目详情页的元信息、目标、待运行区块和任务行。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".project-task-row-meta .ant-list-item-meta-content {",
+   "count": 1,
+   "lines": [
+    17526
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "项目详情页的元信息、目标、待运行区块和任务行。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "antd-reference",
+   "text": "under .ant-list to outrank AntD's own item padding without !important. */",
+   "count": 1,
+   "lines": [
+    17551
+   ],
+   "status": "reassigned",
+   "type": "antd-text",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "项目详情页的元信息、目标、待运行区块和任务行。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": "under .ant-list to outrank AntD's own item padding without !important. */",
+   "count": 1,
+   "lines": [
+    17551
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "项目详情页的元信息、目标、待运行区块和任务行。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".ant-list .project-task-row.is-openable {",
+   "count": 1,
+   "lines": [
+    17552
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "项目详情页的元信息、目标、待运行区块和任务行。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".acceptance-held-up-action .ant-typography code {",
+   "count": 1,
+   "lines": [
+    17782
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "ProjectAcceptanceCard 验收条目区块。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".acceptance-more-meta.ant-typography {",
+   "count": 2,
+   "lines": [
+    17828,
+    17936
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "ProjectAcceptanceCard 验收条目区块。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".acceptance-card.ant-card {",
+   "count": 1,
+   "lines": [
+    17850
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "ProjectAcceptanceCard 验收条目区块。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ":root[data-theme='dark'] .acceptance-card.ant-card {",
+   "count": 1,
+   "lines": [
+    17855
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "ProjectAcceptanceCard 验收条目区块。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".acceptance-card.has-meter .ant-card-head {",
+   "count": 1,
+   "lines": [
+    17860
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "ProjectAcceptanceCard 验收条目区块。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".acceptance-card .ant-card-head {",
+   "count": 1,
+   "lines": [
+    17865
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "ProjectAcceptanceCard 验收条目区块。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".acceptance-card .ant-card-head-wrapper {",
+   "count": 1,
+   "lines": [
+    17868
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "ProjectAcceptanceCard 验收条目区块。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".acceptance-card .ant-card-head-title {",
+   "count": 1,
+   "lines": [
+    17871
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "ProjectAcceptanceCard 验收条目区块。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".acceptance-more-button.ant-btn {",
+   "count": 1,
+   "lines": [
+    17915
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "ProjectAcceptanceCard 验收条目区块。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".acceptance-more-button.ant-btn:hover {",
+   "count": 1,
+   "lines": [
+    17923
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "ProjectAcceptanceCard 验收条目区块。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".projects-toolbar-filter .ant-segmented-item {",
+   "count": 1,
+   "lines": [
+    18020
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "ProjectsToolbar 分段过滤。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "antd-reference",
+   "text": "projects-redesign.html: 11px of row padding (set inline, where it beats AntD's own",
+   "count": 1,
+   "lines": [
+    18028
+   ],
+   "status": "reassigned",
+   "type": "antd-text",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "ProjectsToolbar 分段过滤。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "antd-reference",
+   "text": "already been renamed under us once (antd 5 → 6). */",
+   "count": 1,
+   "lines": [
+    18033
+   ],
+   "status": "reassigned",
+   "type": "antd-text",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "ProjectsToolbar 分段过滤。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".ant-popover .watch-row-list {",
+   "count": 1,
+   "lines": [
+    19055
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "WatchRelations（P4.3）",
+   "owner": "P4.3a",
+   "reason": "WatchRelations 浮层（TaskDetailPanel）。"
+  }
+ ],
+ "reviewPhases": {
+  "src/web/src/components/BatchGraph.tsx": {
+   "p01ReviewPhase": "P4.3",
+   "reviewPhase": "P4.3b",
+   "reason": "Transcript 与 ApprovalPanel 里的批次图。"
+  },
+  "src/web/src/components/CardAction.tsx": {
+   "p01ReviewPhase": "P4.3",
+   "reviewPhase": "P4.3b",
+   "reason": "决策卡共用的操作按钮。"
+  },
+  "src/web/src/components/CardHotkey.ts": {
+   "p01ReviewPhase": "P4.3",
+   "reviewPhase": "P4.3b",
+   "reason": "决策卡共用的快捷键归属。"
+  },
+  "src/web/src/components/OpenItemDeliveryCard.tsx": {
+   "p01ReviewPhase": "P4.3",
+   "reviewPhase": "P4.3b",
+   "reason": "Transcript 里的协调异常卡。"
+  },
+  "src/web/src/components/ProjectIntegrationLine.tsx": {
+   "p01ReviewPhase": "P4.3",
+   "reviewPhase": "P4.3a",
+   "reason": "项目详情页的产物去向区块。"
+  },
+  "src/web/src/components/ProjectPageBlocks.tsx": {
+   "p01ReviewPhase": "P4.3",
+   "reviewPhase": "P4.3a",
+   "reason": "项目详情页的区块顺序。"
+  },
+  "src/web/src/components/ProjectStartedCard.tsx": {
+   "p01ReviewPhase": "P4.3",
+   "reviewPhase": "P4.3b",
+   "reason": "Transcript 里的项目启动回执卡。"
+  },
+  "src/web/src/components/ProjectTaskLink.tsx": {
+   "p01ReviewPhase": "P4.3",
+   "reviewPhase": "P4.3a",
+   "reason": "项目页里打开任务的链接与历史语义。"
+  },
+  "src/web/src/components/ProjectTaskPanel.tsx": {
+   "p01ReviewPhase": "P4.3",
+   "reviewPhase": "P4.3a",
+   "reason": "项目上下文里的任务面板。"
+  },
+  "src/web/src/components/RunSettingsSummary.tsx": {
+   "p01ReviewPhase": "P4.3",
+   "reviewPhase": "P4.3b",
+   "reason": "只由 ProjectStartedCard 与 AcceptanceConfirmationCard 使用。"
+  },
+  "src/web/src/components/TaskProgressBlock.tsx": {
+   "p01ReviewPhase": "P4.3",
+   "reviewPhase": "P4.3a",
+   "reason": "任务进度块（Transcript、BackgroundShellsTray 也渲染，P5.2 复核会话内呈现）。"
+  },
+  "src/web/src/components/TaskStatusPill.tsx": {
+   "p01ReviewPhase": "P4.3",
+   "reviewPhase": "P4.3a",
+   "reason": "任务状态标记，列表与图共用；P4.3b 复核图内呈现。"
+  }
+ },
+ "closed": [
+  {
+   "path": "src/web/src/components/AccountPools.tsx",
+   "category": "production",
+   "p01Owner": "P4.2",
+   "closed": {
+    "antdImports": [
+     "Tag"
+    ],
+    "hitKinds": {}
+   },
+   "remaining": {
+    "antdImports": [
+     "Button",
+     "Checkbox",
+     "Input",
+     "Modal",
+     "Popconfirm",
+     "Radio",
+     "Segmented",
+     "Select",
+     "Tooltip"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "closedBy": [
+    {
+     "commit": "0ba581f316e2aebe1f3ca06e75f25ebee3232bb2",
+     "short": "0ba581f31",
+     "date": "2026-10-04",
+     "subject": "feat: add manual account pause for runners and pool credentials",
+     "line": "main"
+    }
+   ],
+   "closureRecord": null
+  },
+  {
+   "path": "src/web/src/components/AccountSelect.tsx",
+   "category": "production",
+   "p01Owner": "P4.2",
+   "closed": {
+    "antdImports": [
+     "Select"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "remaining": {
+    "antdImports": [],
+    "hitKinds": {}
+   },
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/components/ProjectShareControls.test.tsx",
+   "category": "test",
+   "p01Owner": "P4.3",
+   "closed": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 2,
+     "ant-selector": 2
+    }
+   },
+   "remaining": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 2,
+     "ant-selector": 2
+    }
+   },
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/components/ShareModal.test.tsx",
+   "category": "test",
+   "p01Owner": "P3.2",
+   "closed": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 12,
+     "ant-selector": 12
+    }
+   },
+   "remaining": {
+    "antdImports": [],
+    "hitKinds": {}
+   },
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/components/ShareModal.tsx",
+   "category": "production",
+   "p01Owner": "P3.2",
+   "closed": {
+    "antdImports": [
+     "Button",
+     "Checkbox",
+     "Dropdown",
+     "Modal",
+     "Popconfirm",
+     "Select",
+     "Spin"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "remaining": {
+    "antdImports": [],
+    "hitKinds": {}
+   },
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/components/TaskDetailPanel.modelRouting.test.tsx",
+   "category": "test",
+   "p01Owner": "P3.2",
+   "closed": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 6,
+     "ant-selector": 6,
+     "antd-reference": 1
+    }
+   },
+   "remaining": {
+    "antdImports": [],
+    "hitKinds": {}
+   },
+   "closedBy": [
+    {
+     "commit": "82c7e92ffb947549f9e4864f8793a5ec9aa52ef8",
+     "short": "82c7e92ff",
+     "date": "2026-10-05",
+     "subject": "feat(routing): gate model hint instructions on owner's smart model selection",
+     "line": "main"
+    },
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/components/TaskDetailPanel.share.test.tsx",
+   "category": "test",
+   "p01Owner": "P3.2",
+   "closed": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 5,
+     "ant-selector": 5
+    }
+   },
+   "remaining": {
+    "antdImports": [],
+    "hitKinds": {}
+   },
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/components/TaskDetailPanel.test.tsx",
+   "category": "test",
+   "p01Owner": "P3.2",
+   "closed": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 4,
+     "ant-selector": 1
+    }
+   },
+   "remaining": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/components/TaskDetailPanel.tsx",
+   "category": "production",
+   "p01Owner": "P3.2",
+   "closed": {
+    "antdImports": [
+     "Alert",
+     "Avatar",
+     "Button",
+     "Dropdown",
+     "Input",
+     "Modal",
+     "Popconfirm",
+     "Segmented",
+     "Select",
+     "Spin",
+     "Switch",
+     "Tooltip",
+     "Typography"
+    ],
+    "hitKinds": {
+     "antd-reference": 2,
+     "internal-ref": 1
+    }
+   },
+   "remaining": {
+    "antdImports": [],
+    "hitKinds": {}
+   },
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/components/TaskInputs.tsx",
+   "category": "production",
+   "p01Owner": "P3.2",
+   "closed": {
+    "antdImports": [
+     "Button",
+     "Popconfirm",
+     "Upload"
+    ],
+    "hitKinds": {
+     "antd-reference": 2
+    }
+   },
+   "remaining": {
+    "antdImports": [],
+    "hitKinds": {}
+   },
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/components/WorkspaceView.shareEntry.test.tsx",
+   "category": "test",
+   "p01Owner": "P5.3",
+   "closed": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 3,
+     "ant-selector": 3
+    }
+   },
+   "remaining": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 10,
+     "ant-selector": 9,
+     "antd-reference": 2
+    }
+   },
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/pages/LoginPage.tsx",
+   "category": "production",
+   "p01Owner": "P4.1",
+   "closed": {
+    "antdImports": [
+     "Button",
+     "Card",
+     "Form",
+     "Input"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "remaining": {
+    "antdImports": [],
+    "hitKinds": {}
+   },
+   "closedBy": [
+    {
+     "commit": "14ed14acea932c1a4e86f4ad82c770653a3580b5",
+     "short": "14ed14ace",
+     "date": "2026-10-06",
+     "subject": "feat(web): redesign the login page to match the Mac and iOS clients",
+     "line": "main"
+    }
+   ],
+   "closureRecord": null
+  },
+  {
+   "path": "src/web/src/pages/RunnerDetailPage.codexAccount.test.tsx",
+   "category": "test",
+   "p01Owner": "P4.2",
+   "closed": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 5,
+     "ant-selector": 5,
+     "antd-reference": 1
+    }
+   },
+   "remaining": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/pages/SharedLinksPage.test.tsx",
+   "category": "test",
+   "p01Owner": "P4.4",
+   "closed": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 6,
+     "ant-selector": 6
+    }
+   },
+   "remaining": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 14,
+     "ant-selector": 14
+    }
+   },
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".composer-field textarea.ant-input {",
+   "count": 2,
+   "p01Line": 5811,
+   "p01Group": "WorkspaceView 输入框试点与完整切换（P3.1 → P5.3）",
+   "disposition": "rewritten",
+   "rewrittenAs": [
+    ".composer-field textarea.ant-input,"
+   ],
+   "closedBy": [
+    {
+     "commit": "81f15bef1a60927925e56b1916b82df490da940b",
+     "short": "81f15bef1",
+     "date": "2026-10-06",
+     "subject": "feat(web): auto-sizing Orbit Textarea with a native ref and borderless variant",
+     "line": "project"
+    }
+   ],
+   "closureRecord": null
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".composer-field textarea.ant-input::placeholder {",
+   "count": 1,
+   "p01Line": 5843,
+   "p01Group": "WorkspaceView 输入框试点与完整切换（P3.1 → P5.3）",
+   "disposition": "rewritten",
+   "rewrittenAs": [
+    ".composer-field textarea.ant-input::placeholder,"
+   ],
+   "closedBy": [
+    {
+     "commit": "81f15bef1a60927925e56b1916b82df490da940b",
+     "short": "81f15bef1",
+     "date": "2026-10-06",
+     "subject": "feat(web): auto-sizing Orbit Textarea with a native ref and borderless variant",
+     "line": "project"
+    }
+   ],
+   "closureRecord": null
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".composer-field textarea.ant-input::selection {",
+   "count": 1,
+   "p01Line": 5846,
+   "p01Group": "WorkspaceView 输入框试点与完整切换（P3.1 → P5.3）",
+   "disposition": "rewritten",
+   "rewrittenAs": [
+    ".composer-field textarea.ant-input::selection,"
+   ],
+   "closedBy": [
+    {
+     "commit": "81f15bef1a60927925e56b1916b82df490da940b",
+     "short": "81f15bef1",
+     "date": "2026-10-06",
+     "subject": "feat(web): auto-sizing Orbit Textarea with a native ref and borderless variant",
+     "line": "project"
+    }
+   ],
+   "closureRecord": null
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".composer-field textarea.ant-input:focus-visible {",
+   "count": 1,
+   "p01Line": 5854,
+   "p01Group": "WorkspaceView 输入框试点与完整切换（P3.1 → P5.3）",
+   "disposition": "rewritten",
+   "rewrittenAs": [
+    ".composer-field textarea.ant-input:focus-visible,"
+   ],
+   "closedBy": [
+    {
+     "commit": "81f15bef1a60927925e56b1916b82df490da940b",
+     "short": "81f15bef1",
+     "date": "2026-10-06",
+     "subject": "feat(web): auto-sizing Orbit Textarea with a native ref and borderless variant",
+     "line": "project"
+    }
+   ],
+   "closureRecord": null
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".composer-box-shell .composer-field textarea.ant-input {",
+   "count": 1,
+   "p01Line": 5882,
+   "p01Group": "WorkspaceView 输入框试点与完整切换（P3.1 → P5.3）",
+   "disposition": "rewritten",
+   "rewrittenAs": [
+    ".composer-box-shell .composer-field textarea.ant-input,"
+   ],
+   "closedBy": [
+    {
+     "commit": "81f15bef1a60927925e56b1916b82df490da940b",
+     "short": "81f15bef1",
+     "date": "2026-10-06",
+     "subject": "feat(web): auto-sizing Orbit Textarea with a native ref and borderless variant",
+     "line": "project"
+    }
+   ],
+   "closureRecord": null
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".composer-box textarea.ant-input {",
+   "count": 1,
+   "p01Line": 5889,
+   "p01Group": "WorkspaceView 输入框试点与完整切换（P3.1 → P5.3）",
+   "disposition": "rewritten",
+   "rewrittenAs": [
+    ".composer-box textarea.ant-input,"
+   ],
+   "closedBy": [
+    {
+     "commit": "81f15bef1a60927925e56b1916b82df490da940b",
+     "short": "81f15bef1",
+     "date": "2026-10-06",
+     "subject": "feat(web): auto-sizing Orbit Textarea with a native ref and borderless variant",
+     "line": "project"
+    }
+   ],
+   "closureRecord": null
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".tdp-head > .ant-btn-icon-only {",
+   "count": 1,
+   "p01Line": 10857,
+   "p01Group": "TaskDetailPanel（P3.2）",
+   "disposition": "removed",
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".tdp-head-actions > .ant-btn {",
+   "count": 1,
+   "p01Line": 10873,
+   "p01Group": "TaskDetailPanel（P3.2）",
+   "disposition": "removed",
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".tdp-head-actions > a > .ant-btn,",
+   "count": 1,
+   "p01Line": 10878,
+   "p01Group": "TaskDetailPanel（P3.2）",
+   "disposition": "removed",
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".tdp-head-actions > span > .ant-btn {",
+   "count": 1,
+   "p01Line": 10879,
+   "p01Group": "TaskDetailPanel（P3.2）",
+   "disposition": "removed",
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".tdp-assignee-select.ant-select .ant-select-content {",
+   "count": 1,
+   "p01Line": 11136,
+   "p01Group": "TaskDetailPanel（P3.2）",
+   "disposition": "removed",
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".tdp-assignee-select.ant-select .ant-select-content-has-value {",
+   "count": 1,
+   "p01Line": 11140,
+   "p01Group": "TaskDetailPanel（P3.2）",
+   "disposition": "removed",
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".tdp-assignee-select.ant-select .ant-select-placeholder {",
+   "count": 1,
+   "p01Line": 11143,
+   "p01Group": "TaskDetailPanel（P3.2）",
+   "disposition": "removed",
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".tdp-assignee-select.ant-select:hover .ant-select-content {",
+   "count": 1,
+   "p01Line": 11146,
+   "p01Group": "TaskDetailPanel（P3.2）",
+   "disposition": "removed",
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".tdp-dependency-view.ant-segmented {",
+   "count": 1,
+   "p01Line": 11366,
+   "p01Group": "TaskDetailPanel（P3.2）",
+   "disposition": "removed",
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".tdp-compose .ant-input {",
+   "count": 1,
+   "p01Line": 12394,
+   "p01Group": "TaskDetailPanel compose（P3.2）",
+   "disposition": "removed",
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".share-access-menu .ant-dropdown-menu-item {",
+   "count": 1,
+   "p01Line": 13393,
+   "p01Group": "ShareModal（P3.2）",
+   "disposition": "removed",
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".share-access-menu .ant-dropdown-menu-item .ant-dropdown-menu-item-icon {",
+   "count": 1,
+   "p01Line": 13398,
+   "p01Group": "ShareModal（P3.2）",
+   "disposition": "removed",
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".share-layer-check .ant-checkbox {",
+   "count": 1,
+   "p01Line": 13463,
+   "p01Group": "ShareModal（P3.2）",
+   "disposition": "removed",
+   "closedBy": [
+    {
+     "commit": "c4cc93eb7654c02cc17e5f8d98203a62403fe228",
+     "short": "c4cc93eb7",
+     "date": "2026-10-06",
+     "subject": "feat(web): task detail, share and inputs pilot on Orbit components",
+     "line": "project"
+    }
+   ],
+   "closureRecord": "p3.2/inventory-closure.json"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".re-act .re-icon.ant-btn:not(:disabled) {",
+   "count": 1,
+   "p01Line": 14099,
+   "p01Group": "Providers/RunnerEngines/账号池/登录授权（P4.2）",
+   "disposition": "removed",
+   "closedBy": [
+    {
+     "commit": "c8cee9c19fcbbc61c127942eb1b54228f4cd7863",
+     "short": "c8cee9c19",
+     "date": "2026-10-04",
+     "subject": "refactor(web): move runner account actions into an overflow menu",
+     "line": "main"
+    }
+   ],
+   "closureRecord": null
+  }
+ ],
+ "reviewedNotUse": [
+  {
+   "path": "src/web/src/components/DshRunnerStatus.tsx",
+   "hitKinds": {
+    "imperative-feedback": 1
+   },
+   "p01Owner": null,
+   "note": "message 来自 Orbit useToast()（lib/toast），不是 antd。"
+  },
+  {
+   "path": "src/web/src/components/SignInMethodsCard.tsx",
+   "hitKinds": {
+    "imperative-feedback": 5
+   },
+   "p01Owner": null,
+   "note": "message 来自 Orbit useToast()；卡片用自有 .orbit-card，不导入 antd。"
+  },
+  {
+   "path": "src/web/src/components/WorkspaceView.tsx",
+   "hitKinds": {
+    "imperative-confirm": 6,
+    "imperative-feedback": 40,
+    "ref-focus": 14
+   },
+   "p01Owner": "P5.3",
+   "note": "main 新增的 message.info/warning/error 与一处 ref.focus 都来自 Orbit useToast() 和原生 textarea ref；P0.1 归属 P5.3 不变。"
+  },
+  {
+   "path": "src/web/src/pages/AdminSignInPage.tsx",
+   "hitKinds": {
+    "imperative-feedback": 4
+   },
+   "p01Owner": null,
+   "note": "message 来自 Orbit useToast()，不导入 antd。"
+  },
+  {
+   "path": "src/web/src/pages/RunnerDetailPage.tsx",
+   "hitKinds": {
+    "imperative-confirm": 6,
+    "imperative-feedback": 20,
+    "ref-focus": 1
+   },
+   "p01Owner": "P4.2",
+   "note": "main f22557aff 新增的 message.success/error 来自 Orbit useToast()；P0.1 归属 P4.2 不变。"
+  }
+ ],
+ "forCoordinator": [
+  {
+   "subject": "ProjectBlockers",
+   "candidates": [
+    "P4.3a",
+    "P4.3b"
+   ],
+   "recommendation": "P4.3a",
+   "question": "项目阻塞区块在 ProjectsPage 详情页渲染（P4.3a），也嵌在 ProjectPromotionCard 晋升确认卡里（P4.3b），并带“解决说明”表单；按详情页区块归 P4.3a、由 P4.3b 复核卡内集成，还是随决策卡归 P4.3b？",
+   "files": [
+    "src/web/src/components/ProjectBlockers.test.tsx",
+    "src/web/src/components/ProjectBlockers.tsx"
+   ],
+   "cssLines": [
+    16999,
+    17009,
+    17038
+   ]
+  },
+  {
+   "subject": "ProjectProgressStatus",
+   "candidates": [
+    "P4.3a",
+    "P4.3b"
+   ],
+   "recommendation": "P4.3a",
+   "question": "项目进度状态（仍欠事项、预算、异常/修复表单）在 ProjectsPage、ProjectCoordinatorCard（P4.3a）、ProjectPromotionCard（P4.3b）和 WorkspaceView（P5.3）里都渲染；按项目详情区块归 P4.3a，还是随决策卡归 P4.3b？",
+   "files": [
+    "src/web/src/components/ProjectProgressStatus.test.tsx",
+    "src/web/src/components/ProjectProgressStatus.tsx"
+   ],
+   "cssLines": []
+  },
+  {
+   "subject": "ProjectCrossingsCard",
+   "candidates": [
+    "P4.3a",
+    "P4.3b"
+   ],
+   "recommendation": "P4.3b",
+   "question": "跨项目依赖卡带批准/拒绝确认（决策类，P4.3b），但渲染在 ProjectsPage 详情页和 TaskAttributionCard 里（P4.3a 的页面）；按决策功能归 P4.3b，还是按所在页面归 P4.3a？",
+   "files": [
+    "src/web/src/components/ProjectCrossingsCard.tsx"
+   ],
+   "cssLines": []
+  },
+  {
+   "subject": "TaskDependencyList",
+   "candidates": [
+    "P4.3a",
+    "P4.3b"
+   ],
+   "recommendation": "P4.3a",
+   "question": "任务依赖列表（链接、状态、移除确认）在 TaskDetailPanel 的依赖视图里与依赖图切换显示；它不是图，按任务详情归 P4.3a，还是随依赖主题归 P4.3b？",
+   "files": [
+    "src/web/src/components/TaskDependencyList.tsx"
+   ],
+   "cssLines": []
+  }
+ ],
+ "summary": {
+  "files": {
+   "reassigned": 68,
+   "new": 46,
+   "changed": 5
+  },
+  "cssLines": {
+   "changed": 6,
+   "new": 19,
+   "reassigned": 48
+  },
+  "owners": {
+   "P4.1": 14,
+   "P4.2": 20,
+   "P4.3a": 73,
+   "P4.3b": 30,
+   "P4.4": 6,
+   "P5.1": 2,
+   "P5.2": 1,
+   "P5.3": 10,
+   "P6": 27,
+   "PENDING": 9
+  },
+  "closed": 34,
+  "pendingSubjects": 4
+ }
+}

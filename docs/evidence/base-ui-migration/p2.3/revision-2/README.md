@@ -1,5 +1,13 @@
 # P2.3 第2版：动画与悬停生命周期返工
 
+> **证据瘦身（2026-10-07）**：完整原件见提交 `7732f14f82d4e6b4406d7d164c4b672f63aa0f56`（瘦身前最后一个含完整文件的提交）。取回单个文件用 `git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2.3/revision-2/<路径> > <文件>`，整个目录用 `git archive 7732f14f82d4e6b4406d7d164c4b672f63aa0f56 docs/evidence/base-ui-migration/p2.3/revision-2 | tar -x -C <空目录>`。
+>
+> 本目录在瘦身中：28 份 Playwright 报告换成同目录的 `report.summary.json`，另有 2 份其他文件名的报告换成 `<原名>.summary.json`，都只删附件正文；删除 38 个 trace 压缩包；删除被取代修订的 3590 个原始运行文件（截图、逐用例 JSON、运行压缩包）。下文链接若指向这些文件，按上面的命令从该提交取回；读取它们的脚本要在取回的目录里运行。
+>
+> 第 2 版（判定 SEND_BACK）已被[第 3 版](../revision-3/README.md)（CONFIRM）取代。本版运行的截图、逐用例 JSON 已删除。
+>
+> 目录里的 SHA256SUMS 类清单（`*.sha256`、`artifact-index*.json`、`manifest.json`、各运行 `summary.json` 里的附件哈希等）保留原文件，核验的是提交 `7732f14f8` 里的文件。做法、保留理由和逐文件删除清单见 [evidence-slimming](../../evidence-slimming/README.md)。
+
 本页保留第2版历史证据。第2版因静止指针下的新通知未暂停被独立验收退回；当前结论见 [第3版](../revision-3/README.md)，本页结果和原始附件仍保留。
 
 服务于 [P2.3 通知与反馈服务](orbit-task:34Za3974yqnhjQsRBl0R3)。验收 key `1BvO6hYrlFnU60JqxQPUHt`，原文：**P2：Orbit 自有弹层、选择及反馈组件保持现有键盘、焦点、通知和确认行为。** 本次只承担通知及其与已交付弹层/确认的集成。

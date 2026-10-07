@@ -1,0 +1,1205 @@
+{
+ "full-orig-fc58e5713": {
+  "commit": "fc58e5713a4d4ffdb12f2f74fd887943893d4a0b",
+  "runnerCommit": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+  "args": "pages.browser.mjs states.browser.mjs breakpoints.browser.mjs",
+  "exit": 0,
+  "environment": "p0.2",
+  "stats": {
+   "expected": 76,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 4
+  },
+  "screenshots": 252,
+  "unhandledInAnyTest": [],
+  "profile": {
+   "chromium-dark-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "chromium-dark-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "chromium-light-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "chromium-light-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "webkit-dark-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "webkit-dark-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "webkit-light-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "webkit-light-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   }
+  },
+  "profileSummary": {
+   "tests": 8,
+   "passed": 8,
+   "requestAuthMethods": 0,
+   "unhandledOnlyAuthMethods": 0,
+   "reachedBothCaptures": 8,
+   "pageErrors": 0
+  }
+ },
+ "full-orig-tip": {
+  "commit": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+  "runnerCommit": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+  "args": "pages.browser.mjs states.browser.mjs breakpoints.browser.mjs",
+  "exit": 1,
+  "environment": "p0.2",
+  "stats": {
+   "expected": 68,
+   "unexpected": 8,
+   "flaky": 0,
+   "skipped": 4
+  },
+  "screenshots": 252,
+  "unhandledInAnyTest": [
+   "GET /api/auth/methods"
+  ],
+  "profile": {
+   "chromium-dark-desktop": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods",
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 2,
+    "requests": 17,
+    "pageErrors": []
+   },
+   "chromium-dark-phone": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 1,
+    "requests": 16,
+    "pageErrors": []
+   },
+   "chromium-light-desktop": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 1,
+    "requests": 16,
+    "pageErrors": []
+   },
+   "chromium-light-phone": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods",
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 2,
+    "requests": 17,
+    "pageErrors": []
+   },
+   "webkit-dark-desktop": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods",
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 2,
+    "requests": 17,
+    "pageErrors": []
+   },
+   "webkit-dark-phone": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 1,
+    "requests": 16,
+    "pageErrors": []
+   },
+   "webkit-light-desktop": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods",
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 2,
+    "requests": 17,
+    "pageErrors": []
+   },
+   "webkit-light-phone": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods",
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 2,
+    "requests": 17,
+    "pageErrors": []
+   }
+  },
+  "profileSummary": {
+   "tests": 8,
+   "passed": 0,
+   "requestAuthMethods": 8,
+   "unhandledOnlyAuthMethods": 8,
+   "reachedBothCaptures": 8,
+   "pageErrors": 0
+  }
+ },
+ "full-orig-422627ef7": {
+  "commit": "422627ef782d3c3d82f94e3f247ebd3fec525552",
+  "runnerCommit": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+  "args": "pages.browser.mjs states.browser.mjs breakpoints.browser.mjs",
+  "exit": 0,
+  "environment": "p0.2",
+  "stats": {
+   "expected": 76,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 4
+  },
+  "screenshots": 252,
+  "unhandledInAnyTest": [],
+  "profile": {
+   "chromium-dark-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "chromium-dark-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "chromium-light-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "chromium-light-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "webkit-dark-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "webkit-dark-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "webkit-light-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "webkit-light-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   }
+  },
+  "profileSummary": {
+   "tests": 8,
+   "passed": 8,
+   "requestAuthMethods": 0,
+   "unhandledOnlyAuthMethods": 0,
+   "reachedBothCaptures": 8,
+   "pageErrors": 0
+  }
+ },
+ "full-orig-106c25fc2": {
+  "commit": "106c25fc2c43a938faa3bf16731fe24a5b409d3f",
+  "runnerCommit": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+  "args": "pages.browser.mjs states.browser.mjs breakpoints.browser.mjs",
+  "exit": 0,
+  "environment": "p0.2",
+  "stats": {
+   "expected": 76,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 4
+  },
+  "screenshots": 252,
+  "unhandledInAnyTest": [],
+  "profile": {
+   "chromium-dark-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "chromium-dark-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "chromium-light-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "chromium-light-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 18,
+    "pageErrors": []
+   },
+   "webkit-dark-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "webkit-dark-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "webkit-light-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "webkit-light-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   }
+  },
+  "profileSummary": {
+   "tests": 8,
+   "passed": 8,
+   "requestAuthMethods": 0,
+   "unhandledOnlyAuthMethods": 0,
+   "reachedBothCaptures": 8,
+   "pageErrors": 0
+  }
+ },
+ "full-orig-106c25fc2-r2": {
+  "commit": "106c25fc2c43a938faa3bf16731fe24a5b409d3f",
+  "runnerCommit": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+  "args": "pages.browser.mjs states.browser.mjs breakpoints.browser.mjs",
+  "exit": 0,
+  "environment": "p0.2",
+  "stats": {
+   "expected": 76,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 4
+  },
+  "screenshots": 252,
+  "unhandledInAnyTest": [],
+  "profile": {
+   "chromium-dark-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "chromium-dark-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "chromium-light-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "chromium-light-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "webkit-dark-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "webkit-dark-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "webkit-light-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "webkit-light-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   }
+  },
+  "profileSummary": {
+   "tests": 8,
+   "passed": 8,
+   "requestAuthMethods": 0,
+   "unhandledOnlyAuthMethods": 0,
+   "reachedBothCaptures": 8,
+   "pageErrors": 0
+  }
+ },
+ "full-orig-98cdd37d0": {
+  "commit": "98cdd37d0e2714f7638aef9ca2e207858ac509b1",
+  "runnerCommit": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+  "args": "pages.browser.mjs states.browser.mjs breakpoints.browser.mjs",
+  "exit": 1,
+  "environment": "p0.2",
+  "stats": {
+   "expected": 68,
+   "unexpected": 8,
+   "flaky": 0,
+   "skipped": 4
+  },
+  "screenshots": 252,
+  "unhandledInAnyTest": [
+   "GET /api/auth/methods"
+  ],
+  "profile": {
+   "chromium-dark-desktop": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods",
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 2,
+    "requests": 17,
+    "pageErrors": []
+   },
+   "chromium-dark-phone": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods",
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 2,
+    "requests": 17,
+    "pageErrors": []
+   },
+   "chromium-light-desktop": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods",
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 2,
+    "requests": 17,
+    "pageErrors": []
+   },
+   "chromium-light-phone": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods",
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 2,
+    "requests": 17,
+    "pageErrors": []
+   },
+   "webkit-dark-desktop": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods",
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 2,
+    "requests": 17,
+    "pageErrors": []
+   },
+   "webkit-dark-phone": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods",
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 2,
+    "requests": 17,
+    "pageErrors": []
+   },
+   "webkit-light-desktop": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods",
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 2,
+    "requests": 17,
+    "pageErrors": []
+   },
+   "webkit-light-phone": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods",
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 2,
+    "requests": 17,
+    "pageErrors": []
+   }
+  },
+  "profileSummary": {
+   "tests": 8,
+   "passed": 0,
+   "requestAuthMethods": 8,
+   "unhandledOnlyAuthMethods": 8,
+   "reachedBothCaptures": 8,
+   "pageErrors": 0
+  }
+ },
+ "full-orig-463bb277a": {
+  "commit": "463bb277a211c69ab0a14a19e69a71c404fe18d1",
+  "runnerCommit": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+  "args": "pages.browser.mjs states.browser.mjs breakpoints.browser.mjs",
+  "exit": 0,
+  "environment": "p0.2",
+  "stats": {
+   "expected": 76,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 4
+  },
+  "screenshots": 252,
+  "unhandledInAnyTest": [],
+  "profile": {
+   "chromium-dark-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "chromium-dark-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "chromium-light-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "chromium-light-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "webkit-dark-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "webkit-dark-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "webkit-light-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   },
+   "webkit-light-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 0,
+    "requests": 15,
+    "pageErrors": []
+   }
+  },
+  "profileSummary": {
+   "tests": 8,
+   "passed": 8,
+   "requestAuthMethods": 0,
+   "unhandledOnlyAuthMethods": 0,
+   "reachedBothCaptures": 8,
+   "pageErrors": 0
+  }
+ },
+ "full-orig-558a8ba1f": {
+  "commit": "558a8ba1fcd15bb40c187460bbebc2a5e0c37d61",
+  "runnerCommit": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+  "args": "pages.browser.mjs states.browser.mjs breakpoints.browser.mjs",
+  "exit": 1,
+  "environment": "p0.2",
+  "stats": {
+   "expected": 68,
+   "unexpected": 8,
+   "flaky": 0,
+   "skipped": 4
+  },
+  "screenshots": 252,
+  "unhandledInAnyTest": [
+   "GET /api/auth/methods"
+  ],
+  "profile": {
+   "chromium-dark-desktop": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods",
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 2,
+    "requests": 17,
+    "pageErrors": []
+   },
+   "chromium-dark-phone": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 1,
+    "requests": 16,
+    "pageErrors": []
+   },
+   "chromium-light-desktop": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods",
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 2,
+    "requests": 17,
+    "pageErrors": []
+   },
+   "chromium-light-phone": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 1,
+    "requests": 16,
+    "pageErrors": []
+   },
+   "webkit-dark-desktop": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods",
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 2,
+    "requests": 17,
+    "pageErrors": []
+   },
+   "webkit-dark-phone": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods",
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 2,
+    "requests": 17,
+    "pageErrors": []
+   },
+   "webkit-light-desktop": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods",
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 2,
+    "requests": 17,
+    "pageErrors": []
+   },
+   "webkit-light-phone": {
+    "status": "unexpected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [
+     "GET /api/auth/methods",
+     "GET /api/auth/methods"
+    ],
+    "authMethodsRequests": 2,
+    "requests": 17,
+    "pageErrors": []
+   }
+  },
+  "profileSummary": {
+   "tests": 8,
+   "passed": 0,
+   "requestAuthMethods": 8,
+   "unhandledOnlyAuthMethods": 8,
+   "reachedBothCaptures": 8,
+   "pageErrors": 0
+  }
+ },
+ "full-fix-tip": {
+  "commit": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+  "runnerCommit": "5d7801e4729e1c38fdbf54f372fc433ea2b65bb9",
+  "args": "pages.browser.mjs states.browser.mjs breakpoints.browser.mjs",
+  "exit": 0,
+  "environment": "p0.2",
+  "stats": {
+   "expected": 76,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 4
+  },
+  "screenshots": 252,
+  "unhandledInAnyTest": [],
+  "profile": {
+   "chromium-dark-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 1,
+    "requests": 16,
+    "pageErrors": []
+   },
+   "chromium-dark-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 1,
+    "requests": 16,
+    "pageErrors": []
+   },
+   "chromium-light-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 1,
+    "requests": 16,
+    "pageErrors": []
+   },
+   "chromium-light-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 1,
+    "requests": 16,
+    "pageErrors": []
+   },
+   "webkit-dark-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 1,
+    "requests": 16,
+    "pageErrors": []
+   },
+   "webkit-dark-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 1,
+    "requests": 16,
+    "pageErrors": []
+   },
+   "webkit-light-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 1,
+    "requests": 16,
+    "pageErrors": []
+   },
+   "webkit-light-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 1,
+    "requests": 16,
+    "pageErrors": []
+   }
+  },
+  "profileSummary": {
+   "tests": 8,
+   "passed": 8,
+   "requestAuthMethods": 8,
+   "unhandledOnlyAuthMethods": 0,
+   "reachedBothCaptures": 8,
+   "pageErrors": 0
+  }
+ },
+ "profile-fix-558a8ba1f": {
+  "commit": "558a8ba1fcd15bb40c187460bbebc2a5e0c37d61",
+  "runnerCommit": "5d7801e4729e1c38fdbf54f372fc433ea2b65bb9",
+  "args": "pages.browser.mjs -g profile",
+  "exit": 0,
+  "environment": "p0.2",
+  "stats": {
+   "expected": 8,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 0
+  },
+  "screenshots": 16,
+  "unhandledInAnyTest": [],
+  "profile": {
+   "chromium-dark-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 1,
+    "requests": 16,
+    "pageErrors": []
+   },
+   "chromium-dark-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 1,
+    "requests": 16,
+    "pageErrors": []
+   },
+   "chromium-light-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 1,
+    "requests": 16,
+    "pageErrors": []
+   },
+   "chromium-light-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 1,
+    "requests": 16,
+    "pageErrors": []
+   },
+   "webkit-dark-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 1,
+    "requests": 16,
+    "pageErrors": []
+   },
+   "webkit-dark-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 1,
+    "requests": 16,
+    "pageErrors": []
+   },
+   "webkit-light-desktop": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 1,
+    "requests": 16,
+    "pageErrors": []
+   },
+   "webkit-light-phone": {
+    "status": "expected",
+    "captures": [
+     "profile",
+     "profile-validation"
+    ],
+    "unhandled": [],
+    "authMethodsRequests": 1,
+    "requests": 16,
+    "pageErrors": []
+   }
+  },
+  "profileSummary": {
+   "tests": 8,
+   "passed": 8,
+   "requestAuthMethods": 8,
+   "unhandledOnlyAuthMethods": 0,
+   "reachedBothCaptures": 8,
+   "pageErrors": 0
+  }
+ }
+}

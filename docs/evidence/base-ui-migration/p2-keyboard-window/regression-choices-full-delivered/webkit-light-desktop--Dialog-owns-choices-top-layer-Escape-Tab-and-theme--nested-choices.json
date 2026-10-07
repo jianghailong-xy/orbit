@@ -1,9 +1,0 @@
-{
-  "legacy": false,
-  "topLayerOnly": true,
-  "portalInsideOwner": true,
-  "tabBothDirections": true,
-  "fullTabCycle": true,
-  "scrollLocked": true,
-  "returned": true
-}

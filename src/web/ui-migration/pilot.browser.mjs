@@ -249,6 +249,48 @@ test.describe('task detail pilot', () => {
     await testInfo.attach('trace', { body: JSON.stringify([await observe(page, pilot, 'upload refused twice')], null, 2), contentType: 'application/json' });
   });
 
+  // P3.3's drop probe, kept as a case. The replaced Upload (multiple, no accept filter, one customRequest
+  // per file) took files dropped on Add file, and the Orbit file input takes them the same way: two files
+  // in one DataTransfer dropped on the button, every upload request recorded with the file names its
+  // multipart body carries, and the page staying where it was.
+  test('files dropped on Add file are each uploaded', async ({ evidence }, testInfo) => {
+    const { page } = evidence;
+    const pilot = await installPilotFixtures(page, { theme: testInfo.project.use.colorScheme });
+    const uploads = [];
+    page.on('request', (request) => {
+      if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/attachments') {
+        const body = request.postData() ?? '';
+        uploads.push({ query: new URL(request.url()).search, files: [...body.matchAll(/filename="([^"]+)"/g)].map((m) => m[1]) });
+      }
+    });
+    await page.goto(PILOT_PATHS.task);
+    const panel = page.locator('.task-detail-panel');
+    await expect(panel.locator('.tdp-input-thumb[src]')).toHaveCount(1);
+    const inputs = panel.locator('.tdp-section').filter({ has: page.getByText(/^Inputs \(/) });
+    const add = inputs.getByRole('button', { name: /Add file/ });
+    await add.scrollIntoViewIfNeeded();
+    const before = page.url();
+    const dataTransfer = await page.evaluateHandle(() => {
+      const dt = new DataTransfer();
+      dt.items.add(new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], 'dropped.png', { type: 'image/png' }));
+      dt.items.add(new File(['dropped notes'], 'dropped.txt', { type: 'text/plain' }));
+      return dt;
+    });
+    await add.dispatchEvent('dragenter', { dataTransfer });
+    await add.dispatchEvent('dragover', { dataTransfer });
+    await add.dispatchEvent('drop', { dataTransfer });
+    await expect.poll(() => pilot.requests.filter((r) => r.method === 'POST' && r.path === '/api/attachments').length).toBe(2);
+    await page.waitForTimeout(300);
+    const observed = {
+      url: page.url() === before ? 'unchanged' : page.url(),
+      uploadRequests: pilot.requests.filter((r) => r.method === 'POST' && r.path === '/api/attachments').length,
+      files: uploads.flatMap((u) => u.files).sort(),
+      queries: [...new Set(uploads.map((u) => u.query))],
+    };
+    await testInfo.attach('trace', { body: JSON.stringify([{ step: 'two files dropped on Add file', ...observed, requests: [] }], null, 2), contentType: 'application/json' });
+    expect(observed).toEqual({ url: 'unchanged', uploadRequests: 2, files: ['dropped.png', 'dropped.txt'], queries: [`?taskId=${PILOT_IDS.task}`] });
+  });
+
   test('reopening a stopped task, refused and then backed out of', async ({ evidence }, testInfo) => {
     const { page, capture } = evidence;
     const pilot = await installPilotFixtures(page, { theme: testInfo.project.use.colorScheme });

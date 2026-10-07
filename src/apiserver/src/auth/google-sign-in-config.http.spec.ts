@@ -11,7 +11,7 @@ import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 
 import { PrismaService } from '../prisma/prisma.service';
-import { decryptSecret } from '../providers/provider-crypto';
+import { decryptSecret, encryptSecret } from '../providers/provider-crypto';
 import { AdminRoleGuard } from '../users/admin-role.guard';
 import { AdminSignInController } from './admin-sign-in.controller';
 import { AuthController } from './auth.controller';
@@ -73,12 +73,23 @@ function row(over: Row = {}): Row {
     provider: 'google',
     enabled: true,
     clientId: CLIENT_ID,
-    clientSecretEnc: 'iv:tag:ct',
+    clientSecretEnc: encryptSecret(SECRET),
     signupPolicy: 'EXISTING_ACCOUNTS',
     updatedById: ADMIN_ID,
     updatedAt: new Date(),
     ...over,
   };
+}
+
+/** The ciphertext a *different* `PROVIDER_SECRET_KEY` wrote: what rotating that key leaves behind. */
+function encryptWithKey(key: string, plaintext: string): string {
+  const before = process.env.PROVIDER_SECRET_KEY;
+  process.env.PROVIDER_SECRET_KEY = key;
+  try {
+    return encryptSecret(plaintext);
+  } finally {
+    process.env.PROVIDER_SECRET_KEY = before;
+  }
 }
 
 @Module({
@@ -172,6 +183,11 @@ async function assertStartRefuses(call: Awaited<ReturnType<typeof boot>>['call']
   assert.equal(stateless.status, 302, state);
   assert.equal(stateless.location, 'orbit://auth/google?error=GOOGLE_NOT_CONFIGURED', state);
 
+  // A state /start would not take is not handed back.
+  const unfit = await call('GET', `/api/auth/google/start?client=native&client_state=${'s'.repeat(513)}`);
+  assert.equal(unfit.status, 302, `${state}: ${unfit.status} ${unfit.text}`);
+  assert.equal(unfit.location, 'orbit://auth/google?error=GOOGLE_NOT_CONFIGURED', state);
+
   // No client, or one that is neither: there is nowhere to send the browser back to.
   for (const query of ['', '?client=ios', '?client=web&client=native']) {
     const refused = await call('GET', `/api/auth/google/start${query}`);
@@ -222,11 +238,11 @@ test('on: /auth/methods offers Google, and sign-up only under OPEN; /start no lo
   assert.deepEqual((await call('GET', '/api/auth/methods')).json, { password: true, google: true, googleSignup: true });
 
   // On, /start goes on to the flow (google-sign-in-flow.http.spec.ts): one without a challenge is
-  // refused for the challenge, not sent back GOOGLE_NOT_CONFIGURED.
+  // sent back for the challenge, GOOGLE_BAD_REQUEST, not GOOGLE_NOT_CONFIGURED.
   const start = await call('GET', '/api/auth/google/start?client=web');
-  assert.equal(start.status, 400, start.text);
-  assert.match(start.text, /code_challenge/);
-  assert.equal(start.location, null);
+  assert.equal(start.status, 302, start.text);
+  assert.equal(start.location, '/login?google_error=GOOGLE_BAD_REQUEST');
+  assert.equal(start.setCookie, null);
 });
 
 test('admin: GET and PUT /admin/sign-in/google save and read back the setting, keep the secret encrypted, and never answer it', async (t) => {
@@ -241,6 +257,7 @@ test('admin: GET and PUT /admin/sign-in/google save and read back the setting, k
     enabled: false,
     clientId: '',
     hasSecret: false,
+    secretUnreadable: false,
     signupPolicy: 'EXISTING_ACCOUNTS',
     redirectUri: REDIRECT_URI,
   });
@@ -251,7 +268,14 @@ test('admin: GET and PUT /admin/sign-in/google save and read back the setting, k
     body: { enabled: false, clientId: ` ${CLIENT_ID}\n`, clientSecret: ` ${SECRET} `, signupPolicy: 'OPEN' },
   });
   assert.equal(saved.status, 200, saved.text);
-  const savedView = { enabled: false, clientId: CLIENT_ID, hasSecret: true, signupPolicy: 'OPEN', redirectUri: REDIRECT_URI };
+  const savedView = {
+    enabled: false,
+    clientId: CLIENT_ID,
+    hasSecret: true,
+    secretUnreadable: false,
+    signupPolicy: 'OPEN',
+    redirectUri: REDIRECT_URI,
+  };
   assert.deepEqual(saved.json, savedView);
   assert.equal(storedRow().updatedById, ADMIN_ID);
   assert.notEqual(storedRow().clientSecretEnc, SECRET);
@@ -289,6 +313,53 @@ test('admin: GET and PUT /admin/sign-in/google save and read back the setting, k
     }
     assert.ok(!/clientSecret/.test(answer.text), `an answer named the secret: ${answer.text}`);
   }
+});
+
+test('admin: a secret the PROVIDER_SECRET_KEY in force cannot decrypt is reported, still never answered', async (t) => {
+  // The row a rotation leaves behind (§7.1): ciphertext written under the key that has since gone.
+  stored = row({ clientSecretEnc: encryptWithKey('the-PROVIDER_SECRET_KEY-before-the-rotation', SECRET) });
+  const { call, answers } = await boot(t);
+
+  const view = await call('GET', '/api/admin/sign-in/google', { bearer: 'admin' });
+  assert.equal(view.status, 200, `an unreadable secret is answered, not raised: ${view.text}`);
+  assert.deepEqual(view.json, {
+    enabled: true,
+    clientId: CLIENT_ID,
+    hasSecret: true,
+    secretUnreadable: true,
+    signupPolicy: 'EXISTING_ACCOUNTS',
+    redirectUri: REDIRECT_URI,
+  }, 'the saved setting is reported as it stands, and the secret as unreadable');
+
+  // What the login page offers is not this flag's business: /auth/methods still holds the setting, and
+  // the failure a person meets is the Google sign-in one (§4.3). Here it only has to stay an ordinary
+  // answer — no fifth field, nothing about the secret.
+  const methods = await call('GET', '/api/auth/methods');
+  assert.equal(methods.status, 200, methods.text);
+  assert.deepEqual(methods.json, { password: true, google: true, googleSignup: false });
+
+  // A rotation is not a leak: no answer carries the secret, the ciphertext, or a name for either.
+  for (const answer of answers) {
+    assert.ok(!answer.text.includes(SECRET), `an answer carried the secret: ${answer.text}`);
+    assert.ok(!answer.text.includes(storedRow().clientSecretEnc), `an answer carried the ciphertext: ${answer.text}`);
+    assert.ok(!/clientSecret/.test(answer.text), `an answer named the secret: ${answer.text}`);
+  }
+
+  // Entering a secret again is what clears it: the save answers readable from then on.
+  const saved = await call('PUT', '/api/admin/sign-in/google', {
+    bearer: 'admin',
+    body: { enabled: true, clientId: CLIENT_ID, clientSecret: SECRET, signupPolicy: 'EXISTING_ACCOUNTS' },
+  });
+  assert.equal(saved.status, 200, saved.text);
+  assert.deepEqual(saved.json, {
+    enabled: true,
+    clientId: CLIENT_ID,
+    hasSecret: true,
+    secretUnreadable: false,
+    signupPolicy: 'EXISTING_ACCOUNTS',
+    redirectUri: REDIRECT_URI,
+  });
+  assert.deepEqual((await call('GET', '/api/admin/sign-in/google', { bearer: 'admin' })).json, saved.json);
 });
 
 test('admin: a body the setting cannot hold is refused before anything is written', async (t) => {

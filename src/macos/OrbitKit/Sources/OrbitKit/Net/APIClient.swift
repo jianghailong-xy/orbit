@@ -807,6 +807,12 @@ public final class APIClient: @unchecked Sendable {
         try await get("projects/\(projectID)/integration")
     }
 
+    /// The owner's Retry on a job the integration view says can be retried (`retryable`): the
+    /// silent generation ends and the next one is queued. Answers the integration view read again.
+    public func retryIntegrationJob(_ projectID: String, jobID: String) async throws -> ProjectIntegrationView {
+        try await postEmpty("projects/\(projectID)/integration/jobs/\(jobID)/retry")
+    }
+
     /// One page of the project's top-level tasks, newest first.
     public func projectTaskPage(_ projectID: String, cursor: String? = nil,
                                 limit: Int = 100) async throws -> ProjectTaskPage {
@@ -1405,10 +1411,11 @@ public final class APIClient: @unchecked Sendable {
     }
     public func startRunnerLogin(_ id: String, engine: LoginEngine,
                                  account: String? = nil,
-                                 accountName: String? = nil) async throws -> RunnerLoginState {
+                                 accountName: String? = nil,
+                                 region: String? = nil) async throws -> RunnerLoginState {
         try await post("runners/\(id)/login",
                        body: StartLoginRequest(engine: engine, account: account,
-                                               accountName: accountName))
+                                               accountName: accountName, region: region))
     }
     /// Hand the runner the authorization code the sign-in page gave the user (claude's paste-back
     /// flow). Useless without the PKCE verifier that never leaves the runner process.

@@ -12,13 +12,24 @@ struct ProjectLandingRow: View {
     let line: ProjectPage.LandingLine
 
     var body: some View {
-        let ink = line.running ? Color.accentColor : Color.secondary
+        // A job the server judged timed out is in the warning ink, its triangle where the ring was:
+        // nothing on the row moves for a runner that has stopped reporting.
+        let ink = line.timedOut ? ProjectPalette.warningInk : line.running ? Color.accentColor : Color.secondary
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                LandingRing(running: line.running)
+                if line.timedOut {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 13, height: 13)
+                        .foregroundStyle(ink)
+                        .accessibilityHidden(true)
+                } else {
+                    LandingRing(running: line.running)
+                }
                 Text(line.word).font(.orbitLabel.weight(.semibold)).foregroundStyle(ink)
                 Spacer(minLength: 8)
-                Text(line.state).font(.orbitMeta).foregroundStyle(.secondary)
+                Text(line.state).font(.orbitMeta).foregroundStyle(line.timedOut ? ink : Color.secondary)
             }
             if let what = line.what {
                 Text(what).font(.orbitLabel).lineLimit(2)

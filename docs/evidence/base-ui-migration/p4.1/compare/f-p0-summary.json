@@ -1,0 +1,387 @@
+{
+ "beyond": [
+  {
+   "clusters": [
+    [
+     [
+      18,
+      21
+     ],
+     [
+      192,
+      193
+     ],
+     3,
+     2
+    ],
+    [
+     [
+      18,
+      21
+     ],
+     [
+      222,
+      223
+     ],
+     4,
+     4
+    ]
+   ],
+   "max": 4,
+   "pixels": 7,
+   "shot": "chromium-dark-desktop/breakpoint-639-projects.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      286,
+      289
+     ],
+     [
+      23,
+      23
+     ],
+     2,
+     3
+    ]
+   ],
+   "max": 3,
+   "pixels": 2,
+   "shot": "chromium-light-phone/task-action-focus.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      100,
+      280
+     ],
+     [
+      44,
+      119
+     ],
+     3420,
+     167
+    ],
+    [
+     [
+      227,
+      280
+     ],
+     [
+      44,
+      87
+     ],
+     811,
+     167
+    ],
+    [
+     [
+      136,
+      136
+     ],
+     [
+      45,
+      45
+     ],
+     1,
+     1
+    ],
+    [
+     [
+      225,
+      232
+     ],
+     [
+      49,
+      54
+     ],
+     4,
+     1
+    ],
+    [
+     [
+      223,
+      225
+     ],
+     [
+      52,
+      52
+     ],
+     3,
+     1
+    ]
+   ],
+   "max": 167,
+   "pixels": 4239,
+   "shot": "webkit-dark-phone/profile-validation.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      104,
+      281
+     ],
+     [
+      42,
+      121
+     ],
+     3758,
+     224
+    ],
+    [
+     [
+      221,
+      281
+     ],
+     [
+      42,
+      86
+     ],
+     931,
+     224
+    ],
+    [
+     [
+      112,
+      150
+     ],
+     [
+      43,
+      56
+     ],
+     116,
+     1
+    ],
+    [
+     [
+      236,
+      266
+     ],
+     [
+      43,
+      50
+     ],
+     56,
+     1
+    ]
+   ],
+   "max": 224,
+   "pixels": 4861,
+   "shot": "webkit-light-phone/profile-validation.png"
+  }
+ ],
+ "missing": [],
+ "screenshots": {
+  "antialias": 12,
+  "beyond": 4,
+  "identical": 236,
+  "missing": 0
+ },
+ "styleDeltas": {
+  "webkit-dark-desktop/profile": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "name": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/settings": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "switch": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "theme": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/settings-saved": {
+   "switch": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/profile": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "name": {
+    "lineHeight": [
+     "25.142857px",
+     "25.142879px"
+    ]
+   }
+  },
+  "webkit-dark-phone/settings": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "switch": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "theme": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-dark-phone/settings-saved": {
+   "switch": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/profile": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "name": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/settings": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "switch": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "theme": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-desktop/settings-saved": {
+   "switch": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/profile": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "name": {
+    "lineHeight": [
+     "25.142857px",
+     "25.142879px"
+    ]
+   }
+  },
+  "webkit-light-phone/settings": {
+   "card": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "switch": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "theme": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  },
+  "webkit-light-phone/settings-saved": {
+   "switch": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   }
+  }
+ },
+ "tests": {
+  "notPassedDel": [
+   "chromium-dark-desktop :: record browser performance baseline",
+   "chromium-dark-phone :: both sides of existing 600, 640 and 960px rules",
+   "chromium-dark-phone :: record browser performance baseline",
+   "chromium-light-phone :: both sides of existing 600, 640 and 960px rules",
+   "chromium-light-phone :: record browser performance baseline",
+   "webkit-dark-desktop :: record browser performance baseline",
+   "webkit-dark-phone :: both sides of existing 600, 640 and 960px rules",
+   "webkit-dark-phone :: record browser performance baseline",
+   "webkit-light-desktop :: record browser performance baseline",
+   "webkit-light-phone :: both sides of existing 600, 640 and 960px rules",
+   "webkit-light-phone :: record browser performance baseline"
+  ],
+  "notPassedRef": [
+   "chromium-dark-desktop :: record browser performance baseline",
+   "chromium-dark-phone :: both sides of existing 600, 640 and 960px rules",
+   "chromium-dark-phone :: record browser performance baseline",
+   "chromium-light-phone :: both sides of existing 600, 640 and 960px rules",
+   "chromium-light-phone :: record browser performance baseline",
+   "webkit-dark-desktop :: record browser performance baseline",
+   "webkit-dark-phone :: both sides of existing 600, 640 and 960px rules",
+   "webkit-dark-phone :: record browser performance baseline",
+   "webkit-light-desktop :: record browser performance baseline",
+   "webkit-light-phone :: both sides of existing 600, 640 and 960px rules",
+   "webkit-light-phone :: record browser performance baseline"
+  ],
+  "total": 112
+ },
+ "traces": {
+  "differing": {},
+  "equal": 0,
+  "total": 0
+ }
+}

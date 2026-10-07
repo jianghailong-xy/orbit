@@ -1,12 +1,16 @@
+import { randomUUID } from 'node:crypto';
+
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   Logger,
   NotFoundException,
   OnModuleDestroy,
   OnModuleInit,
+  Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma, type ManagedRunner } from '@prisma/client';
@@ -19,6 +23,12 @@ import {
 import { generateToken, sha256 } from '../common/crypto.util';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  EVERY_ACCOUNT,
+  MANAGED_RUNNER_ELIGIBILITY,
+  managedRunnerNotEligibleReason,
+  type ManagedRunnerEligibility,
+} from './managed-runner-eligibility';
 import { MANAGED_RUNNER_GATE, managedRunnerDisabledError, type ManagedRunnerGate } from './managed-runner-gate';
 import type { ManagedRunnerProfile } from './managed-runner-profile';
 import {
@@ -28,6 +38,7 @@ import {
   managedPvcName,
 } from './managed-runner-resources';
 import { MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from './managed-runner-runtime';
+import type { ManagedRunnerSignIn } from './managed-runner-sign-in';
 import { DEFAULT_HEARTBEAT_FRESH_MS, managedRunnerStatus, managedRunnerUnavailableReason } from './managed-runner-status';
 
 export const MANAGED_RUNNER_NOT_FOUND = 'MANAGED_RUNNER_NOT_FOUND';
@@ -43,16 +54,21 @@ export const MANAGED_RUNNER_NOT_FOUND = 'MANAGED_RUNNER_NOT_FOUND';
  *
  * With the feature off this is the inert status facade the design allows: `status` reads, the
  * writes are refused by ManagedRunnerEnabledGuard before they get here (and again here, should
- * anything call them), and no runtime, client or timer exists.
+ * anything call them), `signedIn` returns before reading anything, and no runtime, client or timer
+ * exists.
+ *
+ * Whether an account is given a mapping at all is ManagedRunnerEligibility's decision, asked by both
+ * ways one is created: a sign-in and an explicit ensure.
  */
 @Injectable()
-export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy {
+export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, ManagedRunnerSignIn {
   private readonly log = new Logger('ManagedRunners');
 
   constructor(
     private readonly prisma: PrismaService,
     @Inject(MANAGED_RUNNER_GATE) private readonly gate: ManagedRunnerGate,
     @Inject(MANAGED_RUNNER_RUNTIME) private readonly runtime: ManagedRunnerRuntime | null,
+    @Optional() @Inject(MANAGED_RUNNER_ELIGIBILITY) private readonly eligibility: ManagedRunnerEligibility = EVERY_ACCOUNT,
   ) {}
 
   onModuleInit(): void {
@@ -73,6 +89,8 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy {
     return managedRunnerStatus({
       enabled: this.gate.enabled,
       available,
+      // Only what could still be offered is asked: an account with a mapping has had its answer.
+      eligible: !mapping && this.gate.enabled && available ? await this.eligibility.eligible(ownerId) : true,
       mapping,
       runner,
       now: new Date(),
@@ -81,14 +99,38 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * A sign-in (ManagedRunnerSignIn): AuthService.completeLogin calls this after it has issued the
+   * tokens, and nothing else does. Off, it returns before reading anything. On, an eligible owner
+   * without a mapping gets one — its runner row and default workspace with it, once — and the manager
+   * is woken to provision it in the background: the sign-in waits for no instance and makes no
+   * Kubernetes call. A mapping that exists is left as it is, whatever its state: a sign-in neither
+   * retries a FAILED one nor recreates a deleted one. Nothing here throws. A sign-in whose intent
+   * could not be recorded stands; an explicit ensure, or the next sign-in, records it.
+   */
+  async signedIn(user: { id: string }): Promise<void> {
+    if (!this.gate.enabled) return;
+    // Enabled without a usable environment: the status read reports MANAGED_RUNNER_UNAVAILABLE.
+    const runtime = this.runtime;
+    if (!runtime?.available) return;
+    try {
+      if (await this.prisma.managedRunner.findUnique({ where: { ownerId: user.id }, select: { id: true } })) return;
+      if (!(await this.eligibility.eligible(user.id))) return;
+      await this.createMapping(user.id, `sign-in:${randomUUID()}`, runtime.profile);
+      runtime.worker.kick();
+    } catch (error) {
+      this.log.warn(`managed runner intent not recorded at sign-in for owner ${user.id}; an explicit ensure records it: ${(error as Error).message}`);
+    }
+  }
+
+  /**
    * Record RUNNING intent: the owner's one mapping, with its runner row and default workspace,
    * created together if it does not exist yet. Idempotent per owner — a repeated or concurrent
-   * ensure answers with the same mapping.
+   * ensure answers with the same mapping. Creating one is for an eligible owner only.
    */
   async ensure(ownerId: string, idempotencyKey: string): Promise<ManagedRunnerStatus> {
     const runtime = this.operable();
     const mapping = (await this.prisma.managedRunner.findUnique({ where: { ownerId } }))
-      ?? (await this.createMapping(ownerId, idempotencyKey, runtime.profile));
+      ?? (await this.createEligibleMapping(ownerId, idempotencyKey, runtime.profile));
     if (mapping.desiredState === 'DELETED' || mapping.managementState === 'DELETING' || mapping.managementState === 'DELETED') {
       throw new ConflictException({
         code: MANAGED_RUNNER_TRANSITION_REFUSED,
@@ -162,6 +204,12 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy {
     const mapping = await this.prisma.managedRunner.findUnique({ where: { ownerId } });
     if (!mapping) throw new NotFoundException({ code: MANAGED_RUNNER_NOT_FOUND, message: 'You have no managed runner.' });
     return mapping;
+  }
+
+  /** An explicit ensure's new mapping, after the decision that the owner may have one. */
+  private async createEligibleMapping(ownerId: string, idempotencyKey: string, profile: ManagedRunnerProfile): Promise<ManagedRunner> {
+    if (!(await this.eligibility.eligible(ownerId))) throw new ForbiddenException(managedRunnerNotEligibleReason());
+    return this.createMapping(ownerId, idempotencyKey, profile);
   }
 
   private revisionConflict(mapping: ManagedRunner): ConflictException {
