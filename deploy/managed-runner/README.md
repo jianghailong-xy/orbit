@@ -131,6 +131,24 @@ runner, which owns signaling/draining its engine children; do not broadcast a si
 process group and prematurely kill active turns. Budget expiry or uncertain old-node status requires
 operator reconciliation/fencing, not a second writer. Keep the original PVC on sleep or failure.
 
+## Manager environment profile
+
+An apiserver with `ORBIT_MANAGED_RUNNERS_ENABLED=true` reconciles only in the environment that
+`ORBIT_MANAGED_RUNNERS_PROFILE` names: an absolute path to a JSON profile shaped like
+[manager-profile.example.json](manager-profile.example.json). The example is refused as it stands
+(`valueKind: example`, placeholders). An actual profile names the JSON kubeconfig file, context,
+expected API server and namespace, the storage class and capacity, a digest-pinned image, the runner's
+Orbit URL, the resource amounts of this Pod template and every lifecycle budget. Without a valid
+profile the feature reports itself unavailable and nothing is reconciled. Only the authorized isolated
+test apiserver may set these variables; no default entry point does.
+
+The manager creates the PVC above from `storage/pvc.template.json` and this Pod template, by the
+fixed names `mr-data-<runner-uuid>` and `mr-<runner-uuid>`. One difference: the runner row already
+exists, so its credential arrives in Secret `mr-boot-<runner-uuid>`, mounted at `/run/orbit-bootstrap`
+and named by `ORBIT_RUNNER_CREDENTIAL_FILE`, instead of an enrollment token. The image entrypoint above
+does not consume it yet and stops before registering. See the implementation record in
+[the design](../../docs/managed-runner-design.md#implementation-record-manager-core).
+
 ## Reproducible checks and pending acceptance
 
 Run the local preparation checks from the checkout, preferably through a runner-hosted background job:
