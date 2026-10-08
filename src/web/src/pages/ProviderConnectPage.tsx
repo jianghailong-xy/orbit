@@ -13,6 +13,8 @@ import {
   type ProviderRow,
 } from '../lib/providerAdmin';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
+import { DeepSeekBalanceSection } from '../components/DeepSeekBalance';
+import { hasDeepSeekBalance } from '../lib/deepseekBalance';
 import { providerDisplayLabel, runtimeSummary } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 
@@ -510,6 +512,10 @@ function ProviderForm({
           </div>
         )}
       </Step>
+
+      {/* Right under the key: the balance is the account's that key belongs to. Only a saved key has
+          one — the server asks DeepSeek with what is stored, never with what is being typed. */}
+      {editing && hasDeepSeekBalance(editing) && <DeepSeekBalanceSection row={editing} />}
 
       <div className="provider-adv" style={{ marginTop: 20 }}>
         <div className={`provider-adv-head${advOpen ? ' open' : ''}`} onClick={() => setAdvOpen((v) => !v)}>

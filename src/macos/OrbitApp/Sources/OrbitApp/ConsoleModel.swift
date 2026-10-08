@@ -313,6 +313,10 @@ final class ConsoleModel {
     /// Nil unless the user picked one here: the session's own provider must never be re-asserted
     /// from a console whose context has not loaded yet.
     private(set) var pendingResumeProvider: String?
+    /// The provider the session itself is stored on, kept only while a held pick has replaced
+    /// `provider` (`pendingResumeProvider`). What is running and what is coming are two different
+    /// facts then, and the model menu's title says both.
+    private(set) var pendingResumeFrom: String?
     /// The account of the engine `pendingResumeProvider` moves the session onto, picked under it in the
     /// Provider submenu — sent with that switch on the revive (`ResumeRequest.account`).
     private(set) var pendingResumeAccount: String?
@@ -2054,6 +2058,10 @@ final class ConsoleModel {
                                                         catalog: modelCatalog,
                                                         configured: configuredProviders)
         providerSwitchNote = TaskRunHandoff.providerSwitchNote(from: from, to: slug, liveRun: isLive)
+        // A held pick replaces `provider` before the resume carries it, so remember what the session
+        // is actually on for as long as the pick stands: the model menu's title reads the pair
+        // (`SessionProviderChoices.engineTitle`), and only the stored half can name what is running.
+        if !isLive, pendingResumeProvider == nil { pendingResumeFrom = from }
         provider = slug
         if nextModel != modelID {
             modelID = nextModel
@@ -2070,6 +2078,7 @@ final class ConsoleModel {
         // here would silently re-assert itself on some later resume of this same console.
         pendingResumeProvider = nil
         pendingResumeAccount = nil
+        pendingResumeFrom = nil
         await applyConfig(model: nextModel, permissionMode: nextMode.rawValue,
                           effort: nextEffort.rawValue, provider: slug, account: account)
     }

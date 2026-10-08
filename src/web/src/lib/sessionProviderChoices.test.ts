@@ -4,6 +4,7 @@ import {
   currentProviderChoice,
   defaultModelLabel,
   engineChoices,
+  engineTitleFor,
   providerChoices,
   runtimeSummary,
   sameRuntimeChoices,
@@ -914,5 +915,43 @@ describe('OpenCode and the keys it may spend', () => {
       'opencode/moonshot',
       'opencode/anthropic',
     ]);
+  });
+});
+
+describe('engineTitleFor', () => {
+  it('names the CLI that executes, not the vendor whose models it writes', () => {
+    // The composer menu's title answers "which engine runs this session". A BYOK provider writes
+    // its own models while Claude Code executes them, so the name is the CLI's.
+    expect(engineTitleFor('claude', [])).toMatchObject({ slug: 'claude', name: 'Claude Code', glyphKey: 'anthropic' });
+    expect(engineTitleFor('deepseek', [deepseek])).toMatchObject({
+      slug: 'claude',
+      name: 'Claude Code',
+      glyphKey: 'anthropic',
+    });
+    expect(engineTitleFor('my-endpoint', [custom]).name).toBe('Claude Code');
+  });
+
+  it('gives every other engine its own product name and mark', () => {
+    expect(engineTitleFor('codex', [])).toMatchObject({ name: 'Codex', glyphKey: 'openai' });
+    expect(engineTitleFor('kimi', [])).toMatchObject({ name: 'Kimi Code', glyphKey: 'moonshot' });
+    expect(engineTitleFor('opencode', []).name).toBe('OpenCode');
+    expect(engineTitleFor('antigravity', [])).toMatchObject({ name: 'Antigravity CLI', glyphKey: 'antigravity' });
+    expect(engineTitleFor('dsh', []).name).toBe('DeepSeek Harness');
+  });
+
+  it('takes the safe Claude fallback for a provider it cannot place', () => {
+    expect(engineTitleFor('nonsense', []).name).toBe('Claude Code');
+    expect(engineTitleFor(null, []).name).toBe('Claude Code');
+  });
+
+  it('says where a standing pick goes only when it changes the engine', () => {
+    // A pick that crosses CLIs is a transition worth printing.
+    expect(engineTitleFor('claude', [], 'codex')).toMatchObject({ name: 'Claude Code', nextName: 'Codex' });
+    expect(engineTitleFor('opencode', [], 'claude')).toMatchObject({ name: 'OpenCode', nextName: 'Claude Code' });
+    // Two providers of one CLI are the same engine — the title stays one name, and the Provider
+    // row below is where that pick is read.
+    expect(engineTitleFor('deepseek', [deepseek], 'claude').nextName).toBeNull();
+    expect(engineTitleFor('claude', [], 'deepseek').nextName).toBeNull();
+    expect(engineTitleFor('claude', [], null).nextName).toBeNull();
   });
 });

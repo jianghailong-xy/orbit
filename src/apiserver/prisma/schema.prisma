@@ -2773,9 +2773,12 @@ model ProjectCodebase {
 /// One attempt the platform makes to put a source branch onto a project's integration line
 /// (docs/project-integration-line-contract.md §2.1, migration 0281).
 ///
-/// Not a session: nothing here starts an engine. A runner claims the row over its heartbeat, does the
-/// git work and runs the checks in a throwaway worktree, and reports back — the whole of it is
-/// mechanical, which is why it is a queue and not a conversation.
+/// Not a session itself, and nothing here starts an engine. A runner claims the row over its
+/// heartbeat, does the git work and runs the checks in a throwaway worktree, and reports back.
+/// Contract revision 12 (§2.9) requires each job to become one attempt inside a platform-driven
+/// landing session, which starts no engine and makes no decisions; that is a requirement on the
+/// landing-session tasks, not yet in this schema — today no session row stands for a landing, and
+/// `sessionId` below is the source work session.
 ///
 /// Two constraints carry the contract and neither can be spelled here: the partial unique index over
 /// `serialKey` WHERE state = 'RUNNING' (J1 — one integration at a time per repository and target ref,
@@ -2800,6 +2803,8 @@ model ProjectIntegrationJob {
   /// SET NULL, not CASCADE: the audit of what the platform pushed outlives the row that asked for it.
   taskId      String?  @map("task_id") @db.Uuid
   task        Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  /// The source work session — never the landing session contract revision 12 adds (§2.9);
+  /// routing, base SHA, the claim guard and receipts read it.
   sessionId   String?  @map("session_id") @db.Uuid
   session     Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   promotionId String?  @map("promotion_id") @db.Uuid
@@ -6489,6 +6494,9 @@ model WikiSpace {
   dossiers   WikiDossier[]
   /// The maintenance runs its trigger made (0320).
   maintenanceRuns WikiMaintenanceRun[]
+  /// The jobs the server runs for it and the model calls those jobs make (0401).
+  jobs            WikiJob[]
+  modelRequests   WikiModelRequest[]
   /// Its plan's versions and the changes proposed to it (0325).
   plans           WikiPlan[]
   planProposals   WikiPlanProposal[]
@@ -6909,7 +6917,11 @@ model WikiMaintenanceRun {
   spaceId         String    @map("space_id") @db.Uuid
   ownerId         String    @map("owner_id") @db.Uuid
   space           WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_maintenance_run_space_fkey")
-  taskId          String    @unique(map: "wiki_maintenance_run_task_id_key") @map("task_id") @db.Uuid
+  /// The task that made it, or NULL for a run a wiki job ran (migration 0401). `wiki_maintenance_run_maker_chk`
+  /// holds the row to exactly one maker: a task (the path until P8/P10) or a job (the server path), never both.
+  taskId          String?   @unique(map: "wiki_maintenance_run_task_id_key") @map("task_id") @db.Uuid
+  /// The wiki_job that ran it (0401): a history reference with no foreign key, as task_id is.
+  jobId           String?   @map("job_id") @db.Uuid
   /// `backlog` | `age` for a task the trigger made; NULL for a run of a task somebody else put in the list.
   due             String?
   backlog         Int       @default(0)
@@ -7140,6 +7152,9 @@ model WikiPlanJob {
   heldAt       DateTime? @map("held_at") @db.Timestamptz(3)
   /// The task it made. A history reference with no foreign key, as a maintenance run's is.
   taskId       String?   @unique(map: "wiki_plan_job_task_id_key") @map("task_id") @db.Uuid
+  /// The wiki_job that ran it on the server (0401), as a maintenance run's job_id is. Exactly one of the two
+  /// makers is set once it is past 'queued'/'held' (`wiki_plan_job_maker_chk`).
+  jobId        String?   @map("job_id") @db.Uuid
   madeAt       DateTime? @map("made_at") @db.Timestamptz(3)
   /// The session that runs it, when it started, and the gate round it is on.
   sessionId    String?   @map("session_id") @db.Uuid
@@ -7293,4 +7308,135 @@ model WikiDocFootnote {
   @@unique([id, ownerId], map: "wiki_doc_footnote_id_owner_id_key")
   @@unique([sentenceId, position], map: "wiki_doc_footnote_sentence_id_position_key")
   @@map("wiki_doc_footnote")
+}
+
+/// The System model as the wiki-worker last found it, and the worker's heartbeat (migration 0400, contract
+/// `systemModel.status`; docs/wiki-server-execution-design.md §5.3). Exactly one row, id 1: the worker writes
+/// it, the apiserver only reads it. No column holds the endpoint's address or its key.
+model WikiModelStatus {
+  id           Int       @id @default(1) @db.SmallInt
+  /// `up` | `down` | `auth_failed` | `unconfigured`.
+  state        String
+  /// ORBIT_WIKI_MODEL; NULL only while unconfigured.
+  model        String?
+  /// When the state began: kept while the state and the model stay what they were.
+  since        DateTime  @db.Timestamptz(3)
+  /// Why the state is not `up`, naming neither the address nor the key; NULL exactly while up.
+  lastError    String?   @map("last_error")
+  /// The last probe of `{base}/health`; NULL while unconfigured.
+  checkedAt    DateTime? @map("checked_at") @db.Timestamptz(3)
+  /// The worker's heartbeat, written with every probe. Stale past `workerStaleSeconds`, the read answers
+  /// `worker_not_running`.
+  workerSeenAt DateTime  @map("worker_seen_at") @db.Timestamptz(3)
+
+  @@map("wiki_model_status")
+}
+
+/// One unit of wiki work the server runs for a space (migration 0401, contract `jobs`;
+/// docs/wiki-server-execution-design.md §5.1). The wiki-worker claims it the way the Watch delivery
+/// worker claims a delivery — `UPDATE … FROM (SELECT … FOR UPDATE SKIP LOCKED)`, a fresh lease
+/// generation per claim, every later write a compare-and-set on that generation — holds one space's
+/// single running job at a time (a partial unique index over `space_id`), and ends it with what it
+/// reported. At most one kind runs today (`smoke`, the queue's own end-to-end probe); the pipeline
+/// kinds arrive with the phases that implement them.
+model WikiJob {
+  id      String    @id @default(uuid(7)) @db.Uuid
+  ownerId String    @map("owner_id") @db.Uuid
+  spaceId String    @map("space_id") @db.Uuid
+  space   WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_job_space_fkey")
+  /// `verify` | `articles` | `import` | `plan_draft` | `plan_revise` | `docs_build` | `maintain` | `smoke`.
+  kind  String
+  /// The job's own material: what to verify, draft, build — never the model's address or key.
+  input Json   @default("{}")
+  /// Owner-initiated work sorts above background maintenance.
+  priority Int @default(0)
+  /// `queued` | `running` | `waiting` | `succeeded` | `failed` | `cancelled`.
+  state String @default("queued")
+  /// `repo` | `model` while waiting; NULL otherwise.
+  waitingFor String? @map("waiting_for")
+  /// How many times this job has been retried after an infra failure.
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime? @map("next_attempt_at") @db.Timestamptz(3)
+  /// The lease: the three together exactly while running, cleared by every settle (a CHECK holds both ways).
+  leaseOwner      String?   @map("lease_owner") @db.Uuid
+  leaseGeneration String?   @map("lease_generation") @db.Uuid
+  leaseDeadlineAt DateTime? @map("lease_deadline_at") @db.Timestamptz(3)
+  progress        Json?     @map("progress")
+  report          Json?
+  error           String?
+  /// `infra` | `content`: whose a failed attempt was.
+  failureKind String?   @map("failure_kind")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  startedAt   DateTime? @map("started_at") @db.Timestamptz(3)
+  endedAt     DateTime? @map("ended_at") @db.Timestamptz(3)
+
+  requests WikiModelRequest[]
+
+  /// The claim's order: priority first, then longest-waiting (partial, over queued rows).
+  @@index([priority(sort: Desc), createdAt, id], map: "wiki_job_claim_idx")
+  /// The lease-expiry sweep, as the migration creates it: partial over running rows.
+  @@index([leaseDeadlineAt], map: "wiki_job_lease_expiry_idx")
+  /// One running job per space: what the claim skips a busy space by, and what holds it anyway —
+  /// a partial unique index the migration creates (`wiki_job_space_running_key`), which Prisma's own
+  /// index syntax cannot express, so it lives in the SQL and nowhere else.
+  @@map("wiki_job")
+}
+
+/// One model call a wiki job makes (migration 0401, contract `modelQueue`;
+/// docs/wiki-server-execution-design.md §5.2). `(job_id, step, unit, attempt)` — the unique key — IS the
+/// request: replaying a pipeline reuses the answer a succeeded row already holds, or waits for the row
+/// still in flight, so a restart re-issues no call that answered. The queue's global concurrency is held
+/// by the claim transaction (an advisory lock, a count of running rows with a live lease, then at most
+/// the difference taken by priority, then enqueued_at, SKIP LOCKED), and the `partial` a call had
+/// received when its lease ran out is kept across the requeue.
+model WikiModelRequest {
+  id      String  @id @default(uuid(7)) @db.Uuid
+  jobId   String  @map("job_id") @db.Uuid
+  job     WikiJob @relation(fields: [jobId], references: [id], onDelete: Cascade, map: "wiki_model_request_job_fkey")
+  ownerId String  @map("owner_id") @db.Uuid
+  spaceId String  @map("space_id") @db.Uuid
+  space   WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_model_request_space_fkey")
+  /// Where in the job's pipeline this call sits, and which unit of it: the request's own address.
+  step String
+  unit String
+  /// Which attempt of that unit this row is (a redo moves to the next), and how many times this row was tried.
+  attempt  Int @default(1)
+  attempts Int @default(0)
+  priority Int @default(0)
+  /// `{ system, prompt, maxTokens }` and its sha256, so a replay proves it is the same call.
+  request       Json   @map("request")
+  requestSha256 String @map("request_sha256") @db.Char(64)
+  /// `queued` | `running` | `succeeded` | `failed` | `cancelled`.
+  state String @default("queued")
+  /// The lease: the three together exactly while running, cleared by every settle (a CHECK holds both ways).
+  leaseOwner      String?   @map("lease_owner") @db.Uuid
+  leaseGeneration String?   @map("lease_generation") @db.Uuid
+  leaseDeadlineAt DateTime? @map("lease_deadline_at") @db.Timestamptz(3)
+  enqueuedAt      DateTime  @default(now()) @map("enqueued_at") @db.Timestamptz(3)
+  /// The backoff a retryable failure set: the row is not due before this.
+  notBefore DateTime? @map("not_before") @db.Timestamptz(3)
+  startedAt DateTime? @map("started_at") @db.Timestamptz(3)
+  endedAt   DateTime? @map("ended_at") @db.Timestamptz(3)
+  answer    String?
+  /// What had arrived when the call was interrupted; kept across a requeue.
+  partial      String?
+  inputTokens  Int?    @map("input_tokens")
+  outputTokens Int?    @map("output_tokens")
+  httpStatus   Int?    @map("http_status")
+  error        String?
+  /// `retryable` | `unauthorized` | `other`: the class the client gave the failure.
+  errorKind String? @map("error_kind")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  /// The request IS its identity (design §5.2): enqueuing the same call again meets the row it already has.
+  @@unique([jobId, step, unit, attempt], map: "wiki_model_request_unit_key")
+  @@index([priority(sort: Desc), enqueuedAt, id], map: "wiki_model_request_claim_idx")
+  /// The lease-expiry sweep, as the migration creates it: partial over running rows.
+  @@index([leaseDeadlineAt], map: "wiki_model_request_lease_expiry_idx")
+  @@index([jobId, step, unit], map: "wiki_model_request_job_idx")
+  @@index([state, endedAt], map: "wiki_model_request_state_idx")
+  @@map("wiki_model_request")
 }

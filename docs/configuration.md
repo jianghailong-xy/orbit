@@ -72,6 +72,35 @@ Two deployment values matter to it:
 
 See [Google sign-in](self-hosting.md#google-sign-in) for the Google Cloud console steps and who can sign in.
 
+### Wiki worker and System model
+
+The `wiki-worker` service runs the apiserver image with another command and calls the wiki's System model: the
+deployment's own endpoint speaking the Anthropic Messages API, such as vLLM. These variables are passed to
+`wiki-worker` only. The API container never receives the model's address or key; it reads the model's name and
+state from the status row the worker writes.
+
+| Variable | Required / default | Purpose | Secret? | Apply change |
+| --- | --- | --- | --- | --- |
+| `ORBIT_WIKI_MODEL_BASE_URL` | Optional; empty means no System model | The endpoint. Calls go to `{base}/v1/messages` and the worker probes `{base}/health` every 10 seconds. Use an address the `wiki-worker` container can reach. | No, but it is never shown to clients; avoid credential-bearing URLs | Recreate `wiki-worker` |
+| `ORBIT_WIKI_MODEL_API_KEY` | Required with the base URL | Sent as `Authorization: Bearer`. | Yes | Recreate `wiki-worker` |
+| `ORBIT_WIKI_MODEL` | Required with the base URL | The model name sent with every call; the only part of the configuration clients see. | No | Recreate `wiki-worker` |
+| `ORBIT_WIKI_MODEL_CONCURRENCY` | Optional; `4` | The most model requests in flight at once, across every wiki space. | No | Recreate `wiki-worker` |
+
+All three of the base URL, key, and model must be set; otherwise the System model reads as unconfigured and the
+worker calls nothing. The wiki settings and health line show the model's name and one of these states: up,
+unreachable, key refused, unconfigured, or wiki worker not running (no heartbeat for 60 seconds). A refused key
+(HTTP 401) stays refused until the worker restarts, so correct the key in `.env` and run
+`docker compose up -d wiki-worker`.
+
+The worker runs in Compose's default bridge network, where `127.0.0.1` is the container itself and
+`host.docker.internal` is not defined. For a model on the Docker host or a GPU machine, use its LAN or tunnel
+address, or give `wiki-worker` an `extra_hosts: ["host.docker.internal:host-gateway"]` entry in a Compose override.
+The names deliberately avoid `ANTHROPIC_*`: agent sessions carry those variables, and a deploy run from inside one
+would otherwise pick up the session's values.
+
+Until the wiki's jobs move to the server, the worker only probes the model and reports its state; wiki jobs still
+run on runners.
+
 ## PostgreSQL and backups
 
 These values are fixed inside Compose unless the table names a host substitution. Changing a

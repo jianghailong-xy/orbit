@@ -191,6 +191,7 @@ import {
   type LocalStatusRow,
 } from '../lib/slashCommands';
 import { sessionPlanUsage } from '../lib/planUsage';
+import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 import { accountNameOf, accountPlanUsage, ANTIGRAVITY_ACCOUNT_LOGIN_CAPABILITY } from '../lib/engineAccounts';
 import { poolAccountHelp, poolsAsProviders, providerPoolsQuery, sessionPoolAccount } from '../lib/providerPools';
 import { isLoginPool, poolSessionLoginMember } from '../lib/codexLogin';
@@ -206,6 +207,7 @@ import {
   currentProviderChoice,
   engineChoiceFor,
   engineChoices,
+  engineTitleFor,
   providerChoices,
   sameRuntimeChoices,
 } from '../lib/sessionProviderChoices';
@@ -8475,7 +8477,55 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     const route = detailForSelected?.route;
     return selected?.taskId && route?.applied && route.level && route.model === shownModel ? route : null;
   })();
+  // The menu's title: the engine this session runs on — and, while a standing pick will carry the
+  // next turn to a different one, where it is going (`Claude Code → Codex`). Same fact
+  // `providerSwitchNote` says in words, said as the pair it is about.
+  const engineTitle = useMemo(
+    () =>
+      engineTitleFor(
+        selected?.provider ?? detailForSelected?.provider ?? shownProvider,
+        configuredProviders,
+        pendingResumeProvider,
+      ),
+    [selected?.provider, detailForSelected?.provider, shownProvider, pendingResumeProvider, configuredProviders],
+  );
+  const engineTitleGlyph = engineTitle.glyphKey ? PROVIDER_GLYPHS[engineTitle.glyphKey] : undefined;
   const modelMenuItems: MenuProps['items'] = [
+    // The menu's own title, and not a control: the one fact none of the rows below states is which
+    // CLI executes at all. It is never picked here — a run keeps its engine for its whole life, and
+    // moving it is the Provider row's job — so the row carries no onClick, no chevron, and the
+    // class drops the item's pointer and hover fill.
+    {
+      key: 'engine-title',
+      className: 'composer-engine-title',
+      label: (
+        <span className="composer-engine-title-row">
+          <span className="composer-engine-title-glyph" style={{ color: engineTitle.brand.from }}>
+            {engineTitleGlyph ? (
+              <svg
+                viewBox="0 0 24 24"
+                width={14}
+                height={14}
+                fill="currentColor"
+                aria-hidden="true"
+                dangerouslySetInnerHTML={{ __html: engineTitleGlyph }}
+              />
+            ) : (
+              <span className="composer-engine-title-mono">{engineTitle.brand.mono}</span>
+            )}
+          </span>
+          <span className="composer-engine-title-name">{engineTitle.name}</span>
+          {engineTitle.nextName && (
+            <>
+              <span className="composer-engine-title-arrow" aria-hidden="true">
+                →
+              </span>
+              <span className="composer-engine-title-name">{engineTitle.nextName}</span>
+            </>
+          )}
+        </span>
+      ),
+    },
     ...(smartRoute
       ? [
           {

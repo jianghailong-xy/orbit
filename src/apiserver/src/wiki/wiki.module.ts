@@ -16,6 +16,8 @@ import { WikiRetrieval } from './wiki-retrieval';
 import { WikiRunReads } from './wiki-run-reads';
 import { WikiRunsController } from './wiki-runs.controller';
 import { WikiService } from './wiki.service';
+import { WikiSystemModelReads } from './wiki-system-model';
+import { WikiSystemModelController } from './wiki-system-model.controller';
 
 /**
  * The Orbit Wiki's own module.
@@ -35,7 +37,7 @@ import { WikiService } from './wiki.service';
   // The articles' reads (contract `articles`), one run's read (contract `reviewModes.run`) and a
   // space's health (contract `maintenance.health`) and the plan (contract `plan`) are controllers of their
   // own, so WikiController's hand-built specs construct it as before — and so are the documents (contract `docs`).
-  controllers: [WikiController, WikiArticlesController, WikiRunsController, WikiHealthController, WikiPlanController, WikiDocsController],
+  controllers: [WikiController, WikiArticlesController, WikiRunsController, WikiHealthController, WikiPlanController, WikiDocsController, WikiSystemModelController],
   // WikiMaintenance serves the maintenance run's dossiers and cursor (contract `maintenance`) to
   // `RunnerWikiMaintenanceController`, and reads the Sessions' and Projects' rows the way the other two
   // do: through Prisma, with no service of theirs. WikiArticles serves the articles to both doors the
@@ -48,7 +50,9 @@ import { WikiService } from './wiki.service';
   // same way, and WikiDocs the documents written from it (contract `docs`). WikiPlanJobFacts moves the
   // plan's jobs on when a task of the owner's changes (contract `plan.jobs.trigger`), from the same
   // published events as the maintenance trigger.
-  providers: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiMaintenanceTrigger, WikiRunReads, WikiHealth, WikiPlans, WikiPlanJobFacts, WikiDocs],
+  // WikiSystemModelReads reads the System model's name and state from the row the wiki-worker writes (contract
+  // `systemModel.read`), through Prisma alone, for a controller of its own.
+  providers: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiMaintenanceTrigger, WikiRunReads, WikiHealth, WikiPlans, WikiPlanJobFacts, WikiDocs, WikiSystemModelReads],
   exports: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiPlans, WikiDocs],
 })
 export class WikiModule {}

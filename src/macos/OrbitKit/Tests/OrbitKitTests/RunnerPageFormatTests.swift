@@ -414,6 +414,48 @@ final class RunnerPageFormatTests: XCTestCase {
         XCTAssertEqual(plain.map(\.subtitle), ["~/.codex", "~/.orbit/codex-accounts/1fda3f43"])
     }
 
+    /// A signed-in account whose login lapses within three days says so, in whole days rounded up the
+    /// way Claude Code counts them, from the time the runner read — decoded as the server sends it.
+    /// Further off, past it, not signed in, or with no time read: nothing.
+    func testALoginAboutToLapseSaysHowManyDaysAreLeft() throws {
+        let decoded = try JSONDecoder().decode(RunnerEngineAccount.self, from: Data(
+            #"{"id":"29e631a9","home":"/root/.orbit/claude-accounts/29e631a9","auth":"yes","loginExpiresAt":"2026-09-17T02:00:00.000Z"}"#.utf8))
+        XCTAssertEqual(decoded.loginExpiresAt, "2026-09-17T02:00:00.000Z")
+
+        func line(_ auth: String, _ lapses: String?) -> RunnerPageFormat.AccountLine {
+            RunnerPageFormat.accountLines(RunnerEngineHealth(engine: "claude", installed: true, auth: "yes", accounts: [
+                RunnerEngineAccount(id: "default", auth: "yes"),
+                RunnerEngineAccount(id: "29e631a9", auth: auth, loginExpiresAt: lapses),
+            ]))[1]
+        }
+        func at(_ hours: Double) -> String { ISO8601DateFormatter().string(from: now.addingTimeInterval(hours * 3600)) }
+        XCTAssertEqual(RunnerPageFormat.loginExpiresLine(line("yes", at(72)), now: now), "Login expires in 3 days")
+        XCTAssertEqual(RunnerPageFormat.loginExpiresLine(line("yes", at(49)), now: now), "Login expires in 3 days",
+                       "rounded up, as Claude Code counts")
+        XCTAssertEqual(RunnerPageFormat.loginExpiresLine(line("yes", at(30)), now: now), "Login expires in 2 days")
+        XCTAssertEqual(RunnerPageFormat.loginExpiresLine(line("yes", at(5)), now: now), "Login expires in 1 day")
+        XCTAssertNil(RunnerPageFormat.loginExpiresLine(line("yes", at(73)), now: now), "further off than Claude Code warns")
+        XCTAssertNil(RunnerPageFormat.loginExpiresLine(line("yes", at(-1)), now: now), "past it, the runner says signed out")
+        XCTAssertNil(RunnerPageFormat.loginExpiresLine(line("no", at(5)), now: now))
+        XCTAssertNil(RunnerPageFormat.loginExpiresLine(line("yes", nil), now: now))
+    }
+
+    /// Under Signed out, what it costs: this account — or, when it is the engine's only account on that
+    /// machine, the engine there. Nothing under an account signed in, or whose answer isn't known.
+    func testASignedOutAccountSaysWhatItCosts() {
+        let lines = RunnerPageFormat.accountLines(RunnerEngineHealth(engine: "claude", installed: true, auth: "yes", accounts: [
+            RunnerEngineAccount(id: "default", auth: "yes"),
+            RunnerEngineAccount(id: "29e631a9", auth: "no"),
+            RunnerEngineAccount(id: "b93d5a17", auth: "unknown"),
+        ]))
+        XCTAssertNil(RunnerPageFormat.signedOutNote(lines[0], alone: false, engine: "claude"))
+        XCTAssertEqual(RunnerPageFormat.signedOutNote(lines[1], alone: false, engine: "claude"),
+                       "Sessions can’t use this account until you sign in again.")
+        XCTAssertNil(RunnerPageFormat.signedOutNote(lines[2], alone: false, engine: "claude"))
+        XCTAssertEqual(RunnerPageFormat.signedOutNote(lines[1], alone: true, engine: "claude"),
+                       "Sessions on this runner can’t use Claude Code until you sign in again.")
+    }
+
     func testARemovalIsTheAccountsItWasAskedFor() {
         let pending = RunnerAccountRemoveState(engine: "codex", account: "1fda3f43", status: "pending", message: nil)
         XCTAssertEqual(RunnerPageFormat.removal(pending, engine: "codex", account: "1fda3f43"),

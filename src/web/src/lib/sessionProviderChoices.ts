@@ -1,9 +1,10 @@
 import { AgentProvider, isAccountEngine, PROVIDER_PRESETS, withEnginePlanUsage, type ProviderBrand } from '@orbit/shared';
-import type { PlanUsage, RunnerAntigravityState, RunnerEngineHealth, RunnerModelCatalog, RuntimeDefaultModels } from '@orbit/shared';
+import type { PlanUsage, ReportedEngine, RunnerAntigravityState, RunnerEngineHealth, RunnerModelCatalog, RuntimeDefaultModels } from '@orbit/shared';
 import type { CodexLogin } from './codexLogin';
 import { DSH_CONNECT_HREF, DSH_PRESET_SLUG, DSH_STATE_LABEL, dshRunnerState, type DshRunnerFacts } from './dshRuntime';
 import { accountNameOf, accountPlanUsage, runsOnEnvKey } from './engineAccounts';
 import { encodeId } from './idCodec';
+import { ENGINE_CLI_NAME } from './runnerEngines';
 import { bindingPlanUsageRow, currentPlanUsageRows } from './planUsage';
 import type { SharedPool } from './sharedPools';
 import {
@@ -543,6 +544,33 @@ export function engineChoiceFor(provider: ProviderChoice, configured?: Configure
           ...(provider.fixHref ? { fixHref: provider.fixHref } : {}),
         }
       : {}),
+  };
+}
+
+/** The engine a session runs on, as the composer's model menu titles itself: the CLI's own product
+ *  name (`runnerEngines`' table — `Claude Code`, not `Claude`, because a BYOK session writes
+ *  DeepSeek's models while Claude Code executes them) over that engine's brand mark. Every row
+ *  under the title picks something for the next turn — which provider, which model, how hard — and
+ *  this is the one fact none of them states.
+ *
+ *  `nextProvider` is a pick that has been made but not yet carried (an ended session's held
+ *  switch). It becomes `nextName` only when it lands on a DIFFERENT engine: two providers of one
+ *  CLI read as the same title, and `Claude Code → Claude Code` would say nothing a reader can use. */
+export function engineTitleFor(
+  provider: string | null | undefined,
+  configured?: ConfiguredProvider[] | null,
+  nextProvider?: string | null,
+): { slug: string; name: string; nextName: string | null; brand: ProviderBrand; glyphKey?: string } {
+  const slug = runtimeForProvider(provider, configured);
+  // `runtimeForProvider` answers one of the six engines REPORTED_ENGINES names, which is exactly
+  // the key set the CLI-name table is keyed by.
+  const name = ENGINE_CLI_NAME[slug as ReportedEngine];
+  const next = nextProvider ? runtimeForProvider(nextProvider, configured) : null;
+  return {
+    slug,
+    name,
+    nextName: next && next !== slug ? ENGINE_CLI_NAME[next as ReportedEngine] : null,
+    ...brandForProvider(slug, name),
   };
 }
 
