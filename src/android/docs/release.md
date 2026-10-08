@@ -4,52 +4,73 @@ S1 is direct installation of a signed APK on Android 10–16 (minSdk 29, targetS
 downloaded from this repository's GitHub Releases. There is no store upload, AAB
 channel or server deployment. The existing `:app` / `:core`, pinned SDK, Java and
 Gradle wrapper remain the build system. See [the event/platform matrix](release-workflows.md)
-for Apple isolation.
+for which job runs when.
 
 ## Publishing a release
 
-1. Choose the commit (the integrated project line once A05–A13 have landed there).
-2. In `src/android/gradle.properties` set `orbitVersionName` (`X.Y.Z[-suffix]`, at
-   most 32 characters) and `orbitVersionCode` (strictly greater than every published
-   `android-v*` release of the package). Commit.
-3. Tag that commit with the release notes and push only the tag:
+Android ships with macOS and iOS: one `vX.Y.Z` (or `vX.Y.Z-beta.N`) tag on `main`, cut
+with the release skill (`.claude/skills/release/release.sh`), runs `release.yml`, and
+its two Android jobs put the APK on the same GitHub Release as the DMG:
 
-   ```sh
-   git tag -a android-v0.1.0-internal.2 -m "Orbit Android 0.1.0-internal.2" -m "What changed for testers"
-   git push origin android-v0.1.0-internal.2
-   ```
+- `orbit-android-<versionName>.apk`, the signed release APK;
+- `orbit-android-<versionName>.apk.sha256`;
+- `android-update.json`, the manifest installed apps read to update themselves.
 
-`android-release.yml` refuses a tag that is not `android-v` + `orbitVersionName`, a
-`versionCode` not above the published history, an existing release for the tag, or
-an APK whose signer differs from `ANDROID_CERT_SHA256`. It publishes a pre-release
-with `orbit-android-<versionName>.apk`, `orbit-android-<versionName>.apk.sha256`
-and `android-update.json`. Never push a `v*` tag for Android; that is the Apple
-release. A tag that failed before publishing can be deleted and pushed again.
+There is nothing Android-specific to do before tagging: the version comes from the
+tag and the commit (below). `android-v*` tags are retired and start no workflow.
+
+`android-build` refuses a tag whose version is not `X.Y.Z[-suffix]` (32 characters at
+most), a `versionCode` that is not above every Android release already published, and
+an APK whose signer differs from `ANDROID_CERT_SHA256`. `android-publish` runs only
+after both `dmg` and `android-build` succeeded, attaches to the release `dmg` created,
+and never creates a release, changes its pre-release/latest state or replaces an
+asset. If `dmg` failed, Android is not published; once the cause is fixed, **Re-run
+failed jobs** on that run builds the DMG again and then attaches Android. A failed
+`testflight` does not hold Android back.
+
+To watch the Android jobs, open the `release.yml` run for the tag; its summary lists
+`Android · signed release APK` and `Android · attach to the GitHub Release`, and the
+latter's step summary has the attached files and their SHA-256:
+
+```sh
+gh run list --workflow release.yml -L 3
+gh run view <run-id> --log --job <android-publish job id>
+gh release view vX.Y.Z --json assets -q '.assets[].name'
+```
 
 ## Version and artifact identity
 
+| | Release (`release.yml`) | Local build |
+| --- | --- | --- |
+| `versionName` | the tag without `v` (`v0.1.2-beta.195` → `0.1.2-beta.195`) | `orbitVersionName` in `gradle.properties` |
+| `versionCode` | `git rev-list --count HEAD` (full checkout), as the iOS build number | `orbitVersionCode` in `gradle.properties` |
+
 `versionName` is reported as `X-Orbit-Client: android/<versionName>` (the backend's
-32-character limit). `versionCode` is an integer in 1..2100000000 that only grows
-per application ID; every delivered replacement needs a larger code, including
-rebuilds whose bytes changed. It is deliberately **not** a commit count or run
-number. Use a distinct `versionName` for every release so telemetry tells them apart.
+32-character limit). `versionCode` must be greater than the `versionCode` in every
+`android-update.json` already published on a v* release of the same package; the
+commit count grows with every commit on `main`, so each release commit is higher.
+Two v* tags on one commit (it happens: a beta and the stable of the same tree) are
+one Android build: the second tag's Android jobs see the first one's manifest with
+the same `sourceSha` and skip quietly, without failing the run. Any other
+`versionCode` that does not increase fails the run before a secret is read.
 
 `build-release.sh` refuses an uncommitted tree, records full Git HEAD and clean
 state, checks APK package/version/min/target SDK, rejects debuggable APKs, verifies
-the signer against an independently supplied SHA-256 fingerprint, and checks the
-source SHA occurs in packaged DEX. The source SHA is injected at build time, so a
-rebuild at another commit is a different artifact; its manifest and SHA-256, not
-a filename, identify it.
+the signer against an independently supplied SHA-256 fingerprint, checks the
+source SHA occurs in packaged DEX and that the updater reads `api.github.com`. The
+source SHA is injected at build time, so a rebuild at another commit is a different
+artifact; its manifest and SHA-256, not a filename, identify it.
 
 `android-update.json` (schema 1):
 
 | Field | Meaning |
 | --- | --- |
+| `tag` | The release it is attached to, `v` + `versionName` |
 | `applicationId`, `versionName`, `versionCode`, `minSdk` | Identity of the APK |
 | `apkName`, `apkUrl`, `apkSize`, `sha256` | The release asset and its SHA-256 |
 | `certSha256` | Signing certificate fingerprint (same as `ANDROID_CERT_SHA256`) |
 | `sourceSha` | Built commit |
-| `publishedAt`, `notes` | UTC publish time; the annotated tag message |
+| `publishedAt`, `notes` | UTC time; the annotated tag's message (`release.sh` writes `Release vX`), or `Orbit <versionName> for Android.` |
 
 ## Signing configuration (no credentials in this repository)
 
@@ -57,10 +78,10 @@ The release key (PKCS12, alias `orbit-android`, RSA 4096) was generated by the
 coordinator and is held outside the repository; the owner stored it in the
 `android-internal` environment. Its certificate SHA-256 is
 `1535cc478f09a4209585518569428c9a0f12bd14add7309fba3547609ca82310`. The environment
-accepts only `android-v*` tags, so branches, dispatches and pull requests cannot
-read it. Never regenerate or replace the key to make an update pass: installed
-apps accept only updates signed by the same certificate, and losing the key
-means users must uninstall to move on.
+accepts only `v*` tags and only `android-build` uses it, so branches, dispatches,
+pull requests and the publishing job cannot read it. Never regenerate or replace
+the key to make an update pass: installed apps accept only updates signed by the
+same certificate, and losing the key means users must uninstall to move on.
 
 ## Push notification client values (Firebase)
 
@@ -71,10 +92,10 @@ build reads them from optional `android-internal` environment variables
 `ORBIT_ANDROID_FIREBASE_*` build inputs, see `notifications.md`). Set all five or
 none: `build-release.sh` refuses a partial set or a package other than the
 application ID, checks the values reached `BuildConfig`, and records
-`pushConfigured` in `identity.json`; the release notes say whether push is on.
-With none set, push notifications stay off. Leave them unset until the released
-source contains A10's notification-channel migration. A Firebase service account
-belongs only to the backend; never put it in this repository, a workflow or the app.
+`pushConfigured` in `identity.json`. With none set, push notifications stay off.
+Leave them unset until the released source contains A10's notification-channel
+migration. A Firebase service account belongs only to the backend; never put it in
+this repository, a workflow or the app.
 
 For a local signed build (for example a rehearsal with a disposable key), export
 `ORBIT_ANDROID_APPLICATION_ID`, `ORBIT_ANDROID_VERSION_NAME`,
@@ -93,14 +114,18 @@ Release builds check GitHub themselves; debug builds (`.debug`) never do.
 - **When:** when the app starts and whenever it returns to the foreground, at most
   once every 6 hours (a clock moved backwards does not postpone the next check);
   manually from Settings → About → Check for updates at any time.
-- **Source:** `GET https://api.github.com/repos/jianghailong-xy/orbit/releases?per_page=100`
-  (never `releases/latest`, which is the macOS release). Drafts and tags that do not
-  start with `android-v` are ignored; the newest ten candidates' `android-update.json`
-  are read from their release downloads.
-- **Eligible:** schema 1, tag `android-v<versionName>`, the installed application ID,
-  `certSha256` equal to the installed signing certificate, `minSdk` ≤ device API,
-  `versionCode` greater than the installed one, and an `apkUrl` that is that
-  release's own APK asset with the published size. The highest `versionCode` wins.
+- **Source:** `GET https://api.github.com/repos/jianghailong-xy/orbit/releases?per_page=30`
+  (never `releases/latest`, which names one release whether or not it carries
+  Android). Only published (not draft) releases whose tag starts with `v` and that
+  carry `android-update.json` count; pre-releases do. A v* release without the
+  manifest — every macOS/iOS release before Android joined, or one whose Android
+  jobs did not publish — is skipped. The newest ten candidates' manifests are read
+  from their release downloads.
+- **Eligible:** schema 1, the manifest's `tag` equal to `v<versionName>` and to the
+  release it came from, the installed application ID, `certSha256` equal to the
+  installed signing certificate, `minSdk` ≤ device API, `versionCode` greater than
+  the installed one, and an `apkUrl` that is that release's own APK asset with the
+  published size. The highest `versionCode` wins.
 - **Prompt:** an automatic check offers the update once (Update / Later); Later
   hides that version until a higher one appears. Settings → About always shows it.
 - **Install:** the APK downloads into app-private `noBackupFilesDir/updates`, must
@@ -116,7 +141,13 @@ Release builds check GitHub themselves; debug builds (`.debug`) never do.
   check explains what happened.
 
 The repository is a Gradle property (`orbitUpdateRepository`, default
-`jianghailong-xy/orbit`), exposed as `BuildConfig.UPDATE_REPOSITORY`.
+`jianghailong-xy/orbit`), exposed as `BuildConfig.UPDATE_REPOSITORY`. The API origin
+is `BuildConfig.UPDATE_API`, always `https://api.github.com` except in an update
+rehearsal: `-PorbitUpdateApi=http://127.0.0.1:<port>` is accepted only for a
+`*.upgradetest` package, and only then does the build merge `src/updateRehearsal`
+(a network security config allowing cleartext to 127.0.0.1, where `adb reverse`
+brings a stand-in for GitHub). `build-release.sh` takes it as
+`ORBIT_ANDROID_UPDATE_API` for test signatures only.
 
 ## Install and replace without losing state
 
@@ -128,9 +159,14 @@ two versions — an update must keep sign-in, account/server-scoped cache and dr
 
 `scripts/upgrade-device-test.sh` is the reproducible `adb install -r` fixture test
 for an isolated `*.upgradetest` package; it uses real Android credential/data
-stores across two processes and leaves emulator settings and ports unchanged. A
-complete device run must own `flock /var/lib/orbit/android/ui.lock`. Temporary test
-signatures prove packaging/update mechanics only; never distribute them.
+stores across two processes and leaves emulator settings and ports unchanged.
+`scripts/update-device-test.py` is the in-app path: it serves a stand-in for the
+GitHub releases list and downloads (`scripts/fake-github.py`) through `adb
+reverse`, installs vN, shows that a newer macOS-only v* release and a draft are no
+update, then attaches vN+1's Android files the way `release.yml` does and lets the
+app find, verify and install it. A complete device run must own `flock
+/var/lib/orbit/android/ui.lock`. Temporary test signatures prove packaging/update
+mechanics only; never distribute them.
 
 For actual deployment version observation, make an authenticated request after each
 install and inspect `ClientVersion` for that user and `kind=android`. Unauthenticated
@@ -141,8 +177,10 @@ evidence from a real deployment.
 
 ## Notes accompanying each release
 
-The release body records package, version/code, minSdk, APK and certificate
-SHA-256, source SHA and the workflow run. Testers install the APK from the release
-page; later releases arrive through the in-app updater. A15 rechecks the final
-integrated feature combination and cross-platform quality; that is not a
-prerequisite for publishing or testing a release.
+The GitHub Release body is the one `dmg` generates; the Android files carry their
+own identity (`android-update.json`, `.sha256`), and `android-publish`'s step
+summary records package, version/code, certificate and APK SHA-256 and source
+SHA. Testers install the APK from the release page; later releases arrive through
+the in-app updater. A15 rechecks the final integrated feature combination and
+cross-platform quality; that is not a prerequisite for publishing or testing a
+release.
