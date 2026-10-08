@@ -1038,6 +1038,8 @@ model Workspace {
   sessionFolders SessionFolder[]
   /// Set when this is a managed runner's default workspace (migration 0399).
   managedRunnerDefault ManagedRunner? @relation("ManagedRunnerDefaultWorkspace")
+  /// The wiki repository operations read in this workspace's checkout (migration 0402).
+  wikiRepoOps WikiRepoOp[]
 
   /// The key a wiki binding's composite foreign key names (migration 0307), so a space can only be
   /// bound to its own owner's workspaces. `id` alone is already unique.
@@ -6497,6 +6499,9 @@ model WikiSpace {
   /// The jobs the server runs for it and the model calls those jobs make (0401).
   jobs            WikiJob[]
   modelRequests   WikiModelRequest[]
+  /// The repository operations its jobs ask a runner for, and the snapshot index they cache (0402).
+  repoOps         WikiRepoOp[]
+  repoSnapshot    WikiRepoSnapshot?
   /// Its plan's versions and the changes proposed to it (0325).
   plans           WikiPlan[]
   planProposals   WikiPlanProposal[]
@@ -7372,6 +7377,7 @@ model WikiJob {
   endedAt     DateTime? @map("ended_at") @db.Timestamptz(3)
 
   requests WikiModelRequest[]
+  repoOps  WikiRepoOp[]
 
   /// The claim's order: priority first, then longest-waiting (partial, over queued rows).
   @@index([priority(sort: Desc), createdAt, id], map: "wiki_job_claim_idx")
@@ -7439,4 +7445,94 @@ model WikiModelRequest {
   @@index([jobId, step, unit], map: "wiki_model_request_job_idx")
   @@index([state, endedAt], map: "wiki_model_request_state_idx")
   @@map("wiki_model_request")
+}
+
+/// One repository operation a wiki job asks a runner for (migration 0402, contract `repoOps`;
+/// docs/wiki-server-execution-design.md §7). The server never touches a repository — the credentials are
+/// on the runners — so a step that needs to know what the repository says asks the machine its space's
+/// workspace runs on: a snapshot to be built once per commit, a bounded read, a diff, or the anchor
+/// checks. Claimed in the heartbeat response the way the integration queue is, and settled by a
+/// compare-and-set on (lease_owner, claim_generation).
+model WikiRepoOp {
+  id      String  @id @default(uuid(7)) @db.Uuid
+  jobId   String  @map("job_id") @db.Uuid
+  job     WikiJob @relation(fields: [jobId], references: [id], onDelete: Cascade, map: "wiki_repo_op_job_fkey")
+  ownerId String  @map("owner_id") @db.Uuid
+  spaceId String  @map("space_id") @db.Uuid
+  space   WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_repo_op_space_fkey")
+  /// The checkout read: the workspace whose work directory it is, and the machine it runs on (written by
+  /// the claim, which is also what the result route's fence reads).
+  workspaceId String     @map("workspace_id") @db.Uuid
+  workspace   Workspace  @relation(fields: [workspaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_repo_op_workspace_fkey")
+  runnerId    String?    @map("runner_id") @db.Uuid
+  /// `snapshot` | `read` | `diff` | `anchors`.
+  kind String
+  /// What the kind reads — a read's paths and limits, a diff's two commits, a snapshot's skip sha.
+  input Json   @default("{}")
+  /// `queued` | `running` | `succeeded` | `failed` | `cancelled`.
+  state String @default("queued")
+  /// The claim: together exactly while running (a CHECK holds it both ways), and the fence every settle
+  /// is a compare-and-set on.
+  leaseOwner      String?   @map("lease_owner") @db.Uuid
+  claimGeneration Int       @default(0) @map("claim_generation")
+  claimedAt       DateTime? @map("claimed_at") @db.Timestamptz(3)
+  heartbeatAt     DateTime? @map("heartbeat_at") @db.Timestamptz(3)
+  result          Json?
+  error           String?
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  endedAt         DateTime? @map("ended_at") @db.Timestamptz(3)
+
+  fragments WikiRepoOpFragment[]
+
+  /// The claim's order, and the rows a machine may take over (partial, as the migration creates them).
+  @@index([createdAt, id], map: "wiki_repo_op_claim_idx")
+  @@index([heartbeatAt], map: "wiki_repo_op_stale_idx")
+  @@index([jobId, createdAt], map: "wiki_repo_op_job_idx")
+  @@map("wiki_repo_op")
+}
+
+/// The pieces of a snapshot too large for one request body, staged under the operation that uploads
+/// them and removed with it. Staged rather than written into the cache: a cache is only ever written
+/// whole, so an upload that dies halfway leaves the space's snapshot as it was.
+model WikiRepoOpFragment {
+  opId    String    @map("op_id") @db.Uuid
+  op      WikiRepoOp @relation(fields: [opId], references: [id], onDelete: Cascade, map: "wiki_repo_op_fragment_op_fkey")
+  ordinal Int
+  content String
+
+  @@id([opId, ordinal])
+  @@map("wiki_repo_op_fragment")
+}
+
+/// The space's snapshot index — the commit it was read at, its size, its sha256 and how many fragments
+/// hold it. ONE ROW PER SPACE: a newer snapshot replaces the last one whole, which is what "only the
+/// most recent one is kept" means (design §7, §9), and the rows are deleted with the space.
+model WikiRepoSnapshot {
+  spaceId String    @id @map("space_id") @db.Uuid
+  ownerId String    @map("owner_id") @db.Uuid
+  space   WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_repo_snapshot_space_fkey")
+  /// The commit the index was read at, the sha256 of its bytes, and its size.
+  sha           String @db.Char(40)
+  digest        String @db.Char(64)
+  sizeBytes     BigInt @map("size_bytes")
+  fragmentCount Int    @map("fragment_count")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  fragments WikiRepoSnapshotFragment[]
+
+  @@unique([spaceId, ownerId], map: "wiki_repo_snapshot_space_owner_key")
+  @@map("wiki_repo_snapshot")
+}
+
+/// The index itself, in fragments: concatenated by ordinal, exactly the bytes the snapshot's digest names.
+model WikiRepoSnapshotFragment {
+  spaceId String @map("space_id") @db.Uuid
+  snapshot WikiRepoSnapshot @relation(fields: [spaceId], references: [spaceId], onDelete: Cascade, map: "wiki_repo_snapshot_fragment_snapshot_fkey")
+  ordinal Int
+  content String
+
+  @@id([spaceId, ordinal])
+  @@map("wiki_repo_snapshot_fragment")
 }

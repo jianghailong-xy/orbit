@@ -314,6 +314,26 @@ JSON 的 `kinds.<kind>.fields` 与 TS 的 `KIND_SPECS[kind].fields` 用同一套
   目录按 frontmatter 的 type（feedback、user、reference、project、其余）再按文件名排序，跳过 `MEMORY.md`。
   在本机（`$ORBIT_HOME/wiki-import` 或 `--state`）记住导到了哪：重跑从断点续，导过的文件不再送模型，内容变了的按新
   note 导。碰到模型端点的第一个 401 就停；首次调用前先等 `/health` 回 200。
+- **服务端执行时的导入**（服务端执行 P5，契约 `import.server`；执行器开关为 `server`，或账号在 `canary` 名单内）：
+  - 命令先问 `GET /api/runner/wiki/spaces/:id/import`：回答 `{ executor, model, modelState }`。回答不是 `server` 的——`runner`、
+    老服务端的 404、拒绝、没有回答——都按上面的老路径走，行为和文案都不变。问错了也不会调模型：服务端执行时，不带
+    `readBy: "server"` 的登记会被拒（见下）。
+  - 回 `server` 时，命令照旧列文件、读 frontmatter、登记 note（body 带 `readBy: "server"`，回答里不再有 `text`），然后把
+    要读的 note 和带着上次没提议的 op 的 note，按顺序一次交给 `POST .../import-jobs`（作业 id 由命令起，重发是同一个作业；
+    至多 1000 条 note），等 `GET .../import-jobs/:jobId` 的作业结束，打印作业报告里的数字，并把报告写回本机的记忆，
+    所以下一次运行不管走哪条路都从断点续。不需要会话的 provider，不起 Claude Code，`--model` 不用。
+  - 作业（wiki-worker 的 `import`，优先级 1）：每条 note 经模型请求队列调一次 System model（step `import`，unit 是 note id，
+    system prompt 和 prompt 与 runner 上逐字相同，max_tokens 8192），不合格的带着问题再问一次（step `import_retry`）；解析、
+    修复、字段和语言检查、verify.command 必须出现在 note 的代码里、引文逐字匹配，全部与 Go 一致——
+    `src/shared/src/wiki-import.fixture.json` 把两边逐字节绑在同一组输出上。锚点查 space 的快照：路径在 origin/main 的树里、
+    提交被 origin/main 可达；space 的 runner 能取时先要一份新快照（最多等 180 秒，持租约等），取不到就用 space 已有的快照，
+    都没有就不带锚点。之后先 dry run，再以 import 来源、调用会话的身份、`wiki-import:<空间和 op 的哈希>` 幂等键提议；
+    分批规则和老路径相同：遇到 `WIKI_QUOTA` 或 `WIKI_REVIEW_QUEUE_FULL`，剩下的留给下一次。
+  - 命令停止等待（作业留在服务端，id 记在本机，下一次运行先收它的结果）：System model 拒了 key 或没配置时立即停；模型
+    不在线、或作业没开始，超过 10 分钟时停；作业已经失败重试 3 次时停。作业失败时，交给它的 note 保持已登记，下一次运行交给新作业。
+  - runner 门在此时归服务端（`WIKI_SERVER_EXECUTES`，409）：不带 `readBy: "server"` 的登记——也就是会用会话自己的模型
+    读 note 的老版命令——在登记任何东西之前就被拒；`POST .../imports` 也被拒，因为提议由作业来做，不收会话模型写的条目。
+    老版命令因此在第一次登记就停下，不会调任何模型。
 
 ---
 
@@ -1859,6 +1879,11 @@ JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5
 - `kind` 闭集：`verify` / `articles` / `import` / `plan_draft` / `plan_revise` / `docs_build` / `maintain`，加上本期的 `smoke`——
   只调一次模型、把答案和用量写进 `report`，是队列最短的一条端到端路径（`wiki-jobs.pg.spec.ts` 对 fake 端点跑通它）；`verify` 自 P3 起有实现（§24.7）。
   还没落地的种类留在队列里：领取只取本 build 认识的种类，不会被交给一个只能失败的 worker。
+- `import`（P5，§5.1 的服务端执行、契约 `jobs.kindRuns.import`）：由 runner 门的 `POST .../import-jobs` 建，输入是命令交来的 note
+  和调用会话，报告就是命令打印并记下的那份（`wiki-import-job.ts`）。执行中写 `progress`（`snapshot` / `reading` / `proposing` 和计数）。
+- `verify`（P3，§24.7）：由记录 op 进入 `verifying` 的那次提交建（业主重开核实也建），按会话排一条、`priority = 1`。
+- 作业重放时，某个单元上一次的请求如果是因等待超限而失败的（平台的失败，不是这次调用的），就换下一个 `attempt` 再问一次；否则
+  作业每次重放都会碰到同一行失败的请求，模型回来以后也永远不再问（`wikiModelRequestAttempt`，P5 补上）。
 
 ### 24.2 领取、租约、回收
 
@@ -2046,3 +2071,75 @@ JSON 里是 `modelQueue` 一节；设计见 `docs/wiki-server-execution-design.m
 | `orbit_wiki_model_request_errors_total{status}` | counter | 失败的调用按 HTTP 状态分；没有回答的失败（连接、超时）是 `none` |
 
 - 与 §23.6 同理：全部在读 metrics 时从库里取，每个副本一致；标签值来自闭集，状态标签是行里的状态码（这条序列本来就是讲状态码的）。
+
+## 26. 仓库操作 `wiki_repo_op` 与快照缓存（服务端执行 P2）
+
+JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` §4.3 和 §7。迁移 `0402_wiki_repo_op`；服务端实现在
+`src/apiserver/src/wiki-worker/`（表、领取、结算与快照缓存 `wiki-repo-ops.ts`、`pg_notify` 监听 `wiki-repo-op-notify.ts`、
+两个通道共用的 LISTEN 连接 `wiki-notify-channel.ts`），runner 侧在 `src/runner-go/wiki_repo_ops.go`（四种操作复用
+`wiki_plan_repo.go` 的索引和 `wiki_anchors.go` 的锚点检查）；共享常量在 `src/shared/src/wikiRepoOps.ts`。
+
+### 26.1 表与状态
+
+- `wiki_repo_op`：`id`、`job_id`（复合外键到 `wiki_job`，作业删掉它也跟着删）、`owner_id`、`space_id`（复合外键到 `wiki_space`）、
+  `workspace_id`（复合外键到 `workspace`：读的是它的 `work_dir`，路由按它的 `runner_id`）、`runner_id`（领取时写入，接管时刷新）、
+  `kind`、`input`（JSONB，从不含地址和 key）、`state`、租约四列（`lease_owner` / `claim_generation` / `claimed_at` / `heartbeat_at`）、
+  `result`、`error`、`created_at` / `updated_at` / `ended_at`。
+- `state`：`queued` / `running` / `succeeded` / `failed` / `cancelled`；`kind`：`snapshot` / `read` / `diff` / `anchors`。
+- CHECK：租约三列（owner、claimed_at、heartbeat_at）与 `running` 互为条件；只有结束态有 `ended_at`；`succeeded` 没有 `error`；
+  `input` / `result` 是对象。
+- 领取**不占槽位**：仓库操作不是任务也不是会话，`runnerActiveTurns`（runner 上 RUNNING 的会话数）在领取前后不变
+  （`wiki-repo-ops.pg.spec.ts` 断言）。
+
+### 26.2 下发：心跳与路由
+
+- 能力 `wiki-repo-op/v1`（`src/runner-go/transport.go` 声明，服务端 `WIKI_REPO_OP_CAPABILITY`）。没有声明它的 runner 什么都拿不到：
+  操作留在队列里，等它的步骤挂起，健康行说「升级 runner」（§26.6）。没有 `leaseOwner`、正在 drain 的进程同样什么都拿不到——
+  这不是错误，是一台机器普通的状态。
+- 领取照集成作业：一条 `UPDATE "wiki_repo_op" … FROM (SELECT … JOIN workspace w ON w.id = o.workspace_id
+  WHERE w.runner_id = <本机> AND (state = 'queued' OR (state = 'running' AND heartbeat_at < now - 60s AND lease_owner <> <本进程>))
+  ORDER BY created_at, id LIMIT 1 FOR UPDATE SKIP LOCKED)`，每条给一个新代数。**每次心跳最多 2 个**，两个 apiserver 同时心跳时
+  在 `SKIP LOCKED` 上错开，而不是互相等待。
+- 按 `workspace.runner_id` 路由，`work_dir` 与空间记录的 `repo_url_norm`、`root_commit_sha` 一起下发：runner 读的是自己的
+  checkout，检查也是在自己的 checkout 上做的。
+- 入队时 `notifyRunnerWake`（与集成作业同一条通道，事务内发出、提交时投递），机器立刻心跳一次，而不是等 30 秒。
+
+### 26.3 回写：三条路由与租约代数
+
+| 路由 | 作用 |
+|---|---|
+| `POST /runner/wiki/repo-ops/:id/progress` | 续租：`heartbeat_at` 只在 `(runner_id, lease_owner, claim_generation)` 还对得上、且仍在 `running` 时写入 |
+| `POST /runner/wiki/repo-ops/:id/fragments` | 分片上传：一片一次调用，同一把租约锁；按 `(op_id, ordinal)` 幂等，重发一片就是同一片 |
+| `POST /runner/wiki/repo-ops/:id/result` | 结算：先按代数比较并交换（`updateMany` 的谓词就是租约），再写结果与快照缓存 |
+
+- 过期的回写（换过 owner、换过代数、换过 runner，或行已终结）得到 **409 `STALE_CLAIM`**，什么都不写；结果重复到达（回包丢了）
+  不算错误，回答行里已有的状态。没有这条操作的账号得到 404。
+- 结算与它引发的一切在同一个事务里：快照的载荷变成空间的那一份、暂存分片删掉、`pg_notify` 发出。读者看不到「已结算但字节不齐」。
+
+### 26.4 分片上传与快照缓存
+
+- API 的请求体上限 10 MB（`src/apiserver/src/main.ts`），所以快照大于 `inlineBytes`（4 MiB）时走分片：每片不超过
+  `fragmentBytes`（2 MiB），按 3 MiB 的整数倍切字符（不会把一个字符切成两半）；服务端按 ordinal 拼回、按 sha256 和字节数与结果
+  对照，全部通过才成为空间的快照。整份上限 `maxSnapshotBytes`（64 MiB）。
+- 缓存 `wiki_repo_snapshot`（每空间一行：`sha`、`digest`、`size_bytes`、`fragment_count`）与它保存载荷的
+  `wiki_repo_snapshot_fragment`（按 ordinal）。**每个空间只留最近一份**：新的整份替换旧的，外键把旧的分片一起带走；空间删除时
+  随复合外键一起删。没有路由返回它的内容，只对 owner 可见（设计 §9），发给模型前过共享脱敏器。
+- 上传途中死掉的进程不会破坏缓存：分片先落在 `wiki_repo_op_fragment`（挂在操作上，随操作删），只有结算那一刻才写缓存。
+
+### 26.5 读取的上限（沿用现值）
+
+- 一项（`read` 的一个 item）：不给上限时，合同文件（`contracts/` 或 `.json`）2,500 字，其余按文档一节 4,200 字；单项最多 22,000 字。
+- 一次请求：整份回答不超过 **22,000 字**（一节的材料），超出的项被截断并标 `truncated`，截断标记算在限内。
+- 脚注核对要用的整个文件是它自己的情况：不带 `section` 的 item 直接要整份文件，上限同样是 22,000 字。
+
+### 26.6 等待：pg_notify 与健康行
+
+- 作业要用仓库时 `waitForWikiRepoOpAsJob`：作业先落到 `waiting` / `waiting_for = 'repo'`，**交出租约**（等的是别的东西，
+  就不该占着租约）；操作结算的通知（`wiki_repo_op` 通道）一到就把它放回 `queued`，领取用新代数接手，流水线从头重放，答案已经在缓存里。
+  等待本身超时（或 worker 停机）是 infra 失败：作业回 `queued`、`attempts + 1`、`failure_kind = 'infra'`、理由写在行上；
+  操作留在队列里给下一次尝试。轮询是兜底，不是主路径。worker 停机时等待立即结束（`WikiRepoOpWaitCancelled`），不再空转到超时。
+- 导入的快照是例外（§5.1、契约 `import.server.snapshot`）：持着租约有上限地等，等不到就用 space 已有的快照或不带锚点，
+  所以 runner 不在时，导入只是少了新快照，不会卡住。
+- 健康行新增 `wikiRepo`：`GET /api/wiki/spaces/:id/health` 的回答多一个 `repo` 字段（`look` / `workspace` / `runner` / `pending`），
+  `look` 取 `ready` / `no_workspace` / `runner_missing` / `runner_offline` / `runner_upgrade`——最后一个就是「升级 runner」：
+  工作区所在的机器在心跳，但没有声明 `wiki-repo-op/v1`。

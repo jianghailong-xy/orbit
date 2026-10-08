@@ -689,18 +689,28 @@ final class WikiModel {
     /// caller's toast used to wait on all four requests and arrive seconds late, often on whatever
     /// page the owner had moved to by then. The card leaves the queue at once (`answered`) and the
     /// reads catch the queue, the drawer's count and the home page up behind it.
+    ///
+    /// Landing is not the same as applying: the server answers 200 for an op it could not apply too,
+    /// recording `conflict` or `withdrawn` on it, and the answer is read for that. Such an answer is a
+    /// refusal like any other — the card is not answered here, and the queue is read again.
     func decide(_ card: WikiLogic.ReviewCard, _ action: WikiDecideAction,
                 reason: WikiRejectReason? = nil, edited: WikiEntryChanges? = nil) async -> String? {
         busy = true
         defer { busy = false }
+        let answer: WikiChangeset
         do {
-            _ = try await api.decideWikiChangeset(
+            answer = try await api.decideWikiChangeset(
                 card.changeset.id,
                 WikiDecideRequest(decisions: [WikiDecision(opId: card.op.id, action: action,
                                                            edited: edited, reason: reason)]))
         } catch {
             await reloadAfterWrite()
             return Self.refusal(error)
+        }
+        if let refusal = WikiLogic.decisionRefusal(WikiLogic.recordedDecision(answer, opID: card.op.id),
+                                                   op: card.op.op, action: action) {
+            await reloadAfterWrite()
+            return refusal
         }
         answered.insert(card.op.id)
         Task { [weak self] in

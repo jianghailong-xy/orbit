@@ -88,6 +88,8 @@ export interface RunnerObjects {
   /** An integration job, and a Codex reset operation, the machine holds the claim of (`leaseOwner`, generation 1). */
   integrationJobId: string;
   codexOperationId: string;
+  /** A wiki repository operation of the machine's, claimed by it the same way (migration 0402). */
+  wikiRepoOpId: string;
   /** A service token of the machine's, to be revoked. */
   spareServiceTokenId: string;
   /** A request from another of the account's sessions to `callingSessionId`, waiting for its reply. */
@@ -120,6 +122,8 @@ export interface RunnerObjects {
   wikiSessionId: string;
   wikiMaintainerSessionId: string;
   wikiPlanJobId: string;
+  /** An import job of the space (server execution P5, contract `import.server`), ended, to be read back. */
+  wikiImportJobId: string;
   /** An op of a changeset `wikiSessionId` proposed, waiting for its verdict. */
   wikiVerifyingOpId: string;
   /** An op of an ended session's changeset, waiting for the maintenance run to adopt its verdict. */
@@ -226,6 +230,29 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     request: (of) => ({
       params: { jobId: of.runner.integrationJobId },
       body: { claimGeneration: '1', leaseOwner: of.runner.leaseOwner, state: 'ERROR', errorCode: 'FETCH_FAILED' },
+    }),
+  },
+
+  // ── the wiki's repository operations (migration 0402) ────────────────────────────────────────────
+  // With the claim's own lease owner and generation, as the integration queue's are above: a machine
+  // that learned them is still not A's, and every one of the three writes is a compare-and-set on that
+  // claim rather than a write by an id.
+  'POST /runner/wiki/repo-ops/:id/progress': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.wikiRepoOpId }, body: { claimGeneration: 1, leaseOwner: of.runner.leaseOwner } }),
+  },
+  'POST /runner/wiki/repo-ops/:id/fragments': {
+    as: RUNNER,
+    request: (of) => ({
+      params: { id: of.runner.wikiRepoOpId },
+      body: { claimGeneration: 1, leaseOwner: of.runner.leaseOwner, sha: SHA, index: 0, total: 1, content: '{"census":true}' },
+    }),
+  },
+  'POST /runner/wiki/repo-ops/:id/result': {
+    as: RUNNER,
+    request: (of) => ({
+      params: { id: of.runner.wikiRepoOpId },
+      body: { claimGeneration: 1, leaseOwner: of.runner.leaseOwner, state: 'failed', error: 'refused by the census' },
     }),
   },
 
@@ -519,6 +546,23 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
       headers: calling(mine.runner.wikiSessionId),
       body: { ops: [{ op: 'challenge', entryId: of.wikiEntryId, reason: 'the census challenges it' }], rationale: 'the census', dryRun: true },
     }),
+  },
+  'GET /runner/wiki/spaces/:id/import': {
+    as: RUNNER,
+    request: (of, mine) => ({ params: { id: of.wikiSpaceId }, headers: calling(mine.runner.wikiSessionId) }),
+  },
+  'POST /runner/wiki/spaces/:id/import-jobs': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: of.wikiSpaceId },
+      headers: calling(mine.runner.wikiSessionId),
+      body: { id: '00000000-0000-4000-8000-0000000a5e1b', maxOps: 1, notes: [{ noteId: '00000000-0000-4000-8000-0000000a5e1c', file: 'census.md', date: '2026-10-08' }] },
+    }),
+  },
+  'GET /runner/wiki/spaces/:id/import-jobs/:jobId': {
+    as: RUNNER,
+    request: (of, mine) => ({ params: { id: of.wikiSpaceId, jobId: of.runner.wikiImportJobId }, headers: calling(mine.runner.wikiSessionId) }),
+    nested: ['jobId'],
   },
   'GET /runner/wiki/entries/:id': { as: RUNNER, request: (of, mine) => ({ params: { id: of.wikiEntryId }, headers: calling(mine.runner.wikiSessionId) }) },
   'GET /runner/wiki/spaces/:id/dossiers': {
@@ -1214,6 +1258,11 @@ const planUsageReadings = Object.fromEntries(
 
 /** Ids a runner-gate request carries that name nothing of an account's to reach, with why and where. */
 export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
+  // ── the wiki's import on the server ──────────────────────────────────────────────────────────────
+  'POST /runner/wiki/spaces/:id/import-jobs body id':
+    'the id the command names for the job it is making: the insert does nothing when the id is taken, and the job '
+    + 'answered is read back by (id, the caller\'s owner, the path\'s space, kind import), so another account\'s job '
+    + 'under that id is neither read nor written (wiki-import-jobs.ts:115)',
   // ── the machine protocol: tokens the machine or the engine makes up, and the machine's own snapshots ──
   'POST /runner/heartbeat body expiredCommitErrors[].operationId':
     'the commit attempt token the server minted for one of the machine\'s own sessions: compared only in the update '
@@ -1337,6 +1386,12 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
  * any other — and the reading, with file:line, of what it reads.
  */
 export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly string[]; reading: string }>> = {
+  'POST /runner/wiki/repo-ops/:id/result body result.*': {
+    reads: [],
+    reading: 'the runner\'s own answer — a snapshot\'s index, a read\'s text, a diff\'s paths, an anchor\'s states — '
+      + 'stored as it is on the operation it holds and never dereferenced (wiki-worker/wiki-repo-ops.ts:436, the row '
+      + 'the result is written to)',
+  },
   'POST /runner/integration-jobs/:jobId/result body errorDetail.*': {
     reads: [],
     reading: 'the runner\'s own account of a failure, stored as it is on the job it holds and never dereferenced '

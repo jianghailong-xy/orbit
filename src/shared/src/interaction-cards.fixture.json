@@ -1,0 +1,769 @@
+{
+  "about": "A08 controlled source-contract corpus, not an iOS/device/deployment record. Read types from shared and OrbitKit.",
+  "sessionId": "34ZaIKKTQq8IdW0pn90xH",
+  "projectId": "34ZZn8fmemArxvl2CsCFp",
+  "taskId": "34ZaIKb2sLBtndX7DqxHG",
+  "snapshot": {
+    "detail": {
+      "id": "34ZaIKKTQq8IdW0pn90xH",
+      "projectId": "34ZZn8fmemArxvl2CsCFp",
+      "taskId": "34ZaIKb2sLBtndX7DqxHG",
+      "status": "AWAITING_INPUT",
+      "runState": "AWAITING_INPUT",
+      "lifecycleState": "OPEN",
+      "capabilities": {
+        "canSend": true,
+        "canResume": false,
+        "canComplete": false,
+        "canRestore": false,
+        "resumeBlockedReason": "NOT_TERMINAL",
+        "canArchive": false
+      }
+    },
+    "approvals": [
+      {
+        "id": "a1",
+        "sessionId": "34ZaIKKTQq8IdW0pn90xH",
+        "toolName": "Bash",
+        "input": {
+          "command": "cd /work && git diff --stat"
+        },
+        "toolUseId": "tool-a1",
+        "status": "PENDING",
+        "createdAt": "2026-10-04T00:00:00.000Z"
+      },
+      {
+        "id": "a2",
+        "sessionId": "34ZaIKKTQq8IdW0pn90xH",
+        "toolName": "AskUserQuestion",
+        "input": {
+          "questions": [
+            {
+              "header": "Scope",
+              "question": "Which scope?",
+              "options": [
+                {
+                  "label": "Core",
+                  "description": "Core controls"
+                },
+                {
+                  "label": "All",
+                  "description": "All controls"
+                }
+              ],
+              "multiSelect": false
+            },
+            {
+              "header": "Evidence",
+              "question": "Which evidence?",
+              "options": [
+                {
+                  "label": "Requests",
+                  "description": "Request records"
+                },
+                {
+                  "label": "Screens",
+                  "description": "Screen records"
+                }
+              ],
+              "multiSelect": true
+            }
+          ]
+        },
+        "toolUseId": "tool-a2",
+        "status": "PENDING",
+        "createdAt": "2026-10-04T00:00:00.000Z"
+      },
+      {
+        "id": "a3",
+        "sessionId": "34ZaIKKTQq8IdW0pn90xH",
+        "toolName": "ExitPlanMode",
+        "input": {
+          "plan": "## Plan\n\n1. Implement cards\n2. Verify server state"
+        },
+        "toolUseId": "tool-a3",
+        "status": "PENDING",
+        "createdAt": "2026-10-04T00:00:00.000Z"
+      },
+      {
+        "id": "a4",
+        "sessionId": "34ZaIKKTQq8IdW0pn90xH",
+        "toolName": "orbit_task_create",
+        "input": {
+          "title": "Check cards",
+          "description": "Test each decision door.",
+          "acceptanceCriteria": "The recorded result matches the request.",
+          "completionCriterion": "EVIDENCE_JUDGMENT",
+          "projectId": "34ZZn8fmemArxvl2CsCFp"
+        },
+        "toolUseId": "tool-a4",
+        "status": "PENDING",
+        "createdAt": "2026-10-04T00:00:00.000Z"
+      },
+      {
+        "id": "a4p",
+        "sessionId": "34ZaIKKTQq8IdW0pn90xH",
+        "toolName": "orbit_project_create",
+        "input": {
+          "title": "Card project",
+          "goal": "Consistent decisions",
+          "acceptanceCriteriaItems": [
+            {
+              "text": "All cards work",
+              "verificationMethod": "Compare the server record."
+            }
+          ]
+        },
+        "toolUseId": "tool-a4p",
+        "status": "PENDING",
+        "createdAt": "2026-10-04T00:00:00.000Z"
+      },
+      {
+        "id": "a5",
+        "sessionId": "34ZaIKKTQq8IdW0pn90xH",
+        "toolName": "orbit_task_batch",
+        "input": {
+          "preview": {
+            "taskCount": 2,
+            "startingNow": 0,
+            "blocked": 1,
+            "needsManualStart": 1,
+            "notDispatchable": 0,
+            "internalEdges": 1,
+            "externalEdges": 0,
+            "lists": [
+              {
+                "id": "list1",
+                "title": "Cards"
+              }
+            ],
+            "tasks": [
+              {
+                "ref": "read",
+                "title": "Read the question"
+              },
+              {
+                "ref": "answer",
+                "title": "Answer it",
+                "dependsOnRefs": [
+                  "read"
+                ]
+              }
+            ],
+            "titlesTruncated": 0
+          }
+        },
+        "toolUseId": "tool-a5",
+        "status": "PENDING",
+        "createdAt": "2026-10-04T00:00:00.000Z"
+      },
+      {
+        "id": "a6",
+        "sessionId": "34ZaIKKTQq8IdW0pn90xH",
+        "toolName": "orbit_dag_change",
+        "input": {
+          "note": "The read precedes the answer.",
+          "preview": {
+            "listTitle": "Cards",
+            "edgesBefore": 1,
+            "edgesAfter": 2,
+            "becomingRunnable": 0,
+            "becomingManual": 0,
+            "becomingBlocked": 1,
+            "cycle": [],
+            "ops": [
+              {
+                "op": "add",
+                "taskTitle": "Answer it",
+                "dependsOnTitle": "Read the question",
+                "noop": false
+              },
+              {
+                "op": "add",
+                "taskTitle": "Existing task",
+                "dependsOnTitle": "Existing prerequisite",
+                "noop": true
+              }
+            ]
+          }
+        },
+        "toolUseId": "tool-a6",
+        "status": "PENDING",
+        "createdAt": "2026-10-04T00:00:00.000Z"
+      },
+      {
+        "id": "a7",
+        "sessionId": "34ZaIKKTQq8IdW0pn90xH",
+        "toolName": "orbit_blocker_resolve",
+        "input": {
+          "projectTitle": "Card project",
+          "blocker": {
+            "kind": "owner",
+            "subjectTitle": "Review",
+            "requiredAction": "Supply review evidence."
+          },
+          "reason": "The evidence is now linked."
+        },
+        "toolUseId": "tool-a7",
+        "status": "PENDING",
+        "createdAt": "2026-10-04T00:00:00.000Z"
+      },
+      {
+        "id": "a8",
+        "sessionId": "34ZaIKKTQq8IdW0pn90xH",
+        "toolName": "orbit_provider_update",
+        "input": {
+          "id": "provider",
+          "name": "Test provider",
+          "baseUrl": "https://provider.example",
+          "apiKey": "fixture-secret-never-display"
+        },
+        "toolUseId": "tool-a8",
+        "status": "PENDING",
+        "createdAt": "2026-10-04T00:00:00.000Z"
+      }
+    ],
+    "queuedTurns": [],
+    "background": [],
+    "standing": {
+      "evidenceDecisions": {
+        "decidingSessionId": "34ZaIKKTQq8IdW0pn90xH",
+        "count": 1,
+        "oldestAgeSeconds": 45,
+        "pending": [
+          {
+            "taskId": "34ZaIKb2sLBtndX7DqxHG",
+            "title": "Check cards",
+            "projectId": "34ZZn8fmemArxvl2CsCFp",
+            "ownerCard": null,
+            "criterion": {
+              "key": "cards",
+              "text": "Decisions match the server."
+            },
+            "evidenceRevision": "7",
+            "ageSeconds": 45,
+            "claim": "Requests and records were compared.",
+            "gaps": [
+              "Physical devices have not been checked."
+            ],
+            "citations": [
+              {
+                "kind": "COMMIT",
+                "ref": "fixture-commit",
+                "resolved": true,
+                "reason": null,
+                "label": "Card implementation"
+              }
+            ],
+            "decidability": {
+              "decidable": true,
+              "refusal": null,
+              "requiredAction": null
+            },
+            "independence": {
+              "independent": true,
+              "disqualification": null,
+              "requiredAction": null
+            }
+          }
+        ],
+        "waitingOnYou": [],
+        "decided": []
+      },
+      "ownerConfirmation": {
+        "taskId": "34ZaIKb2sLBtndX7DqxHG",
+        "title": "Card owner check",
+        "status": "IN_PROGRESS",
+        "projectId": "34ZZn8fmemArxvl2CsCFp",
+        "completionCriterion": "OWNER_CONFIRMED",
+        "acceptanceCriteria": "The owner reviews the report.",
+        "waiting": {
+          "requestId": "owner1",
+          "sessionId": "34ZaIKKTQq8IdW0pn90xH",
+          "requestedAt": "2026-10-04T00:00:00.000Z",
+          "report": {
+            "text": "Here is the exact report.",
+            "reportedAt": "2026-10-04T00:00:00.000Z"
+          },
+          "review": {
+            "reviewId": "review1",
+            "state": "REVIEWED",
+            "notReviewedReason": null,
+            "outdated": null,
+            "reviewer": {
+              "kind": "PROJECT_COORDINATOR",
+              "sessionId": "reviewer",
+              "title": "Reviewer"
+            },
+            "since": "2026-10-04T00:00:00.000Z",
+            "dueAt": "2026-10-05T00:00:00.000Z",
+            "windowSeconds": 1800,
+            "headline": {
+              "kind": "NEEDS_YOU",
+              "text": "Accept the device gap?",
+              "more": 0
+            },
+            "review": {
+              "recordId": "record1",
+              "recordedAt": "2026-10-04T00:00:00.000Z",
+              "reviewedSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "judgment": "The local checks passed.",
+              "checked": [
+                {
+                  "key": "c1",
+                  "text": "Protocol checks passed",
+                  "evidenceRefs": [
+                    "fixture-check"
+                  ]
+                }
+              ],
+              "notChecked": [
+                {
+                  "key": "x1",
+                  "text": "Physical device",
+                  "whyNotProven": "No device available"
+                }
+              ],
+              "needsYou": [
+                {
+                  "key": "n1",
+                  "text": "Accept the device gap?",
+                  "options": [
+                    {
+                      "label": "Keep open",
+                      "description": "Wait for evidence"
+                    },
+                    {
+                      "label": "Accept gap",
+                      "description": "Record a deliberate gap"
+                    }
+                  ],
+                  "recommendedOption": 0
+                }
+              ],
+              "leftOpen": []
+            },
+            "returned": null,
+            "problems": null
+          }
+        },
+        "decisions": [],
+        "ifConfirmed": {
+          "startsTasks": [],
+          "startsAfterLanding": true,
+          "branch": null,
+          "landing": "LINE_THEN_OWNER",
+          "endsSession": {
+            "sessionId": "34ZaIKKTQq8IdW0pn90xH",
+            "runningBgJobs": 0
+          }
+        },
+        "reviewerReturns": []
+      },
+      "criteriaDecisions": {
+        "readAt": "2026-10-04T00:00:00.000Z",
+        "projectId": "34ZZn8fmemArxvl2CsCFp",
+        "count": 1,
+        "oldestAgeSeconds": 40,
+        "decidableCount": 1,
+        "pending": [
+          {
+            "intentId": "intent1",
+            "projectId": "34ZZn8fmemArxvl2CsCFp",
+            "commitToken": "opaque-do-not-normalize",
+            "actionDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "filedAt": "2026-10-04T00:00:00.000Z",
+            "ageSeconds": 40,
+            "baselineSeal": "seal1",
+            "currentSeal": "seal1",
+            "proposed": [
+              {
+                "id": "criterion1",
+                "ordinal": 1,
+                "text": "Decisions match the server.",
+                "verificationMethod": "Compare requests and records.",
+                "completionCriterionOverrideReason": null
+              }
+            ],
+            "diff": {
+              "entries": [
+                {
+                  "change": "CHANGED",
+                  "definitionId": "criterion1",
+                  "ordinal": 1,
+                  "proposed": {
+                    "text": "Check every card",
+                    "verificationMethod": "Compare records",
+                    "completionCriterionOverrideReason": null
+                  },
+                  "onRecord": {
+                    "text": "Check a card",
+                    "verificationMethod": "Compare records",
+                    "completionCriterionOverrideReason": null
+                  },
+                  "changed": [
+                    "text"
+                  ],
+                  "rewrites": [
+                    {
+                      "field": "text",
+                      "segments": [
+                        {
+                          "side": "KEPT",
+                          "text": "Check "
+                        },
+                        {
+                          "side": "REMOVED",
+                          "text": "a"
+                        },
+                        {
+                          "side": "ADDED",
+                          "text": "every"
+                        },
+                        {
+                          "side": "KEPT",
+                          "text": " card"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "sameCount": 0,
+              "changedCount": 1,
+              "newCount": 0,
+              "removedCount": 0
+            },
+            "supersededIntentId": null,
+            "decidability": {
+              "decidable": true,
+              "refusal": null,
+              "requiredAction": null
+            }
+          }
+        ],
+        "settled": []
+      },
+      "acceptanceConfirmation": {
+        "state": "UNCONFIRMED",
+        "confirmed": false,
+        "currentVersion": {
+          "digest": "seal1",
+          "material": [
+            {
+              "definitionId": "criterion1",
+              "revision": 1,
+              "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            }
+          ]
+        },
+        "confirmation": null,
+        "changesSinceConfirmed": null
+      },
+      "project": {
+        "id": "34ZZn8fmemArxvl2CsCFp",
+        "title": "Card project",
+        "status": "OPEN",
+        "startedAt": null,
+        "coordinatorSessionId": "34ZaIKKTQq8IdW0pn90xH",
+        "acceptanceCriteriaItems": [
+          {
+            "id": "criterion1",
+            "ordinal": 1,
+            "text": "Decisions match the server.",
+            "verificationMethod": "Compare requests and records.",
+            "completionCriterionOverrideReason": null
+          }
+        ],
+        "coordinatorEnabled": true,
+        "_count": {
+          "tasks": 2
+        }
+      },
+      "openItems": {
+        "needsYou": [
+          {
+            "itemId": "q1",
+            "kind": "COORDINATOR_QUESTION",
+            "title": "Coordinator Question",
+            "detailLine": "A decision is needed.",
+            "assignee": "OWNER",
+            "assigneeReason": "DEFAULT",
+            "waitingSince": "2026-10-04T00:00:00.000Z",
+            "escalateAt": null,
+            "escalatedAt": null,
+            "taskId": null,
+            "sessionId": null,
+            "promotionId": null,
+            "fuseEpisodeId": null,
+            "delivery": {
+              "state": "DELIVERED",
+              "sessionId": "34ZaIKKTQq8IdW0pn90xH",
+              "at": "2026-10-04T00:00:00.000Z"
+            },
+            "actions": [
+              "ANSWER"
+            ],
+            "question": {
+              "question": "Which delivery?",
+              "options": [
+                {
+                  "label": "Local",
+                  "description": "Local checks"
+                },
+                {
+                  "label": "Device",
+                  "description": "Device checks"
+                }
+              ],
+              "recommendedOption": 0,
+              "blocksTaskIds": [
+                "34ZaIKb2sLBtndX7DqxHG"
+              ],
+              "ifUnanswered": "The task waits."
+            },
+            "startRequest": null,
+            "facts": null,
+            "handling": null,
+            "outcome": null
+          },
+          {
+            "itemId": "x1",
+            "kind": "TASK_FAILED",
+            "title": "Task Failed",
+            "detailLine": "A decision is needed.",
+            "assignee": "OWNER",
+            "assigneeReason": "DEFAULT",
+            "waitingSince": "2026-10-04T00:00:00.000Z",
+            "escalateAt": null,
+            "escalatedAt": null,
+            "taskId": "34ZaIKb2sLBtndX7DqxHG",
+            "sessionId": "failed-session",
+            "promotionId": null,
+            "fuseEpisodeId": null,
+            "delivery": {
+              "state": "DELIVERED",
+              "sessionId": "34ZaIKKTQq8IdW0pn90xH",
+              "at": "2026-10-04T00:00:00.000Z"
+            },
+            "actions": [
+              "RETRY",
+              "CANCEL_TASK",
+              "OPEN_TASK_SESSION",
+              "ASK_COORDINATOR_AGAIN"
+            ],
+            "question": null,
+            "startRequest": null,
+            "facts": {
+              "task": {
+                "id": "34ZaIKb2sLBtndX7DqxHG",
+                "title": "Check cards"
+              },
+              "failure": {
+                "exitCode": 1,
+                "reason": "The check failed."
+              }
+            },
+            "handling": null,
+            "outcome": null
+          },
+          {
+            "itemId": "f1",
+            "kind": "FUSE_PAUSED",
+            "title": "Fuse Paused",
+            "detailLine": "A decision is needed.",
+            "assignee": "OWNER",
+            "assigneeReason": "DEFAULT",
+            "waitingSince": "2026-10-04T00:00:00.000Z",
+            "escalateAt": null,
+            "escalatedAt": null,
+            "taskId": null,
+            "sessionId": null,
+            "promotionId": null,
+            "fuseEpisodeId": "fuse1",
+            "delivery": {
+              "state": "DELIVERED",
+              "sessionId": "34ZaIKKTQq8IdW0pn90xH",
+              "at": "2026-10-04T00:00:00.000Z"
+            },
+            "actions": [
+              "RESUME"
+            ],
+            "question": null,
+            "startRequest": null,
+            "facts": null,
+            "handling": null,
+            "outcome": null
+          }
+        ],
+        "withCoordinator": [],
+        "startRequest": null
+      },
+      "promotion": {
+        "promotionId": "promotion1",
+        "state": "READY",
+        "sourceKind": "PROJECT_BRANCH",
+        "sourceRef": "refs/heads/project/cards",
+        "sourceSha": "dddddddddddddddddddddddddddddddddddddddd",
+        "upstreamRef": "refs/heads/main",
+        "commitsAhead": 2,
+        "filesChanged": 3,
+        "tasks": [
+          {
+            "taskId": "34ZaIKb2sLBtndX7DqxHG",
+            "title": "Check cards"
+          }
+        ],
+        "taskIds": [
+          "34ZaIKb2sLBtndX7DqxHG"
+        ],
+        "checks": [],
+        "conflicts": [],
+        "upstreamShaChecked": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "landsTreeSha": "ffffffffffffffffffffffffffffffffffffffff",
+        "landsAs": "MERGE_COMMIT",
+        "askedAt": "2026-10-04T00:00:00.000Z",
+        "upstream": {
+          "syncedAt": "2026-10-04T00:00:00.000Z",
+          "conflicts": false
+        },
+        "recheckedAt": null,
+        "recheck": null,
+        "execution": null,
+        "merged": null,
+        "settledAt": null
+      }
+    }
+  },
+  "startItem": {
+    "itemId": "start1",
+    "kind": "START_REQUEST",
+    "title": "Start Request",
+    "detailLine": "A decision is needed.",
+    "assignee": "OWNER",
+    "assigneeReason": "DEFAULT",
+    "waitingSince": "2026-10-04T00:00:00.000Z",
+    "escalateAt": null,
+    "escalatedAt": null,
+    "taskId": null,
+    "sessionId": null,
+    "promotionId": null,
+    "fuseEpisodeId": null,
+    "delivery": {
+      "state": "DELIVERED",
+      "sessionId": "34ZaIKKTQq8IdW0pn90xH",
+      "at": "2026-10-04T00:00:00.000Z"
+    },
+    "actions": [],
+    "question": null,
+    "startRequest": {
+      "settings": {
+        "line": "PROJECT_BRANCH",
+        "projectBranchName": "refs/heads/project/cards",
+        "automatic": true,
+        "maxConcurrentTasks": 2,
+        "mergeCheckCommand": "./verify"
+      },
+      "why": "The plan is ready.",
+      "criteriaDigest": "seal1",
+      "planDigest": "plan1",
+      "repository": "owner/orbit",
+      "warnings": []
+    },
+    "facts": null,
+    "handling": null,
+    "outcome": null
+  },
+  "requests": [
+    {
+      "key": "approval:a1",
+      "verb": "ALLOW",
+      "body": {
+        "behavior": "allow"
+      }
+    },
+    {
+      "key": "approval:a1",
+      "verb": "REMEMBER",
+      "body": {
+        "behavior": "allow",
+        "rememberRules": [
+          {
+            "toolName": "Bash",
+            "ruleContent": "cd:*"
+          },
+          {
+            "toolName": "Bash",
+            "ruleContent": "git diff:*"
+          }
+        ]
+      }
+    },
+    {
+      "key": "approval:a3",
+      "verb": "APPROVE_PLAN",
+      "body": {
+        "behavior": "allow"
+      }
+    },
+    {
+      "key": "approval:a3",
+      "verb": "KEEP_PLANNING",
+      "body": {
+        "behavior": "deny"
+      }
+    },
+    {
+      "key": "evidence:34ZaIKb2sLBtndX7DqxHG:7",
+      "verb": "CONFIRM_EVIDENCE",
+      "body": {
+        "decidingSessionId": "34ZaIKKTQq8IdW0pn90xH",
+        "evidenceRevision": "7",
+        "decision": "CONFIRM"
+      }
+    },
+    {
+      "key": "owner:34ZaIKb2sLBtndX7DqxHG:owner1",
+      "verb": "CONFIRM_OWNER",
+      "body": {
+        "decision": "CONFIRM",
+        "requestId": "owner1",
+        "reviewRecordId": "record1",
+        "answers": [
+          {
+            "key": "n1",
+            "option": 0
+          }
+        ]
+      }
+    },
+    {
+      "key": "criteria:intent1",
+      "verb": "APPROVE_CRITERIA",
+      "body": {
+        "commitToken": "opaque-do-not-normalize",
+        "decision": "APPROVE",
+        "baseSeal": "seal1"
+      }
+    },
+    {
+      "key": "acceptance:34ZZn8fmemArxvl2CsCFp:seal1",
+      "verb": "CONFIRM_CRITERIA",
+      "body": {
+        "criteriaDigest": "seal1"
+      }
+    },
+    {
+      "key": "item:f1",
+      "verb": "RESUME",
+      "body": {}
+    },
+    {
+      "key": "promotion:promotion1",
+      "verb": "CONFIRM_MERGE",
+      "body": {
+        "sourceSha": "dddddddddddddddddddddddddddddddddddddddd"
+      }
+    }
+  ]
+}

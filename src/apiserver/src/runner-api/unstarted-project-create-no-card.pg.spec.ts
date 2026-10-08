@@ -1,7 +1,8 @@
 /**
  * D3 over real HTTP and a real PostgreSQL: in a project nobody has started, the tasks its
  * coordinator files are not put in front of the owner one card at a time — the start card reviews
- * them — and every other create is asked exactly as before.
+ * them — nor in a project whose Automatic is on, where its coordinator decides them; every other
+ * create is asked exactly as before.
  *
  * Driven through the doors a runner reaches, in the order `askBeforeCreate` / `askBeforeBatch`
  * reach them: the batch preview, the card (`POST /api/runner/sessions/:id/approvals`) and the poll
@@ -16,11 +17,15 @@
  *      count — and the tasks are written.
  *   2. One item in a project that has started: asked.
  *   3. The same create from a conversation that does not coordinate the project: asked.
- *   4. The project already started: asked.
+ *   4. The project already started, with Automatic off: asked.
  *   5. The batch preview in the unstarted project promises no run, where the same batch in a
  *      started project does: nothing starts before the start.
  *   6. An item that names no project is asked even from the coordinator: which project an unnamed
  *      create lands in is the write's own derivation, and the card door does not guess it.
+ *   7. All of it in a started project whose Automatic is on, from its coordinator: as in 1, under
+ *      the Automatic rule's own message, and the tasks are written.
+ *   8. The Automatic project, but from a conversation that does not coordinate it, or with one
+ *      item in another project: asked.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/unstarted-project-create-no-card.pg.spec.ts
  *
@@ -63,7 +68,7 @@ import { RunnerApiController } from './runner-api.controller';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 import { RunnerTasksController } from './runner-tasks.controller';
-import { START_CARD_REVIEWS_MESSAGE } from './unstarted-project-create';
+import { AUTOMATIC_COORDINATOR_DECIDES_MESSAGE, START_CARD_REVIEWS_MESSAGE } from './unstarted-project-create';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -90,7 +95,7 @@ interface Answer {
 const silent = (): unknown =>
   new Proxy({}, { get: (_target, key) => (key === 'then' ? undefined : () => undefined) });
 
-test('a coordinator’s creates in a project nobody has started are not carded one by one', {
+test('a coordinator’s creates in a project nobody has started, or one that is Automatic, are not carded one by one', {
   skip, concurrency: 1, timeout: 300_000,
 }, async (t) => {
   const url = URL!;
@@ -231,8 +236,11 @@ test('a coordinator’s creates in a project nobody has started are not carded o
     return id;
   }
 
-  /** A project of this owner, coordinated from `coordinator` when one is given. */
-  async function project(title: string, options: { coordinator?: string; started: boolean }): Promise<string> {
+  /** A project of this owner, coordinated from `coordinator` when one is given; Automatic off unless asked. */
+  async function project(
+    title: string,
+    options: { coordinator?: string; started: boolean; automatic?: boolean },
+  ): Promise<string> {
     const id = randomUUID();
     await prisma.project.create({
       data: {
@@ -243,6 +251,7 @@ test('a coordinator’s creates in a project nobody has started are not carded o
           ? { coordinatorWorkspaceId: workspaceId, coordinatorSessionId: options.coordinator }
           : {}),
         startedAt: options.started ? new Date() : null,
+        coordinatorEnabled: options.automatic ?? false,
       },
     });
     await prisma.projectRuntime.upsert({ where: { projectId: id }, create: { projectId: id }, update: {} });
@@ -403,7 +412,7 @@ test('a coordinator’s creates in a project nobody has started are not carded o
   });
 
   // ── 4 ────────────────────────────────────────────────────────────────────────────────────────
-  await t.test('the project already started: asked', async () => {
+  await t.test('the project already started, with Automatic off: asked', async () => {
     const coordinator = await conversation('协调：已开工');
     const started = await project('已开工的项目（协调）', { coordinator, started: true });
 
@@ -453,5 +462,53 @@ test('a coordinator’s creates in a project nobody has started are not carded o
     ]);
 
     await assertAsked(coordinator, card);
+  });
+
+  // ── 7 ────────────────────────────────────────────────────────────────────────────────────────
+  await t.test('all of it in the Automatic project, from its coordinator: no card, and the tasks are written', async () => {
+    const coordinator = await conversation('协调：Automatic 项目');
+    const automatic = await project('Automatic 的项目', { coordinator, started: true, automatic: true });
+
+    const single = taskBody('a fix the coordinator decided on', automatic);
+    const card = await ask(coordinator, 'orbit_task_create', single);
+    assert.equal(card.status, 'ALLOWED');
+    const polled = await send('GET', `/runner/sessions/${uuidToBase62(coordinator)}/approvals/${card.id}`);
+    assert.equal(polled.status, 200, polled.text);
+    assert.equal(polled.json.status, 'ALLOWED');
+    assert.equal(polled.json.behavior, 'allow');
+    assert.equal(polled.json.message, AUTOMATIC_COORDINATOR_DECIDES_MESSAGE);
+    assert.deepEqual(await approvalRow(card.id), {
+      status: 'ALLOWED',
+      message: 'project is Automatic: its coordinator decides these',
+      decided_by_id: null,
+      decided: true,
+    });
+    await write(coordinator, '/runner/tasks', single);
+
+    const batch = [taskBody('a second fix', automatic), taskBody('a third fix', automatic)];
+    const batchCard = await askBatch(coordinator, batch);
+    assert.equal(batchCard.status, 'ALLOWED');
+    assert.equal((await approvalRow(batchCard.id)).message, AUTOMATIC_COORDINATOR_DECIDES_MESSAGE);
+    await write(coordinator, '/runner/tasks/batch-create', { tasks: batch });
+
+    assert.deepEqual(await raised(coordinator), { cards: 0, pushes: 0, pending: 0 });
+    assert.deepEqual(await tasksIn(automatic), ['a fix the coordinator decided on', 'a second fix', 'a third fix']);
+  });
+
+  // ── 8 ────────────────────────────────────────────────────────────────────────────────────────
+  await t.test('the Automatic project from another conversation, or with an item elsewhere: asked', async () => {
+    const coordinator = await conversation('协调：Automatic 项目（反例）');
+    const automatic = await project('Automatic 的项目（反例）', { coordinator, started: true, automatic: true });
+    const elsewhere = await project('另一个 Automatic 的项目', { started: true, automatic: true });
+    const someoneElse = await conversation('一个普通会话（Automatic）');
+
+    const fromElsewhere = await ask(someoneElse, 'orbit_task_create', taskBody('filed from elsewhere', automatic));
+    await assertAsked(someoneElse, fromElsewhere);
+
+    const straddling = await askBatch(coordinator, [
+      taskBody('here', automatic),
+      taskBody('and there', elsewhere),
+    ]);
+    await assertAsked(coordinator, straddling);
   });
 });

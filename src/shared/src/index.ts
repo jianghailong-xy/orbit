@@ -39,6 +39,7 @@ export * from './wikiMaintain';
 export * from './wikiPlan';
 export * from './wikiDocs';
 export * from './wikiJobs';
+export * from './wikiRepoOps';
 export * from './wikiSystemModel';
 
 /** Hard cap on a single user prompt / turn message, in characters. An oversized input

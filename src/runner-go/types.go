@@ -399,6 +399,73 @@ type HeartbeatResponse struct {
 	// named here is nobody else's to do. Nil from older control planes and whenever this beat
 	// claimed nothing; nothing acts on it until this binary declares integration-job/v1.
 	IntegrationJobs []IntegrationJobCommand `json:"integrationJobs,omitempty"`
+	// Repository operations this process has just claimed: the wiki's pipelines run on the server,
+	// which holds no repository, so a step that needs to know what the repository says asks this
+	// machine (docs/wiki-server-execution-design.md §7). Each entry is already RUNNING in the
+	// control plane, claimed for this leaseOwner. At most two per beat. Nil from older control
+	// planes and whenever this beat claimed nothing; nothing acts on it until this binary declares
+	// wiki-repo-op/v1.
+	WikiRepoOps []WikiRepoOpCommand `json:"wikiRepoOps,omitempty"`
+}
+
+// WikiRepoOpCommand mirrors @orbit/shared: one claimed repository operation — what to read, at which
+// commit, in which checkout, under the lease its result is fenced to (contract `repoOps`, design §7).
+type WikiRepoOpCommand struct {
+	ID   string `json:"id"`
+	Kind string `json:"kind"`
+	// Echoed back on every renewal, fragment and result; a write under a generation that has moved is
+	// refused STALE_CLAIM, which is how a takeover retires the process it took over from.
+	ClaimGeneration int64  `json:"claimGeneration"`
+	LeaseOwner      string `json:"leaseOwner"`
+	// The checkout to read, as the workspace stores it; `~` is expanded here.
+	WorkDir string `json:"workDir"`
+	// The space's repository as it is recorded, for the check every operation makes before it reads.
+	RepoURLNorm   string `json:"repoUrlNorm"`
+	RootCommitSha string `json:"rootCommitSha"`
+	// What the kind reads: a read's items, a diff's two commits, a snapshot's skip sha.
+	Input map[string]interface{} `json:"input"`
+}
+
+// WikiRepoOpProgressRequest is the lease renewal of a long operation (POST
+// /runner/wiki/repo-ops/:id/progress).
+type WikiRepoOpProgressRequest struct {
+	ClaimGeneration int64  `json:"claimGeneration"`
+	LeaseOwner      string `json:"leaseOwner"`
+}
+
+// WikiRepoOpFragmentRequest carries one piece of a snapshot too large for one request body (POST
+// /runner/wiki/repo-ops/:id/fragments). The server reassembles the pieces by ordinal, hashes the whole
+// and compares it with the digest the result names.
+type WikiRepoOpFragmentRequest struct {
+	ClaimGeneration int64  `json:"claimGeneration"`
+	LeaseOwner      string `json:"leaseOwner"`
+	Sha             string `json:"sha"`
+	Index           int    `json:"index"`
+	Total           int    `json:"total"`
+	Content         string `json:"content"`
+}
+
+// WikiRepoOpFragmentResponse is the running count of staged pieces; informational, never a receipt.
+type WikiRepoOpFragmentResponse struct {
+	Accepted bool `json:"accepted"`
+	Received int  `json:"received"`
+}
+
+// WikiRepoOpResultRequest is what one repository operation came to (POST
+// /runner/wiki/repo-ops/:id/result).
+type WikiRepoOpResultRequest struct {
+	ClaimGeneration int64                  `json:"claimGeneration"`
+	LeaseOwner      string                 `json:"leaseOwner"`
+	State           string                 `json:"state"`
+	Result          map[string]interface{} `json:"result,omitempty"`
+	Error           string                 `json:"error,omitempty"`
+}
+
+// WikiRepoOpResultResponse says whether the result was taken; a 409 means this process's claim had
+// already moved on and it must stop.
+type WikiRepoOpResultResponse struct {
+	Accepted bool   `json:"accepted"`
+	State    string `json:"state"`
 }
 
 // IntegrationJobCommand mirrors @orbit/shared: one claimed integration job, carrying everything

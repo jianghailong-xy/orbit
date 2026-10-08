@@ -1181,6 +1181,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// plane, but the heartbeat that carries it is at-least-once: without this, a redelivery
 		// after a slow claim would stage a second worktree for the same job.
 		integratingNow := map[string]bool{}
+		// Repository operations this process has in flight, for the same reason: the claim is exclusive
+		// in the control plane, but a redelivered heartbeat must not start the same snapshot twice.
+		repoOpsNow := map[string]bool{}
 		// The one browser-less sign-in this runner may have in flight — it writes the machine's
 		// single credentials file, so it guards itself rather than keying off a request id.
 		runHeartbeatTicks(hbStop, ticker.C, hbNow, func() {
@@ -1316,6 +1319,35 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					}()
 					runIntegrationJobAndReport(t, job)
 				}(job)
+			}
+			// The wiki's repository operations (contracts/wiki.contract.json `repoOps`, design §7):
+			// reading a checkout for a pipeline that runs on the server. Its own goroutine and the same
+			// join as the integration jobs above, because a snapshot of a large repository is minutes of
+			// git — and because none of this takes a session slot.
+			for _, op := range resp.WikiRepoOps {
+				if op.LeaseOwner != "" && t.leaseOwner != "" && op.LeaseOwner != t.leaseOwner {
+					logln("ignoring repository operation claimed for another process:", op.ID)
+					continue
+				}
+				mergeMu.Lock()
+				busy := repoOpsNow[op.ID]
+				if !busy {
+					repoOpsNow[op.ID] = true
+				}
+				mergeMu.Unlock()
+				if busy {
+					continue
+				}
+				heartbeatOps.Add(1)
+				go func(op WikiRepoOpCommand) {
+					defer heartbeatOps.Done()
+					defer func() {
+						mergeMu.Lock()
+						delete(repoOpsNow, op.ID)
+						mergeMu.Unlock()
+					}()
+					runWikiRepoOpAndReport(t, op)
+				}(op)
 			}
 			// Honor "merge to main" requests: merge each session's branch into main on
 			// our local repo and report the outcome. Each runs once (guarded against the
