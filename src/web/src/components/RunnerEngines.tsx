@@ -262,9 +262,7 @@ interface Quota {
 }
 
 /** Older than this, a reading has missed three of the runner's reads (every 5 min with a session
- *  running, every 10 without, when any workspace there defaults to the engine) and is said to be as
- *  of then. Not that anything is wrong: an engine no workspace defaults to is read only while one of
- *  its sessions runs, so its idle reading is often this old. */
+ *  running, every 10 without, while the engine is signed in there) and is said to be as of then. */
 const STALE_QUOTA_MS = 30 * 60_000;
 
 function quotaOf(kind: RowKind, snapshot: PlanUsageSnapshot | null, online: boolean, now: number): Quota {

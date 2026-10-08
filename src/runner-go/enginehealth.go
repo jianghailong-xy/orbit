@@ -441,6 +441,17 @@ func (p *engineHealthProbe) signedOut(engine string) bool {
 	return false
 }
 
+// signedIn is whether the last completed probe found anything on engine signed in (see
+// EngineHealthReport.signedIn). False before the first one finishes, as signedOut is.
+func (p *engineHealthProbe) signedIn(engine string) bool {
+	for _, r := range p.snapshotNow() {
+		if r.Engine == engine {
+			return r.signedIn()
+		}
+	}
+	return false
+}
+
 // snapshotNow returns the last completed probe, or nil before the first one finishes — which the
 // heartbeat omits, leaving the server's stored state alone rather than reporting three unknowns.
 func (p *engineHealthProbe) snapshotNow() []EngineHealthReport {
