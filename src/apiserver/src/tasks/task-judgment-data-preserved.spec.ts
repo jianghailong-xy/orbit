@@ -2101,7 +2101,17 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // still reads the old way — after 0404, which restates it identically, it changes nothing. `wiki_plan_job` is
       // the only table it can alter; no task, project, acceptance or DONE fence object, function, trigger or type is
       // named, and no row is written.
-      '0405_wiki_plan_job_server_maker'],
+      '0405_wiki_plan_job_server_maker',
+      // The read cache (0406, owner 2026-10-08): one new table, `wiki_repo_file` — one file's whole text at
+      // (space, sha, path), so the same text is never read from the runner twice; `state` says what the answer
+      // was (found | cut | missing | too_large) and the composite foreign key to `wiki_space` deletes the rows
+      // with the space. No existing table is altered, and `wiki_repo_op_fragment`, which stages a read whose
+      // answer is too large for one request body, already exists (0402). Read against every claim above: no
+      // function, trigger, type or enum is created, replaced or dropped, so it is not another writer of the
+      // DONE fence and names none of the six preserved objects; no 0177 relation is altered and no `task`,
+      // `session`, `project` or `project_acceptance_*` object is named. No INSERT, UPDATE or DELETE: every
+      // statement is DDL, and the new table carries no stored row to hold a CHECK to.
+      '0406_wiki_repo_file'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

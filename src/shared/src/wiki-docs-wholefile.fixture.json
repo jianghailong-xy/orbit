@@ -1,0 +1,70 @@
+{
+ "why": "Owner 2026-10-08: a read answers with the whole file at the sha, not its first 22,000 characters. This fixture is one section and one footnote quote taken from PAST that window of this repository's own docs/wiki-contract.md, held to the answers src/runner-go/wiki_docs_build.go makes of the whole file — the section's text and lines, what survives the filter and the cap, the section's fingerprint and where the quote is found — so the server's port (wiki-docs-writer.ts) is held to the same bytes on a real document, not only on the small files of wiki-docs-build.fixture.json.",
+ "write": "ORBIT_WIKI_DOCS_WHOLEFILE_FIXTURE=write go test -run TestWikiDocsWholeFileFixtureIsTheServersToo .",
+ "source": "docs/wiki-contract.md",
+ "plan": {
+  "key": "s1",
+  "title": "仓库操作",
+  "kind": "ops",
+  "covers": "",
+  "length": 400
+ },
+ "section": "6.3 变更集",
+ "sectionOffset": 22639,
+ "quoteOffset": 22827,
+ "quote": "全部立即生效的变更集一记录就是 `settled`；一个 op 都没通过的请求不留变更集。Review 只列出有 op 在等 owner 的变更集：\n只剩 op 在等核实的变更集不是 owner 的卡片。\n---",
+ "missing": [],
+ "piece": {
+  "id": "D1",
+  "kind": "design_doc",
+  "path": "docs/wiki-contract.md",
+  "lines": {
+   "start": 395,
+   "end": 402
+  },
+  "section": "6.3 变更集",
+  "symbol": "",
+  "ref": "",
+  "chars": {
+   "start": 0,
+   "end": 0
+  },
+  "text": "### 6.3 变更集\n\n`pending`（还有 op 等 owner 或等核实，此时必须有 `expires_at`）→ `settled`（都没有了，此时有 `decided_at`）。\n§7.5 的重开把一个 op 送回等核实时，它所在的 `settled` 变更集回到 `pending`（重新给 `expires_at`），所以 `settled` 不再是终态。\n全部立即生效的变更集一记录就是 `settled`；一个 op 都没通过的请求不留变更集。Review 只列出有 op 在等 owner 的变更集：\n只剩 op 在等核实的变更集不是 owner 的卡片。\n\n---",
+  "action": "",
+  "into": "",
+  "reason": "",
+  "handed": false
+ },
+ "selected": [
+  {
+   "id": "D1",
+   "kind": "design_doc",
+   "path": "docs/wiki-contract.md",
+   "lines": {
+    "start": 395,
+    "end": 402
+   },
+   "section": "6.3 变更集",
+   "symbol": "",
+   "ref": "",
+   "chars": {
+    "start": 0,
+    "end": 0
+   },
+   "text": "### 6.3 变更集\n\n`pending`（还有 op 等 owner 或等核实，此时必须有 `expires_at`）→ `settled`（都没有了，此时有 `decided_at`）。\n§7.5 的重开把一个 op 送回等核实时，它所在的 `settled` 变更集回到 `pending`（重新给 `expires_at`），所以 `settled` 不再是终态。\n全部立即生效的变更集一记录就是 `settled`；一个 op 都没通过的请求不留变更集。Review 只列出有 op 在等 owner 的变更集：\n只剩 op 在等核实的变更集不是 owner 的卡片。\n\n---",
+   "action": "",
+   "into": "",
+   "reason": "",
+   "handed": true
+  }
+ ],
+ "fingerprint": "7e043a1a4421544ed522dd00520232cbb132c2db379a3643b51739ced7802e48",
+ "located": {
+  "start": 399,
+  "end": 402
+ },
+ "locatedWithin": {
+  "start": 399,
+  "end": 402
+ }
+}
