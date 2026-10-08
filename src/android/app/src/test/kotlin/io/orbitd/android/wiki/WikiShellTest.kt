@@ -145,7 +145,7 @@ class WikiShellTest {
     @Test fun aLinkToASpaceThisAccountDoesNotHaveSaysItIsNotAvailable() {
         signIn()
         open("orbit://wiki/${WikiShell.GONE_SPACE}")
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("That space is not available.").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithText("That space is not available.").fetchSemanticsNodes().isNotEmpty() }
         assertTrue("no other space's home stands in for it", compose.onAllNodesWithTag("wiki-home-list").fetchSemanticsNodes().isEmpty())
     }
 

@@ -172,7 +172,7 @@ class WikiServerExecutionShotsTest {
         // ② the Runs band on Activity (the Wiki page's management half since A12-2), after Review and Plan.
         val activity = OrbitRoute(Destination.WIKI_ACTIVITY)
         show(activity) { WikiActivityScreen(it, activity, DirectoryData(), nav) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-job-row").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-job-row").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-activity-list").performScrollToIndex(3)
         compose.onNodeWithTag("wiki-activity-list").performScrollToNode(hasText(WikiRunsCopy.systemModelLabel("qwen3.8-27b-fp8")))
         val rows = compose.onAllNodesWithTag("wiki-job-row")

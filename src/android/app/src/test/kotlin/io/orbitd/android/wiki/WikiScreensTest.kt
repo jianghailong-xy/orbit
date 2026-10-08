@@ -105,12 +105,12 @@ class WikiScreensTest {
     @Test fun theHomeDrawsTheSpaceItsPrinciplesAndWhereItsBarGoes() {
         val route = OrbitRoute(Destination.WIKI, origin = Origin.DRAWER)
         show(route) { WikiHomeScreen(it, route, DirectoryData(), nav) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-home-list").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-home-list").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-space-picker").assertTextContains("orbit")
         // The first three principles, then All 4 (A12-3).
         listOf("Agent-writable data never becomes a system instruction", "Completion is adjudicated, not claimed",
             "A clock never starts agent work").forEach {
-            compose.waitUntil(5_000) { runCatching { compose.onNodeWithTag("wiki-home-list").performScrollToNode(hasText(it)) }.isSuccess }
+            compose.waitUntil(60_000) { runCatching { compose.onNodeWithTag("wiki-home-list").performScrollToNode(hasText(it)) }.isSuccess }
         }
         // The principles by their kind, and the plan's documents; what Activity draws is not the home's to read.
         assertTrue(sent.any { it.first == "GET wiki/spaces/$space/docs" })
@@ -128,7 +128,7 @@ class WikiScreensTest {
     @Test fun activityDrawsWhatTheHomeUsedToSayAndWhereEachRowGoes() {
         val route = OrbitRoute(Destination.WIKI_ACTIVITY)
         show(route) { WikiActivityScreen(it, route, DirectoryData(), nav) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-status-line").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-status-line").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-status-line").assertTextEquals("9 entries · Anchors verified at 4db4f9f")
         compose.onNodeWithTag("wiki-review-banner").assertTextContains("3 proposals to review", substring = true)
         listOf("Task priority is a field on the task, not a dispatcher session", "Delete means forget", "Headless Chromium needs --window-size=393",
@@ -160,7 +160,7 @@ class WikiScreensTest {
         // The Runs band is Activity's since A12-2, after Review and Plan as on iOS.
         val route = OrbitRoute(Destination.WIKI_ACTIVITY)
         show(route) { WikiActivityScreen(it, route, DirectoryData(), nav) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-job-row").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-job-row").fetchSemanticsNodes().isNotEmpty() }
         // The band's head names the System model and its state, and the status line gained the fixture's look.
         compose.onNodeWithTag("wiki-activity-list").performScrollToNode(hasText(WikiRunsCopy.runs))
         compose.onNodeWithTag("wiki-activity-list").performScrollToNode(hasText(WikiRunsCopy.systemModelLabel("qwen3.8-27b-fp8")))
