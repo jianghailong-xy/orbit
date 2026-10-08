@@ -166,6 +166,33 @@ class WikiShellTest {
         assertTrue("an old refusal is not this visit's", compose.onAllNodesWithTag("watch-error").fetchSemanticsNodes().isEmpty())
     }
 
+    /** MainActivity drops a Settings or Runner page's saved state once its route has left every stack (A13), and a Wiki
+     * or Watch page's likewise (A12): two effects over one holder, each over its own routes. A Settings page pushed over
+     * a watch and popped takes only its own state with it; the watch's goes when the watch itself is left. */
+    @Test fun aSettingsPagePoppedOffAWatchLeavesTheWatchsStateAlone() {
+        shell.pauseRefusal = "a MATCHED watch cannot be paused"
+        signIn()
+        open("orbit://watch/${WikiShell.WATCH}")
+        awaitTag("watch-detail:${WikiShell.WATCH}")
+        compose.onNodeWithTag("watch:${WikiShell.WATCH}:WATCH_PAUSE").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("watch-error").fetchSemanticsNodes().isNotEmpty() }
+        // Settings, from the drawer, goes on the same stack, over the watch.
+        compose.onNodeWithContentDescription("Open navigation").performClick()
+        compose.onNodeWithText("Settings").performScrollTo().performClick()
+        awaitThat("Settings over the watch") { compose.onAllNodesWithTag("watch-detail:${WikiShell.WATCH}").fetchSemanticsNodes().isEmpty() }
+        back()
+        awaitTag("watch-detail:${WikiShell.WATCH}")
+        compose.waitForIdle()
+        assertTrue("the watch never left its stack: its refusal is still this visit's",
+            compose.onAllNodesWithTag("watch-error").fetchSemanticsNodes().isNotEmpty())
+        back()
+        awaitTag("following")
+        open("orbit://watch/${WikiShell.WATCH}")
+        awaitTag("watch-detail:${WikiShell.WATCH}")
+        compose.waitForIdle()
+        assertTrue("left, the watch took its state with it", compose.onAllNodesWithTag("watch-error").fetchSemanticsNodes().isEmpty())
+    }
+
     // MARK: refresh — by event type, and never an older read over a newer one
 
     @Test fun theWikiReReadsOnWikiChangedAndNotOnOtherAccountEvents() {
