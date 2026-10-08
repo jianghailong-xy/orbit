@@ -39,6 +39,8 @@ type fakePlanDoor struct {
 	// drafts answers each draft submitted, by its number from 1.
 	drafts func(n int, body map[string]interface{}) (int, string)
 	check  func(job string) (int, string)
+	// refuse, when set, is the code every plan route answers 409 with: the server's, when it drafts itself.
+	refuse string
 }
 
 func newFakePlanDoor(t *testing.T, f maintainFixture) *fakePlanDoor {
@@ -96,6 +98,9 @@ func newFakePlanDoor(t *testing.T, f maintainFixture) *fakePlanDoor {
 			return string(raw)
 		}
 		switch {
+		case d.refuse != "" && strings.HasPrefix(path, "plan"):
+			status, body = http.StatusConflict, jsonOf(map[string]string{"code": d.refuse,
+				"message": "this account's wiki plan is drafted on the Orbit server (ORBIT_WIKI_EXECUTOR)"})
 		case r.Method == http.MethodGet && path == "plan/job":
 			status, body = http.StatusOK, jsonOf(d.job)
 		case r.Method == http.MethodGet && path == "plan":
@@ -1687,5 +1692,69 @@ func TestWikiPlanRunsOnlyAsItsJob(t *testing.T) {
 	}
 	if end := planFinish(t, door); end["outcome"] != "failed" {
 		t.Errorf("the job's end: %v", end)
+	}
+}
+
+// ── The server's drafts ─────────────────────────────────────────────────────────────────────────
+
+// When the server drafts the account's plan (contract `plan.jobs.server`), the door refuses a run's first call
+// WIKI_SERVER_EXECUTES: draft and revise stop there, say where the plan is drafted, and ask no model — no
+// endpoint's /health, no Claude Code, nothing sent back. A runner that predates this stops at the same call.
+func TestWikiPlanIsTheServersWhenTheServerDraftsIt(t *testing.T) {
+	for _, verb := range []string{"draft", "revise"} {
+		t.Run(verb, func(t *testing.T) {
+			f := newPlanFixture(t)
+			door := newFakePlanDoor(t, f)
+			door.refuse = wikiServerExecutesCode
+			vllm := newFakeVLLM(t, (&planModel{}).answer)
+			planSession(t, door.URL, vllm)
+			spawns := fakeVerifyClaude(t)
+			args := []string{verb}
+			if verb == "revise" {
+				file := filepath.Join(t.TempDir(), "instructions.md")
+				if err := os.WriteFile(file, []byte("合并存储。"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				args = append(args, "--instructions", file)
+			}
+			summary, printed, err := runPlanCLI(t, t.TempDir(), args...)
+			if err == nil || !strings.Contains(err.Error(), "drafted and revised on the Orbit server") || !strings.Contains(err.Error(), "WIKI_SERVER_EXECUTES") ||
+				!strings.Contains(err.Error(), "no model was asked") {
+				t.Fatalf("orbit wiki plan %s against a server that drafts: %v\n%s", verb, err, printed)
+			}
+			if summary.Outcome != "failed" || summary.Version != nil {
+				t.Errorf("the summary: %+v", summary)
+			}
+			if n := len(vllm.Requests()); n != 0 {
+				t.Errorf("the model was asked %d times", n)
+			}
+			if n := len(spawns()); n != 0 {
+				t.Errorf("Claude Code was started %d times", n)
+			}
+			door.mu.Lock()
+			sent := len(door.requests)
+			door.mu.Unlock()
+			if sent != 1 || len(door.of(http.MethodGet, "plan/job")) != 1 {
+				t.Errorf("the run sent %d requests: want its first, GET plan/job, alone", sent)
+			}
+		})
+	}
+}
+
+// Under the runner's path the same door answers as it always has, and the message is the one it always was.
+func TestWikiPlanRunsAsBeforeWhenTheRunnerDrafts(t *testing.T) {
+	err := wikiPlanCallError("orbit wiki plan draft", "space-1", &transportHTTPError{method: http.MethodGet, path: "/runner/wiki/spaces/space-1/plan/job",
+		statusCode: http.StatusConflict, body: `{"code":"WIKI_PLAN_NO_JOB","message":"this maintenance run runs no job"}`})
+	if err == nil || !strings.Contains(err.Error(), "WIKI_PLAN_NO_JOB") || strings.Contains(err.Error(), "Orbit server") {
+		t.Errorf("a runner's refusal reads %v", err)
+	}
+	f := newPlanFixture(t)
+	door := newFakePlanDoor(t, f)
+	vllm := newFakeVLLM(t, (&planModel{}).answer)
+	planSession(t, door.URL, vllm)
+	fakeVerifyClaude(t)
+	summary, printed, runErr := runPlanCLI(t, t.TempDir(), "draft", "--target", "3-3")
+	if runErr != nil || summary.Outcome != "succeeded" || len(vllm.Requests()) != 7 {
+		t.Errorf("the runner's own draft: %v, %+v, %d calls\n%s", runErr, summary.Outcome, len(vllm.Requests()), printed)
 	}
 }

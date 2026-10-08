@@ -223,6 +223,12 @@ func (t *Transport) checkWikiPlanJob(spaceID, jobID string) (json.RawMessage, er
 // wikiPlanNoJobCode is the refusal a run's job routes give a session with no job, or a job that ended.
 const wikiPlanNoJobCode = "WIKI_PLAN_NO_JOB"
 
+// wikiServerExecutesCode is the refusal a runner door route gives when the account's pipeline is the server's
+// (contract `refusals`, `plan.jobs.server.door`): the wiki-worker drafts with the System model, so the door hands
+// no session the job, its materials or a place for what a session's own model wrote. A run of this command meets
+// it at its first call, before it has asked any model anything.
+const wikiServerExecutesCode = "WIKI_SERVER_EXECUTES"
+
 // wikiPlanCallError says what a call to the plan's routes came to.
 func wikiPlanCallError(command, spaceID string, err error) error {
 	var httpErr *transportHTTPError
@@ -230,6 +236,10 @@ func wikiPlanCallError(command, spaceID string, err error) error {
 		return fmt.Errorf("%s: %w", command, err)
 	}
 	switch code := httpErr.code(); {
+	case code == wikiServerExecutesCode:
+		return fmt.Errorf("%s: space %s's plan is drafted and revised on the Orbit server, with its System model (%s: %s). "+
+			"Nothing was read or drafted here, and no model was asked: the owner asks for a draft on the plan page",
+			command, spaceID, code, refusalMessageOf(err))
 	case code == wikiNotMaintenanceSessionCode:
 		return fmt.Errorf("%s: only the plan job of space %s runs it — the session of the task the server made for a draft "+
 			"of the space's plan, a Wiki maintenance run of the space — and this session is not one (%s). Nothing was read "+

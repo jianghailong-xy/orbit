@@ -563,6 +563,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // one (a history reference with no foreign key). Addresses a reader follows — never a fence.
   'jobId',
   'requestedByUserId',
+  // A plan version the wiki-worker's plan job drafted (migration 0404): the wiki_job that wrote it, where a
+  // session's draft names its session. A history reference with no foreign key — an address, never a fence.
+  'authorJobId',
   // A confirmation request's review (migration 0370, docs/owner-confirmation-review-contract.md
   // §3.4): the review row, the REVIEW record a decision was made against, the run the request came
   // from and the session that reviews it. Addresses a reader follows; the request itself keeps its

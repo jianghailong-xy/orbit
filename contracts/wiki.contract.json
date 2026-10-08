@@ -1600,6 +1600,61 @@
         "draftPrecondition": "Run this only as the plan job of the space, once, and let it finish: it drafts as the space's maintenance run, and only a draft that passed the plan's gate is stored — three rounds at most, each handing every error back to the model.",
         "revisePrecondition": "Run this only as the plan job the owner's redraft made, once, and let it finish: it revises the plan's newest version with the owner's instructions, and only a draft that passed the plan's gate is stored — three rounds at most, each handing every error back to the model.",
         "checkPrecondition": "Judge a plan job only by what this reads: it passes when the job's run stored a draft that passed the plan's gate — or, a build's, wrote the documents of the confirmed version it was made for — and a run cannot pass it by saying it finished."
+      },
+      "server": {
+        "phase": "server execution, P6",
+        "doc": "docs/wiki-contract.md section 21.10; docs/wiki-server-execution-design.md sections 4.3 and 8",
+        "why": "The plan's model moves off the runner (design section 0): when the executor switch gives the account to the server, a draft or a revision is a wiki_job the wiki-worker runs with the System model — the runner's pipeline (src/runner-go/wiki_plan_*.go) ported to src/apiserver/src/wiki-worker/wiki-plan-*.ts, its repository read from the space's snapshot — and no task, session or provider of the account's is made or spent.",
+        "when": "Under jobs.executor=server, or canary for an account its list names. Under runner (the default), and for an account canary does not list, a job is made as plan.jobs.task says and run as plan.jobs.run says, exactly as before.",
+        "make": "advanceWikiPlanJob asks the switch first: a draft is made as a `plan_draft` wiki_job and a revision as `plan_revise`, at priority, with input { planJobId }, in the transaction that marks the plan job made with it (wiki_plan_job.job_id). The space's maintenance workspace is still what it needs — the worker reads the repository through that workspace's runner — so a space without one is held no_maintenance_workspace as on the runner's path; the provider is not asked, since no session's model is, and nothing waits for the hidden list (plan.jobs.staggered is the runner's: the queue and one running job a space keep the model from being asked by both at once). No task is made.",
+        "kinds": {
+          "draft": "plan_draft",
+          "revise": "plan_revise"
+        },
+        "priority": 1,
+        "priorityRule": "Owner-initiated (jobs.priority): the space's creation and the owner's redraft are both the owner's, so every request of the job goes before background maintenance.",
+        "maxTokens": 32000,
+        "formatTries": 3,
+        "concurrency": 4,
+        "systemPrompt": "你是这个仓库的文档主编。你根据给你的材料规划产品与技术文档。只使用材料里出现的文件路径、章节标题、符号、项目名，不编造。用中文写，代码名、路径、命令保留原文。只输出要求的内容。",
+        "steps": {
+          "skeleton": "plan_skeleton",
+          "details": "plan_details",
+          "outline": "plan_outline",
+          "rules": "plan_rules",
+          "reviseCatalogue": "plan_revise_catalogue",
+          "reviseDoc": "plan_revise_doc",
+          "redoDoc": "plan_redo_doc"
+        },
+        "calls": "Every call is one queue request (modelQueue): step one of steps — each `plan_*`, so it waits at most modelQueue.waitLimitSeconds.plan and runs at most modelQueue.callBudgetSeconds.plan, sixty minutes — and unit `a<round>/<the runner's unit name>@<the first 12 hex of the call's sha256>`, so a replay meets the request it already made, an answer that does not read is asked again with the format said once more (formatTries calls a unit at most), and a changed question is a new request. maxTokens a call, the system prompt above, one user message; what has arrived is kept as the request's partial while it runs (modelQueue).",
+        "materials": "Read once, at the job's first run, and kept on the plan job (wiki_plan_job.materials, migration 0404): the space's snapshot's sha — a fresh snapshot when its runner can take one, waited for at most snapshotWaitSeconds, else the snapshot the space holds, else the job waits as infra — the plan's materials (plan.jobs.materials, the same function the runner door answers with), the day they were read, and the texts at the sha the snapshot does not carry: the overview's documents and schema.prisma, through the runner's read (repoOps.kinds.read), waited for at most readWaitSeconds. A replay reads them back, so it asks the model the questions it asked; a snapshot that moved under the job (another job of the space took a newer one) makes it start over at the snapshot as it is, as the runner starts over when the sha it drafted from left origin/main.",
+        "snapshotWaitSeconds": 300,
+        "readWaitSeconds": 300,
+        "materialCaps": {
+          "overview": {
+            "full": 14000,
+            "detail": 10000,
+            "doc": 8000
+          },
+          "layout": {
+            "full": 32000,
+            "detail": 26000
+          },
+          "docsTree": {
+            "full": 45000,
+            "detail": 30000
+          },
+          "codeExcerpt": 16000
+        },
+        "materialCapsRule": "The runner's caps, in characters: a catalogue reads the overview at full, the structure and the documents' heading tree at full; a category's details read them at detail; a document's outline reads the overview at doc and its code's symbols within codeExcerpt (bytes, as the runner's builder counts them).",
+        "repository": "Everything the runner's job read of its checkout is read from the snapshot index at the same sha: the files with their sizes (the structure, hasPath), every document's headings (the heading trees, hasDocSection), every source file's symbols (the code excerpt, hasSymbol), the contracts' top-level keys (the contracts list). A symbol the index does not name is looked for, as on the runner, as a word of its file's text — the text read at the sha before the round is gated, at most repoOps.read.wholeFileChars characters a file. That limit, and the index carrying an object's keys only (a contract whose JSON is an array or empty reads as not JSON), are the two places the two paths can differ.",
+        "gate": "The job's own gate first — plan.jobs.run's checks, word for word, with every file, docs section, symbol and contract checked on the snapshot — then the plan's gate on the server (plan.gate), which the job reaches in process (WikiPlans.submitServerDraft) under the draft's idempotency key; repoCheck is the snapshot's sha and what this gate found. Whatever either finds goes back to the model unit by unit, plan.jobs.rules.attemptsMax rounds in all.",
+        "author": "A stored version names the wiki_job that drafted it (wiki_plan.author_job_id, migration 0404; authorJobId on the read) where a session's names its session; origin maintenance, model the System model's name.",
+        "progress": "The plan job says where the run is, as plan.jobs.progress does for a session's: started_at at the job's first run, attempt at each round — what the plan page reads. The wiki_job's own progress (jobs.progress) is { planJobId, attempt, step }.",
+        "finish": "The run ends its plan job as plan.jobs.finish does a session's, held to the same rules (WikiPlans.finishServerJob): succeeded with the version its draft became — a version of the space this wiki_job stored — or failed with the last round's errors, what went wrong, the report and the last draft; the wiki_job ends with { kind, planJobId, outcome, version, error, plan: the report }. A failure of the platform — a request past its wait limit, the space's runner away, the worker stopping — is not the draft's: the wiki_job is retried (jobs.retry) and the plan job stays running. A wiki_job that ends without its plan job ended ends it failed, and one that never started is cancelled, with its plan job ended, when the switch no longer gives the account to the server.",
+        "door": "The runner door's drafting routes are the server's (refusals: WIKI_SERVER_EXECUTES), whoever asks, once the space is found: context, progress, finish, materials and drafts. A session's `orbit wiki plan draft` or `revise` — one that predates this too — stops at its first call, before it has asked any model anything. What a maintenance run reads of the plan (plan.reads.state) and proposes to it (plan.proposals), and the check (plan.jobs.check), are as they were. Under runner every route is exactly as plan.jobs.who says.",
+        "deterministic": "One fixture holds both paths to the same answers: src/shared/src/wiki-plan.fixture.json, written by src/runner-go/wiki_plan_fixture_test.go from a real checkout read the runner's way, and read by src/apiserver/src/wiki-worker/wiki-plan-golden.spec.ts the server's way — the line format read back, the references found, the materials, every step's prompt, each round's draft, gate errors and repository check.",
+        "migration": "src/apiserver/prisma/migrations/0404_wiki_plan_server_draft/migration.sql"
       }
     }
   },
@@ -1899,7 +1954,9 @@
     "kinds": ["verify", "articles", "import", "plan_draft", "plan_revise", "docs_build", "maintain", "smoke"],
     "kindRuns": {
       "smoke": "One model call, its answer and usage written into the job's report: the shortest route through the queue, and P1's end-to-end proof that claim, call, write-back and settle work together. It runs no pipeline and reads nothing; its input is { system?, prompt?, maxTokens? }, each with a default. A kind whose phase has not landed stays queued — the claim takes only the kinds the worker's build runs — so no deployment is handed work it would have to fail.",
-      "import": "orbit wiki import's reading, on the server (P5, import.server): the notes the command registered, read by the System model through the queue — one request a note (step import, unit the note), one retry with what did not hold up (step import_retry) — checked as the runner checks them, the anchors held to the space's snapshot, then a dry run and one proposal with origin import as the calling session, under a key made of the space and the ops. Its input is the create route's body with the session in it; its report is import.server.report, which the command prints and remembers. Made only by the runner door's create route, at import.server.priority."
+      "import": "orbit wiki import's reading, on the server (P5, import.server): the notes the command registered, read by the System model through the queue — one request a note (step import, unit the note), one retry with what did not hold up (step import_retry) — checked as the runner checks them, the anchors held to the space's snapshot, then a dry run and one proposal with origin import as the calling session, under a key made of the space and the ops. Its input is the create route's body with the session in it; its report is import.server.report, which the command prints and remembers. Made only by the runner door's create route, at import.server.priority.",
+      "plan_draft": "A draft of the space's plan on the server (P6, plan.jobs.server): the four steps of plan.jobs.run — the catalogue, each category's details, each document's outline, the rules' draft — through the queue, gated on the space's snapshot and by the plan's gate, three rounds at most; stored as a version the wiki_job authored. Its input is { planJobId }; its report is { kind, planJobId, outcome, version, error, plan: plan.jobs.report }. Made by advanceWikiPlanJob for a draft the space's creation or its owner asked for, at plan.jobs.server.priority.",
+      "plan_revise": "A revision of the space's plan on the server (P6, plan.jobs.server): plan.jobs.run.revise through the queue — the new catalogue with what each document is made from and the conventions it moves, then the documents that merge or are new — gated as plan_draft is. Its input and report are plan_draft's; the owner's instructions are the plan job's own. Made by advanceWikiPlanJob for the owner's redraft with instructions."
     },
     "states": ["queued", "running", "waiting", "succeeded", "failed", "cancelled"],
     "waitingFor": ["repo", "model"],
@@ -1922,7 +1979,7 @@
     "concurrencyPerWorker": 4,
     "pollSeconds": 5,
     "startup": "A worker runs one pass the moment it starts — sweep, then claim — so a job left queued or handed back by a dead worker is picked up where it stands.",
-    "make": "The pipelines enqueue a job as a row (kind, input, priority, state queued) when the executor switch says the server runs for that account. The phases that move each pipeline add their own route or trigger: since P5 the runner door's import-jobs route makes an `import` job (import.server.create), and smoke is made by the specs directly.",
+    "make": "The pipelines enqueue a job as a row (kind, input, priority, state queued) when the executor switch says the server runs for that account. The phases that move each pipeline add their own route or trigger: since P5 the runner door's import-jobs route makes an `import` job (import.server.create), since P6 a plan job of the account is made as a `plan_draft` or `plan_revise` job (plan.jobs.server.make), and smoke is made by the specs directly.",
     "progress": "A job's progress column is its own pipeline's to write (a step, a count, what it is doing), under its lease generation; report is what it ends with. The smoke job writes a report; the import job writes both (import.server.progress, import.server.report).",
     "executor": {
       "env": { "mode": "ORBIT_WIKI_EXECUTOR", "canaryOwners": "ORBIT_WIKI_EXECUTOR_CANARY_OWNERS" },

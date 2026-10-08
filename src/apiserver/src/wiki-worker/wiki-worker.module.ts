@@ -1,8 +1,11 @@
 import { Module } from '@nestjs/common';
+import { WIKI_PLAN_SERVER_JOB } from '@orbit/shared';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PrismaService } from '../prisma/prisma.service';
+import { WikiPlans } from '../wiki/wiki-plan';
 import { WikiService } from '../wiki/wiki.service';
 import { wikiImportJobRunner } from './wiki-import-job';
+import { wikiPlanDraftJobRunner } from './wiki-plan-draft-job';
 import { WikiJobExecutor, WIKI_JOB_RUNNERS, WIKI_JOB_RUNNERS_TOKEN, type WikiJobRunner } from './wiki-job-executor';
 import { WikiModelRequestChannel } from './wiki-model-notify';
 import { WikiRepoOpChannel } from './wiki-repo-op-notify';
@@ -31,7 +34,8 @@ import { currentWikiSystemModel, type WikiSystemModelConfig } from './wiki-syste
  * claim nothing, and the worker only probes — exactly what it did before this phase.
  *
  * THE PIPELINES WRITE THROUGH WikiService, not through their own queries (design §4.2): an import proposes
- * through the same one writer the runner door's `imports` route calls, with origin import. The worker holds
+ * through the same one writer the runner door's `imports` route calls, with origin import; a plan job reads the
+ * plan and stores its draft through WikiPlans, the gate the runner door's drafts go through. The worker holds
  * no realtime hub and no push service — the service's two default to none — so what a job records is not
  * announced to a connected client by this process; realtime is an accelerant and never the truth (contract
  * `realtime.correctness`). What the pipelines' own kinds are is decided here too: the job kind map the
@@ -42,6 +46,7 @@ import { currentWikiSystemModel, type WikiSystemModelConfig } from './wiki-syste
   providers: [
     { provide: WIKI_SYSTEM_MODEL_CONFIG, useFactory: currentWikiSystemModel },
     { provide: WikiService, useFactory: (prisma: PrismaService) => new WikiService(prisma), inject: [PrismaService] },
+    { provide: WikiPlans, useFactory: (prisma: PrismaService) => new WikiPlans(prisma), inject: [PrismaService] },
     WikiRepoOps,
     {
       provide: WIKI_JOB_RUNNERS_TOKEN,
@@ -51,11 +56,17 @@ import { currentWikiSystemModel, type WikiSystemModelConfig } from './wiki-syste
         repoOps: WikiRepoOps,
         model: WikiSystemModelConfig,
         repoWake: WikiRepoOpChannel,
-      ): Record<string, WikiJobRunner> => ({
-        ...WIKI_JOB_RUNNERS,
-        import: wikiImportJobRunner({ prisma, wiki, repoOps, model: model.model, repoWake }),
-      }),
-      inject: [PrismaService, WikiService, WikiRepoOps, WIKI_SYSTEM_MODEL_CONFIG, WikiRepoOpChannel],
+        plans: WikiPlans,
+      ): Record<string, WikiJobRunner> => {
+        const plan = wikiPlanDraftJobRunner({ prisma, plans, repoOps, model: model.model, repoWake });
+        return {
+          ...WIKI_JOB_RUNNERS,
+          import: wikiImportJobRunner({ prisma, wiki, repoOps, model: model.model, repoWake }),
+          [WIKI_PLAN_SERVER_JOB.kinds.draft]: plan,
+          [WIKI_PLAN_SERVER_JOB.kinds.revise]: plan,
+        };
+      },
+      inject: [PrismaService, WikiService, WikiRepoOps, WIKI_SYSTEM_MODEL_CONFIG, WikiRepoOpChannel, WikiPlans],
     },
     WikiModelStatusProbe,
     WikiModelRequestChannel,

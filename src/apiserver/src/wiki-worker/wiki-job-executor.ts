@@ -25,9 +25,12 @@ import { WIKI_MODEL_QUEUE_OPTIONS, WikiModelRequestQueue, WikiModelWaitCancelled
 import { WikiRepoOpWaitCancelled } from './wiki-repo-ops';
 import { runWikiSmokeJob } from './wiki-smoke-job';
 
-/** A job's failure whose fault is the work's: the job ends failed (§5.5 content). */
+/**
+ * A job's failure whose fault is the work's: the job ends failed (§5.5 content). A runner that got part of
+ * its work done says what in `report`, which the failed row keeps.
+ */
 export class WikiJobContentError extends Error {
-  constructor(message: string) {
+  constructor(message: string, readonly report?: Record<string, unknown>) {
     super(message);
     this.name = 'WikiJobContentError';
   }
@@ -227,7 +230,7 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
     }
     const message = this.message(error);
     if (error instanceof WikiJobContentError) {
-      await failWikiJobAsContent(this.prisma, { id: job.id, generation: job.leaseGeneration, error: message });
+      await failWikiJobAsContent(this.prisma, { id: job.id, generation: job.leaseGeneration, error: message, report: error.report });
       this.log.warn(`job ${job.id} (${job.kind}) failed: ${message}`);
       return;
     }
