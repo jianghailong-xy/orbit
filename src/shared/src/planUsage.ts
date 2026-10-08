@@ -434,8 +434,8 @@ export function codexAccountToStartOn(
  * Which of a runner's accounts of `engine` a session whose own account (`from`) just hit its usage
  * limit can move to, between turns: another account that can run now — not signed out, no spent
  * window — ranked as {@link accountToStartOn} ranks. Never a spent one: when no other account has
- * room, moving gains nothing, and the session waits for its own account's reset. Null then, and for a
- * runner with no second account.
+ * room, moving gains nothing, and the session waits for the first account to free up, its own or
+ * another ({@link accountToMoveToAt}). Null then, and for a runner with no second account.
  */
 export function accountToMoveTo(
   engine: AccountEngine,
@@ -458,6 +458,27 @@ export function codexAccountToMoveTo(
   from: string,
 ): string | null {
   return accountToMoveTo('codex', accounts, usage, now, from);
+}
+
+/**
+ * When a session whose own account (`from`) is spent can go again on another of a runner's accounts
+ * of `engine`, for what holds its retry rather than choosing where it goes ({@link accountToMoveTo}):
+ * `now` while one has room, else the first moment another frees up — the reset of its spent windows,
+ * or the end of its pause. Null when no other account names such a moment: a runner with no second
+ * account, every other one signed out, or spent with no reset to go by.
+ */
+export function accountToMoveToAt(
+  engine: AccountEngine,
+  accounts: readonly RunnerEngineAccount[] | null | undefined,
+  usage: PlanUsage | null | undefined,
+  now: Date,
+  from: string,
+): Date | null {
+  if (!accounts || accounts.length < 2) return null;
+  const others = rankAccounts(engine, accounts, usage, now).filter((c) => c.id !== from);
+  if (others.some((c) => c.spentUntil === null)) return now;
+  const first = Math.min(...others.map((c) => c.spentUntil ?? Number.POSITIVE_INFINITY));
+  return Number.isFinite(first) ? new Date(first) : null;
 }
 
 /** Ties go to Default, then to the lower id, so no answer depends on the order of the report. */

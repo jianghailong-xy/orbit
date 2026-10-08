@@ -17,11 +17,13 @@ import {
   type RunnerHeartbeatRequest,
 } from '@orbit/shared';
 import { storeRefreshedCodexResetBlock } from '../runner-api/codex-reset-plan-usage';
-import { RunnerApiController, type RetryPlanTransaction } from '../runner-api/runner-api.controller';
+import { RunnerApiController, type RetryPlanTransaction, type UsageLimitTransaction } from '../runner-api/runner-api.controller';
 import { transactionDouble } from '../test-support/prisma-transaction-double';
+import { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from './account-move-capability';
 import { resolveProviderExec } from './custom-provider';
 import {
   accountAfterUsageLimit,
+  accountAfterUsageLimitAt,
   accountBeforeDispatch,
   accountLabel,
   accountSwitchNotice,
@@ -610,6 +612,111 @@ test("a Kimi session is picked, moved and dispatched by its own accounts' quota,
   });
   assert.deepEqual(Object.keys(stored.kimi!.accounts!), [WORK]);
   assert.equal(stored.kimi!.monthCode!.utilization, 100, "Default's own window is untouched");
+});
+
+test('a session no other account has room for waits for the first account to free up, unless it or its workspace decides', () => {
+  const now = new Date();
+  // Both Claude accounts spent: Default's week until DEFAULT_RESET, Work's 5 hours until the later WORK_RESET.
+  const work5h = (utilization: number) => ({ provider: AgentProvider.CLAUDE, fiveHour: { utilization, resetsAt: WORK_RESET } });
+  const usage = (workUsed: number) => ({
+    claude: { provider: AgentProvider.CLAUDE, sevenDay: { utilization: 100, resetsAt: DEFAULT_RESET }, accounts: { [WORK]: work5h(workUsed) } },
+  });
+  const automatic = { env: null, claudeAccount: null };
+  const at = (account: string, workspace: Parameters<typeof accountAfterUsageLimitAt>[2] = automatic, workUsed = 100, pinned = false) =>
+    accountAfterUsageLimitAt('claude', { account, pinned }, workspace, ENGINES, usage(workUsed), now);
+  // On Work, Default comes back first; on Default, Work is the only other account there is.
+  assert.deepEqual(at(WORK), new Date(DEFAULT_RESET));
+  assert.deepEqual(at('default'), new Date(WORK_RESET));
+  // With room on the other one, now: accountAfterUsageLimit moves it there.
+  assert.deepEqual(at('default', automatic, 8), now);
+  // Picked by hand, or decided by its workspace: only its own account's reset says when.
+  assert.equal(at(WORK, automatic, 100, true), null);
+  assert.equal(at(WORK, { env: null, claudeAccount: WORK }), null);
+  assert.equal(at(WORK, { env: { CLAUDE_CONFIG_DIR: WORK_HOME }, claudeAccount: null }), null);
+});
+
+test("a usage limit no other account has room for is armed for the first account to free up, that one or another", async () => {
+  const controller = new RunnerApiController(
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
+  );
+  const runner = (planUsage: PlanUsage, capabilities: string[]) => ({ planUsage, engines: ENGINES, accountNames: null, accountPauses: null, capabilities });
+
+  // Claude's words without the reset time it usually adds, so the snapshot says when: Default's week
+  // comes back before Work's.
+  const claudeSpent: PlanUsage = {
+    claude: {
+      provider: AgentProvider.CLAUDE,
+      sevenDay: { utilization: 100, resetsAt: DEFAULT_RESET },
+      accounts: { [WORK]: { provider: AgentProvider.CLAUDE, sevenDay: { utilization: 100, resetsAt: WORK_RESET } } },
+    },
+  };
+  const claude = async (claudeAccount: string, pinned = false, capabilities = [CLAUDE_ACCOUNT_MOVE_V1]) => {
+    const tx = transactionDouble<RetryPlanTransaction>({
+      session: {
+        findUnique: async () => ({
+          ownerId: 'owner-1',
+          provider: AgentProvider.CLAUDE,
+          retryAttempts: 0,
+          codexAccount: null,
+          claudeAccount,
+          claudeAccountPinned: pinned,
+          kimiAccount: null,
+          poolSwitchNotice: null,
+          workspace: { env: null, codexAccount: null, claudeAccount: null, kimiAccount: null },
+        }),
+      },
+      runner: { findUnique: async () => runner(claudeSpent, capabilities) },
+    });
+    const plan = await (
+      controller as unknown as {
+        retryPlanFor(tx: RetryPlanTransaction, id: string, runnerId: string, text: string): Promise<{ retryAt?: Date | null; claudeAccount?: string }>;
+      }
+    ).retryPlanFor(tx, 'session-1', RUNNER.id, "You've hit your weekly limit");
+    assert.equal(plan.claudeAccount, undefined, 'moved onto a spent account');
+    return plan.retryAt;
+  };
+  assert.ok(withinJitterOf(await claude(WORK), DEFAULT_RESET), "a run on Work waited for Work's week while Default's came back first");
+  assert.ok(withinJitterOf(await claude('default'), DEFAULT_RESET), 'a run on Default waits for Default, which comes back first');
+  assert.ok(withinJitterOf(await claude(WORK, true), WORK_RESET), 'a run pinned to Work waits for Work');
+  assert.ok(withinJitterOf(await claude(WORK, false, []), WORK_RESET), 'a runner that cannot move it keeps it waiting on Work');
+
+  // Codex says it as the turn's error (usageLimitRetry), and the same holds.
+  const codexSpent: PlanUsage = { codex: { provider: AgentProvider.CODEX, primary: window(100, DEFAULT_RESET), accounts: { [WORK]: work(100) } } };
+  const codex = async (pinned: boolean) => {
+    const tx = transactionDouble<UsageLimitTransaction>({
+      workspace: { findUnique: async () => null },
+      runner: { findUnique: async () => runner(codexSpent, [CODEX_ACCOUNT_MOVE_V1]) },
+    });
+    const retry = await (
+      controller as unknown as {
+        usageLimitRetry(
+          tx: UsageLimitTransaction,
+          runnerId: string,
+          engine: 'codex' | 'kimi',
+          session: Record<string, unknown>,
+          text: string,
+        ): Promise<{ retryAt: Date; move?: unknown } | null>;
+      }
+    ).usageLimitRetry(tx, RUNNER.id, 'codex', {
+      ownerId: 'owner-1',
+      provider: AgentProvider.CODEX,
+      codexAccount: WORK,
+      codexAccountPinned: pinned,
+      kimiAccount: null,
+      kimiAccountPinned: false,
+      workspaceId: null,
+    }, CODEX_LIMIT);
+    assert.equal(retry?.move, undefined, 'moved onto a spent account');
+    return retry?.retryAt;
+  };
+  assert.ok(withinJitterOf(await codex(false), DEFAULT_RESET), 'a Codex run on Work waited for Work while Default came back first');
+  assert.ok(withinJitterOf(await codex(true), WORK_RESET), 'a Codex run pinned to Work waits for Work');
 });
 
 test('the line a moved session carries names both accounts the way the picker names them', () => {

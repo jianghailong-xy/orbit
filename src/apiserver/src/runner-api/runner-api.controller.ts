@@ -41,7 +41,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
-import { accountAfterUsageLimit, accountSwitchNotice, runAccount } from '../providers/plan-usage-accounts';
+import { accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount } from '../providers/plan-usage-accounts';
 import {
   ANTIGRAVITY_ACCOUNT_LOGIN_V1,
   CLAUDE_ACCOUNT_MOVE_V1,
@@ -7236,8 +7236,9 @@ export class RunnerApiController {
    * self-healing failures is the entire reply.
    *
    * Three outcomes:
-   *  - an exhausted quota → arm for the moment it resets (below), leaving the attempt count
-   *    alone: the sweeper counts against it while the snapshot keeps reporting the quota spent.
+   *  - an exhausted quota → arm for the moment it resets, or another account frees up first
+   *    (below), leaving the attempt count alone: the sweeper counts against it while the snapshot
+   *    keeps reporting the quota spent.
    *  - a transient provider error → arm for one backoff step out, or hand back once the steps
    *    are spent. A task's run is armed like any other. Resuming this session keeps its checkout
    *    and its conversation, where the task's own retry starts a new session from nothing — and
@@ -7319,6 +7320,12 @@ export class RunnerApiController {
     // carries the conversation across (CLAUDE_ACCOUNT_MOVE_V1). A task's run too: it is armed like any
     // other session (above), and left on the spent account it waited for the reset while another had
     // room — on 2026-10-02, 36 minutes for a 5-hour window, with Default at 1%.
+    //
+    // With no other account to move to, it waits for the first account to free up, this one or another
+    // (accountAfterUsageLimitAt), and the retry's dispatch moves it there. Armed for this account's reset
+    // alone, it waited out a weekly limit beside an account whose 5 hours came back the same evening —
+    // on 2026-10-08, a coordinator was armed five days out.
+    let elsewhere: Date | null = null;
     if (session.provider === AgentProvider.CLAUDE) {
       const runner = await tx.runner.findUnique({
         where: { id: runnerId },
@@ -7342,9 +7349,20 @@ export class RunnerApiController {
           poolSwitchNotice: accountSwitchNotice('claude', move, runner),
         };
       }
+      elsewhere = runner?.capabilities.includes(CLAUDE_ACCOUNT_MOVE_V1)
+        ? accountAfterUsageLimitAt(
+            'claude',
+            { account: session.claudeAccount, pinned: session.claudeAccountPinned },
+            session.workspace,
+            runner.engines,
+            runner.planUsage,
+            new Date(),
+            runner.accountPauses,
+          )
+        : null;
     }
     if (!delivered) return {};
-    const at = await this.quotaRetryAt(tx, runnerId, session, text, session.workspace);
+    const at = await this.quotaRetryAt(tx, runnerId, session, text, session.workspace, elsewhere);
     // No defensible moment → leave any earlier arming standing rather than replacing it with
     // nothing; the card falls back to a manual retry.
     return at ? { retryAt: at } : {};
@@ -7354,8 +7372,8 @@ export class RunnerApiController {
    * The retry a built-in Codex or Kimi session's usage limit arms: at once, on another of the runner's
    * accounts with room, when its workspace leaves the account to Orbit (accountAfterUsageLimit) and its
    * runner can carry the conversation there (CODEX_ACCOUNT_MOVE_V1, KIMI_ACCOUNT_MOVE_V1) — or at this
-   * account's reset (quotaRetryAt). Null when no reset can be read either: nothing says when to try
-   * again, and the session stays FAILED, one message away from resuming.
+   * account's reset, or another's that comes first (quotaRetryAt). Null when no reset can be read
+   * either: nothing says when to try again, and the session stays FAILED, one message away from resuming.
    */
   private async usageLimitRetry(
     tx: UsageLimitTransaction,
@@ -7390,7 +7408,10 @@ export class RunnerApiController {
       ? accountAfterUsageLimit(engine, own, workspace, runner.engines, runner.planUsage, now, runner.accountPauses)
       : null;
     if (move && runner) return { retryAt: now, move: { to: move.to, notice: accountSwitchNotice(engine, move, runner) } };
-    const at = await this.quotaRetryAt(tx, runnerId, session, text, workspace);
+    const elsewhere = runner?.capabilities.includes(engine === 'kimi' ? KIMI_ACCOUNT_MOVE_V1 : CODEX_ACCOUNT_MOVE_V1)
+      ? accountAfterUsageLimitAt(engine, own, workspace, runner.engines, runner.planUsage, now, runner.accountPauses)
+      : null;
+    const at = await this.quotaRetryAt(tx, runnerId, session, text, workspace, elsewhere);
     return at ? { retryAt: at } : null;
   }
 
@@ -7416,6 +7437,11 @@ export class RunnerApiController {
    * terminal `error` of a run that never got to speak. The account picked for the session, else the
    * one its workspace picked, and the workspace's env say which of the runner's Codex or Claude
    * accounts the run spent (runAccount): the snapshot read is that account's, never another's.
+   *
+   * `elsewhere` is when another of the runner's accounts can take the session instead
+   * (accountAfterUsageLimitAt), from a caller that just found none with room to move it to. Whichever
+   * comes first, it or this account's own reset, is when the retry goes — and on another account, the
+   * retry's dispatch moves the session there (accountBeforeDispatch).
    */
   private async quotaRetryAt(
     tx: QuotaRetryTransaction,
@@ -7423,6 +7449,7 @@ export class RunnerApiController {
     session: { ownerId: string; provider: string; providerBuiltin?: boolean; codexAccount: string | null; claudeAccount?: string | null; antigravityAccount?: string | null; kimiAccount?: string | null },
     text: string,
     workspace: ({ env: unknown } & WorkspaceAccountChoices) | null | undefined,
+    elsewhere: Date | null = null,
   ): Promise<Date | null> {
     const now = new Date();
     const runner = await tx.runner.findUnique({
@@ -7435,7 +7462,7 @@ export class RunnerApiController {
     )
       ? null
       : await this.queue.accountPoolResumesAt(session.ownerId, session.provider, now);
-    const at =
+    const own =
       pool ??
       parseQuotaResetAt(text, now) ??
       planUsageBlockedUntil(
@@ -7454,6 +7481,7 @@ export class RunnerApiController {
           runner?.engines,
         ),
       );
+    const at = elsewhere && (!own || elsewhere < own) ? elsewhere : own;
     return at ? new Date(at.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS)) : null;
   }
 
