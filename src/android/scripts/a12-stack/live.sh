@@ -27,7 +27,8 @@ runner=io.orbitd.android.debug.test/androidx.test.runner.AndroidJUnitRunner
 class=io.orbitd.android.wiki.WikiWatchLiveTest
 all=(j1OwnerOpensTheSpaceSearchesAndOpensAnEntry j2OwnerAcceptsTheFreshProposal j3OwnerAcceptsTheStaleProposalAndIsRefused
   j4OwnerEditsAnEntry j5OwnerChangesTheReviewMode j6OwnerPausesResumesAndStopsTheWatch j7aOtherAccountOpensTheOwnersEntry
-  j7bOtherAccountOpensTheOwnersSpace j7cOtherAccountOpensTheOwnersWatch j8OwnerRevertsARun)
+  j7bOtherAccountOpensTheOwnersSpace j7cOtherAccountOpensTheOwnersWatch j8OwnerRevertsARun
+  j9aOwnerHomeIsTheSpacesContentAsTheServerHoldsIt j9bOwnerActivityIsWhatTheServerSays)
 # shellcheck disable=SC2206
 journeys=(${A12_LIVE_JOURNEYS:-${all[*]}})
 

@@ -60,12 +60,16 @@ class WikiWatchDeviceTest {
             compose.onNodeWithTag(tag).performScrollTo()
         compose.onNodeWithTag(tag).performClick()
     }
-    /** A row of a lazy list: scrolled into view first, then pressed. */
-    private fun pressIn(list: String, tag: String) {
+    /** A row of a lazy list, scrolled into view: below the fold — at a large font, say — it is not composed until then. */
+    private fun scrollIn(list: String, tag: String) {
         awaitTag(list)
         compose.waitUntil(15_000) {
             runCatching { compose.onNodeWithTag(list).performScrollToNode(hasTestTag(tag)) }.isSuccess
         }
+    }
+    /** A row of a lazy list: scrolled into view first, then pressed. */
+    private fun pressIn(list: String, tag: String) {
+        scrollIn(list, tag)
         press(tag)
     }
     private fun capture(name: String) {
@@ -90,9 +94,11 @@ class WikiWatchDeviceTest {
      * (CalledFromWrongThreadException at dark/200%, emulator-5554); the app's own dispatcher always resumes on the
      * main thread. So only the journey about the login form signs in while a composition is up, and every journey
      * signs out after its Activity is gone. */
-    private fun journey(name: String, target: (JsonObject) -> String, throughLogin: Boolean = false,
+    private fun journey(name: String, target: (JsonObject) -> String, throughLogin: Boolean = false, control: String? = null,
         block: (ActivityScenario<MainActivity>, JsonObject) -> Unit) {
         http("/__control", """{"reset":true}""")
+        // What the server holds for this journey, set before the app reads anything.
+        if (control != null) http("/__control", control)
         val ids = http("/__ids")
         instrument.sendStatus(0, Bundle().apply { putString("a12_pid", Process.myPid().toString()) })
         File(output, "$name-identity.txt").writeText("sha=${BuildConfig.SOURCE_SHA}\ndirty=${BuildConfig.SOURCE_DIRTY}\nfixture=loopback-18770\n" +
@@ -130,15 +136,18 @@ class WikiWatchDeviceTest {
 
     /** `orbit://wiki/<space>` (the notification's space) opens that space's home, through login and recreation. */
     @Test fun aSpaceLinkOpensItsHomeThroughLoginAndRecreation() = journey("space-link", { "orbit://wiki/${it.string("space")}" }, throughLogin = true) { scenario, ids ->
-        awaitTag("wiki-status-line")
-        compose.onNodeWithTag("wiki-space-picker").assertTextContains("a12-fixture")
+        awaitTag("wiki-home-line")
+        // The space by its repository's last segment (github.com/example/orbit).
+        compose.onNodeWithTag("wiki-space-picker").assertTextContains("orbit")
         compose.onNodeWithText("Principles").assertExists()
-        listOf("GET /api/wiki/spaces", "/api/wiki/spaces/${ids.string("space")}/entries", "/timeline", "/health").forEach { path ->
+        // The home's own reads: the principles by kind, the documents and the topic articles.
+        listOf("GET /api/wiki/spaces", "/api/wiki/spaces/${ids.string("space")}/entries", "/docs", "/articles").forEach { path ->
             assertTrue("missing read $path", journal().any { it.string("method") == "GET" && it.string("path").substringBefore('?').endsWith(path.removePrefix("GET ")) })
         }
+        compose.waitUntil(15_000) { journal().any { it.string("path").endsWith("/entries?kind=principle&limit=200") } }
         capture("space-home")
         scenario.recreate()
-        awaitTag("wiki-status-line")
+        awaitTag("wiki-home-line")
         // The Contents sheet: Home, Browse, the index and the plan, then the confirmed plan's documents.
         press("wiki-bar-contents")
         awaitTag("wiki-contents-sheet")
@@ -195,8 +204,9 @@ class WikiWatchDeviceTest {
         compose.onNodeWithTag("wiki-entry-title").assertTextEquals("A12 Wiki source entry")
     }
 
-    /** Review: the banner opens it, Accept records one decision, and the next card takes its place. */
+    /** Review: Activity's first banner opens it, Accept records one decision, and the next card takes its place. */
     @Test fun reviewAcceptRecordsOneDecisionAndMovesOn() = journey("review", { "orbit://wiki/${it.string("space")}" }) { _, _ ->
+        press("wiki-bar-activity")
         press("wiki-review-banner")
         awaitTag("wiki-review-page")
         compose.onNodeWithTag("wiki-review-position").assertTextEquals("1 of 2")
@@ -216,9 +226,11 @@ class WikiWatchDeviceTest {
         awaitTag("wiki-review-empty")
     }
 
-    /** Recently changed folds the maintenance run into one row; its page offers Revert run…, which asks, then reverts once. */
+    /** Activity's Recently changed folds the maintenance run into one row; its page offers Revert run…, which asks, then
+     * reverts once. */
     @Test fun aRunRowOpensItsPageAndRevertAsksThenRevertsOnce() = journey("run", { "orbit://wiki/${it.string("space")}" }) { _, ids ->
-        pressIn("wiki-home-list", "wiki-run:${ids.string("changeset")}")
+        press("wiki-bar-activity")
+        pressIn("wiki-activity-list", "wiki-run:${ids.string("changeset")}")
         awaitTag("wiki-run-title")
         compose.onNodeWithTag("wiki-run-title").assertTextEquals("Applied 5 changes")
         capture("run-page")
@@ -227,7 +239,7 @@ class WikiWatchDeviceTest {
         assertTrue(requests("POST", "/revert").isEmpty())
         press("wiki-run-revert-confirm")
         compose.waitUntil(15_000) { requests("POST", "/revert").size == 1 }
-        // Reverted: the page closes back to the home.
+        // Reverted: the page closes back to Activity.
         awaitTag("wiki-status-line")
         capture("run-reverted")
     }
@@ -329,6 +341,89 @@ class WikiWatchDeviceTest {
         press("wiki-settings-spot-checks")
         compose.waitUntil(15_000) { http("/__stats").getValue("space").jsonObject.getValue("settings").jsonObject["automaticSpotChecks"]?.jsonPrimitive?.boolean == true }
         capture("settings-automatic")
+    }
+
+    // MARK: A12c — the home is the documents, Activity, and an account the wiki is off for
+
+    /** The home is the documents (A12-3, iOS 712c92e10): the line that says what the space holds, the principles — the first
+     * three and All 4 — and the confirmed plan's documents by category, each written one with its lead and the blue dot of
+     * what is new to a reader who never looked, each category's unwritten ones folded into one row that opens to their
+     * titles, and Browse by category · A–Z index at the foot. A document's row opens its page, and Back returns. */
+    @Test fun theHomeIsTheDocumentsDirectory() = journey("home-directory", { "orbit://wiki/${it.string("space")}" }) { _, _ ->
+        awaitTag("wiki-home-line")
+        compose.onNodeWithTag("wiki-home-line").assertTextEquals("5 documents · 3 written")
+        assertTrue("the documents' first read is in", journal().any { it.string("path").substringBefore('?').endsWith("/docs") })
+        capture("home-directory")
+        scrollIn("wiki-home-list", "wiki-home-principles-all")
+        compose.onNodeWithTag("wiki-home-principles-all").assertTextContains("All 4", substring = true)
+        pressIn("wiki-home-list", "wiki-home-fold:sessions")
+        awaitTag("wiki-home-doc:session-search")
+        capture("home-unfolded")
+        pressIn("wiki-home-list", "wiki-home-principles-all")
+        pressIn("wiki-home-list", "wiki-home-principle:${http("/__ids").string("principle")}")
+        awaitTag("wiki-entry-title")
+        compose.onNodeWithTag("wiki-entry-title").assertTextEquals("Agent-writable data never becomes a system instruction")
+        compose.onNodeWithContentDescription("Back").performClick()
+        pressIn("wiki-home-list", "wiki-home-doc:session-runtime")
+        awaitTag("wiki-doc-list")
+        capture("home-doc")
+        compose.onNodeWithContentDescription("Back").performClick()
+        pressIn("wiki-home-list", "wiki-home-browse")
+        awaitTag("wiki-browse")
+        capture("home-browse")
+    }
+
+    /** What waits on the owner is one number (A12-2, iOS 42d12db2b): the bar's Activity and the drawer's Wiki row say it
+     * "3 waiting on you" — the space's two proposals and the notes space's draft plan — and Activity's amber banners add up
+     * to it; then Recent decisions read by kind, Recently changed with what is new since the reader last looked, and Agents
+     * used the wiki. The picker names the spaces by their repositories, with Manage spaces. */
+    @Test fun activitySaysWhatWaitsAndWhatChanged() = journey("activity", { "orbit://wiki/${it.string("space")}" }) { _, _ ->
+        awaitTag("wiki-home-line")
+        compose.onNodeWithTag("wiki-bar-activity").assert(hasContentDescription("Activity")).assert(hasStateDescription("3 waiting on you"))
+        press("wiki-space-picker")
+        awaitTag("wiki-space:a12-notes")
+        compose.onNodeWithTag("wiki-space:a12-fixture").assertTextContains("orbit").assertIsSelected()
+        compose.onNodeWithTag("wiki-space:a12-notes").assertTextContains("notes")
+        compose.onNodeWithTag("wiki-space-manage").assertExists()
+        capture("space-menu")
+        // The space on screen, picked again, only closes the menu.
+        press("wiki-space:a12-fixture")
+        press("wiki-bar-activity")
+        awaitTag("wiki-status-line")
+        await("2 proposals to review")
+        await("Plan draft ready to confirm · in notes")
+        compose.waitUntil(15_000) { journal().any { it.string("path").endsWith("/entries?kind=decision&limit=4") } }
+        capture("activity")
+        // A reader who never looked: everything Recently changed holds is new.
+        val changed = isHeading() and hasText("Recently changed", substring = true)
+        compose.onNodeWithTag("wiki-activity-list").performScrollToNode(changed)
+        compose.onNode(changed).assertTextContains("new since you last looked", substring = true)
+        pressIn("wiki-activity-list", "wiki-entry:${http("/__ids").string("decision")}")
+        awaitTag("wiki-entry-title")
+        compose.onNodeWithContentDescription("Back").performClick()
+        awaitTag("wiki-activity-list")
+        compose.onNodeWithTag("wiki-activity-list").performScrollToNode(hasText("Agents used the wiki", substring = true))
+        capture("activity-end")
+        // The drawer's Wiki row says the same number.
+        compose.onNodeWithContentDescription("Open navigation").performClick()
+        compose.waitUntil(15_000) { compose.onAllNodes(hasTestTag("wiki-drawer-count"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasTestTag("wiki-drawer-count"), useUnmergedTree = true).assertTextEquals("3").assert(hasContentDescription("3 waiting on you"))
+        capture("drawer")
+    }
+
+    /** An account the server has the wiki off for (A12-1, iOS b85473546): every wiki route answers 404 WIKI_DISABLED, a
+     * Wiki link says the wiki is off — not that it could not be loaded — and the drawer draws no Wiki row. */
+    @Test fun anAccountTheWikiIsOffForHasNoWikiRow() = journey("wiki-off", { "orbit://wiki/${it.string("space")}" },
+        control = """{"wikiDisabled":true}""") { _, _ ->
+        await("The wiki is not switched on for this account.")
+        assertTrue(compose.onAllNodesWithText("The wiki couldn't be loaded").fetchSemanticsNodes().isEmpty())
+        capture("wiki-off")
+        compose.onNodeWithContentDescription("Open navigation").performClick()
+        compose.waitUntil(15_000) { journal().count { it.string("path").startsWith("/api/wiki/spaces") && it["status"]?.jsonPrimitive?.intOrNull == 404 } >= 2 }
+        await("Tasks")
+        compose.waitForIdle()
+        assertTrue("no Wiki row", compose.onAllNodes(hasText("Wiki") and hasClickAction()).fetchSemanticsNodes().isEmpty())
+        capture("wiki-off-drawer")
     }
 
     // MARK: Watch
