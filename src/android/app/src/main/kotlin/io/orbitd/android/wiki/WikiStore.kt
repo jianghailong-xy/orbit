@@ -70,6 +70,11 @@ internal data class WikiState(
     val failedDocs: Set<String> = emptySet(), val docIndex: WikiDocsIndex? = null,
     val plan: WikiPlanState? = null, val planState: LoadState = LoadState(), val planMissing: Boolean = false,
     val planVersions: List<WikiPlanVersionSummary> = emptyList(), val planVersionReads: Map<Int, WikiPlanVersion> = emptyMap(),
+    /** The deployment's System model and the executor switch for this account (P9): what the settings page and the
+     * plan's copy read while the server executes the account's wiki. */
+    val systemModel: WikiSystemModelStatus? = null,
+    /** The space on screen's server runs, and the space they were read for (P9). */
+    val jobs: WikiJobsRead? = null,
     val selectedSlug: String? = null,
     /** The titles the link-preview cards gave the tasks and sessions a page names, by `kind:key` (iOS `model.linkCards`). */
     val linkTitles: Map<String, String> = emptyMap(),
@@ -93,6 +98,13 @@ internal data class WikiState(
     fun loadFailed(id: String) = wikiKey(id) in failed
     fun run(id: String): WikiChangesetView? = runs[wikiKey(id)] ?: activity?.run(id)
     fun isMissingRun(id: String) = wikiKey(id) in missingRuns
+    /** Whether the server runs this account's wiki (contract `jobs.executor.read`): nil/absent reads as runner. */
+    val serverExecutes: Boolean get() = systemModel?.executor?.serverExecutes == true
+    /** The space on screen's server runs, when the read in hand is that space's. */
+    val currentJobs: List<WikiJob>? get() = jobs?.takeIf { sameWikiId(it.spaceId, currentSpace?.id) }?.jobs
+    fun job(id: String): WikiJob? = currentJobs?.firstOrNull { sameWikiId(it.id, id) }
+    /** Whether a run of the space on screen is still on its way: what the run page reads again for. */
+    val jobsUnderWay: Boolean get() = currentJobs.orEmpty().any { it.state == "queued" || it.state == "running" || it.state == "waiting" }
 }
 
 /** The account's wiki behind every Wiki page, rebuilt per signed-in handle (iOS `WikiModel`). Refetched
@@ -294,15 +306,17 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
         val decisions = async { client.entries(space.id, "decision", WikiHomeContent.RECENT_DECISIONS) }
         val timeline = async { optional { client.timeline(space.id) } }
         val health = async { optional { client.health(space.id) } }
+        val jobs = async { optional { client.jobs(space.id) } }
         try {
             val base = WikiHomeContent(document.await(), current.spaces, entries.await(), timeline.await()?.items.orEmpty(),
                 decisionEntries = decisions.await())
             val runs = base.recentRunIds.map { id -> async { optional { client.changeset(id) } } }.mapNotNull { it.await() }
             val healthRead = health.await()
+            val jobsRead = jobs.await()?.takeIf { sameWikiId(it.spaceId, space.id) }
             if (current.currentSpace?.id != space.id || !newest(ACTIVITY, ticket)) return@supervisorScope
-            set { it.copy(activity = base.copy(runs = runs, health = healthRead), activityState = it.activityState.succeed()) }
+            set { it.copy(activity = base.copy(runs = runs, health = healthRead), jobs = jobsRead, activityState = it.activityState.succeed()) }
         } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) {
-            document.cancel(); entries.cancel(); decisions.cancel(); timeline.cancel(); health.cancel()
+            document.cancel(); entries.cancel(); decisions.cancel(); timeline.cancel(); health.cancel(); jobs.cancel()
             if (current.currentSpace?.id == space.id && newest(ACTIVITY, ticket)) set { it.copy(activityState = it.activityState.fail()) }
         }
     }
@@ -316,6 +330,35 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
             .map { space -> async { optional { client.plan(space.id) }?.let { space.id to it } } }.mapNotNull { it.await() }.toMap()
         otherPlansRead = true
         set { it.copy(otherPlans = read) }
+    }
+
+    /** The deployment's System model and the executor switch as it stands for this account (contract `systemModel.read`,
+     * P9). A server older than the read answers 404, which reads as none — the pages then draw what they always did. */
+    suspend fun loadSystemModel() {
+        try {
+            val read = client.systemModel()
+            set { it.copy(systemModel = read) }
+        } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) {
+            if (error is ApiError && error.status == 404) set { it.copy(systemModel = null) }
+            // Any other failure keeps what is on screen; the next pass reads it again.
+        }
+    }
+
+    /** The space on screen's server runs, newest first, each with its newest calls (contract `jobs.read`, P9). A
+     * server from before the read answers 404, which reads as none — the Runs band is then drawn only when the server
+     * executes the account's wiki. */
+    suspend fun loadJobs() {
+        if (current.spaces.isEmpty()) loadSpaces()
+        val space = current.currentSpace
+        if (space == null) { set { it.copy(jobs = null) }; return }
+        val ticket = ask(JOBS)
+        try {
+            val read = client.jobs(space.id)
+            if (current.currentSpace?.id == space.id && newest(JOBS, ticket)) set { it.copy(jobs = read) }
+        } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) {
+            if (error is ApiError && error.status == 404 && current.currentSpace?.id == space.id && newest(JOBS, ticket)) set { it.copy(jobs = null) }
+            // Any other failure keeps what is on screen; the next pass reads it again.
+        }
     }
 
     suspend fun loadReview() {
@@ -438,6 +481,7 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
         current.docs.keys.toList().forEach { loadDoc(it) }
         if (current.plan != null || current.planState.hasLoaded) loadPlan()
         if (otherPlansRead) loadOtherPlans()
+        if (current.jobs != null) loadJobs()
         current.runs.keys.toList().forEach { loadRun(it) }
         if (current.reviewState.hasLoaded) loadReview()
         onScreen.keys.toList().forEach { loadEntry(it) }
@@ -712,6 +756,7 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
         private const val REVIEW = "review"
         private const val PLAN = "plan"
         private const val DOCS = "docs"
+        private const val JOBS = "jobs"
         private const val ENTRY = "entry:"
         private const val RUN = "run:"
         private var shared: WikiStore? = null

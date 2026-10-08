@@ -78,7 +78,8 @@ internal class WikiPlanActions(
 internal fun WikiPlanPage(route: OrbitRoute, state: WikiPlanState, shown: WikiPlanLogic.Shown?, base: WikiPlanLogic.Shown?,
     versions: List<WikiPlanLogic.VersionRow>, jobCard: WikiPlanLogic.JobCard?, written: Pair<Int, Int>?, whereItRuns: String?,
     provider: String?, now: Instant, busy: Boolean = false, refused: Map<String, List<WikiPlanGateError>> = emptyMap(),
-    actions: WikiPlanActions = WikiPlanActions()) {
+    /** The server executes this account's wiki: the empty page names the System model, not the provider (P9). */
+    serverExecutes: Boolean = false, actions: WikiPlanActions = WikiPlanActions()) {
     val open = WikiPlanLogic.openJob(state)
     val inForce = shown?.status == WikiPlanLogic.ShownStatus.CONFIRMED && state.confirmed?.version == shown.version
     PageBar.Bind(route, title = "") {
@@ -122,7 +123,7 @@ internal fun WikiPlanPage(route: OrbitRoute, state: WikiPlanState, shown: WikiPl
                             }
                         }
                     }
-                } else if (open == null) item(key = "empty") { PlanEmpty(whereItRuns, provider, busy, actions.draft) }
+                } else if (open == null) item(key = "empty") { PlanEmpty(whereItRuns, provider, serverExecutes, busy, actions.draft) }
                 WikiPlanLogic.PageSection.HINT -> if (shown?.status == WikiPlanLogic.ShownStatus.FAILED) item(key = "hint") {
                     Text(WikiPlanCopy.failedHint(state.confirmed?.version), Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)
                         .testTag("wiki-plan-hint"), style = WikiType.label, color = WikiPalette.secondary)
@@ -205,16 +206,16 @@ private fun PlanVersionMenu(shown: WikiPlanLogic.Shown, versions: List<WikiPlanL
 
 /** No plan yet (mock 22 ①): what a plan is, Draft plan, and where and how long it runs. */
 @Composable
-private fun PlanEmpty(whereItRuns: String?, provider: String?, busy: Boolean, draft: () -> Unit) {
+private fun PlanEmpty(whereItRuns: String?, provider: String?, serverExecutes: Boolean, busy: Boolean, draft: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 20.dp).testTag("wiki-plan-empty"),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Icon(painterResource(R.drawable.ic_plan), null, Modifier.size(40.dp), tint = WikiPalette.secondary)
         Text(WikiPlanCopy.emptyTitle, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold))
-        Text(WikiPlanCopy.emptyText(provider), style = WikiType.subtext, color = WikiPalette.secondary, textAlign = TextAlign.Center)
+        Text(WikiPlanCopy.emptyText(provider, serverExecutes), style = WikiType.subtext, color = WikiPalette.secondary, textAlign = TextAlign.Center)
         Button(onClick = draft, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("wiki-plan-draft")) {
             Text(WikiPlanCopy.draft)
         }
-        Text(WikiPlanCopy.emptyNote(whereItRuns, provider), style = WikiType.label, color = WikiPalette.secondary, textAlign = TextAlign.Center)
+        Text(WikiPlanCopy.emptyNote(whereItRuns, provider, serverExecutes), style = WikiType.label, color = WikiPalette.secondary, textAlign = TextAlign.Center)
     }
 }
 
@@ -316,6 +317,12 @@ internal fun WikiPlanSectionHead(title: String, count: String? = null) {
 @Composable
 internal fun WikiPlanFootnote(text: String, modifier: Modifier = Modifier) {
     Text(text, modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 4.dp), style = WikiType.label, color = WikiPalette.secondary)
+}
+
+/** An inset-grouped section's footer that a test names: the same line, with a tag of its own. */
+@Composable
+internal fun WikiPlanFootnoteText(text: String, tag: String) {
+    WikiPlanFootnote(text, Modifier.testTag(tag))
 }
 
 // MARK: - the job

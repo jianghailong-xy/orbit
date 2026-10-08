@@ -242,6 +242,21 @@ internal object WikiModeCopy {
         else -> "Last $days $lookbackUnit"
     }
 
+    // MARK: maintenance while the server executes the account's wiki (mock 35 ①②, P9)
+
+    /** The workspace row's name while the server reads the repository there (`WIKI_REPO_FROM`). */
+    const val repoFrom = "Reads the repository from"
+    const val repoFromNote = "The runner that checks out this codebase; the server reads the repository there."
+    const val model = "Model"
+    const val modelNote = "Set by this deployment, the same for every space."
+    const val maintenanceNoteServer = "Keeps the wiki up to date from sessions, tasks and receipts as they settle. Runs on the server with this deployment’s System model."
+    const val privacyNote = "The wiki sends its material — session summaries, entries and repository excerpts — to this deployment’s System model."
+    /** Automatic's sentence when the server's System model does the checking (`WIKI_MODE_NOTE_AUTOMATIC_SERVER`). */
+    const val modeNoteAutomaticServer = "The System model checks each change against its sources first: supported ones apply, partly supported ones show as Unreviewed, the rest are rejected with a reason."
+
+    /** A mode's sentence as the server's execution has it said (`wikiModeNote`): Automatic's alone changes. */
+    fun modeNote(mode: String?, server: Boolean) = if (server && mode == "automatic") modeNoteAutomaticServer else modeNote(mode)
+
     const val confirm = "Confirm"
     const val confirmed = "Confirmed"
     const val rejected = "Rejected"
@@ -301,7 +316,8 @@ internal object WikiHealthCopy {
     fun lastSuccess(ago: String) = "last success $ago"
     fun failed(count: Int) = if (count == 1) "Maintenance failed" else "Maintenance failed $count times"
 
-    // The server's reasons (mock 35 ⑥, P9): the web's `WIKI_REASON_*`.
+    // MARK: the server's reasons (mock 35 ⑥, P9)
+
     const val reasonWorker = "wiki worker not running"
     const val reasonUnconfigured = "System model not configured"
     const val reasonKeyRefused = "System model refused the key"

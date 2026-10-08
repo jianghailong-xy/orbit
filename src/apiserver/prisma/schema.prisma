@@ -597,7 +597,7 @@ model DeviceToken {
 model ClientVersion {
   userId     String   @map("user_id") @db.Uuid
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  /// 'web' | 'ios' | 'macos' — the client kind, from the `X-Orbit-Client` header.
+  /// 'web' | 'ios' | 'macos' | 'android' — the client kind, from the `X-Orbit-Client` header.
   kind       String
   version    String
   lastSeenAt DateTime @updatedAt @map("last_seen_at")
@@ -6510,6 +6510,8 @@ model WikiSpace {
   /// The repository operations its jobs ask a runner for, and the snapshot index they cache (0402).
   repoOps         WikiRepoOp[]
   repoSnapshot    WikiRepoSnapshot?
+  /// The whole files read at a commit, one row per (space, sha, path): the read cache (0406).
+  repoFiles       WikiRepoFile[]
   /// Its plan's versions and the changes proposed to it (0325).
   plans           WikiPlan[]
   planProposals   WikiPlanProposal[]
@@ -6788,6 +6790,10 @@ model WikiChangeset {
   /// `owner` | `agent` | `maintenance` | `import` | `watch`.
   origin     String
   sessionId  String? @map("session_id") @db.Uuid
+  /// The wiki_job whose pipeline recorded it, for a run the server made (0407): a maintenance run's
+  /// changesets are one run to the circuit breaker, and the server's run has no session to be one by. A
+  /// history reference with no foreign key, as wiki_maintenance_run.job_id is; NULL for every session's.
+  jobId      String? @map("job_id") @db.Uuid
   toolCallId String? @map("tool_call_id") @db.Uuid
   rationale  String?
   /// The owner's key and the digest of the normalized request, set together: the same key with the
@@ -7134,8 +7140,10 @@ model WikiPlanProposal {
   /// `[{ kind, id }, …]`: the entries and sessions that led to it.
   facts           Json
   gate            Json
-  /// A history reference: the maintenance run that filed it.
-  authorSessionId String    @map("author_session_id") @db.Uuid
+  /// A history reference: the maintenance run that filed it — a session's, or the server's wiki job (0407,
+  /// where `wiki_plan_proposal_author_chk` holds exactly one of the two).
+  authorSessionId String?   @map("author_session_id") @db.Uuid
+  authorJobId     String?   @map("author_job_id") @db.Uuid
   decidedByUserId String?   @map("decided_by_user_id") @db.Uuid
   decidedAt       DateTime? @map("decided_at") @db.Timestamptz(3)
   decisionNote    String?   @map("decision_note")
@@ -7552,4 +7560,31 @@ model WikiRepoSnapshotFragment {
 
   @@id([spaceId, ordinal])
   @@map("wiki_repo_snapshot_fragment")
+}
+
+/// One file's text at a commit — the read cache (0406, contract `repoOps.read` and `.cache`, design §7).
+/// A read answers with the whole file at the sha (owner 2026-10-08); the server keeps it by
+/// (space, sha, path) so the same text is never read twice. `state` is `found` (the whole file), `cut` (the
+/// bounded window an older runner answers with, a miss for a whole-file runner), `missing` or `too_large`.
+/// Deleted with the space, and a new snapshot landing drops every row of another sha.
+model WikiRepoFile {
+  id      String    @id @default(uuid(7)) @db.Uuid
+  ownerId String    @map("owner_id") @db.Uuid
+  spaceId String    @map("space_id") @db.Uuid
+  space   WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_repo_file_space_fkey")
+  /// The commit the file was read at, and its path in that tree.
+  sha  String @db.Char(40)
+  path String
+  /// `found` | `cut` | `missing` | `too_large`.
+  state String
+  /// The text, for `found` and `cut`; empty otherwise. At most the file cap, so one row is one file.
+  content String @default("")
+  /// The file's size in bytes at the sha: the whole file's, even when only its head was answered.
+  sizeBytes BigInt @default(0) @map("size_bytes")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([spaceId, sha, path], map: "wiki_repo_file_space_sha_path_key")
+  @@index([spaceId, sha], map: "wiki_repo_file_space_sha_idx")
+  @@map("wiki_repo_file")
 }

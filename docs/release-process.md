@@ -27,9 +27,12 @@ impact, and reproduce the checks that support the announcement.
 ## Publishing
 
 Pushing a `v*` tag starts [.github/workflows/release.yml](../.github/workflows/release.yml), which builds the
-signed/notarized macOS DMG and the iOS TestFlight artifact. The macOS job creates the GitHub Release and
-Sparkle appcast for tag pushes. Maintainers must review the generated release body before sharing it in
-Discussions or other channels, and must check that the release is marked prerelease when the tag contains `-`.
+signed/notarized macOS DMG, the iOS TestFlight artifact and the signed Android APK. The macOS job creates the
+GitHub Release and Sparkle appcast for tag pushes; once it and the Android build have succeeded, the Android
+publishing job attaches `orbit-android-<version>.apk`, its `.sha256` and `android-update.json` to that same
+Release ([Android releases](../src/android/docs/release.md)). Maintainers must review the generated release
+body before sharing it in Discussions or other channels, and must check that the release is marked prerelease
+when the tag contains `-`.
 
 Do not publish signing credentials, private logs, or a claim that a generated changelog is a substitute for
 human upgrade notes. If a required gate is unavailable, say so in the release body and delay the release
@@ -37,7 +40,8 @@ unless the maintainer explicitly records the exception.
 
 ## After publishing
 
-- Check that the release assets, checksums (when provided), appcast, and TestFlight build identify the same tag.
+- Check that the release assets, checksums (when provided), appcast, TestFlight build, and Android
+  `android-update.json` identify the same tag.
 - Announce the release in [Discussions](https://github.com/jianghailong-xy/orbit/discussions) with upgrade notes,
   known limits, and a link to the exact release.
 - Keep the previous supported release and rollback instructions discoverable.
@@ -85,6 +89,10 @@ gh release download "$ORBIT_RELEASE_TAG" --repo jianghailong-xy/orbit --dir "$OR
   and TestFlight jobs succeeded on `ORBIT_RELEASE_SHA`. A successful macOS job alone does not prove iOS upload.
 - [ ] Confirm the expected `Orbit-v<version>-arm64.dmg` and `.zip` assets are present and nonempty.
   The ZIP is the Sparkle payload, not a server image. Record asset names, sizes, URLs, and workflow run URL.
+- [ ] Confirm `orbit-android-<version>.apk`, its `.sha256` and `android-update.json` are present and that
+  `(cd "$ORBIT_RELEASE_ASSETS" && sha256sum -c orbit-android-*.apk.sha256)` passes; the manifest's `tag`,
+  `versionName` and `sourceSha` must be this tag, its version and `ORBIT_RELEASE_SHA`. A second tag on an
+  already released commit carries no Android files (its Android jobs skip); record which release has them.
 - [ ] If the publisher supplies `SHA256SUMS`, verify it from the asset directory using
   `(cd "$ORBIT_RELEASE_ASSETS" && sha256sum -c SHA256SUMS)` on Linux, or
   `(cd "$ORBIT_RELEASE_ASSETS" && shasum -a 256 -c SHA256SUMS)` on macOS. For another checksum filename,
@@ -109,6 +117,7 @@ curl -fsS "$ORBIT_VERIFY_ORIGIN/dl/version.json"
 | Downloadable runner | `/dl/version.json`, then `orbit status` and `orbit capabilities --json` on a registered runner | Manifest/`cliVersion` match the product version; `sourceSha` matches `ORBIT_RELEASE_SHA` |
 | macOS | App bundle's `CFBundleShortVersionString`, bundle build number, and release workflow SHA | Full version including any prerelease suffix; build number is the source commit count |
 | iOS | App Store Connect/TestFlight version, build number, and release workflow SHA | Numeric version `${ORBIT_RELEASE_VERSION%%-*}`; build number is the source commit count |
+| Android | `android-update.json` on the release; Settings → About on an installed phone | `versionName` is `ORBIT_RELEASE_VERSION` (prerelease suffix included); `versionCode` is the source commit count; `sourceSha` is `ORBIT_RELEASE_SHA` |
 
 Server/web do not expose a runtime source-SHA endpoint; retain the build checkout SHA, build log, and image
 IDs as source evidence. Do not infer their source from a matching version string alone. The macOS-bundled

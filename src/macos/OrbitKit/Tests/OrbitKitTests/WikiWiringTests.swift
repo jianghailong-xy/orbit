@@ -453,6 +453,16 @@ final class WikiWiringTests: XCTestCase {
         assertOrder(system, ["try await api.wikiSystemModel()", "} catch APIError.http(let status, _) where status == 404 {",
                              "systemModel?.executor?.serverExecutes == true ? systemModel : nil"],
                     "the System model, the settings page's only while the server runs the wiki")
+        // The plan's empty card reads the same switch, which is what names the System model under Draft plan
+        // (owner's call 2026-10-08): the screen reads it with the plan, and hands it to the page.
+        XCTAssertTrue(system.contains("var serverExecutes: Bool {"), "the model derives whether the server executes the wiki")
+        let docScreens = code(try source("Views/WikiDocScreens.swift"))
+        let planScreen = try slice(docScreens, from: "struct WikiPlanScreen: View {", to: "private func content(_ wiki: WikiModel) -> some View {")
+        assertOrder(planScreen, ["await wiki.loadPlan()", "await wiki.loadDocsDirectory()", "await wiki.loadSystemModel()"],
+                    "the plan screen reads the executor switch with its own reads")
+        XCTAssertTrue(docScreens.contains("serverExecutes: wiki.serverExecutes"), "the plan page is handed the executor switch")
+        let planView = code(try source("Views/WikiPlanView.swift"))
+        XCTAssertTrue(planView.contains("serverExecutes: serverExecutes"), "the empty card's line is the server's while it drafts")
     }
 
     /// Coming into the Wiki from another section opens the space bound to the workspace the reader was in,

@@ -155,12 +155,13 @@ class WikiLogicTest {
         assertEquals("9 entries · Anchors verified at 4db4f9f", activity.statusLine(java.time.Instant.now()))
     }
 
-    /** Activity's blocks, top to bottom (mock 31 ②): the home's management blocks in their order, the other spaces' plan
-     * banners after the space's own, and Principles not among them — it is content. */
+    /** Activity's blocks, top to bottom (mock 31 ②, and P9's mock 35 ④): the home's management blocks in their order, the
+     * other spaces' plan banners after the space's own, the server's runs after Review and Plan, and Principles not among
+     * them — it is content. */
     @Test fun theActivityBandsOrder() {
-        assertEquals(listOf("STATUS", "REVIEW_BANNER", "PLAN_BANNERS", "OTHER_PLAN_BANNERS", "RECENT_DECISIONS", "RECENTLY_CHANGED", "AGENTS_USED"),
+        assertEquals(listOf("STATUS", "REVIEW_BANNER", "PLAN_BANNERS", "OTHER_PLAN_BANNERS", "RUNS", "RECENT_DECISIONS", "RECENTLY_CHANGED", "AGENTS_USED"),
             WikiLogic.ActivityBand.entries.map { it.name })
-        assertEquals(listOf("Recent decisions", "Recently changed", "Agents used the wiki"), WikiLogic.ActivityBand.entries.mapNotNull { it.title })
+        assertEquals(listOf("Runs", "Recent decisions", "Recently changed", "Agents used the wiki"), WikiLogic.ActivityBand.entries.mapNotNull { it.title })
     }
 
     /** Recently changed says how many of its rows came after the reader last looked: all of them for a reader who never did. */

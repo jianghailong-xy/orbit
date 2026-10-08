@@ -72,11 +72,12 @@ internal fun WikiActivityScreen(store: WikiStore, route: OrbitRoute, data: Direc
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = {
         scope.launch { refreshing = true; try { store.loadActivity(); store.loadPlan(); store.loadOtherPlans() } finally { refreshing = false } }
     }, modifier = Modifier.fillMaxSize().testTag("wiki-activity")) {
-        WikiActivityPage(content, banners, seen, now,
+        WikiActivityPage(content, banners, seen, now, state.currentJobs,
             openEntry = nav::entry,
             openRun = { id -> nav.open(OrbitRoute(Destination.WIKI_RUN, id)) },
             openSettings = { nav.open(OrbitRoute(Destination.WIKI_SETTINGS)) },
             openSession = nav::session,
+            openJob = nav::job,
             openBanner = { banner -> openActivityBanner(banner.to, store, nav) { scope.launch { store.loadActivity() } } })
     }
 }
@@ -98,8 +99,8 @@ private fun openActivityBanner(to: WikiSpaceLogic.ActivityBanner.To, store: Wiki
  * Agents used the wiki. */
 @Composable
 internal fun WikiActivityPage(content: WikiHomeContent, banners: List<WikiSpaceLogic.ActivityBanner>, seen: Double?, now: Instant,
-    openEntry: (String) -> Unit, openRun: (String) -> Unit, openSettings: () -> Unit, openSession: (String) -> Unit,
-    openBanner: (WikiSpaceLogic.ActivityBanner) -> Unit) {
+    jobs: List<WikiJob>?, openEntry: (String) -> Unit, openRun: (String) -> Unit, openSettings: () -> Unit, openSession: (String) -> Unit,
+    openJob: (String) -> Unit, openBanner: (WikiSpaceLogic.ActivityBanner) -> Unit) {
     // How many rows came after the reader last looked, and each row's dot: none before the stamp is read.
     val newRows = seen?.let(content::newRows) ?: 0
     fun isNew(at: String?): Boolean? = seen?.let { WikiSeenLog.isNew(at, it) }
@@ -107,7 +108,11 @@ internal fun WikiActivityPage(content: WikiHomeContent, banners: List<WikiSpaceL
         WikiLogic.ActivityBand.entries.forEach { band ->
             when (band) {
                 WikiLogic.ActivityBand.STATUS -> item(key = "status") {
-                    Text(wikiStatusText(content.statusParts(now), openSettings) { content.health?.maintenance?.lastRun?.sessionId?.let(openSession) },
+                    Text(wikiStatusText(content.statusParts(now), openSettings) {
+                        // A run the server's job made has no session: its page is the run's call log (P9).
+                        val last = content.health?.maintenance?.lastRun
+                        if (last?.jobId != null) openJob(last.jobId) else last?.sessionId?.let(openSession)
+                    },
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp).testTag("wiki-status-line"),
                         style = WikiType.label, color = WikiPalette.secondary)
                 }
@@ -116,6 +121,13 @@ internal fun WikiActivityPage(content: WikiHomeContent, banners: List<WikiSpaceL
                         WikiBannerRow(banner.text, banner.amber,
                             if (banner.band == WikiLogic.ActivityBand.REVIEW_BANNER) "wiki-review-banner" else "wiki-activity-banner:${banner.id}") { openBanner(banner) }
                     }
+                WikiLogic.ActivityBand.RUNS -> if (WikiRunsLogic.shown(content.health?.serverExecutes == true, jobs)) {
+                    item(key = "runs-head") { RunsBandHead(content.health?.systemModel) }
+                    if (jobs.isNullOrEmpty()) item(key = "runs-empty") { WikiEmptyLine(WikiRunsCopy.none) }
+                    else items(jobs, key = { "job:${it.id}" }) { job ->
+                        WikiRunRowView(WikiRunsLogic.row(job, now)) { openJob(job.id) }
+                    }
+                }
                 WikiLogic.ActivityBand.RECENT_DECISIONS -> {
                     item(key = "decisions") { WikiBandHeader(WikiCopy.recentDecisions, content.recentDecisions.size) }
                     if (content.recentDecisions.isEmpty()) item(key = "decisions-empty") { WikiEmptyLine(WikiCopy.noDecisions) }
@@ -208,5 +220,21 @@ internal fun WikiStat(value: Int, label: String) {
     Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
         Text("$value", style = WikiType.subtext.copy(fontWeight = FontWeight.SemiBold))
         Text(label, style = WikiType.label, color = WikiPalette.secondary)
+    }
+}
+
+/** The Runs band's heading, a band heading's shape: the System model and its state beside it, as the web card's head
+ * says them — never where the model answers (P9, as main drew it on the Wiki page). */
+@Composable
+private fun RunsBandHead(model: WikiSystemModelStatus?) {
+    Row(Modifier.fillMaxWidth().padding(start = 32.dp, end = 16.dp, top = 18.dp, bottom = 4.dp)
+        .semantics(mergeDescendants = true) { heading() }, verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(WikiRunsCopy.runs, style = WikiType.label.copy(fontWeight = FontWeight.SemiBold))
+        if (model != null) {
+            Text(WikiRunsCopy.systemModelLabel(model.model), Modifier.weight(1f), style = WikiType.label, color = WikiPalette.secondary,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            WikiModelStateText(model)
+        }
     }
 }

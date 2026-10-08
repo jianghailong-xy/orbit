@@ -24,8 +24,10 @@ import (
 //   snapshot   every path of origin/main with its size, every document's title and headings, every source
 //              file's symbols, the contracts' shapes, the commits reachable from origin/main, and the
 //              README's first paragraph. Above `wikiRepoOpInlineBytes` it travels in fragments.
-//   read       the text of given paths at a given commit, one section of a document or a whole file,
-//              each item within its own limit and the request within one section's material.
+//   read       the whole text of given paths at a given commit (owner 2026-10-08), one file up to
+//              `wikiRepoOpWholeFileBytes` — a larger one is missing, with `too_large` as the reason — and
+//              an answer too large for one request body uploaded in fragments, as a snapshot is. A request
+//              that names a limit is answered within it, the way an older control plane asks.
 //   diff       `--name-status -M` between two commits, and the design documents the range added.
 //   anchors    the maintenance run's own anchor checks (wiki_anchors.go), reused.
 //
@@ -39,13 +41,18 @@ import (
 // declare this is handed nothing rather than handed work it would have to fail.
 const wikiRepoOpCapabilityV1 = "wiki-repo-op/v1"
 
+// The capability a runner declares when its `read` answers with whole files (owner 2026-10-08). A runner
+// that declares only wikiRepoOpCapabilityV1 still reads, but with the old window (wikiRepoOpBoundedChars);
+// the server hands whole-file reads only to a runner that declares this. Its apiserver twin is
+// WIKI_REPO_OP_READ_CAPABILITY in src/shared/src/wikiRepoOps.ts.
+const wikiRepoOpReadCapabilityV1 = "wiki-repo-op-read/v1"
+
 // The contract's numbers (`repoOps.fragments`, `.read`), mirrored here as the runner applies them.
 const (
 	wikiRepoOpInlineBytes      = 4 << 20
 	wikiRepoOpFragmentBytes    = 2 << 20
-	wikiRepoOpDocSectionChars  = 4200
-	wikiRepoOpContractChars    = 2500
-	wikiRepoOpSectionChars     = 22000
+	wikiRepoOpWholeFileBytes   = 2 << 20
+	wikiRepoOpBoundedChars     = 22000
 	wikiRepoOpAfterwardsMarker = "\n…（后略）\n"
 )
 
@@ -75,25 +82,28 @@ type wikiRepoOpInput struct {
 	Anchors []wikiDueAnchor `json:"anchors,omitempty"`
 }
 
-// wikiRepoOpReadItem is one thing to read: a whole file, or one section of a document, within a limit.
+// wikiRepoOpReadItem is one thing to read: the whole file at the commit, or — when a limit is named, as an
+// older control plane asks — that much of it.
 type wikiRepoOpReadItem struct {
 	Path    string `json:"path"`
 	Section string `json:"section,omitempty"`
-	// The most characters to answer with; absent gets the path's default (a contract 2,500, else 4,200),
-	// and nothing may ask for more than one section's material (22,000).
+	// The most characters to answer with. Absent reads the whole file, up to wikiRepoOpWholeFileBytes;
+	// a number asks for a bounded read, never more than one section's material (wikiRepoOpBoundedChars).
 	MaxChars int `json:"maxChars,omitempty"`
 }
 
 // ── what this side answers with ─────────────────────────────────────────────────────────────────
 
-// wikiRepoOpOutcome is what one operation came to. `payload` is a snapshot too large to travel inside the
-// result: the caller uploads it in fragments and reports their count instead of the text.
+// wikiRepoOpOutcome is what one operation came to. `payload` is the part too large to travel inside the
+// result: the caller uploads it in fragments and reports their count instead of the text, under `payloadKey`
+// when the kind nests its shape (a read's answer under `read`) and flat when it does not (a snapshot's index).
 type wikiRepoOpOutcome struct {
-	state   string
-	result  map[string]interface{}
-	payload string
-	sha     string
-	err     string
+	state      string
+	result     map[string]interface{}
+	payload    string
+	payloadKey string
+	sha        string
+	err        string
 }
 
 type wikiRepoOpReadAnswer struct {
@@ -106,8 +116,12 @@ type wikiRepoOpReadPiece struct {
 	Path    string `json:"path"`
 	Section string `json:"section,omitempty"`
 	Found   bool   `json:"found"`
-	Text    string `json:"text,omitempty"`
-	// The answer was cut at the limit, so its end is not the file's (or the section's).
+	// Why it is not there: "too_large" for a file over wikiRepoOpWholeFileBytes. Absent otherwise.
+	Reason string `json:"reason,omitempty"`
+	// The file's size in bytes at the commit; 0 when the commit has no such path.
+	Size int64 `json:"size,omitempty"`
+	Text string `json:"text,omitempty"`
+	// The answer was cut at the limit the request named, so its end is not the file's.
 	Truncated bool `json:"truncated,omitempty"`
 	Chars     int  `json:"chars"`
 }
@@ -344,9 +358,15 @@ func wikiRepoOpReachable(root, ref string) ([]string, error) {
 
 // ── read ────────────────────────────────────────────────────────────────────────────────────────
 
-// wikiRepoOpRead answers with bounded text: one section of a document or a whole file per item, each
-// within its own limit, and the whole answer within one section's material (design §4.3 — the numbers the
-// docs build already reads by).
+// wikiRepoOpRead answers with the whole text of what was asked — one file per item, at the commit named, up
+// to wikiRepoOpWholeFileBytes each (owner 2026-10-08). A file over that limit is missing with `too_large` as
+// the reason rather than cut: what a caller does with it is the same as with a path the commit does not
+// have, and the reason says which of the two it is.
+//
+// A request that names a limit is answered within it, the way an older control plane asks (its window is one
+// section's material, wikiRepoOpBoundedChars) — a new control plane names none and gets the file. The answer
+// travels inside the result while it fits; above wikiRepoOpInlineBytes the caller uploads it in fragments,
+// exactly as a snapshot's index is uploaded (wikiRepoOpFragments).
 func wikiRepoOpRead(root string, input wikiRepoOpInput) wikiRepoOpOutcome {
 	sha := strings.ToLower(strings.TrimSpace(input.Sha))
 	if !wikiCommitSha.MatchString(sha) {
@@ -360,67 +380,67 @@ func wikiRepoOpRead(root string, input wikiRepoOpInput) wikiRepoOpOutcome {
 	}
 	answer := wikiRepoOpReadAnswer{Sha: sha, Items: []wikiRepoOpReadPiece{}}
 	for _, item := range input.Items {
-		piece, err := wikiRepoOpReadOne(root, sha, item, wikiRepoOpSectionChars-answer.Chars)
+		piece, err := wikiRepoOpReadOne(root, sha, item)
 		if err != nil {
 			return wikiRepoOpFailed(err.Error())
 		}
 		answer.Chars += piece.Chars
 		answer.Items = append(answer.Items, piece)
 	}
-	return wikiRepoOpSucceeded(map[string]interface{}{"read": answer})
+	payload, err := json.Marshal(answer)
+	if err != nil {
+		return wikiRepoOpFailed(fmt.Sprintf("the read could not be written: %v", err))
+	}
+	outcome := wikiRepoOpOutcome{state: "succeeded", sha: sha}
+	if len(payload) > wikiRepoOpInlineBytes {
+		// Too large for one request body: the caller uploads it in fragments and the result names how many,
+		// under `read` — the answer's own key — so the server reassembles what it asked for.
+		outcome.payload = string(payload)
+		outcome.payloadKey = "read"
+		return outcome
+	}
+	outcome.result = map[string]interface{}{"read": answer}
+	return outcome
 }
 
-func wikiRepoOpReadOne(root, sha string, item wikiRepoOpReadItem, left int) (wikiRepoOpReadPiece, error) {
+func wikiRepoOpReadOne(root, sha string, item wikiRepoOpReadItem) (wikiRepoOpReadPiece, error) {
 	path := wikiAnchorPath(item.Path)
 	piece := wikiRepoOpReadPiece{Path: item.Path, Section: item.Section}
 	if path == "" {
 		return piece, fmt.Errorf("a read item names no path")
 	}
-	text, err := wikiRepoOpBlob(root, sha, path)
+	text, exists, err := wikiRepoOpBlob(root, sha, path)
 	if err != nil {
 		return piece, err
 	}
-	if text == "" {
+	if !exists {
+		return piece, nil
+	}
+	piece.Size = int64(len(text))
+	if piece.Size > wikiRepoOpWholeFileBytes {
+		piece.Reason = "too_large"
 		return piece, nil
 	}
 	piece.Found = true
-	max := item.MaxChars
-	if max <= 0 {
-		max = wikiRepoOpDefaultChars(path)
-	}
-	if max > wikiRepoOpSectionChars {
-		max = wikiRepoOpSectionChars
-	}
-	if max > left {
-		// The request's own budget is one section's material: when what is left of it is less than this
-		// item asked for, the item gets what is left — nothing at all, when nothing is left.
-		max = left
-	}
-	if max <= 0 {
-		piece.Chars = 0
-		piece.Truncated = true
-		return piece, nil
-	}
 	if section := strings.TrimSpace(item.Section); section != "" {
 		text = wikiRepoOpSectionText(text, section)
 	}
-	piece.Text, piece.Truncated = wikiRepoOpCut(text, max)
-	piece.Chars = len([]rune(piece.Text))
-	return piece, nil
-}
-
-// wikiRepoOpDefaultChars is what an item gets when it names no limit: a contract file 2,500 characters,
-// anything else one design-document section (4,200).
-func wikiRepoOpDefaultChars(path string) int {
-	if strings.HasPrefix(path, "contracts/") || strings.HasSuffix(path, ".json") {
-		return wikiRepoOpContractChars
+	if max := item.MaxChars; max > 0 {
+		// A limit is what an older control plane asks by; it is honoured rather than ignored, and it is
+		// never more than the window such a caller reads in.
+		if max > wikiRepoOpBoundedChars {
+			max = wikiRepoOpBoundedChars
+		}
+		text, piece.Truncated = wikiRepoOpCut(text, max)
 	}
-	return wikiRepoOpDocSectionChars
+	piece.Text = text
+	piece.Chars = len([]rune(text))
+	return piece, nil
 }
 
 // wikiRepoOpCut is a text cut to at most max characters, saying so when it was. The marker is counted
 // inside the limit rather than added to it, so what an item answers with is what it asked for: a caller
-// that adds its items up (the worker holds a section to 22,000) reads the number the limit is about.
+// reads the number the limit is about.
 func wikiRepoOpCut(text string, max int) (string, bool) {
 	runes := []rune(text)
 	if len(runes) <= max {
@@ -498,18 +518,19 @@ func wikiRepoOpSectionText(text, section string) string {
 }
 
 // wikiRepoOpBlob is one file's text at a commit: `git show <sha>:<path>`, with the path spelled so a
-// leading dash or a glob is a path and not an option.
-func wikiRepoOpBlob(root, sha, path string) (string, error) {
+// leading dash or a glob is a path and not an option. `exists` says whether the commit has the path at all,
+// which an empty file and a missing one would otherwise answer alike.
+func wikiRepoOpBlob(root, sha, path string) (string, bool, error) {
 	out, code, stderr, err := wikiAnchorGit(root, wikiRepoOpGitTimeout, "--literal-pathspecs", "show", sha+":"+path)
 	switch {
 	case err != nil:
-		return "", fmt.Errorf("git show %s:%s: %v", sha, path, err)
+		return "", false, fmt.Errorf("git show %s:%s: %v", sha, path, err)
 	case code == 0:
-		return string(out), nil
+		return string(out), true, nil
 	case wikiGitSaysAbsent(code, stderr):
-		return "", nil
+		return "", false, nil
 	}
-	return "", fmt.Errorf("git show %s:%s exited %d: %s", sha, path, code, strings.TrimSpace(stderr))
+	return "", false, fmt.Errorf("git show %s:%s exited %d: %s", sha, path, code, strings.TrimSpace(stderr))
 }
 
 // ── diff ────────────────────────────────────────────────────────────────────────────────────────
@@ -649,20 +670,26 @@ func runWikiRepoOpAndReport(t *Transport, cmd WikiRepoOpCommand) {
 		fragments := wikiRepoOpFragments(outcome.payload)
 		if err := uploadWikiRepoOpFragments(t, cmd, outcome.sha, fragments); err != nil {
 			// Not settled with a payload that is not all there: the server would refuse the digest, and the
-			// next attempt builds the snapshot again.
+			// next attempt builds the snapshot (or reads the files) again.
 			body.State = "failed"
 			body.Result = nil
-			body.Error = fmt.Sprintf("the snapshot (%d bytes, %d fragments) could not be uploaded: %v",
-				len(outcome.payload), len(fragments), err)
+			body.Error = fmt.Sprintf("the %s payload (%d bytes, %d fragments) could not be uploaded: %v",
+				cmd.Kind, len(outcome.payload), len(fragments), err)
 		} else {
 			digest := sha256.Sum256([]byte(outcome.payload))
-			body.Result = map[string]interface{}{
+			shape := map[string]interface{}{
 				"sha":       outcome.sha,
 				"bytes":     len(outcome.payload),
 				"digest":    hex.EncodeToString(digest[:]),
 				"fragments": len(fragments),
 			}
-			logln("wiki repo op", cmd.ID, "snapshot uploaded:",
+			if outcome.payloadKey != "" {
+				// The kind nests its answer (a read's under `read`); a snapshot's index is the result itself.
+				body.Result = map[string]interface{}{outcome.payloadKey: shape}
+			} else {
+				body.Result = shape
+			}
+			logln("wiki repo op", cmd.ID, cmd.Kind, "payload uploaded:",
 				fmt.Sprintf("%d bytes in %d fragments", len(outcome.payload), len(fragments)))
 		}
 	}

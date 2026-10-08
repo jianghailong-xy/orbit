@@ -779,6 +779,7 @@ const PROPOSAL_SELECT = {
   facts: true,
   gate: true,
   authorSessionId: true,
+  authorJobId: true,
   decidedByUserId: true,
   decidedAt: true,
   decisionNote: true,
@@ -1547,7 +1548,27 @@ export class WikiPlans {
    */
   async propose(principal: WikiPrincipal, spaceId: string, body: unknown): Promise<WikiPlanProposal> {
     await this.assertMaintainer(principal, spaceId);
-    const { ownerId } = principal;
+    return this.storeProposal(principal.ownerId, spaceId, { sessionId: principal.sessionId, jobId: null }, body);
+  }
+
+  /**
+   * The same proposal from the server's own maintenance run (contract `maintenance.job.server`, P8): the
+   * wiki job the worker runs it under is its author, where a session's proposal names its session. Gated
+   * exactly as a session's is — the wiki job checks the repository references on the space's snapshot
+   * first, and the gate here checks the rest.
+   */
+  async proposeServer(by: { ownerId: string; spaceId: string; wikiJobId: string }, body: unknown): Promise<WikiPlanProposal> {
+    await this.requireSpace(by.ownerId, by.spaceId);
+    return this.storeProposal(by.ownerId, by.spaceId, { sessionId: null, jobId: by.wikiJobId }, body);
+  }
+
+  /** One proposal, gated and stored: a maintenance session's, or the server-run wiki job's. */
+  private async storeProposal(
+    ownerId: string,
+    spaceId: string,
+    author: { sessionId: string | null; jobId: string | null },
+    body: unknown,
+  ): Promise<WikiPlanProposal> {
     const confirmed = await requireConfirmedPlan(this.prisma, { ownerId, spaceId });
     const row = await this.prisma.wikiPlan.findFirstOrThrow({ where: { id: confirmed.id }, select: VERSION_SELECT });
     const base = contentOf(row);
@@ -1587,7 +1608,8 @@ export class WikiPlans {
         change: { doc: docInputOf(doc), category } as unknown as Prisma.InputJsonValue,
         facts: facts as unknown as Prisma.InputJsonValue,
         gate: report(plan, target, true) as unknown as Prisma.InputJsonValue,
-        authorSessionId: principal.sessionId!,
+        authorSessionId: author.sessionId,
+        authorJobId: author.jobId,
       },
       select: PROPOSAL_SELECT,
     });
@@ -2108,6 +2130,7 @@ function proposalView(row: ProposalRow): WikiPlanProposal {
     facts: row.facts as unknown as WikiPlanProposal['facts'],
     gate: row.gate as unknown as WikiPlanGateReport,
     authorSessionId: row.authorSessionId,
+    authorJobId: row.authorJobId,
     decidedByUserId: row.decidedByUserId,
     decidedAt: row.decidedAt?.toISOString() ?? null,
     decisionNote: row.decisionNote,

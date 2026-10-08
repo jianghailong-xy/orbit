@@ -39,6 +39,8 @@ internal class WikiNav(private val push: (OrbitRoute) -> Unit,
             else OrbitRoute(Destination.SESSION, session, origin = Origin.LINK))
     }
     fun task(id: String) = push(OrbitRoute(Destination.TASK, id, origin = Origin.LINK))
+    /** A server run's page: its row on the Runs band, or View run for a run the server's job made (P9). */
+    fun job(id: String) = push(OrbitRoute(Destination.WIKI_JOB, id))
     fun project(id: String) = push(OrbitRoute(Destination.PROJECT, id, origin = Origin.LINK))
     fun runner(id: String) = push(OrbitRoute(Destination.RUNNER, id, origin = Origin.LINK))
     /** A web page — a repository host at a commit — in the browser. */
@@ -88,6 +90,7 @@ fun WikiDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRo
             Destination.WIKI_ENTRY -> WikiEntryScreen(store, route, data, nav)
             Destination.WIKI_REVIEW -> WikiReviewScreen(store, route, data, nav)
             Destination.WIKI_RUN -> WikiRunScreen(store, route, nav)
+            Destination.WIKI_JOB -> WikiJobScreen(store, route)
             Destination.WIKI_SETTINGS -> WikiSettingsScreen(store, route, data, nav)
             Destination.WIKI_ARTICLE -> WikiArticleScreen(store, route, data, nav)
             Destination.WIKI_BROWSE -> WikiBrowseScreen(store, route, data, nav)

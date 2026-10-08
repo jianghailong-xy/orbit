@@ -1,5 +1,5 @@
 import { HttpException, NotFoundException } from '@nestjs/common';
-import { WIKI_DOCS_BUILD_JOB, WIKI_REPO_OPS, type WikiPlanBuildProgress, type WikiPlanBuildReport } from '@orbit/shared';
+import { WIKI_DOCS_BUILD_JOB, type WikiPlanBuildProgress, type WikiPlanBuildReport, type WikiRepoFileRead } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
 import { wikiDocsBuildJobPrincipal, type WikiDocs } from '../wiki/wiki-docs';
 import { gatherDocMaterial, type StoredSessionCondition } from '../wiki/wiki-docs-material';
@@ -20,9 +20,11 @@ import { cutRunes } from './wiki-import-extract';
 import { WikiJobContentError, WikiJobInfraError, type WikiJobContext, type WikiJobRunner } from './wiki-job-executor';
 import { writeWikiJobProgress } from './wiki-jobs';
 import {
+  readWikiRepoFiles,
   readWikiRepoReadiness,
   readWikiRepoSnapshot,
   waitForWikiRepoOp,
+  wikiRepoStepsCanRun,
   WikiRepoOpRefused,
   WikiRepoOpWaitTimedOut,
   type WikiRepoOps,
@@ -41,12 +43,13 @@ import {
  * session's run reported them.
  *
  * THE REPOSITORY AT ONE COMMIT, READ BY THE SPACE'S RUNNER. A snapshot of origin/main names the commit (the
- * runner's fetch, as the CLI's own fetch did) and lists every file with its size; the files a section's sources
- * name are read whole at that commit (`read`), as many to one operation as fit `repoOps.read.wholeFileChars`, and
- * the writer cuts its sections, symbols and contracts out of them exactly as the runner cut them out of
- * `git show`. A file longer than one read gives is read to there and says so: what lies past it is reported
- * missing rather than taken from a heading that only looks like the one named. The reads are waited for holding
- * the job's lease — they are many and short, and parking on each would replay the build each time.
+ * runner's fetch, as the CLI's own fetch did) and lists every file with its size; the files a section's
+ * sources name are read whole at that commit (`read`, owner 2026-10-08), cached by (space, sha, path) and
+ * read from the runner only once, and the writer cuts its sections, symbols and contracts out of them exactly
+ * as the runner cut them out of `git show`. A file over 2 MB is missing with the reason `too_large`; a space
+ * whose runner has not declared `wiki-repo-op-read/v1` reads only the old window (22,000 characters), and a
+ * heading or symbol past it is missing and says so. The reads are waited for holding the job's lease — they
+ * are many and short, and parking on each would replay the build each time.
  *
  * THE SERVER'S HALF IS READ IN PROCESS: the records of a section's session condition through
  * wiki-docs-material.ts, as the runner door's material route reads them; the writes through `WikiDocs.write`, the
@@ -120,13 +123,14 @@ export async function runWikiDocsBuildJob(context: WikiJobContext, deps: WikiDoc
   }
 
   const readiness = await readWikiRepoReadiness(prisma, { ownerId: job.ownerId, spaceId: job.spaceId });
-  if (readiness.look !== 'ready') {
-    // The space's runner cannot be asked now: offline, too old to be given the work, or no checkout to read. The
-    // health line says which; the job is tried again on the backoff.
+  if (!wikiRepoStepsCanRun(readiness)) {
+    // The space's runner cannot be asked now: offline, or too old to be handed repository work at all. The
+    // health line says which; the job is tried again on the backoff. A runner that reads only the bounded
+    // window is not one of these: the build runs, cut short where a file passes it.
     throw new WikiJobInfraError(`REPO_NOT_READY: the space's repository cannot be read now (${readiness.look})`);
   }
   await progress(prisma, context, { step: 'snapshot' });
-  const repo = await snapshotRepo(context, deps);
+  const repo = await snapshotRepo(context, deps, readiness.runner?.wholeFile === true);
 
   const state = await deps.docs.writerState(principal, job.spaceId);
   const stored = new Map<string, Map<string, WikiDocsStoredSection>>();
@@ -328,9 +332,9 @@ const READ_CUT_MARKER = '\n…（后略）\n';
 
 /**
  * The checkout at the snapshot's commit, as the writer reads it (`WikiDocRepo`): which files there are and how big
- * from the snapshot, and each file's text from a `read` at that commit, made before it is shown (`prepare`). A
- * directory shows as `git show <sha>:<dir>` shows a tree — the runner's writer read a directory that way — from the
- * snapshot's paths.
+ * from the snapshot, and each file's text whole from a `read` at that commit (owner 2026-10-08), served from the
+ * read cache when it is already held and read from the runner once otherwise (`prepare`). A directory shows as
+ * `git show <sha>:<dir>` shows a tree — the runner's writer read a directory that way — from the snapshot's paths.
  */
 export class WikiDocsSnapshotRepo implements WikiDocRepo {
   private readonly texts = new Map<string, WikiDocShown | null>();
@@ -342,7 +346,7 @@ export class WikiDocsSnapshotRepo implements WikiDocRepo {
     readonly sha: string,
     private readonly sizes: ReadonlyMap<string, number>,
     private readonly files: readonly string[],
-    private readonly read: (batch: ReadonlyArray<{ path: string; size: number }>) => Promise<Map<string, WikiDocShown | null>>,
+    private readonly read: (paths: readonly string[]) => Promise<Map<string, WikiRepoFileRead | null>>,
   ) {}
 
   show(raw: string): WikiDocShown | null {
@@ -370,31 +374,20 @@ export class WikiDocsSnapshotRepo implements WikiDocRepo {
     return this.files.filter((file) => file.startsWith(prefix));
   }
 
-  /** Read the files among these paths not read yet: as many to one operation as fit one read, a few at a time. */
+  /** Read the files among these paths not held yet, served from the cache where it can be; a few at a time. */
   async prepare(paths: readonly string[]): Promise<void> {
     const wanted = [...new Set(paths.map((path) => wikiDocCleanPath(path)))].filter((path) => this.sizes.has(path));
     const fresh = wanted.filter((path) => !this.texts.has(path) && !this.reading.has(path));
-    let batch: Array<{ path: string; size: number }> = [];
-    let bytes = 0;
-    const flush = (): void => {
-      if (batch.length === 0) return;
-      const taken = batch;
-      const done = this.slot(() => this.read(taken)).then((texts) => {
-        for (const file of taken) this.texts.set(file.path, texts.get(file.path) ?? null);
-      });
-      for (const file of taken) this.reading.set(file.path, done);
-      batch = [];
-      bytes = 0;
-    };
-    for (const path of fresh) {
-      const size = this.sizes.get(path) ?? 0;
-      // Characters never outnumber bytes, so files whose sizes sum within one read's limit fit whole in one.
-      if (batch.length > 0 && bytes + size > WIKI_REPO_OPS.wholeFileChars) flush();
-      batch.push({ path, size });
-      bytes += size;
-    }
-    flush();
-    await Promise.all(wanted.map((path) => this.reading.get(path)).filter((done) => done !== undefined));
+    if (fresh.length === 0) return;
+    const done = this.slot(async () => {
+      const files = await this.read(fresh);
+      for (const path of fresh) {
+        const file = files.get(path) ?? null;
+        this.texts.set(path, file == null ? null : wikiDocsShownOf(file, this.sizes.get(path) ?? 0));
+      }
+    });
+    for (const path of fresh) this.reading.set(path, done);
+    await Promise.all(fresh.map((path) => this.reading.get(path)));
   }
 
   /** At most WIKI_DOCS_BUILD_JOB.readsInFlight reads at once: each is a fetch in the same checkout on the runner. */
@@ -414,7 +407,7 @@ export class WikiDocsSnapshotRepo implements WikiDocRepo {
  * The commit the build reads, and the reader at it: a snapshot of origin/main — skipped by the runner when the
  * space already holds that commit's — then the space's snapshot read back for its paths and sizes.
  */
-async function snapshotRepo(context: WikiJobContext, deps: WikiDocsBuildJobDeps): Promise<WikiDocsSnapshotRepo> {
+async function snapshotRepo(context: WikiJobContext, deps: WikiDocsBuildJobDeps, wholeFile: boolean): Promise<WikiDocsSnapshotRepo> {
   const { job } = context;
   const held = await deps.prisma.wikiRepoSnapshot.findFirst({ where: { spaceId: job.spaceId, ownerId: job.ownerId }, select: { sha: true } });
   const settled = await operation(context, deps, 'snapshot', { skipSha: held?.sha ?? null }, 'the snapshot of origin/main');
@@ -433,38 +426,50 @@ async function snapshotRepo(context: WikiJobContext, deps: WikiDocsBuildJobDeps)
   }
   const files = [...sizes.keys()].sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
   context.log(`the repository at ${sha.slice(0, 12)} (${files.length} files)`);
-  return new WikiDocsSnapshotRepo(sha, sizes, files, (batch) => readFiles(context, deps, sha, batch));
+  return new WikiDocsSnapshotRepo(sha, sizes, files, (paths) => readFiles(context, deps, sha, paths, sizes, wholeFile));
 }
 
-/** Files read whole at the commit (`read`): asked again when the read failed, and given up as the platform's. */
+/** Files read whole at the commit (`read`), from the cache where held: asked again when the read failed, and
+ *  given up as the platform's after `readAttempts`. */
 async function readFiles(
   context: WikiJobContext,
   deps: WikiDocsBuildJobDeps,
   sha: string,
-  batch: ReadonlyArray<{ path: string; size: number }>,
-): Promise<Map<string, WikiDocShown | null>> {
-  const items = batch.map((file) => (file.size > 0 ? { path: file.path, maxChars: Math.min(file.size, WIKI_REPO_OPS.wholeFileChars) } : { path: file.path }));
-  const what = `${batch.length === 1 ? batch[0].path : `${batch.length} files`} at ${sha.slice(0, 12)}`;
+  paths: readonly string[],
+  sizes: ReadonlyMap<string, number>,
+  wholeFile: boolean,
+): Promise<Map<string, WikiRepoFileRead | null>> {
+  const what = `${paths.length === 1 ? paths[0] : `${paths.length} files`} at ${sha.slice(0, 12)}`;
   let last = '';
   for (let attempt = 1; attempt <= WIKI_DOCS_BUILD_JOB.readAttempts; attempt += 1) {
-    const settled = await operation(context, deps, 'read', { sha, items }, `reading ${what}`);
-    if (settled.state === 'succeeded') {
-      const answered = ((settled.result?.read as { items?: unknown[] } | undefined)?.items ?? []) as Array<{ found?: boolean; text?: string; truncated?: boolean }>;
-      const texts = new Map<string, WikiDocShown | null>();
-      batch.forEach((file, i) => texts.set(file.path, wikiDocsShownOf(answered[i], file.size)));
-      return texts;
+    try {
+      return await readWikiRepoFiles({
+        prisma: deps.prisma,
+        repoOps: deps.repoOps,
+        jobId: context.job.id,
+        ownerId: context.job.ownerId,
+        spaceId: context.job.spaceId,
+        sha,
+        paths,
+        wholeFile,
+        sizeOf: (path) => sizes.get(path) ?? 0,
+        waitMs: deps.repoWaitMs ?? WIKI_DOCS_BUILD_JOB.repoWaitSeconds * 1000,
+        wake: deps.repoWake,
+        signal: context.signal,
+      });
+    } catch (error) {
+      last = (error as Error)?.message ?? String(error);
     }
-    last = settled.error ?? settled.state;
   }
   throw new WikiJobInfraError(`REPO_OP_FAILED: reading ${what} failed ${WIKI_DOCS_BUILD_JOB.readAttempts} times: ${last}`);
 }
 
-/** A file as one read item answered it: whole, or its first whole lines when the read stopped short of its end. */
-export function wikiDocsShownOf(item: { found?: boolean; text?: string; truncated?: boolean } | undefined, size: number): WikiDocShown | null {
-  // An empty file answers found false, as a missing one does; the snapshot says which it is.
-  if (!item?.found) return size === 0 ? { text: '', cut: false } : null;
-  let text = String(item.text ?? '');
-  if (!item.truncated) return { text, cut: false };
+/** A file as the read cache answered it: whole, or its first whole lines when an older runner cut it short. */
+export function wikiDocsShownOf(file: WikiRepoFileRead, size: number): WikiDocShown | null {
+  if (file.state === 'missing') return size === 0 ? { text: '', cut: false } : null;
+  if (file.state === 'too_large') return null;
+  let text = file.text;
+  if (file.state !== 'cut') return { text, cut: false };
   if (text.endsWith(READ_CUT_MARKER)) text = text.slice(0, -READ_CUT_MARKER.length);
   return { text: text.slice(0, text.lastIndexOf('\n') + 1), cut: true };
 }

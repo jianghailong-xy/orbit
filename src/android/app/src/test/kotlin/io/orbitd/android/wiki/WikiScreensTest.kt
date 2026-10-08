@@ -36,6 +36,9 @@ class WikiScreensTest {
     private val sent = CopyOnWriteArrayList<Pair<String, String>>()
     private val decided = CopyOnWriteArrayList<String>()
     private val space = WikiFixtures.spaceID
+    /** The space's health and server runs, when a test wants them: the control plane before P9 answers 404. */
+    private var healthRead: String? = null
+    private var jobsRead: String? = null
 
     private fun respond(api: ApiRequest): ApiResponse {
         val path = api.path.joinToString("/")
@@ -49,6 +52,8 @@ class WikiScreensTest {
             path == "wiki/spaces/$space/entries" -> ok(WikiFixtures.entries)
             path == "wiki/spaces/$space/timeline" -> ok(WikiFixtures.timeline)
             path == "wiki/spaces/$space/docs" -> ok(wikiDocsFixture().obj("docs").obj("directory").obj("read").toString())
+            path == "wiki/spaces/$space/health" && healthRead != null -> ok(healthRead!!)
+            path == "wiki/spaces/$space/jobs" && jobsRead != null -> ok(jobsRead!!)
             path == "wiki/entries/${WikiFixtures.pitfallID}" -> ok(WikiFixtures.entryDetail)
             path == "wiki/review" -> ok(reviewQueue())
             path.startsWith("wiki/changesets/") && path.endsWith("/decide") -> {
@@ -139,6 +144,60 @@ class WikiScreensTest {
         compose.onNodeWithText("Task priority is a field on the task, not a dispatcher session").performClick()
         assertEquals(OrbitRoute(Destination.WIKI_REVIEW), opened[0])
         assertEquals(Destination.WIKI_ENTRY, opened[1].destination)
+    }
+
+    /** The server executes the account's wiki: the Runs band stands after Review and Plan, each run a row with its
+     * state and where it waits, and a press opens the run's page (mock 35 ④, P9). */
+    @Test fun theServerExecutesTheWikiAndTheRunsBandOpensARunsPage() {
+        val runs = WikiSharedFiles.serverExecution.fobj("runs")
+        val cases = runs.farr("cases").map { it.jsonObject }
+        fun caseState(case: JsonObject) = case["state"]!!.jsonPrimitive.content
+        // The fixture's own cases, with ids of their own: two rows of one list are two runs.
+        val running = JsonObject(cases.first { caseState(it) == WikiRunsCopy.running }.getValue("job").jsonObject + ("id" to JsonPrimitive("34cE0job0000000000001")))
+        val queued = JsonObject(cases.first { caseState(it) == WikiRunsCopy.queued }.getValue("job").jsonObject + ("id" to JsonPrimitive("34cE0job0000000000002")))
+        healthRead = """{"spaceId":"$space","entries":9,"maintenance":{"look":"ok","enabled":true,"lastOkAt":"2026-10-08T06:00:00.000Z","backlog":0,"lagSeconds":0,"dailyLimitReached":false},"executor":{"mode":"server","serverExecutes":true},"systemModel":{"state":"up","model":"qwen3.8-27b-fp8"}}"""
+        jobsRead = buildJsonObject { put("spaceId", space); put("jobs", JsonArray(listOf(running, queued))) }.toString()
+        // The Runs band is Activity's since A12-2, after Review and Plan as on iOS.
+        val route = OrbitRoute(Destination.WIKI_ACTIVITY)
+        show(route) { WikiActivityScreen(it, route, DirectoryData(), nav) }
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-job-row").fetchSemanticsNodes().isNotEmpty() }
+        // The band's head names the System model and its state, and the status line gained the fixture's look.
+        compose.onNodeWithTag("wiki-activity-list").performScrollToNode(hasText(WikiRunsCopy.runs))
+        compose.onNodeWithTag("wiki-activity-list").performScrollToNode(hasText(WikiRunsCopy.systemModelLabel("qwen3.8-27b-fp8")))
+        val rows = compose.onAllNodesWithTag("wiki-job-row")
+        assertEquals(2, rows.fetchSemanticsNodes().size)
+        compose.onNodeWithTag("wiki-activity-list").performScrollToNode(hasText("Verification"))
+        compose.onNodeWithTag("wiki-activity-list").performScrollToNode(hasText("3 of 7 calls ended", substring = true))
+        assertTrue(sent.any { it.first == "GET wiki/spaces/$space/jobs" })
+        compose.onAllNodesWithTag("wiki-job-row")[0].performClick()
+        assertEquals(OrbitRoute(Destination.WIKI_JOB, "34cE0job0000000000001"), opened.last())
+    }
+
+    /** A server run's page: where it stands, the line under its log, and each call — its state, waits, run time and
+     * tokens (mock 35 ⑤, P9). */
+    @Test fun aServerRunsPageListsItsCalls() {
+        val runs = WikiSharedFiles.serverExecution.fobj("runs")
+        val call = runs.farr("calls").map { it.jsonObject.getValue("call") }
+        val job = buildJsonObject {
+            put("id", "34cE0job0000000000001"); put("kind", "verify"); put("state", "running")
+            put("createdAt", "2026-10-08T06:27:30.000Z"); put("updatedAt", "2026-10-08T06:29:00.000Z")
+            put("startedAt", "2026-10-08T06:28:00.000Z")
+            put("calls", buildJsonObject { put("total", 3); put("queued", 1); put("running", 1); put("succeeded", 1)
+                put("failed", 0); put("cancelled", 0); put("inputTokens", 1204); put("outputTokens", 296) })
+            put("nextCall", buildJsonObject { put("ahead", 0); put("enqueuedAt", "2026-10-08T06:29:57.000Z") })
+            put("requests", JsonArray(call.take(3)))
+        }
+        jobsRead = buildJsonObject { put("spaceId", space); put("jobs", JsonArray(listOf(job))) }.toString()
+        val route = OrbitRoute(Destination.WIKI_JOB, "34cE0job0000000000001")
+        show(route) { WikiJobScreen(it, route) }
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-job-page").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("wiki-job-state").assertTextContains(WikiRunsCopy.running, substring = true)
+        compose.onNodeWithTag("wiki-job-foot").assertTextContains("3 calls · 1,204 tokens in, 296 out so far", substring = true)
+        // One row a call, the phone's two lines: the step and unit, its state, then waited · ran · tokens or its error.
+        compose.onAllNodesWithTag("wiki-call-row").assertCountEquals(3)
+        compose.onNodeWithTag("wiki-job-page").performScrollToNode(hasText("verify · 3f2a9c1e"))
+        compose.onNodeWithTag("wiki-job-page").performScrollToNode(hasText("waited 1s · ran 14s · 1,204 → 296 tokens"))
+        compose.onNodeWithTag("wiki-job-page").performScrollToNode(hasText("The call ran past its 15-minute budget."))
     }
 
     @Test fun searchFindsEntriesUnderTheTitleAndSaysWhenNothingMatches() {
