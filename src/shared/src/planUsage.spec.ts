@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { PlanUsage, RunnerEngineAccount } from './dto';
 import {
@@ -619,4 +621,29 @@ describe('a runner with more than one Kimi Code account', () => {
     // KIMI_API_KEY is read from Kimi's config file alone: in the environment it changes nothing.
     expect(accountOfEnv('kimi', { KIMI_API_KEY: 'sk-test' }, accounts)).toBe('default');
   });
+});
+
+/**
+ * `kimi-plan-usage.fixture.json` is Kimi Code quota from end to end: src/runner-go turns each case's
+ * raw `/usages` readings into its `planUsage` heartbeat (kimi_usage_test.go), and from that heartbeat
+ * the control plane has to start sessions on, and hold runs back from, the accounts the case says.
+ */
+describe('kimi-plan-usage.fixture.json', () => {
+  const fixture = JSON.parse(readFileSync(path.join(__dirname, 'kimi-plan-usage.fixture.json'), 'utf8')) as {
+    now: string;
+    accounts: RunnerEngineAccount[];
+    cases: Array<{ name: string; planUsage: PlanUsage; startOn: string; blockedUntil: Record<string, string | null> }>;
+  };
+  const now = new Date(fixture.now);
+
+  for (const c of fixture.cases) {
+    it(c.name, () => {
+      expect(accountToStartOn('kimi', fixture.accounts, c.planUsage, now)).toBe(c.startOn);
+      for (const [account, until] of Object.entries(c.blockedUntil)) {
+        expect(planUsageBlockedUntil(c.planUsage, 'kimi', now, account)?.getTime() ?? null).toBe(
+          until === null ? null : Date.parse(until),
+        );
+      }
+    });
+  }
 });

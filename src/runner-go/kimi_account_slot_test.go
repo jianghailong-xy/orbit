@@ -468,7 +468,7 @@ func TestKimiAccountRemoval(t *testing.T) {
 		t.Fatalf("live homes = %v, want only Work's", live)
 	}
 
-	if err := removeAccount(kimiAccountKind, nil, nil, work.ID, live); err == nil || !strings.Contains(err.Error(), "in use") {
+	if err := removeAccount(kimiAccountKind, nil, nil, newKimiAccountUsage(), work.ID, live); err == nil || !strings.Contains(err.Error(), "in use") {
 		t.Fatalf("removing Work under a running session = %v, want it refused", err)
 	}
 	if _, err := os.Stat(filepath.Join(work.Dir, "credentials", "kimi-code.json")); err != nil {
@@ -476,7 +476,7 @@ func TestKimiAccountRemoval(t *testing.T) {
 	}
 
 	// That session over, the account goes: its home and its record, and nothing else.
-	if err := removeAccount(kimiAccountKind, nil, nil, work.ID, kimiAccountKind.liveDirs([]string{onDefault})); err != nil {
+	if err := removeAccount(kimiAccountKind, nil, nil, newKimiAccountUsage(), work.ID, kimiAccountKind.liveDirs([]string{onDefault})); err != nil {
 		t.Fatalf("removing Work: %v", err)
 	}
 	for _, path := range []string{work.Dir, filepath.Join(orbitHome, "kimi-accounts", work.ID+".json")} {
@@ -485,10 +485,10 @@ func TestKimiAccountRemoval(t *testing.T) {
 		}
 	}
 	// Redelivered until the runner reports: done again.
-	if err := removeAccount(kimiAccountKind, nil, nil, work.ID, nil); err != nil {
+	if err := removeAccount(kimiAccountKind, nil, nil, newKimiAccountUsage(), work.ID, nil); err != nil {
 		t.Fatalf("removing Work again: %v", err)
 	}
-	if err := removeAccount(kimiAccountKind, nil, nil, accountSlotDefaultID, nil); err == nil {
+	if err := removeAccount(kimiAccountKind, nil, nil, newKimiAccountUsage(), accountSlotDefaultID, nil); err == nil {
 		t.Fatal("Default was removable")
 	}
 	if after := kimiTreeSnapshot(t, defaultHome); !reflect.DeepEqual(after, before) {
@@ -582,7 +582,7 @@ func TestKimiSessionBorrowsItsAccountsHomeWithItsStoresMade(t *testing.T) {
 	}
 
 	// Removed after the session was dispatched: refused, and not made again.
-	if err := removeAccount(kimiAccountKind, nil, nil, work.ID, nil); err != nil {
+	if err := removeAccount(kimiAccountKind, nil, nil, newKimiAccountUsage(), work.ID, nil); err != nil {
 		t.Fatal(err)
 	}
 	errors := run(map[string]string{"KIMI_CODE_HOME": work.Dir})
