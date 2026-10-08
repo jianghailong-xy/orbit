@@ -27,6 +27,8 @@ class WikiStoreHttpTest {
         val calls = CopyOnWriteArrayList<Pair<String, String>>()
         val pending = ConcurrentHashMap.newKeySet<String>().apply { addAll(listOf("op-add", "op-amend", "op-retire", "op-challenge")) }
         @Volatile var decideStatus = 200
+        /** What a decide's answer records for the op decided, as the server's changeset answer does; null answers the count. */
+        @Volatile var recorded: String? = null
         @Volatile var entryStatus = 200
         @Volatile var writeAnswer = """{"changesetId":"$changeset","ops":[{"seq":0,"status":"applied","entryId":"$entryId","revision":4}]}"""
         init {
@@ -51,7 +53,13 @@ class WikiStoreHttpTest {
                             MockResponse().setResponseCode(decideStatus).setBody("""{"code":"WIKI_STALE","message":"This proposal changed since you opened it."}""")
                             else {
                                 val opId = Json.parseToJsonElement(sent).jsonObject["decisions"]!!.jsonArray[0].jsonObject["opId"]!!.jsonPrimitive.content
-                                pending.remove(opId); ok("""{"decided":1}""")
+                                val answer = recorded?.let { decision ->
+                                    val row = Json.parseToJsonElement(reviewJson()).jsonObject
+                                    JsonObject(row + ("ops" to JsonArray(row["ops"]!!.jsonArray.map { op ->
+                                        if (op.jsonObject["id"]!!.jsonPrimitive.content != opId) op
+                                        else JsonObject(op.jsonObject + ("decision" to JsonPrimitive(decision))) }))).toString()
+                                } ?: """{"decided":1}"""
+                                pending.remove(opId); ok(answer)
                             }
                         path == "wiki/entries/$entryId" -> if (entryStatus == 200) ok(detailJson()) else MockResponse().setResponseCode(entryStatus).setBody("{}")
                         path == "wiki/entries/$entryId/confirm" || path == "wiki/entries/$entryId/reject" -> ok("{}")
@@ -176,6 +184,21 @@ class WikiStoreHttpTest {
         assertTrue(requests("GET wiki/review").size > reads)
         assertTrue(store.state.value.reviewCards.any { it.op.id == card.op.id })
         assertFalse(store.state.value.busy)
+    }
+
+    /** Retire on a challenge retires the entry, and the retire withdraws every op still waiting on it — the challenge
+     * it answers included — so the answer records that challenge `withdrawn` (wiki-anchors.pg.spec.ts). That is the
+     * Retire done, as iOS and web read it (700dfa781); `withdrawn` on any other answer still applied nothing. */
+    @Test fun aChallengeAnsweredRetireIsDoneThoughTheServerRecordsTheChallengeWithdrawn() = runBlocking {
+        authority.recorded = "withdrawn"
+        val store = store()
+        store.loadReview()
+        val challenge = store.state.value.reviewCards.first { it.op.op == "challenge" }
+        assertNull("the Retire went through", store.decide(challenge, "retire"))
+        assertEquals("retire", body("POST wiki/changesets/$changeset/decide")["decisions"]!!.jsonArray[0].jsonObject["action"]!!.jsonPrimitive.content)
+        assertFalse(store.state.value.reviewCards.any { it.op.id == challenge.op.id })
+        val amend = store.state.value.reviewCards.first { it.op.op == "amend" }
+        assertEquals(WikiCopy.withdrawnRefused, store.decide(amend, "accept"))
     }
 
     @Test fun ownerWritesCarryTheBaseRevisionAndAKeyPerPress() = runBlocking {
