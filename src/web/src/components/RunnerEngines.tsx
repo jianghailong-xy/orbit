@@ -1027,8 +1027,10 @@ function AccountRow({
         <div className="re-id-main" style={{ minWidth: 0 }}>
           <AccountName runner={runner} engine={engine} account={account} next={next} editing={editing} setEditing={setEditing} />
           {/* Where the account lives and which one it is — never who: the account's email and id
-              stay on the machine, and the fingerprint is a prefix of a non-reversible one. */}
+              stay on the machine, and the fingerprint is a prefix of a non-reversible one. A Kimi
+              account says its site first, which is each account's own (kimi.com or kimi.ai). */}
           <div className="re-meta" title={accountDir(account)}>
+            {engine === 'kimi' && account.kimiRegion && `${KIMI_SITE[account.kimiRegion].domain} · `}
             {tildePath(accountDir(account))}
             {account.fingerprintPrefix && ` · account ${account.fingerprintPrefix}…`}
           </div>
@@ -1122,7 +1124,8 @@ function AccountRow({
 /**
  * "Add account": the same sign-in flow as every other here, started the moment the panel opens, under
  * a name the page picks (defaultAccountName). The runner gives the account a config directory of its
- * own, so Default — and the CLI in a terminal — is untouched.
+ * own, so Default — and the CLI in a terminal — is untouched. Kimi's waits for its site instead: the
+ * press on kimi.com or kimi.ai is what starts it, as on every Kimi sign-in card.
  *
  * The name stays editable throughout, and Enter or a click elsewhere saves it the way a row's rename
  * does (AccountName). That rename can only name an account the runner reports, which a new one is
@@ -1219,7 +1222,7 @@ function AddEngineAccount({
           spellCheck={false}
         />
       </label>
-      <RunnerSignIn runnerId={runnerId} engine={engine} accountName={name} autoStart onCancel={onClose} />
+      <RunnerSignIn runnerId={runnerId} engine={engine} accountName={name} autoStart={engine !== 'kimi'} onCancel={onClose} />
     </>
   );
 }

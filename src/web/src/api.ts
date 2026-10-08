@@ -374,6 +374,8 @@ export const createInteractiveSession = (body: {
   claudeAccount?: string;
   /** The same again for the built-in Antigravity engine: one of the runner's Google accounts. */
   antigravityAccount?: string;
+  /** The same again for the built-in Kimi engine: one of the runner's Kimi Code accounts. */
+  kimiAccount?: string;
   /** Ids of images uploaded unscoped on the compose page; the server scopes them to the
    *  new session and links them to its seeded first turn. */
   attachmentIds?: string[];
@@ -795,7 +797,7 @@ export const updateSessionConfig = (
   },
 ) => api(`/sessions/${sessionId}/config`, { method: 'PATCH', body: config });
 
-/** Move a session on the built-in Codex, Claude or Antigravity engine to another of its runner's
+/** Move a session on the built-in Codex, Claude, Antigravity or Kimi engine to another of its runner's
  *  accounts — which pins it there — or back onto `automatic`. Spawn-only, like a provider: a live
  *  session's engine re-spawns on the new account once no turn is in flight, and an ended one takes it
  *  on its next resume. */
