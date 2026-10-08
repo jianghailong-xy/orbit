@@ -132,6 +132,24 @@ describe('what the card says', () => {
     expect(html).toContain('approval-body is-questions');
   });
 
+  it('renders the question as the markdown the coordinator wrote', () => {
+    // The question body arrives as Markdown (bullets, emphasis), as in the approval cards — a
+    // bulleted question draws a list, not the raw "- " spelling.
+    const asked = row({
+      question: {
+        question: 'Which fix ships first?\n\n- the anchor re-check\n- the stuck job',
+        options: [],
+        recommendedOption: null,
+        blocksTaskIds: [],
+        ifUnanswered: null,
+      },
+    });
+    const html = markup(<CoordinatorQuestionCard projectId={PROJECT_ID} row={asked} now={NOW} />);
+    expect(html).toContain('<ul>');
+    expect(html).toContain('<li>the anchor re-check</li>');
+    expect(html).not.toContain('- the anchor re-check');
+  });
+
   it('takes prose when the coordinator named no alternatives', () => {
     const asked = row({
       question: {
