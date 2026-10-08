@@ -109,6 +109,7 @@ final class WikiServerExecutionCopyParityTests: XCTestCase {
             let title: String
             let none: String
             let kinds: [String: String]
+            let callsTitle: String
             let columns: [String]
             let durations: [Duration]
             let cases: [Case]
@@ -174,6 +175,7 @@ final class WikiServerExecutionCopyParityTests: XCTestCase {
         }
         XCTAssertEqual([WikiRunsCopy.call, WikiRunsCopy.callState, WikiRunsCopy.callWaited, WikiRunsCopy.callRan, WikiRunsCopy.callTokens],
                        shared.runs.columns)
+        XCTAssertEqual(WikiRunsCopy.callsTitle, shared.runs.callsTitle, "the log's name, the section a run's page lists its calls under")
         for one in shared.runs.durations {
             XCTAssertEqual(WikiRunsLogic.duration(one.seconds), one.says, "\(one.seconds) s")
         }
@@ -231,6 +233,7 @@ final class WikiServerExecutionCopyParityTests: XCTestCase {
             ("WIKI_RUN_NEXT_IN_LINE", WikiRunsCopy.nextInLine),
             ("WIKI_RUN_STARTING", WikiRunsCopy.starting),
             ("WIKI_RUN_NO_RESULT", WikiRunsCopy.noResult),
+            ("WIKI_CALLS", WikiRunsCopy.callsTitle),
             ("WIKI_CALL", WikiRunsCopy.call),
             ("WIKI_CALL_STATE", WikiRunsCopy.callState),
             ("WIKI_CALL_WAITED", WikiRunsCopy.callWaited),

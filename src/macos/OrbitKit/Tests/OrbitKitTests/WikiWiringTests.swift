@@ -364,6 +364,9 @@ final class WikiWiringTests: XCTestCase {
                               to: "private var newRows: Int")
         assertOrder(bands, ["case .status:", "case .reviewBanner, .planBanners, .otherPlanBanners:",
                             "ForEach(banners.filter { $0.band == band }) { banner in",
+                            "case .runs:", "WikiRunsLogic.shown(serverExecutes: content.health?.serverExecutes == true, jobs: jobs)",
+                            "runsHeader", "Button { actions.openJob(job.id) } label: {",
+                            "WikiRunListRow(row: WikiRunsLogic.row(job, now: now))", "rows.empty(WikiRunsCopy.none)",
                             "case .recentDecisions:", "case .recentlyChanged:",
                             "WikiCopy.newSinceLastLooked(newRows)", "rows.changeRow(item, new: isNew(item.at))",
                             "rows.runRow(changesetId, origin: origin, at: at, changes: items.count, new: isNew(at))",
@@ -375,6 +378,17 @@ final class WikiWiringTests: XCTestCase {
         let screen = try slice(view, from: "struct WikiActivityView: View {", to: "private func name(of space:")
         assertOrder(screen, [".task(id: wiki.currentSpace?.slug) {", "seen = wiki.seenBefore(slug)", "wiki.moveSeen(slug)",
                              "await wiki.loadOtherPlans()"], "the stamp, read before it moves")
+        // The server's runs are read with the page, and again every few seconds while one is on its way.
+        assertOrder(screen, ["TimelineView(.periodic(from: .now, by: wiki.jobsUnderWay ? 5 : 60)) { context in",
+                             "seen: seen, jobs: wiki.currentJobs, now: context.date, actions: actions(wiki))",
+                             "await wiki.loadOtherPlans()", "await wiki.loadJobs()",
+                             "while !Task.isCancelled, wiki.jobsUnderWay {", "try? await Task.sleep(for: .seconds(5))",
+                             ".refreshable {"], "Activity's runs, read and read again")
+        XCTAssertTrue(view.contains("openJob: { id in model.push(.wikiJob(jobID: id)) }"), "a run's row opens its page")
+        let header = try slice(page, from: "private var runsHeader: some View {", to: "private var newRows: Int")
+        assertOrder(header, ["Text(WikiRunsCopy.runs)", "if let model = content.health?.systemModel {",
+                             "Text(WikiRunsCopy.systemModelLabel(model.model))", "WikiModelStateText(model: model)"],
+                    "the Runs band's head: the System model and its state, never where it answers")
         XCTAssertTrue(view.contains("WikiSpaceLogic.activityBanners(spaces: wiki.spaces, current: space, plans: plans,"))
         XCTAssertTrue(view.contains("case .review:\n            model.push(.wikiReview)"), "the first banner opens Review")
         XCTAssertFalse(view.contains("async let"), "no sibling async let in OrbitApp (d22b276cc)")
@@ -391,6 +405,54 @@ final class WikiWiringTests: XCTestCase {
         let others = try slice(model, from: "func loadOtherPlans() async {", to: "func loadPlanVersion(")
         XCTAssertFalse(others.contains("async let"), "the other spaces' plans read side by side without async let")
         XCTAssertTrue(others.contains("$0.id != current && ($0.planWaiting ?? 0) > 0"))
+    }
+
+    /// A server run's page (mock 35 ⑤): pushed from Activity's Runs band in both shells; where it stands and the
+    /// line under its log, then its calls — each one's state, how long it waited and ran, its tokens and its error
+    /// — read again while the run is on its way. A server run has no task and no session, so nothing on the page
+    /// opens one; the run is read from the space's jobs, matched by its storage key.
+    func testAServerRunHasItsOwnPageAndLinksToNoSession() throws {
+        let view = code(try source("Views/WikiJobView.swift"))
+        let page = try slice(view, from: "struct WikiJobPage: View {", to: "struct WikiJobView: View {")
+        assertOrder(page, ["let row = WikiRunsLogic.row(job, now: now)", "Text(wikiRunStateLine(row, font: .orbitProse))", "Text(row.when)",
+                           "Text(WikiRunsLogic.foot(job))", "if !job.requests.isEmpty {", "ForEach(job.requests) { call in",
+                           "WikiCallListRow(row: WikiRunsLogic.callRow(call, now: now))", "Text(WikiRunsCopy.callsTitle)",
+                           "Text(\"\\(job.calls.total)\")", ".navigationTitle(row.kind)"], "a run's page")
+        let call = try slice(view, from: "struct WikiCallListRow: View {", to: "struct WikiJobPage: View {")
+        assertOrder(call, ["Text(row.call)", "Text(row.state)", "[row.retries, row.line.isEmpty ? nil : row.line]",
+                           "if let error = row.error {", "Text(error)"], "a call's row")
+        let line = try slice(view, from: "func wikiRunStateLine(_ row: WikiRunRow, font: Font) -> AttributedString {",
+                             to: "struct WikiRunListRow: View {")
+        for piece in ["= font.weight(.semibold)", "case .warn: line[Colour.self] = Color.orange",
+                      "case .error: line[Colour.self] = Color.red", "line += AttributedString(\" · \\(row.text)\")"] {
+            XCTAssertTrue(line.contains(piece), "a run's state line lost \(piece)")
+        }
+        let screen = try slice(view, from: "struct WikiJobView: View {", to: "\n}\n")
+        assertOrder(screen, ["if let job = wiki.job(jobID) {", "TimelineView(.periodic(from: .now, by: 5)) { context in",
+                             "WikiJobPage(job: job, now: context.date)", ".task(id: jobID) {", "await wiki.loadJobs()",
+                             "while !Task.isCancelled, wiki.jobsUnderWay {", ".refreshable { await wiki.loadJobs() }"],
+                    "the run read, and read again while it is on its way")
+        for link in ["openSession", ".session(", "taskDetail", "openFromConversation"] {
+            XCTAssertFalse(view.contains(link), "a server run links to no session or task (\(link))")
+        }
+        let shell = code(try source("Views/CompactShell.swift"))
+        XCTAssertTrue(shell.contains("case .wikiJob(let jobID):     WikiJobView(jobID: jobID)"), "the phone pushes the run's page")
+        let screens = code(try source("Views/WikiScreens.swift"))
+        let pane = try slice(screens, from: "struct WikiDetailPane: View {", to: "struct WikiDisabledNote: View {")
+        assertOrder(pane, ["model.nav.selectedWikiRunID", "WikiRunView(changesetID: run)", "model.nav.selectedWikiJobID",
+                           "WikiJobView(jobID: job).id(job)"], "the wide shells' detail pane")
+        let model = code(try source("WikiModel.swift"))
+        let jobs = try slice(model, from: "func loadJobs() async {", to: "func loadSystemModel() async {")
+        assertOrder(jobs, ["guard let space = currentSpace else {", "try await api.wikiJobs(spaceID: space.id)",
+                           "guard currentSpace?.id == space.id else { return }",
+                           "} catch APIError.http(let status, _) where status == 404 {",
+                           "PublicID.storageKey(jobs.spaceId) == PublicID.storageKey(space.id)",
+                           "PublicID.storageKey($0.id) == PublicID.storageKey(id)",
+                           "$0.state == .queued || $0.state == .running || $0.state == .waiting"], "the space's runs")
+        let system = try slice(model, from: "func loadSystemModel() async {", to: "func loadReview() async {")
+        assertOrder(system, ["try await api.wikiSystemModel()", "} catch APIError.http(let status, _) where status == 404 {",
+                             "systemModel?.executor?.serverExecutes == true ? systemModel : nil"],
+                    "the System model, the settings page's only while the server runs the wiki")
     }
 
     /// Coming into the Wiki from another section opens the space bound to the workspace the reader was in,

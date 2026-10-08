@@ -430,12 +430,15 @@ public enum WikiLogic {
     /// Recent decisions, Recently changed and Agents used the wiki. `WikiActivityPage` lays its sections out
     /// in this order and `WikiCopyParityTests` holds the web page to it.
     public enum ActivityBand: String, CaseIterable, Sendable {
-        case status, reviewBanner, planBanners, otherPlanBanners, recentDecisions, recentlyChanged, agentsUsed
+        /// `runs` is the server's runs (mock 35 ④, P9): drawn only while the server executes the account's wiki
+        /// or has run something for the space — the web's `WikiRunsCard`, after Review and Plan.
+        case status, reviewBanner, planBanners, otherPlanBanners, runs, recentDecisions, recentlyChanged, agentsUsed
 
-        /// The band's heading, for the three that have one.
+        /// The band's heading, for the four that have one.
         public var title: String? {
             switch self {
             case .status, .reviewBanner, .planBanners, .otherPlanBanners: return nil
+            case .runs: return WikiRunsCopy.runs
             case .recentDecisions: return WikiCopy.recentDecisions
             case .recentlyChanged: return WikiCopy.recentlyChanged
             case .agentsUsed:      return WikiCopy.agentsUsed

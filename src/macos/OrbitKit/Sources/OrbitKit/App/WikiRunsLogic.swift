@@ -52,6 +52,8 @@ public enum WikiRunsCopy {
 
     // MARK: the call log
 
+    /// The log itself: the web table's name, and the section a run's page lists its calls under.
+    public static let callsTitle = "Calls"                                         // WIKI_CALLS
     public static let call = "Call"                                                // WIKI_CALL
     public static let callState = "State"                                          // WIKI_CALL_STATE
     public static let callWaited = "Waited"                                        // WIKI_CALL_WAITED
