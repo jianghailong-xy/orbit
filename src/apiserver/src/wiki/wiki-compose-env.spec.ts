@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
+import { WIKI_EXECUTOR_ENV } from '@orbit/shared';
 
 /**
  * docker-compose.yml reads the rollout switches from the host under names no agent session carries.
@@ -45,11 +46,11 @@ function interpolations(compose: string): Array<{ name: string; line: number }> 
   );
 }
 
-/** The apiserver service's `environment:` mapping, each value as written less its quotes. */
-function apiserverEnvironment(compose: string): Map<string, string> {
+/** One service's `environment:` mapping, each value as written less its quotes. */
+function serviceEnvironment(compose: string, service: string): Map<string, string> {
   const lines = compose.split('\n');
-  const start = lines.indexOf('  apiserver:', lines.indexOf('services:'));
-  assert.ok(start > 0, 'docker-compose.yml has no apiserver service');
+  const start = lines.indexOf(`  ${service}:`, lines.indexOf('services:'));
+  assert.ok(start > 0, `docker-compose.yml has no ${service} service`);
   const environment = new Map<string, string>();
   let inEnvironment = false;
   for (const line of lines.slice(start + 1)) {
@@ -90,7 +91,7 @@ test('no interpolation in docker-compose.yml reads a variable the runner puts in
 });
 
 test("the apiserver's ORBIT_WIKI comes from ORBIT_WIKI_MODE and its ORBIT_WATCHES from ORBIT_WATCHES_MODE", () => {
-  const environment = apiserverEnvironment(read('docker-compose.yml'));
+  const environment = serviceEnvironment(read('docker-compose.yml'), 'apiserver');
   for (const [container, host] of [
     ['ORBIT_WIKI', 'ORBIT_WIKI_MODE'],
     ['ORBIT_WATCHES', 'ORBIT_WATCHES_MODE'],
@@ -98,5 +99,30 @@ test("the apiserver's ORBIT_WIKI comes from ORBIT_WIKI_MODE and its ORBIT_WATCHE
     const value = environment.get(container);
     assert.ok(value !== undefined, `the apiserver's environment has no ${container}`);
     assert.match(value, new RegExp(`^\\$\\{${host}(?:[:?+-][^}]*)?\\}$`), `the apiserver's ${container} is not read from ${host}`);
+  }
+});
+
+/**
+ * The wiki's executor switch (wiki-executor-switch.ts, P3) reaches the apiserver and the wiki worker from
+ * one host variable each, under the names the services read — the same pair in both, so the process that
+ * queues a job and the one that runs it decide the same about an account, and each defaults to `runner`.
+ *
+ * These two are NOT read from *_MODE names like the switches above, and that is deliberate: no agent
+ * session carries ORBIT_WIKI_EXECUTOR, which the test below re-reads from the runner's own source. An
+ * invocation of `orbit wiki` inside a session would otherwise be the thing that decides what the
+ * deployment's .env meant.
+ */
+test('the wiki executor switch is read from the host by the apiserver and the wiki worker alike, and defaults to runner', () => {
+  const compose = read('docker-compose.yml');
+  for (const service of ['apiserver', 'wiki-worker']) {
+    const environment = serviceEnvironment(compose, service);
+    for (const name of Object.values(WIKI_EXECUTOR_ENV)) {
+      assert.equal(environment.get(name), `\${${name}:-${name === WIKI_EXECUTOR_ENV.mode ? 'runner' : ''}}`,
+        `the ${service}'s ${name} is ${JSON.stringify(environment.get(name))}, not the host's own with its default`);
+    }
+  }
+  const injected = new Set(sessionVariables());
+  for (const name of Object.values(WIKI_EXECUTOR_ENV)) {
+    assert.equal(injected.has(name), false, `an agent session carries ${name}, so it may not be read as itself`);
   }
 });

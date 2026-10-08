@@ -105,6 +105,16 @@ final class SessionProjectCopyParityTests: XCTestCase {
             "Directly into main · Automatic off · 1 at a time")
     }
 
+    /// The compact landing line's own scale for a runner that has gone quiet — one step shorter than
+    /// the project page's `No report`, and the same fact.
+    func testTheSilentWordIsTheWebsOwn() throws {
+        let web = try web()
+        XCTAssertTrue(web.contains("return minutes === null ? 'no report yet' : `no report for ${minutes}m`;"),
+                      "the compact no-report words drifted")
+        XCTAssertEqual(SessionProjectCopy.landingSilentWord(minutes: nil), "no report yet")
+        XCTAssertEqual(SessionProjectCopy.landingSilentWord(minutes: 11), "no report for 11m")
+    }
+
     func testAllFiveCoordinatorLeadPhrasesAreTheWebsOwn() throws {
         let web = try web()
         let kinds: [CoordinatorLeadKind] = [

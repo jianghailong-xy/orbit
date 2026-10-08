@@ -1,4 +1,5 @@
-import type { ProjectIntegrationInFlight, ProjectPromotionView } from '@orbit/shared';
+import type { ProjectIntegrationInFlight, ProjectLandTask, ProjectPromotionView } from '@orbit/shared';
+import { JOB_PHASES } from '../components/ProjectPanoramaHeader';
 import { sessionTimeSections, type GroupableSession } from './sessionGrouping';
 
 /**
@@ -130,6 +131,47 @@ export function promotionChecksSummary(promotion: ProjectPromotionView): { text:
     text: `${checks} · ${upstream}`,
     clean: promotion.checks.length > 0 && promotion.checks.every(passed) && promotion.conflicts.length === 0,
   };
+}
+
+/** The word the card prints before `promotionBlockedBy`'s sentence. */
+export const BLOCKED_BY = 'Blocked by';
+
+/**
+ * WHO IS IN FRONT OF THIS MERGE, when the project's own line is busy — the sentence that turns
+ * "Coordinator is resolving it" into an answer.
+ *
+ * A blocked candidate says why IT cannot merge (`promotionBlockedLine`); this says what the platform
+ * is doing about the branch until it can. The landings a project has in flight are the project's own
+ * read (`ProjectIntegrationView.landTasks`), and one of them is holding the line this merge has to
+ * go through — it targets either the branch the candidate merges FROM or the branch it merges INTO.
+ * Its `blockingReason` is the server's sentence about what holds THAT landing, and it names the job
+ * or the task in front of it, so the chain is read off two rows rather than inferred here: nothing
+ * in this function looks at a clock, a heartbeat or a task status.
+ *
+ * Null when the line is doing nothing on those branches: a card with nothing to name says nothing,
+ * rather than inventing a step to point at.
+ */
+export function promotionBlockedBy(
+  promotion: ProjectPromotionView,
+  landings: readonly ProjectLandTask[] | null | undefined,
+): string | null {
+  const sameBranch = (a: string, b: string): boolean => shortRef(a) === shortRef(b);
+  const holding = (landings ?? []).find((landing) => {
+    const job = landing.integration?.landTask;
+    if (!job || (job.state !== 'QUEUED' && job.state !== 'RUNNING')) return false;
+    return sameBranch(job.targetRef, promotion.sourceRef) || sameBranch(job.targetRef, promotion.upstreamRef);
+  });
+  const job = holding?.integration.landTask;
+  if (!holding || !job) return null;
+  const state = job.state === 'RUNNING'
+    ? (job.phase ? JOB_PHASES[job.phase] ?? 'running' : 'running')
+    : 'queued';
+  const parts = [
+    `“${holding.taskTitle}” is landing on the project line`,
+    state,
+    job.blockingReason?.summary ?? null,
+  ].filter((part): part is string => part !== null);
+  return parts.join(' · ');
 }
 
 /** D's reason with its files: `2 files conflict with main: a.go, b.go`, three named at most. */

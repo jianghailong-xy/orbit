@@ -397,20 +397,24 @@ export function providerChoices(
         }]
       : [];
   const antigravityKeys = byok.filter((choice) => runtimeForProvider(choice.slug, configured) === AgentProvider.ANTIGRAVITY);
-  // OpenCode, once the runner reports it installed — it has no sign-in to offer, so a machine without
-  // it has nothing to fix here either. Its own config first, then every key it may spend (shared
-  // `openCodeKeys`): it speaks each dialect a configured key does, so the same key is listed under
-  // its own engine above and here, as `opencode/<slug>`.
-  const openCode: ProviderChoice[] = engineHealth?.find((e) => e.engine === AgentProvider.OPENCODE)?.installed
-    ? [
-        {
-          slug: AgentProvider.OPENCODE,
-          label: ENGINE_LABELS[AgentProvider.OPENCODE],
-          kind: 'engine' as const,
-          ...brandForProvider(AgentProvider.OPENCODE, ENGINE_LABELS[AgentProvider.OPENCODE]),
-          modelLabel: defaultModelLabel(AgentProvider.OPENCODE, modelCatalog, configured, runtimeDefaultModels),
-        },
-        ...configured
+  // OpenCode, installed or not: Orbit installs it, so a machine without it is a row the picker can
+  // send somewhere rather than an empty space — the same rule DSH and the login engines are listed
+  // under. It has no sign-in to offer (its own login picks an underlying provider interactively), so
+  // the row is never a pick until the CLI is there. Then its keys, which are only worth listing once
+  // it runs (shared `openCodeKeys`): it speaks each dialect a configured key does, so the same key is
+  // listed under its own engine above and here, as `opencode/<slug>`.
+  const openCodeInstalled = engineHealth?.find((e) => e.engine === AgentProvider.OPENCODE)?.installed === true;
+  const openCode: ProviderChoice[] = [
+    {
+      slug: AgentProvider.OPENCODE,
+      label: ENGINE_LABELS[AgentProvider.OPENCODE],
+      kind: 'engine' as const,
+      ...brandForProvider(AgentProvider.OPENCODE, ENGINE_LABELS[AgentProvider.OPENCODE]),
+      modelLabel: defaultModelLabel(AgentProvider.OPENCODE, modelCatalog, configured, runtimeDefaultModels),
+      ...(openCodeInstalled ? {} : { unavailable: 'Not installed', fixEngine: AgentProvider.OPENCODE }),
+    },
+    ...(openCodeInstalled
+      ? configured
           .filter((p) => p.runsOnOpenCode && !poolSlugs.has(p.slug))
           .map((p) => ({
             slug: openCodeKeyChoice(p.slug),
@@ -418,9 +422,9 @@ export function providerChoices(
             kind: 'byok' as const,
             ...brandForProvider(p.slug, p.label, p.presetSlug),
             modelLabel: defaultModelLabel(openCodeKeyChoice(p.slug), modelCatalog, configured, runtimeDefaultModels),
-          })),
-      ]
-    : [];
+          }))
+      : []),
+  ];
   return [
     ...engines.flatMap((choice) => choice.slug === AgentProvider.KIMI ? [...antigravityKeys, choice] : [choice]),
     ...accountPools,

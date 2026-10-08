@@ -149,6 +149,27 @@ export const WIKI_SAVE = 'Save';
 /** What the pickers say before the owner has a workspace, or a provider this build can list. */
 export const WIKI_NO_WORKSPACE = 'Pick a workspace';
 
+/**
+ * Maintenance while the server executes the account's wiki (design §2.2, mock 35 ①②; contract
+ * `jobs.executor.read`): the provider is gone — the model is the deployment's System model, said read-only with its
+ * state — the workspace is where the repository is read from, and one sentence says where the material goes.
+ * Under runner none of these is said, and the page is what it always was.
+ */
+export const WIKI_REPO_FROM = 'Reads the repository from';
+export const WIKI_REPO_FROM_NOTE = 'The runner that checks out this codebase; the server reads the repository there.';
+export const WIKI_MODEL = 'Model';
+export const WIKI_MODEL_NOTE = 'Set by this deployment, the same for every space.';
+export const WIKI_MAINTENANCE_NOTE_SERVER =
+  'Keeps the wiki up to date from sessions, tasks and receipts as they settle. Runs on the server with this deployment’s System model.';
+export const WIKI_PRIVACY_NOTE =
+  'The wiki sends its material — session summaries, entries and repository excerpts — to this deployment’s System model.';
+/** Automatic's sentence when the server's System model does the checking (P3). */
+export const WIKI_MODE_NOTE_AUTOMATIC_SERVER =
+  'The System model checks each change against its sources first: supported ones apply, partly supported ones show as Unreviewed, the rest are rejected with a reason.';
+/** A mode's sentence, as the server's execution has it said. */
+export const wikiModeNote = (mode: WikiReviewMode, server: boolean): string =>
+  server && mode === 'automatic' ? WIKI_MODE_NOTE_AUTOMATIC_SERVER : WIKI_MODE_NOTES[mode];
+
 /** A workspace as the picker lists it: its name, and the runner it lives on. */
 export function wikiWorkspaceLabel(workspace: { name?: string | null; runner?: { name?: string | null; displayName?: string | null } | null }): string {
   const runner = workspace.runner?.displayName || workspace.runner?.name || null;

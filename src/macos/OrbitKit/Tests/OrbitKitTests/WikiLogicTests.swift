@@ -231,15 +231,23 @@ final class WikiLogicTests: XCTestCase {
         }
         nav.path = [.wikiActivity, .wikiRun(changesetID: "c1")]
         XCTAssertNil(nav.wikiContentsAt, "a run opened from Activity lights nothing either")
+        // A server run's page, pushed from Activity's Runs band or its status line's View run (mock 35 ⑤).
+        nav.path = [.wikiActivity, .wikiJob(jobID: "j1")]
+        XCTAssertNil(nav.wikiContentsAt, "a server run opened from Activity lights nothing")
+        XCTAssertEqual(nav.selectedWikiJobID, "j1")
+        XCTAssertNil(nav.selectedWikiRunID, "a server run is no changeset")
+        nav.path = [.wikiActivity]
+        XCTAssertNil(nav.selectedWikiJobID)
     }
 
     /// Activity's blocks, top to bottom (mock 31 ②): the home's management blocks in their order, the
-    /// other spaces' plan banners after the space's own, and Principles not among them — it is content.
+    /// other spaces' plan banners after the space's own, the server's runs after them (mock 35 ④), and
+    /// Principles not among them — it is content.
     func testTheActivityBandsOrder() {
-        XCTAssertEqual(WikiLogic.ActivityBand.allCases, [.status, .reviewBanner, .planBanners, .otherPlanBanners,
+        XCTAssertEqual(WikiLogic.ActivityBand.allCases, [.status, .reviewBanner, .planBanners, .otherPlanBanners, .runs,
                                                          .recentDecisions, .recentlyChanged, .agentsUsed])
         XCTAssertEqual(WikiLogic.ActivityBand.allCases.compactMap(\.title),
-                       ["Recent decisions", "Recently changed", "Agents used the wiki"])
+                       ["Runs", "Recent decisions", "Recently changed", "Agents used the wiki"])
         XCTAssertFalse(WikiLogic.ActivityBand.allCases.map(\.rawValue).contains("principles"))
     }
 

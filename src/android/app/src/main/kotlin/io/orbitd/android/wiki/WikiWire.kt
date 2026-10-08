@@ -227,7 +227,8 @@ data class WikiMaintenanceHealth(
 ) {
     data class Held(val reason: String, val at: String)
     data class Running(val sessionId: String?, val startedAt: String)
-    data class LastRun(val sessionId: String?, val outcome: String?, val endedAt: String)
+    /** What View run opens: the run's session, or the server's job (`jobId`, P9) of a run that has no session. */
+    data class LastRun(val sessionId: String?, val outcome: String?, val endedAt: String, val jobId: String? = null)
     data class LastFailure(val kind: String, val reason: String?, val at: String, val sessionId: String?)
     companion object {
         /** Every field reads as its default when a server one release apart leaves it out. */
@@ -239,7 +240,7 @@ data class WikiMaintenanceHealth(
                 if (reason != null && at != null) Held(reason, at) else null
             }
             val running = (c["running"] as? JsonObject)?.let { r -> r["startedAt"].text()?.let { Running(r["sessionId"].text(), it) } }
-            val lastRun = (c["lastRun"] as? JsonObject)?.let { r -> r["endedAt"].text()?.let { LastRun(r["sessionId"].text(), r["outcome"].text(), it) } }
+            val lastRun = (c["lastRun"] as? JsonObject)?.let { r -> r["endedAt"].text()?.let { LastRun(r["sessionId"].text(), r["outcome"].text(), it, r["jobId"].text()) } }
             val lastFailure = (c["lastFailure"] as? JsonObject)?.let { f ->
                 val kind = f["kind"].text(); val at = f["at"].text()
                 if (kind != null && at != null) LastFailure(kind, f["reason"].text(), at, f["sessionId"].text()) else null
@@ -252,12 +253,35 @@ data class WikiMaintenanceHealth(
     }
 }
 
-data class WikiSpaceHealth(val spaceId: String, val entries: Int, val maintenance: WikiMaintenanceHealth) {
+/** The repository half of the health read (P2): its look (contract `repoOps.looks`), and how many of the space's
+ * repository operations wait. */
+data class WikiSpaceRepoHealth(val look: String?, val pending: Int = 0)
+
+/** Contract `jobs.executor.read` (P9): the mode, and whether the server executes this account's wiki. */
+data class WikiExecutorView(val mode: String?, val serverExecutes: Boolean = false)
+
+/** The System model as the health read carries it while the server executes the wiki (contract `systemModel.read`):
+ * its state, its name and when — never its address or key. */
+data class WikiSystemModelStatus(val state: String?, val model: String? = null, val since: String? = null,
+    val checkedAt: String? = null, val workerSeenAt: String? = null)
+
+/** `GET /wiki/spaces/:id/health` — and, from P2 and P9 on, what the server's runs depend on: the repository's look,
+ * whether the server executes this account's wiki (`executor`), and the System model's state while it does. Each is
+ * absent from an older control plane, which reads as runner and draws the line as it always was. */
+data class WikiSpaceHealth(val spaceId: String, val entries: Int, val maintenance: WikiMaintenanceHealth,
+    val repo: WikiSpaceRepoHealth? = null, val executor: WikiExecutorView? = null, val systemModel: WikiSystemModelStatus? = null) {
+    /** The server runs this account's wiki: what the status line's server reasons ask first. */
+    val serverExecutes: Boolean get() = executor?.serverExecutes == true
     companion object {
         fun decode(element: JsonElement): WikiSpaceHealth {
             val c = element.jsonObject
+            val repo = (c["repo"] as? JsonObject)?.let { WikiSpaceRepoHealth(it["look"].text(), it["pending"].integer() ?: 0) }
+            val executor = (c["executor"] as? JsonObject)?.let { WikiExecutorView(it["mode"].text(), it["serverExecutes"].bool() ?: false) }
+            val systemModel = (c["systemModel"] as? JsonObject)?.let {
+                WikiSystemModelStatus(it["state"].text(), it["model"].text(), it["since"].text(), it["checkedAt"].text(), it["workerSeenAt"].text())
+            }
             return WikiSpaceHealth(requireNotNull(c["spaceId"].text()), requireNotNull(c["entries"].integer()),
-                WikiMaintenanceHealth.read(c["maintenance"]))
+                WikiMaintenanceHealth.read(c["maintenance"]), repo, executor, systemModel)
         }
     }
 }

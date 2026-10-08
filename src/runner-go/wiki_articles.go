@@ -1312,8 +1312,9 @@ func wikiArticlesCallError(spaceID, slug string, err error) error {
 const wikiArticleStaleCode = "WIKI_ARTICLE_STALE"
 
 // wikiServerExecutesCode is the runner door's answer for an account the Orbit server runs the wiki for
-// (contract `refusals`, `articles.serverExecution`): the server's wiki worker writes the articles with the
-// deployment's System model, and no session's provider is asked.
+// (contract `refusals`, `articles.serverExecution`, `plan.jobs.server.door`): the server's wiki worker writes the
+// articles and drafts the plan with the deployment's System model, and no session's provider is asked. A plan
+// draft or revision meets it at its first call, before it has asked any model anything.
 const wikiServerExecutesCode = "WIKI_SERVER_EXECUTES"
 
 // errWikiServerExecutes stops a run whose topic the server answered WIKI_SERVER_EXECUTES for.
