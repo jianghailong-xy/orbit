@@ -71,6 +71,22 @@ final class MergeRecoveryWiringTests: XCTestCase {
         XCTAssertTrue(pill.contains(".frame(minHeight: 24)"), "the row holds the 30pt collapsed bar instead")
     }
 
+    /// The owner's report, 2026-10-09: Merge pressed just after sending a message came back "wait for
+    /// the current turn to finish before merging". The bar held Merge back only on `.running`, and a
+    /// sent message queues its turn first. The bar and this sheet now share one gate, and both hand
+    /// it the send in flight and the sub-agents still at work.
+    func testTheBarAndTheSheetHoldMergeOnTheSameTurnGate() throws {
+        let pill = code(try slice(source("Views/WorktreeBar.swift"), from: "private func pill(", to: "let primary = "))
+        let review = code(try slice(source("Views/MergeRecoverySheet.swift"),
+                                    from: "private func review(", to: "let working = "))
+        for (name, gate) in [("bar", pill), ("sheet", review)] {
+            XCTAssertTrue(gate.contains("WorktreeBarLogic.turnActive("), "the \(name) reads the shared gate")
+            XCTAssertTrue(gate.contains("runningSubagents: session?.runningSubagentCount"), "the \(name) counts sub-agents")
+            XCTAssertTrue(gate.contains("sending: console.sending || console.awaitingReply"), "the \(name) counts the send")
+            XCTAssertFalse(gate.contains("== .running"), "the \(name) keeps no status check of its own")
+        }
+    }
+
     /// The owner's report, 2026-10-01: the review led with a file diff the branch bar already shows,
     /// and its note pointed at "the local-only commits above" when there were none. It now leads with
     /// the branches and the commits the push adds, the diff as that list's last row, and its note is

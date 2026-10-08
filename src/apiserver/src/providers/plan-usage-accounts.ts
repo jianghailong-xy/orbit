@@ -12,6 +12,7 @@ import {
   accountDir,
   accountOfEnv,
   accountToMoveTo,
+  accountToMoveToAt,
   accountToStartOn,
   isAccountEngine,
   planUsageBlockedUntil,
@@ -151,8 +152,9 @@ export function automaticCodexAccount(
  * runner's accounts that can run now (accountToMoveTo) — when the session is on Automatic (nobody
  * picked its account by hand: `pinned`) and its workspace leaves the account to Orbit. `from` is the
  * account the session ran on, as dispatch resolved it. Null when the session stays and waits for that
- * account's reset: a hand-picked account, a workspace pinned to one, a runner with no second account,
- * or no other account with room.
+ * account's reset: a hand-picked account, a workspace pinned to one, a runner with no second account —
+ * or no other account with room, when it waits for the first account to free up, that one or another
+ * (accountAfterUsageLimitAt).
  */
 /**
  * Where a session on Automatic goes BEFORE a turn is dispatched to it, when its runner's own snapshot
@@ -195,6 +197,29 @@ export function accountAfterUsageLimit(
   const usage = weighedPlanUsage(planUsage, runnerEngines);
   const to = accountToMoveTo(engine, accountsOf(engine, runnerEngines, accountPauses, now), usage, now, from);
   return to ? { from, to } : null;
+}
+
+/**
+ * When a session on Automatic that its account's usage limit stopped can go again on another of the
+ * runner's accounts — what its retry waits for, where accountAfterUsageLimit is where it goes: `now`
+ * while one has room (the retry's dispatch moves it there, accountBeforeDispatch), else when the first
+ * of them frees up (accountToMoveToAt). Null when the session is pinned, its workspace decides, or no
+ * other account names such a moment: then only its own account's reset says when.
+ */
+export function accountAfterUsageLimitAt(
+  engine: AccountEngine,
+  session: { account?: string | null; pinned?: boolean },
+  workspace: AccountWorkspace | null | undefined,
+  runnerEngines: unknown,
+  planUsage: unknown,
+  now: Date,
+  accountPauses?: unknown,
+): Date | null {
+  if (session.pinned || !workspaceLeavesAccountToOrbit(engine, workspace, runnerEngines)) return null;
+  const from = runAccount(engine, workspace?.env, { [ACCOUNT_CHOICE[engine]]: session.account }, runnerEngines);
+  if (!from) return null;
+  const usage = weighedPlanUsage(planUsage, runnerEngines);
+  return accountToMoveToAt(engine, accountsOf(engine, runnerEngines, accountPauses, now), usage, now, from);
 }
 
 /** What an account's name is read from: the runner's report, and the names its accounts were given in

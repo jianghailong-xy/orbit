@@ -150,8 +150,9 @@ This command does not change task status and does not add a comment.
 Usage:
   orbit task evidence-decide [task-id] --decision CONFIRM|SEND_BACK --evidence-revision N [--note TEXT] [--json]
 
-Records THIS session's decision about one evidence revision as one row, and writes nothing else:
-no task status, no session state, no comment. --evidence-revision is the revision you read, exactly
+Records THIS session's decision about one evidence revision as one row, plus the status that row
+derives (a CONFIRM of an EVIDENCE_JUDGMENT task's current revision settles it DONE) — no comment,
+no other session state. --evidence-revision is the revision you read, exactly
 as evidence-list returns it, and it must still be the task's latest — an answer to a superseded
 version is refused (EVIDENCE_JUDGMENT_EVIDENCE_SUPERSEDED). The criterion the evidence quotes must
 still be worded the way the project states it today (EVIDENCE_JUDGMENT_CRITERION_MOVED), and the
@@ -160,8 +161,9 @@ session that acts for one project (its coordinator, a judgment session opened fo
 of its tasks) is refused for a task in another (EVIDENCE_JUDGMENT_TASK_IN_ANOTHER_PROJECT): a task's
 evidence is decided from the project it is in now, and a task moved out takes its undecided
 evidence with it, so the project it left can no longer decide it.
---note is required for SEND_BACK: nothing else is written, so it is all the next revision has to
-aim at. The deciding Session is ORBIT_SESSION_ID and is not a flag.
+--note is required for SEND_BACK: it is delivered to the run that submitted the revision as a
+platform message, so it is what the next revision aims at. The deciding Session is ORBIT_SESSION_ID
+and is not a flag.
 `,
 	"create": `orbit task create — create a task
 

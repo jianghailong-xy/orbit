@@ -782,12 +782,15 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 			p.emit(evError, map[string]interface{}{"message": err.Error()})
 			return false
 		}
-		p.emitFor(activeID, evUser, map[string]interface{}{"text": resp.Content,
-			"runtimeSessionId": sessionID, "localTurnId": activeID})
-		if len(resp.Attachments) > 0 {
-			settle(dshPromptResult{turnID: activeID, err: fmt.Errorf("DeepSeek Harness ACP does not support attachments in this composition")}, true)
-			return true
+		// This composition takes text only (no image, audio or embedded-context prompts), so attachments
+		// are saved as files and named in the prompt. Fetched before the turn is recorded: a crash until
+		// then leaves a turn that is safe to run again.
+		text, refs := prepareTextOnlyPrompt(p.ctx, p.t, p.job, resp, nil)
+		userEvent := map[string]interface{}{"text": resp.Content, "runtimeSessionId": sessionID, "localTurnId": activeID}
+		if len(refs) > 0 {
+			userEvent["attachments"] = refs
 		}
+		p.emitFor(activeID, evUser, userEvent)
 		turnID := activeID
 		permissions.begin()
 		// Recorded before the prompt is written: from here a crash leaves a turn that must not be replayed.
@@ -798,7 +801,7 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		promptWG.Add(1)
 		go func() {
 			defer promptWG.Done()
-			result, err := app.prompt(p.ctx, sessionID, turnID, resp.Content)
+			result, err := app.prompt(p.ctx, sessionID, turnID, text)
 			promptDone <- dshPromptResult{turnID: turnID, result: result, err: err}
 		}()
 		return true

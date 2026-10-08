@@ -220,6 +220,8 @@ public extension Session {
                 claudeAccountPinned: claudeAccountPinned,
                 antigravityAccount: antigravityAccount,
                 antigravityAccountPinned: antigravityAccountPinned,
+                kimiAccount: kimiAccount,
+                kimiAccountPinned: kimiAccountPinned,
                 awaitingReplyFrom: awaitingReplyFrom ?? self.awaitingReplyFrom,
                 owesReplyTo: owesReplyTo ?? self.owesReplyTo,
                 folderId: folderId ?? self.folderId,
