@@ -37,12 +37,15 @@ const kimiManagedProvider = "managed:kimi-code"
 // A Kimi Code too old to know `--region` signs in where it always did — kimi.com, on an install
 // Orbit made — so kimi.com is a bare login there, and kimi.ai is refused in words the user can act
 // on rather than quietly signed in on the other site.
-func kimiLoginArgv(argv []string, region string) ([]string, string) {
+//
+// env is the environment the sign-in runs in (nil: this process's own, Default's): its help is asked
+// there too, so asking about an account's sign-in runs nothing in Default's home.
+func kimiLoginArgv(argv []string, region string, env []string) ([]string, string) {
 	if region != kimiRegionMainland && region != kimiRegionGlobal {
 		return nil, "unknown Kimi site " + strconv.Quote(region) + " — start the sign-in again"
 	}
 	spec, _ := specFor(providerKimi)
-	if path, ok := lookLoginEngine(providerKimi); ok && loginHelpMentions(path, spec, nil, "--region") {
+	if path, ok := lookLoginEngine(providerKimi); ok && loginHelpMentions(path, spec, env, "--region") {
 		return append(argv, "--region", region), ""
 	}
 	if region == kimiRegionGlobal {
@@ -70,13 +73,17 @@ func askKimiRegion() string {
 }
 
 // probeKimiLoginRegion asks the CLI which site its own login is on. Config only, like the model
-// catalog's read of the same command: no session, no network, no LLM call.
-func probeKimiLoginRegion(binPath string) string {
+// catalog's read of the same command: no session, no network, no LLM call. env is the CLI's
+// environment (nil: this process's own), so one account's KIMI_CODE_HOME can be asked instead of
+// Default's.
+func probeKimiLoginRegion(binPath string, env []string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	cmd := exec.CommandContext(ctx, binPath, "provider", "list", "--json")
+	cmd.Env = env
 	// Output(), not CombinedOutput(): the payload carries every configured provider's api_key, which
 	// must not reach a log. Nothing but the site is kept from it.
-	out, err := exec.CommandContext(ctx, binPath, "provider", "list", "--json").Output()
+	out, err := cmd.Output()
 	if err != nil {
 		return ""
 	}
