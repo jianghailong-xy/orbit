@@ -474,7 +474,12 @@ export const CLAUDE_ACCOUNT_REMOVE_V1 = 'claude-account-remove/v1';
  *  account named by the control plane — its own Gemini directory — rather than its one Google sign-in. */
 export { ANTIGRAVITY_ACCOUNT_LOGIN_V1 } from '../providers/account-move-capability';
 export const ANTIGRAVITY_ACCOUNT_REMOVE_V1 = 'antigravity-account-remove/v1';
-export { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
+/** Kimi Code's, the same two again: a runner that declares them signs in, and removes, a Kimi account
+ *  named by the control plane — its own KIMI_CODE_HOME, on the site the sign-in names — rather than the
+ *  machine's one Kimi login. */
+export const KIMI_ACCOUNT_LOGIN_V1 = 'kimi-account-login/v1';
+export const KIMI_ACCOUNT_REMOVE_V1 = 'kimi-account-remove/v1';
+export { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1, KIMI_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
 
 /** What a runner declares before it is handed a sign-in, or a removal, of a named account of each
  *  engine that keeps accounts — and what that engine is called when it is too old to. */
@@ -482,16 +487,19 @@ const ACCOUNT_LOGIN_CAPABILITY = {
   codex: CODEX_ACCOUNT_LOGIN_V1,
   claude: CLAUDE_ACCOUNT_LOGIN_V1,
   antigravity: ANTIGRAVITY_ACCOUNT_LOGIN_V1,
+  kimi: KIMI_ACCOUNT_LOGIN_V1,
 } as const satisfies Record<AccountEngine, string>;
 const ACCOUNT_REMOVE_CAPABILITY = {
   codex: CODEX_ACCOUNT_REMOVE_V1,
   claude: CLAUDE_ACCOUNT_REMOVE_V1,
   antigravity: ANTIGRAVITY_ACCOUNT_REMOVE_V1,
+  kimi: KIMI_ACCOUNT_REMOVE_V1,
 } as const satisfies Record<AccountEngine, string>;
 const ACCOUNT_ENGINE_LABEL = {
   codex: 'Codex',
   claude: 'Claude',
   antigravity: 'Antigravity',
+  kimi: 'Kimi',
 } as const satisfies Record<AccountEngine, string>;
 /** Runner guarantees a durable compaction boundary before the next Claude top-level turn. */
 export const SESSION_CLAUDE_COORDINATOR_CONTEXT_V1 =
@@ -2636,6 +2644,7 @@ export class RunnerApiController {
           codexAccount: s.codexAccount ?? workspace?.codexAccount,
           claudeAccount: s.claudeAccount ?? workspace?.claudeAccount,
           antigravityAccount: s.antigravityAccount ?? workspace?.antigravityAccount,
+          kimiAccount: s.kimiAccount ?? workspace?.kimiAccount,
           runnerEngines: s.assignedRunner?.engines,
         });
       let exec = resolveExec(s.model);
@@ -3548,7 +3557,7 @@ export class RunnerApiController {
           const session = await tx.session.findUniqueOrThrow({
             where: { id: sessionId },
             include: {
-              workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true } },
+              workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
               assignedRunner: { select: { engines: true, accountPauses: true } },
             },
           });
@@ -3999,7 +4008,8 @@ export class RunnerApiController {
         codexAccount: true,
         claudeAccount: true,
         antigravityAccount: true,
-        workspace: { select: { model: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true } },
+        kimiAccount: true,
+        workspace: { select: { model: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true, engines: true } },
       },
     });
@@ -4036,6 +4046,7 @@ export class RunnerApiController {
       codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
       claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
       antigravityAccount: session.antigravityAccount ?? session.workspace?.antigravityAccount,
+      kimiAccount: session.kimiAccount ?? session.workspace?.kimiAccount,
       runnerEngines: session.assignedRunner?.engines,
     });
     // A built-in engine authenticates itself, so moving onto one injects nothing — but the
@@ -6315,7 +6326,7 @@ export class RunnerApiController {
         quotaSpent && accountEnvVar(current.provider) && current.workspaceId
           ? await tx.workspace.findUnique({
               where: { id: current.workspaceId },
-              select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true },
+              select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true },
             })
           : null;
       // A pool credential that ended the run is waited out the same way, from the pool's rows rather than
@@ -7254,10 +7265,12 @@ export class RunnerApiController {
         codexAccount: true,
         claudeAccount: true,
         claudeAccountPinned: true,
+        // The Kimi account the run spent, whose quota alone says when it frees up (quotaRetryAt).
+        kimiAccount: true,
         poolSwitchNotice: true,
         poolCodexAccountId: true,
         poolKeyId: true,
-        workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
+        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, kimiAccount: true } },
       },
     });
     if (!session) return {};
@@ -7394,7 +7407,7 @@ export class RunnerApiController {
   private async quotaRetryAt(
     tx: QuotaRetryTransaction,
     runnerId: string,
-    session: { ownerId: string; provider: string; providerBuiltin?: boolean; codexAccount: string | null; claudeAccount?: string | null; antigravityAccount?: string | null },
+    session: { ownerId: string; provider: string; providerBuiltin?: boolean; codexAccount: string | null; claudeAccount?: string | null; antigravityAccount?: string | null; kimiAccount?: string | null },
     text: string,
     workspace: ({ env: unknown } & WorkspaceAccountChoices) | null | undefined,
   ): Promise<Date | null> {
@@ -7423,6 +7436,7 @@ export class RunnerApiController {
             codexAccount: session.codexAccount ?? workspace?.codexAccount,
             claudeAccount: session.claudeAccount ?? workspace?.claudeAccount,
             antigravityAccount: session.antigravityAccount ?? workspace?.antigravityAccount,
+            kimiAccount: session.kimiAccount ?? workspace?.kimiAccount,
           },
           runner?.engines,
         ),

@@ -659,6 +659,7 @@ const ACCOUNT_MOVE_CAPABILITY: Record<AccountEngine, string> = {
   codex: 'codex-account-move/v1',
   claude: 'claude-account-move/v1',
   antigravity: ANTIGRAVITY_ACCOUNT_LOGIN_CAPABILITY,
+  kimi: 'kimi-account-move/v1',
 };
 /** Where a session, and its workspace, keep the account each engine runs on — and whether a session's
  *  was picked by hand. */
@@ -666,11 +667,13 @@ const ACCOUNT_FIELD = {
   codex: 'codexAccount',
   claude: 'claudeAccount',
   antigravity: 'antigravityAccount',
+  kimi: 'kimiAccount',
 } as const satisfies Record<AccountEngine, string>;
 const ACCOUNT_PINNED_FIELD = {
   codex: 'codexAccountPinned',
   claude: 'claudeAccountPinned',
   antigravity: 'antigravityAccountPinned',
+  kimi: 'kimiAccountPinned',
 } as const satisfies Record<AccountEngine, string>;
 /** What the composer sends to put a session back on Automatic (PATCH /sessions/:id/account). */
 const AUTOMATIC_ACCOUNT = 'automatic';
@@ -7480,6 +7483,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           codexAccount?: string | null;
           claudeAccount?: string | null;
           antigravityAccount?: string | null;
+          kimiAccount?: string | null;
         }
       | null
       | undefined,

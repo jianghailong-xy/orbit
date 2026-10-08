@@ -1633,6 +1633,10 @@ export interface SessionDetail {
   antigravityAccount?: string | null;
   /** See codexAccountPinned. */
   antigravityAccountPinned?: boolean;
+  /** The Kimi Code account picked or chosen for this session; null follows the workspace's. */
+  kimiAccount?: string | null;
+  /** See codexAccountPinned. */
+  kimiAccountPinned?: boolean;
   // When the armed auto-retry fires (null = nothing armed), and how many attempts this run of
   // failures has already spent. Drives the transcript's quota / provider-error card.
   retryAt?: string | null;
@@ -1654,6 +1658,8 @@ export interface SessionDetail {
     claudeAccount?: string | null;
     /** The Antigravity Google account this workspace's sessions run on; null is Default. */
     antigravityAccount?: string | null;
+    /** The Kimi Code account this workspace's sessions run on; null is Default. */
+    kimiAccount?: string | null;
   } | null;
   branch?: string | null;
   baseSha?: string | null;

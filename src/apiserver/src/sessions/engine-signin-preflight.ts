@@ -193,7 +193,8 @@ export function signedOutEngineRefusal(args: {
   /** The workspace's custom environment, which the runner layers onto the engine process. */
   workspaceEnv?: unknown;
   /** The accounts this session's workspace pins it to, one per engine that keeps accounts
-   *  (Workspace.codexAccount / claudeAccount / antigravityAccount). Absent or null is Default. */
+   *  (Workspace.codexAccount / claudeAccount / antigravityAccount / kimiAccount). Absent or null is
+   *  Default. */
   accounts?: WorkspaceAccountChoices | null;
   runner: EnginePreflightRunner;
   nowMs?: number;

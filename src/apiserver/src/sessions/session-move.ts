@@ -194,13 +194,13 @@ export function branchAfterMove(
 /**
  * The account columns a move writes (§5.1). On the same runner the session stays on the account it
  * actually runs on, written onto the session: an empty column follows the workspace, and a Codex
- * conversation lives in its account's directory. On another runner the columns are cleared and
- * follow the new workspace — an account id names a slot on one machine only.
+ * conversation lives in its account's directory (a Claude or Kimi one too). On another runner the
+ * columns are cleared and follow the new workspace — an account id names a slot on one machine only.
  */
 export function accountsAfterMove(args: {
   sameRunner: boolean;
-  session: { provider: string; claudeAccount: string | null; codexAccount: string | null };
-  from: { env: unknown; claudeAccount: string | null; codexAccount: string | null } | null;
+  session: { provider: string; claudeAccount: string | null; codexAccount: string | null; kimiAccount: string | null };
+  from: { env: unknown; claudeAccount: string | null; codexAccount: string | null; kimiAccount: string | null } | null;
   runnerEngines: unknown;
 }): {
   claudeAccount?: string | null;
@@ -209,11 +209,13 @@ export function accountsAfterMove(args: {
   codexAccountPinned?: boolean;
   antigravityAccount?: string | null;
   antigravityAccountPinned?: boolean;
+  kimiAccount?: string | null;
+  kimiAccountPinned?: boolean;
 } {
   if (!args.sameRunner) {
     return {
       claudeAccount: null, claudeAccountPinned: false, codexAccount: null, codexAccountPinned: false,
-      antigravityAccount: null, antigravityAccountPinned: false,
+      antigravityAccount: null, antigravityAccountPinned: false, kimiAccount: null, kimiAccountPinned: false,
     };
   }
   // A configured provider or a pool runs on a credential of its own, not on one of the runner's accounts.
@@ -227,6 +229,11 @@ export function accountsAfterMove(args: {
     const choice = { codexAccount: session.codexAccount ?? args.from?.codexAccount };
     const current = runAccount(AgentProvider.CODEX, args.from?.env, choice, args.runnerEngines);
     return typeof current === 'string' ? { codexAccount: current } : {};
+  }
+  if (session.provider === AgentProvider.KIMI) {
+    const choice = { kimiAccount: session.kimiAccount ?? args.from?.kimiAccount };
+    const current = runAccount(AgentProvider.KIMI, args.from?.env, choice, args.runnerEngines);
+    return typeof current === 'string' ? { kimiAccount: current } : {};
   }
   return {};
 }
