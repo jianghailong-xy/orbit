@@ -32,6 +32,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { TASK_COMPLETION_FENCE_REVISION } from '../tasks/task-completion-criterion';
 import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
+import { queueWikiArticlesAfterSessionRun } from './wiki-articles-jobs';
 import {
   afterSql,
   comparePositions,
@@ -982,6 +983,9 @@ export async function finishWikiMaintenanceRun(
       report,
       opsRefused: refused,
     }, now);
+    // The articles the run's end owes, when the executor gives this account to the server (contract
+    // `articles.regeneration`); under the default runner executor nothing is read. Never throws.
+    await queueWikiArticlesAfterSessionRun(prisma, { ownerId, spaceId, sessionId });
     return answer;
   } catch (error) {
     const said = (error as { response?: { message?: unknown } }).response?.message;
