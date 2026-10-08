@@ -212,7 +212,8 @@ class DirectoryDeviceTest {
             val body = when (path) {
                 "/api/auth/login" -> """{"accessToken":"a05-fixture-access","refreshToken":"a05-fixture-refresh","user":{"id":"fixture-user","email":"a05@example.test","name":"Directory fixture"}}"""
                 "/api/users/me" -> """{"id":"fixture-user","email":"a05@example.test","name":"Directory fixture"}"""
-                "/api/workspaces" -> """[{"id":"$workspaceId","name":"Field notes","runnerId":"runner","enabled":true}]"""
+                // Never reordered: the server sends an explicit null position.
+                "/api/workspaces" -> """[{"id":"$workspaceId","name":"Field notes","runnerId":"runner","enabled":true,"position":null}]"""
                 "/api/runners" -> """[{"id":"runner","name":"Fixture runner","online":true}]"""
                 "/api/session-folders" -> """[{"id":"$folderId","workspaceId":"$workspaceId","name":"Research"}]"""
                 "/api/sessions" -> if (request.requestUrl!!.queryParameter("view") == if (completed) "completed" else "open") "[$session]" else "[]"

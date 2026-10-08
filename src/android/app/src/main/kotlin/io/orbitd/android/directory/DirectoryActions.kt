@@ -1,6 +1,5 @@
 package io.orbitd.android.directory
 
-import android.content.Intent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -8,12 +7,10 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.core.protocol.SessionAction
 import io.orbitd.android.navigation.ObjectId
-import java.time.Instant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
@@ -150,7 +147,7 @@ fun DirectoryActionDialog(dialog: DirectoryDialog, api: DirectoryApi, data: Dire
                         dialog.targets.branch?.let { Text("Worktree changes stay on $it (${dialog.targets.changedFiles} changed files).") }
                         ActionButton("Move", canWrite) { perform { api.move(dialog.session.id, dialog.target.workspaceId, dialog.folder?.id) } }
                     }
-                    is DirectoryDialog.Share -> ShareChoices(dialog.session.id, api, data.fresh, onChanged)
+                    is DirectoryDialog.Share -> io.orbitd.android.management.SessionSharePanel(dialog.session.id)
                 }
             }
         })
@@ -184,79 +181,6 @@ private fun MoveChoices(session: DirectorySession, api: DirectoryApi, enabled: B
             target.folders.forEach { folder -> ActionButton("${target.name} / ${folder.name}", available) {
                 setDialog(DirectoryDialog.ConfirmMove(session, result, target, folder))
             } }
-        }
-    }
-}
-
-@Composable
-private fun ShareChoices(id: String, api: DirectoryApi, fresh: Boolean, changed: () -> Unit) {
-    var loaded by remember { mutableStateOf(false) }
-    var link by remember { mutableStateOf<JsonObject?>(null) }
-    var counts by remember { mutableStateOf<JsonObject?>(null) }
-    var toolOutput by remember { mutableStateOf(false) }
-    // A tool-output change must not silently extend an existing public link's lifetime.
-    var expiresAt by remember { mutableStateOf<String?>(null) }
-    var expiryDays by remember { mutableStateOf<Int?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf(false) }
-    var retry by remember { mutableIntStateOf(0) }
-    val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-    LaunchedEffect(id, retry) {
-        error = null
-        try {
-            val response = api.objectRead(listOf("sessions", id, "share"))
-            link = response["link"] as? JsonObject; counts = response["counts"] as? JsonObject
-            toolOutput = ((link?.get("include") as? JsonObject)?.get("toolOutput") as? JsonPrimitive)?.booleanOrNull == true
-            expiresAt = (link?.get("expiresAt") as? JsonPrimitive)?.contentOrNull
-            expiryDays = if (link == null) 0 else null
-            loaded = true
-        } catch (cancel: CancellationException) { throw cancel }
-        catch (failure: Exception) { error = directoryError(failure) }
-    }
-    if (!loaded && error == null) LoadingMessage("Loading access…")
-    error?.let { StatusMessage("Couldn't update sharing", it, { retry++ }) }
-    if (loaded) {
-        Text(if (link == null) "Only you" else "Anyone with the link")
-        Text("Shared messages can be read without signing in. ${counts?.get("messages")?.jsonPrimitive?.content.orEmpty()} messages.")
-        val canWrite = fresh && !busy
-        Row(Modifier.fillMaxWidth().toggleable(toolOutput, enabled = canWrite, role = Role.Checkbox, onValueChange = { toolOutput = it })) {
-            Checkbox(toolOutput, null, enabled = canWrite); Text("Include tool output", Modifier.padding(top = 12.dp))
-        }
-        TextButton(onClick = { expiryDays = when (expiryDays) { 1 -> 7; 7 -> 30; 30 -> 0; else -> 1 } }, enabled = canWrite) {
-            Text(when (expiryDays) { null -> "Expires: ${expiresAt ?: "Never"}"; 0 -> "Expires: Never"; else -> "Expires: $expiryDays days" })
-        }
-        fun update(enable: Boolean) {
-            busy = true; error = null
-            scope.launch {
-                try {
-                    val expiry = when (val days = expiryDays) {
-                        null -> expiresAt
-                        0 -> null
-                        else -> Instant.now().plusSeconds(days * 86400L).toString()
-                    }
-                    link = api.share(id, enable, toolOutput, expiry)
-                    expiresAt = (link?.get("expiresAt") as? JsonPrimitive)?.contentOrNull
-                    expiryDays = if (link == null) 0 else null
-                    changed()
-                }
-                catch (cancel: CancellationException) { throw cancel }
-                catch (failure: Exception) { error = directoryError(failure) }
-                finally { busy = false }
-            }
-        }
-        ActionButton(if (link == null) "Create public link" else "Update link", canWrite) { update(true) }
-        if (link != null) {
-            ActionButton("Only you — turn off link", canWrite) { update(false) }
-            val token = (link?.get("token") as? JsonPrimitive)?.contentOrNull
-            if (token != null) ActionButton("Share link…", !busy) {
-                // Public share URL is supplied by the instance, never an authenticated API URL.
-                val app = context.applicationContext as io.orbitd.android.OrbitApplication
-                val auth = app.session.state.value as? io.orbitd.android.core.auth.AuthState.SignedIn
-                if (auth != null) context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"; putExtra(Intent.EXTRA_TEXT, "${auth.handle.account.server.trimEnd('/')}/s/$token")
-                }, "Share session"))
-            }
         }
     }
 }
