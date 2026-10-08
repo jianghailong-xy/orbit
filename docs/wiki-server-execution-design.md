@@ -372,6 +372,11 @@ agent 会话用的 wiki 工具（`wiki_search` / `wiki_get` / `wiki_propose`，�
   - 确定性部分（解析、门检查、配额、熔断）：对同一份输入逐字比较；
   - 生成部分：看门检查通过率、核实结论的分布、排队和执行耗时、token。
 - **回退**：把开关改回 `runner` 即可。服务端在途的作业和请求会被取消，游标的语义保证下一次会重新读取这些内容。
+  取消由 apiserver 启动时的一次清扫完成（`wiki-executor-sweep.ts`，合同 `jobs.executor.rollback`）：改执行器要重建 apiserver 和
+  wiki-worker，而 apiserver 正是被在途作业堵住触发器的那一方。逐种收尾：作业、它的模型请求（按 0401 约束清错和租约列）和仓库操作
+  置为 `cancelled`；`maintain` 作业的运行记为 `failed` / `infra`，不计连续失败；plan 作业以失败结束并保留来源；`verify` 留下的
+  `verifying` op 由下一场维护运行收养。双保险：触发器只在服务端执行该账号时才查 `unfinishedMaintainJob`，清扫未跑完时 runner
+  路径也不被在途作业堵住（2026-10-08 回退事故：一个没人收尾的 `maintain` 作业让空间两条路径都没有维护，直到人工取消）。
 - **收尾（P10）**：
   - 删除维护会话机制：claim 拒绝、干净启动、`wiki-maintenance-run/v1`，以及隐藏列表里任务的这种用法；
   - 删除 runner 侧的模型代码；
