@@ -47,13 +47,6 @@ class DirectoryApi(private val api: OrbitApi, private val handle: SessionHandle)
     suspend fun createTag(name: String) {
         mutate(listOf("session-tags"), body = buildJsonObject { put("name", name.trim()); put("color", "#3B82F6") })
     }
-    suspend fun share(id: String, enabled: Boolean, toolOutput: Boolean = false, expiresAt: String? = null): JsonObject? {
-        if (!enabled) { mutate(listOf("sessions", id, "share"), HttpMethod.DELETE); return null }
-        return Wire.decode(mutate(listOf("sessions", id, "share"), HttpMethod.PUT, buildJsonObject {
-            putJsonObject("include") { put("toolOutput", toolOutput) }
-            put("expiresAt", expiresAt?.let(::JsonPrimitive) ?: JsonNull)
-        }), JsonObject.serializer())
-    }
 }
 
 fun directoryError(error: Throwable): String = when {

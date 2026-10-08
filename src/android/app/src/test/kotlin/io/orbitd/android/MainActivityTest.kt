@@ -9,6 +9,9 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.isDialog
 import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.net.*
 import org.junit.Rule
@@ -77,10 +80,12 @@ class MainActivityTest {
         compose.waitUntil(5_000) { appSession().state.value is AuthState.SignedIn }
         compose.onNodeWithContentDescription("Open navigation").performClick()
         compose.onNodeWithText("Settings").performScrollTo().performClick()
-        compose.onNodeWithText("Signed in").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Edit profile").assertIsDisplayed()
         compose.activityRule.scenario.recreate()
-        compose.onNodeWithText("Signed in").assertIsDisplayed()
-        compose.onNodeWithText("Sign out").performClick()
+        compose.onNodeWithContentDescription("Edit profile").assertIsDisplayed()
+        compose.onNodeWithText("Sign out").performScrollTo().performClick()
+        compose.onNodeWithText("Sign out of example.test?").assertIsDisplayed()
+        compose.onNode(hasText("Sign out") and hasAnyAncestor(isDialog())).performClick()
         awaitLogin()
         compose.onNodeWithText("Password").assertIsDisplayed()
         compose.onNodeWithText("fixture-password").assertDoesNotExist()
@@ -132,6 +137,8 @@ class TestOrbitApplication : OrbitApplication() {
                 request.api.path == listOf("auth", "methods") -> methods()
                 request.api.path == listOf("auth", "google", "exchange") -> exchange()
                 request.api.path == listOf("auth", "login") -> ApiResponse(200, LOGIN.encodeToByteArray())
+                // The account Settings shows: the one the login answered with.
+                request.api.path == listOf("users", "me") -> ApiResponse(200, USER.encodeToByteArray())
                 request.api.path.firstOrNull() == "tasks" -> ApiResponse(200, """{"id":"01a0cca7-8609-70ed-a0e2-d4b55b832b60","title":"Linked task"}""".encodeToByteArray())
                 // The signed-in shell's directory reads: empty lists.
                 else -> ApiResponse(200, "[]".encodeToByteArray())
@@ -155,4 +162,5 @@ class TestOrbitApplication : OrbitApplication() {
     )
 }
 
-private const val LOGIN = """{"accessToken":"fixture-access","refreshToken":"fixture-refresh","user":{"id":"u1","email":"fixture@example.test","name":"Fixture"}}"""
+private const val USER = """{"id":"u1","email":"fixture@example.test","name":"Fixture"}"""
+private const val LOGIN = """{"accessToken":"fixture-access","refreshToken":"fixture-refresh","user":$USER}"""

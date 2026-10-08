@@ -168,7 +168,7 @@ class GoogleSignInFlowTest {
         // Signed in, the app opens on its directory; the account is shown in Settings.
         compose.onNodeWithContentDescription("Open navigation").performClick()
         compose.onNodeWithText("Settings").performScrollTo().performClick()
-        compose.onNodeWithText("Signed in").assertExists()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("fixture@example.test").fetchSemanticsNodes().isNotEmpty() }
         val exchange = exchanges.single()
         assertEquals("https://orbit.example/team/", exchange.server.value)
         val sent = Wire.decode(exchange.api.body!!, GoogleExchangeRequest.serializer())

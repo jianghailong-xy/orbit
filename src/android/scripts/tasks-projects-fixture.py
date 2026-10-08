@@ -424,7 +424,9 @@ class Handler(cards.Handler):
             if self.command == 'DELETE': state['shares'].pop(path, None); bump(); return dict(ok=True), 200
             if self.command != 'PUT': return dict(message='Unsupported share method'), 405
             if link is None:
-                link = dict(id='fixture-share', token='a11-controlled-public-token', state='ACTIVE', include=dict(taskPages=True, commentsAndFiles=True, conversations=True, toolOutput=True),
+                # The server's link view names its root's kind (share-links.service.ts view()); the panel checks it is this one's.
+                link = dict(id='fixture-share', kind='TASK' if path.startswith('/api/tasks/') else 'PROJECT', token='a11-controlled-public-token', state='ACTIVE',
+                            include=dict(taskPages=True, commentsAndFiles=True, conversations=True, toolOutput=True),
                             expiresAt=None, viewCount=0, lastViewedAt=None, createdAt=NOW, updatedAt=NOW,
                             root=dict(id=path.split('/')[-2], title='Controlled share', status='OPEN'))
             if 'include' in body: link['include'].update(body['include'])

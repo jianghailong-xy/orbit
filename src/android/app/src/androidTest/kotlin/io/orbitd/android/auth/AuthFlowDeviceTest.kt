@@ -2,6 +2,9 @@ package io.orbitd.android.auth
 
 import android.graphics.Bitmap
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -66,7 +69,8 @@ class AuthFlowDeviceTest {
             compose.waitUntil(10_000) { session.state.value is AuthState.SignedIn }
             compose.onNodeWithContentDescription("Open navigation").performClick()
             compose.onNodeWithText("Settings").performScrollTo().performClick()
-            compose.onNodeWithText("Signed in").assertIsDisplayed()
+            // Settings opens on the signed-in account (A13's SettingsHome, from users/me).
+            awaitAccount()
             val handle = (session.state.value as AuthState.SignedIn).handle
             runBlocking {
                 session.me(handle)
@@ -74,16 +78,22 @@ class AuthFlowDeviceTest {
             }
             capture("signed-in.png")
             compose.activityRule.scenario.recreate()
-            compose.onNodeWithText("Signed in").assertIsDisplayed()
-            compose.onNodeWithText("Sign out").performClick()
+            awaitAccount()
+            compose.onNodeWithText("Sign out").performScrollTo().performClick()
+            compose.onNode(hasText("Sign out") and hasAnyAncestor(isDialog())).performClick()
             compose.waitUntil(10_000) { session.state.value is AuthState.SignedOut }
             runBlocking { assertNull(AndroidCredentialStore(compose.activity).load()) }
             compose.onNodeWithText("Instance address").assertIsDisplayed()
-            compose.onNodeWithText("Signed in").assertDoesNotExist()
+            compose.onNodeWithContentDescription("Edit profile").assertDoesNotExist()
             capture("signed-out.png")
             assertEquals(1, requests.count { it.path == "/api/auth/refresh" })
             assertTrue(requests.all { it.getHeader("X-Orbit-Client")?.startsWith("android/") == true })
         }
+    }
+
+    private fun awaitAccount() {
+        compose.waitUntil(10_000) { compose.onAllNodesWithText(fixtureTokens().user.email).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Edit profile").assertIsDisplayed()
     }
 
     private fun capture(name: String) {

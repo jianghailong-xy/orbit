@@ -654,6 +654,42 @@ class TasksProjectsDeviceTest {
         compose.onNode(share).assertIsNotEnabled()
     }
 
+    /** A task's and a project's ⋯ → Share… open the one share panel every Share uses (A13's): turning the link on and
+     * off are the server's own writes, and the menu then says what the server answered. */
+    @Test fun aTaskAndAProjectShareThroughTheOneSharePanel() = journey("share-entry") {
+        login()
+        for ((name, link, page, words) in listOf(listOf("task", "orbit-task:$taskId", "task-detail", "A11 task checklist"),
+            listOf("project", "orbit-project:$projectId", "project-detail", "A11 Android launch"))) {
+            val path = if (name == "task") "/api/tasks/$taskId/share" else "/api/projects/$projectId/share"
+            fun shares() = http("/__stats").obj("shares") ?: JsonObject(emptyMap())
+            fun openShare(status: String) {
+                scrollTo(page, hasTestTag("$name-menu")); tap("$name-menu")
+                val item = hasText(SharePanelCopy.share) and hasAnyAncestor(isPopup())
+                compose.waitUntil(10_000) { compose.onAllNodes(item and hasText(status)).fetchSemanticsNodes().isNotEmpty() }
+                compose.onNode(item).performClick(); awaitTag("share-sheet")
+            }
+            fun choose(access: String) {
+                val row = hasText(access) and isSelectable() and isEnabled() and hasAnyAncestor(hasTestTag("share-sheet"))
+                compose.waitUntil(20_000) { compose.onAllNodes(row).fetchSemanticsNodes().isNotEmpty() }
+                compose.onNode(row).performClick()
+            }
+            fun done() { compose.onNode(hasText(SharePanelCopy.done) and hasAnyAncestor(hasTestTag("share-sheet"))).performClick(); awaitGone("share-sheet") }
+            open(link); awaitIn(page, words)
+            openShare(SharePanelCopy.onlyYou); awaitText("Only you can open it, signed in."); capture("share-entry-$name-private")
+            val mark = journal().size
+            choose("Anyone with the link"); awaitText("/s/a11-controlled-public-token"); capture("share-entry-$name-public")
+            assertTrue("$path PUT", journal().drop(mark).any { it.text("method") == "PUT" && it.text("path") == path && it["status"]?.toString() == "200" })
+            assertNotNull("$path stored", shares()[path])
+            done(); openShare(SharePanelCopy.liveLink); awaitText("/s/a11-controlled-public-token")
+            choose("Only you"); awaitText("Turn off this link?")
+            compose.onNode(hasText("Turn off") and hasClickAction()).performClick()
+            awaitText("Only you can open it, signed in."); capture("share-entry-$name-turned-off")
+            assertTrue("$path DELETE", journal().drop(mark).any { it.text("method") == "DELETE" && it.text("path") == path && it["status"]?.toString() == "200" })
+            assertNull("$path removed", shares()[path])
+            done(); openShare(SharePanelCopy.onlyYou); capture("share-entry-$name-menu-after"); done()
+        }
+    }
+
     /** P3: a comment the server took is not offered again by its page's saved state (the page was left — here the
      * Activity recreated, as P2-2 — while the comment was out). */
     @Test fun regressionP3_aSentCommentIsNotOfferedAgain() = journey("p3-comment-sent-after-leaving") {
