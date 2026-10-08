@@ -14,6 +14,10 @@ This document records the development input at the ordinary merge below. It is a
 | `src/apiserver` tree at merge | `c0aa1a79ded9d330c38acfb668e746e80d768b1b` |
 | `src/shared` tree at merge | `de5d906751a4f57018c24f30c6ef0bca61ddf911` |
 | `src/macos` tree at merge | `2689ba528cc644d9d39b8e62e662dcc4396793cc` |
+| Merge round, 2026-10-08 | `db13974a0`: the project tip `3eb8e8594` (A11b with main `4f695a286`, then A13) merged into A12 v2 `daef4abeb`, parents in that order |
+| Server trees at that tip | `src/apiserver` `fbe271e6c219f180c80439ea0d6f5292409c9cc0`, `src/shared` `bb96d8a6566d907cfa5b95e76d87211970881ad1`, `src/runner-go` `5fa551c0c5f0706e284b242303ec087485b8c5ff` |
+
+The merge round (coordinator comment 34c72iJ9kaNGjIb0DSyX5) brings main's later iOS, contract and server changes into the tree. The iOS baseline of this document stays the one read at the first merge: the iOS Wiki/Watch changes after it (A01b's increment list, for example `712c92e10` and `42d12db2b`) are ported by a task of their own, not in this round.
 
 `git diff 51bbcc3 0f98546 -- src/apiserver src/shared contracts src/macos` is empty. Relative to the A12 initial HEAD, backend and contracts are unchanged; shared adds only `interaction-cards.fixture.json` and `interaction-cards-review.fixture.json`. These inherited files are not A12 authored changes. A06 reader / Markdown / image / link / record-anchor behavior and A08 cards are inherited dependencies, not permission to rewrite those modules. No main tracking, rebase, project-line reset, public push or deployment is part of this work.
 
@@ -206,7 +210,7 @@ Only `aSpaceLinkOpensItsHomeThroughLoginAndRecreation` signs in on the login for
 
 ## A12 live journeys on an isolated stack
 
-`src/android/scripts/a12-stack` (see its README) runs the apiserver and runner of `0f98546a5` (the merge above; the same server trees) on the host's loopback with their own PostgreSQL. It seeds them through the HTTP API alone and reads the server back after every write: an owner and a second account, a Manual space with owner-written entries, a fresh and a stale pending proposal from the agent door (the stack runner's token and a session it hosts), a run that Tiered applied, and a task with a NOTIFY_USER watch. `WikiWatchLiveTest` (ten journeys) opens each journey from its link on the emulator, acts through the screens, and reads the server back with the acting account's own token:
+`src/android/scripts/a12-stack` (see its README) runs the apiserver and runner of the revision its `setup.sh` pins — `0f98546a5` (the first merge) for the 2026-10-07 runs, the project tip `3eb8e8594` since the 2026-10-08 merge round — on the host's loopback with their own PostgreSQL. It seeds them through the HTTP API alone and reads the server back after every write: an owner and a second account, a Manual space with owner-written entries, a fresh and a stale pending proposal from the agent door (the stack runner's token and a session it hosts), a run that Tiered applied, and a task with a NOTIFY_USER watch. `WikiWatchLiveTest` (ten journeys) opens each journey from its link on the emulator, acts through the screens, and reads the server back with the acting account's own token:
 
 - search finds an entry, and its page opens;
 - Review's Accept is recorded `accepted`;
