@@ -916,21 +916,20 @@ class WikiMaintainRun {
         const byEntry = wanted.map(() => new Map<number, WikiAnchorCheckInput>());
         let unanswered = 0;
         for (const reported of Array.isArray(answer.anchors) ? answer.anchors : []) {
-          if (!wikiImportIsObject(reported) || typeof reported.index !== 'number' || !Number.isInteger(reported.index)) {
-            unanswered += 1;
-            continue;
-          }
-          const at = reported.index;
-          const slot = at >= 0 && at < slots.length ? slots[at]! : null;
-          const asked = slot ? flat[at] : null;
-          const state = reported.state === 'verified' || reported.state === 'changed' || reported.state === 'missing' ? reported.state : null;
           // The runner's answer is one check per anchor it was handed, echoing the index and the
-          // type. Anything else is a runner the run cannot lay back safely: it fails the run rather
-          // than guess which anchor a verdict belongs to.
-          if (!slot || !asked || !state || reported.type !== asked.type) {
+          // type. A row that names no anchor this page asked about cannot be laid back at all; a row
+          // whose echo or state does not hold up leaves its own slot unfilled, and the shortfall
+          // below counts it. Either way the run fails rather than guess which anchor a verdict
+          // belongs to.
+          if (!wikiImportIsObject(reported) || typeof reported.index !== 'number' || !Number.isInteger(reported.index)
+            || reported.index < 0 || reported.index >= slots.length) {
             unanswered += 1;
             continue;
           }
+          const slot = slots[reported.index]!;
+          const asked = flat[reported.index]!;
+          const state = reported.state === 'verified' || reported.state === 'changed' || reported.state === 'missing' ? reported.state : null;
+          if (!state || reported.type !== asked.type) continue;
           byEntry[slot.entry]!.set(slot.anchor, {
             index: slot.anchor,
             type: asked.type,
@@ -943,7 +942,7 @@ class WikiMaintainRun {
         }
         unanswered += flat.length - byEntry.reduce((total, checks) => total + checks.size, 0);
         if (unanswered > 0) {
-          throw new WikiJobContentError(`the anchor checks named ${unanswered} anchor(s) no entry asked for: the run refuses to guess whose they are`);
+          throw new WikiJobContentError(`the anchor checks answered ${unanswered} of the ${flat.length} anchor(s) asked for: the run refuses to guess whose the rest were`);
         }
         const report = {
           ref: String(answer.sha ?? this.snapshot?.sha ?? ''),

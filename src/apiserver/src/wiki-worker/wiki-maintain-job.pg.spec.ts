@@ -689,14 +689,46 @@ test('the anchors step records each entry\'s checks on its own anchors — a pag
   assert.equal(brokenAnchors[0]!.check?.state, 'missing', 'the gone path is missing');
   assert.equal(brokenAnchors[1]!.check?.state, 'changed', 'the serve symbol\'s region moved against its own baseline');
   assert.equal(brokenAnchors[1]!.check?.regionSha256, ANCHOR_REPO.regionOf('serve'), 'the changed check carries the region its own symbol holds now');
-  assert.equal(brokenAnchors[1]!.check?.baselineSha256, serveBaseline, 'a changed check keeps the baseline the anchor named');
+  assert.equal(brokenAnchors[1]!.check?.baselineSha256, undefined, 'an anchor that names its own baseline is held to it there: the check does not copy it');
+  assert.equal(brokenAnchors[1]!.regionSha256, serveBaseline, 'and the baseline the anchor named is untouched by the check');
   assert.equal(brokenAnchors[2]!.check?.state, 'missing', 'the unheld commit is missing');
   assert.equal(broken.anchorState, 'missing');
   assert.equal(broken.challenged, true, 'the broken entry is challenged for the owner');
 
   const report = (await runRow(h, fx.runId)).report as Record<string, unknown>;
   const anchors = report.anchors as Record<string, number>;
-  assert.deepEqual(anchors, { entries: 2, changed: 1, missing: 1 });
+  assert.deepEqual(anchors, { entries: 2, changed: 0, missing: 1 }, 'one entry verified, the broken one out as missing');
+});
+
+test('anchor verdicts that name anchors no entry asked for fail the run: nothing is laid on a guess', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  h.maintenance.dossierPage = (async () => ({ ...(pageOf(fx) as Record<string, unknown>), facts: 0, dossiers: [] })) as unknown as WikiMaintenance['dossierPage'];
+  const first = '00000000-0000-4000-8000-000000000010';
+  await h.prisma.wikiEntry.create({
+    data: {
+      id: first, ownerId: h.ownerId, spaceId: fx.spaceId, kind: 'concept', title: 'the kept entry, again', summary: 'a live entry',
+      status: 'active', trust: 'auto', currentRevision: 1, fields: { definition: 'x', boundaries: 'y' }, topics: [],
+      anchors: [{ type: 'path', path: ANCHOR_REPO.file }],
+    },
+  });
+  // A runner that answers one check with an echo naming a different type than the anchor at that
+  // index: the run cannot tell whose verdict it is, so it fails as content and writes nothing.
+  const lying = (anchor: Record<string, unknown>): Record<string, unknown> => ({
+    ...checkAnchorAgainstRepo(anchor),
+    ...(anchor.type === 'path' ? { type: 'commit' } : {}),
+  });
+
+  const which = worker(h);
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'failed', { checkAnchor: lying });
+
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'failed');
+  assert.equal(job.failure_kind, 'content');
+  assert.match(job.error ?? '', /refuses to guess/u);
+  const kept = await h.prisma.wikiEntry.findFirstOrThrow({ where: { id: first } });
+  assert.equal(((kept.anchors as unknown[])[0] as { check?: unknown }).check, undefined, 'no verdict is laid on a guess');
 });
 
 test('a run made while the space is catching up writes no document and proposes no plan change, and owes no articles job', { skip }, async () => {
