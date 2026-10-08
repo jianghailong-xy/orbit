@@ -1,0 +1,10 @@
+2026-10-07T16:57:32Z
+ok  	orbit	12.094s
+ok  	orbit	238.605s
+?   	orbit/cmd/release-manifest	[no test files]
+
+real	4m18.612s
+user	0m45.389s
+sys	0m19.081s
+ACCEPTANCE_EXIT=0
+2026-10-07T17:01:50Z
