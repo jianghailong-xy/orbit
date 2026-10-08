@@ -1,0 +1,126 @@
+<!doctype html>
+<!-- Design mock: a single-account engine row folds too, so Antigravity's four buckets stop being the one
+     tall row on a folded runner card (follows 01-account-fold). 02a–02g are screenshots of the real web
+     console (vite dev on this branch, sample data shaped like the owner's 2026-10-08 wikova screenshot,
+     2026-10-08 00:30 Asia/Shanghai); the chevron on a single-account row, its folded quota and the
+     numbered marks are injected into that real page with the shipped classes. Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Providers · fold a single-account row too (Antigravity)</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  .m-sheet { width: 1900px; }
+  .row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 26px; align-items: start; }
+  .shot { display: block; width: 100%; border-radius: 12px; box-shadow: 0 1px 3px rgba(15, 23, 42, .08); }
+  .m-cap { font-size: 12.5px; line-height: 1.75; color: var(--text-2); margin: 10px 2px 0; }
+  .m-cap b { color: var(--text-1); }
+  .m-cap .n { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px;
+              margin: 0 3px 0 1px; border-radius: 50%; background: var(--warning-solid); color: #fff;
+              font: 700 10.5px/1 -apple-system, sans-serif; vertical-align: 1px; }
+  .ph-l { font-size: 12px; font-weight: 600; color: var(--text-3); margin: 0 0 6px 2px; }
+  .ab { display: grid; grid-template-columns: minmax(0, 1fr) 560px; gap: 34px; align-items: start; }
+  .ab-list { display: flex; flex-direction: column; gap: 22px; }
+  .ab-item { display: grid; grid-template-columns: 760px minmax(0, 1fr); gap: 22px; align-items: start; }
+  .ab-item .m-cap { margin-top: 24px; }
+  .opt { display: inline-block; margin-right: 6px; padding: 0 7px; border-radius: 4px; font-size: 11px; font-weight: 700;
+         background: #eceef1; color: #5b6270; }
+  .opt.rec { background: var(--brand-tint); color: var(--brand-strong); }
+  .phones { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+  .same { margin-top: 4px; padding: 10px 14px; border-radius: 8px; background: #f5f6f8; font-size: 12.5px; line-height: 1.75; color: #3f4652; }
+  .rules { border-collapse: collapse; font-size: 12.5px; line-height: 1.65; width: 100%; }
+  .rules th, .rules td { border: 1px solid #dde0e6; padding: 8px 11px; text-align: left; vertical-align: top; }
+  .rules th { background: #f5f6f8; font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .rules td:first-child { white-space: nowrap; font-weight: 600; color: var(--text-1); }
+  .rules td.why { color: var(--text-3); }
+  .rules code, .files code { font-size: 11.5px; }
+  .grid-bottom { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+  .files { margin: 0; padding: 12px 16px 12px 34px; background: #f5f6f8; border-radius: 8px;
+           font-size: 12.5px; line-height: 1.75; color: #3f4652; }
+  .files li + li { margin-top: 6px; }
+  .files b { color: var(--text-1); }
+  .files-h { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin: 0 0 8px 2px; }
+</style>
+</head>
+<body class="m">
+<section class="m-sheet">
+  <h1 class="m-h1 zh">Providers · Antigravity 一行太高：单账号的行也收起</h1>
+  <p class="m-sub zh">账号组收起以后（01），卡片上只剩 Antigravity 还是一长条：它只有一个账号，所以没有可收的；可它一个账号就报四个桶（gemini、3p 各一个每周、一个 5 小时），四条全列出来，一行 342px，是收起后 Claude Code 那行的四倍。这张图让单账号的行也能收起：收起时只挂最紧的那一条——和组头、运行器页、iOS 是同一条规则——点名字展开看全部。截图来自真实 web 控制台（vite dev，示例数据，照 wikova 的截图造）；箭头和收起后的额度是用页面自己的样式注入的。</p>
+
+  <div class="m-stage">
+    <div class="row3">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k">今天</span>账号组收起了，Antigravity 还摊着</div>
+        <img class="shot" src="02a-today.png" alt="">
+        <p class="m-cap zh">Antigravity 四个桶全列（gemini-weekly、gemini-5h、3p-weekly、3p-5h），这一行 342px，整张卡 640px 里它占了一半多。Claude Code、Codex 是多账号组，已经收成一行。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k new">建议默认态</span>收起：只挂最紧的一条</div>
+        <img class="shot" src="02b-folded.png" alt="">
+        <p class="m-cap zh"><span class="n">1</span>名字后多一个箭头，和账号组的是同一个：点图标、名字、版本行那一块展开 / 收起。<span class="n">2</span>额度只挂最紧的一条：四个桶里剩得最少的 3p-weekly（98%）——运行器页、iOS 的 Antigravity 行挂的也是它。这一行 342 → 126px，整张卡 640 → 424px，四个引擎差不多高。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k new">展开态</span>和今天一样</div>
+        <img class="shot" src="02c-open.png" alt="">
+        <p class="m-cap zh"><span class="n">1</span>展开时箭头转成 ⌄，四个桶照今天的样子全列，各自写几点恢复。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k state">待定 · 要你拍板</span>只有两条额度的单账号行，收不收？</div>
+    <div class="ab">
+      <div class="ab-list">
+        <div class="ab-item">
+          <div>
+            <div class="ph-l zh"><span class="opt rec">方案 A · 推荐</span>不止一条就收（只登了一个 Claude 账号的机器）</div>
+            <img class="shot" src="02d-claude-a.png" alt="">
+          </div>
+          <p class="m-cap zh"><span class="n">3</span>Claude Code 的 5 小时、每周两条也收成一条，挂更紧的每周 89%，名字后有箭头。规则一句话：<b>收起的行都只挂一条</b>，每个引擎差不多高，和运行器页、iOS 一致。</p>
+        </div>
+        <div class="ab-item">
+          <div>
+            <div class="ph-l zh"><span class="opt">方案 B</span>超过两条才收</div>
+            <img class="shot" src="02e-claude-b.png" alt="">
+          </div>
+          <p class="m-cap zh"><span class="n">3</span>Claude、Codex 单账号的两条照旧全列，没有箭头；只有 Antigravity 四个桶、Claude Max 的 Opus / Sonnet 每周额度那样超过两条的才收。改动最少，但同一张卡上有的行一条、有的两条。</p>
+        </div>
+        <div class="same zh">你的 HPC、wikova 两台上，A 和 B 看起来完全一样：Claude、Codex 在那里都是多账号组，HPC 的 Codex 单账号也没读到额度。差别只在只登了一个 Claude / Codex 账号、而且读到了两条额度的机器上。</div>
+      </div>
+      <div>
+        <div class="ph-l zh">手机（390pt）：今天 / 收起</div>
+        <div class="phones">
+          <img class="shot" src="02f-phone-today.png" alt="">
+          <img class="shot" src="02g-phone-folded.png" alt="">
+        </div>
+        <p class="m-cap zh"><span class="n">1</span>手机上同一条规则：收起后 Antigravity 和其他引擎一样分三行，名字、状态、一条额度。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">规则</span>和账号组同一套，只是多了「单账号、多条额度」这一种</div>
+    <div class="grid-bottom">
+      <table class="rules zh">
+        <tr><th>项</th><th>做法</th><th>依据</th></tr>
+        <tr><td>哪些行能收起</td><td>多账号的组（已有）；单账号、额度不止一条的行（A）或超过两条的行（B）。只有一条或没有额度的行没有箭头：没读到额度的 Codex、Kimi、跑在 Gemini key 上的 Antigravity。</td><td class="why">有东西可藏的行才给箭头</td></tr>
+        <tr><td>收起时写什么</td><td>状态不变；额度只挂最紧的一条：有用完的先挂用完的，否则挂最接近上限的；Antigravity 挂剩得最少的桶。</td><td class="why">组头、运行器页、iOS 都是这一条（bindingPlanUsageRow）</td></tr>
+        <tr><td>展开</td><td>和今天一样列全部额度。</td><td class="why">—</td></tr>
+        <tr><td>默认 · 记住 · 自动展开</td><td>和账号组一套：默认收起；按「机器 + 引擎」记住；从链接（?runner=…&amp;engine=…）进来、点「Add account」时展开。沿用已上线的 <code>orbit:providers-open-accounts</code>，已经展开过的保持展开。</td><td class="why">01 图已定（2026-10-07）</td></tr>
+        <tr><td>展开一组账号时</td><td>每个账号行照旧列自己的全部额度。</td><td class="why">点开一组就是要看全部</td></tr>
+      </table>
+      <div>
+        <div class="files-h zh">落地（按代价排）</div>
+        <ol class="files zh">
+          <li><b>RunnerEngines.tsx</b>：<code>EngineRow</code> 能收起的条件从「是账号组」放宽到「是账号组，或额度不止一条（A）/ 超过两条（B）」；单账号的行用同一个按钮和箭头；收起时 <code>QuotaCell</code> 只给最紧的那条（<code>bindingPlanUsageRow</code> 现成）。约 20 行。</li>
+          <li><b>index.css</b>：不加新样式，<code>.re-grp-toggle</code>、<code>.re-grp-chev</code> 直接用。</li>
+          <li><b>测试</b>：<code>RunnerEngines.accountFold.test.tsx</code> 加 Antigravity 单账号的收起 / 展开，A 再加 Claude 单账号两条。其它测试经 <code>openRunnerCards</code> 本来就是展开的；static-markup 的几处视情况补一行打开。</li>
+          <li><b>只改 web</b>：运行器页、iOS 本来就是一个引擎一条额度。</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html>
