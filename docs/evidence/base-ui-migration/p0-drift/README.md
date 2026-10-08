@@ -196,12 +196,12 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 | 会话列表行 | session-idle、session-streaming、session-composer-focus、session-attachment-menu、session-attachment-staged、notification-error、breakpoint-961-session（4 个桌面项目） | 28 | `918034e7…`、`f5bdd7fd…` | `f5bdd7fd3`（运行 full2-f5bdd7fd3） |
 | 项目页 | project-overview、project-graph（8 项目），project-graph-fullscreen、breakpoint-639/641-graph（桌面） | 28 | `93d3ec58…` | `93d3ec580`（full2-93d3ec580） |
 | 任务面板与设置 | task-detail、task-action-hover/focus/menu、task-share-dialog、settings、settings-saved（8 项目），breakpoint-599/601-dialog（桌面） | 64 | `4088d37e…` | `4088d37e6`（full2-4088d37e6） |
-| Wiki 961px 暗色 | breakpoint-961-wiki（chromium-dark-desktop）。第 2 批按第 6 条追加 main 提交并替换参考图，旧图在 git 历史里 | 1 | `e64d0c72…`、`6c4e0ac0…`、`2f9cc095…`、`a884fda3…` | `a884fda36`（full-maint-a884fda36）；第 1 批为 `e64d0c72a`（m5-e64d0c72a） |
+| Wiki 961px 暗色 | breakpoint-961-wiki（chromium-dark-desktop）。第 2 批、第 5 批按第 6 条追加 main 提交并替换参考图，旧图在 git 历史里 | 1 | `e64d0c72…`、`6c4e0ac0…`、`2f9cc095…`、`a884fda3…`、`2ba6765d…` | `2ba6765d9`（full-fix-2ba6765d9）；第 2 批为 `a884fda36`（full-maint-a884fda36），第 1 批为 `e64d0c72a`（m5-e64d0c72a） |
 | 资料页（第 2 批，A6） | profile（8 项目），profile-validation（WebKit 桌面 2 个项目） | 10 | `d233a6cd…` | `d233a6cd0`（full-maint-d233a6cd0） |
 | 资料页，第 7 条例外（第 2 批，A6） | profile-validation（Chromium 4 个项目，WebKit 手机 2 个项目） | 6 | `d233a6cd…` | `d233a6cd0` 加 B1 修复 `3ec9cf83d`，即 `dcb5fd1bd`（full-maint-xfix-d233a6cd0），见 `migrationFix` |
-| Wiki 首页窄屏与 959px（第 2 批，A7、A8） | wiki-home、wiki-new-entry（手机 4 个项目），breakpoint-959-wiki（桌面 4 个项目） | 12 | `6c4e0ac0…`、`2f9cc095…` | `2f9cc095f`（full-maint-2f9cc095f） |
-| Wiki 目录抽屉（第 2 批，A8） | wiki-contents（手机 4 个项目） | 4 | `2f9cc095…` | `2f9cc095f`（full-maint-2f9cc095f） |
-| Wiki 首页桌面与 961px（第 2 批，A7、A8、A9） | wiki-home、wiki-new-entry（桌面 4 个项目），breakpoint-961-wiki（桌面 3 个项目，chromium-dark-desktop 见上面「Wiki 961px 暗色」） | 11 | `6c4e0ac0…`、`2f9cc095…`、`a884fda3…` | `a884fda36`（full-maint-a884fda36） |
+| Wiki 首页窄屏与 959px（第 2 批 A7、A8，第 5 批 A10） | wiki-home、wiki-new-entry（手机 4 个项目），breakpoint-959-wiki（桌面 4 个项目） | 12 | `6c4e0ac0…`、`2f9cc095…`、`2ba6765d…` | `2ba6765d9`（full-fix-2ba6765d9）；第 2 批为 `2f9cc095f`（full-maint-2f9cc095f） |
+| Wiki 目录抽屉（第 2 批 A8，第 5 批 A10） | wiki-contents（手机 4 个项目） | 4 | `2f9cc095…`、`2ba6765d…` | `2ba6765d9`（full-fix-2ba6765d9）；第 2 批为 `2f9cc095f`（full-maint-2f9cc095f） |
+| Wiki 首页桌面与 961px（第 2 批 A7、A8、A9，第 5 批 A10） | wiki-home、wiki-new-entry（桌面 4 个项目），breakpoint-961-wiki（桌面 3 个项目，chromium-dark-desktop 见上面「Wiki 961px 暗色」） | 11 | `6c4e0ac0…`、`2f9cc095…`、`a884fda3…`、`2ba6765d…` | `2ba6765d9`（full-fix-2ba6765d9）；第 2 批为 `a884fda36`（full-maint-a884fda36） |
 
 **每条登记的字段**：
 
@@ -223,10 +223,13 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 - 这些 main 树都在 P2.3 晋升（`90e749e72`）之前，不含 B1。
 - 会话组的生成树 `f5bdd7fd3` 含 P1.1/P1.2 的晋升，项目页的 `93d3ec580` 含 P2.1 的晋升。这些晋升提交本身经过同样的运行，确认没有改变对应截图。
 - 第 2 批的生成树都在 P2.3 晋升之后，含 B1。B1 只改变设置页、资料页的成功提示胶囊。所以 profile-validation 中受 B1 影响的 6 张按第 7 条，在 X 加 B1 修复的树上生成，其余截图在 X 的树上生成，不受 B1 影响（见 [p0-drift-2](../p0-drift-2/README.md)）。
+- 第 5 批的生成树 `2ba6765d9` 含 B1 修复和本项目到当时为止晋升进 main 的迁移代码。它的 first-parent 前驱 `7cc52e0cf` 对照当前期望，Wiki 28 张逐字节相同，所以这些迁移代码没有改变这些截图。`2ba6765d9` 让 Wiki 页头读 `GET /api/wiki/spaces/<id>/share`，参考图用补了这条固定响应（`82247962c`）的 P0 测试生成，按「场景与固定数据维护」第 5 条，它与 P0 原测试只差这一条响应；同一棵树上两者的截图除 Chromium 噪声外相同（见 [p0-drift-5](../p0-drift-5/README.md)）。
 
 **未登记**：其余 88 张仍然对照 P0.2。
 
 **第 2 批**：归因、同环境证明和登记经过见 [p0-drift-2](../p0-drift-2/README.md)。
+
+**第 5 批**：归因、同环境证明和登记经过见 [p0-drift-5](../p0-drift-5/README.md)。
 
 ## 「已接受的迁移差异」层
 
