@@ -9,6 +9,7 @@ import {
   type WikiSpaceHealth,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { readWikiRepoReadiness } from '../wiki-worker/wiki-repo-ops';
 import { countBacklog, spaceScope, type FactPosition } from './wiki-maintenance';
 import { wikiMaintenanceCatchUpOf, wikiMaintenanceRunsToday } from './wiki-maintenance-session';
 import { wikiMaintenanceProviderIsLocal } from './wiki-maintenance-settings';
@@ -83,7 +84,16 @@ export class WikiHealth {
       lastRun: await this.lastRun(ownerId, spaceId),
       lastFailure: await this.lastFailure(ownerId, spaceId),
     };
-    return { spaceId, entries, maintenance: { look: wikiMaintenanceLook(maintenance, now), ...maintenance } };
+    // The repository half of the line (contract `maintenance.health.repo`, design §2.2): whether the steps
+    // that need a repository can run at all, and why not when they cannot — an old runner is the one a
+    // person can act on, so it is named as such rather than as a wait.
+    const repo = await readWikiRepoReadiness(this.prisma, { ownerId, spaceId, now });
+    return {
+      spaceId,
+      entries,
+      maintenance: { look: wikiMaintenanceLook(maintenance, now), ...maintenance },
+      repo: { look: repo.look, workspace: repo.workspace, runner: repo.runner, pending: repo.pending },
+    };
   }
 
   /**

@@ -1967,6 +1967,46 @@
     }
   },
 
+  "repoOps": {
+    "phase": "server execution, P2",
+    "doc": "docs/wiki-contract.md section 26; docs/wiki-server-execution-design.md sections 4.3 and 7",
+    "why": "The server runs the wiki's pipelines but never touches a repository: the credentials are on the runners (design section 1.4). A step that needs to know what the repository says asks the machine its space's workspace runs on, and the answer comes back through a row — no session, no concurrency slot and no model call on the runner (G2).",
+    "capability": "wiki-repo-op/v1",
+    "table": "wiki_repo_op",
+    "migration": "src/apiserver/prisma/migrations/0402_wiki_repo_op/migration.sql",
+    "columns": ["id", "job_id", "owner_id", "space_id", "workspace_id", "runner_id", "kind", "input", "state", "lease_owner", "claim_generation", "claimed_at", "heartbeat_at", "result", "error", "created_at", "updated_at", "ended_at"],
+    "kinds": ["snapshot", "read", "diff", "anchors"],
+    "kindRuns": {
+      "snapshot": "Everything the server asks of one commit at once: fetch origin/main, resolve the sha, and build the index the pipelines query — every path with its size, every document's title and headings, every source file's symbols, the commits reachable from origin/main, and the README's first paragraph. A sha the server already holds is not sent again (`input.skipSha`). Above `fragments.inlineBytes` it travels in fragments.",
+      "read": "The text of named paths at a named sha, bounded: one design-document section is `read.docSectionChars` and one contract file `read.contractChars`, an item may ask for at most `read.sectionChars`, and one request answers `read.sectionChars` in all — one section's material. A footnote's whole-file read is its own case, with its own limit (`read.wholeFileChars`).",
+      "diff": "`git diff --name-status -M` between two commits, and the design documents the range added or copied (`--diff-filter=AR -- docs/`) — what a maintenance run looks for.",
+      "anchors": "The anchor checks a maintenance run already makes (`src/runner-go/wiki_anchors.go`), reused: a path exists, a symbol's region hashes as it is held to, a commit is reachable from the snapshot's commit set."
+    },
+    "states": ["queued", "running", "succeeded", "failed", "cancelled"],
+    "dispatch": {
+      "perHeartbeat": 2,
+      "claim": "One statement per heartbeat: UPDATE wiki_repo_op … FROM (SELECT … JOIN workspace w ON w.id = o.workspace_id WHERE w.runner_id = this runner AND (state = 'queued' OR (state = 'running' AND heartbeat_at < now - staleSeconds AND lease_owner IS DISTINCT FROM this process)) ORDER BY created_at, id LIMIT n FOR UPDATE SKIP LOCKED) — every claimed row a new claim_generation.",
+      "route": "workspace.runner_id: an operation is handed only to the machine the space's workspace runs on, and the workspace's work_dir travels with it.",
+      "wake": "The enqueue NOTIFYs the runner wake channel, so the machine beats at once instead of on its 30-second tick.",
+      "staleSeconds": 60
+    },
+    "routes": {
+      "result": "POST /runner/wiki/repo-ops/:id/result — fenced on (lease_owner, claim_generation) and the runner token; a write from a claim that was taken over answers 409 STALE_CLAIM and settles nothing.",
+      "progress": "POST /runner/wiki/repo-ops/:id/progress — the heartbeat renewal that keeps a long operation from being taken over.",
+      "fragments": "POST /runner/wiki/repo-ops/:id/fragments — one call per fragment, fenced the same way, staged on the operation until its result arrives."
+    },
+    "fragments": { "inlineBytes": 4194304, "fragmentBytes": 2097152, "maxSnapshotBytes": 67108864, "why": "The API's request body is capped at 10 MB (src/apiserver/src/main.ts) and a plan's repository index is larger than that (design section 4.3). A snapshot that fits travels inside the result; one that does not is uploaded in fragments and reassembled — by sha256, and by the byte count the result names — before it becomes the space's snapshot." },
+    "cache": {
+      "tables": ["wiki_repo_snapshot", "wiki_repo_snapshot_fragment"],
+      "perSpace": "One snapshot per space, replaced whole when a newer one lands: the index and the fragments it is kept in. Owner-scoped like everything else, and deleted with the space (the composite foreign key into wiki_space).",
+      "visibility": "The owner's and nobody else's: no route returns it, and what reaches the System model reaches it through the same redactor the notes go through (design section 9)."
+    },
+    "read": { "docSectionChars": 4200, "contractChars": 2500, "sectionChars": 22000, "wholeFileChars": 22000 },
+    "looks": ["ready", "no_workspace", "runner_missing", "runner_offline", "runner_upgrade"],
+    "safety": "An operation checks its checkout before it reads it: the repository's origin URL must be the space's `repo.urlNorm` and the checkout's root commit must be the space's `rootCommitSha`. Otherwise it fails, says which repository it found, and reads nothing.",
+    "waiting": "A job that needs a repository operation is parked (wiki_job state waiting, waiting_for 'repo', no lease) and woken by a NOTIFY on the wiki_repo_op channel when the operation settles. A runner that has not declared `wiki-repo-op/v1` is handed nothing: the operation stays queued, the job stays parked until its wait limit, and the space's health line says the runner has to be upgraded."
+  },
+
   "refusals": [
     { "code": "WIKI_DISABLED", "httpStatus": 404, "scope": "request", "when": "The wiki is off for this account (ORBIT_WIKI rollout)." },
     { "code": "WIKI_SPACE_UNBOUND", "httpStatus": 409, "scope": "request", "when": "The calling session's workspace is bound to no space and could not be bound on first use. The message says in one sentence how the owner binds it." },

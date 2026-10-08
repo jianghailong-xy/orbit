@@ -571,6 +571,12 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'reviewRecordId',
   'runSessionId',
   'reviewerSessionId',
+  // The repository operations (migration 0402): the fragments of an operation's snapshot, staged
+  // while it runs. `opId` is the operation's own id twice over — the runner is handed it in the
+  // heartbeat command and hands it back as the route's `:id` (`PublicIdPipe`, either spelling) —
+  // and this column is that same address on the fragment rows. Never a fence: the stop-the-old-
+  // claim comparison is on (`lease_owner`, `claim_generation`), not on this.
+  'opId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner

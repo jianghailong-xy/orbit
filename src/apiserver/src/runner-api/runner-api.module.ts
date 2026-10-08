@@ -34,6 +34,7 @@ import { PushModule } from '../push/push.module';
 import { ProvidersModule } from '../providers/providers.module';
 import { RunnerWriteProtocolInterceptor } from './runner-write-protocol';
 import { IntegrationJobRelay } from './integration-job-relay';
+import { WikiRepoOps } from '../wiki-worker/wiki-repo-ops';
 import { OutcomeReconcilerModule } from '../outcome-reconciler/outcome-reconciler.module';
 import { WatchesModule } from '../watches/watches.module';
 import { WikiModule } from '../wiki/wiki.module';
@@ -121,6 +122,7 @@ import { RunnerWikiMaintainController } from './runner-wiki-maintain.controller'
     ServiceTokenAuthorizer,
     WorkspacesService,
     IntegrationJobRelay,
+    WikiRepoOps,
   ],
 })
 export class RunnerApiModule {}

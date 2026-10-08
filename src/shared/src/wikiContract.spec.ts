@@ -95,6 +95,13 @@ import {
   wikiMaintenanceRunSessions,
   type WikiMaintenanceReport,
 } from './wikiMaintain';
+import {
+  WIKI_REPO_OPS,
+  WIKI_REPO_LOOKS,
+  WIKI_REPO_OP_CAPABILITY,
+  WIKI_REPO_OP_KINDS,
+  WIKI_REPO_OP_STATES,
+} from './wikiRepoOps';
 import { PROVIDER_PRESETS } from './providerPresets';
 import { WIKI_MAINTENANCE_HEALTH, WIKI_MAINTENANCE_LOOKS, wikiMaintenanceLook } from './wikiHealth';
 import {
@@ -204,6 +211,35 @@ describe('wiki contract', () => {
       'wiki_changeset_op',
       'wiki_exposure',
     ]);
+  });
+
+  it('holds the repository operations to the contract, number for number', () => {
+    const repoOps = CONTRACT.repoOps;
+    expect(repoOps.table).toBe('wiki_repo_op');
+    expect(repoOps.capability).toBe(WIKI_REPO_OP_CAPABILITY);
+    expect(repoOps.kinds).toEqual([...WIKI_REPO_OP_KINDS]);
+    expect(repoOps.states).toEqual([...WIKI_REPO_OP_STATES]);
+    expect(repoOps.looks).toEqual([...WIKI_REPO_LOOKS]);
+    expect(repoOps.migration).toBe('src/apiserver/prisma/migrations/0402_wiki_repo_op/migration.sql');
+    expect(existsSync(path.join(ROOT, repoOps.migration)), `${repoOps.migration} does not exist`).toBe(true);
+    // The numbers the dispatch, the fragments and the reads are held to, each read from the file the
+    // runner-side constants are read from too.
+    expect(repoOps.dispatch.perHeartbeat).toBe(WIKI_REPO_OPS.perHeartbeat);
+    expect(repoOps.dispatch.staleSeconds).toBe(WIKI_REPO_OPS.staleSeconds);
+    expect(repoOps.fragments.inlineBytes).toBe(WIKI_REPO_OPS.inlineBytes);
+    expect(repoOps.fragments.fragmentBytes).toBe(WIKI_REPO_OPS.fragmentBytes);
+    expect(repoOps.fragments.maxSnapshotBytes).toBe(WIKI_REPO_OPS.maxSnapshotBytes);
+    expect(repoOps.read).toEqual({
+      docSectionChars: WIKI_REPO_OPS.docSectionChars,
+      contractChars: WIKI_REPO_OPS.contractChars,
+      sectionChars: WIKI_REPO_OPS.sectionChars,
+      wholeFileChars: WIKI_REPO_OPS.wholeFileChars,
+    });
+    // Every kind says what it answers with, and every kind the contract names is one of the four.
+    expect(Object.keys(repoOps.kindRuns).sort()).toEqual([...WIKI_REPO_OP_KINDS].sort());
+    // The two routes the runner writes back through are named where the doors are.
+    expect(repoOps.routes.result).toMatch(/POST \/runner\/wiki\/repo-ops\/:id\/result/u);
+    expect(repoOps.routes.fragments).toMatch(/POST \/runner\/wiki\/repo-ops\/:id\/fragments/u);
   });
 
   it('ships every closed set exactly as the contract lists it', () => {

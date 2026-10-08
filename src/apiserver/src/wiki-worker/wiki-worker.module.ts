@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { WikiJobExecutor } from './wiki-job-executor';
 import { WikiModelRequestChannel } from './wiki-model-notify';
+import { WikiRepoOpChannel } from './wiki-repo-op-notify';
 import { WikiModelRequestQueue } from './wiki-model-queue.service';
 import { WIKI_SYSTEM_MODEL_CONFIG, WikiModelStatusProbe } from './wiki-model-status';
 import { currentWikiSystemModel } from './wiki-system-model';
@@ -16,6 +17,10 @@ import { currentWikiSystemModel } from './wiki-system-model';
  *   WikiModelRequestQueue     runs the request queue: claim, call, write back, settle (design §5.2)
  *   WikiJobExecutor           claims jobs and runs them, their calls going through the queue (design §5.1)
  *
+ * WikiRepoOpChannel is here for the other half of that same wait (design §7): a job that needs the
+ * repository writes a `wiki_repo_op` and parks on it, and the channel is how it hears the answer land. The
+ * apiserver dispatches and settles those rows (runner-api/wiki-repo-op-relay.ts); the worker only waits.
+ *
  * ORBIT_WIKI_EXECUTOR decides who they run for (wiki-executor-switch.ts): under the default `runner` they
  * claim nothing, and the worker only probes — exactly what it did before this phase.
  */
@@ -25,6 +30,7 @@ import { currentWikiSystemModel } from './wiki-system-model';
     { provide: WIKI_SYSTEM_MODEL_CONFIG, useFactory: currentWikiSystemModel },
     WikiModelStatusProbe,
     WikiModelRequestChannel,
+    WikiRepoOpChannel,
     WikiModelRequestQueue,
     WikiJobExecutor,
   ],

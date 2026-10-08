@@ -2061,7 +2061,20 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // and it rewrites no stored row), and no `task`, `session`, `project` or `project_acceptance_*`
       // object is named. No INSERT, UPDATE or DELETE: every statement is DDL, and the two CHECKs hold
       // for every stored row as it stands.
-      '0401_wiki_job'],
+      '0401_wiki_job',
+      // The runner's repository operations (0402): four new tables and no change to anything that
+      // exists. `wiki_repo_op` is one repository question a job asks the machine its space's
+      // workspace runs on — its kind, its input, its state and the claim (lease_owner,
+      // claim_generation, claimed_at, heartbeat_at) a runner holds while it reads; `wiki_repo_op_fragment`
+      // stages the pieces of a snapshot too large for one request body under the operation that is
+      // uploading them; `wiki_repo_snapshot` is the space's index header (one row per space, replaced
+      // whole) and `wiki_repo_snapshot_fragment` its bytes. Read against every claim above: no
+      // function, trigger, type or enum is created, replaced or dropped — no CREATE OR REPLACE
+      // FUNCTION — so it is not another writer of the DONE fence and names none of the six preserved
+      // objects; no 0177 relation is altered and no `task`, `session`, `project` or
+      // `project_acceptance_*` object is named. No INSERT, UPDATE or DELETE: every statement is DDL,
+      // and the four tables carry no stored row to hold a CHECK to.
+      '0402_wiki_repo_op'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
