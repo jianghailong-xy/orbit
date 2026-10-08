@@ -260,7 +260,8 @@ source SHA, phase records, signed-in/signed-out screenshots and twelve login pag
 `tasks-projects-stack-device-test.sh` with `A11_TEST=io.orbitd.android.auth.LoginRealStackDeviceTest`
 and an args file of base64 `server`, `ownerEmail`, `ownerPassword`: the stack's `auth/methods`, its
 400 for an email it cannot read, an unreachable server, its 401, its `/start` refusal
-(`GOOGLE_BAD_REQUEST`, delivered through the real redirect activity) with a second press ignored, and
+(`GOOGLE_BAD_REQUEST`, handed to `MainActivity.onNewIntent` as the redirect activity hands it on: a
+compose test loses its page once the activity pauses) with a second press ignored, and
 a sign-in that is remembered through sign-out.
 
 API29/API36 runs are emulator evidence until an actual phone serial/device record says

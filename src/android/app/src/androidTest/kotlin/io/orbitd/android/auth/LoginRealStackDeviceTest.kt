@@ -96,14 +96,16 @@ class LoginRealStackDeviceTest {
         capture("stack-401")
 
         // A03-3. The stack's /start, asked with a challenge it cannot take, sends the app back with GOOGLE_BAD_REQUEST, and the
-        // page says iOS's sentence for it. The answer comes back through the real redirect activity, as from a browser; the
-        // browser itself is left out. A second press while that sign-in is open opens nothing (iOS fbe1c83af).
+        // page says iOS's sentence for it. The answer reaches MainActivity as GoogleSignInRedirectActivity hands it on (its
+        // onNewIntent); the browser and that hop are left out, because a compose test loses its page once the activity
+        // pauses (GoogleSignInFlowTest covers the redirect activity). A second press while that sign-in is open opens nothing
+        // (iOS fbe1c83af).
         var opened = 0
         val auth = ViewModelProvider(compose.activity)[AuthViewModel::class.java]
         instrumentation.runOnMainSync {
             auth.continueWithGoogle(server) { url ->
                 opened++
-                thread { answer(Regex("code_challenge=[^&]+").replace(url, "code_challenge=not-a-challenge")) }
+                thread { answer(Regex("code_challenge=[^&]+").replace(url, "code_challenge=not-a-challenge"), context, launchIntent) }
                 true
             }
             auth.continueWithGoogle(server) { opened++; true }
@@ -111,8 +113,6 @@ class LoginRealStackDeviceTest {
         assertEquals(1, opened)
         awaitText(text(R.string.auth_google_bad_request))
         assertEquals(false, auth.googleBusy.value)
-        // MainActivity keeps the newest intent; ActivityScenario follows its activity by the launch intent.
-        instrumentation.runOnMainSync { compose.activity.intent = launchIntent }
         capture("stack-google-bad-request")
 
         // A03-1. The right password signs in; the stack's address and this email are remembered, and signing out comes back
@@ -144,8 +144,8 @@ class LoginRealStackDeviceTest {
 
     private fun awaitText(text: String) = compose.waitUntil(20_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
 
-    /** What the stack answers [url] with, opened as a browser opens it: its redirect, to this app. */
-    private fun answer(url: String) {
+    /** What the stack answers [url] with, opened as a browser opens it: its redirect, handed to MainActivity. */
+    private fun answer(url: String, activity: MainActivity, launchIntent: Intent) {
         val client = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false).build()
         val location = client.newCall(Request.Builder().url(url).build()).execute().use { response ->
             assertEquals(302, response.code)
@@ -153,8 +153,11 @@ class LoginRealStackDeviceTest {
         }
         File(output, "google-start-answer.txt").writeText(location.replace(Regex("state=[^&]+"), "state=<the sign-in's>") + "\n")
         assertTrue(location, location.startsWith("orbit://auth/google?error=GOOGLE_BAD_REQUEST&"))
-        app.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(location)).addCategory(Intent.CATEGORY_BROWSABLE)
-            .setPackage(app.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        instrumentation.runOnMainSync {
+            instrumentation.callActivityOnNewIntent(activity, Intent(activity, MainActivity::class.java).setData(Uri.parse(location)))
+            // MainActivity keeps the newest intent; ActivityScenario follows its activity by the launch intent.
+            activity.intent = launchIntent
+        }
     }
 
     private fun capture(name: String) {
