@@ -64,7 +64,7 @@ const refuse = (name: string) => () => {
     RunnerAuthGuard,
     Reflector,
     { provide: JwtService, useValue: { verifyAsync: async () => ({ sub: ownerScope.ownerId }) } },
-    { provide: PrismaService, useValue: { runner: { findFirst: async () => ownerScope } } },
+    { provide: PrismaService, useValue: { runner: { findFirst: async () => ({ ...ownerScope, owner: { disabledAt: null } }) } } },
   ],
 })
 class RoutingModule {}

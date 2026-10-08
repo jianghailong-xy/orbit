@@ -198,7 +198,7 @@ test('the session guard accepts a runner credential or a service token, and noth
     {
       runner: {
         findFirst: async ({ where }: { where: { tokenHash: string } }) =>
-          where.tokenHash === sha256('runner-secret') ? runnerRow : null,
+          where.tokenHash === sha256('runner-secret') ? { ...runnerRow, owner: { disabledAt: null } } : null,
       },
     } as never,
     { verify: async (token: string) => (token === 'service' ? grant : null) } as never,
@@ -213,7 +213,7 @@ test('the session guard accepts a runner credential or a service token, and noth
 
   const runnerCall = context('runner-secret');
   assert.equal(await guard.canActivate(runnerCall as never), true);
-  assert.equal(runnerCall.req.runner, runnerRow);
+  assert.deepEqual(runnerCall.req.runner, runnerRow);
   assert.equal(runnerCall.req.serviceGrant, undefined, 'a runner credential must carry no grant');
 
   const serviceCall = context('service');

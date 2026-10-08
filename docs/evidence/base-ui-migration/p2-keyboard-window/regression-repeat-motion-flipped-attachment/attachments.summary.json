@@ -1,0 +1,57 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2-keyboard-window/regression-repeat-motion-flipped-attachment/<name>",
+ "files": [
+  {
+   "name": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-attachment--motion.json",
+   "bytes": 22257,
+   "sha256": "ee10e1eef970ba42bfd4881486dc97c059b1a6d935c0aafa2bea289384482fd2"
+  },
+  {
+   "name": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-attachment--repeat-1--motion.json",
+   "bytes": 22283,
+   "sha256": "02748092fc3dfd57fbb6bd0af2c47253e730f6341dcd31c6328556d96870d8a8"
+  },
+  {
+   "name": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-attachment--repeat-2--motion.json",
+   "bytes": 21915,
+   "sha256": "baa0dcade3fa40038d660ebf57656b0ca041ae55f8f0187dd091014c1e98d4fc"
+  },
+  {
+   "name": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-attachment--repeat-3--motion.json",
+   "bytes": 21219,
+   "sha256": "068a95d1a21fe46443807165c85487863ea1ca457cce168bbfc92956ca928a2f"
+  },
+  {
+   "name": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-attachment--repeat-4--motion.json",
+   "bytes": 21998,
+   "sha256": "a8796a33227a43a8d5b4bc7881335ee7dbf4fcb7161bcebbbacd201eed21fd2b"
+  },
+  {
+   "name": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-attachment--repeat-5--motion.json",
+   "bytes": 21917,
+   "sha256": "65359000c6a00231f208290da58d15a1297c253cb5c8111aca942a2c8f87b79a"
+  },
+  {
+   "name": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-attachment--repeat-6--motion.json",
+   "bytes": 21909,
+   "sha256": "4bc1579789b15474670035e97d1f6dd49e9eb5aa8aaafdd8881b6b5a95f0f770"
+  },
+  {
+   "name": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-attachment--repeat-7--motion.json",
+   "bytes": 21976,
+   "sha256": "1936aa9e78e640f1336dfe100e59be2508a8a5c0ba01aa8f0aad37e287951af9"
+  },
+  {
+   "name": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-attachment--repeat-8--motion.json",
+   "bytes": 21985,
+   "sha256": "3b65962859ac5181f91d79db9aa58e0a3a22529ff3dd7af775cab7a8b7695d82"
+  },
+  {
+   "name": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-attachment--repeat-9--motion.json",
+   "bytes": 20872,
+   "sha256": "44272be076c6a8b2ac2cd4383f0f8f9b41092f5aa5ad03eb20969f30f0150b25"
+  }
+ ]
+}

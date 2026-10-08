@@ -179,6 +179,32 @@ test('in flight, not DONE, never landed, landed or conflicted: refused, each say
   }
 });
 
+test('a RUNNING landing whose runner stopped reporting is retried as the ERROR it is (J-T9)', () => {
+  const silent = { id: 'job-2', generation: 2, state: 'RUNNING', checks: [], phase: 'FETCH', timedOut: true };
+  // The coordinator: the same rules as any failed landing, with no item about it yet.
+  assert.deepEqual(decideIntegrationRetry(facts({ newestLanding: silent, openItems: [] })), {
+    ok: true, retryOfJobId: 'job-2', failureClass: 'ERROR', handle: [], endsTimedOutJob: true,
+  });
+  assert.equal(refusalOf(facts({ newestLanding: silent, openItems: [], coordinatorEnabled: false })).code,
+    INTEGRATION_RETRY_NOT_AUTOMATIC);
+  // The account owner: no item of theirs is needed — nothing has opened one, and the press decides.
+  assert.deepEqual(decideIntegrationRetry(facts({ requester: 'OWNER', newestLanding: silent, openItems: [] })), {
+    ok: true, retryOfJobId: 'job-2', failureClass: 'ERROR', handle: [], endsTimedOutJob: true,
+  });
+  assert.equal(refusalOf(facts({
+    requester: 'OWNER', newestLanding: silent, openItems: [],
+    ownerBlockers: [{ id: 'b-1', kind: 'AWAITING_USER_APPROVAL' }],
+  })).code, INTEGRATION_RETRY_OWNER_BLOCKER);
+  // Still inside its limit, or queued, it is in flight: nothing is queued beside it.
+  for (const landing of [{ ...silent, timedOut: false }, { ...silent, state: 'QUEUED' }]) {
+    const refused = refusalOf(facts({ requester: 'OWNER', newestLanding: landing, openItems: [] }));
+    assert.equal(refused.code, INTEGRATION_RETRY_IN_FLIGHT, landing.state);
+    assert.match(refused.message, /stops reporting past its limit/);
+  }
+  // A failed landing's decision does not change shape: it carries no timeout to end.
+  assert.equal('endsTimedOutJob' in decideIntegrationRetry(facts()), false);
+});
+
 const PROJECT = '01a0f53a-99c8-7488-82b1-b4b2d95ecbe1';
 const TASK = '01a0f53f-5fa0-70e8-80c5-c9582a60ec33';
 

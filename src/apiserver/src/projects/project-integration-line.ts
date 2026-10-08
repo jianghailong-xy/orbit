@@ -5,12 +5,14 @@ import {
   type ProjectIntegrationSettings as SharedProjectIntegrationSettings,
   type ProjectIntegrationView as SharedProjectIntegrationView,
   type ProjectListIntegration,
+  type ProjectIntegrationJob,
   type IntegrationJobKind,
   type IntegrationJobPhase,
 } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
 import { branchName } from './project-criterion-landing';
+import { IntegrationCheckSource, integrationJobLimitSeconds } from './project-integration-job';
 import { readProjectLandTaskViews } from './project-task-integration';
 
 /**
@@ -173,7 +175,11 @@ export async function readProjectIntegrationLines(
           state: lead.state === 'RUNNING' ? 'RUNNING' : 'QUEUED',
           startedAt: lead.claimedAt ?? lead.createdAt,
           heartbeatAt: lead.heartbeatAt,
-          waitMs: claimedWaitMs({ state: lead.state, queuedAt: lead.createdAt, claimedAt: lead.claimedAt }),
+          waitMs: claimedWaitMs({
+            state: lead.state,
+            startedAt: lead.claimedAt ?? lead.createdAt,
+            queuedAt: lead.createdAt,
+          }),
         },
       } : {}),
     });
@@ -262,11 +268,6 @@ export async function readProjectIntegrationView(
   projectId: string,
   settings: ProjectIntegrationSettingsView,
 ): Promise<ProjectIntegrationView> {
-  const [counts] = await prisma.$queryRaw<Array<{ integrating: number; queued: number }>>(Prisma.sql`
-    SELECT (count(*) FILTER (WHERE "state" = 'RUNNING'))::int AS "integrating",
-           (count(*) FILTER (WHERE "state" = 'QUEUED'))::int AS "queued"
-      FROM "project_integration_job"
-     WHERE "project_id" = ${projectId}::uuid`);
   // The last finished attempt's checks may have failed on a tree that never landed. Keep its
   // verdict separate from the last successful landing's measured distance from upstream.
   const [newest] = await prisma.$queryRaw<Array<{
@@ -296,58 +297,35 @@ export async function readProjectIntegrationView(
        AND "main_sync_sha" IS NOT NULL
      ORDER BY "finished_at" DESC, "id" DESC
      LIMIT 1`);
-  // Running work takes precedence over queued work: an older queued job must not hide the work
-  // the runner is doing. Within either state, name the oldest job. Kind and phase distinguish a
-  // promotion check from a landing, and checks from the git steps around them.
-  //
-  // Its clock starts at the claim for a running job and at the enqueue for a queued one — a QUEUED
-  // job has never been claimed, so the two spellings are one COALESCE and no job reports the age of
-  // the wrong wait. `id` breaks a tie between two jobs created in the same millisecond; uuid v7
-  // sorts by time.
-  const [oldest] = await prisma.$queryRaw<Array<{
-    state: string; kind: IntegrationJobKind; phase: IntegrationJobPhase | null;
-    taskTitle: string | null; startedAt: Date; heartbeatAt: Date | null;
-    queuedAt: Date; claimedAt: Date | null;
-  }>>(Prisma.sql`
-    SELECT j."state", j."kind", j."phase",
-           t."title" AS "taskTitle",
-           COALESCE(j."claimed_at", j."created_at") AS "startedAt",
-           j."heartbeat_at" AS "heartbeatAt",
-           j."created_at" AS "queuedAt",
-           j."claimed_at" AS "claimedAt"
-      FROM "project_integration_job" j
-      LEFT JOIN "task" t ON t."id" = j."task_id"
-     WHERE j."project_id" = ${projectId}::uuid
-       AND j."state" IN ('RUNNING', 'QUEUED')
-     ORDER BY (j."state" = 'RUNNING') DESC,
-              COALESCE(j."claimed_at", j."created_at") ASC, j."id" ASC
-     LIMIT 1`);
+  const jobs = await readInFlightJobs(prisma, projectId);
   // Each current LAND_TASK through the task read model, so this page and the task's own describe
   // one landing in the same words (§2.7a).
   const landTasks = await readProjectLandTaskViews(prisma, projectId);
 
   const ahead = newest?.aheadOfUpstream ?? null;
+  const lead = jobs[0];
   return {
     ...settings,
     commitsAheadOfUpstream: ahead,
     commitsAheadOfUpstreamAbsentReason: ahead === null ? 'NO_LANDING_YET' : null,
     lastUpstreamSyncAt: synced?.at ?? null,
     lastUpstreamSyncAbsentReason: synced ? null : 'NEVER_SYNCED',
-    integratingCount: counts?.integrating ?? 0,
-    queuedCount: counts?.queued ?? 0,
+    integratingCount: jobs.filter((job) => job.state === 'RUNNING').length,
+    queuedCount: jobs.filter((job) => job.state === 'QUEUED').length,
     mergeCheckOnTip: lastLandingCheck(newest?.checks),
     landTasks,
-    inFlight: oldest
+    inFlight: lead
       ? {
-        taskTitle: oldest.taskTitle,
-        kind: oldest.kind,
-        phase: oldest.phase,
-        state: oldest.state === 'RUNNING' ? 'RUNNING' : 'QUEUED',
-        startedAt: oldest.startedAt,
-        heartbeatAt: oldest.heartbeatAt,
-        waitMs: claimedWaitMs(oldest),
+        taskTitle: lead.taskTitle,
+        kind: lead.kind,
+        phase: lead.phase,
+        state: lead.state,
+        startedAt: lead.startedAt,
+        heartbeatAt: lead.heartbeatAt,
+        waitMs: claimedWaitMs(lead),
       }
       : null,
+    inFlightJobs: jobs,
   };
 }
 
@@ -359,9 +337,117 @@ export async function readProjectIntegrationView(
  * from the same two instants: the clock a reader watches on this line counts from the claim, so
  * without this the minutes a job spent waiting for a runner read as minutes of work.
  */
-function claimedWaitMs(job: { state: string; queuedAt: Date; claimedAt: Date | null }): number | null {
-  if (job.state !== 'RUNNING' || !job.claimedAt) return null;
-  return Math.max(0, job.claimedAt.getTime() - job.queuedAt.getTime());
+function claimedWaitMs(job: { state: string; startedAt: Date; queuedAt: Date }): number | null {
+  if (job.state !== 'RUNNING') return null;
+  return Math.max(0, job.startedAt.getTime() - job.queuedAt.getTime());
+}
+
+/** One RUNNING or QUEUED job as `readInFlightJobs` reads it, before the limit is decided. */
+interface InFlightJobRow extends IntegrationCheckSource {
+  id: string;
+  state: string;
+  kind: IntegrationJobKind;
+  phase: IntegrationJobPhase | null;
+  generation: number;
+  taskId: string | null;
+  taskTitle: string | null;
+  createdAt: Date;
+  claimedAt: Date | null;
+  heartbeatAt: Date | null;
+  runnerName: string | null;
+  retryRequestedBySessionId: string | null;
+  retryRequestedByUserId: string | null;
+  /** Seconds since the runner last said anything about it, by the database's clock. */
+  silentSeconds: number | null;
+  /** Another job on the same runner, repository and target ref was claimed first and still runs. */
+  behindAnotherOnRunner: boolean;
+}
+
+/**
+ * Every job this project has RUNNING and QUEUED, in `inFlight`'s order (§1.6 `inFlightJobs`).
+ *
+ * Running work takes precedence over queued work: an older queued job must not hide the work the
+ * runner is doing. Within either state, the oldest job first. Its clock starts at the claim for a
+ * running job and at the enqueue for a queued one — a QUEUED job has never been claimed, so the two
+ * spellings are one COALESCE and no job reports the age of the wrong wait. `id` breaks a tie between
+ * two jobs created in the same millisecond; uuid v7 sorts by time.
+ *
+ * The columns `checksFor` reads come along so a running job's limit is the one its claim was handed:
+ * the acceptance of the task whose session the job names, and the codebase's merge check.
+ *
+ * A claimed job that has not reported since its claim may be waiting its turn rather than lost: the
+ * runner takes the repository and target ref under one in-process lock, and a CHECK_PROMOTION's
+ * serial key does not keep a landing on the same ref from being claimed beside it. While a job of any
+ * project on the same runner, repository and ref was claimed first and still runs, this one is not
+ * timed out — offering a retry of it would run the same work twice.
+ */
+export async function readInFlightJobs(
+  prisma: Pick<PrismaService, '$queryRaw'>,
+  projectId: string,
+  /** Read just this job — how the retry door judges a timeout by the rule the page shows. */
+  jobId?: string,
+): Promise<ProjectIntegrationJob<Date>[]> {
+  const rows = await prisma.$queryRaw<InFlightJobRow[]>(Prisma.sql`
+    SELECT j."id", j."state", j."kind", j."phase", j."generation",
+           j."task_id" AS "taskId", t."title" AS "taskTitle",
+           j."created_at" AS "createdAt", j."claimed_at" AS "claimedAt",
+           j."heartbeat_at" AS "heartbeatAt",
+           r."name" AS "runnerName",
+           j."retry_requested_by_session_id" AS "retryRequestedBySessionId",
+           j."retry_requested_by_user_id" AS "retryRequestedByUserId",
+           p."source_kind" AS "promotionSourceKind",
+           st."acceptance_command" AS "acceptanceCommand",
+           st."acceptance_expected_exit_code" AS "acceptanceExpectedExitCode",
+           st."acceptance_timeout_seconds" AS "acceptanceTimeoutSeconds",
+           cb."merge_check_command" AS "mergeCheckCommand",
+           cb."merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
+           j."skip_merge_check" AS "skipMergeCheck",
+           EXTRACT(EPOCH FROM now() - COALESCE(j."heartbeat_at", j."claimed_at"))::float8 AS "silentSeconds",
+           (j."state" = 'RUNNING' AND j."heartbeat_at" <= j."claimed_at" AND EXISTS (
+              SELECT 1
+                FROM "project_integration_job" o
+                JOIN "project_codebase" ocb ON ocb."id" = o."codebase_id"
+               WHERE o."state" = 'RUNNING'
+                 AND o."runner_id" = j."runner_id"
+                 AND o."target_ref" = j."target_ref"
+                 AND ocb."canonical_repo_url" = cb."canonical_repo_url"
+                 AND o."claimed_at" < j."claimed_at"
+                 AND o."id" <> j."id")) AS "behindAnotherOnRunner"
+      FROM "project_integration_job" j
+      JOIN "project_codebase" cb ON cb."id" = j."codebase_id"
+      LEFT JOIN "task" t ON t."id" = j."task_id"
+      LEFT JOIN "session" s ON s."id" = j."session_id"
+      LEFT JOIN "task" st ON st."id" = s."task_id"
+      LEFT JOIN "project_promotion" p ON p."id" = j."promotion_id"
+      LEFT JOIN "runner" r ON r."id" = j."runner_id"
+     WHERE j."project_id" = ${projectId}::uuid
+       AND j."state" IN ('RUNNING', 'QUEUED')
+       ${jobId ? Prisma.sql`AND j."id" = ${jobId}::uuid` : Prisma.empty}
+     ORDER BY (j."state" = 'RUNNING') DESC,
+              COALESCE(j."claimed_at", j."created_at") ASC, j."id" ASC`);
+  return rows.map((row) => {
+    const running = row.state === 'RUNNING';
+    const limitSeconds = integrationJobLimitSeconds(row);
+    const timedOut = limitSeconds !== null && !row.behindAnotherOnRunner
+      && (row.silentSeconds ?? 0) > limitSeconds;
+    return {
+      jobId: row.id,
+      kind: row.kind,
+      state: running ? 'RUNNING' : 'QUEUED',
+      phase: row.phase,
+      taskId: row.taskId,
+      taskTitle: row.taskTitle,
+      generation: row.generation,
+      startedAt: row.claimedAt ?? row.createdAt,
+      queuedAt: row.createdAt,
+      heartbeatAt: row.heartbeatAt,
+      runnerName: running ? row.runnerName : null,
+      retriedBy: row.retryRequestedByUserId ? 'OWNER' : row.retryRequestedBySessionId ? 'COORDINATOR' : null,
+      timedOut,
+      limitSeconds,
+      retryable: timedOut && row.kind === 'LAND_TASK',
+    };
+  });
 }
 
 /** The last attempt's check evidence, not the success of its push or the state of the current tip.

@@ -19,9 +19,10 @@ import { Badge } from '../components/ui/Badge';
 import { Button as OrbitButton } from '../components/ui/Button';
 import { Checkbox } from '../components/ui/Checkbox';
 import { useConfirm } from '../components/ui/ConfirmDialog';
+import { OverlayScope } from '../components/ui/Overlay';
 import { fullDate } from '../lib/accessTokens';
 import { authMethodsQuery } from '../lib/googleLink';
-import type { SignInMethods } from '../lib/queries';
+import { meQuery, type SignInMethods } from '../lib/queries';
 import { useToast } from '../lib/toast';
 
 interface AdminUser {
@@ -32,6 +33,8 @@ interface AdminUser {
   createdAt: string;
   /** Absent from a server that predates Google sign-in. */
   signInMethods?: SignInMethods;
+  /** When an administrator disabled the account; null while it is not, absent from a server that predates disabling. */
+  disabledAt?: string | null;
 }
 interface CreateResult {
   email: string;
@@ -41,6 +44,17 @@ interface CreateResult {
 
 export const GOOGLE_SIGN_IN_ONLY = 'Google sign-in only';
 export const UNLINK_GOOGLE = 'Unlink Google';
+export const DISABLE_USER = 'Disable';
+export const ENABLE_USER = 'Enable';
+/**
+ * What the Add-user dialog says under **Google sign-in only** (design §5.2): only a Gmail or Google
+ * Workspace address is one Google vouches for, so only that address can be linked by it. Any other
+ * address leaves the account without a password and without a way in.
+ */
+export const GOOGLE_SIGN_IN_ONLY_HINT =
+  'No password is set: they sign in with the Google account of this email address. That address must be a '
+  + 'Gmail or Google Workspace address — Google has to vouch for it. Any other address leaves this account '
+  + 'with no way to sign in: give them a password instead.';
 
 /**
  * How an account signs in (docs/google-sign-in-design.md §5.6: the list shows it, so an unusual
@@ -78,6 +92,8 @@ export function AdminUsersPage() {
   });
   // A Google-only account is offered only while Google sign-in is on: otherwise it could not sign in.
   const googleOn = useQuery(authMethodsQuery()).data?.google === true;
+  // An administrator cannot disable their own account, so their row does not offer it.
+  const meId = useQuery(meQuery()).data?.id;
 
   const [createOpen, setCreateOpen] = useState(false);
   const [email, setEmail] = useState('');
@@ -157,6 +173,33 @@ export function AdminUsersPage() {
       onConfirm: () => unlinkMut.mutateAsync(u),
     });
 
+  const disabledMut = useMutation({
+    mutationFn: ({ user, disabled }: { user: AdminUser; disabled: boolean }) =>
+      api<AdminUser>(`/admin/users/${user.id}/disabled`, { method: 'PATCH', body: { disabled } }),
+    onSuccess: (_, { user, disabled }) => {
+      invalidate();
+      message.success(disabled ? 'Account disabled' : 'Account enabled', user.email);
+    },
+  });
+  /**
+   * Disable, once confirmed (docs/google-sign-in-design.md §5.5): the administrator is told what stops
+   * working, and that nothing is deleted. A refusal — the last administrator — is shown in the dialog.
+   */
+  const askDisable = (u: AdminUser) =>
+    void confirm({
+      title: `Disable ${u.email}?`,
+      description:
+        'They are signed out everywhere and cannot sign in. Their access tokens, runners and service tokens stop working until you enable the account again. Nothing they own is deleted.',
+      confirmText: DISABLE_USER,
+      danger: true,
+      onConfirm: () => disabledMut.mutateAsync({ user: u, disabled: true }),
+    });
+  const enable = (u: AdminUser) =>
+    disabledMut.mutate(
+      { user: u, disabled: false },
+      { onError: (e: Error) => message.error("Couldn't enable the account", e.message) },
+    );
+
   const columns: TableColumnsType<AdminUser> = [
     { title: 'Email', dataIndex: 'email', key: 'email' },
     { title: 'Name', dataIndex: 'name', key: 'name' },
@@ -167,6 +210,18 @@ export function AdminUsersPage() {
       render: (role: AdminUser['role']) => (
         <Tag color={role === 'ADMIN' ? 'gold' : 'default'}>{role}</Tag>
       ),
+    },
+    {
+      title: 'Status',
+      key: 'status',
+      render: (_, u) =>
+        u.disabledAt ? (
+          <Badge tone="error" title={`Disabled on ${fullDate(u.disabledAt)}`}>
+            Disabled
+          </Badge>
+        ) : (
+          <Badge>Active</Badge>
+        ),
     },
     { title: 'Sign-in', key: 'signIn', render: (_, u) => <SignInBadges methods={u.signInMethods} /> },
     {
@@ -203,6 +258,21 @@ export function AdminUsersPage() {
           >
             {u.role === 'ADMIN' ? 'Make member' : 'Make admin'}
           </Button>
+          {u.disabledAt ? (
+            <OrbitButton
+              size="small"
+              loading={disabledMut.isPending && disabledMut.variables?.user.id === u.id}
+              onClick={() => enable(u)}
+            >
+              {ENABLE_USER}
+            </OrbitButton>
+          ) : (
+            u.id !== meId && (
+              <OrbitButton size="small" danger onClick={() => askDisable(u)}>
+                {DISABLE_USER}
+              </OrbitButton>
+            )
+          )}
           <Popconfirm title={`Delete ${u.email}?`} onConfirm={() => deleteMut.mutate(u.id)}>
             <Button size="small" danger>
               Delete
@@ -256,7 +326,7 @@ export function AdminUsersPage() {
           )}
           <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
             {googleOn && googleOnly
-              ? 'No password is set: they sign in with the Google account of this email address.'
+              ? GOOGLE_SIGN_IN_ONLY_HINT
               : 'A one-time password is generated and shown once after creating.'}
           </div>
         </Space>
@@ -271,7 +341,12 @@ export function AdminUsersPage() {
         width={1120}
         destroyOnHidden
       >
-        {tokensOf && <UserAccessTokens user={tokensOf} />}
+        {/* The table's revoke question is an Orbit popover: it stays inside this dialog's focus and layer. */}
+        {tokensOf && (
+          <OverlayScope>
+            <UserAccessTokens user={tokensOf} />
+          </OverlayScope>
+        )}
       </Modal>
     </div>
   );

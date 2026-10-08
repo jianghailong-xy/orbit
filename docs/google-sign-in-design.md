@@ -101,6 +101,10 @@
   `redirect_uri=${PUBLIC_ORIGIN}/api/auth/google/callback`、`scope=openid email profile`、`state`、`nonce`、
   `code_challenge`（Google 这一侧的 PKCE，与客户端那一对不是同一个）、`prompt=select_account`。
 - 未启用 Google：Web 302 回 `/login?google_error=GOOGLE_NOT_CONFIGURED`，原生回 `orbit://auth/google?error=…`。
+- 参数不合法（`code_challenge` 缺失或不是 S256 格式，或 `client_state` 超过 512 字符）、该 IP 超出限流、未完成的
+  flow 已达总量上限（7.4）时，也按 4.2 失败表 302 回跳而不回 JSON，错误码依次为 `GOOGLE_BAD_REQUEST`、
+  `GOOGLE_RATE_LIMITED`、`GOOGLE_SIGN_IN_BUSY`；这些回跳与上一条一样不设 cookie、不写库（连过期行也不清理），
+  原生端只在 `client_state` 合法时带回它；`client` 缺失或不是 `web` / `native` 时无处可回，仍回 400。
 
 ### 4.2 回调：`GET /api/auth/google/callback`
 
@@ -237,9 +241,13 @@ model OAuthLoginFlow {               // oauth_login_flow：短命，兑换即删
 - 新增「停用」：管理员在用户管理里 Disable / Enable（`User.disabledAt`）。不能停用自己，也不能停用最后一个管理员。停用后：
   - 密码登录、Google 兑换、refresh 一律拒绝 `ACCOUNT_DISABLED`；停用时吊销该用户全部 refresh token（恢复后要重新登录）。
   - access token 是无状态 JWT，PAT 也走同一个 guard：`JwtAuthGuard` 对照一份内存里的停用用户集合
-    （每 30 秒从库里重读），停用在半分钟内对所有用户路由生效，不必每个请求查库。PAT 不吊销，停用期间被拒，恢复后照常可用。
+    （每 25 秒从库里重读，给查询本身和定时器的延迟留出余量），停用在半分钟内对所有用户路由生效，不必每个请求查库；
+    在本服务器上经管理接口停用或恢复，提交后立即重读。PAT 不吊销，停用期间被拒，恢复后照常可用。
   - runner 凭证的鉴权本来每次就按 `tokenHash` 查 runner（`runner-api/runner-auth.guard.ts`），同一次查询带出 owner 的
     `disabledAt` 即可拒绝；`runner-session-auth.guard.ts` 与 service token 同理。停用账号的 runner 因此收不到也领不到活。
+  - 池网关 token（`orbit-gw-` / `orbit-gwl-`）同理：两处 `caller()` 本来每次就按 `tokenHash` 查 token，同一次查询带出会话
+    owner 的 `disabledAt`，停用即回 403 `ACCOUNT_DISABLED`（codex 读的 OpenAI 错误形状，文案与 runner 凭证相同），当场生效。
+    停用前已在 runner 上跑着的 Codex 会话因此不能再经池网关消耗池主的 key 或登录账号；token 不吊销，恢复后照常可用。
   - 不删任何数据，可以恢复。身份行保留，同一个 Google 账号不能靠重新注册绕过（5.2 第 1 条先命中）。
 - 删除照旧：仍拥有 runner、workspace、任务的用户删不掉。处置滥用用停用，不用删除。
 
@@ -277,7 +285,7 @@ model OAuthLoginFlow {               // oauth_login_flow：短命，兑换即删
 | `POST /api/admin/users` | ADMIN | 新增可选 `passwordless` |
 | `PATCH /api/admin/users/:id/disabled` | ADMIN | `{disabled: boolean}`，5.5 |
 | `DELETE /api/admin/users/:id/identities/google` | ADMIN | 解除他人的关联 |
-| `GET /api/admin/sign-in/google` | ADMIN | `{enabled, clientId, hasSecret, signupPolicy, redirectUri}`，从不返回密钥 |
+| `GET /api/admin/sign-in/google` | ADMIN | `{enabled, clientId, hasSecret, secretUnreadable, signupPolicy, redirectUri}`，从不返回密钥；`secretUnreadable` 为真时管理区提示重填（换了 `PROVIDER_SECRET_KEY`，见 7.1） |
 | `PUT /api/admin/sign-in/google` | ADMIN | `{enabled, clientId, clientSecret?, signupPolicy}`；不带 `clientSecret` 即保留原值 |
 
 全是新路由或增量字段，旧客户端不受影响。新路由要过 `pat-route-coverage.spec.ts` 的声明普查（admin 路由沿用 `@PatForbidden('ADMIN')`）。
@@ -304,6 +312,8 @@ model SignInProvider {               // sign_in_provider，每个提供方一行
 - `enabled` 为真且 ID、密钥都在，才算启用；否则 `/auth/methods` 报 `google: false`，行为与今天完全相同。
 - 回调地址取已有的 `PUBLIC_ORIGIN`，必须与 Google 控制台登记的一字不差；`self-hosting.md` 已要求它是对外的 HTTPS 地址。
 - 密钥与模型提供方的 API key 同一套加密：没有密钥版本，轮换 `PROVIDER_SECRET_KEY` 后要重填（与提供方相同的已知限制）。
+  轮换后 `GET /api/admin/sign-in/google` 报 `secretUnreadable: true`，Sign-in 页据此提示已保存的密钥解不开、要求重填，
+  不显示 On 与「A secret is saved」；用户侧登录仍按 4.3 的通用失败文案处理。
 
 为什么不用环境变量：apiserver 的 compose 段被 `test/compose-topology.test.mjs` 钉住，加变量要所有者重新审批；
 改了还要重启。存库则 orbitd.io 和每个自建部署都是「发版后管理员填一次」，不动部署文件。
@@ -334,7 +344,8 @@ model SignInProvider {               // sign_in_provider，每个提供方一行
 
 - `/start` 与 `/exchange` 按 IP 限流，复用 `shared/public-surface.guard.ts` 的 `SharedRateLimiter`
   （按 `visitorAddress()`，即 nginx 给的 `X-Real-IP`）。
-- `/start` 每次删除已过期的 flow；未完成的 flow 设总量上限，超出时回 `503`，不无限写库。
+- `/start` 每次开 flow 前删除已过期的 flow；未完成的 flow 设总量上限，超出时拒绝（`/start` 按 4.1 回跳
+  `GOOGLE_SIGN_IN_BUSY`，`/link` 回 `503`），不无限写库。
 - 密码登录本身仍没有限流，这是既有缺口，不在本方案范围内。
 
 ## 8. 客户端

@@ -26,6 +26,7 @@ import {
 import { ModelUsage, NormalizedRunEvent, TokenUsage } from './events';
 import { SessionSourceSnapshot } from './source';
 import type { WikiMaintenanceRun } from './wiki';
+import type { WikiRepoOpCommand } from './wikiRepoOps';
 
 /** Why an ended session cannot currently be resumed on its original runner. */
 export type SessionResumeBlockedReason =
@@ -456,6 +457,53 @@ export interface PlanUsage extends PlanUsageSnapshot {
   antigravity?: PlanUsageSnapshot;
 }
 
+/** Why the DeepSeek account balance behind a key could not be read: DeepSeek refused the key
+ *  (401/403), the server never reached DeepSeek, or DeepSeek answered with an error or with
+ *  something that is not a balance. */
+export type ProviderBalanceFailure = 'KEY_REJECTED' | 'NETWORK' | 'UPSTREAM_ERROR';
+
+/** One currency of a DeepSeek account's balance. The amounts are the decimal strings DeepSeek
+ *  sends (`balance_infos[]`), never computed here; DeepSeek spends granted before topped-up. */
+export interface ProviderBalanceAmount {
+  currency: string;
+  totalBalance: string;
+  grantedBalance: string;
+  toppedUpBalance: string;
+}
+
+/** Another of the owner's DeepSeek providers holding the very same key — so the same account, and
+ *  the same balance. */
+export interface ProviderBalanceSibling {
+  id: string;
+  label: string;
+}
+
+/** One read of a DeepSeek account's balance, as the server keeps it for a key. A failure carries why
+ *  and when it was tried, and no amount at all — a balance that could not be read is never a 0. */
+export type ProviderBalanceRead =
+  | {
+      ok: true;
+      balances: ProviderBalanceAmount[];
+      /** DeepSeek's `is_available`: false when the account can't pay for more requests. */
+      isAvailable: boolean;
+      /** When the server asked DeepSeek (ISO-8601). Providers sharing a key share this read. */
+      fetchedAt: string;
+    }
+  | {
+      ok: false;
+      reason: ProviderBalanceFailure;
+      /** What happened, in a sentence; the clients add what to do about it where they are. */
+      message: string;
+      fetchedAt: string;
+    };
+
+/**
+ * GET /providers/mine/:id/balance: the balance of the whole DeepSeek account a provider's stored
+ * key belongs to (DeepSeek's `GET /user/balance`, asked by the server — the key never leaves it).
+ * It is not what any session spent: DeepSeek has no per-request or per-day spend API.
+ */
+export type ProviderBalance = ProviderBalanceRead & { sharedWith: ProviderBalanceSibling[] };
+
 export interface RunnerHeartbeatRequest {
   status: RunnerStatus;
   /** How many more active turns the runner can accept right now. Warm idle
@@ -818,6 +866,13 @@ export interface RunnerHeartbeatResponse {
    *  named here is already RUNNING in the database and is nobody else's to take. Answered via
    *  POST /runner/integration-jobs/:jobId/{progress,result}. Absent on older control planes. */
   integrationJobs?: IntegrationJobCommand[];
+  /** Repository operations this runner has just claimed (contract `repoOps`, design §7): the wiki's
+   *  pipelines run on the server, which holds no repository, so a step that needs to know what the
+   *  repository says asks the machine its space's workspace runs on. Sent only to a process that
+   *  declared `wiki-repo-op/v1`, heartbeats with a leaseOwner and is not draining; at most two per
+   *  beat, and a row named here is already RUNNING in the database. Answered via
+   *  POST /runner/wiki/repo-ops/:id/{progress,fragments,result}. Absent on older control planes. */
+  wikiRepoOps?: WikiRepoOpCommand[];
 }
 
 /** `account/rateLimitResetCredit/consume` outcomes, spelled as the provider spells them. */
@@ -1031,6 +1086,19 @@ export interface CodexRateLimitResetResultRefusal {
  */
 export type LoginEngine = 'claude' | 'codex' | 'kimi' | 'antigravity';
 
+/**
+ * Kimi Code's two sign-in sites, as `kimi login --region` names them: `mainland-cn` is kimi.com,
+ * `global` is kimi.ai. Each keeps accounts, a sign-in page and an API of its own, so an account of
+ * one cannot sign in on the other.
+ */
+export type KimiRegion = 'mainland-cn' | 'global';
+export const KIMI_REGIONS: readonly KimiRegion[] = ['mainland-cn', 'global'];
+
+/** Runner signs Kimi Code in on the site a login `start` names (`region`). One that does not runs a
+ *  bare `kimi login`, which goes wherever the CLI decides — the site it last signed in to, or the one
+ *  its installer came from — so it is handed no start naming a site. */
+export const KIMI_LOGIN_REGION_V1 = 'kimi-login-region/v1';
+
 /** Engines with an install action in Providers: every engine a runner signs in with, plus `dsh` and
  *  OpenCode, which are installed without one — the relay needs an install command, not a way in. */
 export type InstallEngine = LoginEngine | 'opencode' | 'dsh';
@@ -1113,6 +1181,10 @@ export interface LoginCommand {
   account?: string;
   /** Codex only: sign in a NEW account, which the runner adds under this name. */
   accountName?: string;
+  /** Kimi only: the site to sign in on (`kimi login --region`). Only a runner that declares
+   *  `kimi-login-region/v1` is handed a start naming one; absent, the runner runs a bare `kimi login`,
+   *  exactly as before the choice. */
+  region?: KimiRegion;
 }
 
 /**
@@ -1207,6 +1279,11 @@ export interface RunnerEngineHealth {
    *  sign-in. Default's `buckets` (with `fetchedAt`) are present only while the runner's own Google
    *  sign-in answers `yes`; every other signed-in account's are under `accounts`, by its id. */
   planUsage?: PlanUsageSnapshot;
+  /** Kimi only: the site the CLI's own login is on, read from the managed Kimi Code provider it keeps
+   *  in config.toml — still reported once that login has expired, and absent before the first sign-in
+   *  on this machine (an installer's default is not a sign-in), after a logout, and from an older
+   *  runner. */
+  kimiRegion?: KimiRegion;
 }
 
 export interface DshRuntimeHealth {
@@ -1251,6 +1328,10 @@ export interface RunnerEngineAccount {
    *  read one for this account, and for engines that report none. Two accounts showing the same one
    *  are the same account. */
   fingerprintPrefix?: string;
+  /** When this signed-in account's login lapses, ISO 8601: the CLI's own expiry for it (Claude Code's
+   *  refreshTokenExpiresAt, which the CLI warns about three days ahead). Absent where the CLI recorded
+   *  none, for an account not signed in, and for every engine but Claude Code. */
+  loginExpiresAt?: string;
 }
 
 /**

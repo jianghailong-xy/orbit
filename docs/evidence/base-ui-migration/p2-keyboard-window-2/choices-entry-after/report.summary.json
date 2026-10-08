@@ -1,0 +1,1089 @@
+{
+ "stats": {
+  "startTime": "2026-10-07T15:26:44.537Z",
+  "duration": 268425.801,
+  "expected": 30,
+  "skipped": 0,
+  "unexpected": 2,
+  "flaky": 0
+ },
+ "errors": [],
+ "tests": [
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 7735,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m250\u001b[39m\nReceived:    \u001b[31m320.19999998807907\u001b[39m\n\n  107 |   expect(scroll.input?.kind).toBe(info.project.use.isMobile ? 'PageDown' : 'wheel');\n  108 |   expect(scroll.movedAfterMs).not.toBeNull();\n> 109 |   expect(scroll.movedAfterMs).toBeLessThanOrEqual(scroll.limitMs);\n      |                               ^\n  110 |   expect(scroll.after).toBeGreaterThan(scroll.before);\n  111 |   await expect(trigger).toBeFocused();\n  112 |   await info.attach('nested-lifecycle', { body: JSON.stringify({ motion, geometry, selectExit, popoverExit, focusReturned: true, scrollUnlocked: true }, null, 2), contentType: 'application/json' });\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/src/web/ui-migration/choices-lifecycle.browser.mjs:109:31"
+     ],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "068dd99eceef976b66f3674a3ec4561217c82a4e0474dc3042a1f258c8413876"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9a52533aa4a33f9b75184c20bdd9276cd5461f07085e0c873bfd7a1b248a2e1f"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "978e7cbea639960f5e94f9c09ff4dcd4f6e77cc4af00b86b9512e0dc36599d8a"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/src/web/.choices-results/choices-lifecycle.browser.-370c5-restore-one-layer-at-a-time-chromium-light-desktop/error-context.md",
+       "sha256": "6d9ba8ee1cacb73fa09aad63cfbd1ca4120e5eebbe452fa7e9feedfc0214718e"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/src/web/.choices-results/choices-lifecycle.browser.-370c5-restore-one-layer-at-a-time-chromium-light-desktop/trace.zip",
+       "sha256": "68e54239b2bc6ff5cdca20f7fd92f1585fdc7471f16db74261b8b93929a0d52b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3472,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "66831453369f4cb88b136910c53be9f4a5a089aeb982e26cc99dfb7db6c05c2d"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "bffd5b4df26dc776ad0b93f0f52064111e4cc82fca25a44a16820d06ccc6679c"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6f0abd03ea63200cff07727bd5829e3ad6c54cb95b70565f640ec12eb0881f52"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "932d3c594d2140b8efbc4c3ef93f3d52d939eb5247bfd12683311990cc620ca0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 6496,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "a95286856b082fb7d12accc6f98401990940cdb645feba58d3e1ae26181fc03b"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c1a96a53066baf00e5e50981882c1dcbfe8163ee6fb7ad860a55b6f7271e2a2d"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7e8d021e3fa8ca54c35bd65dcc571e8d8edd1f0e328d6542e9e4845f4497a0ae"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c030792b64fdf8c7f70a90c56edf79c66fee4c101ca9cbcdd2bc2574326ec34b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2357,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "203186fd2d208982bf0d28abf0bf128f5dcdefe628d2ff4ebde1c40245ca8c58"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "38fa4a30159ea1e702c3d50c13f9957b115d467c1b3281b90e9e251ce0145a83"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a2ca386f9d9ab84f206850696e5e174fcf3c4837bba514678347579cf06735a0"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6abd0c2244ba3ce53317c67daf953b7dc7f5909f1cd090c959a43d15be56f146"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 6363,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "2329b1dab0605b36ff898e45bdc80a5c46f496aee67bb9c7f4f97883fa780e2a"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "279842a7b255ae8e9d8ac6435049532bf89613f3c47704222bb9932d85363776"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "006f0806832e14c36249f2d024fcdebc33acdb7038ee9629ef771e3109ad10b7"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b2edb89d6dcfd6062ca836e5d7388eed368f018b8c4531b24c6ade706b5b2b9a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 29059,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "5d79d984ed4fd400bb961f53e0e269ff6a715d183260481bf67cd943e52e05bb"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "50cd6548324476e0a6219d7fae742bd9797a2ebd4dee02ef9cc5354cc9ed73a4"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "fda8b1264c4adbb619910b99117eb0c0c0f5f12a76011fd4abcf20681f719cf0"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "30ee34d727fbaee2dd3fa122b891dbcdf7debfbc0a2078da158c8c30d56d9778"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 18070,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "a8909e4c8cc4ba87a1050a8c558f052f49dc2f4b874d023d30725e37720c16e5"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "338d18ac40182ffceec835e3d9a9f76063f646eb3939e708bc819d5c7736d0b9"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ce55dd0b4f834c21aac156fe9dfb84b878051e1233b82b5843137993faf372c2"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "414e174450dc3d4b5910e0262b75653013f0487d4d799387d7b8a525ea2b25ff"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 12537,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "34bfc2334e3522885e26a958c6166db68d9110bb98491cd82916bc568221f2c8"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3ce8b71b894bedf486b859bec2efd921dc0e1e6e0ea71da630c14157cf460953"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4e6478ee4d7c8fc37c86e419bb732fff1f1e8a5a47d64fd41769bbb5f3c20523"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "725fab185f63b2b3218c4a6d49f0c34b6cb67987f07754351f893e1e5b7b3a70"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 11357,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "3c4f07cd1fd391f324d0b5160821ea9213f184e8d844699e23ca2a4be232ce92"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2b6b02ebf73eac71242462c912f279c791076a8b97549d72fbdf15c4df70bfd2"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "455efa1e2a27ffe523b9c2bda8b76be8999105b3f027320851ae2ac5765b4129"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "944dfcea4152b07fca5c42193e3c0099abee6b4833ce5c8756d677ed2677914b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2199,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "3c4f07cd1fd391f324d0b5160821ea9213f184e8d844699e23ca2a4be232ce92"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ea64a7596505288bbe808f2f2c34564987eb478a24e5d06f8cfc5b2ed3d98f1e"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "8e237a989ba31859576238d628f6960f65dbb82a164ec32497681fd3a0dfd8b0"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a58de73dcb4a3c0095897f86aed453b16feaf70a0b2ace2a8a5ad05c74e96fc5"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3542,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "bd37132fc3c19168813afc1e5e8e152af39d31857cbb5464d1767b5c79f9734e"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b188238fd4c2244901170cda368704abcef8c0ff7f93eff431c39ead7592879c"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2a732a399a0831323a7c66600e2512f149bb812b7b04db774b6ca371cdf557d3"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f04a0d908ae1f23d008291bf1ead518040eea1809e5e07ee5284d2f1e4fd018f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2128,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "bd37132fc3c19168813afc1e5e8e152af39d31857cbb5464d1767b5c79f9734e"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "971b26bd4383e52b19d6191e58213114bbe0bf4de03beadd3edb485651596353"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "df610b2269024e6f7e012fca22f69dd1e79891665232bd9bddfc192e8cdbbcf7"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "194b49a027508530e61acac071b355ff0ae87328b9da84f1aedf78c6dcd2a1dd"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 4189,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "943f44a7e513de406625ea77b9d7e86edf500735577b5ae8078373ceb58f3d12"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c665df349d690f7978d4778b896cb6a1942b2ca233761522be4bc9e0d8761023"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b4038eb3a97237a229791eb2e4f0bd949c592300e48dacfc7b90c6b1f3c9aac5"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "32f6be3c201ebd2fddf23caab6895aef3cb3e5ec10b875c9c226a4292e2dc192"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3763,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "943f44a7e513de406625ea77b9d7e86edf500735577b5ae8078373ceb58f3d12"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d67d010f57564c410f0f5daaae50c327b67d872ed360436008fb57c7823d8814"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "91d9dc1a3f7c60205ce8b689a04be954a003b7a07c47da8f3c9a86b1871270bd"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a58de73dcb4a3c0095897f86aed453b16feaf70a0b2ace2a8a5ad05c74e96fc5"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 12088,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32mtrue\u001b[39m\nReceived: \u001b[31mfalse\u001b[39m\n\n  43 |   const frames = await page.evaluate(() => { window.choiceExit.active = false; return window.choiceExit.frames; });\n  44 |   if (motion === 'no-preference') {\n> 45 |     expect(frames.some((frame) => frame.connected && frame.visible && frame.opacity > 0 && frame.opacity < 1)).toBe(true);\n     |                                                                                                                ^\n  46 |     expect(frames.filter((frame) => frame.visible).every((frame) => frame.pointerEvents === 'none')).toBe(true);\n  47 |   }\n  48 |   return frames;\n    at closed (/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/src/web/ui-migration/choices-lifecycle.browser.mjs:45:112)\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/src/web/ui-migration/choices-lifecycle.browser.mjs:82:22"
+     ],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b1b86f295fcd3f0c2ddfe63d0122823144c0bc8a87912d840c031d5e4cf58005"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/src/web/.choices-results/choices-lifecycle.browser.-370c5-restore-one-layer-at-a-time-webkit-dark-phone/error-context.md",
+       "sha256": "08960a14bc01b01e75a9ad2dd960de15afbc1a42f7cb0c90367aa23b0e96aa08"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/src/web/.choices-results/choices-lifecycle.browser.-370c5-restore-one-layer-at-a-time-webkit-dark-phone/trace.zip",
+       "sha256": "f811a13378414e2d5a24a26b5215d64c28f9ec8d33cb0e8bfc7b32690fdde4f3"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 4439,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b1b86f295fcd3f0c2ddfe63d0122823144c0bc8a87912d840c031d5e4cf58005"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "677e796925a28fc1d949afa0202c7cdde3d877c4b78ee8ff439ac42ad058f807"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "864d20c9367b680195ef38093d4f23a837c842cb1e56c03877df3418fd4eaa3f"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "194b49a027508530e61acac071b355ff0ae87328b9da84f1aedf78c6dcd2a1dd"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Dialog owns choices, top-layer Escape, Tab and theme",
+   "location": "choices.browser.mjs:343",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3785,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "choices-in-dialog",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "a90385a730a8df3ec6a123861dc7867082e0b31d247c434c85f9724399ce3c12"
+      },
+      {
+       "name": "nested-choices",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner",
+   "location": "choices.browser.mjs:453",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2157,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "dialog-boundaries",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Dialog owns choices, top-layer Escape, Tab and theme",
+   "location": "choices.browser.mjs:343",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2861,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "choices-in-dialog",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "7fbbc3cecf7ae6d8f8ad915f04f66a473ca523b6fba51771114a1c3fd4b2112f"
+      },
+      {
+       "name": "nested-choices",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner",
+   "location": "choices.browser.mjs:453",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2042,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "dialog-boundaries",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Dialog owns choices, top-layer Escape, Tab and theme",
+   "location": "choices.browser.mjs:343",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 48164,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "choices-in-dialog",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "27b1f15ace66b1bbda7c73e0e337a59f9ed419e3d9c5955ba58224d11fedd9b6"
+      },
+      {
+       "name": "nested-choices",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner",
+   "location": "choices.browser.mjs:453",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 20251,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "dialog-boundaries",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Dialog owns choices, top-layer Escape, Tab and theme",
+   "location": "choices.browser.mjs:343",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 7931,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "choices-in-dialog",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "2964549bf3567d8ffc2f62084d0643d5572b25ab91cc6088652e4b4e4f66e147"
+      },
+      {
+       "name": "nested-choices",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner",
+   "location": "choices.browser.mjs:453",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 8437,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "dialog-boundaries",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Dialog owns choices, top-layer Escape, Tab and theme",
+   "location": "choices.browser.mjs:343",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2991,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "choices-in-dialog",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "a6631d68bc94f6ec3c2e4b8499761ee5f1fbdb4571d17173b8c64dff577c04f1"
+      },
+      {
+       "name": "nested-choices",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner",
+   "location": "choices.browser.mjs:453",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2166,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "dialog-boundaries",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Dialog owns choices, top-layer Escape, Tab and theme",
+   "location": "choices.browser.mjs:343",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3307,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "choices-in-dialog",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "aa08666fa974c9d4e32f3f6a18c4b6f537900a21ca8a1de06bc8e26a205be183"
+      },
+      {
+       "name": "nested-choices",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner",
+   "location": "choices.browser.mjs:453",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2340,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "dialog-boundaries",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Dialog owns choices, top-layer Escape, Tab and theme",
+   "location": "choices.browser.mjs:343",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 4237,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "choices-in-dialog",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "810c8771445ce24e9df0908d5118920161565f8c15cf94e5aedfe067d4a54608"
+      },
+      {
+       "name": "nested-choices",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner",
+   "location": "choices.browser.mjs:453",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2929,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "dialog-boundaries",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Dialog owns choices, top-layer Escape, Tab and theme",
+   "location": "choices.browser.mjs:343",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3119,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "choices-in-dialog",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "2ed8214b56d6c0751940572cd0365888cac582aac2b70ee367b14cb1a4a6b21c"
+      },
+      {
+       "name": "nested-choices",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner",
+   "location": "choices.browser.mjs:453",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 4696,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "dialog-boundaries",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

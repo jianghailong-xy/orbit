@@ -9,6 +9,7 @@ import {
   type WikiSpaceHealth,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { readWikiRepoReadiness } from '../wiki-worker/wiki-repo-ops';
 import { countBacklog, spaceScope, type FactPosition } from './wiki-maintenance';
 import { wikiMaintenanceCatchUpOf, wikiMaintenanceRunsToday } from './wiki-maintenance-session';
 import { wikiMaintenanceProviderIsLocal } from './wiki-maintenance-settings';
@@ -83,21 +84,40 @@ export class WikiHealth {
       lastRun: await this.lastRun(ownerId, spaceId),
       lastFailure: await this.lastFailure(ownerId, spaceId),
     };
-    return { spaceId, entries, maintenance: { look: wikiMaintenanceLook(maintenance, now), ...maintenance } };
+    // The repository half of the line (contract `maintenance.health.repo`, design §2.2): whether the steps
+    // that need a repository can run at all, and why not when they cannot — an old runner is the one a
+    // person can act on, so it is named as such rather than as a wait.
+    const repo = await readWikiRepoReadiness(this.prisma, { ownerId, spaceId, now });
+    return {
+      spaceId,
+      entries,
+      maintenance: { look: wikiMaintenanceLook(maintenance, now), ...maintenance },
+      repo: { look: repo.look, workspace: repo.workspace, runner: repo.runner, pending: repo.pending },
+    };
   }
 
   /**
-   * The run under way: the latest that started and has not ended, while its task has not ended either —
-   * started when its latest attempt did (a retry's or a rerun's start, not the run's first).
+   * The run under way: the latest that started and has not ended, while its maker has not ended either —
+   * started when its latest attempt did (a retry's or a rerun's start, not the run's first). A run of a
+   * task is under way while that task is (the session died without saying how: the task's end is the
+   * answer); a run of a wiki job is under way while the job is (migration 0401, the server path).
    */
   private async running(ownerId: string, spaceId: string): Promise<WikiMaintenanceHealth['running']> {
     const run = await this.prisma.wikiMaintenanceRun.findFirst({
       where: { ownerId, spaceId, startedAt: { not: null }, endedAt: null },
       orderBy: [{ startedAt: 'desc' }, { id: 'desc' }],
-      select: { taskId: true, sessionId: true, startedAt: true, lastStartedAt: true },
+      select: { taskId: true, jobId: true, sessionId: true, startedAt: true, lastStartedAt: true },
     });
     const startedAt = run?.lastStartedAt ?? run?.startedAt;
     if (!run || !startedAt) return null;
+    if (run.jobId) {
+      const job = await this.prisma.wikiJob.findFirst({
+        where: { id: run.jobId, ownerId, state: { in: ['queued', 'running', 'waiting'] } },
+        select: { id: true },
+      });
+      return job ? { sessionId: run.sessionId, startedAt: startedAt.toISOString() } : null;
+    }
+    if (!run.taskId) return null;
     // A run whose session died without saying how it ended leaves its row open; its task has ended.
     const task = await this.prisma.task.findFirst({
       where: { id: run.taskId, ownerId, status: { in: ['OPEN', 'IN_PROGRESS'] } },

@@ -1,0 +1,35 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.config.mjs --project chromium-dark-desktop --grep '\"'\"' (select-space-down-enter|select-enter-down-enter|select-down-7-enter|select-down-n-enter|select-enter|select-down-down) (burst|paced) sample'\"'\"''",
+ "env": {},
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "runner": "run-chunks.py (inside one mcp__orbit__bg_run job)",
+ "commit": "9975b1f5555f550c660eb667bd52f2dc6400f4ef",
+ "webTree": "c9b680e536261073e36d2a37e3238fe4f6ef4bdc",
+ "dirtyWeb": "?? src/web/src/components/kw2scratch/",
+ "startedAt": "2026-10-07T14:06:40.860287+00:00",
+ "endedAt": "2026-10-07T14:31:20.906419+00:00",
+ "loadAverage": {
+  "start": [
+   12.33447265625,
+   13.1943359375,
+   13.69287109375
+  ],
+  "end": [
+   11.57373046875,
+   12.6357421875,
+   13.02099609375
+  ]
+ },
+ "exitCode": 0,
+ "outputSha256": "8944ef338483af6da4d99510a15045bfeadaa53826055e3b3b90c09a13d625a5",
+ "outputBytes": 134931,
+ "raw": "/var/tmp/kw2-246921c8/runs/baseline-select-b",
+ "stats": {
+  "expected": 720,
+  "unexpected": 0,
+  "skipped": 0,
+  "flaky": 0,
+  "duration": 1479465.1509999998,
+  "samples": 720
+ }
+}

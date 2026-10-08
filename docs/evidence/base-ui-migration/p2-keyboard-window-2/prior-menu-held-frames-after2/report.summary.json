@@ -1,0 +1,1853 @@
+{
+ "stats": {
+  "startTime": "2026-10-07T16:48:15.451Z",
+  "duration": 78914.955,
+  "expected": 80,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ },
+ "errors": [],
+ "tests": [
+  {
+   "title": "attachment menu ArrowDown ArrowDown Enter with frames held runs image",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1343,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "17d980cba000cfd837a843e04008bcd9d23e857a097f2d1f143e490c4cce9b72"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowDown Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1063,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "16f55c9d7a9e2b123aa47bc2253108d464324581619b05fa9fbb6a0dd9d68348"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowDown ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1049,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "15bc6a23772d7a7dd298202efc17233846b8c7d21deb63a422e0ea1c64ea1043"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter ArrowDown Enter with frames held runs image",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1068,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b3af280baceaee76cc19d79c6d142d8469b1bbe6664b73b6656f28e96d6749f7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1042,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "80cc7c22385b14fd746890954860258899751821fc02b3812c6b28c241edfb7b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1011,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c986f71ac167026dca437e5b07719f0feaeb3346600e14d89036e74a27c7a29c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1091,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "11a53992d7b1f75d4e93d195a946553857de87313a15ef2cc18f27c1edfae698"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp ArrowUp Enter with frames held runs shell",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 974,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "01a2401ed27d5a6212663ab11627e568dcd83677184dbb4ba5e105abf9c19448"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp ArrowDown Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1032,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a9c25ac24af974820546ebea43bd548e8af4fe9ef6fbcca6c8bfdc151d539bcb"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "row actions menu ArrowDown Enter with frames held runs its action and not the row",
+   "location": "menu-held-frames.browser.mjs:77",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1053,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6be7bb9515ff007d200949ea68cde9e17baccb05d33e2f47479dc55ca9a9acea"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowDown ArrowDown Enter with frames held runs image",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1114,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "17d980cba000cfd837a843e04008bcd9d23e857a097f2d1f143e490c4cce9b72"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowDown Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1064,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "16f55c9d7a9e2b123aa47bc2253108d464324581619b05fa9fbb6a0dd9d68348"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowDown ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1090,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "15bc6a23772d7a7dd298202efc17233846b8c7d21deb63a422e0ea1c64ea1043"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter ArrowDown Enter with frames held runs image",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1011,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b3af280baceaee76cc19d79c6d142d8469b1bbe6664b73b6656f28e96d6749f7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 980,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "80cc7c22385b14fd746890954860258899751821fc02b3812c6b28c241edfb7b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1023,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c986f71ac167026dca437e5b07719f0feaeb3346600e14d89036e74a27c7a29c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 928,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "11a53992d7b1f75d4e93d195a946553857de87313a15ef2cc18f27c1edfae698"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp ArrowUp Enter with frames held runs shell",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 957,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "01a2401ed27d5a6212663ab11627e568dcd83677184dbb4ba5e105abf9c19448"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp ArrowDown Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1047,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a9c25ac24af974820546ebea43bd548e8af4fe9ef6fbcca6c8bfdc151d539bcb"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "row actions menu ArrowDown Enter with frames held runs its action and not the row",
+   "location": "menu-held-frames.browser.mjs:77",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1020,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6be7bb9515ff007d200949ea68cde9e17baccb05d33e2f47479dc55ca9a9acea"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowDown ArrowDown Enter with frames held runs image",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 932,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "17d980cba000cfd837a843e04008bcd9d23e857a097f2d1f143e490c4cce9b72"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowDown Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1041,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "16f55c9d7a9e2b123aa47bc2253108d464324581619b05fa9fbb6a0dd9d68348"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowDown ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 966,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "15bc6a23772d7a7dd298202efc17233846b8c7d21deb63a422e0ea1c64ea1043"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter ArrowDown Enter with frames held runs image",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1021,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b3af280baceaee76cc19d79c6d142d8469b1bbe6664b73b6656f28e96d6749f7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 956,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "80cc7c22385b14fd746890954860258899751821fc02b3812c6b28c241edfb7b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 854,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c986f71ac167026dca437e5b07719f0feaeb3346600e14d89036e74a27c7a29c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 813,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "11a53992d7b1f75d4e93d195a946553857de87313a15ef2cc18f27c1edfae698"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp ArrowUp Enter with frames held runs shell",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1028,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "01a2401ed27d5a6212663ab11627e568dcd83677184dbb4ba5e105abf9c19448"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp ArrowDown Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 932,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a9c25ac24af974820546ebea43bd548e8af4fe9ef6fbcca6c8bfdc151d539bcb"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "row actions menu ArrowDown Enter with frames held runs its action and not the row",
+   "location": "menu-held-frames.browser.mjs:77",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 885,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6be7bb9515ff007d200949ea68cde9e17baccb05d33e2f47479dc55ca9a9acea"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowDown ArrowDown Enter with frames held runs image",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1106,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "17d980cba000cfd837a843e04008bcd9d23e857a097f2d1f143e490c4cce9b72"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowDown Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 917,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "16f55c9d7a9e2b123aa47bc2253108d464324581619b05fa9fbb6a0dd9d68348"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowDown ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 984,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "15bc6a23772d7a7dd298202efc17233846b8c7d21deb63a422e0ea1c64ea1043"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter ArrowDown Enter with frames held runs image",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 987,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b3af280baceaee76cc19d79c6d142d8469b1bbe6664b73b6656f28e96d6749f7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1044,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "80cc7c22385b14fd746890954860258899751821fc02b3812c6b28c241edfb7b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 933,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c986f71ac167026dca437e5b07719f0feaeb3346600e14d89036e74a27c7a29c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 854,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "11a53992d7b1f75d4e93d195a946553857de87313a15ef2cc18f27c1edfae698"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp ArrowUp Enter with frames held runs shell",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 925,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "01a2401ed27d5a6212663ab11627e568dcd83677184dbb4ba5e105abf9c19448"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp ArrowDown Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1031,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a9c25ac24af974820546ebea43bd548e8af4fe9ef6fbcca6c8bfdc151d539bcb"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "row actions menu ArrowDown Enter with frames held runs its action and not the row",
+   "location": "menu-held-frames.browser.mjs:77",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 959,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6be7bb9515ff007d200949ea68cde9e17baccb05d33e2f47479dc55ca9a9acea"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowDown ArrowDown Enter with frames held runs image",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 884,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "17d980cba000cfd837a843e04008bcd9d23e857a097f2d1f143e490c4cce9b72"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowDown Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 846,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "16f55c9d7a9e2b123aa47bc2253108d464324581619b05fa9fbb6a0dd9d68348"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowDown ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 855,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "15bc6a23772d7a7dd298202efc17233846b8c7d21deb63a422e0ea1c64ea1043"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter ArrowDown Enter with frames held runs image",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 861,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b3af280baceaee76cc19d79c6d142d8469b1bbe6664b73b6656f28e96d6749f7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 876,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "80cc7c22385b14fd746890954860258899751821fc02b3812c6b28c241edfb7b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 875,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c986f71ac167026dca437e5b07719f0feaeb3346600e14d89036e74a27c7a29c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 873,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "11a53992d7b1f75d4e93d195a946553857de87313a15ef2cc18f27c1edfae698"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp ArrowUp Enter with frames held runs shell",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 840,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "01a2401ed27d5a6212663ab11627e568dcd83677184dbb4ba5e105abf9c19448"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp ArrowDown Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 877,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a9c25ac24af974820546ebea43bd548e8af4fe9ef6fbcca6c8bfdc151d539bcb"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "row actions menu ArrowDown Enter with frames held runs its action and not the row",
+   "location": "menu-held-frames.browser.mjs:77",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 856,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6be7bb9515ff007d200949ea68cde9e17baccb05d33e2f47479dc55ca9a9acea"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowDown ArrowDown Enter with frames held runs image",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 832,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "17d980cba000cfd837a843e04008bcd9d23e857a097f2d1f143e490c4cce9b72"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowDown Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 863,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "16f55c9d7a9e2b123aa47bc2253108d464324581619b05fa9fbb6a0dd9d68348"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowDown ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 891,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "15bc6a23772d7a7dd298202efc17233846b8c7d21deb63a422e0ea1c64ea1043"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter ArrowDown Enter with frames held runs image",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 836,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b3af280baceaee76cc19d79c6d142d8469b1bbe6664b73b6656f28e96d6749f7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 821,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "80cc7c22385b14fd746890954860258899751821fc02b3812c6b28c241edfb7b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 877,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c986f71ac167026dca437e5b07719f0feaeb3346600e14d89036e74a27c7a29c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 825,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "11a53992d7b1f75d4e93d195a946553857de87313a15ef2cc18f27c1edfae698"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp ArrowUp Enter with frames held runs shell",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 799,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "01a2401ed27d5a6212663ab11627e568dcd83677184dbb4ba5e105abf9c19448"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp ArrowDown Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 802,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a9c25ac24af974820546ebea43bd548e8af4fe9ef6fbcca6c8bfdc151d539bcb"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "row actions menu ArrowDown Enter with frames held runs its action and not the row",
+   "location": "menu-held-frames.browser.mjs:77",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 746,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6be7bb9515ff007d200949ea68cde9e17baccb05d33e2f47479dc55ca9a9acea"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowDown ArrowDown Enter with frames held runs image",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 828,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "17d980cba000cfd837a843e04008bcd9d23e857a097f2d1f143e490c4cce9b72"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowDown Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 766,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "16f55c9d7a9e2b123aa47bc2253108d464324581619b05fa9fbb6a0dd9d68348"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowDown ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 791,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "15bc6a23772d7a7dd298202efc17233846b8c7d21deb63a422e0ea1c64ea1043"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter ArrowDown Enter with frames held runs image",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 828,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b3af280baceaee76cc19d79c6d142d8469b1bbe6664b73b6656f28e96d6749f7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 804,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "80cc7c22385b14fd746890954860258899751821fc02b3812c6b28c241edfb7b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 711,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c986f71ac167026dca437e5b07719f0feaeb3346600e14d89036e74a27c7a29c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 774,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "11a53992d7b1f75d4e93d195a946553857de87313a15ef2cc18f27c1edfae698"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp ArrowUp Enter with frames held runs shell",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 830,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "01a2401ed27d5a6212663ab11627e568dcd83677184dbb4ba5e105abf9c19448"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp ArrowDown Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 824,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a9c25ac24af974820546ebea43bd548e8af4fe9ef6fbcca6c8bfdc151d539bcb"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "row actions menu ArrowDown Enter with frames held runs its action and not the row",
+   "location": "menu-held-frames.browser.mjs:77",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 856,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6be7bb9515ff007d200949ea68cde9e17baccb05d33e2f47479dc55ca9a9acea"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowDown ArrowDown Enter with frames held runs image",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 914,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "17d980cba000cfd837a843e04008bcd9d23e857a097f2d1f143e490c4cce9b72"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowDown Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 880,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "16f55c9d7a9e2b123aa47bc2253108d464324581619b05fa9fbb6a0dd9d68348"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowDown ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 864,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "15bc6a23772d7a7dd298202efc17233846b8c7d21deb63a422e0ea1c64ea1043"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter ArrowDown Enter with frames held runs image",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 936,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b3af280baceaee76cc19d79c6d142d8469b1bbe6664b73b6656f28e96d6749f7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 884,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "80cc7c22385b14fd746890954860258899751821fc02b3812c6b28c241edfb7b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu Enter Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 941,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c986f71ac167026dca437e5b07719f0feaeb3346600e14d89036e74a27c7a29c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp Enter with frames held runs command",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1263,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "11a53992d7b1f75d4e93d195a946553857de87313a15ef2cc18f27c1edfae698"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp ArrowUp Enter with frames held runs shell",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1540,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "01a2401ed27d5a6212663ab11627e568dcd83677184dbb4ba5e105abf9c19448"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment menu ArrowUp ArrowDown Enter with frames held runs file",
+   "location": "menu-held-frames.browser.mjs:67",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 954,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a9c25ac24af974820546ebea43bd548e8af4fe9ef6fbcca6c8bfdc151d539bcb"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "row actions menu ArrowDown Enter with frames held runs its action and not the row",
+   "location": "menu-held-frames.browser.mjs:77",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 846,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "menu-held-frames",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6be7bb9515ff007d200949ea68cde9e17baccb05d33e2f47479dc55ca9a9acea"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

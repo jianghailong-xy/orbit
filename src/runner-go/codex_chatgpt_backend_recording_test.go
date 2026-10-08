@@ -22,8 +22,10 @@ package main
 //     request sent again on the access token that came back;
 //   - usage limit: a 429 `usage_limit_reached` naming `resets_at` — codex reports usageLimitExceeded and
 //     does not ask again;
-//   - rate limit: a 429 `rate_limit_exceeded` — codex does not ask again either, which is why the gateway
-//     waits one out on the same login itself.
+//   - rate limit: a 429 `rate_limit_exceeded` naming a `retry-after` — codex waits that long and sends the
+//     turn again, as many times as its stream retry budget allows, and then fails the turn as
+//     responseTooManyFailedAttempts. That is codex 0.161 (openai/codex#49441, which made such a 429
+//     retryable when it carries the server's advice); up to 0.160 it failed the turn on the first 429.
 //
 // Before a turn codex 0.158 asks the backend where the account's workspace lives
 // (GET <backend>/wham/accounts/check): the recorder answers NO_CONSTRAINT, a personal workspace's
@@ -31,8 +33,10 @@ package main
 // recorder answers 426, on which codex goes to HTTPS at once.
 //
 // With ORBIT_RECORD_CODEX_CHATGPT_FIXTURE=<file> it writes the four exchanges to that file, which
-// src/apiserver/src/providers/pool-login-gateway.pg.spec.ts replays through the real gateway. Re-record
-// it when codex is upgraded:
+// src/apiserver/src/providers/pool-login-gateway.pg.spec.ts replays through the real gateway. The one
+// checked in is codex 0.158's, whose rateLimit verdict — one request, no retry — that spec reads as the
+// gateway's premise that codex does not retry a 429; a recording on 0.161 or later no longer says so.
+// Re-record it when codex is upgraded:
 //
 //   env -u ORBIT_SESSION_ID -u ORBIT_TASK_ID -u ORBIT_AGENT_ID \
 //     ORBIT_RECORD_CODEX_CHATGPT_FIXTURE=$PWD/../apiserver/src/providers/fixtures/codex-chatgpt-backend-recording.json \
@@ -79,6 +83,9 @@ const (
 	// Where the window headers say the spent limit resets: far enough ahead that a replay of the fixture
 	// is never looking at a reset that has passed.
 	recordedResetsAt = int64(4102444800) // 2100-01-01T00:00:00Z
+	// How many times codex sends a failed turn again (codex-rs model-provider-info
+	// DEFAULT_STREAM_MAX_RETRIES): the default stream_max_retries, which nothing here or in Orbit sets.
+	codexStreamMaxRetries = 5
 )
 
 func recordedJWT(claims map[string]interface{}) string {
@@ -134,6 +141,8 @@ type recordedCodexVerdict struct {
 type chatgptRecordedExchange struct {
 	Request  recordedExchange `json:"request"`
 	Response recordedAnswer   `json:"response"`
+	// When the recorder answered: before codex could have read any of the answer.
+	at time.Time
 }
 
 type chatgptRecording struct {
@@ -192,6 +201,7 @@ func recordedHeaders(r *http.Request) [][2]string {
 }
 
 func (rec *chatgptRecorder) answer(w http.ResponseWriter, r *http.Request, body []byte, status int, headers [][2]string, out []byte) {
+	at := time.Now()
 	for _, h := range headers {
 		w.Header().Add(h[0], h[1])
 	}
@@ -204,6 +214,7 @@ func (rec *chatgptRecorder) answer(w http.ResponseWriter, r *http.Request, body 
 			Method: r.Method, Path: r.URL.RequestURI(), Headers: recordedHeaders(r), BodyBase64: base64.StdEncoding.EncodeToString(body),
 		},
 		Response: recordedAnswer{Status: status, Headers: headers, BodyBase64: base64.StdEncoding.EncodeToString(out)},
+		at:       at,
 	})
 }
 
@@ -563,10 +574,18 @@ func TestRealCodexOnAChatGPTLogin(t *testing.T) {
 		t.Fatalf("codex on usage_limit_reached: %+v", usageVerdict)
 	}
 
-	// A rate limit: not asked again either.
+	// A rate limit naming a retry-after: asked again once the 2s it names have passed, each time, until the
+	// stream retry budget is spent — and then the turn fails as responseTooManyFailedAttempts.
 	rateRec, rateVerdict := record("rateLimit")
-	if rateVerdict.Requests != 1 || rateVerdict.TurnStatus != "failed" {
+	if rateVerdict.Requests != 1+codexStreamMaxRetries || !rateVerdict.WillRetry || rateVerdict.TurnStatus != "failed" ||
+		fmt.Sprint(rateVerdict.CodexErrorInfo) != "map[responseTooManyFailedAttempts:map[httpStatusCode:429]]" {
 		t.Fatalf("codex on rate_limit_exceeded: %+v", rateVerdict)
+	}
+	limited := rateRec.exchanges(http.MethodPost, responses)
+	for i := 1; i < len(limited); i++ {
+		if waited := limited[i].at.Sub(limited[i-1].at); waited < 2*time.Second {
+			t.Fatalf("codex asked again %v after a 429 whose retry-after named 2s", waited)
+		}
 	}
 
 	target := os.Getenv("ORBIT_RECORD_CODEX_CHATGPT_FIXTURE")

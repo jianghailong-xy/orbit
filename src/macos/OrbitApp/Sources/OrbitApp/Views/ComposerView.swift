@@ -567,6 +567,17 @@ struct ComposerView: View {
         .layoutPriority(2)
     }
 
+    /// The model menu's title: the engine running this session, and — while a held pick stands on a
+    /// different engine — where the next turn goes (`SessionProviderChoices.engineTitle`, web
+    /// `engineTitleFor`). The held pick has already replaced `provider`, so the stored half comes
+    /// from `pendingResumeFrom`.
+    private var engineTitleLabel: String {
+        SessionProviderChoices.engineTitle(
+            provider: console.pendingResumeFrom ?? console.provider,
+            configured: console.configuredProviders,
+            nextProvider: console.pendingResumeProvider).label
+    }
+
     /// Provider, model and effort are one control, written the way the reference composer writes
     /// "model · effort": "Opus 5.5 Max" (web parity: `.composer-model-chip` and `modelMenuItems`).
     /// The menu lists the current provider's models, and puts the rarer choices — the provider and
@@ -577,6 +588,14 @@ struct ComposerView: View {
     /// menu does, whichever way the system opens it.
     private var modelMenu: some View {
         Menu {
+            // The menu's own title: the engine this session runs on (web parity:
+            // `.composer-engine-title`). A bare `Text` picks nothing, and the Section's own rule is
+            // what the web draws as the title's border — `→ Codex` appears only while a held pick
+            // will carry the next turn to another engine.
+            Section {
+                Text(engineTitleLabel)
+                    .lineLimit(1)
+            }
             // A task run on smart selection's pick opens on why it is this model, and on where to fix
             // the model for every run (model routing §9; web parity: the `smart-route` group).
             if let route = smartRoute {

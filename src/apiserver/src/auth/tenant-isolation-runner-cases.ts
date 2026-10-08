@@ -88,6 +88,14 @@ export interface RunnerObjects {
   /** An integration job, and a Codex reset operation, the machine holds the claim of (`leaseOwner`, generation 1). */
   integrationJobId: string;
   codexOperationId: string;
+  /**
+   * The task that integration job lands: one of the project's own, not `projectTaskId`, whose one
+   * in-flight landing is the first half's queued job. No case names it; it is here so that the write
+   * trap counts it among A's ids, as it counted `projectTaskId` while the job landed that.
+   */
+  landingTaskId: string;
+  /** A wiki repository operation of the machine's, claimed by it the same way (migration 0402). */
+  wikiRepoOpId: string;
   /** A service token of the machine's, to be revoked. */
   spareServiceTokenId: string;
   /** A request from another of the account's sessions to `callingSessionId`, waiting for its reply. */
@@ -120,6 +128,8 @@ export interface RunnerObjects {
   wikiSessionId: string;
   wikiMaintainerSessionId: string;
   wikiPlanJobId: string;
+  /** An import job of the space (server execution P5, contract `import.server`), ended, to be read back. */
+  wikiImportJobId: string;
   /** An op of a changeset `wikiSessionId` proposed, waiting for its verdict. */
   wikiVerifyingOpId: string;
   /** An op of an ended session's changeset, waiting for the maintenance run to adopt its verdict. */
@@ -226,6 +236,29 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     request: (of) => ({
       params: { jobId: of.runner.integrationJobId },
       body: { claimGeneration: '1', leaseOwner: of.runner.leaseOwner, state: 'ERROR', errorCode: 'FETCH_FAILED' },
+    }),
+  },
+
+  // ── the wiki's repository operations (migration 0402) ────────────────────────────────────────────
+  // With the claim's own lease owner and generation, as the integration queue's are above: a machine
+  // that learned them is still not A's, and every one of the three writes is a compare-and-set on that
+  // claim rather than a write by an id.
+  'POST /runner/wiki/repo-ops/:id/progress': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.wikiRepoOpId }, body: { claimGeneration: 1, leaseOwner: of.runner.leaseOwner } }),
+  },
+  'POST /runner/wiki/repo-ops/:id/fragments': {
+    as: RUNNER,
+    request: (of) => ({
+      params: { id: of.runner.wikiRepoOpId },
+      body: { claimGeneration: 1, leaseOwner: of.runner.leaseOwner, sha: SHA, index: 0, total: 1, content: '{"census":true}' },
+    }),
+  },
+  'POST /runner/wiki/repo-ops/:id/result': {
+    as: RUNNER,
+    request: (of) => ({
+      params: { id: of.runner.wikiRepoOpId },
+      body: { claimGeneration: 1, leaseOwner: of.runner.leaseOwner, state: 'failed', error: 'refused by the census' },
     }),
   },
 
@@ -515,6 +548,23 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
       headers: calling(mine.runner.wikiSessionId),
       body: { ops: [{ op: 'challenge', entryId: of.wikiEntryId, reason: 'the census challenges it' }], rationale: 'the census', dryRun: true },
     }),
+  },
+  'GET /runner/wiki/spaces/:id/import': {
+    as: RUNNER,
+    request: (of, mine) => ({ params: { id: of.wikiSpaceId }, headers: calling(mine.runner.wikiSessionId) }),
+  },
+  'POST /runner/wiki/spaces/:id/import-jobs': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: of.wikiSpaceId },
+      headers: calling(mine.runner.wikiSessionId),
+      body: { id: '00000000-0000-4000-8000-0000000a5e1b', maxOps: 1, notes: [{ noteId: '00000000-0000-4000-8000-0000000a5e1c', file: 'census.md', date: '2026-10-08' }] },
+    }),
+  },
+  'GET /runner/wiki/spaces/:id/import-jobs/:jobId': {
+    as: RUNNER,
+    request: (of, mine) => ({ params: { id: of.wikiSpaceId, jobId: of.runner.wikiImportJobId }, headers: calling(mine.runner.wikiSessionId) }),
+    nested: ['jobId'],
   },
   'GET /runner/wiki/entries/:id': { as: RUNNER, request: (of, mine) => ({ params: { id: of.wikiEntryId }, headers: calling(mine.runner.wikiSessionId) }) },
   'GET /runner/wiki/spaces/:id/dossiers': {
@@ -1099,6 +1149,15 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
       body: { question: 'Which first?', blocksTaskIds: [of.projectTaskId] },
     }),
   },
+  // The card the owner answered the skip on: B's own landing, A's approval.
+  'POST /runner/projects/:id/tasks/:taskId/integration/skip-merge-check body approvalId': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: mine.projectId, taskId: mine.projectTaskId },
+      headers: calling(mine.runner.coordinatorSessionId),
+      body: { reason: 'the census', approvalId: of.runner.allowedApprovalId },
+    }),
+  },
   ...Object.fromEntries(Object.entries(coordinatorRequests).map(([route, own]) => [
     `${route} header x-orbit-session-id`,
     fromTheirSession(RUNNER, own, (of) => of.runner.coordinatorSessionId),
@@ -1201,6 +1260,11 @@ const planUsageReadings = Object.fromEntries(
 
 /** Ids a runner-gate request carries that name nothing of an account's to reach, with why and where. */
 export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
+  // ── the wiki's import on the server ──────────────────────────────────────────────────────────────
+  'POST /runner/wiki/spaces/:id/import-jobs body id':
+    'the id the command names for the job it is making: the insert does nothing when the id is taken, and the job '
+    + 'answered is read back by (id, the caller\'s owner, the path\'s space, kind import), so another account\'s job '
+    + 'under that id is neither read nor written (wiki-import-jobs.ts:115)',
   // ── the machine protocol: tokens the machine or the engine makes up, and the machine's own snapshots ──
   'POST /runner/heartbeat body expiredCommitErrors[].operationId':
     'the commit attempt token the server minted for one of the machine\'s own sessions: compared only in the update '
@@ -1297,11 +1361,8 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/projects/:id/owner-questions body clientQuestionId':
     'the coordinator\'s own key for one question, a dedupe key within the project the path names '
     + '(project-open-item.service.ts:686)',
-  'POST /runner/projects/:id/tasks/:taskId/integration/skip-merge-check body approvalId':
-    'the card the account owner answered, looked up only among the cards of the caller\'s own sessions '
-    + '(project-open-item.service.ts:1824): another account\'s is refused as an id that names nothing is, with nothing '
-    + 'of it repeated (integration-skip-merge-check.pg.spec.ts). Read only past the landing checks, which the census\'s '
-    + 'landing in flight answers first, so it is held there rather than here',
+  // The skip door's `approvalId` is sent by the census itself (RUNNER_ISOLATION_FIELD_CASES above): a real case is
+  // the stronger registration, and the census refuses a key registered both ways.
 
   // ── the wiki: what a Record body carries (RUNNER_OPAQUE_BODIES) ─────────────────────────────────────
   'POST /runner/wiki/spaces/:id/articles/:slug body articles[].entries[]':
@@ -1327,6 +1388,12 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
  * any other — and the reading, with file:line, of what it reads.
  */
 export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly string[]; reading: string }>> = {
+  'POST /runner/wiki/repo-ops/:id/result body result.*': {
+    reads: [],
+    reading: 'the runner\'s own answer — a snapshot\'s index, a read\'s text, a diff\'s paths, an anchor\'s states — '
+      + 'stored as it is on the operation it holds and never dereferenced (wiki-worker/wiki-repo-ops.ts:436, the row '
+      + 'the result is written to)',
+  },
   'POST /runner/integration-jobs/:jobId/result body errorDetail.*': {
     reads: [],
     reading: 'the runner\'s own account of a failure, stored as it is on the job it holds and never dereferenced '
@@ -1488,6 +1555,10 @@ export const SHARED_BY_HAND: Readonly<Record<string, string>> = {
   'GET /shared/:token/events/:seq':
     'a position in the link\'s own session\'s transcript, not an object: read WHERE session_id = the link\'s '
     + '(sessions.service.ts:3719)',
+  'GET /shared/:token/docs/:slug':
+    'a document slug of the link\'s own wiki space, not an object a caller can name: the space is the link\'s '
+    + '(share-links.service.ts:378), and the slug is looked up among that space\'s own written documents — any '
+    + 'other is the one 404 (public-wiki.ts:155)',
 };
 
 /**
@@ -1528,13 +1599,13 @@ export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
     'the device code is the credential, found by its hash; it hands over only the token the request\'s own '
     + 'approver decided — pat-device-login.service.ts:93',
   'GET /auth/google/start':
-    'starts a Google sign-in flow of its own (a new row, a browser cookie); takes no id — google-login.service.ts:260',
+    'starts a Google sign-in flow of its own (a new row, a browser cookie); takes no id — google-login.service.ts:277',
   'GET /auth/google/callback':
     'Google\'s return: the state is found by its hash and must match the browser cookie the start set — '
-    + 'google-login.service.ts:369',
+    + 'google-login.service.ts:390',
   'POST /auth/google/exchange':
     'the ticket is found by its hash and must come with the code verifier of the flow that made it — '
-    + 'google-login.service.ts:434',
+    + 'google-login.service.ts:455',
   'POST /runner/register':
     'the one-time enrollment token is the credential, found by its hash; the runner it makes or renews belongs to '
     + 'that token\'s owner — runner-api.controller.ts:802, :813',

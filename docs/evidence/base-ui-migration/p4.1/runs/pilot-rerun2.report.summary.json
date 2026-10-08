@@ -1,0 +1,484 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/node_modules/.bin/playwright",
+   "test",
+   "pilot.browser.mjs",
+   "--config",
+   "ui-migration/pilot.config.mjs",
+   "--update-snapshots=all",
+   "--project",
+   "webkit-dark-desktop",
+   "-g",
+   "fields, pickers and the panel header",
+   "--repeat-each=3"
+  ],
+  "configFile": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration/pilot.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/pilot-rerun2-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "pilot*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/pilot-rerun2-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "pilot*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/pilot-rerun2-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "pilot*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/pilot-rerun2-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "pilot*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/pilot-rerun2-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "pilot*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/pilot-rerun2-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "pilot*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/pilot-rerun2-out",
+    "repeatEach": 3,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "pilot*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/pilot-rerun2-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "pilot*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/var/tmp/p4.1-293463/runs/pilot-rerun2-out/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "all",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run preview -- --host 127.0.0.1 --port 4321 --strictPort",
+   "cwd": "/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/",
+   "url": "http://127.0.0.1:4321",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "pilot.browser.mjs",
+   "file": "pilot.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [],
+   "suites": [
+    {
+     "title": "task detail pilot",
+     "file": "pilot.browser.mjs",
+     "line": 70,
+     "column": 6,
+     "specs": [
+      {
+       "title": "fields, pickers and the panel header",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 0,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 7778,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-detail.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-field-hover.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-assignee-open.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-suggested-open.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-provider-open.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-model-open.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-list-open.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-list-search.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-run-hint.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-delete-confirm.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:51:56.637Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "pilot-detail-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-detail.png"
+            },
+            {
+             "name": "pilot-detail-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun2-out/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-webkit-dark-desktop/pilot-detail-actual.png"
+            },
+            {
+             "name": "pilot-field-hover-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-field-hover.png"
+            },
+            {
+             "name": "pilot-field-hover-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun2-out/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-webkit-dark-desktop/pilot-field-hover-actual.png"
+            },
+            {
+             "name": "pilot-assignee-open-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-assignee-open.png"
+            },
+            {
+             "name": "pilot-assignee-open-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun2-out/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-webkit-dark-desktop/pilot-assignee-open-actual.png"
+            },
+            {
+             "name": "pilot-suggested-open-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-suggested-open.png"
+            },
+            {
+             "name": "pilot-suggested-open-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun2-out/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-webkit-dark-desktop/pilot-suggested-open-actual.png"
+            },
+            {
+             "name": "pilot-provider-open-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-provider-open.png"
+            },
+            {
+             "name": "pilot-provider-open-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun2-out/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-webkit-dark-desktop/pilot-provider-open-actual.png"
+            },
+            {
+             "name": "pilot-model-open-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-model-open.png"
+            },
+            {
+             "name": "pilot-model-open-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun2-out/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-webkit-dark-desktop/pilot-model-open-actual.png"
+            },
+            {
+             "name": "pilot-list-open-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-list-open.png"
+            },
+            {
+             "name": "pilot-list-open-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun2-out/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-webkit-dark-desktop/pilot-list-open-actual.png"
+            },
+            {
+             "name": "pilot-list-search-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-list-search.png"
+            },
+            {
+             "name": "pilot-list-search-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun2-out/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-webkit-dark-desktop/pilot-list-search-actual.png"
+            },
+            {
+             "name": "pilot-run-hint-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-run-hint.png"
+            },
+            {
+             "name": "pilot-run-hint-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun2-out/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-webkit-dark-desktop/pilot-run-hint-actual.png"
+            },
+            {
+             "name": "pilot-delete-confirm-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun2-shots/webkit-dark-desktop/pilot-delete-confirm.png"
+            },
+            {
+             "name": "pilot-delete-confirm-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun2-out/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-webkit-dark-desktop/pilot-delete-confirm-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun2-out/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-webkit-dark-desktop/attachments/computed-styles-and-timings-e4c91705bcc5275e724b2acb75bd02c21e3cf42c.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "d4114f9e53caa5d81e7d-50312746c3d96bf01dbd",
+       "file": "pilot.browser.mjs",
+       "line": 71,
+       "column": 3
+      },
+      {
+       "title": "fields, pickers and the panel header",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 1,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 8286,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:52:04.877Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun2-out/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-webkit-dark-desktop-repeat1/attachments/computed-styles-and-timings-7e1d3cc415121168e59c4d28dcd03c972a0a8b59.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "d4114f9e53caa5d81e7d-bde3de85e066a1000dca",
+       "file": "pilot.browser.mjs",
+       "line": 71,
+       "column": 3
+      },
+      {
+       "title": "fields, pickers and the panel header",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 2,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 8703,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:52:13.699Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/pilot-rerun2-out/pilot.browser.mjs-task-det-4dae3-ickers-and-the-panel-header-webkit-dark-desktop-repeat2/attachments/computed-styles-and-timings-0bd67ac02594a3769bd94bcd6c4cf89c396fcf71.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "d4114f9e53caa5d81e7d-cd511c65599d046dcd7e",
+       "file": "pilot.browser.mjs",
+       "line": 71,
+       "column": 3
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-07T15:51:55.645Z",
+  "duration": 26946.408,
+  "expected": 3,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

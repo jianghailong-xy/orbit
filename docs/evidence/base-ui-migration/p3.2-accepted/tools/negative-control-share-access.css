@@ -1,0 +1,6 @@
+
+/* p32acc negative control (scratch commit, not delivered): while the share dialog's Close button is
+   focus-visible, which only task-share-dialog.png shows (one Tab after the dialog opens), the Access button's
+   text "Anyone with the link" starts 1px further right (padding-left 6px -> 7px). Unlike the Close button's
+   focus ring, this text has high contrast in the dark theme too. */
+.share-dialog:has(.orbit-overlay-close:focus-visible) .share-access-select { padding-left: 7px; }

@@ -15,6 +15,9 @@ import type {
   SessionTurnIntent,
   SessionTurnPlacement,
   TaskStartCard,
+  WikiDocBlockKind,
+  WikiDocFootnoteKind,
+  WikiDocVerdict,
 } from '@orbit/shared';
 // Types only, so the public project page's payload is typed by the cards that draw it.
 import type { ProjectPanoramaBuckets, ProjectPanoramaShape } from './components/ProjectPanoramaHeader';
@@ -950,8 +953,11 @@ export const resendSessionRetryMessage = (
 ) =>
   api<{ turnId: string; placement?: string }>(`/sessions/${sessionId}/retry-message`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(identity),
+    // The object, not `JSON.stringify` of it: `api` serializes the body itself, and handing it a
+    // string puts a JSON STRING on the wire (`"{\"provider\":…}"`), which express's strict body
+    // parser refuses with 400 `Unexpected token '"'` before any handler sees the request — every
+    // press of the failure card's Retry failed that way (seen on orbitd.io, 2026-10-07).
+    body: identity,
   });
 
 // Turn off / put back the retry armed on this session by a spent quota or a transient provider
@@ -968,14 +974,17 @@ export const armAutoRetry = (sessionId: string, retryAt: Date) =>
   });
 
 // ── Public read-only sharing ──
-// A public link is a `share_link` row of its own: one root (a session, a task or a project), the
-// layers it includes, an expiry, how often it was opened (docs/share-links-design.md §4–§5). The
-// public address is `/s/<token>`. The open link's token also rides on SessionDetail.shareToken.
+// A public link is a `share_link` row of its own: one root (a session, a task, a project or a wiki
+// space), the layers it includes, an expiry, how often it was opened (docs/share-links-design.md
+// §4–§5, §10). The public address is `/s/<token>`. The open link's token also rides on
+// SessionDetail.shareToken.
 
-export type ShareRootKind = 'SESSION' | 'TASK' | 'PROJECT';
+export type ShareRootKind = 'SESSION' | 'TASK' | 'PROJECT' | 'WIKI';
+/** Every kind of root this client draws — what it asks Settings → Shared links for by name. */
+export const SHARE_ROOT_KINDS: readonly ShareRootKind[] = ['SESSION', 'TASK', 'PROJECT', 'WIKI'];
 /** The layers a link can turn on or off; which of them a link has depends on its root. Overview is
  *  not one of them: it is always included. */
-export type ShareLayer = 'taskPages' | 'commentsAndFiles' | 'conversations' | 'toolOutput';
+export type ShareLayer = 'taskPages' | 'commentsAndFiles' | 'conversations' | 'toolOutput' | 'footnotes';
 export type ShareInclude = Partial<Record<ShareLayer, boolean>>;
 /** ACTIVE opens; PAUSED is a session in the Trash (it opens again once restored); ENDED is turned
  *  off or expired, for good. */
@@ -994,13 +1003,15 @@ export interface ShareLink {
   updatedAt: string;
   state: ShareLinkState;
   stateReason: 'TURNED_OFF' | 'EXPIRED' | 'IN_TRASH' | null;
-  /** The root, named and placed: a session root also says where it is filed and when it completed. */
+  /** The root, named and placed: a session root also says where it is filed and when it completed.
+   *  A wiki space has no status; its `slug` is the owner's address for it (`/wiki/<slug>`). */
   root: {
     id: string;
     title: string;
-    status: string;
+    status?: string;
     lifecycleState?: string;
     completedAt?: string | null;
+    slug?: string;
   };
 }
 
@@ -1027,13 +1038,20 @@ export interface ProjectShareCounts {
   transcripts: number;
 }
 
+/** How much a wiki link's layers hold: its written documents, and the footnotes their pages carry. */
+export interface WikiShareCounts {
+  documents: number;
+  footnotes: number;
+}
+
 /** A root's layer counts, whichever kind of root it is. */
-export type ShareCounts = Partial<SessionShareCounts & TaskShareCounts & ProjectShareCounts>;
+export type ShareCounts = Partial<SessionShareCounts & TaskShareCounts & ProjectShareCounts & WikiShareCounts>;
 
 const SHARE_ROOT_PATH: Record<ShareRootKind, string> = {
   SESSION: 'sessions',
   TASK: 'tasks',
   PROJECT: 'projects',
+  WIKI: 'wiki/spaces',
 };
 
 /** A root's link that has not ended (null when it has none), with its layers' counts. */
@@ -1052,8 +1070,10 @@ export const putShareLink = (
 export const turnOffShareLink = (kind: ShareRootKind, id: string) =>
   api(`/${SHARE_ROOT_PATH[kind]}/${id}/share`, { method: 'DELETE' });
 
-/** Every link this account has made, ended ones included, newest first (Settings → Shared links). */
-export const listShareLinks = () => api<{ links: ShareLink[] }>('/share-links');
+/** Every link this account has made, ended ones included, newest first (Settings → Shared links) —
+ *  of every kind this client draws. A server lists only the kinds a client names, so an app that
+ *  predates a kind is never handed one it cannot decode. */
+export const listShareLinks = () => api<{ links: ShareLink[] }>(`/share-links?kind=${SHARE_ROOT_KINDS.join(',')}`);
 
 /** Turn off these links in one request; `count` is how many were still open. */
 export const turnOffShareLinks = (shareLinkIds: string[]) =>
@@ -1309,10 +1329,78 @@ export interface SharedTaskRun {
 }
 
 /** What `/s/<token>` opens: a session link's transcript page, or another root's page. */
+/** One written document as a wiki link's home lists it. */
+export interface SharedWikiDocRow {
+  slug: string;
+  /** `<category>.<place>`: `3.1`. */
+  number: string;
+  title: string;
+  /** Its first sentences; null while it has none. */
+  lead: string | null;
+}
+
+/** A wiki link's root page: the space's written documents by category (docs/share-links-design.md
+ *  §10). A category with nothing written, and every document not written yet, is left out. */
+export interface SharedWiki {
+  /** The space's name: its repository's last part, else its title. */
+  name: string;
+  documents: number;
+  categories: { key: string; number: number; title: string; docs: SharedWikiDocRow[] }[];
+}
+
+/** One footnote of a shared document, with Footnotes on: the words it quotes and where they are — a
+ *  repository file's path and lines, or a record's kind, number and time. Nothing that leads back. */
+export interface SharedWikiFootnote {
+  n: number;
+  kind: WikiDocFootnoteKind;
+  verdict: WikiDocVerdict;
+  quote: string | null;
+  path: string | null;
+  lineStart: number | null;
+  lineEnd: number | null;
+  section: string | null;
+  symbol: string | null;
+  excerpt: string | null;
+  seq: number | null;
+  at: string | null;
+  label: string | null;
+  notePath: string | null;
+}
+
+/** One written document as a wiki link shows it: sections written, sentences not withdrawn, their
+ *  footnote numbers and `footnotes` only with Footnotes. A «Not covered» target's `slug` is set only
+ *  when the link opens it. */
+export interface SharedWikiDoc {
+  slug: string;
+  number: string;
+  title: string;
+  question: string;
+  audience: string[];
+  scopeIn: string[];
+  scopeOut: { text: string; docs: { slug: string | null; number: string | null; title: string | null }[] }[];
+  category: { key: string; number: number; title: string };
+  updatedAt: string | null;
+  sections: {
+    key: string;
+    number: number;
+    title: string;
+    blocks: { kind: WikiDocBlockKind; text: string | null; sentences: { text: string; notes: number[] }[] }[];
+  }[];
+  footnotes?: SharedWikiFootnote[];
+}
+
+/** `/s/<token>/d/<slug>`: one of a wiki link's documents, with the link's layers and the wiki's name. */
+export interface SharedWikiDocPage {
+  include: ShareInclude;
+  wiki: { name: string };
+  doc: SharedWikiDoc;
+}
+
 export type SharedRoot =
   | (SharedSession & { kind?: 'SESSION' })
   | { kind: 'TASK'; include: ShareInclude; sharedAt: string; root: SharedTask }
-  | { kind: 'PROJECT'; include: ShareInclude; sharedAt: string; root: SharedProject; scope: SharedScope };
+  | { kind: 'PROJECT'; include: ShareInclude; sharedAt: string; root: SharedProject; scope: SharedScope }
+  | { kind: 'WIKI'; include: ShareInclude; sharedAt: string; root: SharedWiki };
 
 /** One of a project link's tasks (`/s/<token>/t/<id>`): the task as a task link shows its task,
  *  with the link's layers and what it opens. */
@@ -1354,6 +1442,11 @@ export const getSharedSession = (
  *  anything else is the dead link's 404. Not counted as a view. */
 export const getSharedProjectTask = (token: string, taskId: string): Promise<SharedProjectTaskPage> =>
   sharedGet<SharedProjectTaskPage>(token, `/tasks/${encodeURIComponent(taskId)}`);
+
+/** One written document of a wiki link, by its slug — anything the link does not open is the dead
+ *  link's 404. Not counted as a view. */
+export const getSharedWikiDoc = (token: string, slug: string): Promise<SharedWikiDocPage> =>
+  sharedGet<SharedWikiDocPage>(token, `/docs/${encodeURIComponent(slug)}`);
 
 /** A page of a shared transcript: the `limit` events just older than `before` (or the newest
  *  when it is absent). Clipped like the rest unless `whole`, which the Download HTML walk asks
@@ -1510,6 +1603,14 @@ export interface SessionDetail {
   provider?: string | null;
   /** The routing decision this task run was planned with; null on any other session. */
   route?: TaskRunRoute | null;
+  // The run's SOURCE, as the session row carries it (project-source-contract §6.1). `REFUSED` is a
+  // baseline the runner would not start from — the run never became one — and `sourceRefusalCode`
+  // with `sourceRefusalDetail` is why (the code, the ref and the machine's own words). UNBOUND on
+  // every Legacy session, and the only state an ordinary session ever has.
+  sourceState?: string | null;
+  sourceRef?: string | null;
+  sourceRefusalCode?: string | null;
+  sourceRefusalDetail?: Record<string, unknown> | null;
   /** On an account pool: the member its last claim dispatched on (null before the first). */
   poolMemberProviderId?: string | null;
   /** On a shared pool: the key its last claim chose (null before the first, or when none could run). */

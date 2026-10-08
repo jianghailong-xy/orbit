@@ -51,7 +51,7 @@ function stubPrisma(options: { updated: number; after: Record<string, unknown> }
   const writes: Written[] = [];
   const prisma = {
     // The real guard runs against this: the token is hashed and looked up, exactly as in production.
-    runner: { findFirst: async () => RUNNER },
+    runner: { findFirst: async () => ({ ...RUNNER, owner: { disabledAt: null } }) },
     session: {
       findFirst: async ({ where }: { where: Record<string, unknown> }) =>
         where.id === SESSION && where.assignedRunnerId === RUNNER.id

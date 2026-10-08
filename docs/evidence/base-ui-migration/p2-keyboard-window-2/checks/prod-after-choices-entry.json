@@ -1,0 +1,17 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 npm run test:ui-choices -w @orbit/web -- --grep \"Dialog owns choices|Dialog keeps composition|Dialog Popover Select exits\"'",
+ "commit": "069601b675c735a69263f4a75f8d4349c0877c77",
+ "webTree": "34ebe07972ab9680cad0775ad5f4169c39b5f98b",
+ "dirtyWeb": "",
+ "startedAt": "2026-10-07T15:26:43Z",
+ "endedAt": "2026-10-07T15:31:13+00:00",
+ "loadAverage": {
+  "start": "48.65 36.98 28.91",
+  "end": [
+   "62.82",
+   "57.84",
+   "40.08"
+  ]
+ },
+ "exitCode": 1
+}

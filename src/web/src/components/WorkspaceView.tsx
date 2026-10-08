@@ -191,6 +191,7 @@ import {
   type LocalStatusRow,
 } from '../lib/slashCommands';
 import { sessionPlanUsage } from '../lib/planUsage';
+import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 import { accountNameOf, accountPlanUsage, ANTIGRAVITY_ACCOUNT_LOGIN_CAPABILITY } from '../lib/engineAccounts';
 import { poolAccountHelp, poolsAsProviders, providerPoolsQuery, sessionPoolAccount } from '../lib/providerPools';
 import { isLoginPool, poolSessionLoginMember } from '../lib/codexLogin';
@@ -206,6 +207,7 @@ import {
   currentProviderChoice,
   engineChoiceFor,
   engineChoices,
+  engineTitleFor,
   providerChoices,
   sameRuntimeChoices,
 } from '../lib/sessionProviderChoices';
@@ -280,6 +282,11 @@ import {
   uploadAttachment,
 } from '../api';
 import { DshRepairCard } from './Transcript';
+import {
+  RunNeverStartedCard,
+  runNeverStarted,
+  type NeverStartedSession,
+} from './RunNeverStartedCard';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
 import { AntigravityRepairCard, antigravityRepair, AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, EventFullCtx, LiveToolOutputsCtx, QueuedUserTurn, SessionNavCtx, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
@@ -318,6 +325,7 @@ import {
 import { ProjectMergeStrip, ProjectMergeTimelineRow } from './ProjectMergeStrip';
 import { isMergeJob, projectTimelineSections } from '../lib/projectMerge';
 import { LandingRow, landingLine } from './ProjectPanoramaHeader';
+import { LandingJobsSheet } from './LandingJobsSheet';
 import { ProjectStartDialog } from './StartProjectCard';
 import {
   CHAT_FACTS_AS_ARMED,
@@ -417,6 +425,7 @@ import {
   sessionIsStarting,
   sessionLifecycleLabel,
   sessionLifecycleStateOf,
+  sessionReadingState,
   sessionRetryPending,
   sessionRunStateOf,
   sessionRunStatusOf,
@@ -469,7 +478,8 @@ import {
   type TaskRunConflict,
   type TaskRunConflictAction,
 } from '../lib/taskRunHandoff';
-import { TaskRunHandedOverNotice, TaskRunHandoffNotice } from './TaskRunHandoffNotice';
+import { TaskRunHandedOverNotice, TaskRunHandoffNotice, reportTaskRunConflict } from './TaskRunHandoffNotice';
+import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
 import {
   isCompleteShortcutEligible,
   scopedAttachmentCreateBlockedMessage,
@@ -1057,7 +1067,9 @@ const waitingLabel = (s: any): string => {
 // `watching` is this session as an observer — what its row says about the live watches that will
 // resume it (lib/watches `watchingSessions`) — and absent wherever a caller holds no watches.
 export const sessionLine = (s: any, live: boolean, watching?: SessionWatching | null): SessionLine => {
-  const state = sessionRunStateOf(s);
+  // `sessionReadingState`, not the run's own status: a refused SOURCE is over (SR34) and its row
+  // wears what a dead run wears, rather than the Starting line the wait would otherwise draw.
+  const state = sessionReadingState(s);
   // Somebody is waiting on YOU here, which outranks everything else the row could say: every other
   // line reports what the workspace is doing, and this one is the only one you can act on.
   //
@@ -1234,12 +1246,15 @@ function SessionProjectStartRow({ start, projectId }: { start: StartPageRow; pro
 
 /** The landing line inside the progress card while a task lands on the project branch (iOS
  *  `SessionProjectPage.landingLine`): the project page's own row, ticking once a second, and a press
- *  that opens the project page. A merge job's line is the merge card's (`ProjectMergeStrip`). Its own
+ *  that lists every job in flight (`LandingJobsSheet`) — or, from a server that does not list them,
+ *  opens the project page. A merge job's line is the merge card's (`ProjectMergeStrip`). Its own
  *  component, so the second hand redraws this line and not the console around it. */
 function SessionProjectLanding({ projectId, onOpen }: { projectId: string; onOpen: () => void }) {
   const integration = useQuery(projectIntegrationQuery(projectId));
   const view = integration.data && typeof integration.data === 'object' ? integration.data : null;
   const live = view?.inFlight != null && !isMergeJob(view.inFlight);
+  const listed = view?.inFlightJobs !== undefined;
+  const [jobsOpen, setJobsOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!live) return undefined;
@@ -1250,12 +1265,21 @@ function SessionProjectLanding({ projectId, onOpen }: { projectId: string; onOpe
   const line = live && view
     ? landingLine(view, now, { updatedAt: integration.dataUpdatedAt, failed: integration.isError })
     : null;
-  if (!line) return null;
   return (
-    <button type="button" className="session-project-page-landing" onClick={onOpen}>
-      <LandingRow line={line} />
-      <RightOutlined className="session-project-page-landing-chev" aria-hidden />
-    </button>
+    <>
+      {line ? (
+        <button type="button" className="session-project-page-landing" aria-haspopup={listed ? 'dialog' : undefined}
+          onClick={listed ? () => setJobsOpen(true) : onOpen}>
+          <LandingRow line={line} />
+          <RightOutlined className="session-project-page-landing-chev" aria-hidden />
+        </button>
+      ) : null}
+      {/* Portalled out of the card, and kept while open even if the line goes, so a list being read
+          does not vanish under the reader when its last job lands. */}
+      {listed || jobsOpen ? (
+        <LandingJobsSheet projectId={projectId} open={jobsOpen} onClose={() => setJobsOpen(false)} />
+      ) : null}
+    </>
   );
 }
 
@@ -1431,7 +1455,8 @@ export function SessionTagChips({
 // is coming, and nobody is being asked for one. Absent wherever a caller has no watches to hand
 // (the search palette's rows), which keeps the previous reading rather than inventing one.
 export function statusLabel(session: any, watching?: string | null): string {
-  const state = sessionRunStateOf(session);
+  // See sessionLine: a refused SOURCE reads as the failure it is.
+  const state = sessionReadingState(session);
   // Same ordering as `sessionLine`, and outside the generating gate for the same reason: an owner
   // decision is not held open by a turn, so it is still waiting once the conversation parks.
   if ((session.pendingApprovals ?? 0) > 0) return waitingLabel(session);
@@ -1488,7 +1513,8 @@ export function orbitLinkStateWord(row: any): string {
  * these for the sessions filed in it (lib/sessionFolders), so a folder and its rows can't disagree.
  */
 export function statusGlyphMotion(session: any, watching?: string | null): 'spinner' | 'pulse' | null {
-  const state = sessionRunStateOf(session);
+  // See sessionLine: nothing about a refused run is in motion.
+  const state = sessionReadingState(session);
   if ((session.pendingApprovals ?? 0) > 0 || state === 'SUCCEEDED') return null;
   if (waitingNoticeFor(session) || isGenerating(session, state)) return 'spinner';
   if (state !== 'AWAITING_INPUT') return null;
@@ -1521,7 +1547,8 @@ function RunningStatusIcon() {
 // `watching` is the word for the live watches that will resume this session (`statusLabel`'s), and
 // absent wherever a caller holds no watches.
 export function StatusIcon({ session, watching }: { session: any; watching?: string | null }) {
-  const state = sessionRunStateOf(session);
+  // See sessionLine: the glyph agrees with the word beside it on a refused run too.
+  const state = sessionReadingState(session);
   const fontSize = 16;
   // First, and outside the generating gate — see `statusLabel`. The glyph and the label branch in
   // the same order on purpose: they are read together on one row.
@@ -3748,6 +3775,36 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     selectedWaiting !== null,
     STARTING_NOTICE_DELAY_MS,
     waitingNoticeScope(selectedId, selectedStartingSession),
+  );
+  // The engine that would have executed THIS session — its own provider, never the composer's
+  // pending pick: choosing another provider for the next turn does not rename the engine that
+  // could not start this one (the same reading `outageProvider` makes for the quota card).
+  const selectedRuntime = runtimeForProvider(
+    detailForSelected?.provider ?? selected?.provider,
+    configuredProviders,
+  );
+  // Whether this run never became one, and why — see RunNeverStartedCard. Read off the MERGED row,
+  // because the SOURCE columns only ride the detail payload. Deliberately outside the delayed-notice
+  // machinery above: this is a fact, not a wait that might still end, so it is not held back the ten
+  // seconds those notices are.
+  const neverStarted = useMemo(
+    () =>
+      selected && !selectedTrashed && !selectedMissing
+        ? runNeverStarted({
+            session: selectedSession as NeverStartedSession,
+            runtime: selectedRuntime,
+            runnerName: runner.displayName || runner.name,
+          })
+        : null,
+    [
+      selected,
+      selectedSession,
+      selectedTrashed,
+      selectedMissing,
+      selectedRuntime,
+      runner.displayName,
+      runner.name,
+    ],
   );
   const scopedEvents = useMemo(
     () => (eventsSessionId === selectedId ? events : []),
@@ -7587,6 +7644,26 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     onError: (e: Error) => void message.error("Couldn't re-send the message", e.message),
   });
   const resendFromSessionMutate = resendFromSession.mutate;
+  /**
+   * "Start it again" on the refused-run card: a NEW run of the task, which is what the task panel's
+   * Run now makes and the only recovery SR34 leaves for a refused SOURCE — the pin is terminal, so
+   * the next start resolves against the configuration as it stands, never against this baseline.
+   * `triggerId` is the press's own name, drawn at the click: a resend of a lost answer reuses it
+   * and is one request, while the next click draws another and is a second run.
+   */
+  const startRunAgain = useMutation({
+    ...runRequestResend,
+    mutationFn: ({ taskId, triggerId }: { taskId: string; triggerId: string }) =>
+      api(`/tasks/${taskId}/execute`, { method: 'POST', body: { triggerId } }),
+    onSuccess: () => {
+      message.success('Assignee workspace triggered');
+      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      if (selectedId) void qc.invalidateQueries({ queryKey: ['session', selectedId] });
+    },
+    // The task moved on between the page's read and the press; the refusal names the run that has
+    // it, so it is reported as that run rather than as the server's sentence about claims.
+    onError: (e: Error) => reportTaskRunConflict(message, e),
+  });
   const sendMutate = send.mutate;
   // §2.1, §8 criterion 19: a Retry already in flight is not offered a second time. The server is
   // idempotent on the failed message, so a second click could not queue a second turn for one — but
@@ -8400,7 +8477,55 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     const route = detailForSelected?.route;
     return selected?.taskId && route?.applied && route.level && route.model === shownModel ? route : null;
   })();
+  // The menu's title: the engine this session runs on — and, while a standing pick will carry the
+  // next turn to a different one, where it is going (`Claude Code → Codex`). Same fact
+  // `providerSwitchNote` says in words, said as the pair it is about.
+  const engineTitle = useMemo(
+    () =>
+      engineTitleFor(
+        selected?.provider ?? detailForSelected?.provider ?? shownProvider,
+        configuredProviders,
+        pendingResumeProvider,
+      ),
+    [selected?.provider, detailForSelected?.provider, shownProvider, pendingResumeProvider, configuredProviders],
+  );
+  const engineTitleGlyph = engineTitle.glyphKey ? PROVIDER_GLYPHS[engineTitle.glyphKey] : undefined;
   const modelMenuItems: MenuProps['items'] = [
+    // The menu's own title, and not a control: the one fact none of the rows below states is which
+    // CLI executes at all. It is never picked here — a run keeps its engine for its whole life, and
+    // moving it is the Provider row's job — so the row carries no onClick, no chevron, and the
+    // class drops the item's pointer and hover fill.
+    {
+      key: 'engine-title',
+      className: 'composer-engine-title',
+      label: (
+        <span className="composer-engine-title-row">
+          <span className="composer-engine-title-glyph" style={{ color: engineTitle.brand.from }}>
+            {engineTitleGlyph ? (
+              <svg
+                viewBox="0 0 24 24"
+                width={14}
+                height={14}
+                fill="currentColor"
+                aria-hidden="true"
+                dangerouslySetInnerHTML={{ __html: engineTitleGlyph }}
+              />
+            ) : (
+              <span className="composer-engine-title-mono">{engineTitle.brand.mono}</span>
+            )}
+          </span>
+          <span className="composer-engine-title-name">{engineTitle.name}</span>
+          {engineTitle.nextName && (
+            <>
+              <span className="composer-engine-title-arrow" aria-hidden="true">
+                →
+              </span>
+              <span className="composer-engine-title-name">{engineTitle.nextName}</span>
+            </>
+          )}
+        </span>
+      ),
+    },
     ...(smartRoute
       ? [
           {
@@ -9652,7 +9777,44 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   )}
                 </div>
               )}
-              {placeholder === 'queued' && showQueuedNotice && (
+              {/* A run that never became one says why, in place of the waiting notice that would
+                  otherwise promise it is still coming. It takes the slot the two notices below
+                  take, and suppresses them: the same empty transcript cannot be both a start that
+                  is on its way and a start that was refused. */}
+              {selected && !selectedTrashed && neverStarted && (
+                <RunNeverStartedCard
+                  never={neverStarted}
+                  actions={{
+                    // SR34: a refused run is not re-resolved, it is replaced by a NEW run of the
+                    // task — the same write the task panel's Run now makes, under the same
+                    // request token so a lost answer is resent rather than duplicated.
+                    startAgain: selectedSession?.taskId
+                      ? () =>
+                          startRunAgain.mutate({
+                            taskId: selectedSession.taskId as string,
+                            triggerId: newRunRequestToken(),
+                          })
+                      : undefined,
+                    // An ordinary session is resumable as it stands, so the message goes again —
+                    // the transcript's own retry, whose words it would carry.
+                    sendAgain: authErrorHelp.onRetry,
+                    install:
+                      selectedRuntime === AgentProvider.DSH
+                        ? authErrorHelp.onInstallDsh
+                        : authErrorHelp.onInstall,
+                    openProviders:
+                      selectedRuntime === AgentProvider.DSH
+                        ? authErrorHelp.onEditDshKey
+                        : authErrorHelp.onOpenProviders,
+                    openRunner: () => navigate(`/runners/${encodeId(runner.id)}`),
+                    // The conversation is the other way to answer a refusal, so this only arms it:
+                    // the reader's own words are the point, and nothing is sent for them.
+                    chatAbout: () => setTimeout(() => taRef.current?.focus(), 0),
+                    busy: retryInFlight || startRunAgain.isPending,
+                  }}
+                />
+              )}
+              {placeholder === 'queued' && showQueuedNotice && !neverStarted && (
                 dshQueueRepair ? <DshRepairCard repair={dshQueueRepair} help={authErrorHelp} /> : antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-queued-state">
                   <div className="chat-queued-dots" aria-hidden="true">
                     <span />
@@ -9663,7 +9825,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   <div className="chat-queued-desc">{slotWaitDescription}</div>
                 </div>
               )}
-              {placeholder === 'starting' && showStartingNotice && (
+              {placeholder === 'starting' && showStartingNotice && !neverStarted && (
                 <div className="chat-queued-state">
                   <div className="chat-queued-dots" aria-hidden="true">
                     <span />
@@ -9841,9 +10003,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   <span>{slotWaitDescription}</span>
                 </div>
               )}
+              {/* The one-line form for a transcript that already has content. A run whose engine
+                  never spoke has none, so this is only ever the other waits — but the gate is
+                  shared with the pane above rather than left to that coincidence. */}
               {selected &&
                 !selectedTrashed &&
                 showStartingNotice &&
+                !neverStarted &&
                 transcriptEvents.length > 0 && (
                 <div className="chat-note chat-slot-wait">
                   <span>

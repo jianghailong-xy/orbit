@@ -135,7 +135,7 @@ async function open(path = '/settings/access-tokens'): Promise<void> {
       </MemoryRouter>,
     );
   });
-  await vi.waitFor(() => expect(page().querySelector('.ant-table-row, .ant-table-placeholder')).not.toBeNull(), {
+  await vi.waitFor(() => expect(page().querySelector('tbody tr')).not.toBeNull(), {
     timeout: 10_000,
   });
   await settle();
@@ -155,7 +155,12 @@ const page = (): HTMLElement => {
   if (!container) throw new Error('the page is not mounted');
   return container;
 };
-const dialog = () => document.body.querySelector<HTMLElement>('.ant-modal.access-token-dialog');
+/** An open dialog, by its accessible name (the title it is labelled by). */
+const named = (name: string) =>
+  [...document.body.querySelectorAll<HTMLElement>('[role="dialog"]')].find(
+    (d) => document.getElementById(d.getAttribute('aria-labelledby') ?? '')?.textContent === name,
+  ) ?? null;
+const dialog = () => named('New access token');
 
 async function click(element: Element | null | undefined, what: string): Promise<void> {
   expect(element, `${what} is on screen`).toBeTruthy();
@@ -177,10 +182,15 @@ async function type(input: HTMLInputElement | null, value: string): Promise<void
   await settle();
 }
 
+/** The list's token rows (the body's rows, less the one that says the list is empty). */
+const tokenRows = () =>
+  [...page().querySelectorAll<HTMLTableRowElement>('tbody tr')].filter((row) => row.cells.length > 1);
 /** Every row of the list as it reads, cell by cell. */
-const rows = () =>
-  [...page().querySelectorAll<HTMLElement>('.ant-table-row')].map((row) =>
-    [...row.querySelectorAll('td')].map((cell) => cell.textContent?.trim() ?? ''));
+const rows = () => tokenRows().map((row) => [...row.cells].map((cell) => cell.textContent?.trim() ?? ''));
+/** A radio, a checkbox, by the text of its label. */
+const choice = (within: ParentNode, role: 'radio' | 'checkbox', label: string) =>
+  [...within.querySelectorAll<HTMLElement>(`[role="${role}"]`)].find((el) => el.closest('label')?.textContent === label);
+const isChecked = (el: Element | undefined) => el?.getAttribute('aria-checked') === 'true';
 
 const tabs = () =>
   [...page().querySelectorAll<HTMLElement>('[role="tab"]')].map((tab) => ({
@@ -269,7 +279,7 @@ describe('Settings → Access tokens', { timeout: 60_000 }, () => {
       [`Demoorbit_pat_…${LAPSED.tokenHint}`, `Expired ${fullDate(LAPSED.expiresAt!)}`, 7],
     ]);
     // A token that no longer works has nothing to revoke.
-    expect(page().querySelectorAll('.ant-table-row button')).toHaveLength(0);
+    expect(tokenRows().flatMap((row) => [...row.querySelectorAll('button')])).toHaveLength(0);
   });
 
   it('issues a token and shows it once — in full, beside Copy and why to copy it now — never in the list, and gone once dismissed', async () => {
@@ -278,12 +288,11 @@ describe('Settings → Access tokens', { timeout: 60_000 }, () => {
 
     await newToken('Nightly report', async (form) => {
       // 90 days unless another is chosen, saying when that is.
-      const checked = form.querySelector<HTMLInputElement>('input[type="radio"][value="90"]');
-      expect(checked?.checked).toBe(true);
+      expect(isChecked(choice(form, 'radio', '90 days'))).toBe(true);
       expect(form.textContent).toContain(`Stops working on ${fullDate(at(90 * DAY))}.`);
       expect(form.textContent).not.toContain(NEVER_EXPIRES_WARNING);
       // Never says what it risks, where it is chosen.
-      await click(form.querySelector('input[type="radio"][value="never"]'), 'Never');
+      await click(choice(form, 'radio', 'Never'), 'Never');
       expect(form.querySelector('.access-token-never-warning')?.textContent).toBe(NEVER_EXPIRES_WARNING);
     });
 
@@ -301,7 +310,7 @@ describe('Settings → Access tokens', { timeout: 60_000 }, () => {
     // Once on the page: in the panel, and in the list only as its last four characters.
     await vi.waitFor(() => expect(rows().map((row) => row[0])).toContain(`Nightly reportorbit_pat_…${PLAINTEXT.slice(-4)}`));
     expect(occurrences(PLAINTEXT)).toBe(1);
-    expect(page().querySelector('.ant-table')!.textContent).not.toContain(PLAINTEXT);
+    expect(page().querySelector('table')!.textContent).not.toContain(PLAINTEXT);
     expect(dialog()?.textContent ?? '').not.toContain(PLAINTEXT);
 
     await click(button(shown, 'Copy'), 'Copy');
@@ -341,29 +350,26 @@ describe('Settings → Access tokens', { timeout: 60_000 }, () => {
     expect(button(form, 'Create token')?.hasAttribute('disabled')).toBe(true);
 
     await type(form.querySelector<HTMLInputElement>('input[placeholder^="What it"]'), 'Wiki bot');
-    await click(form.querySelector('input[type="radio"][value="custom"]'), 'Custom');
+    await click(choice(form, 'radio', 'Custom'), 'Custom');
     const row = (resource: string) =>
       [...form.querySelectorAll<HTMLElement>('.access-token-scope-row')].find((r) => r.firstChild?.textContent === resource)!;
-    const box = (resource: string, which: 'Read' | 'Write') =>
-      [...row(resource).querySelectorAll<HTMLElement>('.ant-checkbox-wrapper')]
-        .find((label) => label.textContent === which)!
-        .querySelector<HTMLInputElement>('input')!;
+    const box = (resource: string, which: 'Read' | 'Write') => choice(row(resource), 'checkbox', which)!;
     // Custom starts from the preset it leaves: every read scope, and no write.
     for (const resource of ['Tasks', 'Projects', 'Sessions', 'Workspaces', 'Runners', 'Wiki', 'Events']) {
-      expect(box(resource, 'Read').checked, resource).toBe(true);
+      expect(isChecked(box(resource, 'Read')), resource).toBe(true);
     }
     expect(form.querySelectorAll('.access-token-scope-row')).toHaveLength(7);
-    expect(box('Tasks', 'Write').checked).toBe(false);
+    expect(isChecked(box('Tasks', 'Write'))).toBe(false);
 
     // Untick every read but the wiki's, then write the wiki, then untick the projects' read again.
     for (const resource of ['Tasks', 'Projects', 'Sessions', 'Workspaces', 'Runners', 'Events']) await click(box(resource, 'Read'), resource);
     await click(box('Wiki', 'Write'), 'Wiki write');
     // Writing sessions brings reading them along.
     await click(box('Sessions', 'Write'), 'Sessions write');
-    expect(box('Sessions', 'Read').checked).toBe(true);
+    expect(isChecked(box('Sessions', 'Read'))).toBe(true);
     // Giving up reading them gives up writing them.
     await click(box('Sessions', 'Read'), 'Sessions read');
-    expect(box('Sessions', 'Write').checked).toBe(false);
+    expect(isChecked(box('Sessions', 'Write'))).toBe(false);
 
     await click(button(form, 'Create token'), 'Create token');
     await vi.waitFor(() => expect(issueAccessToken).toHaveBeenCalledTimes(1));
@@ -380,12 +386,10 @@ describe('Settings → Access tokens', { timeout: 60_000 }, () => {
     await vi.waitFor(() => expect(dialog()?.querySelector('input[placeholder^="What it"]')).toBeTruthy());
     const again = dialog()!;
     await type(again.querySelector<HTMLInputElement>('input[placeholder^="What it"]'), 'Nothing');
-    await click(again.querySelector('input[type="radio"][value="custom"]'), 'Custom');
+    await click(choice(again, 'radio', 'Custom'), 'Custom');
     for (const resource of ['Tasks', 'Projects', 'Sessions', 'Workspaces', 'Runners', 'Wiki', 'Events']) {
-      const read = [...again.querySelectorAll<HTMLElement>('.access-token-scope-row')]
-        .find((r) => r.firstChild?.textContent === resource)!
-        .querySelector<HTMLInputElement>('input')!;
-      await click(read, resource);
+      const scopes = [...again.querySelectorAll<HTMLElement>('.access-token-scope-row')].find((r) => r.firstChild?.textContent === resource)!;
+      await click(choice(scopes, 'checkbox', 'Read'), resource);
     }
     expect(button(again, 'Create token')?.hasAttribute('disabled')).toBe(true);
   });
@@ -410,12 +414,13 @@ describe('Settings → Access tokens', { timeout: 60_000 }, () => {
     serve([CI, LAPTOP]);
     await open();
 
-    const ci = [...page().querySelectorAll<HTMLElement>('.ant-table-row')].find((row) => row.textContent?.startsWith('CI pipeline'))!;
+    const ci = tokenRows().find((row) => row.textContent?.startsWith('CI pipeline'))!;
     await click(button(ci, 'Revoke'), 'Revoke');
     expect(revokeAccessToken).not.toHaveBeenCalled();
-    const asked = document.body.querySelector('.ant-popconfirm');
-    expect(asked?.querySelector('.ant-popconfirm-title')?.textContent).toBe('Revoke “CI pipeline”?');
-    expect(asked?.querySelector('.ant-popconfirm-description')?.textContent).toBe(
+    // The question names itself by its title and is described by what revoking does.
+    const asked = named('Revoke “CI pipeline”?');
+    expect(asked).not.toBeNull();
+    expect(document.getElementById(asked!.getAttribute('aria-describedby') ?? '')?.textContent).toBe(
       'Anything using it stops working at once. This can’t be undone.',
     );
     await click(button(asked!, 'Revoke'), 'Revoke (confirm)');

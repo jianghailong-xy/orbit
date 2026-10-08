@@ -1632,6 +1632,7 @@ export function TaskDetailPanel({
               )}
               {hasDependencyRelations && (
                 <Segmented<'graph' | 'list'>
+                  size="small"
                   className="tdp-dependency-view"
                   value={dependencyView}
                   options={[

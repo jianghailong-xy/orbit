@@ -449,11 +449,12 @@
       "route": "POST /api/runner/wiki/spaces/:id/notes",
       "body": {
         "path": "required: where the file was read, relative to the directory the import named; at most rules.notePathMaxChars characters",
-        "text": "required: the file's text; at most rules.noteMaxChars characters"
+        "text": "required: the file's text; at most rules.noteMaxChars characters",
+        "readBy": "server, from a command whose notes the server reads (import.server); left out otherwise. Under import.server it is required: import.server.door"
       },
       "redaction": "The text and the path go through src/apiserver/src/common/secret-redaction.ts, with the owner's workspace.env values as literals, BEFORE anything is stored or hashed. Only the redacted text, its sha256 and the redacted path are kept: never the text as it was sent.",
       "dedup": "One content is one note in a space: UNIQUE (space_id, content_sha256), the sha256 of the redacted text. Registering a text the space already holds — the same file imported again, or the same text under another name — answers the note already there with created false, and makes no row.",
-      "answer": "{ id, spaceId, path, contentSha256, chars, redacted, created, text }. text is the stored, redacted text, which is what the importing runner hands its model, so a quote the model copies is checked against the very text it read.",
+      "answer": "{ id, spaceId, path, contentSha256, chars, redacted, created, text }. text is the stored, redacted text, which is what the importing runner hands its model, so a quote the model copies is checked against the very text it read. Under import.server the answer carries no text: the server reads it, and no session's model does.",
       "who": "A session this runner hosts for its owner (X-Orbit-Session-Id; a headless call is refused 400), into one of that owner's spaces (another owner's is a plain 404). A verifier, foreman or judgment session is refused WIKI_SESSION_EXCLUDED."
     },
     "source": "A note is cited as { kind: note, ref: <the note's id>, quote? }. It resolves only among its owner's notes — another owner's note is WIKI_SOURCE_UNRESOLVED, as their turn or task is — and its text is the stored, redacted text: what a quote is checked against (sourceRules.quote) and what an automatic space's verifier reads. Its locator is { path }, the file it came from. A note is second-hand content an agent wrote, never the owner's own words (reviewModes.tiered).",
@@ -469,10 +470,55 @@
       "precondition": "Import only the files the owner asked for, into the space they named, and never write an entry yourself: each entry is the local model's, read from a separate clean call over the file's redacted text, and it takes effect only as the space's review mode says.",
       "does": "Registers each file as a note (import.note), asks a clean Claude Code for at most rules.entriesPerNote entries from it, checks the run's ops with a dry run, and proposes the ones that passed (import.propose): at most rules.opsPerRun ops a run.",
       "files": "A file is imported as it is. A directory is its *.md files directly inside it, the ones whose frontmatter says they are the owner's own guidance first (type feedback, then user, reference, project, then the rest), each group by name; MEMORY.md, a memory library's index, is left out. A file already imported, or holding a text the space already has, is not proposed from again.",
-      "model": "As agentSurface.verify.model: the endpoint, token and model the session's provider injected — ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN read by an apiKeyHelper, and ANTHROPIC_MODEL, which --model overrides — called the way agentSurface.verify.cleanClaudeCode calls it, with the importer's own system prompt and no thinking (CLAUDE_CODE_EFFORT_LEVEL=unset, MAX_THINKING_TOKENS=0). It waits for the endpoint's GET /health to answer 200 before its first call, and stops at the first 401.",
+      "model": "As agentSurface.verify.model: the endpoint, token and model the session's provider injected — ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN read by an apiKeyHelper, and ANTHROPIC_MODEL, which --model overrides — called the way agentSurface.verify.cleanClaudeCode calls it, with the importer's own system prompt and no thinking (CLAUDE_CODE_EFFORT_LEVEL=unset, MAX_THINKING_TOKENS=0). It waits for the endpoint's GET /health to answer 200 before its first call, and stops at the first 401. When jobs.executor gives the account to the server, the command reads with no model of its own: import.server.",
       "principles": "A principle is the owner's alone (reviewModes.floors.principleOwnerOnly): the model is asked for none, and one it writes anyway is not proposed, only counted.",
       "batches": "A dry run checks the run's ops first. An op refused for what it says is dropped and counted; from the first one refused for room — WIKI_QUOTA, or WIKI_REVIEW_QUEUE_FULL — the rest wait for a later run. What needs review therefore reaches Review a batch at a time, as limits.opsPerTurn, limits.opsPerSession and limits.pendingOpsPerSpace allow, never hundreds at once.",
       "resume": "It remembers on the machine it runs on ($ORBIT_HOME/wiki-import, or --state) which files it registered, what the model found in each and which ops it proposed: a run picks up where the last one stopped, a file already imported is not sent to the model again, and one whose text changed is imported as the new note it is. A batch is proposed under an idempotency key made of its space and its ops, so one sent again after a lost answer writes nothing twice."
+    },
+    "server": {
+      "phase": "server execution, P5",
+      "doc": "docs/wiki-contract.md section 5.1; docs/wiki-server-execution-design.md sections 2.2 and 8",
+      "why": "The import's model moves off the runner (design section 0): orbit wiki import still runs on the runner and still reads the files, their frontmatter and registers each as a note, but the entries are read by the deployment's System model in an `import` job of the wiki-worker (jobs.kindRuns.import), and the command waits for the job and prints its report. No key, subscription or provider of the session's is spent, and the session needs none.",
+      "when": "Under jobs.executor=server, or canary for an account its list names: the executor route answers server. Under runner (the default), and against a server that predates this route, the command reads with the session's own model exactly as import.cli says, and nothing below happens.",
+      "door": "Under it, the import's two older routes are the server's (refusals: WIKI_SERVER_EXECUTES): POST notes refuses a body without readBy server — an orbit wiki import that predates this one, and would read the note with the session's own model — before anything is registered, and answers one with it without the text; POST imports is refused, because the job proposes and no entry a session's own model wrote is taken. The command that predates this stops at its first registration, before it has asked any model anything. Under runner both routes are exactly as import.note and import.propose say.",
+      "executor": {
+        "route": "GET /api/runner/wiki/spaces/:id/import",
+        "answer": "{ executor: server | runner, model, modelState }: which path this account's import takes, and the System model's name and state as systemModel.read says them — never its address or key.",
+        "olderServer": "Any answer but server — runner, a 404 (a server without this route, a space that is not the caller's, a wiki that is off), a refusal, no answer at all — is read as runner: the command goes on as it always has, and the note route answers what it answers. A command that asks wrong costs a refusal and never a model call: under import.server the note route refuses a registration that does not say readBy server (door)."
+      },
+      "create": {
+        "route": "POST /api/runner/wiki/spaces/:id/import-jobs",
+        "body": "{ id, maxOps, concurrency?, checkoutRoot?, notes: [{ noteId, file, date, ops?: [{ index, body }] }] }. id is the job's, named by the command (a uuid or a public id), so a request sent again after a lost answer is answered with the job it already made; maxOps is 1 to rules.opsPerRun; concurrency is the notes read at once, 1 to maxConcurrency (defaultConcurrency when left out); checkoutRoot is the git root of the directory the command ran in, if any; notes are in the order the run would read them, at most maxNotes, each the note's id as import.note answered it, the file's path as the command names it, its date (YYYY-MM-DD: the frontmatter's modified, else the file's time) and — for a note an earlier run read — the ops it found and did not propose, each at its index in that run's list.",
+        "rules": "Every note must be one of this space's (another space's, or another owner's, is a WIKI_SCHEMA field error naming it); a body that is not this shape is WIKI_SCHEMA with every field named. The job is made with kind import, priority `priority`, the calling session in its input. An account the switch does not give the server is refused 409 and no job is made.",
+        "who": "As import.note.who: a session this runner hosts for its owner; the calling session is what the job proposes as."
+      },
+      "read": {
+        "route": "GET /api/runner/wiki/spaces/:id/import-jobs/:jobId",
+        "answer": "{ id, spaceId, state, waitingFor, attempts, error, failureKind, progress, report, createdAt, startedAt, endedAt, model: { name, state } } — the job row as jobs says it, and the System model's name and state so a command waiting on it can say why it waits.",
+        "who": "Any session this runner hosts for the space's owner — a later run in another session collects a job an earlier one left — and a 404 for another owner's job or another space's."
+      },
+      "priority": 1,
+      "steps": {
+        "read": "import",
+        "retry": "import_retry"
+      },
+      "maxTokens": 8192,
+      "defaultConcurrency": 4,
+      "maxConcurrency": 8,
+      "maxNotes": 1000,
+      "systemPrompt": "You compile durable engineering knowledge from one note about a code repository into wiki entries. You output only a JSON array.",
+      "reads": "Each note to read is one request through the queue (modelQueue): step `steps.read`, unit the note's id, the system prompt above, max_tokens maxTokens, and the prompt orbit wiki import sends on the runner word for word (wikiImportPrompt: what is worth an entry, the one flat shape, the fictional example, the note under its path and date, and — for a note whose prose is Chinese — the language named last). Notes are read `concurrency` at a time, in order, until the run has maxOps ops; the queue's own perJob cap still holds what is in flight. A replayed job meets the rows it made: a note answered before is not asked again.",
+      "checks": "As the runner checks (import.cli): the answer's JSON array is found bare, in a fence, wrapped as {entries}, or after reasoning, and mended (an unescaped quote in a quote, a trailing comma); each entry is held to its kind's fields, a title to the note's language when it is Chinese, a recipe's verify.command to a command the note writes in its code, a quote to the note's own words (else the note is cited with no quote); a principle is counted and never proposed; a second entry of one title is dropped; at most rules.entriesPerNote ops a note. An answer that does not parse, or entries that do not hold up, are asked about once more (step `steps.retry`) with what was wrong, and a note whose answers never parse is failed — not read again. A request the queue ends as no outage (the call's budget, a refusal the model gives for what was sent) fails its note the same way; one the platform could not finish (the wait limit) fails the job as infra, and the retried job asks again (modelQueue.identity).",
+      "deterministic": "One input, one answer on both paths until P10: src/shared/src/wiki-import.fixture.json holds what the runner's Go code makes of a set of notes and answers — the prompt, a note's language, the reading of an answer, a quote, a verify command, the ops and problems an answer becomes and the retry that names them, a path anchor — and src/runner-go/wiki_import_fixture_test.go and src/apiserver/src/wiki-worker/wiki-import-golden.spec.ts hold both implementations to it byte for byte.",
+      "snapshot": {
+        "waitSeconds": 180,
+        "rule": "The anchors are held to the space's snapshot (repoOps) instead of a checkout: a path its origin/main tree has, file or directory — an absolute one read under checkoutRoot, an Orbit worktree, or a directory named for the space's repository — and a commit origin/main reaches, a prefix of seven or more characters naming exactly one. When the space's repository can be read now (readiness ready), the job asks for a fresh snapshot (skipSha the one it holds, under an operation id made from the job's) and waits for it holding its lease, at most waitSeconds; otherwise, or when the snapshot fails or does not come in time, it holds the anchors to the snapshot the space already holds; with none, the anchors are left out. Only a job with a note to read asks.",
+        "report": "report.snapshot is { sha, fresh } of the snapshot the anchors were held to — fresh when it is the one this job asked for — or null."
+      },
+      "propose": "As import.cli.batches: the run's ops (at most maxOps, in note order) are checked with a dry run, and the ones that passed proposed in one changeset through WikiService.submitChangeset as the calling session, origin import, under idempotencyKey wiki-import:<the first 40 hex of sha256(space id, a newline, the ops as Go's json.Marshal writes them)> — a replay of the job, or a run that carries a batch whose answer was lost, writes nothing twice. The rationale names the System model and the notes. An op refused for what it says is dropped and counted; from the first refused for room (WIKI_QUOTA, WIKI_REVIEW_QUEUE_FULL) the rest wait for a later run, and a run that could propose nothing for want of room says so in summary.stopped. A refusal of the whole request fails the job as content.",
+      "report": "{ kind: import, model, snapshot, summary: { notes, read, entries, principles, dropped, failed, proposed, applied, pending, verifying, refused, deferred, calls, inputTokens, outputTokens, refusals[{file, title, code, why}], stopped }, notes: [{ file, noteId, status: read | failed | carried, why?, principles?, dropped?, ops: [{ index, body?, outcome: '' | applied | pending | verifying | refused, why?, opId?, entryId? }] }] }. A note read this run lists every op it gave (outcome '' for one with no room this run); a carried note lists the ops it carried; a note the run did not reach is absent. The summary's numbers are what the command prints.",
+      "progress": "While it runs the job writes progress { step: snapshot | reading | proposing, notes, read, failed, ops } under its lease generation (jobs.progress).",
+      "cli": "The command asks the executor route first. On server it registers the files that are not yet notes (readBy server), hands the job every note to read and every note carrying ops in one create (at most maxNotes; the rest wait for the next run), writes the job's id into its memory before it waits, polls the read route, and on success writes the report into its memory as import.cli.resume keeps it — so the next run, on either path, picks up where this one stopped — and prints the report's numbers. It stops waiting, leaving the job to the server and its id in its memory, when the System model refuses the deployment's key (auth_failed) or is not configured, when the model has not been up, or the job has not started, for ten minutes, and when the job has failed three times over (its attempts); the next run collects that job before it makes another. A failed job leaves its notes registered for the next run's job. --model is not used; no ANTHROPIC_* variable and no Claude Code are needed."
     }
   },
 
@@ -1238,6 +1284,8 @@
       "markdownMaxChars": 20000
     },
     "rulesNote": "An article's length is counted in characters (Unicode code points) of its kept sentences, footnote markers and headings left out: the demo's measure, whose articles averaged 1,052 against a 400-900 target. The writer aims inside the range and asks again once when a draft falls short of minChars; the server cuts what passes maxChars (validation.cap). splitAbove, groupTarget, groupsMax and groupMin are the writer's grouping (the demo's), entriesPerArticle the most entries one article is written from.",
+    "job": { "step": "articles", "priority": 0, "articleMaxTokens": 4096, "nameMaxTokens": 512, "parallel": 4, "snapshotWaitSeconds": 900 },
+    "jobNote": "The server's articles job (articles.serverExecution): step is the queue's step for every one of its calls, which gives them the default wait limit and call budget, 15 minutes each (modelQueue.waitLimit, modelQueue.callBudget); priority is background work (jobs.priority); articleMaxTokens is max_tokens of an article, overview or subtopic call — far above the 900 characters the server keeps — and nameMaxTokens of a group's name; parallel is how many of one topic's calls are in flight at once, the queue's own cap for one job; snapshotWaitSeconds is how long a job with no snapshot to name waits for the one it asked for.",
     "membership": {
       "entries": "A topic's entries are the space's active entries that no web-derived source tainted, each in exactly one topic.",
       "order": [
@@ -1250,7 +1298,7 @@
       "patterns": "wiki_topic.path_prefixes holds prefixes and suffixes. A prefix claims a path that starts with it, as many characters as it has; one that ends in / claims the directory itself too (src/web claims what src/web/ does). A pattern that starts with * is a suffix: it claims a path that ends with the rest (*.swift claims a bare ConsoleModel.swift), as many characters as the rest has. So a directory's prefix outranks a suffix, and a suffix names what a bare file name is about when nothing longer does."
     },
     "fingerprint": "sha256 of the lines <entry id>:<current revision> of the topic's entries, sorted by id and joined by a newline: the same entries at the same revisions give the same fingerprint, and an entry that joins, leaves or is amended changes it.",
-    "regeneration": "A topic's articles are rewritten only when its fingerprint differs from the one its part 0 was generated from, and only by a maintenance run after its entries changed (criterion 3): no clock starts one. A write that names the stored fingerprint rewrites nothing (unchanged), and one that names a fingerprint other than the topic's current one is refused WIKI_ARTICLE_STALE.",
+    "regeneration": "A topic's articles are rewritten only when its fingerprint differs from the one its part 0 was generated from, and never by a clock. What starts a rewrite depends on who runs the account's wiki (jobs.executor). Under the default runner: since criterion 3's revision 3 a maintenance run no longer rewrites the topic articles (maintenance.job.run.steps, docs), and nothing does on its own — a maintenance session that runs orbit wiki articles writes them. For an account the switch gives the server (server, or canary with the account on its list; the owner's decision of 2026-10-08): a maintenance run of the space that succeeded, recorded ops and was not made while the space was behind (its catch-up neither active nor paused, the documents' own rule) makes one articles job (articles.serverExecution, jobs.kindRuns.articles), whichever path ran the run; the job rewrites only the topics whose fingerprint changed. A write that names the stored fingerprint rewrites nothing (unchanged), and one that names a fingerprint other than the topic's current one is refused WIKI_ARTICLE_STALE.",
     "validation": {
       "input": "Each part is Markdown with footnote markers [n], and notes: the entry each n names, notes[n-1]. A subtopic part names the entries of its group too.",
       "sentences": "The body is cut into sentences at 。！？, and at a full stop or an ASCII ? or ! followed by a space or the end of the line — not at an ASCII ? or ! after a space or another ? or !, which is code left outside backticks (a ?? b, a != b), and not inside a code span; a heading line starts a block, and a first-level heading is not part of the body.",
@@ -1267,7 +1315,7 @@
       "readers": "The owner, on the user door. Another owner's space, topic or article is a plain 404."
     },
     "who": {
-      "write": "A maintenance run of the space (isWikiMaintenanceSession, contract maintenance.session) through the runner door, and an import the API server's container runs itself (origin import, no session and no user) for a preview space. Every other caller is refused WIKI_NOT_MAINTENANCE_SESSION; the user door has no write route.",
+      "write": "A maintenance run of the space (isWikiMaintenanceSession, contract maintenance.session) through the runner door, the server's own articles job (origin maintenance, no session and no user, revisions authored system: articles.serverExecution), and an import the API server's container runs itself (origin import, no session and no user) for a preview space. Every other caller is refused WIKI_NOT_MAINTENANCE_SESSION; the user door has no write route. For an account the executor switch gives the server, a maintenance run of the space is refused WIKI_SERVER_EXECUTES on all three runner routes — plan, input and write: the wiki worker writes those articles, so no session's provider is asked.",
       "read": "The owner, on the user door."
     },
     "seeding": "A space with no topic yet is given articles.defaultTopics the first time a writer asks for its plan: their slugs, display names, categories, descriptions and path prefixes, in this order. A space that has topics keeps them.",
@@ -1286,12 +1334,28 @@
       "entriesListed": 200,
       "index": "Every article of the space, A to Z by title: its topic, its part and the entries it was written from."
     },
-    "cleanClaudeCode": "The verifier's clean launch (agentSurface.verify.cleanClaudeCode) with the writer's own system prompt, and thinking off: CLAUDE_CODE_EFFORT_LEVEL=unset and MAX_THINKING_TOKENS=0. The model reads entries only, never session text.",
+    "cleanClaudeCode": "The verifier's clean launch (agentSurface.verify.cleanClaudeCode) with the writer's own system prompt, and thinking off: CLAUDE_CODE_EFFORT_LEVEL=unset and MAX_THINKING_TOKENS=0. The model reads entries only, never session text. The runner's path only: the server's articles job calls the System model through the request queue, with the same system prompt and no Claude Code at all (articles.serverExecution).",
+    "serverExecution": {
+      "phase": "server execution, P4",
+      "doc": "docs/wiki-contract.md section 18.8; docs/wiki-server-execution-design.md sections 4.5 and 8",
+      "who": "An account the executor switch gives the server (jobs.executor: server, or canary with the account on its list). Under the default runner none of this runs, and the articles are what they were.",
+      "made": "One articles job per space, made where the server records the end of a maintenance run of the space that succeeded, recorded ops (a changeset of origin maintenance from the run's session) and was not made while the space was behind — the runner path's run included: its finish route is where the end is recorded (owner, 2026-10-08). Background priority (articles.job.priority). At most one is queued or parked per space: a queued job reads the plan when it runs, and a parked one reads it again when it is replayed, so either covers every run that ends before it; one that is already running may have read it, so the next run's end queues another behind it. A failure to make it is logged and never the run's.",
+      "steps": [
+        "plan: WikiArticles.plan as the job (who.write) — a space with no topic is given the default ones — and only the topics whose fingerprint changed are taken up; with none, the job succeeds having asked nothing",
+        "ref: the sha of the space's repository snapshot (repoOps.cache), which an article records as the commit it was written at. With none, the job asks the space's runner for one, once (repoOps.kinds.snapshot) and parks on it (repoOps.waiting, at most articles.job.snapshotWaitSeconds); it is replayed when the snapshot lands. A job that asked and got none — the operation failed, or did not settle in time — or whose space names no checkout to read writes without a ref, and its report says why",
+        "topic: its input as the runner door answers it; a topic of more than rules.splitAbove entries grouped by the runner's grouping, step for step (tf-idf spherical k-means, anchor paths first), yielding the worker's event loop as it computes; each group named one after another, each told the names already taken; the subtopic articles and the overview, or the one article, written articles.job.parallel at a time; a draft that keeps fewer than rules.minChars characters, counted by the server's own validation, asked for once more when its pool has 8 entries or more",
+        "write: WikiArticles.write, the write the runner door calls, so validation keeps a footnote only when it names an entry of the topic and the topic's rows are replaced only from its current fingerprint; model is the System model's name"
+      ],
+      "prompts": "The runner's, word for word: the system prompt, the article, subtopic and overview prompts, the entry lines, the naming prompt and the retry suffix. src/shared/src/wiki-article-writer.fixture.json holds both paths to one answer — every call and the big topic's groups — and src/runner-go/wiki_articles_test.go and src/apiserver/src/wiki-worker/wiki-articles-job.spec.ts each read it.",
+      "calls": "Each call is a request of the queue (modelQueue) with step articles.job.step and unit <slug>@<first 12 of its fingerprint>/name-<n>, /part-<n> or /part-<n>/again, so a job replayed after its worker died reuses every answer it had, and a topic whose entries moved between two attempts is asked afresh. The queue retries what the runner retried by hand (5xx, 429, a dropped connection) and stops at a 401 for the whole deployment (modelQueue.retry.unauthorized) — where the runner stopped its run.",
+      "ends": "Every topic it took up written or unchanged: succeeded, its report the runner's summary — seeded, ref and refWhy, topics [{slug, entries, outcome, why, parts}], written, unchanged, failed, calls, usage and the validation's stats. A topic left unwritten — a call that ended in a way that is the work's, a write refused (WIKI_ARTICLE_STALE among them) — fails the job as content once every other topic has been tried, its report on the row, as the command exits non-zero; the next job writes it from the entries as they stand. A failure of the platform (a request past its wait limit, the database, the worker stopping) ends the attempt as infra, and the replay starts over from the plan.",
+      "runnerDoor": "A maintenance session of such an account is refused WIKI_SERVER_EXECUTES on the plan, input and write routes (who.write), so a runner of any version asks its session's provider nothing for these articles. orbit wiki articles reads that answer as the server writing them: it asks no model, says so and exits 0 (cli.does)."
+    },
     "cli": {
       "articles": "orbit wiki articles --space <id> [--topic <slug>] [--model MODEL] [--json]",
       "tool": "none: a maintenance run's verb, CLI only, with no MCP tool beside it.",
       "precondition": "Write articles only as a Wiki maintenance run of the space, and only from what the model wrote: every sentence keeps a footnote to one of the topic's entries or is deleted, and a topic whose entries did not change is left as it is.",
-      "does": "Asks the plan for the topics whose entry set changed (--topic, one of them), reads each one's entries, groups a topic of more than rules.splitAbove entries into subtopics by their anchor paths and words, has the model name each group and write each article, and writes the topic's articles. It stops at the first 401 from the model's endpoint, and exits non-zero when any topic it took up was left unwritten."
+      "does": "Asks the plan for the topics whose entry set changed (--topic, one of them), reads each one's entries, groups a topic of more than rules.splitAbove entries into subtopics by their anchor paths and words, has the model name each group and write each article, and writes the topic's articles. It stops at the first 401 from the model's endpoint, and exits non-zero when any topic it took up was left unwritten. For an account the server runs the wiki for, the door answers WIKI_SERVER_EXECUTES (serverExecution.runnerDoor): it asks no model, says the Orbit server writes the articles, and exits 0."
     },
     "defaultTopics": [
       { "slug": "sessions", "title": "会话", "category": "platform", "description": "Sessions: lifecycle, messages, turns, steer and interrupt, delivery, attachments, session merge and commit.", "pathPrefixes": ["src/apiserver/src/sessions/", "src/apiserver/src/attachments/", "src/apiserver/src/link-previews/", "src/apiserver/src/session-tags/", "docs/session-"] },
@@ -1748,6 +1812,267 @@
     "tool": "none: no MCP tool reads or writes a document. Writing is a maintenance run's verb on the CLI; reading is the owner's, in the Wiki."
   },
 
+  "systemModel": {
+    "phase": "server execution, P1a",
+    "doc": "docs/wiki-contract.md section 23; docs/wiki-server-execution-design.md sections 2.1, 4.1, 4.5, 5.3 and 6",
+    "why": "The wiki's model calls move off the runner (design section 0): the server's wiki-worker calls the deployment's own System model, whose address and key are in that service's environment and nowhere else. At this phase the worker only probes the model and writes its state and heartbeat; P1b adds the job table (jobs), the request queue (modelQueue) and the executor switch (jobs.executor); the pipelines call the model their own way until the phases that move them (P3-P8) send their calls through the queue.",
+    "service": {
+      "name": "wiki-worker",
+      "image": "orbit-apiserver:local",
+      "command": "node src/apiserver/dist/wiki-worker/main.js",
+      "entry": "src/apiserver/src/wiki-worker/main.ts",
+      "context": "NestFactory.createApplicationContext over WikiWorkerModule: Prisma and the worker's own providers, no controller and no port; enableShutdownHooks().",
+      "dependsOn": "apiserver, service_healthy: the worker runs no migration, the apiserver applies them on boot.",
+      "restart": "unless-stopped",
+      "stopGracePeriodSeconds": 30
+    },
+    "env": {
+      "baseUrl": "ORBIT_WIKI_MODEL_BASE_URL",
+      "apiKey": "ORBIT_WIKI_MODEL_API_KEY",
+      "model": "ORBIT_WIKI_MODEL",
+      "concurrency": "ORBIT_WIKI_MODEL_CONCURRENCY"
+    },
+    "envRules": {
+      "configured": "baseUrl, apiKey and model all set: an http or https URL, a key, a model name. With any of them missing or unusable the state is unconfigured and nothing is probed or called.",
+      "defaultConcurrency": 4,
+      "concurrency": "Model requests in flight at once across every space, held by the request queue (modelQueue.concurrency). A value that is not a positive whole number is read as the default.",
+      "onlyOn": "wiki-worker. The apiserver's environment holds none of the four (docker-compose.yml, test/compose-topology.test.mjs).",
+      "names": "None is ANTHROPIC_*: Compose prefers the shell's environment to .env, and an agent session's environment carries those names (src/apiserver/src/wiki/wiki-compose-env.spec.ts).",
+      "problems": "readWikiSystemModel(env) returns the configuration and the problems it found, and the worker logs them once. Neither the problems nor the log carry the key."
+    },
+    "request": {
+      "route": "POST {baseUrl}/v1/messages",
+      "headers": {
+        "authorization": "Bearer {apiKey}",
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+      },
+      "body": "{model, max_tokens, system, messages: [one user message], stream: true}. Every call gives its max_tokens explicitly; no tools are sent and thinking is not turned on.",
+      "events": ["message_start", "content_block_delta", "message_delta", "message_stop", "error"],
+      "eventRules": "The answer is the text of the text_delta deltas, in order. message_start carries the model and the first usage, message_delta the stop reason and the usage so far. A call has ended only at message_stop: a stream that closes before it is a dropped connection. ping, content_block_start, content_block_stop and any event not named here are read past.",
+      "usage": "inputTokens and outputTokens are the last values the stream reported: message_delta's, else message_start's.",
+      "idleTimeoutSeconds": 300,
+      "timeouts": "Each call has a budget of its own, its step's limit (verify, extract, import and articles 15 minutes, docs 20, plan 60), and is disconnected after idleTimeoutSeconds without a byte whatever its budget. Both, and a cancel, abort it through one AbortController.",
+      "partial": "The text received so far is handed to the caller after every delta, and carried by the error of a call that fails: what the request queue keeps as a request's partial (P1b).",
+      "errors": {
+        "retryable": "HTTP 5xx and 429; a connection refused, reset or closed, a name that does not resolve, a stream closed before message_stop, idleTimeoutSeconds without a byte; an SSE error event of type overloaded_error, api_error or rate_limit_error.",
+        "unauthorized": "HTTP 401, or an SSE error event of type authentication_error: the key was refused, and the state becomes auth_failed.",
+        "other": "Every other HTTP status and SSE error, an answer that is not an event stream, the call's own budget running out, and a cancel."
+      },
+      "connections": "Node's own fetch: connections are kept alive and reused, with no per-origin limit below the concurrency. After message_stop the stream is still read to its end, for a second at most, so that the connection goes back to the pool."
+    },
+    "health": {
+      "route": "GET {baseUrl}/health",
+      "headers": "authorization and anthropic-version, as a call sends them.",
+      "upStatuses": [200, 404],
+      "authFailedStatuses": [401],
+      "intervalSeconds": 10,
+      "timeoutSeconds": 5,
+      "rule": "An answer in upStatuses is up and one in authFailedStatuses auth_failed; any other status, no answer within timeoutSeconds, or no connection is down. Probed every intervalSeconds while configured, and each probe writes the state and the heartbeat together."
+    },
+    "status": {
+      "table": "wiki_model_status",
+      "migration": "src/apiserver/prisma/migrations/0400_wiki_model_status/migration.sql",
+      "row": "Exactly one, id 1, written by the worker alone with INSERT ... ON CONFLICT (id) DO UPDATE. The apiserver only reads it.",
+      "columns": ["state", "model", "since", "last_error", "checked_at", "worker_seen_at"],
+      "states": ["up", "down", "auth_failed", "unconfigured"],
+      "meaning": {
+        "up": "The probe answered one of health.upStatuses.",
+        "down": "The probe got no answer, or another status. Requests are not taken while down (modelQueue.pause); the probe goes on, and the next up resumes them.",
+        "auth_failed": "The endpoint refused the key (401), to the probe or to a call. It holds until the worker restarts, which is when a corrected key is read: every later call would be refused the same way.",
+        "unconfigured": "env.baseUrl, env.apiKey or env.model is missing or unusable. Nothing is probed or called; the heartbeat is still written."
+      },
+      "since": "When the state began: kept while the state and the model stay what they were.",
+      "lastError": "Why the state is not up, in words that name neither the address nor the key: an HTTP status, a connection error's code, a variable's name. Null while up.",
+      "checkedAt": "When the probe last ran; null while unconfigured.",
+      "workerSeenAt": "The worker's heartbeat, written with every probe, every health.intervalSeconds.",
+      "workerStaleSeconds": 60
+    },
+    "read": {
+      "route": "GET /api/wiki/system-model",
+      "who": "Any account the wiki is on for (JwtAuthGuard and WikiRolloutGuard; a personal access token needs wiki:read): it is the deployment's model, not a space's. It writes nothing.",
+      "states": ["up", "down", "auth_failed", "unconfigured", "worker_not_running"],
+      "fields": ["state", "model", "since", "checkedAt", "workerSeenAt"],
+      "workerNotRunning": "No row, or a workerSeenAt older than status.workerStaleSeconds, reads as worker_not_running: what the settings page and the health line show as wiki worker not running. since is then the last heartbeat.",
+      "never": "The System model's address, its key, and last_error: the read says the model's name and its state, and nothing else."
+    },
+    "metrics": {
+      "route": "GET /api/metrics",
+      "series": {
+        "orbit_wiki_model_state": "gauge, label state (one of read.states): 1 for the state the read answers, 0 for the others.",
+        "orbit_wiki_worker_heartbeat_age_seconds": "gauge: seconds since workerSeenAt; absent while no worker has written.",
+        "orbit_wiki_model_calls_total": "counter, label outcome (succeeded, or one of request.errors): the queue's calls, read from its rows at scrape time (modelQueue.metrics).",
+        "orbit_wiki_model_call_duration_seconds": "summary, quantiles 0.5 and 0.95: how long the queue's calls ran, over the rows that ended (modelQueue.metrics)."
+      }
+    }
+  },
+
+  "jobs": {
+    "phase": "server execution, P1b",
+    "doc": "docs/wiki-contract.md section 24; docs/wiki-server-execution-design.md sections 5.1, 5.4 and 10",
+    "why": "The wiki's pipelines move off the runner's maintenance sessions onto the server (design section 0). A unit of that work is a job: the server makes one, a wiki-worker claims it, and the model calls it makes go through the persisted request queue (modelQueue). At this phase the table, the claim, the lease, the retry and the executor switch are the contract; the seven pipeline kinds arrive with the phases that implement them (P3 to P8), and the one kind that runs today is `smoke`.",
+    "table": "wiki_job",
+    "migration": "src/apiserver/prisma/migrations/0401_wiki_job/migration.sql",
+    "columns": ["id", "owner_id", "space_id", "kind", "input", "priority", "state", "waiting_for", "attempts", "next_attempt_at", "lease_owner", "lease_generation", "lease_deadline_at", "progress", "report", "error", "failure_kind", "created_at", "updated_at", "started_at", "ended_at"],
+    "kinds": ["verify", "articles", "import", "plan_draft", "plan_revise", "docs_build", "maintain", "smoke"],
+    "kindRuns": {
+      "articles": "The server's articles writer (P4, articles.serverExecution): orbit wiki articles done by the wiki worker with the System model. Its input is {}; it is made after a maintenance run of the space by the rule articles.regeneration states, at priority 0 (articles.job). It reads the plan, takes up the topics whose fingerprint changed, groups a big topic as the runner does, has the model name the groups and write the articles through the queue — step articles, a unit per topic, fingerprint and part — and writes them through WikiArticles.write. Its ref is the space's snapshot's sha, asked for once and parked on when there is none (repoOps.waiting). It succeeds when every topic it took up is written or unchanged, and fails as content, its report on the row, when one was left unwritten.",
+      "smoke": "One model call, its answer and usage written into the job's report: the shortest route through the queue, and P1's end-to-end proof that claim, call, write-back and settle work together. It runs no pipeline and reads nothing; its input is { system?, prompt?, maxTokens? }, each with a default. A kind whose phase has not landed stays queued — the claim takes only the kinds the worker's build runs — so no deployment is handed work it would have to fail.",
+      "import": "orbit wiki import's reading, on the server (P5, import.server): the notes the command registered, read by the System model through the queue — one request a note (step import, unit the note), one retry with what did not hold up (step import_retry) — checked as the runner checks them, the anchors held to the space's snapshot, then a dry run and one proposal with origin import as the calling session, under a key made of the space and the ops. Its input is the create route's body with the session in it; its report is import.server.report, which the command prints and remembers. Made only by the runner door's create route, at import.server.priority."
+    },
+    "states": ["queued", "running", "waiting", "succeeded", "failed", "cancelled"],
+    "waitingFor": ["repo", "model"],
+    "waitingRule": "Nothing writes `waiting` yet: this phase's worker keeps a job running while its model request waits, and the request's wait limit is what ends it. The transitions that park a job — on a repo operation (P2), or on the model being away — arrive with the phases that need them, and a waiting row holds no lease (the CHECK above).",
+    "failureKinds": ["infra", "content"],
+    "lease": {
+      "seconds": 60,
+      "renewSeconds": 20,
+      "claim": "One statement per claim, the shape watch_delivery's claim has: UPDATE wiki_job … FROM (SELECT … WHERE state = 'queued' AND (next_attempt_at IS NULL OR next_attempt_at <= now()) AND kind = ANY(the kinds this build runs) AND owner_id matches what this worker serves AND NOT EXISTS a running job of the same space … ORDER BY priority DESC, created_at, id LIMIT n FOR UPDATE SKIP LOCKED) — each claimed row gets a new lease_generation, and started_at is the first claim's.",
+      "hosts": "lease_owner, lease_generation and lease_deadline_at are set together exactly while the row is running (`wiki_job_lease_chk` holds it both ways), and every settle clears them.",
+      "cas": "Every write that ends an attempt — succeeded, requeued, failed — is a compare-and-set on the claim's generation. A worker whose lease ran out and was taken over matches no row and settles nothing.",
+      "sweep": "A running job whose lease_deadline_at passed goes back to queued, attempts one higher and the next attempt on retry.backoffSeconds; the takeover starts the job from the beginning, and the request rows it already made answer the replay (modelQueue.identity)."
+    },
+    "onePerSpace": "At most one job per space runs at a time (design section 5.1, the hidden list's maxConcurrent 1): the claim skips a space whose job is running, and a partial unique index over space_id WHERE state = 'running' is the same rule in the database, for two schedulers that read at once. A job that is waiting (waiting_for set) holds no lease and does not occupy the space.",
+    "priority": "Integer, default 0. Owner-initiated work — a plan draft, a review, a build, an import from the command line — is made with a higher priority than background maintenance, and the claim takes the highest first; within one priority, the longest-waiting job first.",
+    "retry": {
+      "backoffSeconds": [0, 10, 30],
+      "rule": "An infra failure puts the job back to queued with attempts one higher and next_attempt_at now plus backoffSeconds[attempts], the same schedule the queue's calls use. A content failure ends it: state failed, failure_kind content, ended_at set. attempts counts the infra retries of the job's own row."
+    },
+    "concurrencyPerWorker": 4,
+    "pollSeconds": 5,
+    "startup": "A worker runs one pass the moment it starts — sweep, then claim — so a job left queued or handed back by a dead worker is picked up where it stands.",
+    "make": "The pipelines enqueue a job as a row (kind, input, priority, state queued) when the executor switch says the server runs for that account. The phases that move each pipeline add their own route or trigger: since P5 the runner door's import-jobs route makes an `import` job (import.server.create), and smoke is made by the specs directly. Since P4 an articles job is also made, where the server records the end of a maintenance run of an account it runs, by the rule articles.regeneration states (articles.serverExecution.made).",
+    "progress": "A job's progress column is its own pipeline's to write (a step, a count, what it is doing), under its lease generation; report is what it ends with. The smoke job writes a report; the import job writes both (import.server.progress, import.server.report); the articles job writes its report (articles.serverExecution.ends).",
+    "executor": {
+      "env": { "mode": "ORBIT_WIKI_EXECUTOR", "canaryOwners": "ORBIT_WIKI_EXECUTOR_CANARY_OWNERS" },
+      "modes": ["runner", "canary", "server"],
+      "default": "runner",
+      "rules": {
+        "runner": "The old path only: maintenance sessions and their tasks run the pipelines, and no worker claims or executes a wiki job. Nothing about today's behavior changes.",
+        "canary": "The accounts ORBIT_WIKI_EXECUTOR_CANARY_OWNERS lists (comma-separated uuids) are run by the server's worker; every other account is as under runner.",
+        "server": "Every account is. The switch gates execution only: rows written by either path stay where they are, and moving it back to runner stops new jobs being taken without deleting anything."
+      },
+      "mistyped": "A value that is none of the three is read as runner, with a logged problem: a switch reached for and mistyped must land on the path that already runs, never on one whose worker nobody deployed.",
+      "whoReadsIt": "One pure function (src/apiserver/src/wiki/wiki-executor-switch.ts, shaped after wiki-rollout.ts) is read by the apiserver and by the wiki-worker, so both answer the same about an account. The variables reach a service the way the model's do — this deployment's compose passes them from its .env (owner-confirmed, the same way the wiki rollout's ORBIT_WIKI is set), and unset everywhere reads as runner."
+    },
+    "runRows": {
+      "why": "Health and the day's count read runs, not the history of how they were made (design section 5.1).",
+      "doctor": "wiki_maintenance_run.job_id and wiki_plan_job.job_id record the job that ran a run; task_id is nullable from 0401 on, and a CHECK requires exactly one maker per started row (a plan job is exempt while it is queued or held — it has made neither yet).",
+      "count": "The day's runs (space.settings.maintenance.dailyRunLimit) count the maintenance list's tasks made since midnight UTC, as they always have, and the runs made by a job read off their own rows, which have no task; a run in active catch-up on a local endpoint and one that failed are not counted, whichever path made it. Plan jobs never count."
+    },
+    "runnerTurns": "A server run creates no task and no session: it does not touch runnerActiveTurns, and the runner's only part in the server path is the repo operations of P2."
+  },
+
+  "modelQueue": {
+    "phase": "server execution, P1b",
+    "doc": "docs/wiki-contract.md section 25; docs/wiki-server-execution-design.md sections 5.2, 5.4, 5.5 and 6",
+    "why": "All of the wiki's model calls go through one persisted queue, so that a deployment's System model answers at most ORBIT_WIKI_MODEL_CONCURRENCY requests at once whatever the pipelines were doing when a worker died (design section 0). The row is also the breakpoint: a pipeline replayed after a restart reuses the answer a finished call holds instead of issuing it again.",
+    "table": "wiki_model_request",
+    "migration": "src/apiserver/prisma/migrations/0401_wiki_job/migration.sql",
+    "columns": ["id", "job_id", "owner_id", "space_id", "step", "unit", "attempt", "attempts", "priority", "request", "request_sha256", "state", "lease_owner", "lease_generation", "lease_deadline_at", "enqueued_at", "not_before", "started_at", "ended_at", "answer", "partial", "input_tokens", "output_tokens", "http_status", "error", "error_kind"],
+    "identity": "(job_id, step, unit, attempt) is unique, and the pair (step, unit) is the call's own address inside its job: enqueuing it again MEETS the row it already has rather than making a second call. `attempt` is which attempt of that unit the row is (a genuine redo moves to the next), and `attempts` is how many times this row has been tried — a lease that ran out and a retry each count one, and the backoff reads it.",
+    "request": "{ system, prompt, maxTokens } — the call exactly as the client sends it, and its sha256, so the same unit twice with a different call can be told from the same call replayed.",
+    "states": ["queued", "running", "succeeded", "failed", "cancelled"],
+    "concurrency": {
+      "env": "ORBIT_WIKI_MODEL_CONCURRENCY",
+      "default": 4,
+      "meaning": "Requests in flight at once across every space and every worker of the deployment.",
+      "claim": "One transaction per scheduler: pg_advisory_xact_lock (one key for the whole queue), count the rows whose state is running and whose lease has not expired, then claim at most (concurrency − that count) — ORDER BY priority DESC, enqueued_at, id LIMIT that many FOR UPDATE SKIP LOCKED, each row under a new lease generation. However many workers run, running-plus-unexpired never passes the concurrency, and two schedulers claiming at once serialize on the lock rather than on rows.",
+      "perJob": 4
+    },
+    "priority": "Integer, default 0, copied from the job. Owner-initiated work sorts above background maintenance, and within one priority the longest-waiting request goes first; perJob caps what one job can hold in flight, so no single job takes the queue.",
+    "lease": {
+      "seconds": 60,
+      "renewSeconds": 20,
+      "partialSeconds": 5,
+      "rule": "A running row holds lease_owner, lease_generation and lease_deadline_at together (`wiki_model_request_lease_chk`), renewed while the call runs. The text received so far is written back with a renewal only when it grew, so a row that dies mid-call keeps what had arrived.",
+      "sweep": "A running row whose lease passed goes back to queued with attempts one higher and its partial KEPT; the next claim re-issues the call and hands the client the text it had. Every settle is a compare-and-set on the claim's generation, so a takeover's generation is not the dead worker's and its late write settles nothing.",
+      "answer": "A succeeded row's answer is written once, by the claim that owned it: an answer that arrives after the lease was taken over is dropped, and the takeover issues the call again."
+    },
+    "retry": {
+      "backoffSeconds": [0, 10, 30],
+      "rule": "5xx, 429 and connection failures class retryable: the row goes back to queued, attempts one higher, not_before now plus backoffSeconds[attempts − 1] (0, then 10 s, then 30 s and every one after it). Nothing else is retried: the call's own budget running out, an answer that is not an event stream and an unclassified error end the request (state failed, error_kind other) and the job reads it.",
+      "unauthorized": "A 401 (and an authentication_error event) is its own case: the request goes back to the queue — it is the deployment's key to fix, not the work's to lose — and the worker reports the refusal to the model's state, which turns auth_failed and stops the queue (pause)."
+    },
+    "waitLimit": {
+      "defaultSeconds": 900,
+      "byStep": { "extract": 180, "docs": 180, "import": 600, "plan": 1200 },
+      "rule": "How long a request may wait from its enqueue before it fails, by its step (the step's own name or one of its stages: extract*, docs*, import*, plan*). A request that waits past it ends failed with error_kind other and the wait limit's words; the job that made it reads that and fails as infra, so a model that is away for an hour ends a run rather than hanging it forever. The clock is the row's enqueued_at: a retry does not start it over."
+    },
+    "callBudget": {
+      "defaultSeconds": 900,
+      "byStep": { "docs": 1200, "plan": 3600 },
+      "rule": "One call's own budget, by step (design section 6): the call is disconnected when it runs out, and is also disconnected after the contract's idleTimeoutSeconds without a byte (systemModel.request)."
+    },
+    "pause": {
+      "when": "The model's state is not up (wiki_model_status): down and auth_failed both stop the claim, so requests stay queued and undelivered (design section 5.3).",
+      "resume": "down resumes by itself — the probe keeps asking, and the next up makes the next pass claim again. auth_failed holds until the worker restarts with a corrected key, which is when every later call would stop being refused."
+    },
+    "shutdown": {
+      "signal": "SIGTERM (docker stop, 30 s grace).",
+      "plan": "A, the owner's decision of 2026-10-07: the worker does not wait for calls in flight.",
+      "rule": "Stop claiming; abort each call in flight; each saves the text it had into partial and sets its lease_deadline_at to now, so the next process's sweep takes the row over at once and re-issues the call with what had arrived. A job interrupted the same way lets its lease out to now, and its kind's pipeline is what decides, from the request rows, whether an interrupted call is continued or redone."
+    },
+    "notify": {
+      "channel": "wiki_model_request",
+      "rule": "A settled request sends pg_notify on the channel with its id, and the worker that made it LISTENs on one dedicated connection (the shape realtime.service.ts uses) so the waiting job wakes as the answer lands.",
+      "fallback": "pollSeconds: a waiter re-reads its row on that interval whatever the announcements did, so a notification that never arrived costs latency and never an answer."
+    },
+    "metrics": {
+      "route": "GET /api/metrics",
+      "series": {
+        "orbit_wiki_model_calls_total": "counter, label outcome (succeeded, or one of systemModel.request.errors): read from the queue's rows at scrape time — a succeeded row is `succeeded`, a failed row its error's class, and a request that failed and was requeued counts under that failure's class until it succeeds or the wait limit ends it.",
+        "orbit_wiki_model_call_duration_seconds": "summary, quantiles 0.5 and 0.95: how long the queue's calls ran (started_at to ended_at), over the rows that ended.",
+        "orbit_wiki_model_queue_depth": "gauge: requests queued, waiting for a slot.",
+        "orbit_wiki_model_requests_in_flight": "gauge: requests running right now, their lease unexpired — never above concurrency.claims.",
+        "orbit_wiki_model_request_wait_seconds": "summary, quantiles 0.5 and 0.95: how long settled calls waited from their enqueue to their first byte.",
+        "orbit_wiki_model_request_run_seconds": "summary, quantiles 0.5 and 0.95: how long settled calls ran.",
+        "orbit_wiki_model_request_tokens_total": "counter, label direction (input, output): tokens the succeeded calls spent.",
+        "orbit_wiki_model_request_errors_total": "counter, label status: failed calls by the HTTP status that refused them, `none` for a failure with no answer (a connection, a timeout)."
+      }
+    }
+  },
+
+  "repoOps": {
+    "phase": "server execution, P2",
+    "doc": "docs/wiki-contract.md section 26; docs/wiki-server-execution-design.md sections 4.3 and 7",
+    "why": "The server runs the wiki's pipelines but never touches a repository: the credentials are on the runners (design section 1.4). A step that needs to know what the repository says asks the machine its space's workspace runs on, and the answer comes back through a row — no session, no concurrency slot and no model call on the runner (G2).",
+    "capability": "wiki-repo-op/v1",
+    "table": "wiki_repo_op",
+    "migration": "src/apiserver/prisma/migrations/0402_wiki_repo_op/migration.sql",
+    "columns": ["id", "job_id", "owner_id", "space_id", "workspace_id", "runner_id", "kind", "input", "state", "lease_owner", "claim_generation", "claimed_at", "heartbeat_at", "result", "error", "created_at", "updated_at", "ended_at"],
+    "kinds": ["snapshot", "read", "diff", "anchors"],
+    "kindRuns": {
+      "snapshot": "Everything the server asks of one commit at once: fetch origin/main, resolve the sha, and build the index the pipelines query — every path with its size, every document's title and headings, every source file's symbols, the commits reachable from origin/main, and the README's first paragraph. A sha the server already holds is not sent again (`input.skipSha`). Above `fragments.inlineBytes` it travels in fragments.",
+      "read": "The text of named paths at a named sha, bounded: one design-document section is `read.docSectionChars` and one contract file `read.contractChars`, an item may ask for at most `read.sectionChars`, and one request answers `read.sectionChars` in all — one section's material. A footnote's whole-file read is its own case, with its own limit (`read.wholeFileChars`).",
+      "diff": "`git diff --name-status -M` between two commits, and the design documents the range added or copied (`--diff-filter=AR -- docs/`) — what a maintenance run looks for.",
+      "anchors": "The anchor checks a maintenance run already makes (`src/runner-go/wiki_anchors.go`), reused: a path exists, a symbol's region hashes as it is held to, a commit is reachable from the snapshot's commit set."
+    },
+    "states": ["queued", "running", "succeeded", "failed", "cancelled"],
+    "dispatch": {
+      "perHeartbeat": 2,
+      "claim": "One statement per heartbeat: UPDATE wiki_repo_op … FROM (SELECT … JOIN workspace w ON w.id = o.workspace_id WHERE w.runner_id = this runner AND (state = 'queued' OR (state = 'running' AND heartbeat_at < now - staleSeconds AND lease_owner IS DISTINCT FROM this process)) ORDER BY created_at, id LIMIT n FOR UPDATE SKIP LOCKED) — every claimed row a new claim_generation.",
+      "route": "workspace.runner_id: an operation is handed only to the machine the space's workspace runs on, and the workspace's work_dir travels with it.",
+      "wake": "The enqueue NOTIFYs the runner wake channel, so the machine beats at once instead of on its 30-second tick.",
+      "staleSeconds": 60
+    },
+    "routes": {
+      "result": "POST /runner/wiki/repo-ops/:id/result — fenced on (lease_owner, claim_generation) and the runner token; a write from a claim that was taken over answers 409 STALE_CLAIM and settles nothing.",
+      "progress": "POST /runner/wiki/repo-ops/:id/progress — the heartbeat renewal that keeps a long operation from being taken over.",
+      "fragments": "POST /runner/wiki/repo-ops/:id/fragments — one call per fragment, fenced the same way, staged on the operation until its result arrives."
+    },
+    "fragments": { "inlineBytes": 4194304, "fragmentBytes": 2097152, "maxSnapshotBytes": 67108864, "why": "The API's request body is capped at 10 MB (src/apiserver/src/main.ts) and a plan's repository index is larger than that (design section 4.3). A snapshot that fits travels inside the result; one that does not is uploaded in fragments and reassembled — by sha256, and by the byte count the result names — before it becomes the space's snapshot." },
+    "cache": {
+      "tables": ["wiki_repo_snapshot", "wiki_repo_snapshot_fragment"],
+      "perSpace": "One snapshot per space, replaced whole when a newer one lands: the index and the fragments it is kept in. Owner-scoped like everything else, and deleted with the space (the composite foreign key into wiki_space).",
+      "visibility": "The owner's and nobody else's: no route returns it, and what reaches the System model reaches it through the same redactor the notes go through (design section 9)."
+    },
+    "read": { "docSectionChars": 4200, "contractChars": 2500, "sectionChars": 22000, "wholeFileChars": 22000 },
+    "looks": ["ready", "no_workspace", "runner_missing", "runner_offline", "runner_upgrade"],
+    "safety": "An operation checks its checkout before it reads it: the repository's origin URL must be the space's `repo.urlNorm` and the checkout's root commit must be the space's `rootCommitSha`. Otherwise it fails, says which repository it found, and reads nothing.",
+    "waiting": "A job that needs a repository operation is parked (wiki_job state waiting, waiting_for 'repo', no lease) and woken by a NOTIFY on the wiki_repo_op channel when the operation settles. A runner that has not declared `wiki-repo-op/v1` is handed nothing: the operation stays queued, the job stays parked until its wait limit, and the space's health line says the runner has to be upgraded. The import's snapshot (import.server.snapshot) is the exception: it is waited for holding the job's lease, a bounded wait with a fallback, so a runner that is away costs the import its fresh anchors and never the run."
+  },
+
   "refusals": [
     { "code": "WIKI_DISABLED", "httpStatus": 404, "scope": "request", "when": "The wiki is off for this account (ORBIT_WIKI rollout)." },
     { "code": "WIKI_SPACE_UNBOUND", "httpStatus": 409, "scope": "request", "when": "The calling session's workspace is bound to no space and could not be bound on first use. The message says in one sentence how the owner binds it." },
@@ -1766,6 +2091,7 @@
     { "code": "WIKI_CURSOR_BEHIND", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A succeeded run asked to advance the cursor to a token behind the space's watermark: another run already went further, and the cursor only moves forward (maintenance.cursor.advance). The answer carries the cursor as it stands." },
     { "code": "WIKI_CURSOR_INVALID", "httpStatus": 400, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A cursor token that no dossier page of this space handed out: one that does not decode, one of another space, or a position past the furthest page the space's dossier route has issued." },
     { "code": "WIKI_ARTICLE_STALE", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "An article write named an entry-set fingerprint that is not its topic's current one: the topic's entries changed while the articles were being written (articles.regeneration). Nothing is written; the next run writes them from the entries as they stand." },
+    { "code": "WIKI_SERVER_EXECUTES", "httpStatus": 409, "scope": "request", "phase": "server execution", "addedByThisContract": true, "when": "This account's pipeline is executed by the server (jobs.executor: ORBIT_WIKI_EXECUTOR=server, or canary with the account on its list): the runner door no longer hands a session that pipeline's material, nor accepts what a session's own model wrote for it — the wiki worker runs it with the System model, so no session's provider is asked. Nothing is read or written. Under the default runner nothing answers it." },
     { "code": "WIKI_PLAN_GATE", "httpStatus": 422, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A plan draft, an owner's edit of the plan, a proposed change to it or the acceptance of one did not pass the plan's gate (plan.gate): errors[] lists everything it found, each with its check and where it is. Nothing is stored." },
     { "code": "WIKI_PLAN_STALE", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A plan request was built on a version that is no longer the space's newest (plan.versions), confirmed a version that is no longer a draft, or answered a proposal already decided. Nothing is written; read the plan again." },
     { "code": "WIKI_PLAN_UNCONFIRMED", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A space's documents were to be written, or a change proposed to its plan, and the space has no plan its owner confirmed (plan.guard)." },
@@ -1850,7 +2176,8 @@
           "POST /api/wiki/spaces/:id/plan/redraft",
           "GET /api/wiki/spaces/:id/docs",
           "GET /api/wiki/spaces/:id/docs/:slug",
-          "GET /api/wiki/spaces/:id/doc-index"
+          "GET /api/wiki/spaces/:id/doc-index",
+          "GET /api/wiki/system-model"
         ]
       },
       "runner": {
@@ -1902,7 +2229,13 @@
           "POST /api/runner/wiki/spaces/:id/notes",
           "POST /api/runner/wiki/spaces/:id/imports"
         ],
-        "importNote": "phase 2 (import): orbit wiki import's two routes, for a session of the space's owner — X-Orbit-Session-Id is required, and another owner's space is a 404."
+        "importNote": "phase 2 (import): orbit wiki import's two routes, for a session of the space's owner — X-Orbit-Session-Id is required, and another owner's space is a 404. When the server reads the account's imports, notes takes only readBy server and imports is refused WIKI_SERVER_EXECUTES (import.server.door).",
+        "importJobRoutes": [
+          "GET /api/runner/wiki/spaces/:id/import",
+          "POST /api/runner/wiki/spaces/:id/import-jobs",
+          "GET /api/runner/wiki/spaces/:id/import-jobs/:jobId"
+        ],
+        "importJobNote": "server execution, P5 (import.server): which path an import takes, the notes handed to an import job, and the job read back — for a session of the space's owner, X-Orbit-Session-Id required, another owner's space or job a 404."
       }
     },
     "verify": {

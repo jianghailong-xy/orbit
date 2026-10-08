@@ -55,6 +55,7 @@ import {
   IntegrationJobRefused,
   IntegrationJobRelay,
 } from './integration-job-relay';
+import { WikiRepoOpRefused, WikiRepoOps, WIKI_REPO_OP_REFUSAL_STATUS } from '../wiki-worker/wiki-repo-ops';
 import {
   AgentProvider,
   openCodeKeyOf,
@@ -100,6 +101,7 @@ import {
   CodexAccountRemoveResult,
   InstallCommand,
   InstallResult,
+  KIMI_LOGIN_REGION_V1,
   LoginCommand,
   LoginEngine,
   LoginResult,
@@ -125,6 +127,11 @@ import {
   TurnAttachment,
   TurnCompleteRequest,
   WIKI_MAINTENANCE_RUN_V1,
+  type WikiRepoOpCommand,
+  type WikiRepoOpFragmentRequest,
+  type WikiRepoOpProgressRequest,
+  type WikiRepoOpResultRequest,
+  type WikiRepoOpResultResponse,
   WorktreesRemovableRequest,
   WorktreesRemovableResponse,
   gracefulEndStatus,
@@ -209,7 +216,11 @@ import {
   postWorkNotOnBranchComment,
   reclaimStalledTask,
 } from '../tasks/reclaim-stalled-task';
-import { readDispatchRefusal, recordDispatchRefusal } from '../tasks/task-dispatch-refusal';
+import {
+  raiseSourceUnresolvedBlocker,
+  readDispatchRefusal,
+  recordDispatchRefusal,
+} from '../tasks/task-dispatch-refusal';
 import { CurrentRunner } from './current-runner.decorator';
 import { reclaimRuntimeIds } from './reclaim-runtime';
 import {
@@ -318,7 +329,7 @@ import {
   NON_REPLAYABLE_EVENT_TYPES,
   replayableEventSql,
 } from '../common/system-noise';
-import { isInstallEngine, isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
+import { isInstallEngine, isKimiRegion, isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
 import { antigravityGoogleLoginRefusal, antigravitySignInUnderWay } from '../common/antigravity-readiness';
 import { RUNNER_OS_HEADER, withRunnerOs } from '../common/runner-platform';
 import { loginCodeRelay } from '../runners/login-code-relay';
@@ -349,13 +360,14 @@ import {
   runnerAdvertisesProvider,
   withProviderDeclarations,
 } from './runner-provider-support';
-import { START_CARD_REVIEWS_MESSAGE, startCardReviewsCreate } from './unstarted-project-create';
+import { coordinatorCreateAllowedBy } from './unstarted-project-create';
 import {
   freezeSessionSourcePin,
   hasResolvedSource,
   sessionSourceSnapshot,
 } from '../projects/session-source';
 import { providerDispatchWhereOn, providerSlugsOn, sessionExecRuntime } from '../providers/custom-provider';
+import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-delete';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -612,6 +624,19 @@ export function runnerSupportsCapability(
   );
 }
 
+/** The repository operations' refusal as a status (contract `repoOps`): 409 for a claim that was taken
+ *  over or a row already settled, 404 for one this runner cannot see, 400 for a body that is not a
+ *  result. Anything else is a real fault and is raised as it is, so it is logged as one. */
+function wikiRepoOpHttpError(error: unknown): unknown {
+  if (error instanceof WikiRepoOpRefused) {
+    return new HttpException(
+      { code: error.refusal, message: error.message },
+      WIKI_REPO_OP_REFUSAL_STATUS[error.refusal],
+    );
+  }
+  return error;
+}
+
 /**
  * An integration-job refusal as HTTP (contract §2.3): 409 for a claim that moved on or a job already
  * written down, 404 for one this runner cannot see, 400 for a body that is not a result. Anything
@@ -799,6 +824,14 @@ export class RunnerApiController {
      * delivered after the reviewer's next completion, and its window runs out regardless.
      */
     @Optional() private readonly confirmationReviews?: OwnerConfirmationReviewService,
+    /**
+     * The heartbeat's half of the repository operations (contract `repoOps`, design §7). `@Optional()`
+     * for the same reason as everything else in this list: the specs that construct this controller
+     * directly pass none, and a required parameter would make every one of them a compile error about a
+     * queue they do not exercise. A control plane built without it simply hands no repository work out —
+     * the operations stay queued, and the space's health line says so.
+     */
+    @Optional() private readonly wikiRepoOps?: WikiRepoOps,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -830,8 +863,9 @@ export class RunnerApiController {
       status: 'ONLINE' as const,
       lastHeartbeatAt: new Date(),
     };
+    // Never a managed runner: its identity and credential belong to its mapping, not to a name.
     const existing = await this.prisma.runner.findFirst({
-      where: { ownerId, name: runnerName },
+      where: { ownerId, name: runnerName, managedRunner: { is: null } },
       orderBy: { enrolledAt: 'desc' },
     });
     const runner = existing
@@ -978,6 +1012,7 @@ export class RunnerApiController {
   @Post('deregister')
   @HttpCode(200)
   async deregister(@CurrentRunner() runner: { id: string }) {
+    await refuseManagedRunnerDeletion(this.prisma, runner.id);
     await this.prisma.runner.delete({ where: { id: runner.id } });
     return { ok: true };
   }
@@ -1134,6 +1169,22 @@ export class RunnerApiController {
       if (claimed.length > 0) integrationJobs = claimed;
     } catch (error) {
       this.logger.warn(`runner ${runner.id}: integration jobs skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+    }
+    // The repository operations this process has just claimed (contract `repoOps`, design §7). The
+    // same shape as the integration queue above and for the same reason — the claim is a
+    // compare-and-set on a row, so an operation named here is already RUNNING and is nobody else's —
+    // and on its own try, so a failure costs this beat's operations and not the heartbeat itself.
+    let wikiRepoOps: RunnerHeartbeatResponse['wikiRepoOps'];
+    try {
+      const claimed = (await this.wikiRepoOps?.dispatch({
+        runnerId: runner.id,
+        leaseOwner: heartbeatLeaseOwner,
+        draining: dto?.draining === true,
+        capabilities: reportedCapabilities,
+      })) ?? [];
+      if (claimed.length > 0) wikiRepoOps = claimed;
+    } catch (error) {
+      this.logger.warn(`runner ${runner.id}: repository operations skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
     }
     // An engine that was signed in and now isn't: tell the owner while it is still news, rather
     // than letting them find out from the next session that refuses to start. Only the yes -> no
@@ -1418,6 +1469,7 @@ export class RunnerApiController {
       ...(claudeHistoryRequest ? { claudeHistoryRequest } : {}),
       // Present only when this beat claimed something, for the same reason.
       ...(integrationJobs ? { integrationJobs } : {}),
+      ...(wikiRepoOps ? { wikiRepoOps } : {}),
     };
   }
 
@@ -1508,6 +1560,102 @@ export class RunnerApiController {
       }
     }
     return applied.answer;
+  }
+
+  /** The repository-operation queue, or the reason a request about one cannot be answered without it. */
+  private wikiRepoQueue(): WikiRepoOps {
+    if (!this.wikiRepoOps) {
+      throw new HttpException(
+        { code: 'WIKI_REPO_OP_QUEUE_UNAVAILABLE', message: 'this control plane runs no wiki repository queue' },
+        503,
+      );
+    }
+    return this.wikiRepoOps;
+  }
+
+  /**
+   * A claimed repository operation is still being worked on (contract `repoOps.routes.progress`): the lease
+   * renewal that keeps a long snapshot from being taken over, fenced on (leaseOwner, claimGeneration) and on
+   * the runner token. A process whose claim was taken over gets 409 STALE_CLAIM and stops, rather than
+   * renewing a row that is no longer its.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('wiki/repo-ops/:id/progress')
+  @HttpCode(200)
+  async wikiRepoOpProgress(
+    @CurrentRunner() runner: { id: string },
+    @Param('id', PublicIdPipe) opId: string,
+    @Body() body: WikiRepoOpProgressRequest,
+  ): Promise<{ accepted: true }> {
+    try {
+      await this.wikiRepoQueue().progress({
+        id: opId,
+        runnerId: runner.id,
+        leaseOwner: String(body?.leaseOwner ?? ''),
+        claimGeneration: Number(body?.claimGeneration ?? -1),
+      });
+    } catch (error) {
+      throw wikiRepoOpHttpError(error);
+    }
+    return { accepted: true };
+  }
+
+  /**
+   * One fragment of a snapshot too large for one request body (contract `repoOps.routes.fragments`). Fenced
+   * like the progress route; the fragments are staged on the operation and become the space's snapshot only
+   * when the result arrives and the whole payload checks out.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('wiki/repo-ops/:id/fragments')
+  @HttpCode(200)
+  async wikiRepoOpFragment(
+    @CurrentRunner() runner: { id: string },
+    @Param('id', PublicIdPipe) opId: string,
+    @Body() body: WikiRepoOpFragmentRequest,
+  ): Promise<{ accepted: true; received: number }> {
+    try {
+      const stored = await this.wikiRepoQueue().storeWikiRepoOpFragment({
+        id: opId,
+        runnerId: runner.id,
+        leaseOwner: String(body?.leaseOwner ?? ''),
+        claimGeneration: Number(body?.claimGeneration ?? -1),
+        index: Number(body?.index ?? -1),
+        total: Number(body?.total ?? 0),
+        sha: String(body?.sha ?? '').toLowerCase(),
+        content: typeof body?.content === 'string' ? body.content : '',
+      });
+      return { accepted: true, received: stored.received };
+    } catch (error) {
+      throw wikiRepoOpHttpError(error);
+    }
+  }
+
+  /**
+   * What one claimed repository operation came to (contract `repoOps.routes.result`).
+   *
+   * Everything a succeeded snapshot implies is written in the same transaction as the state — the payload
+   * becoming the space's snapshot, its staged fragments dropped — so a reader never sees a settled snapshot
+   * whose bytes are not all there. The notification that wakes the job waiting on it is written in that
+   * transaction too, and Postgres delivers it at COMMIT.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('wiki/repo-ops/:id/result')
+  @HttpCode(200)
+  async wikiRepoOpResult(
+    @CurrentRunner() runner: { id: string; ownerId?: string },
+    @Param('id', PublicIdPipe) opId: string,
+    @Body() body: WikiRepoOpResultRequest,
+  ): Promise<WikiRepoOpResultResponse> {
+    try {
+      return await this.wikiRepoQueue().applyWikiRepoOpResult({
+        id: opId,
+        runnerId: runner.id,
+        ownerId: runner.ownerId,
+        body,
+      });
+    } catch (error) {
+      throw wikiRepoOpHttpError(error);
+    }
   }
 
   /**
@@ -1810,6 +1958,7 @@ export class RunnerApiController {
         loginEngine: true,
         loginAccount: true,
         loginAccountName: true,
+        loginRegion: true,
         loginCode: true,
         loginAt: true,
       },
@@ -1844,6 +1993,8 @@ export class RunnerApiController {
     if (r.loginStatus === 'pending') {
       const account = r.loginAccount ?? undefined;
       const accountName = r.loginAccountName ?? undefined;
+      // Kimi's site, only ever stored for Kimi (RunnersService.startLogin) and handed over only for it.
+      const region = engine === 'kimi' && isKimiRegion(r.loginRegion) ? r.loginRegion : undefined;
       // A process that does not declare account sign-in for THIS engine would ignore the account
       // and sign in its machine's Default instead — replacing the very login this sign-in was meant
       // to leave alone. One engine's declaration says nothing about another's: a runner that has
@@ -1853,13 +2004,17 @@ export class RunnerApiController {
       // Antigravity's Google sign-in is judged again on the process polling now — the relay it
       // declares and the OS it names — which the start (RunnersService.startLogin) could only
       // check against the last heartbeat's.
+      // A process that does not declare the site choice would ignore it and run a bare `kimi login`,
+      // which goes wherever the CLI decides — perhaps the very site the user just turned away from.
       const refusal =
         !signsInAccounts && (accountName || (account && account !== 'default'))
           ? `This runner is too old to sign in another ${ACCOUNT_ENGINE_LABEL[accountEngine]} account — ` +
             'update it, then try again.'
-          : engine === 'antigravity'
-            ? antigravityGoogleLoginRefusal({ capabilities: withRunnerOs(parseRunnerCapabilities(capabilities) ?? [], osHeader) })
-            : null;
+          : region && !runnerSupportsCapability(capabilities, KIMI_LOGIN_REGION_V1)
+            ? 'This runner is too old to choose a Kimi site — update it, then try again.'
+            : engine === 'antigravity'
+              ? antigravityGoogleLoginRefusal({ capabilities: withRunnerOs(parseRunnerCapabilities(capabilities) ?? [], osHeader) })
+              : null;
       if (refusal) {
         await this.prisma.runner.update({
           where: { id: runnerId },
@@ -1874,6 +2029,7 @@ export class RunnerApiController {
         // Only when named, so a start for the runner's own login is the shape it always was.
         ...(account ? { account } : {}),
         ...(accountName ? { accountName } : {}),
+        ...(region ? { region } : {}),
       };
     }
     // Antigravity's code never touched the row: it is in this process's memory, bound to the attempt
@@ -2629,7 +2785,11 @@ export class RunnerApiController {
    * The refusal is recorded INSIDE this transaction, on the door's own client, for the reason the
    * checkout's refusal is recorded in the finalize's: a refusal committed without its record is the
    * silent state this whole path exists to close, and the compare-and-set cannot be won twice, so
-   * nothing would ever come back to write the missing half.
+   * nothing would ever come back to write the missing half. Three halves, in fact, and all three are
+   * written here: the run itself is closed in the same transaction the refusal is frozen in
+   * (`freezeSessionSourcePin`, so a refused session never stays RUNNING with its claim held), the
+   * task records the refusal (`recordDispatchRefusal`), and the project gets the exception item that
+   * says its code line is unresolved (`raiseSourceUnresolvedBlocker`, SR50).
    */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/source/pin')
@@ -2648,12 +2808,18 @@ export class RunnerApiController {
           dto,
         );
         if (frozen.refused) {
+          const at = new Date();
+          // The project's exception item FIRST, the task's record second, and the order is the lock
+          // order rather than a preference: this one writes a `project_blocker`, whose foreign key
+          // takes the project (rank 40) FOR KEY SHARE, and `recordDispatchRefusal` writes the task
+          // (rank 50). Taking 50 and then 40 is the cycle two transactions can deadlock on.
+          await raiseSourceUnresolvedBlocker(tx, frozen.refused, at);
           await recordDispatchRefusal(
             tx,
             frozen.refused.taskId,
             frozen.refused.run,
             { code: frozen.refused.code, reason: frozen.refused.reason },
-            new Date(),
+            at,
           );
         }
         return frozen;
@@ -3894,13 +4060,14 @@ export class RunnerApiController {
     // to re-answer a settled question. Recorded as a decided approval with no decider, which is
     // what makes an automatic allow tellable from a human one afterwards.
     const autoAllowed = existing ? false : await this.standingGrantCovers(session, dto);
-    // The same shape for a coordinator's task creates in a project nobody has started: the start
-    // card reviews them, so none of them is a question on its own (`unstarted-project-create.ts`).
+    // The same shape for a coordinator's task creates in its own project when nobody has started it
+    // (the start card reviews them) or its Automatic is on (the coordinator decides them): none of
+    // them is a question on its own (`unstarted-project-create.ts`).
     const allowedMessage = autoAllowed
       ? AUTO_ALLOWED_MESSAGE
-      : !existing && (await startCardReviewsCreate(this.prisma, session, dto.toolName, dto.input))
-        ? START_CARD_REVIEWS_MESSAGE
-        : null;
+      : existing
+        ? null
+        : await coordinatorCreateAllowedBy(this.prisma, session, dto.toolName, dto.input);
     // Which turn is asking. Derived here rather than sent by the runner: the MCP server knows only
     // its session, and the server already knows which turn it leased to that session — the runner
     // has been polling inside it since the dequeue. It is what makes an abandoned call provable
@@ -6288,11 +6455,23 @@ export class RunnerApiController {
         // Genuine failure (not a user cancel): leave a note on the task explaining it. A run the
         // runner refused at its checkout never started, so its note is the refusal itself, recorded
         // on the task beside it — the generic note says to run the task again, which is the one
-        // thing that cannot help (tasks/task-dispatch-refusal.ts).
+        // thing that cannot help (tasks/task-dispatch-refusal.ts). The project's own exception item
+        // for the refusal is opened here too (SR50: a checkout refusal names an unresolved code line
+        // exactly as a resolution refusal does, and the project is where "work has stopped" is read).
         if (effectiveStatus === RunStatus.FAILED) {
           const refused = readDispatchRefusal(dto.error, current);
           if (refused) {
-            await recordDispatchRefusal(tx, current.taskId, current, refused, new Date());
+            const at = new Date();
+            // The project's item FIRST, the task's record second, and the order is the lock order
+            // rather than a preference: this one writes a `project_blocker`, whose foreign key takes
+            // the project (rank 40) FOR KEY SHARE, and `recordDispatchRefusal` writes the task
+            // (rank 50). Cf. `pinSessionSource`, whose refusal records the same two halves.
+            await raiseSourceUnresolvedBlocker(
+              tx,
+              { taskId: current.taskId, code: refused.code, run: current },
+              at,
+            );
+            await recordDispatchRefusal(tx, current.taskId, current, refused, at);
             dispatchRefused = true;
           } else {
             await postRunFailureComment(tx, current.taskId, dto.error || dto.result || 'run failed');

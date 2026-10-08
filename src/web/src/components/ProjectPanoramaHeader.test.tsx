@@ -4,13 +4,18 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ProjectIntegrationView } from '@orbit/shared';
+import type { ProjectIntegrationJob, ProjectIntegrationView } from '@orbit/shared';
 import {
   PANORAMA_BUCKETS,
   ProjectPanoramaHeader,
   ProjectPanoramaCard,
   integrationLanes,
   landingClock,
+  landingClockTime,
+  landingJobLines,
+  landingJobsCount,
+  landingJobsTitle,
+  landingLimit,
   landingLine,
   type ProjectPanorama,
 } from './ProjectPanoramaHeader';
@@ -409,6 +414,7 @@ describe('landingLine', () => {
       word: 'Landing',
       what: 'T2 wiki 契約、迁移与共享类型',
       running: true,
+      timedOut: false,
       state: 'checking',
       clock: '1m 20s',
       clockLabel: 'Elapsed', updated: 'Updated 1m ago', wait: null,
@@ -418,7 +424,7 @@ describe('landingLine', () => {
         integration({ inFlight: { taskTitle: 'T1', state: 'QUEUED', startedAt: '2026-09-25T13:58:40Z' } }),
         now,
       ),
-    ).toEqual({ word: 'Integration', what: 'T1', running: false, state: 'queued', clock: '0m 40s',
+    ).toEqual({ word: 'Integration', what: 'T1', running: false, timedOut: false, state: 'queued', clock: '0m 40s',
       clockLabel: 'Queued for', updated: null, wait: null });
   });
 
@@ -506,6 +512,258 @@ describe('landingLine', () => {
   });
 });
 
+/**
+ * The screen the timeout was specified against (docs/mocks/landing-jobs-sheet, 21:57): C5, claimed
+ * at 20:07 by a runner that never reported, and the merge into main queued behind it for 41m 8s.
+ * Local instants, because the detail line reads them on the reader's own clock; and in the past, so a
+ * read seeded at the real time is never older than the clock these tests set.
+ */
+const CLAIMED = new Date(2026, 8, 25, 20, 7, 4).getTime();
+const NOW = new Date(2026, 8, 25, 21, 57, 30).getTime();
+const C5 = 'C5 · 登录后开通默认托管 runner 与 workspace';
+const instant = (ms: number) => new Date(ms).toISOString();
+
+/** One job as `inFlightJobs` lists it — by default C5, timed out and retryable. */
+const job = (over: Partial<ProjectIntegrationJob> = {}): ProjectIntegrationJob => ({
+  jobId: 'job-c5',
+  kind: 'LAND_TASK',
+  state: 'RUNNING',
+  phase: 'FETCH',
+  taskId: 'task-c5',
+  taskTitle: C5,
+  generation: 1,
+  startedAt: instant(CLAIMED),
+  queuedAt: instant(CLAIMED - 60_000),
+  heartbeatAt: null,
+  runnerName: 'workstation-gpu',
+  retriedBy: null,
+  timedOut: true,
+  limitSeconds: 600,
+  retryable: true,
+  ...over,
+});
+
+/** The merge into main, queued: no task, no runner, no limit. */
+const merge = (over: Partial<ProjectIntegrationJob> = {}): ProjectIntegrationJob => job({
+  jobId: 'job-merge', kind: 'LAND_PROMOTION', state: 'QUEUED', phase: null, taskId: null, taskTitle: null,
+  startedAt: instant(NOW - (41 * 60 + 8) * 1000), queuedAt: instant(NOW - (41 * 60 + 8) * 1000), runnerName: null,
+  timedOut: false, limitSeconds: null, retryable: false,
+  ...over,
+});
+
+/** The view of a server that lists its jobs: the counts count them, and `inFlight` is the first. */
+const listing = (jobs: ProjectIntegrationJob[]): ProjectIntegrationView => integration({
+  integratingCount: jobs.filter((entry) => entry.state === 'RUNNING').length,
+  queuedCount: jobs.filter((entry) => entry.state === 'QUEUED').length,
+  inFlight: jobs[0] ? {
+    taskTitle: jobs[0].taskTitle, kind: jobs[0].kind, phase: jobs[0].phase, state: jobs[0].state,
+    startedAt: jobs[0].startedAt, heartbeatAt: jobs[0].heartbeatAt,
+  } : null,
+  inFlightJobs: jobs,
+});
+
+describe('landingLine, from a server that lists its jobs', () => {
+  it('takes the server’s word that the job it describes timed out, and counts how many did', () => {
+    expect(landingLine(listing([job(), merge()]), NOW, { updatedAt: NOW })).toEqual({
+      word: 'Landing', what: '2 jobs · 1 timed out', running: false, timedOut: true,
+      state: 'Timed out', clock: '110m', clockLabel: 'No report for', updated: 'limit 10m', wait: null,
+    });
+    // One job keeps the task's own title in the name slot.
+    expect(landingLine(listing([job()]), NOW, { updatedAt: NOW })).toMatchObject({ what: C5, state: 'Timed out' });
+  });
+
+  it('counts the silence from the last report, and states the limit the step had', () => {
+    const check = job({ phase: 'CHECK', heartbeatAt: instant(NOW - 75 * 60_000), limitSeconds: 4200 });
+    expect(landingLine(listing([check]), NOW, { updatedAt: NOW }))
+      .toMatchObject({ clock: '75m', clockLabel: 'No report for', updated: 'limit 70m' });
+    // No limit on the job is the claim lease's ten minutes, and an instant it cannot read is no
+    // silence rather than NaN.
+    expect(landingLine(listing([job({ limitSeconds: null })]), NOW)).toMatchObject({ updated: 'limit 10m' });
+    expect(landingLine(listing([job({ startedAt: 'not a date' })]), NOW)).toMatchObject({ clock: '0m' });
+  });
+
+  it('counts a timed-out job behind a lead that is still fine, and draws the lead as it is', () => {
+    const fine = job({
+      jobId: 'job-t2', taskTitle: 'T2', phase: 'CHECK', timedOut: false, retryable: false,
+      startedAt: instant(NOW - 80_000), heartbeatAt: instant(NOW - 5_000),
+    });
+    expect(landingLine(listing([fine, job()]), NOW, { updatedAt: NOW })).toEqual({
+      word: 'Landing', what: '2 jobs · 1 timed out', running: true, timedOut: false,
+      state: 'checking', clock: '1m 20s', clockLabel: 'Elapsed', updated: 'Updated just now', wait: null,
+    });
+  });
+
+  it('says Update unavailable when this app cannot read the server, ahead of any timeout', () => {
+    for (const observation of [{ updatedAt: NOW - 5_000, failed: true }, { updatedAt: NOW - 91_000 }]) {
+      expect(landingLine(listing([job(), merge()]), NOW, observation)).toMatchObject({
+        what: '2 jobs · 1 timed out', running: false, timedOut: false, state: 'Update unavailable',
+      });
+    }
+  });
+
+  it('leaves timeouts to the server: a long-silent check it has not timed out still reads as checking', () => {
+    // Eleven minutes without a report is past the lease an older server's row guesses from, and
+    // well inside a check's budget.
+    const check = job({
+      phase: 'CHECK', timedOut: false, retryable: false, heartbeatAt: instant(NOW - 11 * 60_000), limitSeconds: 4200,
+    });
+    expect(landingLine(listing([check]), NOW, { updatedAt: NOW })).toMatchObject({
+      running: true, timedOut: false, state: 'checking', updated: 'Updated 11m ago',
+    });
+    // The same job from a server that does not list its jobs: this app reads the reports for
+    // itself, and reads them for what they are — a runner that has said nothing for a while is
+    // "No report", never a timeout, which only the job's own verdict (the server's `blockingReason`)
+    // may word, and never "Update unavailable", which is this app failing to READ the server.
+    expect(landingLine({ ...listing([check]), inFlightJobs: undefined }, NOW, { updatedAt: NOW }))
+      .toMatchObject({ running: false, timedOut: false, state: 'No report', updated: 'No report for 11m' });
+  });
+});
+
+describe('landingJobLines', () => {
+  it('is empty from a server that does not list its jobs', () => {
+    expect(landingJobLines(integration(), NOW, { updatedAt: NOW })).toEqual([]);
+  });
+
+  it('draws a running job as the row draws it, with the task its row opens', () => {
+    const running = job({
+      jobId: 'job-t2', taskId: 'task-t2', taskTitle: 'T2', phase: 'CHECK', timedOut: false, retryable: false,
+      startedAt: instant(NOW - 80_000), heartbeatAt: instant(NOW - 10_000),
+    });
+    expect(landingJobLines(listing([running]), NOW, { updatedAt: NOW })).toEqual([{
+      jobId: 'job-t2', taskId: 'task-t2', detail: null, retryable: false,
+      line: { word: 'Landing', what: 'T2', running: true, timedOut: false, state: 'checking', clock: '1m 20s',
+        clockLabel: 'Elapsed', updated: 'Updated just now', wait: null },
+    }]);
+    // Fresh as the runner's last report, not as this app's last read...
+    expect(landingJobLines(listing([{ ...running, heartbeatAt: instant(NOW - 3 * 60_000) }]), NOW,
+      { updatedAt: NOW })[0].line.updated).toBe('Updated 3m ago');
+    // ...and as the read when the runner has not reported yet, as on the row.
+    expect(landingJobLines(listing([{ ...running, heartbeatAt: null }]), NOW,
+      { updatedAt: NOW - 2 * 60_000 })[0].line.updated).toBe('Updated 2m ago');
+  });
+
+  it('draws a promotion, which lands no task, as its word, state and wait alone', () => {
+    expect(landingJobLines(listing([merge()]), NOW, { updatedAt: NOW })).toEqual([{
+      jobId: 'job-merge', taskId: null, detail: null, retryable: false,
+      line: { word: 'Merge to main', what: null, running: false, timedOut: false, state: 'queued', clock: '41m 8s',
+        clockLabel: 'Queued for', updated: 'Updated just now', wait: null },
+    }]);
+  });
+
+  it('keeps a queued job queued whatever step and report an earlier claim left on it', () => {
+    // The server sends a job's phase and heartbeat as its row holds them, so a job queued again after
+    // a claim carries both: neither makes it running, and its freshness is still the read's.
+    const requeued = merge({ phase: 'MERGE', heartbeatAt: instant(NOW - 30 * 60_000) });
+    expect(landingJobLines(listing([requeued]), NOW, { updatedAt: NOW - 60_000 })[0].line).toEqual({
+      word: 'Merge to main', what: null, running: false, timedOut: false, state: 'queued', clock: '41m 8s',
+      clockLabel: 'Queued for', updated: 'Updated 1m ago', wait: null,
+    });
+  });
+
+  it.each([
+    ['FETCH', 'fetching', 'no push recorded'],
+    ['MAIN_SYNC', 'syncing main', 'no push recorded'],
+    ['REBASE', 'rebasing', 'no push recorded'],
+    ['MERGE', 'merging', 'no push recorded'],
+    ['CHECK', 'checking', 'no push recorded'],
+    ['VERIFY', 'verifying', 'may have been pushed'],
+    ['PUSH', 'pushing', 'may have been pushed'],
+  ] as const)('says where a job that timed out at %s stopped, and whether it may have pushed', (phase, stopped, push) => {
+    expect(landingJobLines(listing([job({ phase })]), NOW, { updatedAt: NOW })).toEqual([{
+      jobId: 'job-c5', taskId: 'task-c5', retryable: true,
+      line: { word: 'Landing', what: C5, running: false, timedOut: true, state: 'Timed out', clock: '110m',
+        clockLabel: 'No report for', updated: 'limit 10m', wait: null },
+      detail: `Runner workstation-gpu took it at 20:07 · stopped at ${stopped} · ${push}`,
+    }]);
+  });
+
+  it('names no runner it was not told, and no step it never heard of', () => {
+    expect(landingJobLines(listing([job({ runnerName: null, phase: null })]), NOW)[0].detail)
+      .toBe('The runner took it at 20:07 · stopped at running · no push recorded');
+  });
+
+  it('says which generation a retried job is, who asked for it and when', () => {
+    const retried = {
+      generation: 2, retriedBy: 'OWNER' as const, timedOut: false, retryable: false,
+      queuedAt: new Date(2026, 8, 25, 22, 15, 3).toISOString(),
+    };
+    expect(landingJobLines(listing([job(retried)]), NOW)[0].detail).toBe('Generation 2 · retried by you at 22:15');
+    expect(landingJobLines(listing([job({ ...retried, generation: 3, retriedBy: 'COORDINATOR' })]), NOW)[0].detail)
+      .toBe('Generation 3 · retried by the coordinator at 22:15');
+  });
+
+  it('carries Retry from the server’s answer, not from the timeout', () => {
+    expect(landingJobLines(listing([job({ retryable: false })]), NOW)[0])
+      .toMatchObject({ retryable: false, line: { timedOut: true } });
+  });
+
+  it('says Update unavailable on every job while this app cannot read the server, timed out or not', () => {
+    const lines = landingJobLines(listing([job(), merge()]), NOW, { updatedAt: NOW - 120_000, failed: true });
+    for (const { line } of lines) {
+      expect(line).toMatchObject({ running: false, timedOut: false, state: 'Update unavailable' });
+    }
+    // The queued job's clock stops where the last read left it, as the row's does.
+    expect(lines[1].line.clock).toBe('39m 8s');
+  });
+});
+
+describe('the landing list’s words', () => {
+  it('titles the list by how many jobs it holds', () => {
+    expect(landingJobsTitle(1)).toBe('1 job in flight');
+    expect(landingJobsTitle(2)).toBe('2 jobs in flight');
+  });
+
+  it('counts jobs, and how many timed out only when any did', () => {
+    expect(landingJobsCount(2, 0)).toBe('2 jobs');
+    expect(landingJobsCount(3, 1)).toBe('3 jobs · 1 timed out');
+  });
+
+  it('states a limit in whole minutes', () => {
+    expect(landingLimit(600)).toBe('limit 10m');
+    expect(landingLimit(4200)).toBe('limit 70m');
+    expect(landingLimit(630)).toBe('limit 11m');
+  });
+
+  it('reads an instant on the reader’s own 24-hour clock', () => {
+    expect(landingClockTime(new Date(2026, 8, 25, 9, 5).toISOString())).toBe('09:05');
+    expect(landingClockTime(new Date(2026, 8, 25, 22, 15).toISOString())).toBe('22:15');
+    expect(landingClockTime('not a date')).toBe('--:--');
+  });
+});
+
+describe('the landing row, from a server that lists its jobs', () => {
+  afterEach(() => vi.useRealTimers());
+
+  /** The header at NOW, its integration read made at NOW too, so the read is fresh. */
+  function renderListed(view: ProjectIntegrationView): string {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    const qc = newClient();
+    qc.setQueryData(panoramaKey, panorama());
+    qc.setQueryData(integrationKey, view);
+    return render(qc);
+  }
+
+  it('draws a timed-out job with a still warning mark, and says so in words', () => {
+    const html = renderListed(listing([job(), merge()]));
+    expect(html).toContain('class="project-landing project-landing-timed-out"');
+    expect(html).not.toContain('project-landing-running');
+    expect(html).toContain('data-glyph="exclamation"');
+    expect(html).not.toContain('data-glyph="spinner"');
+    for (const text of ['>Timed out<', '>2 jobs · 1 timed out<', '>110m<', '>limit 10m<']) expect(html).toContain(text);
+    expect(html).toContain('No report for');
+  });
+
+  it('makes the row a button that opens the list, and keeps it a line to read from an older server', () => {
+    expect(renderListed(listing([job(), merge()]))).toMatch(
+      /<button type="button" class="project-landing-press" aria-haspopup="dialog"><div class="project-landing project-landing-timed-out">/,
+    );
+    const older = renderListed(integration());
+    expect(older).toContain('class="project-landing project-landing-running"');
+    expect(older).not.toContain('project-landing-press');
+  });
+});
+
 describe('manual ready work', () => {
   const manual = { count: 1, taskId: 'manual-task', title: 'Check the lock order' };
   function card(over: Partial<React.ComponentProps<typeof ProjectPanoramaCard>> = {}) {
@@ -525,6 +783,8 @@ describe('manual ready work', () => {
     expect(html).toContain('Open task');
     expect(html).toContain('Landing');
     expect(html).not.toMatch(/Dispatch needs attention|Check providers|var\(--warning-bg\)/);
+    // A card handed no way to open the list draws the row to read, not to press.
+    expect(html).not.toContain('project-landing-press');
   });
 
   it('never infers manual dispatch from totals or a missing old-server field', () => {
@@ -561,5 +821,12 @@ describe('the landing row’s styles', () => {
     expect(css).toMatch(/\.project-landing-clock \{[\s\S]*?font-variant-numeric: tabular-nums;/);
     // The task gets two lines without squeezing the phase or elapsed time off a phone.
     expect(css).toMatch(/\.project-landing-what \{[\s\S]*?-webkit-line-clamp: 2;/);
+  });
+
+  it('draws a timed-out row’s mark and words in amber, and never spins it', () => {
+    expect(css).toMatch(/\.project-landing-timed-out \.project-landing-ring \{\s*color: var\(--warning-solid\);/);
+    expect(css).toMatch(/\.project-landing-timed-out \.project-landing-clock \{\s*color: var\(--warning\);/);
+    // The spin is a running row's only, and a timed-out row is never drawn as one.
+    expect(css).not.toMatch(/\.project-landing-timed-out[^{]*\{[^}]*animation/);
   });
 });

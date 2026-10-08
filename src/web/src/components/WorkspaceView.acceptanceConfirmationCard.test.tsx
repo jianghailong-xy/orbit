@@ -386,7 +386,7 @@ beforeEach(() => {
     if (path === `/projects/${PROJECT_PUBLIC}/open-items`) {
       return reply({ needsYou: [], withCoordinator: [], startRequest: startRow });
     }
-    // The plan the start card sums up in a line: two tasks, the second after the first.
+    // The plan the start card lists by level: two tasks, the second after the first.
     if (path === `/projects/${PROJECT_PUBLIC}/dependency-graph`) {
       return reply({
         marks: [
@@ -618,8 +618,9 @@ describe('the start card in WorkspaceView', { timeout: 60_000 }, () => {
     await openSettlementReview();
     const card = (): HTMLElement => reviewForm()!.querySelector<HTMLElement>('.start-card')!;
     expect(reviewForm()!.querySelectorAll('.settlement-card.start-card')).toHaveLength(1);
-    // The plan in one line, off the dependency graph.
-    expect(card().querySelector('.start-card-plan')?.textContent).toContain('A starts now · B after A');
+    // The plan by level, off the dependency graph: A starts with the project, B after it.
+    expect([...card().querySelectorAll('.start-card-level')].map((level) => level.textContent))
+      .toEqual(['1Athe sealNow', '2Bthe card']);
     // One setting changed on the card before the press: at most 5 tasks, not the suggested 3.
     const count5 = card().querySelector<HTMLInputElement>('.start-card-count input')!;
     await act(async () => {

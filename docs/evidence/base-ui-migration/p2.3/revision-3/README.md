@@ -1,5 +1,11 @@
 # P2.3 第3版：静止指针下的新通知
 
+> **证据瘦身（2026-10-07）**：完整原件见提交 `7732f14f82d4e6b4406d7d164c4b672f63aa0f56`（瘦身前最后一个含完整文件的提交）。取回单个文件用 `git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2.3/revision-3/<路径> > <文件>`，整个目录用 `git archive 7732f14f82d4e6b4406d7d164c4b672f63aa0f56 docs/evidence/base-ui-migration/p2.3/revision-3 | tar -x -C <空目录>`。
+>
+> 本目录在瘦身中：11 份 Playwright 报告换成同目录的 `report.summary.json`，都只删附件正文；删除 1 个 trace 压缩包；436 个逐用例 JSON（含打包的 attachments.tar.gz）换成所在目录的 `attachments.summary.json`（文件名、字节数、SHA-256 和顶层标量字段）；删除 100 张与本任务目录里保留副本逐字节相同的重复截图。下文链接若指向这些文件，按上面的命令从该提交取回；读取它们的脚本要在取回的目录里运行。
+>
+> 目录里的 SHA256SUMS 类清单（`*.sha256`、`artifact-index*.json`、`manifest.json`、各运行 `summary.json` 里的附件哈希等）保留原文件，核验的是提交 `7732f14f8` 里的文件。做法、保留理由和逐文件删除清单见 [evidence-slimming](../../evidence-slimming/README.md)。
+
 服务于 [P2.3 通知与反馈服务](orbit-task:34Za3974yqnhjQsRBl0R3)。验收 key `1BvO6hYrlFnU60JqxQPUHt`，原文：**P2：Orbit 自有弹层、选择及反馈组件保持现有键盘、焦点、通知和确认行为。** 本次承担通知及其与已交付弹层/确认的集成。
 
 第2版 `192ee6cf0fa45727096b0bf23d5a4f2ce3e5c96e` 被独立验收退回：新通知出现在静止指针下时，浏览器产生 mouseover，没有 mousemove，六秒停留计时没有暂停。本页替代第2版的完成结论，历史附件不覆盖。任务起点仍为 `67e62c0b4028eefe2c619dac80d3fac312cea601`；第1版可访问性及第2版动画/弹层悬停修复保留。

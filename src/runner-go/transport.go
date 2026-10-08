@@ -88,8 +88,10 @@ func init() {
 		claudeAccountMoveCapabilityV1,
 		antigravityAccountLoginCapabilityV1,
 		antigravityAccountRemoveCapabilityV1,
+		kimiLoginRegionCapabilityV1,
 		sessionMoveCapabilityV1,
 		wikiMaintenanceRunV1,
+		wikiRepoOpCapabilityV1,
 	}, declaredSteerCapabilities()...), ",")
 }
 
@@ -652,6 +654,32 @@ func (t *Transport) integrationJobProgress(jobID string, b IntegrationJobProgres
 func (t *Transport) integrationJobResult(jobID string, b IntegrationJobResultRequest) (*IntegrationJobResultResponse, error) {
 	var out IntegrationJobResultResponse
 	if err := t.do(nil, "POST", "/runner/integration-jobs/"+jobID+"/result", b, &out, 30*time.Second); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// wikiRepoOpProgress renews a claimed repository operation's lease. A 409 means this process's claim
+// had already moved on and it must stop working on the operation.
+func (t *Transport) wikiRepoOpProgress(opID string, b WikiRepoOpProgressRequest) error {
+	return t.do(nil, "POST", "/runner/wiki/repo-ops/"+opID+"/progress", b, nil, 15*time.Second)
+}
+
+// wikiRepoOpFragment uploads one piece of a snapshot too large for one request body. Idempotent by its
+// ordinal, so a piece that has to be sent again is the same piece.
+func (t *Transport) wikiRepoOpFragment(opID string, b WikiRepoOpFragmentRequest) (*WikiRepoOpFragmentResponse, error) {
+	var out WikiRepoOpFragmentResponse
+	if err := t.do(nil, "POST", "/runner/wiki/repo-ops/"+opID+"/fragments", b, &out, 60*time.Second); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// wikiRepoOpResult reports what a claimed repository operation came to. The answer says whether the
+// control plane took it; a 409 means this process's claim had already moved on.
+func (t *Transport) wikiRepoOpResult(opID string, b WikiRepoOpResultRequest) (*WikiRepoOpResultResponse, error) {
+	var out WikiRepoOpResultResponse
+	if err := t.do(nil, "POST", "/runner/wiki/repo-ops/"+opID+"/result", b, &out, wikiRepoOpResultTimeout); err != nil {
 		return nil, err
 	}
 	return &out, nil

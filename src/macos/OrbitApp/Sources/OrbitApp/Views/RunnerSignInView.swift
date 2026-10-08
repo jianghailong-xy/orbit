@@ -32,12 +32,21 @@ struct RunnerSignInView: View {
     /// Sign in a NEW account, which the runner adds under this name. The button waits for one: a
     /// blank name would read as no account at all, which is the runner's own login.
     var accountName: String? = nil
-    /// Start signing in as the card appears, not on its button: the press that raised it — Add Account
-    /// — already asked for the sign-in.
+    /// Start signing in as the card appears, not on its button: the press that raised it — Add Account,
+    /// an account's Sign In or Renew — already asked for the sign-in. A card for an account the runner
+    /// has follows a sign-in already under way for it instead (another device may have started it).
+    /// Kimi's starts on the site it is asked for, so its card opens on that choice (`kimiSites`),
+    /// and this card never starts one by appearing.
     var autoStart = false
     /// Offered the moment the sign-in lands: re-send whatever the failure ate. Nil where there is
     /// nothing to re-send (a proactive sign-in from the Runners screen).
     var onDone: (() async -> Void)?
+    /// The page's way to put this card away. Given, the card offers the one control for it: Cancel
+    /// while a sign-in is under way, which cancels that sign-in first, and Close otherwise — never the
+    /// two side by side.
+    var onClose: (() -> Void)? = nil
+    /// Told once the sign-in this card watched has landed, so the page can fold the card away.
+    var onSignedIn: (() -> Void)? = nil
 
     @Environment(AppModel.self) private var app
     @Environment(\.openURL) private var openURL
@@ -60,9 +69,12 @@ struct RunnerSignInView: View {
                                                adding: accountName != nil,
                                                baseURL: baseURL, tokenStore: app.tokenStore)
             model = m
-            // Started by the card's first appearance only: a later one picks the relay back up.
-            if autoStart, fresh {
-                await m.begin(accountName: accountName)
+            // Started by the card's first appearance only: a later one picks the relay back up. A card
+            // adding an account owns only the sign-in it starts; one for an account the runner has
+            // follows a sign-in already running for it rather than starting it over.
+            if autoStart, fresh, engine != .kimi {
+                if accountName == nil { await m.refresh() }
+                if m.status?.inFlight != true { await m.begin(accountName: accountName) }
             } else {
                 await m.refresh()
             }
@@ -88,7 +100,7 @@ struct RunnerSignInView: View {
                     waiting(model, "Signing in with your code…",
                             hint: "The runner picks it up on its next check-in, so this can take up to a minute.")
                 } else {
-                    PasteBackForm(model: model)
+                    PasteBackForm(model: model, onClose: onClose)
                 }
             case .failed, nil:
                 idle(model)
@@ -97,18 +109,24 @@ struct RunnerSignInView: View {
                 Text(e).font(.orbitLabel).foregroundStyle(.red)
             }
         }
+        .onChange(of: model.status == .done) { _, done in
+            if done { onSignedIn?() }
+        }
     }
 
     // MARK: states
 
     private var signedIn: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-            Text("Signed in — this runner is ready.").font(.orbitLabel)
-            if let onDone {
-                Button("Retry my message") { Task { await onDone() } }
-                    .buttonStyle(.borderless).font(.orbitLabel)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                Text("Signed in — this runner is ready.").font(.orbitLabel)
+                if let onDone {
+                    Button("Retry my message") { Task { await onDone() } }
+                        .buttonStyle(.borderless).font(.orbitLabel)
+                }
             }
+            closeButton
         }
     }
 
@@ -124,32 +142,53 @@ struct RunnerSignInView: View {
     }
 
     /// Device flow (codex/kimi): the code goes to the browser, not back through here, so all this
-    /// can do is show both halves and wait for the CLI to finish approving itself.
+    /// can do is show both halves and wait for the CLI to finish approving itself. The code comes
+    /// first, and one press both copies it and opens the page it goes into (VS Code's "Copy &
+    /// Continue to GitHub"): on a phone that page is a browser switch away, and retyping a one-time
+    /// code from memory is exactly what people get wrong — over there, all that is left is a paste.
     @ViewBuilder
     private func deviceFlow(_ model: RunnerSignInModel) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if let url = model.url { openPageButton(url) }
-            Text("Sign in there, then enter this one-time code:")
+        // Kimi's page belongs to one of its two sites, named so the user knows which account it wants.
+        let site = model.site
+        VStack(alignment: .leading, spacing: 8) {
+            Text(site?.enterCode ?? "Enter this one-time code on the sign-in page:")
                 .font(.orbitLabel).foregroundStyle(.secondary)
             if let code = model.userCode {
-                // Tap to copy: on a phone the page is a browser switch away, and retyping a
-                // one-time code from memory is exactly what people get wrong.
+                Text(code)
+                    .font(.title3.monospaced().weight(.semibold))
+                    .textSelection(.enabled)
+            }
+            if let url = model.url {
                 Button {
-                    PlatformPasteboard.copyString(code)
-                    PlatformHaptics.success()
+                    if let code = model.userCode {
+                        PlatformPasteboard.copyString(code)
+                        PlatformHaptics.success()
+                    }
+                    openURL(url)
                 } label: {
-                    HStack(spacing: 6) {
-                        Text(code).font(.orbitMono).textSelection(.enabled)
-                        Image(systemName: "doc.on.doc").font(.orbitMeta).foregroundStyle(.secondary)
+                    if model.userCode != nil {
+                        Label(site?.copyCodeAndOpen ?? "Copy Code & Open Sign-In Page", systemImage: "doc.on.doc")
+                    } else {
+                        Label(site?.openPage ?? "Open the sign-in page", systemImage: "arrow.up.forward.square")
                     }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.borderedProminent)
             }
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
                 Text("Waiting for you to approve it…").font(.orbitLabel)
             }
-            cancelButton(model)
+            // The wrong site is the one mistake the user can't see until they are on its page: their
+            // account isn't there. Starting over on the other one is a single press.
+            HStack(spacing: 16) {
+                cancelButton(model)
+                if let site {
+                    Button(site.other.useInstead) { Task { await model.begin(site: KimiSite.named(site.other, on: model.runner)) } }
+                        .buttonStyle(.borderless)
+                        .font(.orbitLabel)
+                        .disabled(model.busy)
+                }
+            }
         }
     }
 
@@ -158,6 +197,56 @@ struct RunnerSignInView: View {
     /// configured from the web's Providers page), so this is the whole choice.
     @ViewBuilder
     private func idle(_ model: RunnerSignInModel) -> some View {
+        if engine == .kimi {
+            kimiSites(model)
+        } else {
+            signInButton(model)
+        }
+    }
+
+    /// Kimi's sign-in is itself a choice: kimi.com and kimi.ai keep separate accounts, and left to
+    /// itself the CLI goes to the site its installer came from. So the press that starts it picks the
+    /// site, and nothing is picked for the user (web RunnerSignIn).
+    @ViewBuilder
+    private func kimiSites(_ model: RunnerSignInModel) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if model.status == .failed, let m = model.relayMessage {
+                Text(m).font(.orbitLabel).foregroundStyle(.orange)
+            }
+            Text(KimiSite.question).font(.orbitLabel)
+            ForEach(KimiSite.allCases) { site in
+                Button {
+                    Task { await model.begin(site: KimiSite.named(site, on: model.runner)) }
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(site.domain).font(.headline)
+                            Text(site.place).font(.orbitLabel).foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 8)
+                        if model.currentSite == site {
+                            Text(KimiSite.currentMark)
+                                .font(.orbitLabel.weight(.semibold))
+                                .foregroundStyle(Color.accentColor)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                                .background(Color.accentColor.opacity(0.14), in: Capsule())
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.bordered)
+                .disabled(model.busy || !model.runnerRead)
+            }
+            Text(KimiSite.separateAccounts)
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+            closeButton
+        }
+    }
+
+    @ViewBuilder
+    private func signInButton(_ model: RunnerSignInModel) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             if engine == .antigravity { GoogleSignInTermsView() }
             if model.status == .failed, let m = model.relayMessage {
@@ -174,6 +263,7 @@ struct RunnerSignInView: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(model.busy || !nameReady)
+            closeButton
         }
     }
 
@@ -185,30 +275,48 @@ struct RunnerSignInView: View {
 
     // MARK: pieces
 
-    /// The sign-in page opens in the browser — Safari on iOS, the default browser on macOS — since
-    /// that is where the user's session with the vendor already lives.
-    private func openPageButton(_ url: URL) -> some View {
-        Button {
-            openURL(url)
-        } label: {
-            Label("Open the sign-in page", systemImage: "arrow.up.forward.square")
+    /// Cancel: the sign-in under way is cancelled on the runner, and a card the page can put away goes
+    /// with it — unless cancelling failed, which leaves the card up to say so. (The page's own button
+    /// is gone: the device flow's one press copies the code and opens the page itself.)
+    private func cancelButton(_ model: RunnerSignInModel) -> some View {
+        Button("Cancel") {
+            Task {
+                await model.cancel()
+                if model.errorText == nil { onClose?() }
+            }
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.borderless)
+        .font(.orbitLabel)
+        .disabled(model.busy)
     }
 
-    private func cancelButton(_ model: RunnerSignInModel) -> some View {
-        Button("Cancel") { Task { await model.cancel() } }
-            .buttonStyle(.borderless)
-            .font(.orbitLabel)
-            .disabled(model.busy)
+    /// Close, where nothing is under way to cancel: before a sign-in starts, after one failed, and once
+    /// one has landed and the page has yet to fold the card.
+    @ViewBuilder private var closeButton: some View {
+        if let onClose {
+            Button("Close", action: onClose)
+                .buttonStyle(.borderless)
+                .font(.orbitLabel)
+        }
     }
 }
 
 /// Paste-back flow (claude): the sign-in page hands the user a code that has to come back through
 /// here. Its own view so the code field can bind straight into the model.
+///
+/// The prominent press follows the next step: Open the sign-in page until the page has been opened
+/// from here and the app brought back, then Paste. Paste is the system's paste control, which hands
+/// over what was copied on that page without asking to read the pasteboard, and the code goes
+/// straight to the runner; a code typed by hand is sent with Submit, or Return.
 private struct PasteBackForm: View {
     @Bindable var model: RunnerSignInModel
+    var onClose: (() -> Void)?
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var opened = false
+    @State private var returned = false
+
+    private var typed: Bool { !model.code.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -218,10 +326,21 @@ private struct PasteBackForm: View {
                 Text(m).font(.orbitLabel).foregroundStyle(.orange)
             }
             if let url = model.url {
-                Button { openURL(url) } label: {
-                    Label("Open the sign-in page", systemImage: "arrow.up.forward.square")
+                if returned {
+                    Button { openURL(url) } label: {
+                        Label("Open the sign-in page", systemImage: "arrow.up.forward.square")
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.orbitLabel)
+                } else {
+                    Button {
+                        opened = true
+                        openURL(url)
+                    } label: {
+                        Label("Open the sign-in page", systemImage: "arrow.up.forward.square")
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
-                .buttonStyle(.borderedProminent)
             }
             Text("Approve it there, then paste the code the page gives you:")
                 .font(.orbitLabel).foregroundStyle(.secondary)
@@ -234,14 +353,38 @@ private struct PasteBackForm: View {
                     .textInputAutocapitalization(.never)
                     #endif
                     .onSubmit { Task { await model.submitCode() } }
-                Button("Submit") { Task { await model.submitCode() } }
-                    .buttonStyle(.bordered)
-                    .disabled(model.busy || model.code.trimmingCharacters(in: .whitespaces).isEmpty)
+                if typed {
+                    Button("Submit") { Task { await model.submitCode() } }
+                        .buttonStyle(.bordered)
+                        .disabled(model.busy)
+                } else {
+                    PasteButton(payloadType: String.self) { pasted in
+                        guard let code = pasted.first?.trimmingCharacters(in: .whitespacesAndNewlines),
+                              !code.isEmpty else { return }
+                        Task { @MainActor in
+                            model.code = code
+                            await model.submitCode()
+                        }
+                    }
+                    .labelStyle(.titleAndIcon)
+                    .buttonBorderShape(.capsule)
+                    .tint(returned ? Color.accentColor : Color.secondary)
+                    .disabled(model.busy)
+                }
             }
-            Button("Cancel") { Task { await model.cancel() } }
-                .buttonStyle(.borderless)
-                .font(.orbitLabel)
-                .disabled(model.busy)
+            Button("Cancel") {
+                Task {
+                    await model.cancel()
+                    if model.errorText == nil { onClose?() }
+                }
+            }
+            .buttonStyle(.borderless)
+            .font(.orbitLabel)
+            .disabled(model.busy)
+        }
+        // Back from the page this opened: the code is on the pasteboard now, so Paste is the press.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active, opened { returned = true }
         }
     }
 }

@@ -117,11 +117,13 @@ fi
 DEPLOY_SHA="$(git rev-parse HEAD)"
 export ORBIT_SOURCE_SHA="${ORBIT_SOURCE_SHA:-$DEPLOY_SHA}"
 
-echo "==> Building images from source (apiserver, web)"
+# wiki-worker runs the apiserver's image with another command, so naming it builds nothing twice: it
+# keeps this list and the recreate list below the same services.
+echo "==> Building images from source (apiserver and wiki-worker, web)"
 if [ "$NO_CACHE" -eq 1 ]; then
-  $DC build --no-cache apiserver web
+  $DC build --no-cache apiserver wiki-worker web
 else
-  $DC build apiserver web
+  $DC build apiserver wiki-worker web
 fi
 
 echo "==> Applying migrations before recreating services"
@@ -140,8 +142,8 @@ fi
 # --no-deps is deliberate: an upgrade launched from a worktree must not recreate postgres, whose
 # relative bind-mount path differs from the installed checkout — that has already once served
 # production an empty database.
-echo "==> Recreating apiserver and presentation services"
-$DC up -d --wait --no-deps apiserver web gateway
+echo "==> Recreating apiserver, wiki-worker and presentation services"
+$DC up -d --wait --no-deps apiserver wiki-worker web gateway
 
 echo "==> Stack status"
 $DC ps

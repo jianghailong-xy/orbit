@@ -756,4 +756,52 @@ final class SessionProviderChoicesTests: XCTestCase {
         XCTAssertEqual(OpenCodeKeys.choiceKey("opencode/glm"), "glm")
         XCTAssertNil(OpenCodeKeys.choiceKey("opencode"))
     }
+
+    // MARK: - engineTitle (the composer model menu's title)
+
+    /// The title answers "which engine runs this session" — the CLI that executes, not the vendor
+    /// whose models it writes (web `engineTitleFor`).
+    func testEngineTitleNamesTheCLIThatExecutes() {
+        XCTAssertEqual(SessionProviderChoices.engineTitle(provider: "claude", configured: []).name,
+                       "Claude Code")
+        XCTAssertEqual(SessionProviderChoices.engineTitle(provider: "deepseek", configured: [deepseek]).name,
+                       "Claude Code")
+        XCTAssertEqual(SessionProviderChoices.engineTitle(provider: "my-endpoint", configured: [custom]).name,
+                       "Claude Code")
+        XCTAssertEqual(SessionProviderChoices.engineTitle(provider: "codex", configured: []).name, "Codex")
+        XCTAssertEqual(SessionProviderChoices.engineTitle(provider: "kimi", configured: []).name, "Kimi Code")
+        XCTAssertEqual(SessionProviderChoices.engineTitle(provider: "opencode", configured: []).name, "OpenCode")
+        XCTAssertEqual(SessionProviderChoices.engineTitle(provider: "antigravity", configured: []).name,
+                       "Antigravity")
+        XCTAssertEqual(SessionProviderChoices.engineTitle(provider: "dsh", configured: []).name,
+                       "DeepSeek Harness")
+        // A provider the console cannot place takes the server's own Claude fallback.
+        XCTAssertEqual(SessionProviderChoices.engineTitle(provider: "nonsense", configured: []).name,
+                       "Claude Code")
+    }
+
+    /// A held pick becomes `nextName` only when it changes the engine: two providers of one CLI read
+    /// as the same title, and that pick is the Provider row's business, not the title's.
+    func testEngineTitleSaysWhereAHeldPickGoesOnlyWhenTheEngineChanges() {
+        XCTAssertEqual(
+            SessionProviderChoices.engineTitle(provider: "claude", configured: [], nextProvider: "codex").nextName,
+            "Codex")
+        XCTAssertEqual(
+            SessionProviderChoices.engineTitle(provider: "opencode", configured: [], nextProvider: "claude").nextName,
+            "Claude Code")
+        XCTAssertNil(
+            SessionProviderChoices.engineTitle(provider: "deepseek", configured: [deepseek],
+                                                nextProvider: "claude").nextName)
+        XCTAssertNil(
+            SessionProviderChoices.engineTitle(provider: "claude", configured: [], nextProvider: nil).nextName)
+    }
+
+    /// The one line both clients print, arrow and all.
+    func testEngineTitleLabelReadsAsOneLine() {
+        XCTAssertEqual(SessionProviderChoices.engineTitle(provider: "deepseek", configured: [deepseek]).label,
+                       "Claude Code")
+        XCTAssertEqual(
+            SessionProviderChoices.engineTitle(provider: "claude", configured: [], nextProvider: "codex").label,
+            "Claude Code → Codex")
+    }
 }

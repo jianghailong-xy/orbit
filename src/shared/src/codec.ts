@@ -132,6 +132,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'credentialId',
   'foremanWorkspaceId',
   'coordinatorWorkspaceId',
+  // A managed runner's default workspace (migration 0399): the workspace a reader opens — an
+  // address, never a fence.
+  'defaultWorkspaceId',
   'runnerId',
   'assignedRunnerId',
   'targetRunnerId',
@@ -309,6 +312,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // The public links a caller turns off in one request (`POST /share-links/turn-off`, 0306): each
   // is a `share_link` row's own id, the one its list hands out and `DELETE /share-links/:id` takes.
   'shareLinkIds',
+  // The wiki space a public link is rooted at (`share_link.wiki_space_id`, 0403): the space's own id,
+  // the one `/wiki/spaces/:id/share` takes. An address, never a fence.
+  'wikiSpaceId',
   // Owner Ratification's durable decision, reusable authority and two-phase action ledgers. These
   // all name rows a caller can inspect or hand back; whether the named authority is still valid is
   // decided by the database from its immutable scope, not by preserving UUID spelling.
@@ -568,6 +574,12 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'reviewRecordId',
   'runSessionId',
   'reviewerSessionId',
+  // The repository operations (migration 0402): the fragments of an operation's snapshot, staged
+  // while it runs. `opId` is the operation's own id twice over — the runner is handed it in the
+  // heartbeat command and hands it back as the route's `:id` (`PublicIdPipe`, either spelling) —
+  // and this column is that same address on the fragment rows. Never a fence: the stop-the-old-
+  // claim comparison is on (`lease_owner`, `claim_generation`), not on this.
+  'opId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner

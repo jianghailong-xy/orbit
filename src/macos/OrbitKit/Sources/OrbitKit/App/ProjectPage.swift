@@ -119,27 +119,32 @@ public enum ProjectPage {
     /// the project had stopped.
     public struct LandingLine: Equatable, Sendable {
         public let word: String
-        /// The task being landed, "N jobs" when more than one is in flight, or nil when the job
-        /// names no single task (a promotion, a merge check) — the row then draws its word and
-        /// state alone.
+        /// The task being landed, "N jobs" (with how many timed out) when more than one is in
+        /// flight, or nil when the job names no single task (a promotion, a merge check) — the row
+        /// then draws its word and state alone.
         public let what: String?
         /// Whether the job is running, as opposed to still waiting its
         /// turn. What the ring's spin and the two brand-blue words are drawn from; the `state` word
         /// is what carries the same fact to a reader who cannot use motion.
         public let running: Bool
-        /// The reported job phase, or "queued".
+        /// The reported job phase, "queued", or "Timed out".
         public let state: String
-        /// "1m 20s". See `landingClock`.
+        /// "1m 20s" (see `landingClock`), or a timed-out job's silence in whole minutes, "110m".
         public let clock: String
         public let clockLabel: String
+        /// When the line was last updated — or, for a timed-out job, its limit ("limit 10m").
         public let updated: String?
         /// "2m 24s" — what the job waited for a runner before the claim, or nil when it never waited,
         /// the read does not say, or it has not been claimed at all (a queued job's whole clock is
         /// that wait, which `clockLabel` says).
         public let wait: String?
+        /// The server judged the job's runner silent past its limit: the row says so in the warning
+        /// ink, with a triangle where the ring was, and nothing spins.
+        public let timedOut: Bool
 
         public init(what: String?, running: Bool, state: String, clock: String, word: String = "Integration",
-                    clockLabel: String = "Elapsed", updated: String? = nil, wait: String? = nil) {
+                    clockLabel: String = "Elapsed", updated: String? = nil, wait: String? = nil,
+                    timedOut: Bool = false) {
             self.word = word
             self.what = what
             self.running = running
@@ -148,8 +153,35 @@ public enum ProjectPage {
             self.clockLabel = clockLabel
             self.updated = updated
             self.wait = wait
+            self.timedOut = timedOut
         }
     }
+
+    /// One job of the list the landing row opens (docs/mocks/landing-jobs-sheet), drawn as the row
+    /// itself.
+    public struct LandingJobLine: Equatable, Sendable, Identifiable {
+        public let jobId: String
+        /// The task a press on the row opens; nil for a promotion or a merge check, whose row opens
+        /// nothing.
+        public let taskId: String?
+        public let line: LandingLine
+        /// Under a timed-out job, who took it, when, where it stopped and whether a push was
+        /// recorded; under a retried one, its generation and who asked. Nil otherwise.
+        public let detail: String?
+        /// Whether to offer Retry: the server's `retryable`, never inferred from `timedOut`.
+        public let retryable: Bool
+        public var id: String { jobId }
+    }
+
+    // The job list's words, held to the web's by `ProjectPageSectionsCopyParityTests`.
+    public static let landingTimedOut = "Timed out"
+    public static let landingNoReportFor = "No report for"
+    public static let landingRetry = "Retry"
+    public static let landingRetryFailed = "Retry failed"
+    public static let landingNoPushRecorded = "no push recorded"
+    public static let landingMayHaveBeenPushed = "may have been pushed"
+    public static let landingRetriedByOwner = "retried by you"
+    public static let landingRetriedByCoordinator = "retried by the coordinator"
 
     public static let integrationJobWords = [
         "LAND_TASK": "Landing", "CHECK_PROMOTION": "Merge check", "LAND_PROMOTION": "Merge to main",
@@ -186,6 +218,27 @@ public enum ProjectPage {
         return "\(whole / 60)m \(whole % 60)s"
     }
 
+    /// The name slot when more than one job is in flight: "2 jobs", or "2 jobs · 1 timed out".
+    public static func landingJobsCount(_ jobs: Int, timedOut: Int) -> String {
+        timedOut > 0 ? "\(jobs) jobs · \(timedOut) timed out" : "\(jobs) jobs"
+    }
+
+    /// A timed-out job's limit, in minutes rounded as the web's `Math.round` rounds them: "limit 10m".
+    public static func landingLimit(_ seconds: Int) -> String {
+        "limit \(Int((Double(seconds) / 60).rounded()))m"
+    }
+
+    /// The job list's title: "1 job in flight", "2 jobs in flight".
+    public static func landingJobsTitle(_ jobs: Int) -> String {
+        "\(jobs) \(jobs == 1 ? "job" : "jobs") in flight"
+    }
+
+    /// "20:07" — a local 24-hour clock time, as the job list says when a runner took a job and when
+    /// a retry was asked for.
+    public static func landingClockTime(_ date: Date, timeZone: TimeZone = .current) -> String {
+        clockTimes.string(from: date, timeZone: timeZone)
+    }
+
     /// The line, or nil when nothing is landing — which is what removes the row from the card.
     ///
     /// `inFlight` is the server's answer to "is anything in flight", so the whole row is drawn from
@@ -194,49 +247,155 @@ public enum ProjectPage {
     ///
     /// The name slot takes the job's task, or the COUNT when there is more than one: "Landing 2
     /// jobs" says what a single task's title would have pretended to — that this is the oldest of
-    /// several, not the only thing the queue is doing.
+    /// several, not the only thing the queue is doing — and it says how many of them timed out.
+    ///
+    /// A server that lists its jobs (`inFlightJobs`) judges a silent runner itself, so the row no
+    /// longer guesses from the heartbeat's age: "Update unavailable" is then only this app being
+    /// unable to read the server, which outranks what the last read said, and a job the server
+    /// judged timed out says so — how long nothing was heard, against its limit. An older server
+    /// leaves the reading of the reports here, from the runner's heartbeat: a claimed job whose
+    /// runner has gone quiet reads "No report" for as long as it stays quiet — never "timed out",
+    /// which is the job's own verdict to give and arrives as the server's `blockingReason`.
     public static func landingLine(_ view: ProjectIntegrationView, now: Date = Date(),
                                    updatedAt: Date? = nil, refreshFailed: Bool = false) -> LandingLine? {
         guard let inFlight = view.inFlight else { return nil }
         let running = inFlight.state == "RUNNING"
         let jobs = view.integratingCount + view.queuedCount
+        let listed = view.inFlightJobs
+        let timedOutJobs = listed?.filter(\.timedOut).count ?? 0
         let heartbeatAt = inFlight.heartbeatAt.flatMap(RelativeTime.parse)
-        let reported = heartbeatAt != nil
         // A claimed job whose runner has gone quiet: no report at all, or none since the claim lease
-        // the server itself uses. This is what the row used to call "Update unavailable", which said
-        // the wrong thing twice — the read was fine, and the job had judged nothing about itself.
-        let heartbeatStale = running && (heartbeatAt.map { now.timeIntervalSince($0) > 600 } ?? true)
-        let readStale = updatedAt.map { now.timeIntervalSince($0) > 90 } == true
-        // `Update unavailable` is only ever about THIS CLIENT's own read of the server.
-        let unavailable = refreshFailed || readStale
-        // The last moment this row has evidence for, which is what its clock freezes at and what
-        // "Updated …" counts from: a read that failed is evidence only of itself, while a read that
-        // worked carries the runner's own last report.
-        let seenAt = unavailable ? updatedAt : (running && reported ? heartbeatAt : updatedAt)
-        let elapsedAt = unavailable || heartbeatStale ? min(now, seenAt ?? now) : now
-        let age = seenAt.map { Int(max(0, now.timeIntervalSince($0)) / 60) }
+        // the server itself uses. Read only where the server hands over no verdict of its own (a
+        // server that does not list its jobs) — one that lists them judges the timeouts, and this
+        // row takes that word instead.
+        let silent = listed == nil && running
+            && (heartbeatAt.map { now.timeIntervalSince($0) > 600 } ?? true)
+        let unavailable = cannotRead(now: now, updatedAt: updatedAt, refreshFailed: refreshFailed)
+        let word = integrationJobWords[inFlight.kind ?? ""] ?? "Integration"
+        let what = jobs > 1 ? landingJobsCount(jobs, timedOut: timedOutJobs) : inFlight.taskTitle
+        // What the job waited for a runner before it was claimed — the row's own `inFlight` carries
+        // it, and only a CLAIMED job has one to show: a queued job's whole clock is that wait.
+        let wait = running ? waitLine(inFlight.waitMs) : nil
+        if !unavailable, let lead = listed?.first, lead.timedOut {
+            return timedOutLine(lead, word: word, what: what, now: now, wait: wait)
+        }
+        return liveLine(word: word, what: what, running: running, phase: inFlight.phase,
+                        startedAt: inFlight.startedAt, heartbeatAt: inFlight.heartbeatAt, now: now,
+                        updatedAt: updatedAt, unavailable: unavailable, silent: silent, wait: wait)
+    }
+
+    /// What a job waited for a runner before its clock began, from the server's own measurement:
+    /// nil when it never waited, the server does not say, or nothing was waited for.
+    private static func waitLine(_ waitMs: Int?) -> String? {
+        waitMs.flatMap { $0 > 0 ? landingClock(Double($0) / 1000) : nil }
+    }
+
+    /// Every job in flight, one line each in `inFlightJobs`' order; none from a server that does not
+    /// list them. Each is the landing row's own rendering of that job, its task's title in the name
+    /// slot (never a count), on the row's terms: the app unable to read the server first, then the
+    /// server's judgement that the runner went silent, then the job's own clock.
+    public static func landingJobLines(_ view: ProjectIntegrationView, now: Date = Date(),
+                                       updatedAt: Date? = nil, refreshFailed: Bool = false) -> [LandingJobLine] {
+        let unavailable = cannotRead(now: now, updatedAt: updatedAt, refreshFailed: refreshFailed)
+        return (view.inFlightJobs ?? []).map { job in
+            let word = integrationJobWords[job.kind] ?? "Integration"
+            let line = job.timedOut && !unavailable
+                ? timedOutLine(job, word: word, what: job.taskTitle, now: now)
+                : liveLine(word: word, what: job.taskTitle, running: job.state == "RUNNING", phase: job.phase,
+                           startedAt: job.startedAt, heartbeatAt: job.heartbeatAt, now: now,
+                           updatedAt: updatedAt, unavailable: unavailable)
+            return LandingJobLine(jobId: job.jobId, taskId: job.taskId, line: line,
+                                  detail: landingJobDetail(job), retryable: job.retryable)
+        }
+    }
+
+    /// Whether this app has lost the server: its last read failed, or is more than 90 s old.
+    private static func cannotRead(now: Date, updatedAt: Date?, refreshFailed: Bool) -> Bool {
+        refreshFailed || updatedAt.map { now.timeIntervalSince($0) > 90 } == true
+    }
+
+    /// A job running or waiting its turn, as the row draws it. `unavailable` freezes the clock at the
+    /// last update the app had and stops the row claiming activity; `silent` freezes it at the last
+    /// REPORT instead — the same freeze, reached from the runner's silence rather than this app's read.
+    private static func liveLine(word: String, what: String?, running: Bool, phase: String?,
+                                 startedAt: String, heartbeatAt: String?, now: Date, updatedAt: Date?,
+                                 unavailable: Bool, silent: Bool = false, wait: String? = nil) -> LandingLine {
+        // A queued job's heartbeat and phase can be an earlier claim's: only a running job's count.
+        let reported = heartbeatAt.flatMap(RelativeTime.parse)
+        let lastUpdate = running ? (reported ?? updatedAt) : updatedAt
+        let elapsedAt = unavailable || silent ? min(now, lastUpdate ?? now) : now
+        let age = lastUpdate.map { Int(max(0, now.timeIntervalSince($0)) / 60) }
         // An instant this clock cannot read is no elapsed time rather than a wrong one: the row
         // stays up and counts from zero, which is the one thing it can still say truthfully.
-        let elapsed = RelativeTime.parse(inFlight.startedAt).map { elapsedAt.timeIntervalSince($0) } ?? 0
-        // The right-hand slot says where the reports stand, which is the whole difference between
-        // a job that is working and one nobody has heard from: the age of the last report, or that
-        // there has never been one.
+        let elapsed = RelativeTime.parse(startedAt).map { elapsedAt.timeIntervalSince($0) } ?? 0
+        // The right-hand slot says where the reports stand, which is the whole difference between a
+        // job that is working and one nobody has heard from: a silent job says that rather than
+        // putting a false "Updated" on itself.
         let report: String?
-        if heartbeatStale && !unavailable {
-            report = (reported ? age.map(landingNoReportFor) : nil) ?? landingNoReportYet
+        if silent {
+            report = (reported != nil ? age.map { landingNoReportFor($0) } : nil) ?? landingNoReportYet
         } else {
             report = age.map { $0 == 0 ? "Updated just now" : "Updated \($0)m ago" }
         }
-        return LandingLine(what: jobs > 1 ? "\(jobs) jobs" : inFlight.taskTitle,
-                           running: running && !unavailable && !heartbeatStale,
+        return LandingLine(what: what, running: running && !unavailable && !silent,
                            state: unavailable ? "Update unavailable"
-                               : heartbeatStale ? landingNoReport
-                                   : running ? (integrationPhaseWords[inFlight.phase ?? ""] ?? "running") : "queued",
-                           clock: landingClock(elapsed),
-                           word: integrationJobWords[inFlight.kind ?? ""] ?? "Integration",
+                               : silent ? landingNoReport
+                                   : running ? (integrationPhaseWords[phase ?? ""] ?? "running") : "queued",
+                           clock: landingClock(elapsed), word: word,
                            clockLabel: running ? "Elapsed" : "Queued for",
-                           updated: report,
-                           wait: running ? inFlight.waitMs.flatMap { $0 > 0 ? landingClock(Double($0) / 1000) : nil } : nil)
+                           updated: report, wait: wait)
+    }
+
+    /// A job the server judged timed out: how long its runner has said nothing, in whole minutes,
+    /// against the limit it went past — no elapsed clock that only looks like it stopped.
+    private static func timedOutLine(_ job: ProjectIntegrationJob, word: String, what: String?,
+                                     now: Date, wait: String? = nil) -> LandingLine {
+        let silentSince = RelativeTime.parse(job.heartbeatAt ?? job.startedAt)
+        let minutes = silentSince.map { max(0, Int(now.timeIntervalSince($0)) / 60) } ?? 0
+        return LandingLine(what: what, running: false, state: landingTimedOut, clock: "\(minutes)m",
+                           word: word, clockLabel: landingNoReportFor,
+                           updated: landingLimit(job.limitSeconds ?? 600), wait: wait, timedOut: true)
+    }
+
+    /// The line under a job: what a timed-out job's runner did, or which generation a retried job is
+    /// and who asked for it. Whether a push may have happened is read off the step it stopped at.
+    private static func landingJobDetail(_ job: ProjectIntegrationJob) -> String? {
+        // An instant the clock cannot read is said to be one, as the web says it, never a wrong time.
+        func time(_ iso: String) -> String {
+            RelativeTime.parse(iso).map { landingClockTime($0) } ?? "--:--"
+        }
+        if job.timedOut {
+            // A runner with no name is "The runner", as the web's truthiness reads an empty one.
+            let runner = job.runnerName.flatMap { $0.isEmpty ? nil : "Runner \($0)" } ?? "The runner"
+            let step = integrationPhaseWords[job.phase ?? ""] ?? "running"
+            let push = job.phase == "PUSH" || job.phase == "VERIFY" ? landingMayHaveBeenPushed : landingNoPushRecorded
+            return "\(runner) took it at \(time(job.startedAt)) · stopped at \(step) · \(push)"
+        }
+        guard let retriedBy = job.retriedBy else { return nil }
+        let who = retriedBy == "OWNER" ? landingRetriedByOwner : landingRetriedByCoordinator
+        return "Generation \(job.generation) · \(who) at \(time(job.queuedAt))"
+    }
+
+    /// One formatter for every clock time, built once: the job list redraws each second, and an ICU
+    /// formatter per row per tick is the cost `RelativeTime` describes. Locked, because the zone it
+    /// formats in is set on each call.
+    private static let clockTimes = ClockTimes()
+
+    private final class ClockTimes: @unchecked Sendable {
+        private let lock = NSLock()
+        private let formatter: DateFormatter = {
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "en_US_POSIX")
+            f.dateFormat = "HH:mm"
+            return f
+        }()
+
+        func string(from date: Date, timeZone: TimeZone) -> String {
+            lock.lock()
+            defer { lock.unlock() }
+            if formatter.timeZone != timeZone { formatter.timeZone = timeZone }
+            return formatter.string(from: date)
+        }
     }
 
     // MARK: - Acceptance criteria

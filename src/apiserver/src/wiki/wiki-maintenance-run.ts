@@ -32,6 +32,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { TASK_COMPLETION_FENCE_REVISION } from '../tasks/task-completion-criterion';
 import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
+import { queueWikiArticlesAfterSessionRun } from './wiki-articles-jobs';
 import {
   afterSql,
   comparePositions,
@@ -320,7 +321,8 @@ export async function considerWikiMaintenance(
 
 /**
  * Whether a hint names the end of the space's latest run (contract `maintenance.job.catchUp.trigger`): that run's
- * task, or one of its sessions, once the task has ended. The run's own events name nothing else of the space.
+ * task, or one of its sessions, once the task has ended. The run's own events name nothing else of the space — and
+ * a run a wiki job ran (task_id NULL, migration 0401) is named by none of them, so it names no next run either.
  */
 async function namesLatestRunEnd(
   prisma: TriggerDb,
@@ -334,7 +336,7 @@ async function namesLatestRunEnd(
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     select: { taskId: true },
   });
-  if (!latest) return false;
+  if (!latest?.taskId) return false;
   const named = taskIds.includes(latest.taskId) || (sessionIds.length > 0
     && (await prisma.session.findFirst({ where: { id: { in: sessionIds }, ownerId, taskId: latest.taskId }, select: { id: true } })) !== null);
   if (!named) return false;
@@ -981,6 +983,9 @@ export async function finishWikiMaintenanceRun(
       report,
       opsRefused: refused,
     }, now);
+    // The articles the run's end owes, when the executor gives this account to the server (contract
+    // `articles.regeneration`); under the default runner executor nothing is read. Never throws.
+    await queueWikiArticlesAfterSessionRun(prisma, { ownerId, spaceId, sessionId });
     return answer;
   } catch (error) {
     const said = (error as { response?: { message?: unknown } }).response?.message;

@@ -240,6 +240,13 @@ export const COORDINATOR_SESSION_LIVE_CODE = 'COORDINATOR_SESSION_LIVE';
 export const COORDINATOR_MESSAGE_UNDELIVERED_CODE = 'COORDINATOR_MESSAGE_UNDELIVERED';
 
 /**
+ * "This start would turn Automatic on, and the project has nowhere to open the coordinator that
+ * runs an Automatic project" (`assertStartCanOpenCoordinator`). A 409 that writes nothing: the
+ * start is refused before it begins, and starting with Automatic off is one of the two ways out.
+ */
+export const START_COORDINATOR_UNAVAILABLE = 'START_COORDINATOR_UNAVAILABLE';
+
+/**
  * Which press `coordinator` is answering.
  *
  * `open` resolves-or-creates and never leaves a standing conversation behind; `replace` is the
@@ -3238,7 +3245,15 @@ export class ProjectsService {
       where: { ownerId, projectId },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       take: PROJECT_GRAPH_MAX_TASKS + 1,
-      select: { id: true, title: true, status: true, parentTaskId: true, createdAt: true },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        parentTaskId: true,
+        createdAt: true,
+        completionCriterion: true,
+        autoRunWhenReady: true,
+      },
     });
     const overCeiling = rows.length > PROJECT_GRAPH_MAX_TASKS;
     const rowsInGraph = overCeiling ? rows.slice(0, PROJECT_GRAPH_MAX_TASKS) : rows;
@@ -4444,6 +4459,86 @@ export class ProjectsService {
     // one asked was addressed to it, and this rotation is the moment it stops being able to read it.
     await this.openItems?.deliverOwed(id, project.coordinatorSessionId ?? undefined);
     return { sessionId: session.id, created: true, workspaceId: runIn };
+  }
+
+  /**
+   * Whether a start with Automatic on can leave this project the coordinator it needs — checked
+   * BEFORE the start writes anything, so a start that could not have one changes nothing.
+   *
+   * Automatic is the coordinator running the project for its owner: deciding when tasks are done,
+   * handling what goes wrong, merging. A project with no coordinator at all — the owner's own
+   * Start… on a project nobody planned from a conversation — would be started into a state where
+   * that is nobody's job. So the start opens its first one (`coordinatorAfterStart`), and this is
+   * the half of that which can still refuse: the same landing `coordinator` would choose for a
+   * first coordinator (`coordinatorLanding`'s free branch — where the project's work already runs),
+   * read rather than opened, and the two refusals `sessions.create` would give for it.
+   *
+   * Nothing to check, and nothing refused here, for a project that is not there or already started
+   * (the start's own 404 and 409 say so), or that already has a coordinator.
+   */
+  async assertStartCanOpenCoordinator(ownerId: string, id: string): Promise<void> {
+    const project = await this.prisma.project.findFirst({
+      where: { id, ownerId },
+      select: { startedAt: true, coordinatorSessionId: true, coordinatorWorkspaceId: true },
+    });
+    if (!project || project.startedAt || project.coordinatorSessionId) return;
+    const landing = project.coordinatorWorkspaceId ?? (await this.busiestAssignee(id));
+    const workspace = landing
+      ? await this.prisma.workspace.findFirst({
+          where: { id: landing, ownerId, deletedAt: null },
+          select: { enabled: true, runnerId: true },
+        })
+      : null;
+    if (workspace?.enabled && workspace.runnerId) return;
+    throw new ConflictException({
+      statusCode: 409,
+      error: 'Conflict',
+      code: START_COORDINATOR_UNAVAILABLE,
+      message: landing
+        ? 'Automatic needs a coordinator, and the workspace this project’s tasks run in cannot '
+          + 'open one: it is disabled, deleted or not on a runner. Nothing was started.'
+        : 'Automatic needs a coordinator, and this project has nowhere to open one: none of its '
+          + 'tasks is assigned to a workspace. Nothing was started.',
+      requiredAction:
+        'Assign the project’s tasks to a workspace on a runner, or start it with Automatic off.',
+    });
+  }
+
+  /**
+   * The coordinator a start leaves the project with, for the start's answer.
+   *
+   * Automatic on: resolve-or-create through `coordinator`, the same door every link that opens a
+   * coordinator goes through — the standing conversation handed back, or the project's first one
+   * opened where its work runs (`assertStartCanOpenCoordinator` checked it could be, before the
+   * start). Opened AFTER the start committed, so its opening is written for a started, Automatic
+   * project. Automatic off: whatever the project already has, and nothing opened — the owner is
+   * running it.
+   *
+   * Never a reason the start did not happen: it already has. A coordinator that could not be opened
+   * after all is logged and answered as null, and the project page offers to open one.
+   */
+  async coordinatorAfterStart(
+    ownerId: string,
+    id: string,
+    automatic: boolean,
+  ): Promise<{ sessionId: string; created: boolean } | null> {
+    if (!automatic) {
+      const project = await this.prisma.project.findFirst({
+        where: { id, ownerId },
+        select: { coordinatorSessionId: true },
+      });
+      return project?.coordinatorSessionId
+        ? { sessionId: project.coordinatorSessionId, created: false }
+        : null;
+    }
+    try {
+      const opened = await this.coordinator(ownerId, id);
+      return { sessionId: opened.sessionId, created: opened.created };
+    } catch (error) {
+      this.logger.warn(`project ${id} was started with Automatic on and no coordinator opened: ${
+        (error as { message?: string })?.message ?? String(error)}`);
+      return null;
+    }
   }
 
   /**

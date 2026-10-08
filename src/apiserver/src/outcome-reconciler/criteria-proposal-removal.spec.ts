@@ -528,13 +528,16 @@ test('the removal adds no compose service and no resident process', () => {
   const withoutExtensions = compose.replace(/^x-[^\n]*\n(?:[ \t][^\n]*\n|\n)*/gm, '');
   const services = [...withoutExtensions.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)]
     .map((match) => match[1]);
+  // wiki-worker and its start:wiki-worker are the wiki's server-side executor, which the account owner
+  // added on 2026-10-07 (docs/wiki-server-execution-design.md §4.1), not this removal;
+  // test/compose-topology.test.mjs (l) pins its whole definition.
   assert.deepEqual(services.sort(),
-    ['apiserver', 'gateway', 'pg-socket', 'pgbackup', 'postgres', 'web'],
+    ['apiserver', 'gateway', 'pg-socket', 'pgbackup', 'postgres', 'web', 'wiki-worker'],
     'the deployment is exactly the services it already had');
   const apiserver = JSON.parse(read('src/apiserver/package.json')) as
     { scripts: Record<string, string> };
   assert.deepEqual(Object.keys(apiserver.scripts).filter((name) => name.startsWith('start:')).sort(),
-    ['start:dev'], 'no new long-running entry point');
+    ['start:dev', 'start:wiki-worker'], 'no new long-running entry point');
 });
 
 test('the ruler the proposal protected is still installed, and the judging around it is not', () => {

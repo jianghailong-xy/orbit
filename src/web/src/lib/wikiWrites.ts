@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
   WikiAnchorInput,
+  WikiChangeset,
   WikiDecideAction,
   WikiEntryChanges,
   WikiEntryDraft,
@@ -121,8 +122,12 @@ export function proposeToWiki(spaceId: string, body: WikiProposeBody): Promise<{
   return api(`/wiki/spaces/${encodeURIComponent(spaceId)}/changesets`, { method: 'POST', body });
 }
 
-/** `POST /api/wiki/changesets/:id/decide` — the owner's answer, refused to every session. */
-export function decideWikiChangeset(changesetId: string, decisions: WikiDecision[]): Promise<unknown> {
+/**
+ * `POST /api/wiki/changesets/:id/decide` — the owner's answer, refused to every session. It answers with
+ * the changeset, every op carrying the decision the server recorded for it — which, for an op it could
+ * not apply, is `conflict` or `withdrawn` under a 200 (`wikiDecisionRefusal`).
+ */
+export function decideWikiChangeset(changesetId: string, decisions: WikiDecision[]): Promise<WikiChangeset> {
   return api(`/wiki/changesets/${encodeURIComponent(changesetId)}/decide`, {
     method: 'POST',
     body: { decisions },

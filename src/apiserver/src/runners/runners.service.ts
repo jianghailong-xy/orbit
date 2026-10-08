@@ -39,6 +39,7 @@ import { loginCodeRelay } from './login-code-relay';
 import { engineKeepsAccounts } from '../common/runner-engines';
 import { ACCOUNT_ID_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunnerDto } from './dto';
 import { accountPauseUntil } from '../common/account-pause';
+import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-delete';
 
 // Three missed 30s heartbeats — a runner quieter than this reads as offline.
 const OFFLINE_AFTER_MS = 90_000;
@@ -319,7 +320,7 @@ export class RunnersService {
     // user knows approving re-issues its credential rather than adding a 2nd machine.
     const runnerName = s.name;
     const nameConflict =
-      (await this.prisma.runner.count({ where: { ownerId, name: runnerName } })) > 0;
+      (await this.prisma.runner.count({ where: { ownerId, name: runnerName, managedRunner: { is: null } } })) > 0;
     return {
       userCode: s.userCode,
       name: s.name,
@@ -360,8 +361,9 @@ export class RunnersService {
       status: 'ONLINE' as const,
       lastHeartbeatAt: new Date(),
     };
+    // Never a managed runner: its identity and credential belong to its mapping, not to a name.
     const existing = await this.prisma.runner.findFirst({
-      where: { ownerId, name: runnerName },
+      where: { ownerId, name: runnerName, managedRunner: { is: null } },
       orderBy: { enrolledAt: 'desc' },
     });
     const runner = existing
@@ -440,6 +442,10 @@ export class RunnersService {
    * Antigravity signs in a Google account, which only a runner that relays that sign-in can do: any
    * other is refused here, in words the person who pressed the button can act on, rather than left
    * to fail on the machine.
+   *
+   * Kimi may be told which of its two sites to sign in on (`region`: kimi.com or kimi.ai, whose
+   * accounts are separate). Naming none is the bare `kimi login` it always was, which goes wherever
+   * the CLI decides; a runner too old to choose is refused at the heartbeat that would hand it over.
    */
   async startLogin(ownerId: string, id: string, dto: StartLoginDto = {}): Promise<RunnerLoginState> {
     const engine: LoginEngine = dto.engine ?? 'claude';
@@ -455,6 +461,9 @@ export class RunnersService {
     if (dto.accountName != null && !accountName) {
       throw new BadRequestException('A new account needs a name');
     }
+    if (dto.region != null && engine !== 'kimi') {
+      throw new BadRequestException('Only Kimi Code signs in on a site of your choosing');
+    }
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
     if (!runner) throw new NotFoundException('runner not found');
     if (runner.status === 'OFFLINE') {
@@ -469,6 +478,7 @@ export class RunnersService {
         loginEngine: engine,
         loginAccount: dto.account ?? null,
         loginAccountName: accountName ?? null,
+        loginRegion: dto.region ?? null,
         loginUrl: null,
         loginUserCode: null,
         loginCode: null,
@@ -542,6 +552,7 @@ export class RunnersService {
         loginEngine: stopOnRunner ? runner.loginEngine : null,
         loginAccount: null,
         loginAccountName: null,
+        loginRegion: null,
         loginUrl: null,
         loginUserCode: null,
         loginCode: null,
@@ -921,6 +932,7 @@ export class RunnersService {
   async removeRunner(ownerId: string, id: string) {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
     if (!runner) throw new NotFoundException('runner not found');
+    await refuseManagedRunnerDeletion(this.prisma, id);
     await this.prisma.runner.delete({ where: { id } });
     return { ok: true };
   }
