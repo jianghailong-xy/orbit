@@ -15,6 +15,15 @@ public enum ProvidersOverview {
     public static let editOnWeb = "Adding or changing a key happens on the web."
     /// A pool's page when the pool has gone — deleted, or left — as the web page says it.
     public static let poolGone = "That pool no longer exists."
+    /// A key's page when the key has gone, as the web's edit page says it.
+    public static let keyGone = "That provider no longer exists."
+
+    /// The line under a key's name: its default model — or, for a DeepSeek Harness key, whose models
+    /// come from the runtime itself and which has no default, where it runs.
+    public static func keyLine(_ key: ConfiguredProvider) -> String? {
+        if let model = key.defaultModel, !model.isEmpty { return model }
+        return key.runtime == "dsh" ? "Runs on DeepSeek Harness" : nil
+    }
 
     /// A runner's line: how many of its engines are signed in (web's `summaryOf`, counted over the
     /// engines the page lists), and first that it is offline when it is — the machine can't take

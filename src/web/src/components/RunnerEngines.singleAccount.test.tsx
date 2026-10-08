@@ -113,7 +113,9 @@ const ROW: {
     state: 'signed out',
     auth: 'no',
     codex: {
-      text: ['Codex', '0.156.0', 'Signed out', 'Sign in to see quota', 'Sign in'],
+      // What being signed out costs, said under the row: Codex is this machine's only account.
+      text: ['Codex', '0.156.0', 'Signed out', 'Sign in to see quota', 'Sign in',
+        'Sessions on this runner can’t use Codex until you sign in again.'],
       tag: 'orange',
       bar: null,
       buttons: ['Sign in · primary'],

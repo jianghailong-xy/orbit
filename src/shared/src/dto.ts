@@ -456,6 +456,53 @@ export interface PlanUsage extends PlanUsageSnapshot {
   antigravity?: PlanUsageSnapshot;
 }
 
+/** Why the DeepSeek account balance behind a key could not be read: DeepSeek refused the key
+ *  (401/403), the server never reached DeepSeek, or DeepSeek answered with an error or with
+ *  something that is not a balance. */
+export type ProviderBalanceFailure = 'KEY_REJECTED' | 'NETWORK' | 'UPSTREAM_ERROR';
+
+/** One currency of a DeepSeek account's balance. The amounts are the decimal strings DeepSeek
+ *  sends (`balance_infos[]`), never computed here; DeepSeek spends granted before topped-up. */
+export interface ProviderBalanceAmount {
+  currency: string;
+  totalBalance: string;
+  grantedBalance: string;
+  toppedUpBalance: string;
+}
+
+/** Another of the owner's DeepSeek providers holding the very same key — so the same account, and
+ *  the same balance. */
+export interface ProviderBalanceSibling {
+  id: string;
+  label: string;
+}
+
+/** One read of a DeepSeek account's balance, as the server keeps it for a key. A failure carries why
+ *  and when it was tried, and no amount at all — a balance that could not be read is never a 0. */
+export type ProviderBalanceRead =
+  | {
+      ok: true;
+      balances: ProviderBalanceAmount[];
+      /** DeepSeek's `is_available`: false when the account can't pay for more requests. */
+      isAvailable: boolean;
+      /** When the server asked DeepSeek (ISO-8601). Providers sharing a key share this read. */
+      fetchedAt: string;
+    }
+  | {
+      ok: false;
+      reason: ProviderBalanceFailure;
+      /** What happened, in a sentence; the clients add what to do about it where they are. */
+      message: string;
+      fetchedAt: string;
+    };
+
+/**
+ * GET /providers/mine/:id/balance: the balance of the whole DeepSeek account a provider's stored
+ * key belongs to (DeepSeek's `GET /user/balance`, asked by the server — the key never leaves it).
+ * It is not what any session spent: DeepSeek has no per-request or per-day spend API.
+ */
+export type ProviderBalance = ProviderBalanceRead & { sharedWith: ProviderBalanceSibling[] };
+
 export interface RunnerHeartbeatRequest {
   status: RunnerStatus;
   /** How many more active turns the runner can accept right now. Warm idle
@@ -1273,6 +1320,10 @@ export interface RunnerEngineAccount {
    *  read one for this account, and for engines that report none. Two accounts showing the same one
    *  are the same account. */
   fingerprintPrefix?: string;
+  /** When this signed-in account's login lapses, ISO 8601: the CLI's own expiry for it (Claude Code's
+   *  refreshTokenExpiresAt, which the CLI warns about three days ahead). Absent where the CLI recorded
+   *  none, for an account not signed in, and for every engine but Claude Code. */
+  loginExpiresAt?: string;
 }
 
 /**

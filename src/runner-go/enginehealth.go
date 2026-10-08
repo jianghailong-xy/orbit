@@ -142,15 +142,35 @@ func accountHealthWithUsage(kind accountSlotKind, binPath string, defaultAuth au
 				auth = accountLoginStatus(kind, binPath, slot.Dir)
 			}
 		}
-		out = append(out, EngineAccountReport{
+		report := EngineAccountReport{
 			ID:        slot.ID,
 			Name:      slot.Name,
 			Dir:       slot.Dir,
 			CodexHome: codexHomeOf(kind, slot.Dir),
 			Auth:      authWord(auth),
-		})
+		}
+		if kind.engine == providerClaude && auth == authYes {
+			report.LoginExpiresAt = claudeLoginExpiry(slot)
+		}
+		out = append(out, report)
 	}
 	return out, usage
+}
+
+// claudeLoginExpiry is when a Claude account's login lapses, RFC 3339, or "" when its stored
+// credentials record no such time or hold no refresh token to lapse. Default's login is read where
+// the quota read reads it — the runner's own, the Keychain on a Mac — and an added account's from
+// its own directory, never from Default's.
+func claudeLoginExpiry(slot accountSlot) string {
+	dir := slot.Dir
+	if slot.ID == accountSlotDefaultID {
+		dir = ""
+	}
+	login, err := claudeStoredLoginIn(dir)
+	if err != nil || !login.refreshable || login.loginExpiresAt.IsZero() {
+		return ""
+	}
+	return login.loginExpiresAt.UTC().Format(time.RFC3339)
 }
 
 // withAccountUsage files each added account's own quota under the engine snapshot's accounts, the

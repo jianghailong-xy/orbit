@@ -2773,9 +2773,12 @@ model ProjectCodebase {
 /// One attempt the platform makes to put a source branch onto a project's integration line
 /// (docs/project-integration-line-contract.md §2.1, migration 0281).
 ///
-/// Not a session: nothing here starts an engine. A runner claims the row over its heartbeat, does the
-/// git work and runs the checks in a throwaway worktree, and reports back — the whole of it is
-/// mechanical, which is why it is a queue and not a conversation.
+/// Not a session itself, and nothing here starts an engine. A runner claims the row over its
+/// heartbeat, does the git work and runs the checks in a throwaway worktree, and reports back.
+/// Contract revision 12 (§2.9) requires each job to become one attempt inside a platform-driven
+/// landing session, which starts no engine and makes no decisions; that is a requirement on the
+/// landing-session tasks, not yet in this schema — today no session row stands for a landing, and
+/// `sessionId` below is the source work session.
 ///
 /// Two constraints carry the contract and neither can be spelled here: the partial unique index over
 /// `serialKey` WHERE state = 'RUNNING' (J1 — one integration at a time per repository and target ref,
@@ -2800,6 +2803,8 @@ model ProjectIntegrationJob {
   /// SET NULL, not CASCADE: the audit of what the platform pushed outlives the row that asked for it.
   taskId      String?  @map("task_id") @db.Uuid
   task        Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  /// The source work session — never the landing session contract revision 12 adds (§2.9);
+  /// routing, base SHA, the claim guard and receipts read it.
   sessionId   String?  @map("session_id") @db.Uuid
   session     Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   promotionId String?  @map("promotion_id") @db.Uuid
