@@ -68,7 +68,7 @@ function Submenu({ item, contents, container, zIndex }: { item: MenuAction; cont
       handOver(event, target, ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter', ' ', 'ArrowLeft', 'Tab']);
     }}>{contents}<RightOutlined className="orbit-menu-submenu-icon" aria-hidden /></BaseMenu.SubmenuTrigger>
     <BaseMenu.Portal container={container()}>
-      <BaseMenu.Positioner side="right" align="start" sideOffset={4} collisionPadding={8} className="orbit-floating-positioner" style={{ zIndex: zIndex + 1 }}>
+      <BaseMenu.Positioner side="right" align="start" sideOffset={4} collisionPadding={8} positionMethod={layer.positionMethod} className="orbit-floating-positioner" style={{ zIndex: zIndex + 1 }}>
         <BaseMenu.Popup ref={popup} className="orbit-menu" onClick={(event) => event.stopPropagation()}><Items items={item.children!} container={container} zIndex={zIndex + 1} /></BaseMenu.Popup>
       </BaseMenu.Positioner>
     </BaseMenu.Portal>
@@ -126,7 +126,7 @@ export function Menu({ trigger, items, disabled, variant = 'default', side = 'bo
       if (layer.open && menu) handOver(event, menu.querySelector<HTMLElement>('[data-highlighted]') ?? menu, ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter', 'Tab']);
     }} />
     <BaseMenu.Portal container={layer.container()}>
-      <BaseMenu.Positioner ref={positioner} side={side} align={align} {...placement} className="orbit-floating-positioner" style={{ zIndex: layer.zIndex }}>
+      <BaseMenu.Positioner ref={positioner} side={side} align={align} {...placement} positionMethod={layer.positionMethod} className="orbit-floating-positioner" style={{ zIndex: layer.zIndex }}>
         <BaseMenu.Popup ref={popup} finalFocus={returnFocus} className={`orbit-menu${popupClassName ? ` ${popupClassName}` : ''}`} data-variant={variant} onClick={(event) => event.stopPropagation()}
           style={{ '--orbit-menu-anchor-width': anchorWidth === undefined ? undefined : `${anchorWidth}px`, ...popupStyle } as CSSProperties}>
           <Items items={items} container={layer.container} zIndex={layer.zIndex} />

@@ -53,6 +53,64 @@ export function collapseWhitespace(text: string): string {
   return text.split(GO_FIELDS).filter((field) => field !== '').join(' ');
 }
 
+/**
+ * One field of a JSON object as Go's encoding/json reads a struct field: the exact key first, then any
+ * case of it — `{"Verdict": …}` names Verdict exactly as `{"verdict": …}` does. undefined when no case
+ * of the key is there.
+ */
+export function answerField(value: Record<string, unknown>, name: string): unknown {
+  const keys = Object.keys(value);
+  const found = keys.find((key) => key === name) ?? keys.find((key) => key.toLowerCase() === name.toLowerCase());
+  return found === undefined ? undefined : value[found];
+}
+
+/** U+FFFD, what Go's encoding/json writes for a lone surrogate (`\uD800` with no `\uDC00` after it). */
+const REPLACEMENT_CHAR = '�';
+
+/**
+ * Go's json.Unmarshal of a model's answer, where JSON.parse alone answers differently: a number past
+ * float64's range is an error there (a map or slice decode is a float64 decode), not Infinity, and a
+ * lone surrogate in any string or key comes out U+FFFD. Both are put right, so the decoded answer is
+ * the value Go hands its checks.
+ */
+export function parseAnswerJson(body: string): unknown {
+  const value: unknown = JSON.parse(body, (_key: string, item: unknown) => {
+    if (typeof item === 'number' && !Number.isFinite(item)) throw new SyntaxError('number out of float64 range');
+    return item;
+  });
+  return fixAnswerStrings(value);
+}
+
+/** A decoded value with every string's — and key's — lone surrogates U+FFFD, as Go's decoder writes them. */
+export function fixAnswerStrings(value: unknown): unknown {
+  if (typeof value === 'string') return fixLoneSurrogates(value);
+  if (Array.isArray(value)) return value.map(fixAnswerStrings);
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [fixLoneSurrogates(key), fixAnswerStrings(item)]),
+    );
+  }
+  return value;
+}
+
+function fixLoneSurrogates(text: string): string {
+  if (!/[\uD800-\uDFFF]/.test(text)) return text;
+  let out = '';
+  for (let i = 0; i < text.length; i += 1) {
+    const code = text.charCodeAt(i);
+    if (code >= 0xd800 && code <= 0xdbff && i + 1 < text.length) {
+      const next = text.charCodeAt(i + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        out += text.slice(i, i + 2);
+        i += 1;
+        continue;
+      }
+    }
+    out += code >= 0xd800 && code <= 0xdfff ? REPLACEMENT_CHAR : text[i];
+  }
+  return out;
+}
+
 /** The first `max` characters (code points), as Go's cutRunes cuts. */
 export function cutRunes(text: string, max: number): string {
   const runes = [...text];
@@ -290,7 +348,7 @@ export function wikiImportRepair(text: string): string {  const quoted = text.re
 function wikiImportEntries(body: string): WikiImportAnswerEntry[] | null {
   let value: unknown;
   try {
-    value = JSON.parse(body);
+    value = parseAnswerJson(body);
   } catch {
     return null;
   }
@@ -343,7 +401,7 @@ function decodeArrayAt(body: string, start: number): { value: WikiImportAnswerEn
       if (depth === 0) {
         const text = body.slice(start, i + 1);
         try {
-          const value: unknown = JSON.parse(text);
+          const value: unknown = parseAnswerJson(text);
           if (!Array.isArray(value)) return null;
           const list = asEntryList(value);
           return list ? { value: list, span: Buffer.byteLength(text, 'utf8') } : null;

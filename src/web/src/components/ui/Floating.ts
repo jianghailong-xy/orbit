@@ -137,5 +137,12 @@ export function useFloating({ open, onOpenChange }: FloatingProps) {
   const layer = useOverlayChild(shown, () => setOpen(false));
   // A static (server) render has no document; the popup is closed there and its portal renders nothing.
   const container = () => (typeof document === 'undefined' ? undefined : layer.getContainer());
-  return { open: shown, setOpen, container, zIndex: layer.zIndex };
+  // Base UI measures a popup it has not placed yet while that popup is position: fixed, and applies the
+  // result in the method asked for. Portaled into an overlay, an absolute popup is laid out against the
+  // overlay's box, so the first placement, measured in page coordinates, puts it off by the overlay's
+  // offset until the next measurement. Fixed, it is placed in page coordinates from the first one, as the
+  // replaced popups were (in body), and is not held to the overlay's width. Portaled to body, absolute
+  // already is page coordinates, and moves with the page natively as the replaced ones did.
+  const positionMethod: 'absolute' | 'fixed' = layer.inOverlay ? 'fixed' : 'absolute';
+  return { open: shown, setOpen, container, zIndex: layer.zIndex, positionMethod };
 }

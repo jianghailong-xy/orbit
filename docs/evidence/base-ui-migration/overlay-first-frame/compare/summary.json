@@ -1,0 +1,6101 @@
+{
+ "final-pilot-ref1-fix1": {
+  "screenshots": 256,
+  "identical": 220,
+  "antialias": 28,
+  "beyond": {
+   "chromium-dark-phone/pilot-share-turn-off.png": {
+    "pixels": 31,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       43,
+       52
+      ],
+      "y": [
+       176,
+       176
+      ],
+      "pixels": 5,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       43,
+       43
+      ],
+      "y": [
+       187,
+       196
+      ],
+      "pixels": 4,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       43,
+       52
+      ],
+      "y": [
+       207,
+       207
+      ],
+      "pixels": 6,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       32,
+       33
+      ],
+      "y": [
+       393,
+       395
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       32,
+       33
+      ],
+      "y": [
+       404,
+       406
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       32,
+       33
+      ],
+      "y": [
+       448,
+       450
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "chromium-light-desktop/pilot-share-conversations.png": {
+    "pixels": 55635,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       352,
+       927
+      ],
+      "y": [
+       81,
+       635
+      ],
+      "pixels": 55584,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       376,
+       406
+      ],
+      "y": [
+       82,
+       87
+      ],
+      "pixels": 51,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "chromium-light-desktop/pilot-share-expiry-open.png": {
+    "pixels": 57109,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       352,
+       927
+      ],
+      "y": [
+       81,
+       688
+      ],
+      "pixels": 57058,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       376,
+       406
+      ],
+      "y": [
+       82,
+       87
+      ],
+      "pixels": 51,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "chromium-light-desktop/pilot-share-public.png": {
+    "pixels": 55635,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       352,
+       927
+      ],
+      "y": [
+       81,
+       635
+      ],
+      "pixels": 55584,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       376,
+       406
+      ],
+      "y": [
+       82,
+       87
+      ],
+      "pixels": 51,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "chromium-light-desktop/pilot-share-turn-off.png": {
+    "pixels": 55636,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       352,
+       927
+      ],
+      "y": [
+       81,
+       635
+      ],
+      "pixels": 55585,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       376,
+       406
+      ],
+      "y": [
+       82,
+       87
+      ],
+      "pixels": 51,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "chromium-light-phone/pilot-share-access-menu.png": {
+    "pixels": 12365,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       346,
+       389
+      ],
+      "y": [
+       173,
+       196
+      ],
+      "pixels": 264,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       41,
+       389
+      ],
+      "y": [
+       183,
+       345
+      ],
+      "pixels": 12079,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       75,
+       75
+      ],
+      "y": [
+       184,
+       184
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       41,
+       48
+      ],
+      "y": [
+       309,
+       310
+      ],
+      "pixels": 10,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       387,
+       389
+      ],
+      "y": [
+       309,
+       315
+      ],
+      "pixels": 11,
+      "maxChannelDiff": 2
+     }
+    ]
+   },
+   "chromium-light-phone/pilot-share-expiry-open.png": {
+    "pixels": 4720,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       78,
+       229
+      ],
+      "y": [
+       592,
+       718
+      ],
+      "pixels": 4708,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       113,
+       113
+      ],
+      "y": [
+       593,
+       593
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       78,
+       86
+      ],
+      "y": [
+       682,
+       683
+      ],
+      "pixels": 11,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "chromium-light-phone/pilot-share-turn-off.png": {
+    "pixels": 27,
+    "maxChannelDiff": 6,
+    "clusters": [
+     {
+      "x": [
+       43,
+       51
+      ],
+      "y": [
+       176,
+       176
+      ],
+      "pixels": 6,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       43,
+       43
+      ],
+      "y": [
+       187,
+       196
+      ],
+      "pixels": 5,
+      "maxChannelDiff": 6
+     },
+     {
+      "x": [
+       43,
+       51
+      ],
+      "y": [
+       207,
+       207
+      ],
+      "pixels": 6,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       33,
+       33
+      ],
+      "y": [
+       394,
+       395
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       32,
+       33
+      ],
+      "y": [
+       404,
+       405
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       33,
+       33
+      ],
+      "y": [
+       449,
+       450
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     }
+    ]
+   }
+  },
+  "antialiasShots": [
+   "chromium-dark-desktop/pilot-inputs.png",
+   "chromium-dark-desktop/pilot-remove-confirm.png",
+   "chromium-dark-desktop/pilot-reopen-refused.png",
+   "chromium-dark-desktop/pilot-reopen.png",
+   "chromium-dark-desktop/pilot-share-access-menu.png",
+   "chromium-dark-desktop/pilot-share-error.png",
+   "chromium-dark-desktop/pilot-share-expiry-open.png",
+   "chromium-dark-desktop/pilot-share-loading.png",
+   "chromium-dark-desktop/pilot-share-private.png",
+   "chromium-dark-phone/pilot-delete-confirm.png",
+   "chromium-dark-phone/pilot-remove-confirm.png",
+   "chromium-dark-phone/pilot-run-hint.png",
+   "chromium-dark-phone/pilot-share-access-menu.png",
+   "chromium-dark-phone/pilot-share-expiry-open.png",
+   "chromium-light-desktop/pilot-assignee-open.png",
+   "chromium-light-desktop/pilot-dependencies.png",
+   "chromium-light-desktop/pilot-dependency-list.png",
+   "chromium-light-desktop/pilot-dependency-view-hover.png",
+   "chromium-light-desktop/pilot-detail.png",
+   "chromium-light-desktop/pilot-field-hover.png",
+   "chromium-light-desktop/pilot-inputs.png",
+   "chromium-light-desktop/pilot-prerequisite-open.png",
+   "chromium-light-desktop/pilot-reopen-refused.png",
+   "chromium-light-desktop/pilot-reopen.png",
+   "chromium-light-desktop/pilot-share-access-menu.png",
+   "chromium-light-desktop/pilot-share-private.png",
+   "chromium-light-phone/pilot-delete-confirm.png",
+   "chromium-light-phone/pilot-run-hint.png"
+  ],
+  "traces": 72,
+  "tracesEqual": 59,
+  "tracesRequestsDiffer": [],
+  "tracesSnapshotOnly": {
+   "chromium-dark-desktop :: task detail pilot \u203a fields, pickers and the panel header": [
+    "list pick Later"
+   ],
+   "chromium-dark-desktop :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": [
+    "antigravity account Work"
+   ],
+   "chromium-dark-desktop :: workspace account pilot \u203a the Claude account picker of a new workspace": [
+    "account Work"
+   ],
+   "chromium-dark-phone :: task detail pilot \u203a fields, pickers and the panel header": [
+    "model pick Sonnet"
+   ],
+   "chromium-dark-phone :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": [
+    "antigravity account Work"
+   ],
+   "chromium-dark-phone :: workspace account pilot \u203a the Claude account picker of a new workspace": [
+    "account Work"
+   ],
+   "chromium-light-desktop :: task detail pilot \u203a dependencies, inputs and comments": [
+    "input removed"
+   ],
+   "chromium-light-phone :: task detail pilot \u203a dependencies, inputs and comments": [
+    "prerequisite added"
+   ],
+   "chromium-light-phone :: task detail pilot \u203a fields, pickers and the panel header": [
+    "list pick Later",
+    "suggested pick L"
+   ],
+   "chromium-light-phone :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": [
+    "antigravity account Work"
+   ],
+   "webkit-dark-desktop :: share dialog pilot \u203a from Only you to a public link and back": [
+    "expiry 30 days"
+   ],
+   "webkit-light-desktop :: share dialog pilot \u203a from Only you to a public link and back": [
+    "expiry 30 days"
+   ],
+   "webkit-light-phone :: share dialog pilot \u203a from Only you to a public link and back": [
+    "expiry 30 days"
+   ]
+  },
+  "styleCaptures": 256,
+  "styleCapturesDiffering": 0
+ },
+ "final-pilot-ref2-fix1": {
+  "screenshots": 256,
+  "identical": 205,
+  "antialias": 37,
+  "beyond": {
+   "chromium-dark-phone/pilot-share-turn-off.png": {
+    "pixels": 31,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       43,
+       52
+      ],
+      "y": [
+       176,
+       176
+      ],
+      "pixels": 5,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       43,
+       43
+      ],
+      "y": [
+       187,
+       196
+      ],
+      "pixels": 4,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       43,
+       52
+      ],
+      "y": [
+       207,
+       207
+      ],
+      "pixels": 6,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       32,
+       33
+      ],
+      "y": [
+       393,
+       395
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       32,
+       33
+      ],
+      "y": [
+       404,
+       406
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       32,
+       33
+      ],
+      "y": [
+       448,
+       450
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "chromium-light-phone/pilot-share-access-menu.png": {
+    "pixels": 12365,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       346,
+       389
+      ],
+      "y": [
+       173,
+       196
+      ],
+      "pixels": 264,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       41,
+       389
+      ],
+      "y": [
+       183,
+       345
+      ],
+      "pixels": 12079,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       75,
+       75
+      ],
+      "y": [
+       184,
+       184
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       41,
+       48
+      ],
+      "y": [
+       309,
+       310
+      ],
+      "pixels": 10,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       387,
+       389
+      ],
+      "y": [
+       309,
+       315
+      ],
+      "pixels": 11,
+      "maxChannelDiff": 2
+     }
+    ]
+   },
+   "chromium-light-phone/pilot-share-expiry-open.png": {
+    "pixels": 4720,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       78,
+       229
+      ],
+      "y": [
+       592,
+       718
+      ],
+      "pixels": 4708,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       113,
+       113
+      ],
+      "y": [
+       593,
+       593
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       78,
+       86
+      ],
+      "y": [
+       682,
+       683
+      ],
+      "pixels": 11,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "chromium-light-phone/pilot-share-turn-off.png": {
+    "pixels": 27,
+    "maxChannelDiff": 6,
+    "clusters": [
+     {
+      "x": [
+       43,
+       51
+      ],
+      "y": [
+       176,
+       176
+      ],
+      "pixels": 6,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       43,
+       43
+      ],
+      "y": [
+       187,
+       196
+      ],
+      "pixels": 5,
+      "maxChannelDiff": 6
+     },
+     {
+      "x": [
+       43,
+       51
+      ],
+      "y": [
+       207,
+       207
+      ],
+      "pixels": 6,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       33,
+       33
+      ],
+      "y": [
+       394,
+       395
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       32,
+       33
+      ],
+      "y": [
+       404,
+       405
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       33,
+       33
+      ],
+      "y": [
+       449,
+       450
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "webkit-light-phone/pilot-assignee-open.png": {
+    "pixels": 70,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       31,
+       32
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       45,
+       45
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       58,
+       59
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       72,
+       72
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       85,
+       86
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       99,
+       99
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     }
+    ]
+   },
+   "webkit-light-phone/pilot-delete-confirm.png": {
+    "pixels": 142,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       31,
+       32
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       45,
+       45
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       58,
+       59
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       72,
+       72
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       85,
+       86
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       99,
+       99
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     }
+    ]
+   },
+   "webkit-light-phone/pilot-detail.png": {
+    "pixels": 70,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       31,
+       32
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       45,
+       45
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       58,
+       59
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       72,
+       72
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       85,
+       86
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       99,
+       99
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     }
+    ]
+   },
+   "webkit-light-phone/pilot-field-hover.png": {
+    "pixels": 70,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       31,
+       32
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       45,
+       45
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       58,
+       59
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       72,
+       72
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       85,
+       86
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       99,
+       99
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     }
+    ]
+   },
+   "webkit-light-phone/pilot-list-open.png": {
+    "pixels": 70,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       31,
+       32
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       45,
+       45
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       58,
+       59
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       72,
+       72
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       85,
+       86
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       99,
+       99
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     }
+    ]
+   },
+   "webkit-light-phone/pilot-list-search.png": {
+    "pixels": 70,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       31,
+       32
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       45,
+       45
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       58,
+       59
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       72,
+       72
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       85,
+       86
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       99,
+       99
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     }
+    ]
+   },
+   "webkit-light-phone/pilot-model-open.png": {
+    "pixels": 70,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       31,
+       32
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       45,
+       45
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       58,
+       59
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       72,
+       72
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       85,
+       86
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       99,
+       99
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     }
+    ]
+   },
+   "webkit-light-phone/pilot-provider-open.png": {
+    "pixels": 70,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       31,
+       32
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       45,
+       45
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       58,
+       59
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       72,
+       72
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       85,
+       86
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       99,
+       99
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     }
+    ]
+   },
+   "webkit-light-phone/pilot-run-hint.png": {
+    "pixels": 142,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       31,
+       32
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       45,
+       45
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       58,
+       59
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       72,
+       72
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       85,
+       86
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       99,
+       99
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     }
+    ]
+   },
+   "webkit-light-phone/pilot-suggested-open.png": {
+    "pixels": 70,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       31,
+       32
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       45,
+       45
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       58,
+       59
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       72,
+       72
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       85,
+       86
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       99,
+       99
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     }
+    ]
+   }
+  },
+  "antialiasShots": [
+   "chromium-dark-desktop/pilot-dependencies.png",
+   "chromium-dark-desktop/pilot-dependency-list.png",
+   "chromium-dark-desktop/pilot-dependency-view-hover.png",
+   "chromium-dark-desktop/pilot-inputs.png",
+   "chromium-dark-desktop/pilot-p0-share-focused.png",
+   "chromium-dark-desktop/pilot-prerequisite-open.png",
+   "chromium-dark-desktop/pilot-remove-confirm.png",
+   "chromium-dark-desktop/pilot-reopen-refused.png",
+   "chromium-dark-desktop/pilot-reopen.png",
+   "chromium-dark-desktop/pilot-share-access-menu.png",
+   "chromium-dark-desktop/pilot-share-expiry-open.png",
+   "chromium-dark-desktop/pilot-share-loading.png",
+   "chromium-dark-phone/pilot-delete-confirm.png",
+   "chromium-dark-phone/pilot-remove-confirm.png",
+   "chromium-dark-phone/pilot-run-hint.png",
+   "chromium-dark-phone/pilot-share-access-menu.png",
+   "chromium-dark-phone/pilot-share-expiry-open.png",
+   "chromium-light-desktop/pilot-assignee-open.png",
+   "chromium-light-desktop/pilot-delete-confirm.png",
+   "chromium-light-desktop/pilot-detail.png",
+   "chromium-light-desktop/pilot-field-hover.png",
+   "chromium-light-desktop/pilot-inputs.png",
+   "chromium-light-desktop/pilot-list-open.png",
+   "chromium-light-desktop/pilot-list-search.png",
+   "chromium-light-desktop/pilot-model-open.png",
+   "chromium-light-desktop/pilot-provider-open.png",
+   "chromium-light-desktop/pilot-reopen-refused.png",
+   "chromium-light-desktop/pilot-reopen.png",
+   "chromium-light-desktop/pilot-share-access-menu.png",
+   "chromium-light-desktop/pilot-share-conversations.png",
+   "chromium-light-desktop/pilot-share-expiry-open.png",
+   "chromium-light-desktop/pilot-share-private.png",
+   "chromium-light-desktop/pilot-share-public.png",
+   "chromium-light-desktop/pilot-share-turn-off.png",
+   "chromium-light-desktop/pilot-suggested-open.png",
+   "chromium-light-phone/pilot-delete-confirm.png",
+   "chromium-light-phone/pilot-run-hint.png"
+  ],
+  "traces": 72,
+  "tracesEqual": 66,
+  "tracesRequestsDiffer": [],
+  "tracesSnapshotOnly": {
+   "chromium-dark-phone :: task detail pilot \u203a fields, pickers and the panel header": [
+    "model pick Sonnet"
+   ],
+   "chromium-dark-phone :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": [
+    "antigravity account Work"
+   ],
+   "chromium-dark-phone :: workspace account pilot \u203a the Claude account picker of a new workspace": [
+    "account Work"
+   ],
+   "chromium-light-phone :: task detail pilot \u203a dependencies, inputs and comments": [
+    "prerequisite added"
+   ],
+   "webkit-dark-phone :: share dialog pilot \u203a from Only you to a public link and back": [
+    "turned off"
+   ],
+   "webkit-light-desktop :: share dialog pilot \u203a from Only you to a public link and back": [
+    "expiry 30 days"
+   ]
+  },
+  "styleCaptures": 256,
+  "styleCapturesDiffering": 0
+ },
+ "final-pilot-ref1-ref2": {
+  "screenshots": 256,
+  "identical": 215,
+  "antialias": 27,
+  "beyond": {
+   "chromium-light-desktop/pilot-share-conversations.png": {
+    "pixels": 55655,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       352,
+       927
+      ],
+      "y": [
+       81,
+       635
+      ],
+      "pixels": 55584,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       376,
+       406
+      ],
+      "y": [
+       82,
+       87
+      ],
+      "pixels": 51,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       1060,
+       1062
+      ],
+      "y": [
+       715,
+       736
+      ],
+      "pixels": 20,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "chromium-light-desktop/pilot-share-expiry-open.png": {
+    "pixels": 57129,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       352,
+       927
+      ],
+      "y": [
+       81,
+       688
+      ],
+      "pixels": 57058,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       376,
+       406
+      ],
+      "y": [
+       82,
+       87
+      ],
+      "pixels": 51,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       1060,
+       1062
+      ],
+      "y": [
+       715,
+       736
+      ],
+      "pixels": 20,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "chromium-light-desktop/pilot-share-public.png": {
+    "pixels": 55655,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       352,
+       927
+      ],
+      "y": [
+       81,
+       635
+      ],
+      "pixels": 55584,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       376,
+       406
+      ],
+      "y": [
+       82,
+       87
+      ],
+      "pixels": 51,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       1060,
+       1062
+      ],
+      "y": [
+       715,
+       736
+      ],
+      "pixels": 20,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "chromium-light-desktop/pilot-share-turn-off.png": {
+    "pixels": 55656,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       352,
+       927
+      ],
+      "y": [
+       81,
+       635
+      ],
+      "pixels": 55585,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       376,
+       406
+      ],
+      "y": [
+       82,
+       87
+      ],
+      "pixels": 51,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       1060,
+       1062
+      ],
+      "y": [
+       715,
+       736
+      ],
+      "pixels": 20,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "webkit-light-phone/pilot-assignee-open.png": {
+    "pixels": 70,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       31,
+       32
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       45,
+       45
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       58,
+       59
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       72,
+       72
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       85,
+       86
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       99,
+       99
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     }
+    ]
+   },
+   "webkit-light-phone/pilot-delete-confirm.png": {
+    "pixels": 142,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       31,
+       32
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       45,
+       45
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       58,
+       59
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       72,
+       72
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       85,
+       86
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       99,
+       99
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     }
+    ]
+   },
+   "webkit-light-phone/pilot-detail.png": {
+    "pixels": 70,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       31,
+       32
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       45,
+       45
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       58,
+       59
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       72,
+       72
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       85,
+       86
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       99,
+       99
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     }
+    ]
+   },
+   "webkit-light-phone/pilot-field-hover.png": {
+    "pixels": 70,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       31,
+       32
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       45,
+       45
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       58,
+       59
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       72,
+       72
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       85,
+       86
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       99,
+       99
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     }
+    ]
+   },
+   "webkit-light-phone/pilot-list-open.png": {
+    "pixels": 70,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       31,
+       32
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       45,
+       45
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       58,
+       59
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       72,
+       72
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       85,
+       86
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       99,
+       99
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     }
+    ]
+   },
+   "webkit-light-phone/pilot-list-search.png": {
+    "pixels": 70,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       31,
+       32
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       45,
+       45
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       58,
+       59
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       72,
+       72
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       85,
+       86
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       99,
+       99
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     }
+    ]
+   },
+   "webkit-light-phone/pilot-model-open.png": {
+    "pixels": 70,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       31,
+       32
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       45,
+       45
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       58,
+       59
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       72,
+       72
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       85,
+       86
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       99,
+       99
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     }
+    ]
+   },
+   "webkit-light-phone/pilot-provider-open.png": {
+    "pixels": 70,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       31,
+       32
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       45,
+       45
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       58,
+       59
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       72,
+       72
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       85,
+       86
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       99,
+       99
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     }
+    ]
+   },
+   "webkit-light-phone/pilot-run-hint.png": {
+    "pixels": 142,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       31,
+       32
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       45,
+       45
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       58,
+       59
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       72,
+       72
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       85,
+       86
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       99,
+       99
+      ],
+      "y": [
+       682,
+       682
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     }
+    ]
+   },
+   "webkit-light-phone/pilot-suggested-open.png": {
+    "pixels": 70,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       31,
+       32
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       45,
+       45
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       58,
+       59
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       72,
+       72
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       85,
+       86
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       99,
+       99
+      ],
+      "y": [
+       716,
+       716
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 2
+     }
+    ]
+   }
+  },
+  "antialiasShots": [
+   "chromium-dark-desktop/pilot-dependencies.png",
+   "chromium-dark-desktop/pilot-dependency-list.png",
+   "chromium-dark-desktop/pilot-dependency-view-hover.png",
+   "chromium-dark-desktop/pilot-p0-share-focused.png",
+   "chromium-dark-desktop/pilot-prerequisite-open.png",
+   "chromium-dark-desktop/pilot-share-error.png",
+   "chromium-dark-desktop/pilot-share-loading.png",
+   "chromium-dark-desktop/pilot-share-private.png",
+   "chromium-dark-phone/pilot-delete-confirm.png",
+   "chromium-dark-phone/pilot-run-hint.png",
+   "chromium-light-desktop/pilot-assignee-open.png",
+   "chromium-light-desktop/pilot-delete-confirm.png",
+   "chromium-light-desktop/pilot-dependencies.png",
+   "chromium-light-desktop/pilot-dependency-list.png",
+   "chromium-light-desktop/pilot-dependency-view-hover.png",
+   "chromium-light-desktop/pilot-detail.png",
+   "chromium-light-desktop/pilot-field-hover.png",
+   "chromium-light-desktop/pilot-list-open.png",
+   "chromium-light-desktop/pilot-list-search.png",
+   "chromium-light-desktop/pilot-model-open.png",
+   "chromium-light-desktop/pilot-prerequisite-open.png",
+   "chromium-light-desktop/pilot-provider-open.png",
+   "chromium-light-desktop/pilot-share-access-menu.png",
+   "chromium-light-desktop/pilot-share-private.png",
+   "chromium-light-desktop/pilot-suggested-open.png",
+   "chromium-light-phone/pilot-delete-confirm.png",
+   "chromium-light-phone/pilot-run-hint.png"
+  ],
+  "traces": 72,
+  "tracesEqual": 63,
+  "tracesRequestsDiffer": [],
+  "tracesSnapshotOnly": {
+   "chromium-dark-desktop :: task detail pilot \u203a fields, pickers and the panel header": [
+    "list pick Later"
+   ],
+   "chromium-dark-desktop :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": [
+    "antigravity account Work"
+   ],
+   "chromium-dark-desktop :: workspace account pilot \u203a the Claude account picker of a new workspace": [
+    "account Work"
+   ],
+   "chromium-light-desktop :: task detail pilot \u203a dependencies, inputs and comments": [
+    "input removed"
+   ],
+   "chromium-light-phone :: task detail pilot \u203a fields, pickers and the panel header": [
+    "list pick Later",
+    "suggested pick L"
+   ],
+   "chromium-light-phone :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": [
+    "antigravity account Work"
+   ],
+   "webkit-dark-desktop :: share dialog pilot \u203a from Only you to a public link and back": [
+    "expiry 30 days"
+   ],
+   "webkit-dark-phone :: share dialog pilot \u203a from Only you to a public link and back": [
+    "turned off"
+   ],
+   "webkit-light-phone :: share dialog pilot \u203a from Only you to a public link and back": [
+    "expiry 30 days"
+   ]
+  },
+  "styleCaptures": 256,
+  "styleCapturesDiffering": 0
+ },
+ "final-pilot-fix1-fix2": {
+  "screenshots": 256,
+  "identical": 231,
+  "antialias": 24,
+  "beyond": {
+   "chromium-dark-desktop/pilot-delete-confirm.png": {
+    "pixels": 13,
+    "maxChannelDiff": 15,
+    "clusters": [
+     {
+      "x": [
+       1247,
+       1247
+      ],
+      "y": [
+       28,
+       30
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 15
+     },
+     {
+      "x": [
+       1246,
+       1247
+      ],
+      "y": [
+       37,
+       39
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 11
+     },
+     {
+      "x": [
+       640,
+       642
+      ],
+      "y": [
+       572,
+       573
+      ],
+      "pixels": 4,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       1252,
+       1254
+      ],
+      "y": [
+       572,
+       573
+      ],
+      "pixels": 4,
+      "maxChannelDiff": 1
+     }
+    ]
+   }
+  },
+  "antialiasShots": [
+   "chromium-dark-desktop/pilot-dependencies.png",
+   "chromium-dark-desktop/pilot-dependency-list.png",
+   "chromium-dark-desktop/pilot-dependency-view-hover.png",
+   "chromium-dark-desktop/pilot-inputs.png",
+   "chromium-dark-desktop/pilot-prerequisite-open.png",
+   "chromium-dark-desktop/pilot-reopen-refused.png",
+   "chromium-dark-desktop/pilot-reopen.png",
+   "chromium-dark-desktop/pilot-run-hint.png",
+   "chromium-dark-phone/pilot-run-hint.png",
+   "chromium-dark-phone/pilot-share-turn-off.png",
+   "chromium-light-desktop/pilot-assignee-open.png",
+   "chromium-light-desktop/pilot-dependencies.png",
+   "chromium-light-desktop/pilot-dependency-list.png",
+   "chromium-light-desktop/pilot-dependency-view-hover.png",
+   "chromium-light-desktop/pilot-detail.png",
+   "chromium-light-desktop/pilot-field-hover.png",
+   "chromium-light-desktop/pilot-inputs.png",
+   "chromium-light-desktop/pilot-list-open.png",
+   "chromium-light-desktop/pilot-list-search.png",
+   "chromium-light-desktop/pilot-model-open.png",
+   "chromium-light-desktop/pilot-prerequisite-open.png",
+   "chromium-light-desktop/pilot-provider-open.png",
+   "chromium-light-desktop/pilot-share-expiry-open.png",
+   "chromium-light-desktop/pilot-suggested-open.png"
+  ],
+  "traces": 72,
+  "tracesEqual": 63,
+  "tracesRequestsDiffer": [],
+  "tracesSnapshotOnly": {
+   "chromium-dark-phone :: task detail pilot \u203a fields, pickers and the panel header": [
+    "list pick Later",
+    "suggested pick L",
+    "model pick Sonnet"
+   ],
+   "chromium-dark-phone :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": [
+    "antigravity account Work"
+   ],
+   "chromium-dark-phone :: workspace account pilot \u203a the Claude account picker of a new workspace": [
+    "account Work"
+   ],
+   "chromium-light-desktop :: workspace account pilot \u203a the Antigravity account picker: Default on the Gemini key, a Google account with what is left": [
+    "antigravity account Work"
+   ],
+   "chromium-light-phone :: task detail pilot \u203a dependencies, inputs and comments": [
+    "prerequisite added"
+   ],
+   "chromium-light-phone :: task detail pilot \u203a fields, pickers and the panel header": [
+    "list pick Later"
+   ],
+   "webkit-dark-desktop :: share dialog pilot \u203a from Only you to a public link and back": [
+    "turned off"
+   ],
+   "webkit-dark-phone :: share dialog pilot \u203a from Only you to a public link and back": [
+    "expiry 30 days"
+   ],
+   "webkit-light-desktop :: share dialog pilot \u203a from Only you to a public link and back": [
+    "turned off"
+   ]
+  },
+  "styleCaptures": 256,
+  "styleCapturesDiffering": 0
+ },
+ "final-p41-ref-fix": {
+  "screenshots": 272,
+  "identical": 261,
+  "antialias": 11,
+  "beyond": {},
+  "antialiasShots": [
+   "chromium-dark-desktop/p41-tokens-new-never.png",
+   "chromium-dark-desktop/p41-tokens-new-workspaces.png",
+   "chromium-dark-phone/p41-setup-invalid.png",
+   "chromium-dark-phone/p41-setup-valid.png",
+   "chromium-dark-phone/p41-tokens-revoke.png",
+   "chromium-light-desktop/p41-tokens-new-never.png",
+   "chromium-light-desktop/p41-tokens-new-workspaces.png",
+   "chromium-light-phone/p41-setup-invalid.png",
+   "chromium-light-phone/p41-setup-required.png",
+   "chromium-light-phone/p41-tokens-issued.png",
+   "webkit-light-phone/p41-tokens-new-workspaces.png"
+  ],
+  "traces": 96,
+  "tracesEqual": 93,
+  "tracesRequestsDiffer": [],
+  "tracesSnapshotOnly": {
+   "webkit-dark-desktop :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": [
+    "wrong password"
+   ],
+   "webkit-dark-phone :: P4.1 access tokens \u203a an administrator: a user's tokens in the users page dialog": [
+    "revoked"
+   ],
+   "webkit-light-phone :: P4.1 access tokens \u203a an administrator: a user's tokens in the users page dialog": [
+    "escape closes the dialog"
+   ]
+  },
+  "styleCaptures": 252,
+  "styleCapturesDiffering": 0
+ },
+ "final-p41-fix1-fix2": {
+  "screenshots": 272,
+  "identical": 266,
+  "antialias": 6,
+  "beyond": {},
+  "antialiasShots": [
+   "chromium-dark-desktop/p41-setup-required.png",
+   "chromium-dark-phone/p41-cli-denied.png",
+   "chromium-dark-phone/p41-setup-invalid.png",
+   "chromium-light-phone/p41-setup-invalid.png",
+   "chromium-light-phone/p41-setup-required.png",
+   "chromium-light-phone/p41-setup-valid.png"
+  ],
+  "traces": 96,
+  "tracesEqual": 91,
+  "tracesRequestsDiffer": [],
+  "tracesSnapshotOnly": {
+   "chromium-dark-desktop :: P4.1 access tokens \u203a an administrator: a user's tokens in the users page dialog": [
+    "escape closes the dialog"
+   ],
+   "chromium-dark-phone :: P4.1 access tokens \u203a an administrator: a user's tokens in the users page dialog": [
+    "escape closes the dialog"
+   ],
+   "chromium-light-phone :: P4.1 access tokens \u203a an administrator: a user's tokens in the users page dialog": [
+    "escape closes the dialog"
+   ],
+   "webkit-dark-phone :: P4.1 access tokens \u203a an administrator: a user's tokens in the users page dialog": [
+    "revoked"
+   ],
+   "webkit-light-phone :: P4.1 access tokens \u203a an administrator: a user's tokens in the users page dialog": [
+    "escape closes the dialog"
+   ]
+  },
+  "styleCaptures": 252,
+  "styleCapturesDiffering": 0
+ },
+ "second-pilot-ref-fix": {
+  "screenshots": 256,
+  "identical": 225,
+  "antialias": 20,
+  "beyond": {
+   "chromium-dark-desktop/pilot-delete-confirm.png": {
+    "pixels": 13,
+    "maxChannelDiff": 15,
+    "clusters": [
+     {
+      "x": [
+       1247,
+       1247
+      ],
+      "y": [
+       28,
+       30
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 15
+     },
+     {
+      "x": [
+       1246,
+       1247
+      ],
+      "y": [
+       37,
+       39
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 11
+     },
+     {
+      "x": [
+       635,
+       636
+      ],
+      "y": [
+       577,
+       579
+      ],
+      "pixels": 4,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       1258,
+       1259
+      ],
+      "y": [
+       577,
+       579
+      ],
+      "pixels": 4,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "chromium-dark-phone/pilot-share-turn-off.png": {
+    "pixels": 27,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       43,
+       52
+      ],
+      "y": [
+       176,
+       176
+      ],
+      "pixels": 5,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       43,
+       43
+      ],
+      "y": [
+       187,
+       196
+      ],
+      "pixels": 4,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       43,
+       52
+      ],
+      "y": [
+       207,
+       207
+      ],
+      "pixels": 6,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       32,
+       33
+      ],
+      "y": [
+       393,
+       395
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       32,
+       33
+      ],
+      "y": [
+       404,
+       406
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       32,
+       33
+      ],
+      "y": [
+       448,
+       450
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "chromium-light-phone/pilot-share-access-menu.png": {
+    "pixels": 12365,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       346,
+       389
+      ],
+      "y": [
+       173,
+       196
+      ],
+      "pixels": 264,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       41,
+       389
+      ],
+      "y": [
+       183,
+       345
+      ],
+      "pixels": 12079,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       75,
+       75
+      ],
+      "y": [
+       184,
+       184
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       41,
+       48
+      ],
+      "y": [
+       309,
+       310
+      ],
+      "pixels": 10,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       387,
+       389
+      ],
+      "y": [
+       309,
+       315
+      ],
+      "pixels": 11,
+      "maxChannelDiff": 2
+     }
+    ]
+   },
+   "chromium-light-phone/pilot-share-expiry-open.png": {
+    "pixels": 4720,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       78,
+       229
+      ],
+      "y": [
+       592,
+       718
+      ],
+      "pixels": 4708,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       113,
+       113
+      ],
+      "y": [
+       593,
+       593
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       78,
+       86
+      ],
+      "y": [
+       682,
+       683
+      ],
+      "pixels": 11,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "chromium-light-phone/pilot-share-turn-off.png": {
+    "pixels": 27,
+    "maxChannelDiff": 6,
+    "clusters": [
+     {
+      "x": [
+       43,
+       51
+      ],
+      "y": [
+       176,
+       176
+      ],
+      "pixels": 6,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       43,
+       43
+      ],
+      "y": [
+       187,
+       196
+      ],
+      "pixels": 5,
+      "maxChannelDiff": 6
+     },
+     {
+      "x": [
+       43,
+       51
+      ],
+      "y": [
+       207,
+       207
+      ],
+      "pixels": 6,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       33,
+       33
+      ],
+      "y": [
+       394,
+       395
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       32,
+       33
+      ],
+      "y": [
+       404,
+       405
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       33,
+       33
+      ],
+      "y": [
+       449,
+       450
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "webkit-dark-desktop/pilot-share-access-menu.png": {
+    "pixels": 71,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       1056,
+       1056
+      ],
+      "y": [
+       718,
+       718
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       936,
+       950
+      ],
+      "y": [
+       735,
+       757
+      ],
+      "pixels": 56,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       1058,
+       1058
+      ],
+      "y": [
+       735,
+       736
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       942,
+       944
+      ],
+      "y": [
+       837,
+       842
+      ],
+      "pixels": 12,
+      "maxChannelDiff": 3
+     }
+    ]
+   },
+   "webkit-dark-desktop/pilot-share-conversations.png": {
+    "pixels": 71,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       1056,
+       1056
+      ],
+      "y": [
+       718,
+       718
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       936,
+       950
+      ],
+      "y": [
+       735,
+       757
+      ],
+      "pixels": 56,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       1058,
+       1058
+      ],
+      "y": [
+       735,
+       736
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       942,
+       944
+      ],
+      "y": [
+       837,
+       842
+      ],
+      "pixels": 12,
+      "maxChannelDiff": 3
+     }
+    ]
+   },
+   "webkit-dark-desktop/pilot-share-expiry-open.png": {
+    "pixels": 71,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       1056,
+       1056
+      ],
+      "y": [
+       718,
+       718
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       936,
+       950
+      ],
+      "y": [
+       735,
+       757
+      ],
+      "pixels": 56,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       1058,
+       1058
+      ],
+      "y": [
+       735,
+       736
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       942,
+       944
+      ],
+      "y": [
+       837,
+       842
+      ],
+      "pixels": 12,
+      "maxChannelDiff": 3
+     }
+    ]
+   },
+   "webkit-dark-desktop/pilot-share-private.png": {
+    "pixels": 71,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       1056,
+       1056
+      ],
+      "y": [
+       718,
+       718
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       936,
+       950
+      ],
+      "y": [
+       735,
+       757
+      ],
+      "pixels": 56,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       1058,
+       1058
+      ],
+      "y": [
+       735,
+       736
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       942,
+       944
+      ],
+      "y": [
+       837,
+       842
+      ],
+      "pixels": 12,
+      "maxChannelDiff": 3
+     }
+    ]
+   },
+   "webkit-dark-desktop/pilot-share-public.png": {
+    "pixels": 71,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       1056,
+       1056
+      ],
+      "y": [
+       718,
+       718
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       936,
+       950
+      ],
+      "y": [
+       735,
+       757
+      ],
+      "pixels": 56,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       1058,
+       1058
+      ],
+      "y": [
+       735,
+       736
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       942,
+       944
+      ],
+      "y": [
+       837,
+       842
+      ],
+      "pixels": 12,
+      "maxChannelDiff": 3
+     }
+    ]
+   },
+   "webkit-dark-desktop/pilot-share-turn-off.png": {
+    "pixels": 71,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       1056,
+       1056
+      ],
+      "y": [
+       718,
+       718
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       936,
+       950
+      ],
+      "y": [
+       735,
+       757
+      ],
+      "pixels": 56,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       1058,
+       1058
+      ],
+      "y": [
+       735,
+       736
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       942,
+       944
+      ],
+      "y": [
+       837,
+       842
+      ],
+      "pixels": 12,
+      "maxChannelDiff": 3
+     }
+    ]
+   }
+  },
+  "antialiasShots": [
+   "chromium-dark-desktop/pilot-assignee-open.png",
+   "chromium-dark-desktop/pilot-detail.png",
+   "chromium-dark-desktop/pilot-field-hover.png",
+   "chromium-dark-desktop/pilot-remove-confirm.png",
+   "chromium-dark-desktop/pilot-run-hint.png",
+   "chromium-dark-desktop/pilot-share-access-menu.png",
+   "chromium-dark-desktop/pilot-share-loading.png",
+   "chromium-dark-phone/pilot-delete-confirm.png",
+   "chromium-dark-phone/pilot-remove-confirm.png",
+   "chromium-dark-phone/pilot-run-hint.png",
+   "chromium-dark-phone/pilot-share-access-menu.png",
+   "chromium-dark-phone/pilot-share-expiry-open.png",
+   "chromium-light-desktop/pilot-delete-confirm.png",
+   "chromium-light-desktop/pilot-run-hint.png",
+   "chromium-light-desktop/pilot-share-access-menu.png",
+   "chromium-light-desktop/pilot-share-error.png",
+   "chromium-light-desktop/pilot-share-loading.png",
+   "chromium-light-phone/pilot-delete-confirm.png",
+   "webkit-dark-phone/pilot-dependencies.png",
+   "webkit-dark-phone/pilot-dependency-view-hover.png"
+  ],
+  "traces": 72,
+  "tracesEqual": 63,
+  "tracesRequestsDiffer": [],
+  "tracesSnapshotOnly": {
+   "chromium-dark-desktop :: task detail pilot \u203a fields, pickers and the panel header": [
+    "suggested pick L"
+   ],
+   "chromium-dark-phone :: task detail pilot \u203a fields, pickers and the panel header": [
+    "suggested pick L"
+   ],
+   "webkit-dark-desktop :: share dialog pilot \u203a from Only you to a public link and back": [
+    "expiry 30 days"
+   ],
+   "webkit-dark-desktop :: task detail pilot \u203a fields, pickers and the panel header": [
+    "list pick Later"
+   ],
+   "webkit-dark-phone :: share dialog pilot \u203a from Only you to a public link and back": [
+    "expiry 30 days"
+   ],
+   "webkit-dark-phone :: task detail pilot \u203a fields, pickers and the panel header": [
+    "list pick Later",
+    "model pick Sonnet"
+   ],
+   "webkit-light-phone :: share dialog pilot \u203a from Only you to a public link and back": [
+    "expiry 30 days"
+   ],
+   "webkit-light-phone :: task detail pilot \u203a dependencies, inputs and comments": [
+    "input removed"
+   ],
+   "webkit-light-phone :: task detail pilot \u203a fields, pickers and the panel header": [
+    "list pick Later"
+   ]
+  },
+  "styleCaptures": 256,
+  "styleCapturesDiffering": 0
+ },
+ "second-pilot-fix-fix2": {
+  "screenshots": 256,
+  "identical": 219,
+  "antialias": 30,
+  "beyond": {
+   "chromium-dark-desktop/pilot-delete-confirm.png": {
+    "pixels": 27,
+    "maxChannelDiff": 15,
+    "clusters": [
+     {
+      "x": [
+       1247,
+       1247
+      ],
+      "y": [
+       28,
+       30
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 15
+     },
+     {
+      "x": [
+       1246,
+       1247
+      ],
+      "y": [
+       37,
+       39
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 11
+     },
+     {
+      "x": [
+       721,
+       722
+      ],
+      "y": [
+       325,
+       326
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       721,
+       723
+      ],
+      "y": [
+       347,
+       349
+      ],
+      "pixels": 5,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       722,
+       722
+      ],
+      "y": [
+       358,
+       358
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       722,
+       723
+      ],
+      "y": [
+       377,
+       378
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "webkit-dark-desktop/pilot-share-access-menu.png": {
+    "pixels": 71,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       1056,
+       1056
+      ],
+      "y": [
+       718,
+       718
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       936,
+       950
+      ],
+      "y": [
+       735,
+       757
+      ],
+      "pixels": 56,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       1058,
+       1058
+      ],
+      "y": [
+       735,
+       736
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       942,
+       944
+      ],
+      "y": [
+       837,
+       842
+      ],
+      "pixels": 12,
+      "maxChannelDiff": 3
+     }
+    ]
+   },
+   "webkit-dark-desktop/pilot-share-conversations.png": {
+    "pixels": 71,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       1056,
+       1056
+      ],
+      "y": [
+       718,
+       718
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       936,
+       950
+      ],
+      "y": [
+       735,
+       757
+      ],
+      "pixels": 56,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       1058,
+       1058
+      ],
+      "y": [
+       735,
+       736
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       942,
+       944
+      ],
+      "y": [
+       837,
+       842
+      ],
+      "pixels": 12,
+      "maxChannelDiff": 3
+     }
+    ]
+   },
+   "webkit-dark-desktop/pilot-share-expiry-open.png": {
+    "pixels": 71,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       1056,
+       1056
+      ],
+      "y": [
+       718,
+       718
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       936,
+       950
+      ],
+      "y": [
+       735,
+       757
+      ],
+      "pixels": 56,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       1058,
+       1058
+      ],
+      "y": [
+       735,
+       736
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       942,
+       944
+      ],
+      "y": [
+       837,
+       842
+      ],
+      "pixels": 12,
+      "maxChannelDiff": 3
+     }
+    ]
+   },
+   "webkit-dark-desktop/pilot-share-private.png": {
+    "pixels": 71,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       1056,
+       1056
+      ],
+      "y": [
+       718,
+       718
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       936,
+       950
+      ],
+      "y": [
+       735,
+       757
+      ],
+      "pixels": 56,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       1058,
+       1058
+      ],
+      "y": [
+       735,
+       736
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       942,
+       944
+      ],
+      "y": [
+       837,
+       842
+      ],
+      "pixels": 12,
+      "maxChannelDiff": 3
+     }
+    ]
+   },
+   "webkit-dark-desktop/pilot-share-public.png": {
+    "pixels": 71,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       1056,
+       1056
+      ],
+      "y": [
+       718,
+       718
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       936,
+       950
+      ],
+      "y": [
+       735,
+       757
+      ],
+      "pixels": 56,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       1058,
+       1058
+      ],
+      "y": [
+       735,
+       736
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       942,
+       944
+      ],
+      "y": [
+       837,
+       842
+      ],
+      "pixels": 12,
+      "maxChannelDiff": 3
+     }
+    ]
+   },
+   "webkit-dark-desktop/pilot-share-turn-off.png": {
+    "pixels": 71,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       1056,
+       1056
+      ],
+      "y": [
+       718,
+       718
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       936,
+       950
+      ],
+      "y": [
+       735,
+       757
+      ],
+      "pixels": 56,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       1058,
+       1058
+      ],
+      "y": [
+       735,
+       736
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       942,
+       944
+      ],
+      "y": [
+       837,
+       842
+      ],
+      "pixels": 12,
+      "maxChannelDiff": 3
+     }
+    ]
+   }
+  },
+  "antialiasShots": [
+   "chromium-dark-desktop/pilot-antigravity-account-open.png",
+   "chromium-dark-desktop/pilot-antigravity-account.png",
+   "chromium-dark-desktop/pilot-assignee-open.png",
+   "chromium-dark-desktop/pilot-detail.png",
+   "chromium-dark-desktop/pilot-field-hover.png",
+   "chromium-dark-desktop/pilot-list-open.png",
+   "chromium-dark-desktop/pilot-list-search.png",
+   "chromium-dark-desktop/pilot-model-open.png",
+   "chromium-dark-desktop/pilot-provider-open.png",
+   "chromium-dark-desktop/pilot-run-hint.png",
+   "chromium-dark-desktop/pilot-share-loading.png",
+   "chromium-dark-desktop/pilot-suggested-open.png",
+   "chromium-dark-phone/pilot-delete-confirm.png",
+   "chromium-dark-phone/pilot-remove-confirm.png",
+   "chromium-dark-phone/pilot-run-hint.png",
+   "chromium-light-desktop/pilot-account-open.png",
+   "chromium-light-desktop/pilot-account.png",
+   "chromium-light-desktop/pilot-antigravity-account-open.png",
+   "chromium-light-desktop/pilot-antigravity-account.png",
+   "chromium-light-desktop/pilot-delete-confirm.png",
+   "chromium-light-desktop/pilot-p0-share-focused.png",
+   "chromium-light-desktop/pilot-remove-confirm.png",
+   "chromium-light-desktop/pilot-reopen-refused.png",
+   "chromium-light-desktop/pilot-run-hint.png",
+   "chromium-light-desktop/pilot-share-loading.png",
+   "chromium-light-phone/pilot-account-open.png",
+   "chromium-light-phone/pilot-remove-confirm.png",
+   "chromium-light-phone/pilot-reopen-refused.png",
+   "chromium-light-phone/pilot-run-hint.png",
+   "chromium-light-phone/pilot-share-turn-off.png"
+  ],
+  "traces": 72,
+  "tracesEqual": 61,
+  "tracesRequestsDiffer": [],
+  "tracesSnapshotOnly": {
+   "chromium-dark-desktop :: task detail pilot \u203a dependencies, inputs and comments": [
+    "input removed"
+   ],
+   "chromium-dark-desktop :: task detail pilot \u203a fields, pickers and the panel header": [
+    "model pick Sonnet"
+   ],
+   "chromium-dark-phone :: task detail pilot \u203a dependencies, inputs and comments": [
+    "input removed"
+   ],
+   "chromium-dark-phone :: task detail pilot \u203a fields, pickers and the panel header": [
+    "model pick Sonnet"
+   ],
+   "chromium-light-desktop :: task detail pilot \u203a fields, pickers and the panel header": [
+    "model pick Sonnet"
+   ],
+   "chromium-light-phone :: task detail pilot \u203a dependencies, inputs and comments": [
+    "input removed"
+   ],
+   "webkit-dark-phone :: share dialog pilot \u203a from Only you to a public link and back": [
+    "turned off"
+   ],
+   "webkit-dark-phone :: task detail pilot \u203a fields, pickers and the panel header": [
+    "list pick Later",
+    "model pick Sonnet"
+   ],
+   "webkit-light-desktop :: share dialog pilot \u203a from Only you to a public link and back": [
+    "expiry 30 days",
+    "turned off"
+   ],
+   "webkit-light-desktop :: task detail pilot \u203a fields, pickers and the panel header": [
+    "model pick Sonnet"
+   ],
+   "webkit-light-phone :: share dialog pilot \u203a from Only you to a public link and back": [
+    "turned off"
+   ]
+  },
+  "styleCaptures": 256,
+  "styleCapturesDiffering": 0
+ },
+ "second-p41-ref-fix": {
+  "screenshots": 256,
+  "identical": 245,
+  "antialias": 10,
+  "beyond": {
+   "chromium-dark-phone/p41-profile-photo.png": {
+    "pixels": 56,
+    "maxChannelDiff": 33,
+    "clusters": [
+     {
+      "x": [
+       16,
+       23
+      ],
+      "y": [
+       95,
+       102
+      ],
+      "pixels": 8,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       59,
+       65
+      ],
+      "y": [
+       180,
+       181
+      ],
+      "pixels": 8,
+      "maxChannelDiff": 16
+     },
+     {
+      "x": [
+       80,
+       86
+      ],
+      "y": [
+       180,
+       181
+      ],
+      "pixels": 7,
+      "maxChannelDiff": 16
+     },
+     {
+      "x": [
+       122,
+       122
+      ],
+      "y": [
+       180,
+       180
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       42,
+       43
+      ],
+      "y": [
+       199,
+       203
+      ],
+      "pixels": 7,
+      "maxChannelDiff": 33
+     },
+     {
+      "x": [
+       121,
+       123
+      ],
+      "y": [
+       203,
+       205
+      ],
+      "pixels": 5,
+      "maxChannelDiff": 1
+     }
+    ]
+   }
+  },
+  "antialiasShots": [
+   "chromium-dark-desktop/p41-tokens-new-never.png",
+   "chromium-dark-desktop/p41-tokens-new-workspaces.png",
+   "chromium-dark-phone/p41-setup-valid.png",
+   "chromium-dark-phone/p41-tokens-revoke.png",
+   "chromium-light-desktop/p41-tokens-new-never.png",
+   "chromium-light-desktop/p41-tokens-new-workspaces.png",
+   "chromium-light-phone/p41-setup-invalid.png",
+   "chromium-light-phone/p41-setup-required.png",
+   "chromium-light-phone/p41-setup-valid.png",
+   "webkit-light-phone/p41-tokens-new-workspaces.png"
+  ],
+  "traces": 88,
+  "tracesEqual": 86,
+  "tracesRequestsDiffer": [],
+  "tracesSnapshotOnly": {
+   "webkit-dark-phone :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": [
+    "wrong password"
+   ],
+   "webkit-light-desktop :: P4.1 orbit login approval \u203a warnings, a refused approval, deny and a dead code": [
+    "approval refused"
+   ]
+  },
+  "styleCaptures": 236,
+  "styleCapturesDiffering": 0
+ },
+ "second-p41-fix-fix2": {
+  "screenshots": 256,
+  "identical": 242,
+  "antialias": 11,
+  "beyond": {
+   "chromium-dark-desktop/p41-profile-photo.png": {
+    "pixels": 318,
+    "maxChannelDiff": 30,
+    "clusters": [
+     {
+      "x": [
+       17,
+       46
+      ],
+      "y": [
+       859,
+       875
+      ],
+      "pixels": 318,
+      "maxChannelDiff": 30
+     }
+    ]
+   },
+   "chromium-dark-phone/p41-profile-photo.png": {
+    "pixels": 72,
+    "maxChannelDiff": 33,
+    "clusters": [
+     {
+      "x": [
+       16,
+       23
+      ],
+      "y": [
+       95,
+       102
+      ],
+      "pixels": 8,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       366,
+       373
+      ],
+      "y": [
+       95,
+       102
+      ],
+      "pixels": 8,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       59,
+       65
+      ],
+      "y": [
+       180,
+       181
+      ],
+      "pixels": 8,
+      "maxChannelDiff": 16
+     },
+     {
+      "x": [
+       80,
+       86
+      ],
+      "y": [
+       180,
+       181
+      ],
+      "pixels": 7,
+      "maxChannelDiff": 16
+     },
+     {
+      "x": [
+       122,
+       122
+      ],
+      "y": [
+       180,
+       180
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       42,
+       43
+      ],
+      "y": [
+       199,
+       203
+      ],
+      "pixels": 7,
+      "maxChannelDiff": 33
+     }
+    ]
+   },
+   "chromium-light-desktop/p41-profile-photo.png": {
+    "pixels": 374,
+    "maxChannelDiff": 39,
+    "clusters": [
+     {
+      "x": [
+       719,
+       721
+      ],
+      "y": [
+       151,
+       153
+      ],
+      "pixels": 5,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       734,
+       737
+      ],
+      "y": [
+       151,
+       153
+      ],
+      "pixels": 7,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       849,
+       852
+      ],
+      "y": [
+       151,
+       153
+      ],
+      "pixels": 7,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       526,
+       527
+      ],
+      "y": [
+       155,
+       159
+      ],
+      "pixels": 6,
+      "maxChannelDiff": 32
+     },
+     {
+      "x": [
+       526,
+       527
+      ],
+      "y": [
+       174,
+       178
+      ],
+      "pixels": 6,
+      "maxChannelDiff": 39
+     },
+     {
+      "x": [
+       1030,
+       1034
+      ],
+      "y": [
+       242,
+       247
+      ],
+      "pixels": 7,
+      "maxChannelDiff": 1
+     }
+    ]
+   }
+  },
+  "antialiasShots": [
+   "chromium-dark-phone/p41-cli-denied.png",
+   "chromium-dark-phone/p41-setup-invalid.png",
+   "chromium-dark-phone/p41-setup-required.png",
+   "chromium-dark-phone/p41-setup-valid.png",
+   "chromium-light-desktop/p41-setup-invalid.png",
+   "chromium-light-desktop/p41-setup-required.png",
+   "chromium-light-desktop/p41-setup-valid.png",
+   "chromium-light-phone/p41-cli-denied.png",
+   "chromium-light-phone/p41-setup-invalid.png",
+   "chromium-light-phone/p41-setup-valid.png",
+   "chromium-light-phone/p41-tokens-issued.png"
+  ],
+  "traces": 88,
+  "tracesEqual": 86,
+  "tracesRequestsDiffer": [],
+  "tracesSnapshotOnly": {
+   "webkit-dark-desktop :: P4.1 orbit login approval \u203a warnings, a refused approval, deny and a dead code": [
+    "approval refused"
+   ],
+   "webkit-dark-desktop :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": [
+    "wrong password"
+   ]
+  },
+  "styleCaptures": 236,
+  "styleCapturesDiffering": 0
+ },
+ "first-pilot-ref1-fix1": {
+  "screenshots": 256,
+  "identical": 212,
+  "antialias": 40,
+  "beyond": {
+   "chromium-dark-phone/pilot-share-turn-off.png": {
+    "pixels": 22,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       43,
+       52
+      ],
+      "y": [
+       176,
+       176
+      ],
+      "pixels": 5,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       43,
+       43
+      ],
+      "y": [
+       187,
+       196
+      ],
+      "pixels": 4,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       43,
+       52
+      ],
+      "y": [
+       207,
+       207
+      ],
+      "pixels": 6,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       33,
+       35
+      ],
+      "y": [
+       461,
+       462
+      ],
+      "pixels": 4,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       44,
+       46
+      ],
+      "y": [
+       461,
+       462
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "chromium-light-phone/pilot-share-access-menu.png": {
+    "pixels": 12365,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       346,
+       389
+      ],
+      "y": [
+       173,
+       196
+      ],
+      "pixels": 264,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       41,
+       389
+      ],
+      "y": [
+       183,
+       345
+      ],
+      "pixels": 12079,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       75,
+       75
+      ],
+      "y": [
+       184,
+       184
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       41,
+       48
+      ],
+      "y": [
+       309,
+       310
+      ],
+      "pixels": 10,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       387,
+       389
+      ],
+      "y": [
+       309,
+       315
+      ],
+      "pixels": 11,
+      "maxChannelDiff": 2
+     }
+    ]
+   },
+   "chromium-light-phone/pilot-share-expiry-open.png": {
+    "pixels": 4720,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       78,
+       229
+      ],
+      "y": [
+       592,
+       718
+      ],
+      "pixels": 4708,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       113,
+       113
+      ],
+      "y": [
+       593,
+       593
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       78,
+       86
+      ],
+      "y": [
+       682,
+       683
+      ],
+      "pixels": 11,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "chromium-light-phone/pilot-share-turn-off.png": {
+    "pixels": 27,
+    "maxChannelDiff": 6,
+    "clusters": [
+     {
+      "x": [
+       43,
+       51
+      ],
+      "y": [
+       176,
+       176
+      ],
+      "pixels": 6,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       43,
+       43
+      ],
+      "y": [
+       187,
+       196
+      ],
+      "pixels": 5,
+      "maxChannelDiff": 6
+     },
+     {
+      "x": [
+       43,
+       51
+      ],
+      "y": [
+       207,
+       207
+      ],
+      "pixels": 6,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       33,
+       33
+      ],
+      "y": [
+       394,
+       395
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       32,
+       33
+      ],
+      "y": [
+       404,
+       405
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       33,
+       33
+      ],
+      "y": [
+       449,
+       450
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     }
+    ]
+   }
+  },
+  "antialiasShots": [
+   "chromium-dark-desktop/pilot-delete-confirm.png",
+   "chromium-dark-desktop/pilot-dependencies.png",
+   "chromium-dark-desktop/pilot-dependency-list.png",
+   "chromium-dark-desktop/pilot-dependency-view-hover.png",
+   "chromium-dark-desktop/pilot-inputs.png",
+   "chromium-dark-desktop/pilot-prerequisite-open.png",
+   "chromium-dark-desktop/pilot-remove-confirm.png",
+   "chromium-dark-desktop/pilot-share-access-menu.png",
+   "chromium-dark-desktop/pilot-share-conversations.png",
+   "chromium-dark-desktop/pilot-share-expiry-open.png",
+   "chromium-dark-desktop/pilot-share-private.png",
+   "chromium-dark-desktop/pilot-share-public.png",
+   "chromium-dark-desktop/pilot-share-turn-off.png",
+   "chromium-dark-phone/pilot-delete-confirm.png",
+   "chromium-dark-phone/pilot-remove-confirm.png",
+   "chromium-dark-phone/pilot-run-hint.png",
+   "chromium-dark-phone/pilot-share-access-menu.png",
+   "chromium-dark-phone/pilot-share-expiry-open.png",
+   "chromium-light-desktop/pilot-account-open.png",
+   "chromium-light-desktop/pilot-account.png",
+   "chromium-light-desktop/pilot-antigravity-account-open.png",
+   "chromium-light-desktop/pilot-assignee-open.png",
+   "chromium-light-desktop/pilot-detail.png",
+   "chromium-light-desktop/pilot-field-hover.png",
+   "chromium-light-desktop/pilot-inputs.png",
+   "chromium-light-desktop/pilot-list-open.png",
+   "chromium-light-desktop/pilot-list-search.png",
+   "chromium-light-desktop/pilot-model-open.png",
+   "chromium-light-desktop/pilot-p0-share-focused.png",
+   "chromium-light-desktop/pilot-prerequisite-open.png",
+   "chromium-light-desktop/pilot-provider-open.png",
+   "chromium-light-desktop/pilot-remove-confirm.png",
+   "chromium-light-desktop/pilot-reopen-refused.png",
+   "chromium-light-desktop/pilot-share-access-menu.png",
+   "chromium-light-desktop/pilot-share-error.png",
+   "chromium-light-desktop/pilot-share-expiry-open.png",
+   "chromium-light-desktop/pilot-share-loading.png",
+   "chromium-light-desktop/pilot-suggested-open.png",
+   "chromium-light-phone/pilot-delete-confirm.png",
+   "chromium-light-phone/pilot-run-hint.png"
+  ],
+  "traces": 72,
+  "tracesEqual": 62,
+  "tracesRequestsDiffer": [],
+  "tracesSnapshotOnly": {
+   "chromium-dark-phone :: task detail pilot \u203a dependencies, inputs and comments": [
+    "input removed"
+   ],
+   "chromium-dark-phone :: task detail pilot \u203a fields, pickers and the panel header": [
+    "model pick Sonnet"
+   ],
+   "chromium-light-desktop :: task detail pilot \u203a fields, pickers and the panel header": [
+    "model pick Sonnet"
+   ],
+   "chromium-light-phone :: task detail pilot \u203a dependencies, inputs and comments": [
+    "input removed"
+   ],
+   "webkit-dark-desktop :: share dialog pilot \u203a from Only you to a public link and back": [
+    "expiry 30 days"
+   ],
+   "webkit-dark-desktop :: task detail pilot \u203a fields, pickers and the panel header": [
+    "suggested pick L"
+   ],
+   "webkit-dark-phone :: share dialog pilot \u203a from Only you to a public link and back": [
+    "expiry 30 days",
+    "turned off"
+   ],
+   "webkit-dark-phone :: task detail pilot \u203a fields, pickers and the panel header": [
+    "suggested pick L"
+   ],
+   "webkit-light-desktop :: share dialog pilot \u203a from Only you to a public link and back": [
+    "turned off"
+   ],
+   "webkit-light-desktop :: task detail pilot \u203a fields, pickers and the panel header": [
+    "suggested pick L",
+    "model pick Sonnet"
+   ]
+  },
+  "styleCaptures": 256,
+  "styleCapturesDiffering": 0
+ },
+ "first-pilot-ref2-fix2": {
+  "screenshots": 256,
+  "identical": 219,
+  "antialias": 31,
+  "beyond": {
+   "chromium-dark-phone/pilot-share-turn-off.png": {
+    "pixels": 27,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       43,
+       52
+      ],
+      "y": [
+       176,
+       176
+      ],
+      "pixels": 5,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       43,
+       43
+      ],
+      "y": [
+       187,
+       196
+      ],
+      "pixels": 4,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       43,
+       52
+      ],
+      "y": [
+       207,
+       207
+      ],
+      "pixels": 6,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       32,
+       33
+      ],
+      "y": [
+       393,
+       395
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       32,
+       33
+      ],
+      "y": [
+       404,
+       406
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       32,
+       33
+      ],
+      "y": [
+       448,
+       450
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "chromium-light-phone/pilot-share-access-menu.png": {
+    "pixels": 12365,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       346,
+       389
+      ],
+      "y": [
+       173,
+       196
+      ],
+      "pixels": 264,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       41,
+       389
+      ],
+      "y": [
+       183,
+       345
+      ],
+      "pixels": 12079,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       75,
+       75
+      ],
+      "y": [
+       184,
+       184
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       41,
+       48
+      ],
+      "y": [
+       309,
+       310
+      ],
+      "pixels": 10,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       387,
+       389
+      ],
+      "y": [
+       309,
+       315
+      ],
+      "pixels": 11,
+      "maxChannelDiff": 2
+     }
+    ]
+   },
+   "chromium-light-phone/pilot-share-expiry-open.png": {
+    "pixels": 4720,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       78,
+       229
+      ],
+      "y": [
+       592,
+       718
+      ],
+      "pixels": 4708,
+      "maxChannelDiff": 3
+     },
+     {
+      "x": [
+       113,
+       113
+      ],
+      "y": [
+       593,
+       593
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       78,
+       86
+      ],
+      "y": [
+       682,
+       683
+      ],
+      "pixels": 11,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "chromium-light-phone/pilot-share-turn-off.png": {
+    "pixels": 27,
+    "maxChannelDiff": 6,
+    "clusters": [
+     {
+      "x": [
+       43,
+       51
+      ],
+      "y": [
+       176,
+       176
+      ],
+      "pixels": 6,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       43,
+       43
+      ],
+      "y": [
+       187,
+       196
+      ],
+      "pixels": 5,
+      "maxChannelDiff": 6
+     },
+     {
+      "x": [
+       43,
+       51
+      ],
+      "y": [
+       207,
+       207
+      ],
+      "pixels": 6,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       33,
+       33
+      ],
+      "y": [
+       394,
+       395
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       32,
+       33
+      ],
+      "y": [
+       404,
+       405
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       33,
+       33
+      ],
+      "y": [
+       449,
+       450
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "webkit-dark-phone/pilot-dependencies.png": {
+    "pixels": 16,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       106,
+       106
+      ],
+      "y": [
+       423,
+       437
+      ],
+      "pixels": 15,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       276,
+       276
+      ],
+      "y": [
+       439,
+       439
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 3
+     }
+    ]
+   },
+   "webkit-dark-phone/pilot-dependency-view-hover.png": {
+    "pixels": 16,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       106,
+       106
+      ],
+      "y": [
+       423,
+       437
+      ],
+      "pixels": 15,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       276,
+       276
+      ],
+      "y": [
+       439,
+       439
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 3
+     }
+    ]
+   }
+  },
+  "antialiasShots": [
+   "chromium-dark-desktop/pilot-assignee-open.png",
+   "chromium-dark-desktop/pilot-detail.png",
+   "chromium-dark-desktop/pilot-field-hover.png",
+   "chromium-dark-desktop/pilot-inputs.png",
+   "chromium-dark-desktop/pilot-p0-share-focused.png",
+   "chromium-dark-desktop/pilot-remove-confirm.png",
+   "chromium-dark-desktop/pilot-reopen-refused.png",
+   "chromium-dark-desktop/pilot-share-access-menu.png",
+   "chromium-dark-desktop/pilot-share-conversations.png",
+   "chromium-dark-desktop/pilot-share-expiry-open.png",
+   "chromium-dark-desktop/pilot-share-loading.png",
+   "chromium-dark-desktop/pilot-share-private.png",
+   "chromium-dark-desktop/pilot-share-public.png",
+   "chromium-dark-desktop/pilot-share-turn-off.png",
+   "chromium-dark-phone/pilot-delete-confirm.png",
+   "chromium-dark-phone/pilot-remove-confirm.png",
+   "chromium-dark-phone/pilot-reopen-refused.png",
+   "chromium-dark-phone/pilot-run-hint.png",
+   "chromium-dark-phone/pilot-share-access-menu.png",
+   "chromium-dark-phone/pilot-share-expiry-open.png",
+   "chromium-light-desktop/pilot-assignee-open.png",
+   "chromium-light-desktop/pilot-detail.png",
+   "chromium-light-desktop/pilot-field-hover.png",
+   "chromium-light-desktop/pilot-p0-share-focused.png",
+   "chromium-light-desktop/pilot-remove-confirm.png",
+   "chromium-light-desktop/pilot-reopen-refused.png",
+   "chromium-light-desktop/pilot-reopen.png",
+   "chromium-light-desktop/pilot-share-access-menu.png",
+   "chromium-light-desktop/pilot-share-error.png",
+   "chromium-light-desktop/pilot-share-loading.png",
+   "chromium-light-phone/pilot-delete-confirm.png"
+  ],
+  "traces": 72,
+  "tracesEqual": 61,
+  "tracesRequestsDiffer": [],
+  "tracesSnapshotOnly": {
+   "chromium-dark-desktop :: task detail pilot \u203a dependencies, inputs and comments": [
+    "input removed"
+   ],
+   "chromium-dark-desktop :: task detail pilot \u203a fields, pickers and the panel header": [
+    "list pick Later",
+    "model pick Sonnet"
+   ],
+   "chromium-dark-phone :: task detail pilot \u203a dependencies, inputs and comments": [
+    "input removed"
+   ],
+   "chromium-dark-phone :: task detail pilot \u203a fields, pickers and the panel header": [
+    "model pick Sonnet"
+   ],
+   "chromium-light-desktop :: task detail pilot \u203a fields, pickers and the panel header": [
+    "model pick Sonnet"
+   ],
+   "chromium-light-phone :: task detail pilot \u203a fields, pickers and the panel header": [
+    "list pick Later",
+    "suggested pick L",
+    "model pick Sonnet"
+   ],
+   "webkit-dark-desktop :: share dialog pilot \u203a from Only you to a public link and back": [
+    "expiry 30 days"
+   ],
+   "webkit-light-desktop :: share dialog pilot \u203a from Only you to a public link and back": [
+    "expiry 30 days",
+    "turned off"
+   ],
+   "webkit-light-desktop :: task detail pilot \u203a fields, pickers and the panel header": [
+    "suggested pick L",
+    "model pick Sonnet"
+   ],
+   "webkit-light-phone :: share dialog pilot \u203a from Only you to a public link and back": [
+    "expiry 30 days"
+   ],
+   "webkit-light-phone :: task detail pilot \u203a fields, pickers and the panel header": [
+    "suggested pick L"
+   ]
+  },
+  "styleCaptures": 256,
+  "styleCapturesDiffering": 0
+ },
+ "first-pilot-ref1-ref2": {
+  "screenshots": 256,
+  "identical": 216,
+  "antialias": 36,
+  "beyond": {
+   "chromium-dark-desktop/pilot-delete-confirm.png": {
+    "pixels": 5,
+    "maxChannelDiff": 15,
+    "clusters": [
+     {
+      "x": [
+       1247,
+       1247
+      ],
+      "y": [
+       28,
+       30
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 15
+     },
+     {
+      "x": [
+       1246,
+       1247
+      ],
+      "y": [
+       37,
+       39
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 11
+     }
+    ]
+   },
+   "chromium-light-desktop/pilot-delete-confirm.png": {
+    "pixels": 5,
+    "maxChannelDiff": 20,
+    "clusters": [
+     {
+      "x": [
+       1247,
+       1247
+      ],
+      "y": [
+       28,
+       30
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 20
+     },
+     {
+      "x": [
+       1246,
+       1247
+      ],
+      "y": [
+       37,
+       39
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 16
+     }
+    ]
+   },
+   "webkit-dark-phone/pilot-dependencies.png": {
+    "pixels": 16,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       106,
+       106
+      ],
+      "y": [
+       423,
+       437
+      ],
+      "pixels": 15,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       276,
+       276
+      ],
+      "y": [
+       439,
+       439
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 3
+     }
+    ]
+   },
+   "webkit-dark-phone/pilot-dependency-view-hover.png": {
+    "pixels": 16,
+    "maxChannelDiff": 3,
+    "clusters": [
+     {
+      "x": [
+       106,
+       106
+      ],
+      "y": [
+       423,
+       437
+      ],
+      "pixels": 15,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       276,
+       276
+      ],
+      "y": [
+       439,
+       439
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 3
+     }
+    ]
+   }
+  },
+  "antialiasShots": [
+   "chromium-dark-desktop/pilot-assignee-open.png",
+   "chromium-dark-desktop/pilot-detail.png",
+   "chromium-dark-desktop/pilot-field-hover.png",
+   "chromium-dark-desktop/pilot-inputs.png",
+   "chromium-dark-desktop/pilot-list-open.png",
+   "chromium-dark-desktop/pilot-list-search.png",
+   "chromium-dark-desktop/pilot-model-open.png",
+   "chromium-dark-desktop/pilot-p0-share-focused.png",
+   "chromium-dark-desktop/pilot-provider-open.png",
+   "chromium-dark-desktop/pilot-share-expiry-open.png",
+   "chromium-dark-desktop/pilot-share-private.png",
+   "chromium-dark-desktop/pilot-suggested-open.png",
+   "chromium-dark-phone/pilot-delete-confirm.png",
+   "chromium-dark-phone/pilot-reopen-refused.png",
+   "chromium-dark-phone/pilot-run-hint.png",
+   "chromium-light-desktop/pilot-account-open.png",
+   "chromium-light-desktop/pilot-account.png",
+   "chromium-light-desktop/pilot-antigravity-account.png",
+   "chromium-light-desktop/pilot-assignee-open.png",
+   "chromium-light-desktop/pilot-detail.png",
+   "chromium-light-desktop/pilot-field-hover.png",
+   "chromium-light-desktop/pilot-list-open.png",
+   "chromium-light-desktop/pilot-list-search.png",
+   "chromium-light-desktop/pilot-model-open.png",
+   "chromium-light-desktop/pilot-prerequisite-open.png",
+   "chromium-light-desktop/pilot-provider-open.png",
+   "chromium-light-desktop/pilot-remove-confirm.png",
+   "chromium-light-desktop/pilot-reopen-refused.png",
+   "chromium-light-desktop/pilot-reopen.png",
+   "chromium-light-desktop/pilot-share-error.png",
+   "chromium-light-desktop/pilot-share-loading.png",
+   "chromium-light-desktop/pilot-share-turn-off.png",
+   "chromium-light-desktop/pilot-suggested-open.png",
+   "chromium-light-phone/pilot-delete-confirm.png",
+   "chromium-light-phone/pilot-remove-confirm.png",
+   "chromium-light-phone/pilot-run-hint.png"
+  ],
+  "traces": 72,
+  "tracesEqual": 60,
+  "tracesRequestsDiffer": [],
+  "tracesSnapshotOnly": {
+   "chromium-dark-desktop :: task detail pilot \u203a dependencies, inputs and comments": [
+    "input removed"
+   ],
+   "chromium-dark-desktop :: task detail pilot \u203a fields, pickers and the panel header": [
+    "list pick Later"
+   ],
+   "chromium-dark-phone :: task detail pilot \u203a fields, pickers and the panel header": [
+    "model pick Sonnet"
+   ],
+   "chromium-light-desktop :: task detail pilot \u203a dependencies, inputs and comments": [
+    "input removed"
+   ],
+   "chromium-light-desktop :: task detail pilot \u203a fields, pickers and the panel header": [
+    "list pick Later",
+    "model pick Sonnet"
+   ],
+   "chromium-light-phone :: task detail pilot \u203a fields, pickers and the panel header": [
+    "model pick Sonnet"
+   ],
+   "webkit-dark-desktop :: task detail pilot \u203a fields, pickers and the panel header": [
+    "suggested pick L"
+   ],
+   "webkit-dark-phone :: share dialog pilot \u203a from Only you to a public link and back": [
+    "turned off"
+   ],
+   "webkit-light-desktop :: share dialog pilot \u203a from Only you to a public link and back": [
+    "turned off"
+   ],
+   "webkit-light-desktop :: task detail pilot \u203a fields, pickers and the panel header": [
+    "suggested pick L",
+    "model pick Sonnet"
+   ],
+   "webkit-light-phone :: share dialog pilot \u203a from Only you to a public link and back": [
+    "expiry 30 days",
+    "turned off"
+   ],
+   "webkit-light-phone :: task detail pilot \u203a fields, pickers and the panel header": [
+    "suggested pick L"
+   ]
+  },
+  "styleCaptures": 256,
+  "styleCapturesDiffering": 0
+ },
+ "first-pilot-fix1-fix2": {
+  "screenshots": 256,
+  "identical": 222,
+  "antialias": 32,
+  "beyond": {
+   "chromium-dark-desktop/pilot-delete-confirm.png": {
+    "pixels": 19,
+    "maxChannelDiff": 15,
+    "clusters": [
+     {
+      "x": [
+       1247,
+       1247
+      ],
+      "y": [
+       28,
+       30
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 15
+     },
+     {
+      "x": [
+       1246,
+       1247
+      ],
+      "y": [
+       37,
+       39
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 11
+     },
+     {
+      "x": [
+       721,
+       722
+      ],
+      "y": [
+       325,
+       326
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       721,
+       723
+      ],
+      "y": [
+       347,
+       349
+      ],
+      "pixels": 5,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       722,
+       722
+      ],
+      "y": [
+       358,
+       358
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       722,
+       723
+      ],
+      "y": [
+       377,
+       378
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "chromium-light-desktop/pilot-delete-confirm.png": {
+    "pixels": 5,
+    "maxChannelDiff": 20,
+    "clusters": [
+     {
+      "x": [
+       1247,
+       1247
+      ],
+      "y": [
+       28,
+       30
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 20
+     },
+     {
+      "x": [
+       1246,
+       1247
+      ],
+      "y": [
+       37,
+       39
+      ],
+      "pixels": 3,
+      "maxChannelDiff": 16
+     }
+    ]
+   }
+  },
+  "antialiasShots": [
+   "chromium-dark-desktop/pilot-assignee-open.png",
+   "chromium-dark-desktop/pilot-dependencies.png",
+   "chromium-dark-desktop/pilot-dependency-list.png",
+   "chromium-dark-desktop/pilot-dependency-view-hover.png",
+   "chromium-dark-desktop/pilot-detail.png",
+   "chromium-dark-desktop/pilot-field-hover.png",
+   "chromium-dark-desktop/pilot-inputs.png",
+   "chromium-dark-desktop/pilot-list-open.png",
+   "chromium-dark-desktop/pilot-list-search.png",
+   "chromium-dark-desktop/pilot-model-open.png",
+   "chromium-dark-desktop/pilot-prerequisite-open.png",
+   "chromium-dark-desktop/pilot-provider-open.png",
+   "chromium-dark-desktop/pilot-reopen-refused.png",
+   "chromium-dark-desktop/pilot-share-loading.png",
+   "chromium-dark-desktop/pilot-share-private.png",
+   "chromium-dark-desktop/pilot-suggested-open.png",
+   "chromium-dark-phone/pilot-remove-confirm.png",
+   "chromium-dark-phone/pilot-run-hint.png",
+   "chromium-dark-phone/pilot-share-turn-off.png",
+   "chromium-light-desktop/pilot-account-open.png",
+   "chromium-light-desktop/pilot-account.png",
+   "chromium-light-desktop/pilot-antigravity-account-open.png",
+   "chromium-light-desktop/pilot-antigravity-account.png",
+   "chromium-light-desktop/pilot-inputs.png",
+   "chromium-light-desktop/pilot-remove-confirm.png",
+   "chromium-light-desktop/pilot-share-error.png",
+   "chromium-light-desktop/pilot-share-expiry-open.png",
+   "chromium-light-desktop/pilot-share-loading.png",
+   "chromium-light-desktop/pilot-share-turn-off.png",
+   "chromium-light-phone/pilot-delete-confirm.png",
+   "chromium-light-phone/pilot-remove-confirm.png",
+   "chromium-light-phone/pilot-run-hint.png"
+  ],
+  "traces": 72,
+  "tracesEqual": 61,
+  "tracesRequestsDiffer": [],
+  "tracesSnapshotOnly": {
+   "chromium-dark-desktop :: task detail pilot \u203a fields, pickers and the panel header": [
+    "model pick Sonnet"
+   ],
+   "chromium-dark-phone :: task detail pilot \u203a fields, pickers and the panel header": [
+    "model pick Sonnet"
+   ],
+   "chromium-light-desktop :: task detail pilot \u203a dependencies, inputs and comments": [
+    "input removed"
+   ],
+   "chromium-light-desktop :: task detail pilot \u203a fields, pickers and the panel header": [
+    "list pick Later",
+    "model pick Sonnet"
+   ],
+   "chromium-light-phone :: task detail pilot \u203a dependencies, inputs and comments": [
+    "input removed"
+   ],
+   "chromium-light-phone :: task detail pilot \u203a fields, pickers and the panel header": [
+    "list pick Later",
+    "suggested pick L",
+    "model pick Sonnet"
+   ],
+   "webkit-dark-phone :: share dialog pilot \u203a from Only you to a public link and back": [
+    "expiry 30 days"
+   ],
+   "webkit-dark-phone :: task detail pilot \u203a fields, pickers and the panel header": [
+    "suggested pick L"
+   ],
+   "webkit-light-desktop :: share dialog pilot \u203a from Only you to a public link and back": [
+    "expiry 30 days",
+    "turned off"
+   ],
+   "webkit-light-desktop :: task detail pilot \u203a fields, pickers and the panel header": [
+    "suggested pick L",
+    "model pick Sonnet"
+   ],
+   "webkit-light-phone :: share dialog pilot \u203a from Only you to a public link and back": [
+    "turned off"
+   ]
+  },
+  "styleCaptures": 256,
+  "styleCapturesDiffering": 0
+ },
+ "first-p41-ref1-fix1": {
+  "screenshots": 256,
+  "identical": 237,
+  "antialias": 17,
+  "beyond": {
+   "chromium-dark-phone/p41-profile-photo.png": {
+    "pixels": 57,
+    "maxChannelDiff": 33,
+    "clusters": [
+     {
+      "x": [
+       59,
+       65
+      ],
+      "y": [
+       180,
+       181
+      ],
+      "pixels": 8,
+      "maxChannelDiff": 16
+     },
+     {
+      "x": [
+       80,
+       86
+      ],
+      "y": [
+       180,
+       181
+      ],
+      "pixels": 7,
+      "maxChannelDiff": 16
+     },
+     {
+      "x": [
+       122,
+       122
+      ],
+      "y": [
+       180,
+       180
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       42,
+       43
+      ],
+      "y": [
+       199,
+       203
+      ],
+      "pixels": 7,
+      "maxChannelDiff": 33
+     },
+     {
+      "x": [
+       121,
+       123
+      ],
+      "y": [
+       203,
+       205
+      ],
+      "pixels": 5,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       122,
+       124
+      ],
+      "y": [
+       216,
+       217
+      ],
+      "pixels": 4,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "chromium-light-desktop/p41-cli-loading.png": {
+    "pixels": 62,
+    "maxChannelDiff": 20,
+    "clusters": [
+     {
+      "x": [
+       642,
+       651
+      ],
+      "y": [
+       470,
+       479
+      ],
+      "pixels": 62,
+      "maxChannelDiff": 20
+     }
+    ]
+   }
+  },
+  "antialiasShots": [
+   "chromium-dark-desktop/p41-setup-invalid.png",
+   "chromium-dark-desktop/p41-setup-valid.png",
+   "chromium-dark-desktop/p41-tokens-new-never.png",
+   "chromium-dark-desktop/p41-tokens-new-workspaces.png",
+   "chromium-dark-phone/p41-setup-invalid.png",
+   "chromium-dark-phone/p41-setup-required.png",
+   "chromium-dark-phone/p41-tokens-revoke.png",
+   "chromium-light-desktop/p41-setup-invalid.png",
+   "chromium-light-desktop/p41-setup-required.png",
+   "chromium-light-desktop/p41-setup-valid.png",
+   "chromium-light-desktop/p41-tokens-new-never.png",
+   "chromium-light-desktop/p41-tokens-new-workspaces.png",
+   "chromium-light-phone/p41-profile-photo.png",
+   "chromium-light-phone/p41-setup-invalid.png",
+   "chromium-light-phone/p41-setup-required.png",
+   "chromium-light-phone/p41-setup-valid.png",
+   "webkit-light-phone/p41-tokens-new-workspaces.png"
+  ],
+  "traces": 88,
+  "tracesEqual": 84,
+  "tracesRequestsDiffer": [],
+  "tracesSnapshotOnly": {
+   "webkit-dark-desktop :: P4.1 orbit login approval \u203a warnings, a refused approval, deny and a dead code": [
+    "approval refused"
+   ],
+   "webkit-dark-desktop :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": [
+    "wrong password"
+   ],
+   "webkit-light-desktop :: P4.1 orbit login approval \u203a warnings, a refused approval, deny and a dead code": [
+    "approval refused"
+   ],
+   "webkit-light-phone :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": [
+    "wrong password"
+   ]
+  },
+  "styleCaptures": 236,
+  "styleCapturesDiffering": 0
+ },
+ "first-p41-ref2-fix2": {
+  "screenshots": 256,
+  "identical": 236,
+  "antialias": 18,
+  "beyond": {
+   "chromium-light-desktop/p41-profile-photo.png": {
+    "pixels": 318,
+    "maxChannelDiff": 30,
+    "clusters": [
+     {
+      "x": [
+       17,
+       46
+      ],
+      "y": [
+       859,
+       875
+      ],
+      "pixels": 318,
+      "maxChannelDiff": 30
+     }
+    ]
+   },
+   "chromium-light-phone/p41-profile-photo.png": {
+    "pixels": 32,
+    "maxChannelDiff": 32,
+    "clusters": [
+     {
+      "x": [
+       59,
+       65
+      ],
+      "y": [
+       180,
+       181
+      ],
+      "pixels": 7,
+      "maxChannelDiff": 16
+     },
+     {
+      "x": [
+       80,
+       86
+      ],
+      "y": [
+       180,
+       181
+      ],
+      "pixels": 6,
+      "maxChannelDiff": 16
+     },
+     {
+      "x": [
+       121,
+       122
+      ],
+      "y": [
+       180,
+       180
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       42,
+       43
+      ],
+      "y": [
+       199,
+       203
+      ],
+      "pixels": 6,
+      "maxChannelDiff": 32
+     },
+     {
+      "x": [
+       42,
+       43
+      ],
+      "y": [
+       218,
+       222
+      ],
+      "pixels": 6,
+      "maxChannelDiff": 32
+     },
+     {
+      "x": [
+       42,
+       43
+      ],
+      "y": [
+       292,
+       295
+      ],
+      "pixels": 5,
+      "maxChannelDiff": 1
+     }
+    ]
+   }
+  },
+  "antialiasShots": [
+   "chromium-dark-desktop/p41-cli-denied.png",
+   "chromium-dark-desktop/p41-setup-invalid.png",
+   "chromium-dark-desktop/p41-setup-required.png",
+   "chromium-dark-desktop/p41-tokens-new-never.png",
+   "chromium-dark-desktop/p41-tokens-new-workspaces.png",
+   "chromium-dark-phone/p41-cli-denied.png",
+   "chromium-dark-phone/p41-profile-photo.png",
+   "chromium-dark-phone/p41-setup-invalid.png",
+   "chromium-dark-phone/p41-setup-valid.png",
+   "chromium-dark-phone/p41-tokens-revoke.png",
+   "chromium-light-desktop/p41-setup-invalid.png",
+   "chromium-light-desktop/p41-setup-required.png",
+   "chromium-light-desktop/p41-tokens-new-never.png",
+   "chromium-light-desktop/p41-tokens-new-workspaces.png",
+   "chromium-light-phone/p41-cli-denied.png",
+   "chromium-light-phone/p41-setup-invalid.png",
+   "chromium-light-phone/p41-setup-valid.png",
+   "webkit-light-phone/p41-tokens-new-workspaces.png"
+  ],
+  "traces": 88,
+  "tracesEqual": 84,
+  "tracesRequestsDiffer": [],
+  "tracesSnapshotOnly": {
+   "webkit-dark-desktop :: P4.1 orbit login approval \u203a warnings, a refused approval, deny and a dead code": [
+    "approval refused"
+   ],
+   "webkit-dark-desktop :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": [
+    "wrong password"
+   ],
+   "webkit-dark-phone :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": [
+    "wrong password"
+   ],
+   "webkit-light-desktop :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": [
+    "wrong password"
+   ]
+  },
+  "styleCaptures": 236,
+  "styleCapturesDiffering": 0
+ },
+ "first-p41-ref1-ref2": {
+  "screenshots": 256,
+  "identical": 241,
+  "antialias": 13,
+  "beyond": {
+   "chromium-dark-desktop/p41-profile-photo.png": {
+    "pixels": 318,
+    "maxChannelDiff": 30,
+    "clusters": [
+     {
+      "x": [
+       17,
+       46
+      ],
+      "y": [
+       859,
+       875
+      ],
+      "pixels": 318,
+      "maxChannelDiff": 30
+     }
+    ]
+   },
+   "chromium-light-phone/p41-profile-photo.png": {
+    "pixels": 32,
+    "maxChannelDiff": 32,
+    "clusters": [
+     {
+      "x": [
+       59,
+       65
+      ],
+      "y": [
+       180,
+       181
+      ],
+      "pixels": 7,
+      "maxChannelDiff": 16
+     },
+     {
+      "x": [
+       80,
+       86
+      ],
+      "y": [
+       180,
+       181
+      ],
+      "pixels": 6,
+      "maxChannelDiff": 16
+     },
+     {
+      "x": [
+       121,
+       122
+      ],
+      "y": [
+       180,
+       180
+      ],
+      "pixels": 2,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       42,
+       43
+      ],
+      "y": [
+       199,
+       203
+      ],
+      "pixels": 6,
+      "maxChannelDiff": 32
+     },
+     {
+      "x": [
+       42,
+       43
+      ],
+      "y": [
+       218,
+       222
+      ],
+      "pixels": 6,
+      "maxChannelDiff": 32
+     },
+     {
+      "x": [
+       42,
+       43
+      ],
+      "y": [
+       292,
+       295
+      ],
+      "pixels": 5,
+      "maxChannelDiff": 1
+     }
+    ]
+   }
+  },
+  "antialiasShots": [
+   "chromium-dark-desktop/p41-cli-denied.png",
+   "chromium-dark-desktop/p41-setup-invalid.png",
+   "chromium-dark-desktop/p41-setup-valid.png",
+   "chromium-dark-phone/p41-cli-denied.png",
+   "chromium-dark-phone/p41-profile-photo.png",
+   "chromium-dark-phone/p41-setup-invalid.png",
+   "chromium-dark-phone/p41-setup-required.png",
+   "chromium-dark-phone/p41-setup-valid.png",
+   "chromium-light-desktop/p41-profile-photo.png",
+   "chromium-light-desktop/p41-setup-required.png",
+   "chromium-light-desktop/p41-setup-valid.png",
+   "chromium-light-phone/p41-setup-invalid.png",
+   "chromium-light-phone/p41-setup-required.png"
+  ],
+  "traces": 88,
+  "tracesEqual": 85,
+  "tracesRequestsDiffer": [],
+  "tracesSnapshotOnly": {
+   "webkit-dark-desktop :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": [
+    "wrong password"
+   ],
+   "webkit-dark-phone :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": [
+    "wrong password"
+   ],
+   "webkit-light-desktop :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": [
+    "wrong password"
+   ]
+  },
+  "styleCaptures": 236,
+  "styleCapturesDiffering": 0
+ },
+ "first-p41-fix1-fix2": {
+  "screenshots": 256,
+  "identical": 243,
+  "antialias": 9,
+  "beyond": {
+   "chromium-dark-desktop/p41-profile-photo.png": {
+    "pixels": 318,
+    "maxChannelDiff": 30,
+    "clusters": [
+     {
+      "x": [
+       17,
+       46
+      ],
+      "y": [
+       859,
+       875
+      ],
+      "pixels": 318,
+      "maxChannelDiff": 30
+     }
+    ]
+   },
+   "chromium-dark-phone/p41-profile-photo.png": {
+    "pixels": 64,
+    "maxChannelDiff": 33,
+    "clusters": [
+     {
+      "x": [
+       366,
+       373
+      ],
+      "y": [
+       95,
+       102
+      ],
+      "pixels": 8,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       59,
+       65
+      ],
+      "y": [
+       180,
+       181
+      ],
+      "pixels": 8,
+      "maxChannelDiff": 16
+     },
+     {
+      "x": [
+       80,
+       86
+      ],
+      "y": [
+       180,
+       181
+      ],
+      "pixels": 7,
+      "maxChannelDiff": 16
+     },
+     {
+      "x": [
+       122,
+       122
+      ],
+      "y": [
+       180,
+       180
+      ],
+      "pixels": 1,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       42,
+       43
+      ],
+      "y": [
+       199,
+       203
+      ],
+      "pixels": 7,
+      "maxChannelDiff": 33
+     },
+     {
+      "x": [
+       121,
+       123
+      ],
+      "y": [
+       203,
+       205
+      ],
+      "pixels": 5,
+      "maxChannelDiff": 1
+     }
+    ]
+   },
+   "chromium-light-desktop/p41-cli-loading.png": {
+    "pixels": 62,
+    "maxChannelDiff": 20,
+    "clusters": [
+     {
+      "x": [
+       642,
+       651
+      ],
+      "y": [
+       470,
+       479
+      ],
+      "pixels": 62,
+      "maxChannelDiff": 20
+     }
+    ]
+   },
+   "chromium-light-desktop/p41-profile-photo.png": {
+    "pixels": 354,
+    "maxChannelDiff": 30,
+    "clusters": [
+     {
+      "x": [
+       849,
+       852
+      ],
+      "y": [
+       151,
+       153
+      ],
+      "pixels": 7,
+      "maxChannelDiff": 2
+     },
+     {
+      "x": [
+       1030,
+       1034
+      ],
+      "y": [
+       242,
+       247
+      ],
+      "pixels": 7,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       1058,
+       1059
+      ],
+      "y": [
+       379,
+       381
+      ],
+      "pixels": 5,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       500,
+       501
+      ],
+      "y": [
+       408,
+       410
+      ],
+      "pixels": 4,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       1058,
+       1059
+      ],
+      "y": [
+       408,
+       410
+      ],
+      "pixels": 4,
+      "maxChannelDiff": 1
+     },
+     {
+      "x": [
+       17,
+       46
+      ],
+      "y": [
+       859,
+       875
+      ],
+      "pixels": 318,
+      "maxChannelDiff": 30
+     }
+    ]
+   }
+  },
+  "antialiasShots": [
+   "chromium-dark-desktop/p41-setup-required.png",
+   "chromium-dark-phone/p41-setup-invalid.png",
+   "chromium-light-desktop/p41-setup-invalid.png",
+   "chromium-light-desktop/p41-setup-required.png",
+   "chromium-light-phone/p41-cli-denied.png",
+   "chromium-light-phone/p41-profile-photo.png",
+   "chromium-light-phone/p41-setup-invalid.png",
+   "chromium-light-phone/p41-setup-required.png",
+   "chromium-light-phone/p41-setup-valid.png"
+  ],
+  "traces": 88,
+  "tracesEqual": 85,
+  "tracesRequestsDiffer": [],
+  "tracesSnapshotOnly": {
+   "webkit-dark-desktop :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": [
+    "wrong password"
+   ],
+   "webkit-light-desktop :: P4.1 orbit login approval \u203a warnings, a refused approval, deny and a dead code": [
+    "approval refused"
+   ],
+   "webkit-light-phone :: P4.1 sign-in and first-run setup \u203a login: a signed-out link, a wrong password, then where it was going": [
+    "wrong password"
+   ]
+  },
+  "styleCaptures": 236,
+  "styleCapturesDiffering": 0
+ }
+}

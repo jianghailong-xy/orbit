@@ -304,6 +304,9 @@ interface Check {
   type: 'path' | 'symbol' | 'commit';
   state: 'verified' | 'changed' | 'missing';
   regionSha256?: string;
+  path?: string;
+  symbol?: string;
+  sha?: string;
 }
 
 async function report(h: Harness, m: Maintained, ref: string, entries: Array<{ entryId: string; revision: number; checks: Check[] }>, who?: Caller): Promise<Answer> {
@@ -637,6 +640,41 @@ test('a report against a revision that moved is stale, and a malformed one is re
   ] }]);
   expectStatus(good, 200, 'a report of the current revision');
   assert.equal(good.body.outcomes[0].anchorState, 'verified');
+});
+
+test('a check that names another anchor than the one at its index is stale and writes nothing', { skip }, async () => {
+  const h = await boot();
+  const m = await maintainedSpace(h, 'identity');
+  // Two path anchors: the type at each index is the same, so only the identity tells them apart —
+  // the shape the canary incident took, when a page-mate's verdict was laid on the wrong entry.
+  const entryId = await ownerEntry(h, m, 'Two files, two anchors', [{ type: 'path', path: 'docs/one.md' }, { type: 'path', path: 'docs/two.md' }]);
+
+  // The right identity is recorded.
+  const right = await report(h, m, REF_1, [{ entryId, revision: 1, checks: [{ index: 0, type: 'path', state: 'verified', path: 'docs/one.md' }] }]);
+  expectStatus(right, 200, 'a check naming the anchor it belongs to');
+  assert.equal(right.body.outcomes[0].status, 'recorded');
+  assert.equal(right.body.outcomes[0].anchorState, 'unchecked', 'the second anchor is not checked yet');
+  let row = await entryRow(h, entryId);
+  assert.equal(((row.anchors as unknown[])[0] as { check?: { state?: string } }).check?.state, 'verified');
+  assert.equal(((row.anchors as unknown[])[1] as { check?: { state?: string } }).check, undefined, 'the check landed on the anchor it named');
+
+  // The wrong identity — the OTHER path at the same index — is a report against a list that moved:
+  // stale, nothing written, so the maintenance run that carried it is told and fails the job.
+  const wrong = await report(h, m, REF_1, [{ entryId, revision: 1, checks: [{ index: 0, type: 'path', state: 'missing', path: 'docs/two.md' }] }]);
+  expectStatus(wrong, 200, 'a mismatched identity is no failure of the report door');
+  assert.equal(wrong.body.outcomes[0].status, 'stale');
+  assert.match(wrong.body.outcomes[0].message, /names path docs\/two\.md/u);
+  row = await entryRow(h, entryId);
+  assert.equal(((row.anchors as unknown[])[0] as { check?: { state?: string; ref?: string } }).check?.state, 'verified',
+    'the identity mismatch wrote nothing: the earlier verdict stands');
+  assert.equal(row.anchorState, 'unchecked');
+
+  // An identity field its type does not name is malformed.
+  const malformed = await report(h, m, REF_1, [{ entryId, revision: 1, checks: [{ index: 0, type: 'path', state: 'verified', sha: COMMIT }] }]);
+  expectStatus(malformed, 400, 'a path check names no sha');
+  assert.equal(malformed.body.outcomes[0].code, 'WIKI_SCHEMA');
+  row = await entryRow(h, entryId);
+  assert.equal(((row.anchors as unknown[])[0] as { check?: { state?: string } }).check?.state, 'verified', 'the malformed report wrote nothing either');
 });
 
 // ── Tiered reads what a check writes ────────────────────────────────────────────────────────────

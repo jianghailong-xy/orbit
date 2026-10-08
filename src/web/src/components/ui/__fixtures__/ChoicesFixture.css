@@ -14,3 +14,6 @@
 .fixture-access-menu .ant-dropdown-menu-item .ant-dropdown-menu-item-icon { margin-top: 3px; }
 .fixture-command-icon { display: inline-block; width: 1em; font-size: inherit; text-align: center; }
 .fixture-mid-anchor { display: flex; justify-content: center; margin-top: 24px; }
+/* First-frame owners: a screen of content around the sample; on the page, in a box that scrolls. */
+.fixture-scroll-spacer { height: 100vh; }
+.fixture-scroll-owner { height: 160px; overflow: auto; }
