@@ -14,6 +14,11 @@ done
 [[ $ORBIT_ANDROID_SIGNING_PURPOSE != test || $ORBIT_ANDROID_APPLICATION_ID == *.upgradetest ]] || {
   echo 'Temporary test signing requires an isolated *.upgradetest application ID' >&2; exit 2;
 }
+# Update rehearsals only: the updater reads a stand-in for GitHub on the device loopback (adb reverse).
+update_api=${ORBIT_ANDROID_UPDATE_API:-https://api.github.com}
+[[ $update_api == https://api.github.com || ( $ORBIT_ANDROID_SIGNING_PURPOSE == test && $update_api =~ ^http://127\.0\.0\.1:[1-9][0-9]{0,4}$ ) ]] || {
+  echo 'ORBIT_ANDROID_UPDATE_API is only for a test-signed rehearsal: http://127.0.0.1:<port>' >&2; exit 2;
+}
 [[ $ORBIT_ANDROID_VERSION_NAME =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ && ${#ORBIT_ANDROID_VERSION_NAME} -le 32 ]] || {
   echo 'Invalid version name (X.Y.Z[-suffix], max 32 characters)' >&2; exit 2;
 }
@@ -57,7 +62,7 @@ output=$(cd "$1" && pwd)
 printf '%s\n' "$source_sha" > "$output/source-sha.txt"
 # No --info/--debug, command-line passwords, Gradle build scan or credential capture.
 bash "$android_dir/gradlew" -p "$android_dir" --no-daemon --max-workers=2 \
-  -PorbitSourceSha="$source_sha" -PorbitSourceDirty=false :app:assembleRelease \
+  -PorbitSourceSha="$source_sha" -PorbitSourceDirty=false -PorbitUpdateApi="$update_api" :app:assembleRelease \
   2>&1 | tee "$output/build.log"
 cp "$android_dir/app/build/outputs/apk/release/app-release.apk" "$output/app-release.apk"
 "$tools/aapt" dump badging "$output/app-release.apk" > "$output/badging.txt"
@@ -83,6 +88,9 @@ source = (p / 'source-sha.txt').read_text().strip()
 config = (p / 'BuildConfig.java').read_text()
 assert f'SOURCE_SHA = "{source}"' in config and 'SOURCE_DIRTY = false' in config
 assert f'VERSION_NAME = "{version}"' in config and f'VERSION_CODE = {code};' in config
+update_api = re.search(r'UPDATE_API = "([^"]*)"', config)[1]
+assert update_api == os.environ.get('ORBIT_ANDROID_UPDATE_API', 'https://api.github.com'), 'BuildConfig.UPDATE_API differs'
+assert update_api == 'https://api.github.com' or os.environ['ORBIT_ANDROID_SIGNING_PURPOSE'] == 'test'
 firebase = {name: os.environ.get(f'ORBIT_ANDROID_FIREBASE_{name}', '') for name in
             ('APP_ID', 'API_KEY', 'PROJECT_ID', 'SENDER_ID', 'ANDROID_PACKAGE')}
 for name, value in firebase.items():
@@ -93,7 +101,7 @@ identity = dict(applicationId=app_id, versionName=version, versionCode=int(code)
                 buildType='release', debuggable=False, sourceSha=source, sourceDirty=False,
                 apkSha256=hashlib.sha256((p / 'app-release.apk').read_bytes()).hexdigest(),
                 certificateSha256=certs[0], signingPurpose=os.environ['ORBIT_ANDROID_SIGNING_PURPOSE'],
-                distributionSignature=os.environ['ORBIT_ANDROID_SIGNING_PURPOSE'] == 'release',
+                distributionSignature=os.environ['ORBIT_ANDROID_SIGNING_PURPOSE'] == 'release', updateApi=update_api,
                 pushConfigured=all(firebase.values()), firebaseProjectId=firebase['PROJECT_ID'] or None)
 (p / 'identity.json').write_text(json.dumps(identity, indent=2) + '\n')
 print(json.dumps(identity, indent=2))
