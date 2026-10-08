@@ -418,6 +418,13 @@ export class WikiPlanRepo {
     return this.files.filter((file) => wikiPlanIsSource(file) && wikiPlanPathMatches(pattern, file));
   }
 
+  /** Whether the contracts/ inventory of the snapshot has this file (contract `plan.proposals`, P8). */
+  hasContract(raw: string): boolean {
+    const path = trimDotSlash(goTrim(goTrimSpace(raw), '`'));
+    if (path === '') return false;
+    return this.contractKeys.has(path) || (this.fileSet.has(path) && path.startsWith('contracts/'));
+  }
+
   /** What a file declares, as the gate offers it to a model that named one it does not have. */
   symbolsOf(where: string, max: number): string[] {
     const out: string[] = [];

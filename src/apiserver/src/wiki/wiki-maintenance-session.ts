@@ -191,18 +191,17 @@ export async function wikiMaintenanceRunsToday(
     })
     : 0;
   // The server path's runs: made by a wiki job, counted off the run row itself, under the same rules the
-  // task branch has — not a catch-up run on a local endpoint, and not one that failed.
-  const byJob = settings.listId
-    ? await db.wikiMaintenanceRun.count({
-      where: {
-        ownerId,
-        spaceId,
-        jobId: { not: null },
-        createdAt: { gte: since },
-        NOT: { catchUp: 'active', OR: [{ localEndpoint: true }, { outcome: { in: ['failed', 'truncated'] } }] },
-      },
-    })
-    : 0;
+  // task branch has — not a catch-up run on a local endpoint, and not one that failed. A list is not
+  // needed for them: a space the server executes makes no task (contract `maintenance.job.server`, P8).
+  const byJob = await db.wikiMaintenanceRun.count({
+    where: {
+      ownerId,
+      spaceId,
+      jobId: { not: null },
+      createdAt: { gte: since },
+      NOT: { catchUp: 'active', OR: [{ localEndpoint: true }, { outcome: { in: ['failed', 'truncated'] } }] },
+    },
+  });
   const used = byTask + byJob;
   return {
     limit: settings.dailyRunLimit,

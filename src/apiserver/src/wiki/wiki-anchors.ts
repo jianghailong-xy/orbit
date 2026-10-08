@@ -300,6 +300,31 @@ export async function listWikiAnchors(
   input: { ownerId: string; runnerId: string; spaceId: string; sessionId: string; after: string | null; limit: number | null },
 ): Promise<WikiAnchorList> {
   const limit = Math.min(Math.max(input.limit ?? WIKI_ANCHOR_RULES.listEntriesDefault, 1), WIKI_ANCHOR_RULES.listEntriesMax);
+  const page = await anchorPage(reader, input, limit);
+  return { spaceId: input.spaceId, repo: await anchorRepoOf(reader, input), entries: page.entries, next: page.next };
+}
+
+/**
+ * The same page for the server's own maintenance run (contract `maintenance.job.server`, P8): there is no
+ * session and no runner on this side — the checks travel as a `wiki_repo_op` the space's workspace routes,
+ * and this returns the entries alone, with no checkout for the caller to name. The entries are exactly the
+ * runner's list's: active, git-anchored, in id order, one page at a time.
+ */
+export async function listWikiAnchorsForJob(
+  reader: AnchorReader,
+  input: { ownerId: string; spaceId: string; after: string | null; limit: number | null },
+): Promise<{ spaceId: string; entries: WikiAnchorList['entries']; next: string | null }> {
+  const limit = Math.min(Math.max(input.limit ?? WIKI_ANCHOR_RULES.listEntriesDefault, 1), WIKI_ANCHOR_RULES.listEntriesMax);
+  const page = await anchorPage(reader, input, limit);
+  return { spaceId: input.spaceId, entries: page.entries, next: page.next };
+}
+
+/** The page's rows as entries: the one read both lists above make. */
+async function anchorPage(
+  reader: AnchorReader,
+  input: { ownerId: string; spaceId: string; after: string | null },
+  limit: number,
+): Promise<Pick<WikiAnchorList, 'entries' | 'next'>> {
   const rows = await reader.$queryRaw<Array<{ id: string; currentRevision: number; anchors: unknown }>>`
     SELECT e."id" AS "id", e."current_revision" AS "currentRevision", e."anchors" AS "anchors"
       FROM "wiki_entry" e
@@ -313,8 +338,6 @@ export async function listWikiAnchors(
      LIMIT ${limit + 1}::int`;
   const page = rows.slice(0, limit);
   return {
-    spaceId: input.spaceId,
-    repo: await anchorRepoOf(reader, input),
     entries: page.map((row) => ({
       entryId: row.id,
       revision: Number(row.currentRevision),

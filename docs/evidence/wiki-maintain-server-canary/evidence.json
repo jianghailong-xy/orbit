@@ -1,0 +1,1290 @@
+{
+  "checks": [
+    {
+      "what": "run 1: a maintain job succeeded",
+      "ok": true
+    },
+    {
+      "what": "run 1: no task was made for it",
+      "ok": true
+    },
+    {
+      "what": "run 1: the cursor advanced",
+      "ok": true,
+      "detail": "(none) -> 85a16c9a-ba78-430f-80d0-4e51357149d3"
+    },
+    {
+      "what": "run 2: a maintain job succeeded",
+      "ok": true
+    },
+    {
+      "what": "run 2: no task was made for it",
+      "ok": true
+    },
+    {
+      "what": "run 2: the cursor advanced",
+      "ok": true,
+      "detail": "85a16c9a-ba78-430f-80d0-4e51357149d3 -> eb4ff8af-36d2-46ba-90dd-125140e9190d"
+    },
+    {
+      "what": "run 3: a maintain job succeeded",
+      "ok": true
+    },
+    {
+      "what": "run 3: no task was made for it",
+      "ok": true
+    },
+    {
+      "what": "run 3: the cursor advanced",
+      "ok": true,
+      "detail": "eb4ff8af-36d2-46ba-90dd-125140e9190d -> 4a0329cb-bc74-4fd9-a87c-224da0e7e1f8"
+    },
+    {
+      "what": "account A: the three runs made no task",
+      "ok": true,
+      "detail": "{\"before\":{\"tasks\":7,\"tasksInHiddenList\":1,\"sessions\":26,\"providers\":0,\"providerPools\":0},\"after\":{\"tasks\":7,\"tasksInHiddenList\":1,\"sessions\":26,\"providers\":0,\"providerPools\":0},\"tasksAdded\":0,\"sessionsAdded\":0,\"tasksInHiddenListAdded\":0}"
+    },
+    {
+      "what": "account A: the three runs made no session",
+      "ok": true,
+      "detail": "{\"before\":{\"tasks\":7,\"tasksInHiddenList\":1,\"sessions\":26,\"providers\":0,\"providerPools\":0},\"after\":{\"tasks\":7,\"tasksInHiddenList\":1,\"sessions\":26,\"providers\":0,\"providerPools\":0},\"tasksAdded\":0,\"sessionsAdded\":0,\"tasksInHiddenListAdded\":0}"
+    },
+    {
+      "what": "account A: the hidden maintenance list gained no task",
+      "ok": true,
+      "detail": "{\"before\":{\"tasks\":7,\"tasksInHiddenList\":1,\"sessions\":26,\"providers\":0,\"providerPools\":0},\"after\":{\"tasks\":7,\"tasksInHiddenList\":1,\"sessions\":26,\"providers\":0,\"providerPools\":0},\"tasksAdded\":0,\"sessionsAdded\":0,\"tasksInHiddenListAdded\":0}"
+    },
+    {
+      "what": "account B holds no provider row of any kind",
+      "ok": true,
+      "detail": "providers 0, pools 0"
+    },
+    {
+      "what": "a run succeeded, recorded ops and was not behind, and a queued articles job exists for the space",
+      "ok": true,
+      "detail": "runs with ops 3, articles jobs 3: {\"id\":\"ab4709d1-4fcb-4192-a574-4700839e11eb\",\"state\":\"succeeded\",\"input\":{},\"priority\":0,\"createdAt\":\"2026-10-08T12:50:46.299Z\",\"endedAt\":\"2026-10-08T12:50:47.652Z\",\"failureKind\":null,\"error\":null}"
+    },
+    {
+      "what": "account B (no provider row): the owner PATCH turns maintenance on",
+      "ok": true,
+      "detail": "status 200, settings {\"listId\":\"01a11b91-392e-708e-be93-38a9374110ff\",\"enabled\":true,\"provider\":\"claude\",\"workspaceId\":\"fb00dd00-6631-48e1-8ff4-117ce867d731\",\"lookbackDays\":7,\"dailyRunLimit\":8}"
+    },
+    {
+      "what": "account B: its run succeeded with no provider row in the account",
+      "ok": true
+    },
+    {
+      "what": "account B: its run made no task",
+      "ok": true
+    },
+    {
+      "what": "account B: its run made no task and no session",
+      "ok": true,
+      "detail": "{\"before\":{\"tasks\":4,\"tasksInHiddenList\":null,\"sessions\":25,\"providers\":0,\"providerPools\":0},\"after\":{\"tasks\":4,\"tasksInHiddenList\":null,\"sessions\":25,\"providers\":0,\"providerPools\":0},\"tasksAdded\":0,\"sessionsAdded\":0,\"afterRun\":{\"tasks\":4,\"tasksInHiddenList\":null,\"sessions\":25,\"providers\":0,\"providerPools\":0},\"sessionsAddedByRun\":0,\"tasksAddedByRun\":0}"
+    },
+    {
+      "what": "the runner's runContext route answers 409 WIKI_SERVER_EXECUTES",
+      "ok": true,
+      "detail": "409 {\"code\":\"WIKI_SERVER_EXECUTES\",\"message\":\"this account's Wiki maintenance run is executed by the Orbit server (ORBIT_WIKI_EXECUTOR): its wiki worker reads the dossiers and calls the deployment's Syste"
+    },
+    {
+      "what": "the runner's dossiers route answers 409 WIKI_SERVER_EXECUTES",
+      "ok": true,
+      "detail": "409 {\"code\":\"WIKI_SERVER_EXECUTES\",\"message\":\"this account's Wiki maintenance run is executed by the Orbit server (ORBIT_WIKI_EXECUTOR): its wiki worker reads the dossiers and moves the cursor, so this do"
+    },
+    {
+      "what": "the runner's cursor route answers 409 WIKI_SERVER_EXECUTES",
+      "ok": true,
+      "detail": "409 {\"code\":\"WIKI_SERVER_EXECUTES\",\"message\":\"this account's Wiki maintenance run is executed by the Orbit server (ORBIT_WIKI_EXECUTOR): its wiki worker reads the dossiers and moves the cursor, so this do"
+    },
+    {
+      "what": "the door checks asked the model nothing",
+      "ok": true,
+      "detail": "{\"callsBefore\":8,\"callsAfter\":8,\"callsDuringDoorChecks\":0,\"total\":8}"
+    },
+    {
+      "what": "the published runner's `orbit wiki maintain` was refused",
+      "ok": true,
+      "detail": "exit 1: {\"spaceId\":\"1414QrDa3auwuAktck2Ijw\",\"outcome\":\"failed\",\"advanced\":false,\"report\":{\"sessions\":0,\"dossiers\":0,\"unchanged\":0,\"offTopic\":0,\"entries\":{\"extracted\":0,\"kept\":0,\"dropped\":0,\"foreign\":0,\"principles\":0},\"ops\":{\"proposed\":0,\"recorded\":0,\"refused\":0,\"selfCheckDropped\":0,\"heldBack\":0,\"heldBackByB"
+    },
+    {
+      "what": "three maintain jobs succeeded in a row",
+      "ok": true,
+      "detail": "[[1,\"46cfb9a6-940e-4370-b0a9-15b2fad46c99\",\"succeeded\"],[2,\"14fb4b50-baf8-4cd6-81b3-9953d7dae5b9\",\"succeeded\"],[3,\"12010986-a827-4ba7-8e5a-40f1643bf080\",\"succeeded\"]]"
+    }
+  ],
+  "runs": [
+    {
+      "run": 1,
+      "runId": "3e6fdfc1-000b-45e5-b2b7-898681e4b5f7",
+      "jobId": "46cfb9a6-940e-4370-b0a9-15b2fad46c99",
+      "jobState": "succeeded",
+      "jobAttempts": 3,
+      "taskId": null,
+      "due": "backlog",
+      "catchUp": null,
+      "expectAt": "2026-10-08T12:16:51.101Z",
+      "outcome": "succeeded",
+      "opsRefused": 0,
+      "failureKind": null,
+      "error": null,
+      "ops": {
+        "recorded": 2,
+        "proposed": 2,
+        "heldBackByBreaker": 0
+      },
+      "report": {
+        "ops": {
+          "applied": 0,
+          "refused": 0,
+          "waiting": 2,
+          "heldBack": 0,
+          "proposed": 2,
+          "recorded": 2,
+          "selfCheckDropped": 0,
+          "heldBackByBreaker": 0
+        },
+        "docs": {
+          "tokens": {
+            "calls": 0,
+            "input": 0,
+            "output": 0
+          },
+          "seconds": 0,
+          "skipped": "no_confirmed_plan",
+          "affected": {
+            "stale": 0,
+            "total": 0,
+            "byRepo": 0,
+            "byEntries": 0,
+            "unwritten": 0
+          },
+          "proposal": null,
+          "sections": {
+            "failed": 0,
+            "written": 0,
+            "unchanged": 0
+          },
+          "unplaced": {
+            "entries": 0,
+            "designDocs": 0
+          },
+          "withdrawn": {
+            "paths": 0,
+            "sentences": 0
+          },
+          "planVersion": null
+        },
+        "tokens": {
+          "calls": 2,
+          "input": 20,
+          "output": 80
+        },
+        "anchors": {
+          "changed": 0,
+          "entries": 0,
+          "missing": 0
+        },
+        "entries": {
+          "kept": 2,
+          "dropped": 0,
+          "foreign": 0,
+          "extracted": 2,
+          "principles": 0
+        },
+        "seconds": 3,
+        "dossiers": 2,
+        "offTopic": 0,
+        "sessions": 2,
+        "unchanged": 0,
+        "cursorAdvanced": true
+      },
+      "cursorBefore": null,
+      "cursorAfter": {
+        "at": "2026-10-08T12:16:51.101Z",
+        "kind": "session_settled",
+        "ref": "85a16c9a-ba78-430f-80d0-4e51357149d3",
+        "failures": 0
+      }
+    },
+    {
+      "run": 2,
+      "runId": "d2e55305-edbd-4eee-820e-bfe4bdc34463",
+      "jobId": "14fb4b50-baf8-4cd6-81b3-9953d7dae5b9",
+      "jobState": "succeeded",
+      "jobAttempts": 0,
+      "taskId": null,
+      "due": "backlog",
+      "catchUp": null,
+      "expectAt": "2026-10-08T12:18:51.099Z",
+      "outcome": "succeeded",
+      "opsRefused": 0,
+      "failureKind": null,
+      "error": null,
+      "ops": {
+        "recorded": 2,
+        "proposed": 2,
+        "heldBackByBreaker": 0
+      },
+      "report": {
+        "ops": {
+          "applied": 0,
+          "refused": 0,
+          "waiting": 2,
+          "heldBack": 0,
+          "proposed": 2,
+          "recorded": 2,
+          "selfCheckDropped": 0,
+          "heldBackByBreaker": 0
+        },
+        "docs": {
+          "tokens": {
+            "calls": 0,
+            "input": 0,
+            "output": 0
+          },
+          "seconds": 0,
+          "skipped": "no_confirmed_plan",
+          "affected": {
+            "stale": 0,
+            "total": 0,
+            "byRepo": 0,
+            "byEntries": 0,
+            "unwritten": 0
+          },
+          "proposal": null,
+          "sections": {
+            "failed": 0,
+            "written": 0,
+            "unchanged": 0
+          },
+          "unplaced": {
+            "entries": 0,
+            "designDocs": 0
+          },
+          "withdrawn": {
+            "paths": 0,
+            "sentences": 0
+          },
+          "planVersion": null
+        },
+        "tokens": {
+          "calls": 2,
+          "input": 20,
+          "output": 80
+        },
+        "anchors": {
+          "changed": 0,
+          "entries": 0,
+          "missing": 0
+        },
+        "entries": {
+          "kept": 2,
+          "dropped": 0,
+          "foreign": 0,
+          "extracted": 2,
+          "principles": 0
+        },
+        "seconds": 1,
+        "dossiers": 2,
+        "offTopic": 0,
+        "sessions": 2,
+        "unchanged": 0,
+        "cursorAdvanced": true
+      },
+      "cursorBefore": {
+        "at": "2026-10-08T12:16:51.101Z",
+        "kind": "session_settled",
+        "ref": "85a16c9a-ba78-430f-80d0-4e51357149d3",
+        "failures": 0
+      },
+      "cursorAfter": {
+        "at": "2026-10-08T12:18:51.099Z",
+        "kind": "session_settled",
+        "ref": "eb4ff8af-36d2-46ba-90dd-125140e9190d",
+        "failures": 0
+      }
+    },
+    {
+      "run": 3,
+      "runId": "65b42dd8-759b-49fc-beb2-72a4202d0890",
+      "jobId": "12010986-a827-4ba7-8e5a-40f1643bf080",
+      "jobState": "succeeded",
+      "jobAttempts": 0,
+      "taskId": null,
+      "due": "backlog",
+      "catchUp": null,
+      "expectAt": "2026-10-08T12:20:51.096Z",
+      "outcome": "succeeded",
+      "opsRefused": 0,
+      "failureKind": null,
+      "error": null,
+      "ops": {
+        "recorded": 2,
+        "proposed": 2,
+        "heldBackByBreaker": 0
+      },
+      "report": {
+        "ops": {
+          "applied": 0,
+          "refused": 0,
+          "waiting": 2,
+          "heldBack": 0,
+          "proposed": 2,
+          "recorded": 2,
+          "selfCheckDropped": 0,
+          "heldBackByBreaker": 0
+        },
+        "docs": {
+          "tokens": {
+            "calls": 0,
+            "input": 0,
+            "output": 0
+          },
+          "seconds": 0,
+          "skipped": "no_confirmed_plan",
+          "affected": {
+            "stale": 0,
+            "total": 0,
+            "byRepo": 0,
+            "byEntries": 0,
+            "unwritten": 0
+          },
+          "proposal": null,
+          "sections": {
+            "failed": 0,
+            "written": 0,
+            "unchanged": 0
+          },
+          "unplaced": {
+            "entries": 0,
+            "designDocs": 0
+          },
+          "withdrawn": {
+            "paths": 0,
+            "sentences": 0
+          },
+          "planVersion": null
+        },
+        "tokens": {
+          "calls": 2,
+          "input": 20,
+          "output": 80
+        },
+        "anchors": {
+          "changed": 0,
+          "entries": 0,
+          "missing": 0
+        },
+        "entries": {
+          "kept": 2,
+          "dropped": 0,
+          "foreign": 0,
+          "extracted": 2,
+          "principles": 0
+        },
+        "seconds": 1,
+        "dossiers": 2,
+        "offTopic": 0,
+        "sessions": 2,
+        "unchanged": 0,
+        "cursorAdvanced": true
+      },
+      "cursorBefore": {
+        "at": "2026-10-08T12:18:51.099Z",
+        "kind": "session_settled",
+        "ref": "eb4ff8af-36d2-46ba-90dd-125140e9190d",
+        "failures": 0
+      },
+      "cursorAfter": {
+        "at": "2026-10-08T12:20:51.096Z",
+        "kind": "session_settled",
+        "ref": "4a0329cb-bc74-4fd9-a87c-224da0e7e1f8",
+        "failures": 0
+      }
+    }
+  ],
+  "jobs": [
+    {
+      "id": "46cfb9a6-940e-4370-b0a9-15b2fad46c99",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
+      "space_id": "22fc5e25-16fc-4b75-800a-77010dd9ce38",
+      "kind": "maintain",
+      "state": "succeeded",
+      "input": {
+        "runId": "3e6fdfc1-000b-45e5-b2b7-898681e4b5f7"
+      },
+      "priority": 0,
+      "attempts": 3,
+      "failure_kind": null,
+      "error": null,
+      "created_at": "2026-10-08T12:49:56.489Z",
+      "ended_at": "2026-10-08T12:50:46.301Z",
+      "report": {
+        "kind": "maintain",
+        "runId": "3e6fdfc1-000b-45e5-b2b7-898681e4b5f7",
+        "cursor": "wc1.eyJzIjoiMjJmYzVlMjUtMTZmYy00Yjc1LTgwMGEtNzcwMTBkZDljZTM4IiwicCI6WyIyMDI2LTEwLTA4VDEyOjE2OjUxLjEwMVoiLCJzZXNzaW9uX3NldHRsZWQiLCI4NWExNmM5YS1iYTc4LTQzMGYtODBkMC00ZTUxMzU3MTQ5ZDMiXX0",
+        "report": {
+          "ops": {
+            "applied": 0,
+            "refused": 0,
+            "waiting": 2,
+            "heldBack": 0,
+            "proposed": 2,
+            "recorded": 2,
+            "selfCheckDropped": 0,
+            "heldBackByBreaker": 0
+          },
+          "docs": {
+            "tokens": {
+              "calls": 0,
+              "input": 0,
+              "output": 0
+            },
+            "seconds": 0,
+            "skipped": "no_confirmed_plan",
+            "affected": {
+              "stale": 0,
+              "total": 0,
+              "byRepo": 0,
+              "byEntries": 0,
+              "unwritten": 0
+            },
+            "proposal": null,
+            "sections": {
+              "failed": 0,
+              "written": 0,
+              "unchanged": 0
+            },
+            "unplaced": {
+              "entries": 0,
+              "designDocs": 0
+            },
+            "withdrawn": {
+              "paths": 0,
+              "sentences": 0
+            },
+            "planVersion": null
+          },
+          "tokens": {
+            "calls": 2,
+            "input": 20,
+            "output": 80
+          },
+          "anchors": {
+            "changed": 0,
+            "entries": 0,
+            "missing": 0
+          },
+          "entries": {
+            "kept": 2,
+            "dropped": 0,
+            "foreign": 0,
+            "extracted": 2,
+            "principles": 0
+          },
+          "seconds": 3,
+          "dossiers": 2,
+          "offTopic": 0,
+          "sessions": 2,
+          "unchanged": 0,
+          "cursorAdvanced": true
+        },
+        "outcome": "succeeded",
+        "refused": [],
+        "advanced": true
+      }
+    },
+    {
+      "id": "ab4709d1-4fcb-4192-a574-4700839e11eb",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
+      "space_id": "22fc5e25-16fc-4b75-800a-77010dd9ce38",
+      "kind": "articles",
+      "state": "succeeded",
+      "input": {},
+      "priority": 0,
+      "attempts": 0,
+      "failure_kind": null,
+      "error": null,
+      "created_at": "2026-10-08T12:50:46.299Z",
+      "ended_at": "2026-10-08T12:50:47.652Z",
+      "report": {
+        "ref": null,
+        "kind": "articles",
+        "calls": 0,
+        "model": "p8-maintain-system-model",
+        "stats": {
+          "chars": 0,
+          "markers": 0,
+          "footnotes": 0,
+          "sentences": 0,
+          "markersStripped": 0,
+          "sentencesDeleted": 0,
+          "sentencesTrimmed": 0
+        },
+        "usage": {
+          "inputTokens": 0,
+          "outputTokens": 0
+        },
+        "failed": 0,
+        "refWhy": null,
+        "seeded": 22,
+        "topics": [],
+        "spaceId": "22fc5e25-16fc-4b75-800a-77010dd9ce38",
+        "written": 0,
+        "unchanged": 0
+      }
+    },
+    {
+      "id": "14fb4b50-baf8-4cd6-81b3-9953d7dae5b9",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
+      "space_id": "22fc5e25-16fc-4b75-800a-77010dd9ce38",
+      "kind": "maintain",
+      "state": "succeeded",
+      "input": {
+        "runId": "d2e55305-edbd-4eee-820e-bfe4bdc34463"
+      },
+      "priority": 0,
+      "attempts": 0,
+      "failure_kind": null,
+      "error": null,
+      "created_at": "2026-10-08T12:50:46.963Z",
+      "ended_at": "2026-10-08T12:50:54.123Z",
+      "report": {
+        "kind": "maintain",
+        "runId": "d2e55305-edbd-4eee-820e-bfe4bdc34463",
+        "cursor": "wc1.eyJzIjoiMjJmYzVlMjUtMTZmYy00Yjc1LTgwMGEtNzcwMTBkZDljZTM4IiwicCI6WyIyMDI2LTEwLTA4VDEyOjE4OjUxLjA5OVoiLCJzZXNzaW9uX3NldHRsZWQiLCJlYjRmZjhhZi0zNmQyLTQ2YmEtOTBkZC0xMjUxNDBlOTE5MGQiXX0",
+        "report": {
+          "ops": {
+            "applied": 0,
+            "refused": 0,
+            "waiting": 2,
+            "heldBack": 0,
+            "proposed": 2,
+            "recorded": 2,
+            "selfCheckDropped": 0,
+            "heldBackByBreaker": 0
+          },
+          "docs": {
+            "tokens": {
+              "calls": 0,
+              "input": 0,
+              "output": 0
+            },
+            "seconds": 0,
+            "skipped": "no_confirmed_plan",
+            "affected": {
+              "stale": 0,
+              "total": 0,
+              "byRepo": 0,
+              "byEntries": 0,
+              "unwritten": 0
+            },
+            "proposal": null,
+            "sections": {
+              "failed": 0,
+              "written": 0,
+              "unchanged": 0
+            },
+            "unplaced": {
+              "entries": 0,
+              "designDocs": 0
+            },
+            "withdrawn": {
+              "paths": 0,
+              "sentences": 0
+            },
+            "planVersion": null
+          },
+          "tokens": {
+            "calls": 2,
+            "input": 20,
+            "output": 80
+          },
+          "anchors": {
+            "changed": 0,
+            "entries": 0,
+            "missing": 0
+          },
+          "entries": {
+            "kept": 2,
+            "dropped": 0,
+            "foreign": 0,
+            "extracted": 2,
+            "principles": 0
+          },
+          "seconds": 1,
+          "dossiers": 2,
+          "offTopic": 0,
+          "sessions": 2,
+          "unchanged": 0,
+          "cursorAdvanced": true
+        },
+        "outcome": "succeeded",
+        "refused": [],
+        "advanced": true
+      }
+    },
+    {
+      "id": "e93ed091-ceac-42cf-8e16-30a8417fd2b2",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
+      "space_id": "22fc5e25-16fc-4b75-800a-77010dd9ce38",
+      "kind": "articles",
+      "state": "succeeded",
+      "input": {},
+      "priority": 0,
+      "attempts": 0,
+      "failure_kind": null,
+      "error": null,
+      "created_at": "2026-10-08T12:50:54.123Z",
+      "ended_at": "2026-10-08T12:50:57.638Z",
+      "report": {
+        "ref": null,
+        "kind": "articles",
+        "calls": 0,
+        "model": "p8-maintain-system-model",
+        "stats": {
+          "chars": 0,
+          "markers": 0,
+          "footnotes": 0,
+          "sentences": 0,
+          "markersStripped": 0,
+          "sentencesDeleted": 0,
+          "sentencesTrimmed": 0
+        },
+        "usage": {
+          "inputTokens": 0,
+          "outputTokens": 0
+        },
+        "failed": 0,
+        "refWhy": null,
+        "seeded": 0,
+        "topics": [],
+        "spaceId": "22fc5e25-16fc-4b75-800a-77010dd9ce38",
+        "written": 0,
+        "unchanged": 0
+      }
+    },
+    {
+      "id": "12010986-a827-4ba7-8e5a-40f1643bf080",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
+      "space_id": "22fc5e25-16fc-4b75-800a-77010dd9ce38",
+      "kind": "maintain",
+      "state": "succeeded",
+      "input": {
+        "runId": "65b42dd8-759b-49fc-beb2-72a4202d0890"
+      },
+      "priority": 0,
+      "attempts": 0,
+      "failure_kind": null,
+      "error": null,
+      "created_at": "2026-10-08T12:50:54.539Z",
+      "ended_at": "2026-10-08T12:51:04.165Z",
+      "report": {
+        "kind": "maintain",
+        "runId": "65b42dd8-759b-49fc-beb2-72a4202d0890",
+        "cursor": "wc1.eyJzIjoiMjJmYzVlMjUtMTZmYy00Yjc1LTgwMGEtNzcwMTBkZDljZTM4IiwicCI6WyIyMDI2LTEwLTA4VDEyOjIwOjUxLjA5NloiLCJzZXNzaW9uX3NldHRsZWQiLCI0YTAzMjljYi1iYzc0LTRmZDktYTg3Yy0yMjRkYTBlN2UxZjgiXX0",
+        "report": {
+          "ops": {
+            "applied": 0,
+            "refused": 0,
+            "waiting": 2,
+            "heldBack": 0,
+            "proposed": 2,
+            "recorded": 2,
+            "selfCheckDropped": 0,
+            "heldBackByBreaker": 0
+          },
+          "docs": {
+            "tokens": {
+              "calls": 0,
+              "input": 0,
+              "output": 0
+            },
+            "seconds": 0,
+            "skipped": "no_confirmed_plan",
+            "affected": {
+              "stale": 0,
+              "total": 0,
+              "byRepo": 0,
+              "byEntries": 0,
+              "unwritten": 0
+            },
+            "proposal": null,
+            "sections": {
+              "failed": 0,
+              "written": 0,
+              "unchanged": 0
+            },
+            "unplaced": {
+              "entries": 0,
+              "designDocs": 0
+            },
+            "withdrawn": {
+              "paths": 0,
+              "sentences": 0
+            },
+            "planVersion": null
+          },
+          "tokens": {
+            "calls": 2,
+            "input": 20,
+            "output": 80
+          },
+          "anchors": {
+            "changed": 0,
+            "entries": 0,
+            "missing": 0
+          },
+          "entries": {
+            "kept": 2,
+            "dropped": 0,
+            "foreign": 0,
+            "extracted": 2,
+            "principles": 0
+          },
+          "seconds": 1,
+          "dossiers": 2,
+          "offTopic": 0,
+          "sessions": 2,
+          "unchanged": 0,
+          "cursorAdvanced": true
+        },
+        "outcome": "succeeded",
+        "refused": [],
+        "advanced": true
+      }
+    },
+    {
+      "id": "7d1de98c-9831-48ae-8e48-166d0ab35f5b",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
+      "space_id": "22fc5e25-16fc-4b75-800a-77010dd9ce38",
+      "kind": "articles",
+      "state": "succeeded",
+      "input": {},
+      "priority": 0,
+      "attempts": 0,
+      "failure_kind": null,
+      "error": null,
+      "created_at": "2026-10-08T12:51:04.164Z",
+      "ended_at": "2026-10-08T12:51:07.647Z",
+      "report": {
+        "ref": null,
+        "kind": "articles",
+        "calls": 0,
+        "model": "p8-maintain-system-model",
+        "stats": {
+          "chars": 0,
+          "markers": 0,
+          "footnotes": 0,
+          "sentences": 0,
+          "markersStripped": 0,
+          "sentencesDeleted": 0,
+          "sentencesTrimmed": 0
+        },
+        "usage": {
+          "inputTokens": 0,
+          "outputTokens": 0
+        },
+        "failed": 0,
+        "refWhy": null,
+        "seeded": 0,
+        "topics": [],
+        "spaceId": "22fc5e25-16fc-4b75-800a-77010dd9ce38",
+        "written": 0,
+        "unchanged": 0
+      }
+    },
+    {
+      "id": "0620050e-355f-404a-87eb-69865e75819f",
+      "owner_id": "491d4c79-7f53-447a-9f3a-f1088199bebe",
+      "space_id": "1c86a156-558b-46e5-b6a9-f8a5e9c06ced",
+      "kind": "maintain",
+      "state": "succeeded",
+      "input": {
+        "runId": "75ddc23c-711e-461d-8811-3736716f4991"
+      },
+      "priority": 0,
+      "attempts": 0,
+      "failure_kind": null,
+      "error": null,
+      "created_at": "2026-10-08T12:51:04.784Z",
+      "ended_at": "2026-10-08T12:51:10.149Z",
+      "report": {
+        "kind": "maintain",
+        "runId": "75ddc23c-711e-461d-8811-3736716f4991",
+        "cursor": "wc1.eyJzIjoiMWM4NmExNTYtNTU4Yi00NmU1LWI2YTktZjhhNWU5YzA2Y2VkIiwicCI6WyIyMDI2LTEwLTA4VDEyOjE2OjU0LjQ3MFoiLCJzZXNzaW9uX3NldHRsZWQiLCIxMzcyYTYyOS03NDAxLTQ5NWQtYWUwZC01MGU4NzU5MjUwM2MiXX0",
+        "report": {
+          "ops": {
+            "applied": 0,
+            "refused": 0,
+            "waiting": 2,
+            "heldBack": 0,
+            "proposed": 2,
+            "recorded": 2,
+            "selfCheckDropped": 0,
+            "heldBackByBreaker": 0
+          },
+          "docs": {
+            "tokens": {
+              "calls": 0,
+              "input": 0,
+              "output": 0
+            },
+            "seconds": 0,
+            "skipped": "no_confirmed_plan",
+            "affected": {
+              "stale": 0,
+              "total": 0,
+              "byRepo": 0,
+              "byEntries": 0,
+              "unwritten": 0
+            },
+            "proposal": null,
+            "sections": {
+              "failed": 0,
+              "written": 0,
+              "unchanged": 0
+            },
+            "unplaced": {
+              "entries": 0,
+              "designDocs": 0
+            },
+            "withdrawn": {
+              "paths": 0,
+              "sentences": 0
+            },
+            "planVersion": null
+          },
+          "tokens": {
+            "calls": 2,
+            "input": 20,
+            "output": 80
+          },
+          "anchors": {
+            "changed": 0,
+            "entries": 0,
+            "missing": 0
+          },
+          "entries": {
+            "kept": 2,
+            "dropped": 0,
+            "foreign": 0,
+            "extracted": 2,
+            "principles": 0
+          },
+          "seconds": 2,
+          "dossiers": 2,
+          "offTopic": 0,
+          "sessions": 2,
+          "unchanged": 0,
+          "cursorAdvanced": true
+        },
+        "outcome": "succeeded",
+        "refused": [],
+        "advanced": true
+      }
+    },
+    {
+      "id": "d80b6fc8-cd51-4699-867b-9eb1553b4040",
+      "owner_id": "491d4c79-7f53-447a-9f3a-f1088199bebe",
+      "space_id": "1c86a156-558b-46e5-b6a9-f8a5e9c06ced",
+      "kind": "articles",
+      "state": "queued",
+      "input": {},
+      "priority": 0,
+      "attempts": 0,
+      "failure_kind": null,
+      "error": null,
+      "created_at": "2026-10-08T12:51:10.149Z",
+      "ended_at": null,
+      "report": null
+    }
+  ],
+  "requests": [
+    {
+      "id": "50e10743-4802-4c9f-a672-7470958600d6",
+      "job_id": "46cfb9a6-940e-4370-b0a9-15b2fad46c99",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
+      "step": "extract",
+      "unit": "a49250b0-6549-4441-a2fd-54b2f4570252",
+      "state": "succeeded",
+      "attempt": 1,
+      "input_tokens": 10,
+      "output_tokens": 40,
+      "http_status": 200,
+      "error": null,
+      "enqueued_at": "2026-10-08T12:50:44.834Z",
+      "ended_at": "2026-10-08T12:50:46.046Z"
+    },
+    {
+      "id": "d1a3fe2e-8de4-4947-9fe3-7ae08680b908",
+      "job_id": "46cfb9a6-940e-4370-b0a9-15b2fad46c99",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
+      "step": "extract",
+      "unit": "85a16c9a-ba78-430f-80d0-4e51357149d3",
+      "state": "succeeded",
+      "attempt": 1,
+      "input_tokens": 10,
+      "output_tokens": 40,
+      "http_status": 200,
+      "error": null,
+      "enqueued_at": "2026-10-08T12:50:44.845Z",
+      "ended_at": "2026-10-08T12:50:46.048Z"
+    },
+    {
+      "id": "dc7140a6-d49e-4f33-be25-6eb203d9b9f2",
+      "job_id": "14fb4b50-baf8-4cd6-81b3-9953d7dae5b9",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
+      "step": "extract",
+      "unit": "c6019860-d248-4fa8-8bd2-a1c6cb755af7",
+      "state": "succeeded",
+      "attempt": 1,
+      "input_tokens": 10,
+      "output_tokens": 40,
+      "http_status": 200,
+      "error": null,
+      "enqueued_at": "2026-10-08T12:50:53.020Z",
+      "ended_at": "2026-10-08T12:50:54.053Z"
+    },
+    {
+      "id": "d38d0c49-6b94-4936-990e-67e208e7d4ac",
+      "job_id": "14fb4b50-baf8-4cd6-81b3-9953d7dae5b9",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
+      "step": "extract",
+      "unit": "eb4ff8af-36d2-46ba-90dd-125140e9190d",
+      "state": "succeeded",
+      "attempt": 1,
+      "input_tokens": 10,
+      "output_tokens": 40,
+      "http_status": 200,
+      "error": null,
+      "enqueued_at": "2026-10-08T12:50:53.021Z",
+      "ended_at": "2026-10-08T12:50:54.054Z"
+    },
+    {
+      "id": "7414a070-8ca5-42d4-95d7-76c7109ab143",
+      "job_id": "12010986-a827-4ba7-8e5a-40f1643bf080",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
+      "step": "extract",
+      "unit": "ad0de092-856b-4384-b733-e7042dda81b1",
+      "state": "succeeded",
+      "attempt": 1,
+      "input_tokens": 10,
+      "output_tokens": 40,
+      "http_status": 200,
+      "error": null,
+      "enqueued_at": "2026-10-08T12:51:02.895Z",
+      "ended_at": "2026-10-08T12:51:04.081Z"
+    },
+    {
+      "id": "dbf3602f-bccf-48c0-a79e-dee0f6f5dda7",
+      "job_id": "12010986-a827-4ba7-8e5a-40f1643bf080",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
+      "step": "extract",
+      "unit": "4a0329cb-bc74-4fd9-a87c-224da0e7e1f8",
+      "state": "succeeded",
+      "attempt": 1,
+      "input_tokens": 10,
+      "output_tokens": 40,
+      "http_status": 200,
+      "error": null,
+      "enqueued_at": "2026-10-08T12:51:02.896Z",
+      "ended_at": "2026-10-08T12:51:04.082Z"
+    },
+    {
+      "id": "92d24bf6-547b-4555-936e-6e6f29b44af4",
+      "job_id": "0620050e-355f-404a-87eb-69865e75819f",
+      "owner_id": "491d4c79-7f53-447a-9f3a-f1088199bebe",
+      "step": "extract",
+      "unit": "da18ad42-050b-43bf-8394-7eac50f988ae",
+      "state": "succeeded",
+      "attempt": 1,
+      "input_tokens": 10,
+      "output_tokens": 40,
+      "http_status": 200,
+      "error": null,
+      "enqueued_at": "2026-10-08T12:51:09.321Z",
+      "ended_at": "2026-10-08T12:51:10.098Z"
+    },
+    {
+      "id": "e244c92d-72dc-47ed-a2be-22413c0ded5a",
+      "job_id": "0620050e-355f-404a-87eb-69865e75819f",
+      "owner_id": "491d4c79-7f53-447a-9f3a-f1088199bebe",
+      "step": "extract",
+      "unit": "1372a629-7401-495d-ae0d-50e87592503c",
+      "state": "succeeded",
+      "attempt": 1,
+      "input_tokens": 10,
+      "output_tokens": 40,
+      "http_status": 200,
+      "error": null,
+      "enqueued_at": "2026-10-08T12:51:09.321Z",
+      "ended_at": "2026-10-08T12:51:10.099Z"
+    }
+  ],
+  "counts": {
+    "accountA": {
+      "before": {
+        "tasks": 7,
+        "tasksInHiddenList": 1,
+        "sessions": 26,
+        "providers": 0,
+        "providerPools": 0
+      },
+      "after": {
+        "tasks": 7,
+        "tasksInHiddenList": 1,
+        "sessions": 26,
+        "providers": 0,
+        "providerPools": 0
+      },
+      "tasksAdded": 0,
+      "sessionsAdded": 0,
+      "tasksInHiddenListAdded": 0
+    },
+    "accountB": {
+      "before": {
+        "tasks": 4,
+        "tasksInHiddenList": null,
+        "sessions": 25,
+        "providers": 0,
+        "providerPools": 0
+      },
+      "after": {
+        "tasks": 4,
+        "tasksInHiddenList": null,
+        "sessions": 25,
+        "providers": 0,
+        "providerPools": 0
+      },
+      "tasksAdded": 0,
+      "sessionsAdded": 0,
+      "afterRun": {
+        "tasks": 4,
+        "tasksInHiddenList": null,
+        "sessions": 25,
+        "providers": 0,
+        "providerPools": 0
+      },
+      "sessionsAddedByRun": 0,
+      "tasksAddedByRun": 0
+    },
+    "windowSeconds": 69
+  },
+  "providerless": {
+    "patch": {
+      "status": 200,
+      "body": {
+        "id": "rpJImz8rG41L2lUJYl5y9",
+        "slug": "maintain-1c86a156",
+        "title": "Providerless space (P8)",
+        "repoUrlNorm": "/tmp/wiki-maintain-server-canary/origin",
+        "rootCommitSha": "34ebf7ac97f6887838b146a66cac9adbb64ca61e",
+        "settings": {
+          "push": true,
+          "autoAcceptReinforce": true,
+          "reviewMode": "manual",
+          "automaticSpotChecks": false,
+          "maintenance": {
+            "enabled": true,
+            "workspaceId": "7ddT3HnmT9jndOpj26bruL",
+            "provider": "claude",
+            "dailyRunLimit": 8,
+            "lookbackDays": 7,
+            "listId": "34cMSB789LPf56S3Xytot",
+            "workspacePublicId": "7ddT3HnmT9jndOpj26bruL",
+            "listPublicId": "34cMSB789LPf56S3Xytot",
+            "agentId": "7ddT3HnmT9jndOpj26bruL"
+          }
+        },
+        "createdAt": "2026-10-08T12:49:54.386Z",
+        "updatedAt": "2026-10-08T12:51:04.635Z",
+        "publicId": "rpJImz8rG41L2lUJYl5y9"
+      },
+      "maintenance": {
+        "listId": "01a11b91-392e-708e-be93-38a9374110ff",
+        "enabled": true,
+        "provider": "claude",
+        "workspaceId": "fb00dd00-6631-48e1-8ff4-117ce867d731",
+        "lookbackDays": 7,
+        "dailyRunLimit": 8
+      }
+    },
+    "run": {
+      "runId": "75ddc23c-711e-461d-8811-3736716f4991",
+      "jobId": "0620050e-355f-404a-87eb-69865e75819f",
+      "jobState": "succeeded",
+      "outcome": "succeeded",
+      "opsRefused": 0,
+      "failureKind": null,
+      "error": null,
+      "taskId": null,
+      "cursor": {
+        "at": "2026-10-08T12:16:54.470Z",
+        "kind": "session_settled",
+        "ref": "1372a629-7401-495d-ae0d-50e87592503c",
+        "failures": 0
+      },
+      "report": {
+        "ops": {
+          "applied": 0,
+          "refused": 0,
+          "waiting": 2,
+          "heldBack": 0,
+          "proposed": 2,
+          "recorded": 2,
+          "selfCheckDropped": 0,
+          "heldBackByBreaker": 0
+        },
+        "docs": {
+          "tokens": {
+            "calls": 0,
+            "input": 0,
+            "output": 0
+          },
+          "seconds": 0,
+          "skipped": "no_confirmed_plan",
+          "affected": {
+            "stale": 0,
+            "total": 0,
+            "byRepo": 0,
+            "byEntries": 0,
+            "unwritten": 0
+          },
+          "proposal": null,
+          "sections": {
+            "failed": 0,
+            "written": 0,
+            "unchanged": 0
+          },
+          "unplaced": {
+            "entries": 0,
+            "designDocs": 0
+          },
+          "withdrawn": {
+            "paths": 0,
+            "sentences": 0
+          },
+          "planVersion": null
+        },
+        "tokens": {
+          "calls": 2,
+          "input": 20,
+          "output": 80
+        },
+        "anchors": {
+          "changed": 0,
+          "entries": 0,
+          "missing": 0
+        },
+        "entries": {
+          "kept": 2,
+          "dropped": 0,
+          "foreign": 0,
+          "extracted": 2,
+          "principles": 0
+        },
+        "seconds": 2,
+        "dossiers": 2,
+        "offTopic": 0,
+        "sessions": 2,
+        "unchanged": 0,
+        "cursorAdvanced": true
+      }
+    }
+  },
+  "door": {
+    "runner": "0.1.224+p8-merge.2865071b3",
+    "maintain": {
+      "argv": "/tmp/p8-orbit-merge wiki maintain --space 1414QrDa3auwuAktck2Ijw --json",
+      "status": 1,
+      "stdout": "{\"spaceId\":\"1414QrDa3auwuAktck2Ijw\",\"outcome\":\"failed\",\"advanced\":false,\"report\":{\"sessions\":0,\"dossiers\":0,\"unchanged\":0,\"offTopic\":0,\"entries\":{\"extracted\":0,\"kept\":0,\"dropped\":0,\"foreign\":0,\"principles\":0},\"ops\":{\"proposed\":0,\"recorded\":0,\"refused\":0,\"selfCheckDropped\":0,\"heldBack\":0,\"heldBackByBreaker\":0,\"applied\":0,\"waiting\":0},\"tokens\":{\"input\":0,\"output\":0,\"calls\":0},\"seconds\":0}}",
+      "stderr": "orbit wiki: orbit wiki maintain: GET /runner/wiki/spaces/1414QrDa3auwuAktck2Ijw/maintenance/run -> 409\n  refused: WIKI_SERVER_EXECUTES\n  what:    this account's Wiki maintenance run is executed by the Orbit server (ORBIT_WIKI_EXECUTOR): its wiki worker reads the dossiers and calls the deployment's System model through the request queue, and no session's provider is asked. Nothing was read or proposed.\n{\"code\":\"WIKI_SERVER_EXECUTES\",\"message\":\"this account's Wiki maintenance run is executed by the Orbit server (ORBIT_WIKI_EXECUTOR): its wiki worker reads the dossiers and calls the deployment's System model through the request queue, and no session's provider is asked. Nothing was read or proposed.\"}"
+    },
+    "runContext": {
+      "status": 409,
+      "body": {
+        "code": "WIKI_SERVER_EXECUTES",
+        "message": "this account's Wiki maintenance run is executed by the Orbit server (ORBIT_WIKI_EXECUTOR): its wiki worker reads the dossiers and calls the deployment's System model through the request queue, and no session's provider is asked. Nothing was read or proposed."
+      }
+    },
+    "dossiers": {
+      "status": 409,
+      "body": {
+        "code": "WIKI_SERVER_EXECUTES",
+        "message": "this account's Wiki maintenance run is executed by the Orbit server (ORBIT_WIKI_EXECUTOR): its wiki worker reads the dossiers and moves the cursor, so this door hands a session neither. Nothing was read."
+      }
+    },
+    "cursor": {
+      "status": 409,
+      "body": {
+        "code": "WIKI_SERVER_EXECUTES",
+        "message": "this account's Wiki maintenance run is executed by the Orbit server (ORBIT_WIKI_EXECUTOR): its wiki worker reads the dossiers and moves the cursor, so this door hands a session neither. Nothing was read."
+      }
+    }
+  },
+  "model": {
+    "callsBefore": 8,
+    "callsAfter": 8,
+    "callsDuringDoorChecks": 0,
+    "total": 8
+  },
+  "articlesJobs": [
+    {
+      "id": "ab4709d1-4fcb-4192-a574-4700839e11eb",
+      "state": "succeeded",
+      "input": {},
+      "priority": 0,
+      "createdAt": "2026-10-08T12:50:46.299Z",
+      "endedAt": "2026-10-08T12:50:47.652Z",
+      "failureKind": null,
+      "error": null
+    },
+    {
+      "id": "e93ed091-ceac-42cf-8e16-30a8417fd2b2",
+      "state": "succeeded",
+      "input": {},
+      "priority": 0,
+      "createdAt": "2026-10-08T12:50:54.123Z",
+      "endedAt": "2026-10-08T12:50:57.638Z",
+      "failureKind": null,
+      "error": null
+    },
+    {
+      "id": "7d1de98c-9831-48ae-8e48-166d0ab35f5b",
+      "state": "queued",
+      "input": {},
+      "priority": 0,
+      "createdAt": "2026-10-08T12:51:04.164Z",
+      "endedAt": null,
+      "failureKind": null,
+      "error": null
+    }
+  ],
+  "requestSummary": {
+    "extract/succeeded": 8
+  },
+  "runsTotal": {
+    "maintain": 4,
+    "articles": 4
+  },
+  "cursor": {
+    "accountA": {
+      "at": "2026-10-08T12:20:51.096Z",
+      "kind": "session_settled",
+      "ref": "4a0329cb-bc74-4fd9-a87c-224da0e7e1f8",
+      "failures": 0
+    },
+    "accountB": {
+      "at": "2026-10-08T12:16:54.470Z",
+      "kind": "session_settled",
+      "ref": "1372a629-7401-495d-ae0d-50e87592503c",
+      "failures": 0
+    }
+  },
+  "checkSummary": {
+    "passed": 24,
+    "failed": 0
+  }
+}

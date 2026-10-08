@@ -82,7 +82,8 @@ internal object WikiHealthLogic {
                 add(WikiStatusPart(WikiHealthCopy.failed(health.consecutiveFailures), WikiStatusPart.Tone.ERROR, WikiStatusPart.Mark.DOT, strong = true))
                 health.lastOkAt?.let { add(WikiStatusPart(WikiHealthCopy.lastSuccess(ago(it, now)))) }
                 add(catchUp)
-                if (health.lastRun?.sessionId != null) add(WikiStatusPart(WikiModeCopy.viewRun, link = WikiStatusPart.Link.RUN))
+                // A run the server's job made has no session: View run opens its row on Activity (P9).
+                if (health.lastRun?.sessionId != null || health.lastRun?.jobId != null) add(WikiStatusPart(WikiModeCopy.viewRun, link = WikiStatusPart.Link.RUN))
             }
             "ok" -> listOf(health.lastOkAt?.let { WikiStatusPart(WikiHealthCopy.maintained(ago(it, now)), mark = WikiStatusPart.Mark.CHECK) }
                 ?: WikiStatusPart(WikiHealthCopy.maintenanceOn), catchUp)
@@ -92,6 +93,37 @@ internal object WikiHealthLogic {
     /** `●` before a dot, `✓` after a check, ` · ` between (web `wikiStatusText`): what TalkBack reads. */
     fun text(parts: List<WikiStatusPart>): String = parts.joinToString(" · ") { part ->
         (if (part.mark == WikiStatusPart.Mark.DOT) "● " else "") + part.text + (if (part.mark == WikiStatusPart.Mark.CHECK) " ✓" else "")
+    }
+
+    /** Why the server's runs do not move, while the server executes the account's wiki — the web's
+     * `wikiServerReason`: the first that holds of the worker, the model's configuration, its key and its
+     * reachability, then — while maintenance is on or a read of the repository waits — the runner. */
+    fun serverReason(health: WikiSpaceHealth): WikiStatusPart? {
+        if (!health.serverExecutes) return null
+        fun reason(text: String, tone: WikiStatusPart.Tone) = WikiStatusPart(text, tone, WikiStatusPart.Mark.DOT, strong = true)
+        when (health.systemModel?.state) {
+            "worker_not_running" -> return reason(WikiHealthCopy.reasonWorker, WikiStatusPart.Tone.ERROR)
+            "unconfigured" -> return reason(WikiHealthCopy.reasonUnconfigured, WikiStatusPart.Tone.ERROR)
+            "auth_failed" -> return reason(WikiHealthCopy.reasonKeyRefused, WikiStatusPart.Tone.ERROR)
+            "down" -> return reason(WikiHealthCopy.reasonUnreachable, WikiStatusPart.Tone.WARN)
+        }
+        val repo = health.repo ?: return null
+        if (!health.maintenance.enabled && repo.pending <= 0) return null
+        return when (repo.look) {
+            "runner_offline" -> reason(WikiHealthCopy.reasonRunnerOffline, WikiStatusPart.Tone.WARN)
+            "runner_upgrade" -> reason(WikiHealthCopy.reasonRunnerUpgrade, WikiStatusPart.Tone.WARN)
+            else -> null
+        }
+    }
+
+    /** The status line's whole maintenance part: the look's parts, and the server's reason before their links —
+     * the web's `wikiStatusParts`. */
+    fun parts(health: WikiSpaceHealth, now: Instant): List<WikiStatusPart> {
+        val parts = parts(health.maintenance, now)
+        val reason = serverReason(health) ?: return parts
+        val link = parts.indexOfFirst { it.link != WikiStatusPart.Link.NONE }
+        if (link < 0) return parts + reason
+        return parts.take(link) + reason + parts.drop(link)
     }
 }
 
@@ -339,7 +371,8 @@ internal data class WikiHomeContent(val space: WikiSpace, val spaces: List<WikiS
         val count = health?.entries ?: entries.size
         val parts = mutableListOf(WikiStatusPart("${WikiArticleCopy.count(count)} ${WikiCopy.entryNoun(count)}"))
         space.rootCommitSha?.takeIf { it.isNotEmpty() }?.let { parts += WikiStatusPart(WikiCopy.anchorsVerified(it.take(7), "")) }
-        health?.let { parts += WikiHealthLogic.parts(it.maintenance, now) }
+        // The look's parts and — while the server runs this account's wiki — its reason before the links (P9).
+        health?.let { parts += WikiHealthLogic.parts(it, now) }
         return parts
     }
     fun statusLine(now: Instant) = WikiHealthLogic.text(statusParts(now))

@@ -278,8 +278,7 @@ export function parseWikiImportAnswer(text: string): WikiImportAnswerEntry[] | n
 }
 
 /** The two mistakes a model makes most: an unescaped double quote inside a quote's value, and a trailing comma. */
-export function wikiImportRepair(text: string): string {
-  const quoted = text.replace(QUOTE_VALUE, (_match, open: string, inner: string, close: string) => {
+export function wikiImportRepair(text: string): string {  const quoted = text.replace(QUOTE_VALUE, (_match, open: string, inner: string, close: string) => {
     let escaped = inner.replace(BARE_QUOTE, '$1\\"');
     if (escaped.startsWith('"')) escaped = `\\${escaped}`;
     return open + escaped + close;
@@ -745,3 +744,45 @@ function parentOf(path: string): string {
 
 /** The system prompt every read carries (contract `import.server.systemPrompt`). */
 export const WIKI_IMPORT_SYSTEM_PROMPT = WIKI_IMPORT_JOB.systemPrompt;
+
+// ── The same checks, read by the maintenance run (P8) ───────────────────────────────────────────
+//
+// An extraction's entries are held to the same field checks the import's are (`wikiImportField`), with the
+// dossier's date where a note's date was: the maintenance port reuses them rather than answering them twice.
+
+/** The fields a kind requires, and the ones it may carry (the runner's `wikiImportRequired`/`wikiImportOptional`). */
+export function wikiImportRequiredFields(kind: string): readonly string[] {
+  return REQUIRED[kind] ?? [];
+}
+
+export function wikiImportOptionalFields(kind: string): readonly string[] {
+  return OPTIONAL[kind] ?? [];
+}
+
+/** One required field in the shape the kind's schema gives it, or what is wrong (the runner's `wikiImportField`). */
+export function wikiImportFieldValue(name: string, value: unknown, note: WikiImportNote): { value?: unknown; problem: string } {
+  return wikiImportField(name, value, note);
+}
+
+/** A text field trimmed and cut to what the contract lets it hold; "" when it is not text or is blank. */
+export function wikiImportText(value: unknown, max: number): string {
+  return text(value, max);
+}
+
+/** A list of texts, blanks left out and cut to the contract's list size; a lone text is a list of one. */
+export function wikiImportTextList(value: unknown): string[] {
+  return textList(value);
+}
+
+/** The last `max` characters of an answer, for a retry's suffix. */
+export function wikiImportLastRunes(value: string, max: number): string {
+  return lastRunes(value, max);
+}
+
+/** Whether a value is a JSON object (not null, not an array). */
+export function wikiImportIsObject(value: unknown): value is Record<string, unknown> {
+  return isObject(value);
+}
+
+/** The code fence a model wraps its answer in; the maintenance run reads `{"offTopic": true}` out of one too. */
+export const WIKI_IMPORT_FENCE = FENCE;

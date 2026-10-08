@@ -147,6 +147,12 @@ export interface WikiPrincipal {
   userId: string | null;
   /** The calling session a runner hosts; null headless (and always null on the owner door). */
   sessionId: string | null;
+  /**
+   * The wiki_job whose pipeline this write is the server's own (P8, migration 0407): a maintenance run the
+   * worker executes has no session, and the changesets of one run are one run to the circuit breaker and one
+   * proposer to the verification list — this is what names it. Null for every session's write and the owner's.
+   */
+  jobId?: string | null;
   /** The tool call this proposal came from, when the door knows it. */
   toolCallId: string | null;
   /**
@@ -1366,9 +1372,10 @@ export class WikiService {
     const settings = wikiSpaceSettings(space.settings);
     const mode = settings.reviewMode;
     // A Wiki maintenance run's changesets are one run to the circuit breaker: what its earlier ones
-    // changed through the mode is spent, and the space is counted as it stood when the run began.
-    const run = principal.origin === 'maintenance' && principal.sessionId && mode !== 'manual'
-      ? await wikiMaintenanceRunChanges(tx, principal.ownerId, space.id, principal.sessionId)
+    // changed through the mode is spent, and the space is counted as it stood when the run began. The run
+    // is its session — or, for a run the server's worker executes, the wiki job that runs it (P8, 0407).
+    const run = principal.origin === 'maintenance' && (principal.sessionId || principal.jobId) && mode !== 'manual'
+      ? await wikiMaintenanceRunChanges(tx, principal.ownerId, space.id, { sessionId: principal.sessionId, jobId: principal.jobId ?? null })
       : null;
     const budget: ChangesetBudget = {
       mode,
@@ -1382,11 +1389,13 @@ export class WikiService {
       // What waited for the owner is what the effect policy held back: every op a session recorded
       // that was not applied at once — by the policy (`auto_applied`) or by the mode — and that no
       // verification took: an op that waits for, or was decided by, its verdict never waited on them.
-      waitingInSession: principal.sessionId
+      waitingInSession: principal.sessionId || principal.jobId
         ? await tx.wikiChangesetOp.count({
             where: {
               ownerId: principal.ownerId,
-              changeset: { sessionId: principal.sessionId },
+              changeset: principal.sessionId
+                ? { sessionId: principal.sessionId }
+                : { sessionId: null, jobId: principal.jobId ?? null },
               appliedByMode: null,
               verificationVerdict: null,
               decision: { notIn: ['auto_applied', 'verifying'] },
@@ -1422,6 +1431,7 @@ export class WikiService {
               spaceId: space.id,
               origin: principal.origin,
               sessionId: principal.sessionId,
+              jobId: principal.jobId ?? null,
               toolCallId: principal.toolCallId,
               rationale: input.rationale as string,
               idempotencyKey: input.idempotencyKey ?? null,
@@ -2792,7 +2802,7 @@ export class WikiService {
    * it counts against no session's quota. A Tiered pitfall the check leaves verified may become Auto.
    */
   async recordAnchorChecks(
-    caller: { ownerId: string; sessionId: string },
+    caller: { ownerId: string; sessionId: string | null; jobId?: string | null },
     spaceId: string,
     report: unknown,
   ): Promise<WikiAnchorReportResult> {
@@ -2832,7 +2842,7 @@ export class WikiService {
   /** One entry's report, inside its own transaction: see {@link recordAnchorChecks}. */
   private async applyAnchorCheck(
     tx: Tx,
-    caller: { ownerId: string; sessionId: string },
+    caller: { ownerId: string; sessionId: string | null; jobId?: string | null },
     space: { id: string; settings: unknown },
     ref: string,
     at: string,
@@ -2874,8 +2884,12 @@ export class WikiService {
       if (open === 0) {
         const system: WikiPrincipal = { origin: 'maintenance', ownerId, userId: null, sessionId: null, toolCallId: null, authorKind: 'system' };
         const ops = [{ op: 'challenge', entryId: entry.id, reason: anchorChallengeReason(checked, ref) }];
-        const rationale = `Anchor re-verification on origin/main at ${ref.slice(0, 12)}, reported by maintenance session `
-          + `${uuidToBase62(caller.sessionId)}: this entry's anchors no longer hold as recorded.`;
+        // Whose run checked it: a session's, or the server's wiki job (P8) — the challenge names the one.
+        const who = caller.sessionId
+          ? `maintenance session ${uuidToBase62(caller.sessionId)}`
+          : `the server's maintenance run${caller.jobId ? ` (job ${uuidToBase62(caller.jobId)})` : ''}`;
+        const rationale = `Anchor re-verification on origin/main at ${ref.slice(0, 12)}, reported by ${who}: `
+          + "this entry's anchors no longer hold as recorded.";
         const recorded = await this.recordChangeset(tx, system, space, ops, { ops, rationale }, null, literals);
         const outcome = (recorded.ops as WikiOpOutcome[])[0];
         if (outcome?.status === 'refused') throw new WikiRefusalError(outcome.reasons[0]);
@@ -4919,13 +4933,14 @@ function rawOpSources(op: Record<string, unknown>): unknown[] {
 
 /**
  * The changesets a verification caller proposed (contract `reviewModes.verification.who`): a
- * session's own, or — for the one-off import, which has no session — the ones of its origin that
- * name none. Nothing else is found, so another caller's op is the same 404 as one that does not exist.
+ * session's own, the ones the server's maintenance run recorded (its wiki job), or — for the one-off
+ * import, which has no session — the ones of its origin that name none. Nothing else is found, so
+ * another caller's op is the same 404 as one that does not exist.
  */
 function proposerScope(principal: WikiPrincipal): Prisma.WikiChangesetWhereInput {
-  return principal.sessionId !== null
-    ? { sessionId: principal.sessionId }
-    : { sessionId: null, origin: principal.origin };
+  if (principal.sessionId !== null) return { sessionId: principal.sessionId };
+  if (principal.jobId) return { sessionId: null, jobId: principal.jobId };
+  return { sessionId: null, origin: principal.origin };
 }
 
 /**

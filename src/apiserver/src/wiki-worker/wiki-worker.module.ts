@@ -1,14 +1,16 @@
 import { Module } from '@nestjs/common';
-import { WIKI_PLAN_SERVER_JOB } from '@orbit/shared';
+import { WIKI_MAINTAIN_JOB, WIKI_PLAN_SERVER_JOB } from '@orbit/shared';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { WikiArticles } from '../wiki/wiki-articles';
 import { WikiDocs } from '../wiki/wiki-docs';
+import { WikiMaintenance } from '../wiki/wiki-maintenance';
 import { WikiPlans } from '../wiki/wiki-plan';
 import { WikiService } from '../wiki/wiki.service';
 import { wikiArticlesJobRunner } from './wiki-articles-job';
 import { wikiDocsBuildJobRunner } from './wiki-docs-build-job';
 import { wikiImportJobRunner } from './wiki-import-job';
+import { wikiMaintainJobRunner } from './wiki-maintain-job';
 import { wikiPlanDraftJobRunner } from './wiki-plan-draft-job';
 import { WikiJobExecutor, WIKI_JOB_RUNNERS, WIKI_JOB_RUNNERS_TOKEN, type WikiJobRunner } from './wiki-job-executor';
 import { WikiModelRequestChannel } from './wiki-model-notify';
@@ -61,6 +63,7 @@ import { wikiVerifyJobRunner } from './wiki-verify-job';
     { provide: WikiArticles, useFactory: (prisma: PrismaService) => new WikiArticles(prisma), inject: [PrismaService] },
     { provide: WikiDocs, useFactory: (prisma: PrismaService, wiki: WikiService) => new WikiDocs(prisma, wiki), inject: [PrismaService, WikiService] },
     { provide: WikiPlans, useFactory: (prisma: PrismaService) => new WikiPlans(prisma), inject: [PrismaService] },
+    { provide: WikiMaintenance, useFactory: (prisma: PrismaService) => new WikiMaintenance(prisma), inject: [PrismaService] },
     WikiRepoOps,
     {
       provide: WIKI_JOB_RUNNERS_TOKEN,
@@ -73,6 +76,7 @@ import { wikiVerifyJobRunner } from './wiki-verify-job';
         articles: WikiArticles,
         plans: WikiPlans,
         docs: WikiDocs,
+        maintenance: WikiMaintenance,
       ): Record<string, WikiJobRunner> => {
         const plan = wikiPlanDraftJobRunner({ prisma, plans, repoOps, model: model.model, repoWake });
         return {
@@ -83,9 +87,16 @@ import { wikiVerifyJobRunner } from './wiki-verify-job';
           [WIKI_PLAN_SERVER_JOB.kinds.draft]: plan,
           [WIKI_PLAN_SERVER_JOB.kinds.revise]: plan,
           docs_build: wikiDocsBuildJobRunner({ prisma, docs, wiki, repoOps, repoWake, model: model.model ?? '' }),
+          [WIKI_MAINTAIN_JOB.kind]: wikiMaintainJobRunner({
+            prisma, wiki, maintenance, docs, plans, repoOps, repoWake,
+            model: model.model ?? '',
+            // The System model's address, read here and nowhere else in the run: the one thing the day's
+            // counting wants of it is whether its endpoint is this machine's (`catchUp.localEndpoint`).
+            modelBaseUrl: model.baseUrl,
+          }),
         };
       },
-      inject: [PrismaService, WikiService, WikiRepoOps, WIKI_SYSTEM_MODEL_CONFIG, WikiRepoOpChannel, WikiArticles, WikiPlans, WikiDocs],
+      inject: [PrismaService, WikiService, WikiRepoOps, WIKI_SYSTEM_MODEL_CONFIG, WikiRepoOpChannel, WikiArticles, WikiPlans, WikiDocs, WikiMaintenance],
     },
     WikiModelStatusProbe,
     WikiModelRequestChannel,

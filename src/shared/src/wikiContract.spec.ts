@@ -88,6 +88,7 @@ import {
   WIKI_MAINTENANCE_DUE,
   WIKI_MAINTENANCE_FAILURE_KINDS,
   WIKI_MAINTENANCE_HELD_REASONS,
+  WIKI_MAINTAIN_JOB,
   WIKI_MAINTENANCE_JOB,
   WIKI_MAINTENANCE_RECOVERY,
   wikiMaintenanceBehind,
@@ -101,6 +102,7 @@ import {
   WIKI_REPO_LOOKS,
   WIKI_REPO_OP_CAPABILITY,
   WIKI_REPO_OP_KINDS,
+  WIKI_REPO_OP_READ_CAPABILITY,
   WIKI_REPO_OP_STATES,
 } from './wikiRepoOps';
 import { PROVIDER_PRESETS } from './providerPresets';
@@ -225,11 +227,15 @@ describe('wiki contract', () => {
     const repoOps = CONTRACT.repoOps;
     expect(repoOps.table).toBe('wiki_repo_op');
     expect(repoOps.capability).toBe(WIKI_REPO_OP_CAPABILITY);
+    expect(repoOps.readCapability).toBe(WIKI_REPO_OP_READ_CAPABILITY);
     expect(repoOps.kinds).toEqual([...WIKI_REPO_OP_KINDS]);
     expect(repoOps.states).toEqual([...WIKI_REPO_OP_STATES]);
     expect(repoOps.looks).toEqual([...WIKI_REPO_LOOKS]);
     expect(repoOps.migration).toBe('src/apiserver/prisma/migrations/0402_wiki_repo_op/migration.sql');
     expect(existsSync(path.join(ROOT, repoOps.migration)), `${repoOps.migration} does not exist`).toBe(true);
+    // The read cache's table is the whole-file read's own migration, named where the contract names it.
+    expect(repoOps.fileMigration).toBe('src/apiserver/prisma/migrations/0406_wiki_repo_file/migration.sql');
+    expect(existsSync(path.join(ROOT, repoOps.fileMigration)), `${repoOps.fileMigration} does not exist`).toBe(true);
     // The numbers the dispatch, the fragments and the reads are held to, each read from the file the
     // runner-side constants are read from too.
     expect(repoOps.dispatch.perHeartbeat).toBe(WIKI_REPO_OPS.perHeartbeat);
@@ -241,8 +247,12 @@ describe('wiki contract', () => {
       docSectionChars: WIKI_REPO_OPS.docSectionChars,
       contractChars: WIKI_REPO_OPS.contractChars,
       sectionChars: WIKI_REPO_OPS.sectionChars,
-      wholeFileChars: WIKI_REPO_OPS.wholeFileChars,
+      wholeFileBytes: WIKI_REPO_OPS.wholeFileBytes,
+      boundedChars: WIKI_REPO_OPS.boundedChars,
+      operationBytes: WIKI_REPO_OPS.operationBytes,
     });
+    // The cache is the snapshot's two tables and the files read at a sha.
+    expect(repoOps.cache.tables).toEqual(['wiki_repo_snapshot', 'wiki_repo_snapshot_fragment', 'wiki_repo_file']);
     // Every kind says what it answers with, and every kind the contract names is one of the four.
     expect(Object.keys(repoOps.kindRuns).sort()).toEqual([...WIKI_REPO_OP_KINDS].sort());
     // The two routes the runner writes back through are named where the doors are.
@@ -1624,9 +1634,11 @@ describe('wiki contract', () => {
     expect(CONTRACT.repoOps.waiting).toMatch(/docs\.build\.server\.repository/u);
     expect(server.who).toMatch(/Under the default runner none of this runs/u);
     expect(server.door).toMatch(/WIKI_SERVER_EXECUTES/u);
-    expect(server.repository).toMatch(/wholeFileChars/u);
-    // The whole files a build reads fit the read's own limits: one item, one request.
-    expect(WIKI_REPO_OPS.wholeFileChars).toBeLessThanOrEqual(WIKI_REPO_OPS.sectionChars);
+    expect(server.repository).toMatch(/wholeFileBytes/u);
+    expect(server.repository).toMatch(/boundedChars/u);
+    // A whole file fits one item; a request is packed well under the API's body cap.
+    expect(WIKI_REPO_OPS.wholeFileBytes).toBeLessThanOrEqual(WIKI_REPO_OPS.operationBytes);
+    expect(WIKI_REPO_OPS.operationBytes).toBeLessThanOrEqual(WIKI_REPO_OPS.apiBodyBytes);
     // The runner's prompts and steps, held to one fixture both implementations read.
     expect(server.calls).toContain('src/shared/src/wiki-docs-build.fixture.json');
     for (const file of ['src/shared/src/wiki-docs-build.fixture.json', 'src/runner-go/wiki_docs_build_fixture_test.go', 'src/apiserver/src/wiki-worker/wiki-docs-build-golden.spec.ts']) {
@@ -1742,6 +1754,45 @@ describe('wiki contract', () => {
       'orbit_wiki_model_calls_total',
       'orbit_wiki_model_call_duration_seconds',
     ]);
+  });
+
+  it('runs the maintenance pipeline on the server: the job, its numbers, its identity and its door (server execution P8)', () => {
+    // The run moves off the runner for an account the switch gives the server: a `maintain` wiki job, the
+    // System model in place of a session's provider, and the repository through `wiki_repo_op` alone.
+    const server = CONTRACT.maintenance.job.server;
+    expect(existsSync(path.join(ROOT, server.migration)), `${server.migration} does not exist`).toBe(true);
+    const sql = readFileSync(path.join(ROOT, server.migration), 'utf8').replace(/\s+/gu, ' ');
+    // One nullable `job_id` on a changeset, and one author column beside the session's on a proposal.
+    expect(sql).toContain('ALTER TABLE "wiki_changeset" ADD COLUMN IF NOT EXISTS "job_id" UUID');
+    expect(sql).toContain('ALTER TABLE "wiki_plan_proposal" ADD COLUMN IF NOT EXISTS "author_job_id" UUID');
+    expect(sql).toContain('ALTER TABLE "wiki_plan_proposal" ALTER COLUMN "author_session_id" DROP NOT NULL');
+    expect(sql).toContain('("author_session_id" IS NULL) <> ("author_job_id" IS NULL)');
+    // The numbers are the runner's, kept in one place: WIKI_MAINTAIN_JOB, held to this block.
+    expect(server.rules.kind).toBe(WIKI_MAINTAIN_JOB.kind);
+    expect(server.rules.priority).toMatch(/^0:/u);
+    expect(server.rules.steps).toEqual(WIKI_MAINTAIN_JOB.steps);
+    expect(server.rules.extractMaxTokens).toBe(WIKI_MAINTAIN_JOB.extractMaxTokens);
+    expect(server.rules.planMaxTokens).toBe(WIKI_MAINTAIN_JOB.planMaxTokens);
+    expect(server.rules.pageSessions).toBe(WIKI_MAINTAIN_JOB.pageSessions);
+    expect(server.rules.opsPerChangeset).toBe(WIKI_MAINTAIN_JOB.opsPerChangeset);
+    expect(server.rules.opsPerTurn).toBe(WIKI_MAINTAIN_JOB.opsPerTurn);
+    expect(server.rules.quoteMaxChars).toBe(WIKI_MAINTAIN_JOB.quoteMaxChars);
+    expect(server.rules.aboutMaxChars).toBe(WIKI_MAINTAIN_JOB.aboutMaxChars);
+    expect(server.rules.proposalRoundsMax).toBe(WIKI_MAINTAIN_JOB.proposalRoundsMax);
+    expect(server.rules.proposalItemsMax).toBe(WIKI_MAINTAIN_JOB.proposalItemsMax);
+    expect(server.rules.repoWaitSeconds).toBe(WIKI_MAINTAIN_JOB.repoWaitSeconds);
+    expect(server.rules.docsExcluded).toEqual([...WIKI_MAINTAIN_JOB.docsExcluded]);
+    // The batch sizes are the contract's own limits, and the entry cap the maintenance job's.
+    expect(WIKI_MAINTAIN_JOB.opsPerChangeset).toBe(WIKI_LIMITS.opsPerChangeset);
+    expect(WIKI_MAINTAIN_JOB.opsPerTurn).toBe(WIKI_LIMITS.opsPerTurn);
+    expect(WIKI_MAINTAIN_JOB.extractMaxTokens).toBeLessThanOrEqual(WIKI_MAINTAIN_JOB.planMaxTokens);
+    // The pipeline the kind runs is stated, and no provider is in it.
+    expect(CONTRACT.jobs.kindRuns.maintain).toMatch(/maintenance\.job\.server/u);
+    expect(server.trigger).toMatch(/MaintenanceJobWriter/u);
+    expect(server.identity).toMatch(/wiki_changeset\.job_id/u);
+    expect(server.door).toMatch(/WIKI_SERVER_EXECUTES/u);
+    expect(server.skip).toMatch(/catch-up active or paused/u);
+    expect(server.failureKinds).toMatch(/nothing is counted/u);
   });
 
   it('runs wiki jobs on the server: the table, the kinds, the lease, the retry and the switch (server execution P1b)', () => {
