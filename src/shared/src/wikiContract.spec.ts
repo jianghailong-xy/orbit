@@ -1663,8 +1663,9 @@ describe('wiki contract', () => {
     // Under runner nothing of it happens; the runner door's drafting routes are the server's otherwise.
     expect(server.when).toMatch(/Under runner \(the default\)/u);
     expect(server.door).toMatch(/WIKI_SERVER_EXECUTES/u);
-    // A build is the documents' pipeline (P7): until it moves, its own session keeps the job routes.
-    expect(server.door).toMatch(/a build job's own session keeps its context, progress and finish under plan\.jobs\.who/u);
+    // A build is the documents' pipeline, the server's too since P7: its session is refused the job routes like any other.
+    expect(server.door).toMatch(/a build job's session too/u);
+    expect(server.build).toMatch(/docs\.build\.server/u);
     expect(CONTRACT.refusals.map((r: { code: string }) => r.code)).toContain('WIKI_SERVER_EXECUTES');
     // A replay drafts from what its first run read, and the two paths are held to one fixture.
     expect(server.materials).toMatch(/wiki_plan_job\.materials/u);

@@ -1637,9 +1637,9 @@ JSON 里是 `plan.jobs.server`；迁移 `0404_wiki_plan_server_draft`；实现�
   失败——请求等待超限、space 的 runner 不在、worker 停机——不算草稿的失败：`wiki_job` 重试（24.4），plan 作业保持 running。`wiki_job`
   结束了而 plan 作业没结束的，记为失败；开关不再把账号交给服务端时，还没开始的 `wiki_job` 被取消，plan 作业随之结束。
 - **runner 门归服务端**（`WIKI_SERVER_EXECUTES`，409）：找到 space 之后，不论谁来问，起草用的路由——`GET …/plan/job`、
-  `POST …/plan/job/progress`、`POST …/plan/job/finish`、`GET …/plan/materials`、`POST …/plan/drafts`——一律拒绝；只有生成作业
-  （`build`）自己的会话例外：文档的流水线移到服务端之前（P7），生成仍是那个任务的会话来写，它的 `GET …/plan/job`、`progress`、`finish`
-  照 21.7 不变。所以会话里的 `orbit wiki plan draft` 或 `revise`，包括本期之前的版本，在第一次调用时就停下，没问过任何模型；
+  `POST …/plan/job/progress`、`POST …/plan/job/finish`、`GET …/plan/materials`、`POST …/plan/drafts`——一律拒绝，生成作业
+  （`build`）自己的会话也一样：P7 起文档也由服务端写（22.13），不再建生成任务；开关切换之前建的生成任务，它的会话在第一次调用时就停下，
+  作业随任务结束。所以会话里的 `orbit wiki plan draft` 或 `revise`，包括本期之前的版本，在第一次调用时就停下，没问过任何模型；
   新版命令（随下一个 runner 版本发布）说明 plan 由服务端用 System model 起草、这里什么也没读也没问模型、要起草请 owner 在 plan
   页要求。维护运行读 plan（`GET …/plan`）、提修改建议、`plan check` 都不变。`runner` 下每条路由照 21.7。
 - **迁移 0404**：加 `wiki_plan.author_job_id`，`wiki_plan_author_chk` 改为维护来源的版本恰好记会话或作业之一；加 `wiki_plan_job.materials`；
@@ -1907,11 +1907,13 @@ JSON 里是 `docs.build.server`、`jobs.kindRuns.docs_build` 与 `plan.jobs.serv
   和命令以非 0 退出一样。平台的失败（runner 不在、读取或请求等待超限、worker 停机）两者都不结束：作业稍后重放，已写的节靠指纹原样不动。
   重放时发现 plan 作业已经结束，就按那个结束回答。
 - **runner 门**：对这样的账号，文档在 runner 门上的路由（`writerState`、`writerDoc`、`material`、`write`、`affected`、`withdraw`）
-  对维护会话一律回 `WIKI_SERVER_EXECUTES`，什么都不读——所以旧 runner 的 `orbit wiki docs build` 和维护运行的文档步骤都问不到会话的模型。
-  别的会话照旧是 `WIKI_NOT_MAINTENANCE_SESSION`。runner 模式下照 22.10、22.12 回答。
-- **命令行（随下一次 runner 发版）**：`orbit wiki docs build` 把 `WIKI_SERVER_EXECUTES` 读作「文档由服务端写」：不调模型、不再写、说明一句
-  （`--json` 里 `serverExecutes`），以 0 退出；在生成作业的会话里（开关切换前建的任务）把作业以失败结束并写明原因。在那之前，旧 runner
-  碰到拒绝会以非 0 退出，同样什么都没问。
+  对维护会话一律回 `WIKI_SERVER_EXECUTES`，什么都不读；plan 作业的路由对所有会话也都这样回，生成作业的会话在内（21.10）——所以旧
+  runner 的 `orbit wiki docs build` 和维护运行的文档步骤都问不到会话的模型。别的会话照旧是 `WIKI_NOT_MAINTENANCE_SESSION`。runner 模式下
+  照 22.10、22.12 回答。
+- **命令行（随下一次 runner 发版）**：`orbit wiki docs build` 把 `WIKI_SERVER_EXECUTES` 读作「文档由服务端写」——第一次调用读作业时
+  如此，读写文档的路由上也如此：不调模型、不再写、说明一句（`--json` 里 `serverExecutes`），以 0 退出。开关切换之前建的生成任务，它的
+  会话在第一次调用时就被拒，作业随任务结束；运行到一半开关切换、结束作业也被拒的，同样留给任务。在那之前，旧 runner 碰到拒绝会以非 0
+  退出，同样什么都没问。
 
 ## 23. System model 与 wiki-worker（服务端执行 P1a）
 

@@ -991,7 +991,8 @@ export class WikiPlans {
    * server executes the account's wiki, nobody. The wiki-worker drafts and revises with the System model then, so the
    * door hands no session a job to run, the materials to draft from or a place for what its own model wrote, and an
    * `orbit wiki plan draft` that predates this asks no model at all. Refused WIKI_SERVER_EXECUTES once the space is
-   * found, whoever asks — on the job routes, the session of a build job aside (`assertRunnerJob`).
+   * found, whoever asks — a build job's session too: the wiki-worker builds the documents then (contract
+   * `docs.build.server`), so no build task is made, and one made before the switch stops at its first call.
    */
   private async assertRunnerDrafts(principal: WikiPrincipal, spaceId: string): Promise<void> {
     if (wikiExecutorServes(currentWikiExecutorSwitch(), principal.ownerId)) {
@@ -1004,20 +1005,6 @@ export class WikiPlans {
       });
     }
     await this.assertMaintainer(principal, spaceId);
-  }
-
-  /**
-   * The job routes — a run's context, its progress and its end — are a drafting run's and a build's. A build is
-   * written on the runner until the documents' pipeline moves to the server (P7): whatever the switch says it is a
-   * task its session runs, so the session of the space's build job is held to `assertMaintainer` alone, as before;
-   * every other caller is held to `assertRunnerDrafts`.
-   */
-  private async assertRunnerJob(principal: WikiPrincipal, spaceId: string): Promise<void> {
-    if (wikiExecutorServes(currentWikiExecutorSwitch(), principal.ownerId) && principal.sessionId !== null) {
-      const job = await wikiPlanJobOfSession(this.prisma, principal.ownerId, spaceId, principal.sessionId);
-      if (job?.kind === 'build') return this.assertMaintainer(principal, spaceId);
-    }
-    return this.assertRunnerDrafts(principal, spaceId);
   }
 
   // ── Reads ─────────────────────────────────────────────────────────────────────────────────────
@@ -1790,7 +1777,7 @@ export class WikiPlans {
    * space, its repository and the maintenance workspace's checkout. Records that the run started.
    */
   async jobContext(principal: WikiPrincipal, spaceId: string): Promise<WikiPlanJobContext> {
-    await this.assertRunnerJob(principal, spaceId);
+    await this.assertRunnerDrafts(principal, spaceId);
     const row = await this.jobOfRun(principal, spaceId);
     await startWikiPlanJob(this.prisma, row.id, principal.sessionId!);
     const job = await wikiPlanJobById(this.prisma, principal.ownerId, row.id);
@@ -1822,7 +1809,7 @@ export class WikiPlans {
    * plan page shows as it runs.
    */
   async jobProgress(principal: WikiPrincipal, spaceId: string, body: unknown): Promise<WikiPlanJob> {
-    await this.assertRunnerJob(principal, spaceId);
+    await this.assertRunnerDrafts(principal, spaceId);
     const row = await this.jobOfRun(principal, spaceId);
     const raw = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
     if (row.state !== 'made') throw jobEnded();
@@ -1847,7 +1834,7 @@ export class WikiPlans {
    * refused WIKI_PLAN_NO_JOB.
    */
   async jobFinish(principal: WikiPrincipal, spaceId: string, body: unknown): Promise<WikiPlanJob> {
-    await this.assertRunnerJob(principal, spaceId);
+    await this.assertRunnerDrafts(principal, spaceId);
     const row = await this.jobOfRun(principal, spaceId);
     if (row.state !== 'made') {
       // The same end said again by the run that said it — its first send landed and the answer was lost on

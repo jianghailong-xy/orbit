@@ -28,8 +28,8 @@
  *      account, a task under runner and for an account canary does not list — and a job that never started is
  *      cancelled when the switch moves back;
  *  10. the runner door hands no session a plan job when the server drafts (WIKI_SERVER_EXECUTES), so an `orbit
- *      wiki plan draft` that predates this asks no model — while a build job's session, the runner's until the
- *      documents move (P7), keeps its job routes; under runner it answers exactly as it always has.
+ *      wiki plan draft` that predates this asks no model — a build job's session too, the documents being the
+ *      server's as well since P7; under runner it answers exactly as it always has.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-plan-draft-job.pg.spec.ts
  *
@@ -1083,7 +1083,7 @@ test('the switch decides: a wiki_job under server and for a listed canary accoun
 
 // ── 10. the runner door ──────────────────────────────────────────────────────────────────────────────
 
-test('the runner door hands no session a plan job when the server drafts it — a build\'s session aside — and under runner it answers as it always has', { skip, timeout: 120_000 }, async () => {
+test('the runner door hands no session a plan job when the server drafts it — a build\'s session included — and under runner it answers as it always has', { skip, timeout: 120_000 }, async () => {
   const h = await boot();
   // Under runner: the job's task, its session, and the door as it always was.
   await reset(h, 'runner');
@@ -1105,6 +1105,9 @@ test('the runner door hands no session a plan job when the server drafts it — 
   assert.equal(stranger.body.code, 'WIKI_NOT_MAINTENANCE_SESSION');
   const build = await buildJobSession(h, o, job.task_id);
   const asBuild = { runner: o.runnerToken, session: build.session };
+  const ownJob = await call(h, asBuild, 'GET', `/runner/wiki/spaces/${o.spaceId}/plan/job`);
+  expectStatus(ownJob, 200, 'under runner a build job\'s session reads its job');
+  assert.equal(toUuid(ownJob.body.job.id), build.planJobId);
 
   // Under server (and for a listed canary account): every route a run of `orbit wiki plan draft` reaches is the
   // server's, whoever asks — so a command that predates this stops at its first call, before any model.
@@ -1122,18 +1125,12 @@ test('the runner door hands no session a plan job when the server drafts it — 
     expectStatus(await call(h, as, 'GET', `/runner/wiki/spaces/${o.spaceId}/plan`), 200, `${mode}: a maintenance run reads the plan`);
     const theirs = await owner(h);
     expectStatus(await call(h, as, 'GET', `/runner/wiki/spaces/${theirs.spaceId}/plan/job`), 404, `${mode}: another owner's space`);
-    // A build is not drafted: its job is the runner's task until the documents move to the server (P7), so its own
-    // session reads its job and says how far it got — and is refused, like any other, what only a draft reads.
-    const built = await call(h, asBuild, 'GET', `/runner/wiki/spaces/${o.spaceId}/plan/job`);
-    expectStatus(built, 200, `${mode}: a build job's session reads its job`);
-    assert.equal(toUuid(built.body.job.id), build.planJobId);
-    assert.equal(built.body.job.kind, 'build');
-    expectStatus(
-      await call(h, asBuild, 'POST', `/runner/wiki/spaces/${o.spaceId}/plan/job/progress`, { docs: { done: 0, total: 3 }, current: null }),
-      200, `${mode}: and says how far it got`,
-    );
+    // The documents are the server's too (P7, docs.build.server): a build task made before the switch is refused at
+    // its first call like any other session, so its `orbit wiki docs build` asks no model either.
     for (const [method, route, body] of [
-      ['GET', 'plan/materials', undefined], ['POST', 'plan/drafts', { baseVersion: null, plan: {}, repoCheck: { sha: SHA, checked: 0, missing: [] } }],
+      ['GET', 'plan/job', undefined], ['POST', 'plan/job/progress', { docs: { done: 0, total: 3 }, current: null }],
+      ['POST', 'plan/job/finish', { outcome: 'failed', error: 'x' }], ['GET', 'plan/materials', undefined],
+      ['POST', 'plan/drafts', { baseVersion: null, plan: {}, repoCheck: { sha: SHA, checked: 0, missing: [] } }],
     ] as const) {
       const answer = await call(h, asBuild, method, `/runner/wiki/spaces/${o.spaceId}/${route}`, body);
       expectStatus(answer, 409, `${mode}: a build job's session, ${method} ${route}`);
