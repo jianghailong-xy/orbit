@@ -71,6 +71,8 @@ public enum KimiSite: String, CaseIterable, Sendable, Identifiable {
     public static let separateAccounts = "The two sites keep separate accounts — pick the one you signed up on."
     public static let currentMark = "Current"
     public var openPage: String { "Open the \(domain) sign-in page" }
+    /// The device code's one press — copy it, open the page it goes into — naming the site.
+    public var copyCodeAndOpen: String { "Copy Code & Open \(domain)" }
     public var enterCode: String { "Sign in with your \(domain) account there, then enter this one-time code:" }
     public var useInstead: String { "Use \(domain) instead" }
 }

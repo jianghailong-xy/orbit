@@ -152,10 +152,10 @@ final class AntigravityGoogleClientTests: XCTestCase {
         let relay = try String(contentsOf: file("src/macos/OrbitApp/Sources/OrbitApp/Views/RunnerSignInView.swift"), encoding: .utf8)
         let rows = try String(contentsOf: file("src/macos/OrbitApp/Sources/OrbitApp/Views/RunnerPageParts.swift"), encoding: .utf8)
         for piece in ["RunnerPageFormat.accountLines(health)",
-                      "RunnerSignInView(runnerID: runner.id, engine: login, account: line.signInAccount)",
+                      "RunnerSignInView(runnerID: runner.id, engine: login, account: line.signInAccount, autoStart: true,",
                       "if RunnerPageFormat.canAddAccount(runner, engine: engine) {",
                       "} else if let hint = RunnerPageFormat.signInHint(runner, engine: engine) {",
-                      "} else if RunnerPageFormat.canSignIn(runner, engine: engine) && (!line.envKey || alone) {",
+                      "if RunnerPageFormat.canSignIn(runner, engine: engine) && (!line.envKey || alone)",
                       "Button(line.envKey ? \"Sign in with Google\" : line.auth == \"yes\" ? \"Sign In Again\" : RunnerPageCopy.RUNNER_SIGN_IN) {",
                       "if engine == \"antigravity\" && RunnerPageFormat.antigravityCanSignIn(runner) {",
                       "GoogleSignInTermsView()",
@@ -166,7 +166,7 @@ final class AntigravityGoogleClientTests: XCTestCase {
         XCTAssertFalse(engine.contains("antigravitySection"), "Antigravity has no section of its own")
         XCTAssertFalse(engine.contains("Re-sign in"), "an account is signed in again on its own row")
         XCTAssertTrue(relay.contains("case .awaitingCode:"))
-        XCTAssertTrue(relay.contains("PasteBackForm(model: model)"))
+        XCTAssertTrue(relay.contains("PasteBackForm(model: model, onClose: onClose)"))
         XCTAssertTrue(relay.contains("console.runnerAntigravity?.googleLogin == .available"))
         XCTAssertTrue(relay.contains("EngineAuth.googleTermsURL"))
         let start = try XCTUnwrap(rows.range(of: "struct RunnerEngineRow: View {"))
