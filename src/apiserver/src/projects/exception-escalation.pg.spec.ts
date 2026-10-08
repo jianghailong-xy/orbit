@@ -46,11 +46,14 @@ import { ProjectOpenItemService } from './project-open-item.service';
  * duration, which is what "this was opened two hours ago" IS. Nothing else in these cases is
  * rewritten — the window each item carries stays the one its project froze into it at creation.
  *
- * What the clock counts is progress on the item, not arbitrary conversation activity (the last four
- * cases): the answer to the item's delivery, a concrete fix, or the fix's own work session can move
- * the deadline. A generic chat turn is deliberately not progress on this item. Those facts are
- * written by the production doors — the runner's claim, `dequeueTurn` handing a turn to the engine,
- * `turnComplete` ending it, and task/session writes — and aged by `quiet`/`age` on their own timelines.
+ * Revision 13: an item the project's live coordinator has taken up — answered one of its delivery
+ * turns since it last became the coordinator's — has no deadline at all, and is handed over only by
+ * the coordinator itself (the last five cases). The clock is left for the coordinator that cannot
+ * ask: one that never answered the item, or answered and is now down or ended. For those it counts
+ * progress on the item, not arbitrary conversation activity: the answer to the item's delivery, a
+ * concrete fix, or the fix's own work session can move the deadline. Those facts are written by the
+ * production doors — the runner's claim, `dequeueTurn` handing a turn to the engine, `turnComplete`
+ * ending it, and task/session writes — and aged by `quiet`/`age` on their own timelines.
  *
  * The clock is loaded by a specifier the compiler does not resolve, so this file compiles and runs
  * against a tree that has no escalation service at all. There, `tick` escalates nothing and each case
@@ -619,55 +622,53 @@ test('an item inside its window does not escalate', { skip, timeout: 180_000 }, 
 });
 
 /**
- * What the clock counts is item progress, not arbitrary coordinator chat (§4.6 X-E1).
+ * Revision 13 (§4.6): a coordinator that took the item up keeps it, however long the work takes.
  *
- * The old rule extended the deadline for any later conversation turn. The current rule is narrower:
- * the answer to the item's own delivery counts, but an unrelated chat turn does not. This case ages
- * the delivery answer, then sends a fresh generic chat message; the item still escalates because no
- * item-specific progress happened in the window.
+ * It answered the item's delivery, went on with an unrelated turn, and then nothing about the item
+ * moved for three days — the shape of the card an owner got on 2026-10-08 about a fix that had
+ * landed and been merged into main two hours earlier. The conversation is still the project's and
+ * can still act on it, so the item has no deadline: the sweep leaves it where it is, nobody is told,
+ * and the reader says so rather than counting down to a moment that is not coming. What the
+ * coordinator cannot settle it asks the owner about itself (`ask_owner`).
  */
-test('a generic coordinator chat turn does not renew an item progress window',
+test('a coordinator that took the item keeps it however long the work takes, and the reader shows no deadline',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
-      const w = await world(stack, 'still-carrying');
-      const item = await failedTask(stack, w, 'still-carrying');
+      const w = await world(stack, 'taken-up');
+      const item = await failedTask(stack, w, 'taken-up');
 
-      // Answer the delivery, then age that item-specific progress out of the window.
       const took = await takeTurn(stack, w);
-      assert.match(took.content, /Task failed: still-carrying/, 'the first turn it took is the item');
-      await quiet(stack.db, w.coordinatorSessionId, 2 * 60 * MINUTE + MINUTE);
-
-      // A fresh generic chat answer is deliberately not tied to the item's delivery key.
+      assert.match(took.content, /Task failed: taken-up/, 'the first turn it took is the item');
       await stack.sessions.createTurn(w.ownerId, w.coordinatorSessionId, {
         clientTurnId: randomUUID(),
         content: 'and the rest of the project?',
         intent: 'NEXT_TURN',
       });
-      const latest = await takeTurn(stack, w);
+      await takeTurn(stack, w);
 
-      // The item and its delivery are now beyond the frozen window. The generic turn remains recent,
-      // but it is not one of the progress facts for this item.
-      await age(stack.db, item, 2 * 60 * MINUTE + MINUTE);
+      // Three days on: every instant of the item and of the conversation went back together.
+      await quiet(stack.db, w.coordinatorSessionId, 3 * 24 * 60 * MINUTE);
+      await age(stack.db, item, 3 * 24 * 60 * MINUTE);
       const escalated = await tick(stack.prisma);
 
       const after = await reread(stack.db, item);
       assert.deepEqual(
-        [after.assignee, after.assigneeReason],
-        ['OWNER', 'ESCALATED'],
-        'generic conversation activity does not count as progress on the delivered item',
+        [after.assignee, after.assigneeReason, after.escalatedAt],
+        ['COORDINATOR', 'DEFAULT', null],
+        'a coordinator that took the item up keeps it: the clock does not decide it is taking too long',
       );
-      assert.ok(after.escalatedAt, 'the item records the hand-off');
-      assert.deepEqual(escalated.filter((row) => row.projectId === w.projectId).map((row) => row.itemId), [item.id],
-        'the stale item is reported to its owner');
+      assert.equal(after.assignedAt.getTime(), item.assignedAt.getTime() - 3 * 24 * 60 * MINUTE,
+        'and nothing about the assignment was touched');
+      assert.deepEqual(escalated.filter((row) => row.projectId === w.projectId), [],
+        'the tick reports nothing about it, so nobody is told');
 
       const reader = await stack.openItems.list(w.ownerId, w.projectId);
       assert.deepEqual(
-        [reader.needsYou.map((row) => row.itemId), reader.withCoordinator.length],
-        [[item.id], 0],
-        'the owner reads the escalated item and the coordinator group is empty',
+        [reader.needsYou.length, reader.withCoordinator.map((row) => [row.itemId, row.escalateAt])],
+        [0, [[item.id, null]]],
+        'the owner is shown nothing, and the coordinator\'s row has no moment it goes to them',
       );
-      assert.ok(latest.turnId, 'the unrelated chat turn was answered but did not renew the item');
     } finally {
       await stack.db.$disconnect();
     }
@@ -774,22 +775,33 @@ test('a coordinator conversation that has ended carries nothing, however recentl
   });
 
 /**
- * Criterion 9's property, on the path this change added: the clock that now reads a conversation's
- * turns still writes nothing a conversation would run (§4.6 X-E1). The coordinator took the item and
- * then went quiet for a full window, so the item goes to the owner — on the service's own interval,
- * with a push beside it that records every call — and the whole database is counted either side.
+ * Criterion 9's property, on the path the clock keeps after revision 13: the coordinator took the
+ * item and then went DOWN — its run failed and nobody ended it (`conversationIsDown`), so it can ask
+ * nobody anything. A full window after its last progress the item goes to the owner — on the
+ * service's own interval, with a push beside it that records every call — and the whole database is
+ * counted either side: the clock that reads a conversation's turns still writes nothing a
+ * conversation would run (§4.6 X-E1). While it was up, the same item stayed where it was.
  */
-test('an item whose coordinator went quiet for a full window after taking it escalates, and only its owner is told',
+test('an item whose coordinator went down after taking it escalates a window later, and only its owner is told',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
-      const w = await world(stack, 'went-quiet');
-      const item = await failedTask(stack, w, 'went-quiet');
+      const w = await world(stack, 'went-down');
+      const item = await failedTask(stack, w, 'went-down');
       await takeTurn(stack, w);
       // Opened three hours ago and taken at once; the conversation's last turn ended two hours and one
       // minute ago, and nothing has moved since.
       await age(stack.db, item, 3 * 60 * MINUTE);
       await quiet(stack.db, w.coordinatorSessionId, 2 * 60 * MINUTE + MINUTE);
+      assert.deepEqual(await tick(stack.prisma), [],
+        'up, the coordinator that took it keeps it — the control the rest of this case turns on');
+      assert.equal((await reread(stack.db, item)).assignee, 'COORDINATOR');
+
+      // Its run fails and nobody ends it: down, not over (§4.4 X-D6).
+      await stack.db.session.update({
+        where: { id: w.coordinatorSessionId },
+        data: { status: RunStatus.FAILED, endReason: null },
+      });
 
       const told: Array<{ method: string; args: unknown[] }> = [];
       const push = new Proxy({}, {
@@ -803,8 +815,8 @@ test('an item whose coordinator went quiet for a full window after taking it esc
 
       const now = await reread(stack.db, item);
       assert.deepEqual([now.assignee, now.assigneeReason], ['OWNER', 'ESCALATED'],
-        'a full window without a turn after taking the item is a coordinator that stopped — '
-        + `${NO_CLOCK}, item still ${now.assignee}`);
+        'a coordinator that went down cannot ask anybody, so a window after its last progress the item '
+        + `is the owner's — ${NO_CLOCK}, item still ${now.assignee}`);
       assert.deepEqual(
         told.filter((call) => call.args[0] === item.id),
         [{ method: 'notifyOwnerItem', args: [item.id] }],
@@ -816,6 +828,51 @@ test('an item whose coordinator went quiet for a full window after taking it esc
         'nothing an agent would run — '
         + `turns ${before.turns}→${after.turns}, sessions ${before.sessions}→${after.sessions}, `
         + `wakes ${before.wakes}→${after.wakes}, deliveries ${before.deliveries}→${after.deliveries}`);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+/**
+ * Revision 13, the other edge of "taken up": "Ask the coordinator again" puts the item in front of
+ * the coordinator as a new custody (`waiting_since` moves), so an answer it gave before the owner had
+ * the item does not hold it — only an answer after the press does. One world for each side: the
+ * coordinator that never answered the delivery the press made loses the item on the clock again; the
+ * one that did keeps it.
+ */
+test('asked again, the item is the coordinator\'s to take up afresh: only an answer to the new delivery holds it',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      for (const answers of [false, true]) {
+        const label = answers ? 'asked-again-answered' : 'asked-again-silent';
+        const w = await world(stack, label);
+        const item = await failedTask(stack, w, label);
+        await takeTurn(stack, w);
+        await stack.openItems.handOver(w.ownerId, w.projectId, item.id,
+          { note: 'this needs the owner\'s signing key' }, { kind: 'SESSION', sessionId: w.coordinatorSessionId });
+        assert.equal((await reread(stack.db, item)).assignee, 'OWNER', `${label}: handed over, it is the owner's`);
+
+        // The answer it gave before the owner had it is three hours old by the time it is asked again.
+        await quiet(stack.db, w.coordinatorSessionId, 3 * 60 * MINUTE);
+        await stack.openItems.returnToCoordinator(w.ownerId, w.projectId, item.id);
+        if (answers) {
+          const took = await takeTurn(stack, w);
+          assert.match(took.content, new RegExp(`Task failed: ${label}`), `${label}: the turn it took is the item again`);
+        }
+        await age(stack.db, item, 2 * 60 * MINUTE + MINUTE);
+        if (answers) await quiet(stack.db, w.coordinatorSessionId, 2 * 60 * MINUTE + MINUTE);
+        await tick(stack.prisma);
+
+        const after = await reread(stack.db, item);
+        assert.deepEqual(
+          [after.assignee, after.assigneeReason],
+          answers ? ['COORDINATOR', 'DEFAULT'] : ['OWNER', 'ESCALATED'],
+          answers
+            ? `${label}: it answered the delivery the press made, so it holds the item again`
+            : `${label}: an answer from before the press is not taking the item up again — ${NO_CLOCK}`,
+        );
+      }
     } finally {
       await stack.db.$disconnect();
     }

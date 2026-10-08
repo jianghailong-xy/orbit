@@ -38,6 +38,7 @@ import { formatResetTime } from '../lib/providerPools';
 import { runnersQuery } from '../lib/queries';
 import { RUNNER_ENGINE_RENEW, runnerEngineNext } from '../lib/runnerCopy';
 import { loginExpiresLine, signedOutNote } from '../lib/accountLogin';
+import { foldFromAnywhere } from '../lib/foldHead';
 import { ago, engineVersionNumber, updateNoteOf } from '../lib/runnerEngines';
 import { ENGINE_PRESET, ENGINE_SLUGS } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
@@ -557,10 +558,18 @@ function EngineRow({
   );
 
   return (
-    <div className={`re-row${grouped ? ' re-grp' : ''}${folded ? ' folded' : ''}${focused ? ' focused' : ''}${accountIsPaused(single?.pausedUntil, now) ? ' account-paused' : ''}`} ref={row} data-engine={engine}>
+    <div
+      className={`re-row${grouped ? ' re-grp' : ''}${folded ? ' folded' : ''}${focused ? ' focused' : ''}${accountIsPaused(single?.pausedUntil, now) ? ' account-paused' : ''}`}
+      ref={row}
+      data-engine={engine}
+      // The head's line folds its group from anywhere on it, as a card's head does — not a panel or
+      // note opened under the line, which are the row's and not its head's.
+      onClick={grouped ? foldFromAnywhere(() => onFold(!open), 'button, a, input, .re-panel, .re-login-note') : undefined}
+    >
       {grouped ? (
         // A group folds under its head. The toggle is the identity alone, as a runner card's is, so
-        // Add account beside it stays a button of its own.
+        // Add account beside it stays a button of its own; a press elsewhere on the line is the
+        // toggle's (foldFromAnywhere).
         <button className="re-id re-grp-toggle" type="button" aria-expanded={open} onClick={() => onFold(!open)}>
           <ProviderTile slug={ENGINE_PRESET[engine] ?? engine} label={ENGINE_NAME[engine]} size={28} />
           <span className="re-grp-copy">
@@ -1179,9 +1188,11 @@ function RunnerEngineCard({
 
   return (
     <div className={`re-card re-runner-card${runner.online ? '' : ' offline'}${collapsed ? ' collapsed' : ''}`}>
-      <div className="re-head">
+      <div className="re-head" onClick={foldFromAnywhere(onToggle)}>
         {/* The toggle is its own button rather than the whole header: the header also holds a
-            link, and a link inside a button is neither valid nor operable by keyboard. */}
+            link, and a link inside a button is neither valid nor operable by keyboard. A press
+            anywhere else on the header — the summary, the space around it — is the toggle's
+            (foldFromAnywhere); the link stays its own. */}
         <button
           className="re-toggle"
           type="button"

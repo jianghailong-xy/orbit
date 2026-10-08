@@ -473,10 +473,12 @@ test('an Automatic project hands a path warning to its coordinator as a delivery
         for (const want of [
           'Changed files it didn’t declare', STRAY, DECLARED_DIR, '机械的范围告警', 'open_item_resolve',
           'task_reopen', 'supersedesTaskId', 'integration_retry', '不要为它 ask_owner',
-          'exceptionEscalationSeconds',
+          '你接手之后它一直归你',
         ]) {
           assert.ok(text.includes(want), `the review message does not say ${JSON.stringify(want)}`);
         }
+        // Revision 13 (§4.6): a review the coordinator took up is not handed to the owner on a clock.
+        assert.ok(!text.includes('exceptionEscalationSeconds'), 'the review still threatens the escalation clock');
         assert.ok(!text.includes('合并到 main'), 'the review was sent as an order to merge');
         assert.ok(!text.includes('需要账号所有者裁决'), 'the review was worded as the owner’s decision');
         assert.equal(await stack.db.projectOpenItemDelivery.count({

@@ -37,6 +37,7 @@ import {
 import {
   ownerHoldOnHandledItems,
   recordIntegrationFailure,
+  rearmItemFixedBy,
   recordPromotionApproval,
   resolveHandledItems,
   resolveIntegrationItemsOnLanding,
@@ -569,9 +570,10 @@ export interface IntegrationResultAftermath {
   projectId: string;
   landedTaskId: string | null;
   /**
-   * The exception items this result opened, by id, for the door that delivered the result to hand
-   * over. By item rather than by task because a promotion job names no task (§3.4): the caller is
-   * the only thing holding that row's id, and no read finds it by a task it does not have.
+   * The exception items this result opened — and, for a fix task's landing, the item it fixes,
+   * re-keyed for its coordinator (§4.4 X-D4 5) — by id, for the door that delivered the result to
+   * hand over. By item rather than by task because a promotion job names no task (§3.4): the caller
+   * is the only thing holding that row's id, and no read finds it by a task it does not have.
    */
   openItemIds: string[];
   /**
@@ -992,6 +994,12 @@ export async function applyIntegrationJobResult(
       await resolveHandledItems(tx, job.id);
       await resolveIntegrationItemsOnLanding(tx, job.taskId);
     }
+    // §4.4 X-D4 (5): this task was filed to fix an exception, and its landing is in — receipted, and
+    // not the answer about a branch the work did not end on. Whether the work that exception is
+    // about went in with it is the coordinator's to check, so the item goes back in front of it.
+    const rearmedItemId = job.kind === 'LAND_TASK' && job.taskId && receiptState !== null && !leftWorkBehind
+      ? await rearmItemFixedBy(tx, job.taskId)
+      : null;
 
     return {
       answer: {
@@ -1009,7 +1017,7 @@ export async function applyIntegrationJobResult(
         landedTaskId: (jobLanded(effectiveState) || receiptIds.length > 0) && !job.promotionId
           ? job.taskId
           : null,
-        openItemIds: openItemId ? [openItemId] : [],
+        openItemIds: [openItemId, rearmedItemId].filter((id): id is string => id !== null),
         // M-F1 for a landing, M-F4 for a promotion that ended: both are the queue getting shorter.
         considerPromotionProjectId:
           job.kind === 'LAND_TASK' || job.kind === 'LAND_PROMOTION' ? job.projectId : null,

@@ -925,8 +925,13 @@ type AgentExecConfig struct {
 	// FastMode asks Claude Code for its fast lane — the same thing `/fast` turns on
 	// interactively. Unlike Effort it is not a flag: it is a settings key, and one the
 	// engine reads once at startup (claude_spawn.go), so it moves only across a re-spawn.
-	FastMode     bool                   `json:"fastMode"`
-	MaxTurns     *int                   `json:"maxTurns"`
+	FastMode bool `json:"fastMode"`
+	// PromptSuggestions asks Claude Code to predict the person's next message after each turn
+	// (`--prompt-suggestions`), which this runner files as a prompt_suggestion event. The
+	// control plane decides it per session; absent is off, so an older control plane never turns
+	// it on. A spawn flag like FastMode's settings key: it moves only across a re-spawn.
+	PromptSuggestions bool                   `json:"promptSuggestions,omitempty"`
+	MaxTurns          *int                   `json:"maxTurns"`
 	MaxBudgetUsd *float64               `json:"maxBudgetUsd"`
 	McpConfig    map[string]interface{} `json:"mcpConfig"`
 	// Custom env vars injected into the coding-engine process.
@@ -1451,6 +1456,9 @@ const (
 	// Interactive sessions (Route B)
 	evUser    = "user"
 	evTurnEnd = "turn_end"
+	// What the person will probably type next, predicted by Claude Code after a turn ended
+	// (claude_prompt_suggestion.go). Durable, and filed against the turn it follows.
+	evPromptSuggestion = "prompt_suggestion"
 	// How far a user message got on its way into the engine's conversation: enqueued ->
 	// written -> acknowledged, or failed with a reason (claude_delivery.go). The `user`
 	// event that opens a turn carries its own first state; this reports every one after.

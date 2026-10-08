@@ -338,6 +338,7 @@ import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
 import { orchestrationEnabled } from '../common/orchestration-switch';
+import { claimPromptSuggestions } from '../common/prompt-suggestions-switch';
 import {
   AUTO_ALLOWED_MESSAGE,
   dispatchAllowedTools,
@@ -2701,6 +2702,15 @@ export class RunnerApiController {
         fastMode:
           s.fastMode &&
           fastModeAvailable(provider, exec.model, s.assignedRunner?.modelCatalog as RunnerModelCatalog | null),
+        // cf. the claim path: a reclaimed engine is spawned again, so it is asked again.
+        promptSuggestions: claimPromptSuggestions({
+          owner: s.owner,
+          provider,
+          runSource: s.runSource,
+          spawnDepth: s.spawnDepth,
+          maintenance,
+          env: exec.env,
+        }),
         // Per-session effort wins; otherwise use the workspace's effort setting.
         // Same dispatch-time variant check as the queue claim: an OpenCode variant is only
         // valid against the assigned runner's reported catalog for this model, and a configured

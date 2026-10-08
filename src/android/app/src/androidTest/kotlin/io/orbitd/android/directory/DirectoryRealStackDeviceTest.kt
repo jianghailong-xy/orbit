@@ -9,6 +9,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.orbitd.android.auth.chooseServer
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.AuthState
@@ -81,11 +82,11 @@ class DirectoryRealStackDeviceTest {
 
             compose.waitUntil(10_000) { app.session.state.value !is AuthState.Restoring }
             if (app.session.state.value is AuthState.SignedIn) runBlocking { app.session.logout() }
-            awaitText("Instance address")
-            compose.onNodeWithText("Instance address").performTextReplacement(server)
+            awaitText("Welcome back")
+            compose.chooseServer(server)
             compose.onNodeWithText("Email").performTextReplacement(arg("ownerEmail"))
             compose.onNodeWithText("Password").performTextReplacement(arg("ownerPassword"))
-            compose.onAllNodesWithText("Sign in")[1].performScrollTo().performClick()
+            compose.onNodeWithText("Sign In").performScrollTo().performClick()
             compose.waitUntil(30_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
 
             // The Workspaces page: one row per workspace, top to bottom in iOS's order.
