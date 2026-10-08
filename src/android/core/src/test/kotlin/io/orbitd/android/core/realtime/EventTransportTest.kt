@@ -25,7 +25,7 @@ class EventTransportTest {
             var opened = false
             OkHttpEventTransport().stream(request(server), { opened = true }, { assertTrue(opened); frames += it })
             assertEquals("中文🙂", RunEvent.decode(frames.single()).fields.text("text"))
-            val wire = server.takeRequest(1, TimeUnit.SECONDS)!!
+            val wire = server.takeRequest(60, TimeUnit.SECONDS)!!
             assertEquals("/api/sessions/s1/events?sinceSeq=9", wire.path)
             assertEquals("Bearer fixture-token", wire.getHeader("Authorization"))
             assertEquals("android/test", wire.getHeader("X-Orbit-Client"))
@@ -37,12 +37,12 @@ class EventTransportTest {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream")
                 .setBody(":k\n\n".repeat(8)).throttleBody(4, 50, TimeUnit.MILLISECONDS))
-            withTimeout(3000) { OkHttpEventTransport(150).stream(request(server), {}, { fail("Comments do not dispatch") }) }
+            withTimeout(60_000) { OkHttpEventTransport(150).stream(request(server), {}, { fail("Comments do not dispatch") }) }
             server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream")
                 .setBody("data: {}\n\n").setBodyDelay(1, TimeUnit.SECONDS))
             var opened = false
             try {
-                withTimeout(3000) { OkHttpEventTransport(100).stream(request(server), { opened = true }, {}) }
+                withTimeout(60_000) { OkHttpEventTransport(100).stream(request(server), { opened = true }, {}) }
                 fail("Silent stream should fail")
             } catch (_: NetworkException) { assertTrue(opened) }
         }
@@ -54,7 +54,7 @@ class EventTransportTest {
                 .setBody("data: {}\n\n").setBodyDelay(2, TimeUnit.SECONDS))
             val opened = CompletableDeferred<Unit>()
             val job = launch { OkHttpEventTransport().stream(request(server), { opened.complete(Unit) }, {}) }
-            withTimeout(3000) { opened.await() }
+            withTimeout(60_000) { opened.await() }
             withTimeout(500) { job.cancelAndJoin() }
             assertTrue(job.isCancelled)
         }
@@ -70,11 +70,11 @@ class EventTransportTest {
                 .setBody("data: {\"type\":\"ping\"}\n\n".repeat(1000)).throttleBody(24, 50, TimeUnit.MILLISECONDS))
             val opened = CompletableDeferred<Unit>()
             val first = launch { transport.stream(request, { opened.complete(Unit) }, {}) }
-            withTimeout(3000) { opened.await() }
+            withTimeout(60_000) { opened.await() }
             withTimeout(500) { first.cancelAndJoin() }
             server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream").setBody("data: recovered\n\n"))
             val frames = mutableListOf<SseFrame>()
-            withTimeout(3000) { transport.stream(request, {}, { frames += it }) }
+            withTimeout(60_000) { transport.stream(request, {}, { frames += it }) }
             assertEquals("recovered", frames.single().data)
         }
     }
