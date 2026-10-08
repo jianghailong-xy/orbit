@@ -56,6 +56,8 @@ class UpgradeDeviceTest {
         val instances = AndroidInstanceStore(context)
         val data = AndroidSessionDataStore(context)
         val marker = File(context.noBackupFilesDir, "orbit/a14-upgrade-marker")
+        // What app-private storage held when this phase began, whether or not a read below fails.
+        InstrumentationRegistry.getInstrumentation().sendStatus(0, Bundle().apply { putString("a14_storage_at_start", storageState(context)) })
         var observedVersion: String? = null
         val session = AuthSession(HttpTransport { request ->
             observedVersion = request.clientVersion
@@ -87,8 +89,8 @@ class UpgradeDeviceTest {
             assertTrue("Upgrade uses a new process", before[0].toInt() != Process.myPid())
             assertTrue("Upgrade must increase versionCode", before[1].toLong() < info.longVersionCode)
             assertNotEquals("Upgrade must identify a new version", before[2], version)
-            assertTrue("Encrypted credential must survive", credentials.load() == StoredSession(server.value, tokens))
-            assertEquals(server.value, instances.load())
+            assertTrue("Encrypted credential must survive", stored(context, "credentials.load") { credentials.load() } == StoredSession(server.value, tokens))
+            assertEquals(server.value, stored(context, "instances.load") { instances.load() })
             // Restore the production Application's own AuthSession without contacting a real backend.
             val applicationSession = (context as OrbitApplication).session
             applicationSession.restore()
@@ -107,7 +109,7 @@ class UpgradeDeviceTest {
         assertFalse(encrypted.contains(tokens.refreshToken))
         for ((index, account) in accounts.withIndex()) for (kind in DataKind.entries) {
             assertArrayEquals("Account/server namespace survives upgrade", "$index:$kind".encodeToByteArray(),
-                data.read(account, kind, "same-id"))
+                stored(context, "data.read $index $kind") { data.read(account, kind, "same-id") })
         }
         assertNull(data.read(AccountKey(server.value, "absent-account"), DataKind.CACHE, "same-id"))
         assertNull(data.read(AccountKey("https://absent.example.test/", tokens.user.id), DataKind.CACHE, "same-id"))
@@ -130,4 +132,20 @@ class UpgradeDeviceTest {
             putString("a14_login", if (phase == "seed") "fixture login saved" else "production Application session restored; fixture request authenticated; logout purged")
         })
     }
+}
+
+/** Files under app-private orbit/ and this package's Keystore aliases, for a failure message. */
+private fun storageState(context: Context): String {
+    val root = File(context.noBackupFilesDir, "orbit")
+    val files = root.walkTopDown().filter { it.isFile }.map { "${it.relativeTo(root)}(${it.length()})" }.toList()
+    val aliases = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.aliases().toList()
+        .filter { it.startsWith(context.packageName) }.sorted()
+    return "orbit/ files ${files.filterNot { it.startsWith("accounts/") }} + ${files.count { it.startsWith("accounts/") }} under accounts/; keys $aliases"
+}
+
+/** A storage read that names itself, and what storage held, when it fails (SecureStorageException carries no cause). */
+private suspend fun <T> stored(context: Context, step: String, read: suspend () -> T): T = try {
+    read()
+} catch (error: SecureStorageException) {
+    throw AssertionError("$step: ${error.message}; ${storageState(context)}", error)
 }
