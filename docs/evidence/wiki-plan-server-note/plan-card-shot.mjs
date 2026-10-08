@@ -119,10 +119,21 @@ console.log('toasts on screen:', toasts);
 const name = SERVER ? 'activity-plan-server' : 'activity-plan-runner';
 await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
 await page.locator('.wk-plan-card').screenshot({ path: `${OUT}/${name}-card.png` });
-writeFileSync(
-  `${OUT}/${name}.txt`,
+let notes =
   `URL: /wiki/orbit/activity\nexecutor: ${SERVER ? 'canary (serverExecutes: true)' : 'runner (serverExecutes: false)'}\n`
-    + `Plan card line: ${note}\nDraft plan beside it: ${/Draft plan/.test(foot)}\nCard sentence: ${banner}\nToasts: ${toasts}\n\n`
-    + `The Plan card's foot as the DOM has it:\n${foot}\n`,
-);
+  + `Plan card line: ${note}\nDraft plan beside it: ${/Draft plan/.test(foot)}\nCard sentence: ${banner}\nToasts: ${toasts}\n\n`
+  + `The Plan card's foot as the DOM has it:\n${foot}\n`;
+
+// The plan's empty page: who drafts it, and the note under Draft plan — the other two sentences the review named.
+await page.goto(`http://localhost:${PORT}/wiki/orbit/plan`, { waitUntil: 'domcontentloaded' });
+await page.waitForSelector('.wk-pl-empty', { timeout: 30_000 });
+const body = await page.locator('.wk-pl-empty p').first().innerText();
+const emptyNote = await page.locator('.wk-pl-empty .note').first().innerText();
+console.log('the empty page\'s body:', JSON.stringify(body));
+console.log('the empty page\'s note:', JSON.stringify(emptyNote));
+const planName = SERVER ? 'plan-empty-server' : 'plan-empty-runner';
+await page.screenshot({ path: `${OUT}/${planName}.png`, fullPage: true });
+await page.locator('.wk-pl-empty').screenshot({ path: `${OUT}/${planName}-card.png` });
+notes += `\nURL: /wiki/orbit/plan\nEmpty page body: ${body}\nEmpty page note: ${emptyNote}\n`;
+writeFileSync(`${OUT}/${name}.txt`, notes);
 await browser.close();

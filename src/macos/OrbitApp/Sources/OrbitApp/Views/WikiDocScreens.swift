@@ -214,7 +214,8 @@ struct WikiPlanScreen: View {
         let failed = WikiPlanLogic.failedJob(state)
         let inForce = shown?.status == .confirmed && state.confirmed?.version == shown?.version
         let online = model.wikiMaintenanceRunnerOnline
-        let card = WikiPlanLogic.jobCard(state.job, now: Date(), runnerOnline: online, failed: shown?.status == .failed ? failed : nil,
+        let card = WikiPlanLogic.jobCard(state.job, now: Date(), runnerOnline: online, serverExecutes: wiki.serverExecutes,
+                                         failed: shown?.status == .failed ? failed : nil,
                                          inForce: inForce, directory: wiki.docsDirectory)
         let rows = WikiPlanLogic.versionRows(wiki.planVersions, failed: failed.map { job -> (version: Int, at: String?) in
             (WikiPlanLogic.nextVersion(state), job.endedAt)
@@ -340,7 +341,8 @@ struct WikiPlanScreen: View {
         WikiPlanRedraftSheet(note: WikiPlanCopy.redraftNote(provider: model.wikiMaintenanceProvider,
                                                             from: newest.map { version -> (version: Int, inForce: Bool) in
                                                                 (version.version, version.status == .confirmed)
-                                                            }),
+                                                            },
+                                                            serverExecutes: wiki.serverExecutes),
                              protectedDocs: protected) { words in await redraft(wiki, words, failure: WikiCopy.planRedraftFailed) }
     }
 

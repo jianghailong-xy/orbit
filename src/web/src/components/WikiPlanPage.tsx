@@ -296,6 +296,7 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
   const card = wikiPlanJobCard(plan.job, {
     now,
     runnerOnline: page.maintenance.runnerOnline,
+    serverExecutes: page.serverExecutes,
     failed: shown?.status === 'failed' ? page.failed : null,
     inForce,
     directory: page.directory.data,
@@ -424,6 +425,7 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
         onClose={() => setRedrafting(false)}
         spaceId={spaceId}
         provider={page.maintenance.provider}
+        serverExecutes={page.serverExecutes}
         plan={plan}
         protectedDocs={(page.plan && wikiPlanNewest(page.plan) ? wikiPlanFromVersion(wikiPlanNewest(page.plan)!) : null)?.docs.filter((doc) => doc.protected).map((doc) => doc.number) ?? []}
       />
@@ -531,7 +533,7 @@ function PlanEmpty({
     <div className="wk-pl-empty">
       <ProfileOutlined className="ic" />
       <b>{WIKI_PLAN_EMPTY_TITLE}</b>
-      <p>{wikiPlanEmptyText(provider)}</p>
+      <p>{wikiPlanEmptyText(provider, serverExecutes)}</p>
       <Button type="primary" loading={busy} onClick={onDraft}>
         {WIKI_PLAN_DRAFT}
       </Button>
@@ -1322,6 +1324,7 @@ function PlanRedraftModal({
   onClose,
   spaceId,
   provider,
+  serverExecutes,
   plan,
   protectedDocs,
 }: {
@@ -1329,6 +1332,7 @@ function PlanRedraftModal({
   onClose: () => void;
   spaceId: string;
   provider: string | null;
+  serverExecutes: boolean;
   plan: WikiPlanState;
   protectedDocs: string[];
 }) {
@@ -1361,7 +1365,7 @@ function PlanRedraftModal({
       confirmLoading={redraft.isPending}
       destroyOnHidden
     >
-      <p className="wk-pl-modal-p">{wikiPlanRedraftNote(provider, newest ? { version: newest.version, inForce: newest.status === 'confirmed' } : null)}</p>
+      <p className="wk-pl-modal-p">{wikiPlanRedraftNote(provider, newest ? { version: newest.version, inForce: newest.status === 'confirmed' } : null, serverExecutes)}</p>
       <Input.TextArea autoFocus value={words} onChange={(event) => setWords(event.target.value)} rows={4} placeholder={WIKI_PLAN_REDRAFT_PLACEHOLDER} />
       {protectedDocs.length > 0 && <div className="wk-pl-modal-note">{wikiPlanProtectedKept(protectedDocs)}</div>}
     </Modal>

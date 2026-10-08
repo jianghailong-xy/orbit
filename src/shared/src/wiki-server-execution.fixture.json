@@ -8,10 +8,14 @@
     "`WikiServerExecutionCopyParityTests` (`WikiRunsCopy`, `WikiRunsLogic`, `WikiModeCopy`), so the two ends cannot drift into",
     "two sentences. The status line's server reasons are cases of `wiki-health.fixture.json`, the line's own fixture.",
     "",
-    "`plan.note` is the line beside Draft plan while the server executes the account — on Activity's Plan card and on the",
-    "plan's empty card, which the web reads in `lib/wikiPlan.ts` (`wikiPlanCard`, `wikiPlanEmptyNote`) and OrbitKit in",
-    "`WikiPlanCopy` (`noteServer`, `emptyNote`). Under runner both keep the line they always had, `<provider> · about",
-    "1–2 hours`, which is not this file's.",
+    "`plan` is the plan's words while the server executes the account (owner's call 2026-10-08, review of the first",
+    "delivery): `drafter` names who drafts — the wiki-worker's System model — and `note` is the line beside Draft plan on",
+    "Activity's Plan card; `emptyNote`, `emptyText` and `redraftNotes` are the plan empty page's note, its body and the",
+    "Redraft… dialog's sentence with the System model as their subject. The web reads them in `lib/wikiPlan.ts`",
+    "(`wikiPlanCard`, `wikiPlanEmptyNote`, `wikiPlanEmptyText`, `wikiPlanRedraftNote`, `wikiPlanJobCard`) and OrbitKit in",
+    "`WikiPlanCopy` (`noteServer`, `emptyNoteServer`, `drafterServer`, `emptyText`, `emptyNote`, `redraftNote`). Under",
+    "runner every one of them keeps what it always said, `<provider>` as the drafter, which is not this file's — those",
+    "rows are `wiki-docs.fixture.json`'s. The documents' build is P7's, not this file's.",
     "",
     "Times are read at `now`. A run case is a `GET /api/wiki/spaces/:id/jobs` job and the row the Runs card draws for it:",
     "`kind`, `state` and `text` (what follows the state, ` · ` between its parts), `mark`, `tone` and `when`. A call case is",
@@ -101,7 +105,23 @@
     ]
   },
   "plan": {
-    "note": "System model · about 1–2 hours"
+    "drafter": "System model",
+    "note": "System model · about 1–2 hours",
+    "emptyNote": "Runs on the server with the System model — usually 1–2 hours. Until you confirm a plan, the Wiki shows its topic articles.",
+    "emptyText": "A plan lays out this wiki’s documents: the categories, the documents in each, who each one is for and what it covers, and where each section’s material comes from. The System model drafts it; nothing is written until you confirm it.",
+    "redraftNotes": [
+      {
+        "from": null,
+        "says": "The System model drafts it again with what you write here. A draft that doesn’t pass the plan check is redrafted with its errors, up to 3 times."
+      },
+      {
+        "from": {
+          "version": 1,
+          "inForce": true
+        },
+        "says": "The System model drafts it again from v1, the plan in force, with what you write here. A draft that doesn’t pass the plan check is redrafted with its errors, up to 3 times."
+      }
+    ]
   },
   "runs": {
     "title": "Runs",

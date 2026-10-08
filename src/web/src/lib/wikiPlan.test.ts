@@ -65,8 +65,16 @@ function readFixture(): { timeZone: string; now: string; docs: { directory: { re
   return JSON.parse(readFileSync(path, 'utf8'));
 }
 
-/** The server-execution fixture (P9): the one line this file shares with OrbitKit's `WikiPlanCopy`. */
-function readServerFixture(): { plan: { note: string } } {
+/** The server-execution fixture (P9): the plan's words while the server executes the account, shared with OrbitKit. */
+function readServerFixture(): {
+  plan: {
+    drafter: string;
+    note: string;
+    emptyNote: string;
+    emptyText: string;
+    redraftNotes: Array<{ from: { version: number; inForce: boolean } | null; says: string }>;
+  };
+} {
   const candidates = [
     resolve(process.cwd(), '../shared/src/wiki-server-execution.fixture.json'),
     resolve(process.cwd(), 'src/shared/src/wiki-server-execution.fixture.json'),
@@ -221,10 +229,10 @@ describe("the plan's words", () => {
     for (const row of c.changesCount) expect(P.wikiPlanChangeCount(row.n as number)).toBe(row.says);
     for (const row of c.time) expect(P.wikiPlanTime(row.since as string | null, row.until as string | null)).toBe(row.says);
     for (const row of c.redraftNotes) {
-      expect(P.wikiPlanRedraftNote(row.provider as string | null, row.from as { version: number; inForce: boolean } | null)).toBe(row.says);
+      expect(P.wikiPlanRedraftNote(row.provider as string | null, row.from as { version: number; inForce: boolean } | null, false)).toBe(row.says);
     }
     for (const row of c.protectedKept) expect(P.wikiPlanProtectedKept(row.numbers as string[])).toBe(row.says);
-    for (const row of c.emptyText) expect(P.wikiPlanEmptyText(row.provider as string | null)).toBe(row.says);
+    for (const row of c.emptyText) expect(P.wikiPlanEmptyText(row.provider as string | null, false)).toBe(row.says);
     for (const row of c.emptyNote) expect(P.wikiPlanEmptyNote(row.where as string | null, row.provider as string | null, false)).toBe(row.says);
     for (const row of c.saveNote) expect(P.wikiPlanSaveNote(row.n as number)).toBe(row.says);
     for (const row of c.editTitle) expect(P.wikiPlanEditTitle(row.number as string)).toBe(row.says);
@@ -244,17 +252,31 @@ describe("the plan's words", () => {
   });
 });
 
-describe('the plan’s line under Draft plan, under server execution and under runner', () => {
+describe('the plan’s words that name a drafter, under server execution and under runner', () => {
   const served = readServerFixture();
   const context = (serverExecutes: boolean, provider: string | null) => ({ now, docs: null, runnerOnline: true, provider, serverExecutes });
   const noPlan = (): WikiPlanState => ({ spaceId: 'sp1', confirmed: null, draft: null, proposals: [], job: null });
+  const drafting = (): WikiPlanState => stateOf({ confirmed: null, draft: null, proposals: false, job: 'drafting', runnerOnline: true });
 
-  it('says the System model’s line, from the shared fixture, while the server executes the account', () => {
+  it('names the System model as the drafter, from the shared fixture, while the server executes the account', () => {
+    // Activity's Plan card: the short line beside Draft plan.
     expect(P.WIKI_PLAN_NOTE_SERVER).toBe(served.plan.note);
     expect(P.wikiPlanCard('noPlan', noPlan(), context(true, 'local-vllm')).note).toBe(served.plan.note);
     expect(P.wikiPlanCard('noPlan', noPlan(), context(true, null)).note).toBe(served.plan.note);
-    expect(P.wikiPlanEmptyNote('orbit · wikova', 'local-vllm', true)).toBe(served.plan.note);
-    expect(P.wikiPlanEmptyNote(null, null, true)).toBe(served.plan.note);
+    // The plan's empty page: the note keeps the half that still holds, and the body names the System model.
+    expect(P.WIKI_PLAN_EMPTY_NOTE_SERVER).toBe(served.plan.emptyNote);
+    expect(P.wikiPlanEmptyNote('orbit · wikova', 'local-vllm', true)).toBe(served.plan.emptyNote);
+    expect(P.wikiPlanEmptyNote(null, null, true)).toBe(served.plan.emptyNote);
+    expect(P.WIKI_PLAN_DRAFTER_SERVER).toBe(served.plan.drafter);
+    expect(P.wikiPlanEmptyText('local-vllm', true)).toBe(served.plan.emptyText);
+    expect(P.wikiPlanEmptyText(null, true)).toBe(served.plan.emptyText);
+    for (const row of served.plan.redraftNotes) {
+      expect(P.wikiPlanRedraftNote('local-vllm', row.from as { version: number; inForce: boolean } | null, true)).toBe(row.says);
+    }
+    // What is drafting: the job's card on the page, and the Activity card's own sentence.
+    const card = P.wikiPlanJobCard(plan.jobs.drafting, { now, runnerOnline: true, serverExecutes: true, directory: null, inForce: false })!;
+    expect(card.text.startsWith(`${served.plan.drafter} · attempt `)).toBe(true);
+    expect(P.wikiPlanCard('drafting', drafting(), context(true, 'local-vllm')).text).toContain(`Drafting the plan · ${served.plan.drafter} · attempt `);
   });
 
   it('says the provider’s line, word for word as before, under runner', () => {
@@ -262,6 +284,13 @@ describe('the plan’s line under Draft plan, under server execution and under r
     expect(P.wikiPlanCard('noPlan', noPlan(), context(false, null)).note).toBe('Wiki maintenance · about 1–2 hours');
     expect(P.wikiPlanEmptyNote('orbit · wikova', 'local-vllm', false)).toBe(plan.counts.emptyNote[0].says);
     expect(P.wikiPlanEmptyNote(null, null, false)).toBe(plan.counts.emptyNote[1].says);
+    expect(P.wikiPlanEmptyText('local-vllm', false)).toBe(plan.counts.emptyText[0].says);
+    expect(P.wikiPlanEmptyText(null, false)).toBe(plan.counts.emptyText[1].says);
+    const redraft = plan.counts.redraftNotes[0];
+    expect(P.wikiPlanRedraftNote(redraft.provider as string | null, redraft.from as { version: number; inForce: boolean } | null, false)).toBe(redraft.says);
+    const card = P.wikiPlanJobCard(plan.jobs.drafting, { now, runnerOnline: true, serverExecutes: false, directory: null, inForce: false })!;
+    expect(card.text.startsWith('local-vllm · attempt ')).toBe(true);
+    expect(P.wikiPlanCard('drafting', drafting(), context(false, 'local-vllm')).text).toContain('Drafting the plan · local-vllm · attempt ');
   });
 });
 
@@ -292,7 +321,7 @@ describe('every state of the plan', () => {
         expect(shown ? P.wikiPlanMeta(shown, { job: shown.status === 'failed' ? failed : (open ?? state.job), docs: inForce ? docs : null }) : null).toEqual(expected.meta);
         expect(shown?.status === 'failed' ? P.wikiPlanFailedHint(state.confirmed?.version ?? null) : null).toBe(expected.hint);
         const directory = state.confirmed ? fixture.docs.directory.read : null;
-        expect(P.wikiPlanJobCard(state.job, { now, runnerOnline, failed: shown?.status === 'failed' ? failed : null, inForce, directory })).toEqual(expected.jobCard);
+        expect(P.wikiPlanJobCard(state.job, { now, runnerOnline, serverExecutes: false, failed: shown?.status === 'failed' ? failed : null, inForce, directory })).toEqual(expected.jobCard);
         const gate = shown && (shown.status === 'draft' || shown.status === 'failed') ? P.wikiPlanGate(shown, { base, job: shown.status === 'failed' ? failed : state.job }) : null;
         expect(gate).toEqual(expected.gate);
         expect(
