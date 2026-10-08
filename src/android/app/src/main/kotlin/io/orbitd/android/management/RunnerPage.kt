@@ -697,10 +697,11 @@ internal object RunnerPage {
     fun isPaused(until: String?, nowMs: Long) = isoMs(until)?.let { it > nowMs } == true
 }
 
-/** PlanUsage.snapshot(for:): an engine's own quota, nested or a legacy flat one; never another engine's. */
+/** PlanUsage.snapshot(for:): an engine's own quota, nested or a legacy flat one; never another engine's. A flat payload keeps
+ * its `accounts`: its own windows are Default's, every other account's snapshot sits beside them (web planUsageSnapshotForProvider). */
 internal fun planUsageSnapshot(usage: JsonObject?, provider: String): JsonObject? {
     usage ?: return null
-    val flat = JsonObject(usage.filterKeys { it !in setOf("claude", "codex", "kimi", "accounts") })
+    val flat = JsonObject(usage.filterKeys { it !in setOf("claude", "codex", "kimi") })
     return when (provider) {
         "codex" -> usage.obj("codex") ?: flat.takeIf { it.str("provider") == "codex" || it.obj("primary") != null || it.obj("secondary") != null || it.list("rateLimits").isNotEmpty() }
         "kimi" -> usage.obj("kimi") ?: flat.takeIf { it.str("provider") == "kimi" }
