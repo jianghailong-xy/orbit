@@ -59,6 +59,21 @@ test('the answer is read the way it comes: bare, in a fence, after reasoning, wr
   }
 });
 
+test("the answer is read as Go's encoding/json reads it: a lone surrogate is U+FFFD, a number past float64 is no parse", () => {
+  // P10's boundary probes (zz_p10_parity_test.go), where JSON.parse alone answers differently from the
+  // runner's decoder: it keeps a lone surrogate and turns 1e999 into Infinity, Go writes U+FFFD and fails.
+  const lone = parseWikiImportAnswer('[{"kind":"concept","title":"half \\ud83d of a pair","summary":"B","definition":"C","boundaries":"D","quote":"E"}]');
+  assert.ok(lone && lone.length === 1, `the lone-surrogate answer parses: ${JSON.stringify(lone)}`);
+  assert.equal(lone?.[0]?.title, 'half \ufffd of a pair', 'a lone surrogate is U+FFFD, as Go decodes it');
+  const pair = parseWikiImportAnswer('[{"kind":"concept","title":"a \\ud83d\\ude00 pair","summary":"B","definition":"C","boundaries":"D","quote":"E"}]');
+  assert.equal(pair?.[0]?.title, 'a \ud83d\ude00 pair', 'a whole pair stays');
+  assert.equal(
+    parseWikiImportAnswer('[{"kind":"recipe","title":"t","summary":"s","steps":["a"],"verify":{"command":"make","expectedExit":1e999}}]'),
+    null,
+    'a number past float64 fails the whole parse, as Go decodes into one',
+  );
+});
+
 // ── TestWikiImportCitesTheNotesOwnWords ─────────────────────────────────────────────────────────────────────
 
 test("a quote is the note's own words: as written, or the note's span when the model dropped its marks", () => {
