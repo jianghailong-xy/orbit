@@ -8,7 +8,7 @@ import XCTest
 /// reads the files themselves:
 ///
 /// - the next step for a refused run is `dispatchRefusalNextStep`
-///   (`src/apiserver/src/tasks/task-dispatch-refusal.ts`), the sentence the task's comment and the
+///   (`src/shared/src/source-refusal.ts`), the sentence the task's comment and the
 ///   coordinator's message give — `SessionRunStart.nextStep` is a port of it and every ported
 ///   sentence is looked up here;
 /// - the claim sentences a machine-side card quotes are `src/apiserver/src/runner-api/runner-provider-support.ts`,
@@ -19,7 +19,7 @@ import XCTest
 /// A missing counterpart is a FAILURE, never an `XCTSkip`.
 final class SessionRunStartCopyParityTests: XCTestCase {
 
-    private static let refusal = "src/apiserver/src/tasks/task-dispatch-refusal.ts"
+    private static let refusal = "src/shared/src/source-refusal.ts"
     private static let providerSupport = "src/apiserver/src/runner-api/runner-provider-support.ts"
     private static let workspace = "src/web/src/components/WorkspaceView.tsx"
 

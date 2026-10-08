@@ -1,0 +1,1179 @@
+[WebServer] (node:2825199) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+P0 expected screenshots: 88 P0.2 originals, 150 main drift references, 14 accepted migration differences.
+
+Running 80 tests using 1 worker
+
+(node:2833791) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/breakpoint-961-session.png, writing actual.
+  ✘   1 [chromium-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (10.8s)
+(node:2842020) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/task-share-dialog.png, writing actual.
+  ✓   2 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (3.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/task-public-share.png, writing actual.
+  ✓   3 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › share (714ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/project-graph-fullscreen.png, writing actual.
+  ✓   4 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (3.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/wiki-new-entry.png, writing actual.
+  ✘   5 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.7s)
+(node:2853141) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/settings-saved.png, writing actual.
+  ✓   6 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/profile-validation.png, writing actual.
+  ✓   7 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/notification-error.png, writing actual.
+  ✓   8 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session (5.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/projects-loading.png, writing actual.
+  ✓   9 [chromium-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (861ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-desktop/projects-error.png, writing actual.
+  ✓  10 [chromium-light-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (2.0s)
+(node:2863446) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  11 [chromium-light-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/task-share-dialog.png, writing actual.
+  ✓  12 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/task-public-share.png, writing actual.
+  ✓  13 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › share (647ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/project-graph-fullscreen.png, writing actual.
+  ✓  14 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (3.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/wiki-contents.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/wiki-new-entry.png, writing actual.
+  ✘  15 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (1.8s)
+(node:2871750) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/settings-saved.png, writing actual.
+  ✓  16 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/profile-validation.png, writing actual.
+  ✓  17 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/notification-error.png, writing actual.
+  ✓  18 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › session (4.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/projects-loading.png, writing actual.
+  ✓  19 [chromium-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (961ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-light-phone/projects-error.png, writing actual.
+  ✓  20 [chromium-light-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (2.0s)
+(node:2883490) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/breakpoint-961-session.png, writing actual.
+  ✘  21 [chromium-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (11.6s)
+(node:2891675) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/task-share-dialog.png, writing actual.
+  ✓  22 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (4.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/task-public-share.png, writing actual.
+  ✓  23 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › share (962ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/project-graph-fullscreen.png, writing actual.
+  ✓  24 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (4.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/wiki-new-entry.png, writing actual.
+  ✘  25 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (2.1s)
+(node:2901121) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/settings-saved.png, writing actual.
+  ✓  26 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/profile-validation.png, writing actual.
+  ✓  27 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/notification-error.png, writing actual.
+  ✓  28 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session (5.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/projects-loading.png, writing actual.
+  ✓  29 [chromium-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (931ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-desktop/projects-error.png, writing actual.
+  ✓  30 [chromium-dark-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (2.3s)
+(node:2911105) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  31 [chromium-dark-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/task-share-dialog.png, writing actual.
+  ✓  32 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (3.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/task-public-share.png, writing actual.
+  ✓  33 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › share (919ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/project-graph-fullscreen.png, writing actual.
+  ✓  34 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (3.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/wiki-contents.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/wiki-new-entry.png, writing actual.
+  ✘  35 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (4.7s)
+(node:2916858) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/settings-saved.png, writing actual.
+  ✓  36 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings (3.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/profile-validation.png, writing actual.
+  ✓  37 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/notification-error.png, writing actual.
+  ✓  38 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session (4.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/projects-loading.png, writing actual.
+  ✓  39 [chromium-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (907ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/chromium-dark-phone/projects-error.png, writing actual.
+  ✓  40 [chromium-dark-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.4s)
+(node:2919477) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/breakpoint-961-session.png, writing actual.
+  ✘  41 [webkit-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (14.2s)
+(node:2923168) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/task-share-dialog.png, writing actual.
+  ✓  42 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (5.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/task-public-share.png, writing actual.
+  ✓  43 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › share (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/project-graph-fullscreen.png, writing actual.
+  ✓  44 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (5.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/wiki-new-entry.png, writing actual.
+  ✘  45 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (2.7s)
+(node:2928199) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/settings-saved.png, writing actual.
+  ✓  46 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (4.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/profile-validation.png, writing actual.
+  ✓  47 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (2.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/notification-error.png, writing actual.
+  ✓  48 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session (6.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/projects-loading.png, writing actual.
+  ✓  49 [webkit-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-desktop/projects-error.png, writing actual.
+  ✓  50 [webkit-light-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.5s)
+(node:2934086) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  51 [webkit-light-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/task-share-dialog.png, writing actual.
+  ✓  52 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (3.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/task-public-share.png, writing actual.
+  ✓  53 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › share (970ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/project-graph-fullscreen.png, writing actual.
+  ✓  54 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (3.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/wiki-contents.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/wiki-new-entry.png, writing actual.
+  ✘  55 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (2.4s)
+(node:2937936) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/settings-saved.png, writing actual.
+  ✓  56 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/profile-validation.png, writing actual.
+  ✓  57 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/notification-error.png, writing actual.
+  ✓  58 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › session (6.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/projects-loading.png, writing actual.
+  ✓  59 [webkit-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-light-phone/projects-error.png, writing actual.
+  ✓  60 [webkit-light-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.6s)
+(node:2940987) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/breakpoint-961-session.png, writing actual.
+  ✘  61 [webkit-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (25.0s)
+(node:2947827) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/task-share-dialog.png, writing actual.
+  ✓  62 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (3.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/task-public-share.png, writing actual.
+  ✓  63 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › share (973ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/project-graph-fullscreen.png, writing actual.
+  ✓  64 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (4.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/wiki-new-entry.png, writing actual.
+  ✘  65 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (2.0s)
+(node:2949620) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/settings-saved.png, writing actual.
+  ✓  66 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/profile-validation.png, writing actual.
+  ✓  67 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/notification-error.png, writing actual.
+  ✓  68 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session (5.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/projects-loading.png, writing actual.
+  ✓  69 [webkit-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (978ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-desktop/projects-error.png, writing actual.
+  ✓  70 [webkit-dark-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.5s)
+(node:2951374) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  71 [webkit-dark-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/task-share-dialog.png, writing actual.
+  ✓  72 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (3.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/task-public-share.png, writing actual.
+  ✓  73 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › share (940ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/project-graph-fullscreen.png, writing actual.
+  ✓  74 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (4.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/wiki-contents.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/wiki-new-entry.png, writing actual.
+  ✘  75 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (2.2s)
+(node:2953054) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/settings-saved.png, writing actual.
+  ✓  76 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/profile-validation.png, writing actual.
+  ✓  77 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/notification-error.png, writing actual.
+  ✓  78 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session (6.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/projects-loading.png, writing actual.
+  ✓  79 [webkit-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/snapshots/webkit-dark-phone/projects-error.png, writing actual.
+  ✓  80 [webkit-dark-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.5s)
+
+
+  1) [chromium-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share',
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share'
+    + ]
+    - []
+
+
+       at fixtures.mjs:198
+
+      196 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      197 |   });
+    > 198 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      199 | }
+      200 |
+        at Object.assertHandled (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/fixtures.mjs:198:70)
+        at Object.evidence (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: breakpoint-599-share (image/png) ────────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-light-desktop/breakpoint-599-share.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/breakpoint-599-share-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: breakpoint-599-dialog (image/png) ───────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-light-desktop/breakpoint-599-dialog.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/breakpoint-599-dialog-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: breakpoint-601-share (image/png) ────────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-light-desktop/breakpoint-601-share.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/breakpoint-601-share-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #4: breakpoint-601-dialog (image/png) ───────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-light-desktop/breakpoint-601-dialog.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/breakpoint-601-dialog-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #5: breakpoint-639-projects (image/png) ─────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-light-desktop/breakpoint-639-projects.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/breakpoint-639-projects-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #6: breakpoint-639-graph (image/png) ────────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-light-desktop/breakpoint-639-graph.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/breakpoint-639-graph-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #7: breakpoint-641-projects (image/png) ─────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-light-desktop/breakpoint-641-projects.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/breakpoint-641-projects-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #8: breakpoint-641-graph (image/png) ────────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-light-desktop/breakpoint-641-graph.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/breakpoint-641-graph-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #9: breakpoint-959-wiki (image/png) ─────────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-light-desktop/breakpoint-959-wiki.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/breakpoint-959-wiki-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #10: breakpoint-959-session (image/png) ─────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-light-desktop/breakpoint-959-session.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/breakpoint-959-session-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #11: breakpoint-961-wiki (image/png) ────────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-light-desktop/breakpoint-961-wiki.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/breakpoint-961-wiki-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #12: breakpoint-961-session (image/png) ─────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-light-desktop/breakpoint-961-session.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/breakpoint-961-session-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #13: computed-styles-and-timings (application/json) ─────────────────────────────────
+    ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/attachments/computed-styles-and-timings-0a72461719a8fd07edefeef33f8fd1d6ed71b177.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/error-context.md
+
+    attachment #15: trace (application/zip) ────────────────────────────────────────────────────────
+    ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ──────────────────────────
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share',
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share'
+    + ]
+    - []
+
+
+       at fixtures.mjs:198
+
+      196 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      197 |   });
+    > 198 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      199 | }
+      200 |
+        at Object.assertHandled (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/fixtures.mjs:198:70)
+        at Object.evidence (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: wiki-home (image/png) ───────────────────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-light-desktop/wiki-home.png
+    Received: ../../../output/pages.browser.mjs-wiki-chromium-light-desktop/wiki-home-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: wiki-new-entry (image/png) ──────────────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-light-desktop/wiki-new-entry.png
+    Received: ../../../output/pages.browser.mjs-wiki-chromium-light-desktop/wiki-new-entry-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../output/pages.browser.mjs-wiki-chromium-light-desktop/attachments/computed-styles-and-timings-d526d7fa352615d7b8871d00c16c9543e48c0688.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../output/pages.browser.mjs-wiki-chromium-light-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../output/pages.browser.mjs-wiki-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../output/pages.browser.mjs-wiki-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ────────────────────────────
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share',
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share'
+    + ]
+    - []
+
+
+       at fixtures.mjs:198
+
+      196 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      197 |   });
+    > 198 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      199 | }
+      200 |
+        at Object.assertHandled (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/fixtures.mjs:198:70)
+        at Object.evidence (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: wiki-home (image/png) ───────────────────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-light-phone/wiki-home.png
+    Received: ../../../output/pages.browser.mjs-wiki-chromium-light-phone/wiki-home-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: wiki-contents (image/png) ───────────────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-light-phone/wiki-contents.png
+    Received: ../../../output/pages.browser.mjs-wiki-chromium-light-phone/wiki-contents-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: wiki-new-entry (image/png) ──────────────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-light-phone/wiki-new-entry.png
+    Received: ../../../output/pages.browser.mjs-wiki-chromium-light-phone/wiki-new-entry-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #4: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../output/pages.browser.mjs-wiki-chromium-light-phone/attachments/computed-styles-and-timings-93e153a330eb7f5da1c8e353e29c7ef402162a77.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../output/pages.browser.mjs-wiki-chromium-light-phone/error-context.md
+
+    attachment #6: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../output/pages.browser.mjs-wiki-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../output/pages.browser.mjs-wiki-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share',
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share'
+    + ]
+    - []
+
+
+       at fixtures.mjs:198
+
+      196 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      197 |   });
+    > 198 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      199 | }
+      200 |
+        at Object.assertHandled (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/fixtures.mjs:198:70)
+        at Object.evidence (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: breakpoint-599-share (image/png) ────────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-dark-desktop/breakpoint-599-share.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-599-share-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: breakpoint-599-dialog (image/png) ───────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-dark-desktop/breakpoint-599-dialog.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-599-dialog-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: breakpoint-601-share (image/png) ────────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-dark-desktop/breakpoint-601-share.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-601-share-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #4: breakpoint-601-dialog (image/png) ───────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-dark-desktop/breakpoint-601-dialog.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-601-dialog-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #5: breakpoint-639-projects (image/png) ─────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-dark-desktop/breakpoint-639-projects.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-639-projects-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #6: breakpoint-639-graph (image/png) ────────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-dark-desktop/breakpoint-639-graph.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-639-graph-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #7: breakpoint-641-projects (image/png) ─────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-dark-desktop/breakpoint-641-projects.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-641-projects-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #8: breakpoint-641-graph (image/png) ────────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-dark-desktop/breakpoint-641-graph.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-641-graph-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #9: breakpoint-959-wiki (image/png) ─────────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-dark-desktop/breakpoint-959-wiki.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-959-wiki-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #10: breakpoint-959-session (image/png) ─────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-dark-desktop/breakpoint-959-session.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-959-session-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #11: breakpoint-961-wiki (image/png) ────────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-dark-desktop/breakpoint-961-wiki.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-961-wiki-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #12: breakpoint-961-session (image/png) ─────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-dark-desktop/breakpoint-961-session.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-961-session-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #13: computed-styles-and-timings (application/json) ─────────────────────────────────
+    ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/attachments/computed-styles-and-timings-ed1c2f19bf784dcfc990cdc9f483081b1d3aed12.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/error-context.md
+
+    attachment #15: trace (application/zip) ────────────────────────────────────────────────────────
+    ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ───────────────────────────
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share',
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share'
+    + ]
+    - []
+
+
+       at fixtures.mjs:198
+
+      196 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      197 |   });
+    > 198 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      199 | }
+      200 |
+        at Object.assertHandled (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/fixtures.mjs:198:70)
+        at Object.evidence (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: wiki-home (image/png) ───────────────────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-dark-desktop/wiki-home.png
+    Received: ../../../output/pages.browser.mjs-wiki-chromium-dark-desktop/wiki-home-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: wiki-new-entry (image/png) ──────────────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-dark-desktop/wiki-new-entry.png
+    Received: ../../../output/pages.browser.mjs-wiki-chromium-dark-desktop/wiki-new-entry-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../output/pages.browser.mjs-wiki-chromium-dark-desktop/attachments/computed-styles-and-timings-53190631d55b59d5cab3d9523b9f1057bc906ede.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../output/pages.browser.mjs-wiki-chromium-dark-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../output/pages.browser.mjs-wiki-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../output/pages.browser.mjs-wiki-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ─────────────────────────────
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share',
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share'
+    + ]
+    - []
+
+
+       at fixtures.mjs:198
+
+      196 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      197 |   });
+    > 198 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      199 | }
+      200 |
+        at Object.assertHandled (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/fixtures.mjs:198:70)
+        at Object.evidence (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: wiki-home (image/png) ───────────────────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-dark-phone/wiki-home.png
+    Received: ../../../output/pages.browser.mjs-wiki-chromium-dark-phone/wiki-home-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: wiki-contents (image/png) ───────────────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-dark-phone/wiki-contents.png
+    Received: ../../../output/pages.browser.mjs-wiki-chromium-dark-phone/wiki-contents-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: wiki-new-entry (image/png) ──────────────────────────────────────────────────────
+    Expected: ../../../snapshots/chromium-dark-phone/wiki-new-entry.png
+    Received: ../../../output/pages.browser.mjs-wiki-chromium-dark-phone/wiki-new-entry-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #4: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../output/pages.browser.mjs-wiki-chromium-dark-phone/attachments/computed-styles-and-timings-73bfbf10614930ce7b84d28fbcb51009ddde3da3.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../output/pages.browser.mjs-wiki-chromium-dark-phone/error-context.md
+
+    attachment #6: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../output/pages.browser.mjs-wiki-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../output/pages.browser.mjs-wiki-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [webkit-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share',
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share'
+    + ]
+    - []
+
+
+       at fixtures.mjs:198
+
+      196 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      197 |   });
+    > 198 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      199 | }
+      200 |
+        at Object.assertHandled (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/fixtures.mjs:198:70)
+        at Object.evidence (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: breakpoint-599-share (image/png) ────────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-light-desktop/breakpoint-599-share.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/breakpoint-599-share-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: breakpoint-599-dialog (image/png) ───────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-light-desktop/breakpoint-599-dialog.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/breakpoint-599-dialog-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: breakpoint-601-share (image/png) ────────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-light-desktop/breakpoint-601-share.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/breakpoint-601-share-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #4: breakpoint-601-dialog (image/png) ───────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-light-desktop/breakpoint-601-dialog.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/breakpoint-601-dialog-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #5: breakpoint-639-projects (image/png) ─────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-light-desktop/breakpoint-639-projects.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/breakpoint-639-projects-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #6: breakpoint-639-graph (image/png) ────────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-light-desktop/breakpoint-639-graph.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/breakpoint-639-graph-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #7: breakpoint-641-projects (image/png) ─────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-light-desktop/breakpoint-641-projects.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/breakpoint-641-projects-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #8: breakpoint-641-graph (image/png) ────────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-light-desktop/breakpoint-641-graph.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/breakpoint-641-graph-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #9: breakpoint-959-wiki (image/png) ─────────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-light-desktop/breakpoint-959-wiki.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/breakpoint-959-wiki-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #10: breakpoint-959-session (image/png) ─────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-light-desktop/breakpoint-959-session.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/breakpoint-959-session-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #11: breakpoint-961-wiki (image/png) ────────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-light-desktop/breakpoint-961-wiki.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/breakpoint-961-wiki-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #12: breakpoint-961-session (image/png) ─────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-light-desktop/breakpoint-961-session.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/breakpoint-961-session-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #13: computed-styles-and-timings (application/json) ─────────────────────────────────
+    ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/attachments/computed-styles-and-timings-3e906595160fc7ed5f3992bcde990d6584139635.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/error-context.md
+
+    attachment #15: trace (application/zip) ────────────────────────────────────────────────────────
+    ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ────────────────────────────
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share',
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share'
+    + ]
+    - []
+
+
+       at fixtures.mjs:198
+
+      196 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      197 |   });
+    > 198 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      199 | }
+      200 |
+        at Object.assertHandled (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/fixtures.mjs:198:70)
+        at Object.evidence (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: wiki-home (image/png) ───────────────────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-light-desktop/wiki-home.png
+    Received: ../../../output/pages.browser.mjs-wiki-webkit-light-desktop/wiki-home-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: wiki-new-entry (image/png) ──────────────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-light-desktop/wiki-new-entry.png
+    Received: ../../../output/pages.browser.mjs-wiki-webkit-light-desktop/wiki-new-entry-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../output/pages.browser.mjs-wiki-webkit-light-desktop/attachments/computed-styles-and-timings-4f42806f08763ad481eb448c97e8d91fa0c1145b.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../output/pages.browser.mjs-wiki-webkit-light-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../output/pages.browser.mjs-wiki-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../output/pages.browser.mjs-wiki-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ──────────────────────────────
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share',
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share'
+    + ]
+    - []
+
+
+       at fixtures.mjs:198
+
+      196 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      197 |   });
+    > 198 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      199 | }
+      200 |
+        at Object.assertHandled (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/fixtures.mjs:198:70)
+        at Object.evidence (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: wiki-home (image/png) ───────────────────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-light-phone/wiki-home.png
+    Received: ../../../output/pages.browser.mjs-wiki-webkit-light-phone/wiki-home-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: wiki-contents (image/png) ───────────────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-light-phone/wiki-contents.png
+    Received: ../../../output/pages.browser.mjs-wiki-webkit-light-phone/wiki-contents-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: wiki-new-entry (image/png) ──────────────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-light-phone/wiki-new-entry.png
+    Received: ../../../output/pages.browser.mjs-wiki-webkit-light-phone/wiki-new-entry-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #4: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../output/pages.browser.mjs-wiki-webkit-light-phone/attachments/computed-styles-and-timings-db9a2d117db1abed6b5765f6fa0eda51e34905b5.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../output/pages.browser.mjs-wiki-webkit-light-phone/error-context.md
+
+    attachment #6: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../output/pages.browser.mjs-wiki-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../output/pages.browser.mjs-wiki-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  10) [webkit-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share',
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share'
+    + ]
+    - []
+
+
+       at fixtures.mjs:198
+
+      196 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      197 |   });
+    > 198 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      199 | }
+      200 |
+        at Object.assertHandled (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/fixtures.mjs:198:70)
+        at Object.evidence (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: breakpoint-599-share (image/png) ────────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-dark-desktop/breakpoint-599-share.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/breakpoint-599-share-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: breakpoint-599-dialog (image/png) ───────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-dark-desktop/breakpoint-599-dialog.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/breakpoint-599-dialog-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: breakpoint-601-share (image/png) ────────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-dark-desktop/breakpoint-601-share.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/breakpoint-601-share-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #4: breakpoint-601-dialog (image/png) ───────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-dark-desktop/breakpoint-601-dialog.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/breakpoint-601-dialog-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #5: breakpoint-639-projects (image/png) ─────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-dark-desktop/breakpoint-639-projects.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/breakpoint-639-projects-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #6: breakpoint-639-graph (image/png) ────────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-dark-desktop/breakpoint-639-graph.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/breakpoint-639-graph-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #7: breakpoint-641-projects (image/png) ─────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-dark-desktop/breakpoint-641-projects.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/breakpoint-641-projects-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #8: breakpoint-641-graph (image/png) ────────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-dark-desktop/breakpoint-641-graph.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/breakpoint-641-graph-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #9: breakpoint-959-wiki (image/png) ─────────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-dark-desktop/breakpoint-959-wiki.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/breakpoint-959-wiki-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #10: breakpoint-959-session (image/png) ─────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-dark-desktop/breakpoint-959-session.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/breakpoint-959-session-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #11: breakpoint-961-wiki (image/png) ────────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-dark-desktop/breakpoint-961-wiki.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/breakpoint-961-wiki-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #12: breakpoint-961-session (image/png) ─────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-dark-desktop/breakpoint-961-session.png
+    Received: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/breakpoint-961-session-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #13: computed-styles-and-timings (application/json) ─────────────────────────────────
+    ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/attachments/computed-styles-and-timings-b7c797b52f562b951a09ef604652ce6f065c8639.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/error-context.md
+
+    attachment #15: trace (application/zip) ────────────────────────────────────────────────────────
+    ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../output/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  11) [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ────────────────────────────
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share',
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share'
+    + ]
+    - []
+
+
+       at fixtures.mjs:198
+
+      196 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      197 |   });
+    > 198 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      199 | }
+      200 |
+        at Object.assertHandled (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/fixtures.mjs:198:70)
+        at Object.evidence (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: wiki-home (image/png) ───────────────────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-dark-desktop/wiki-home.png
+    Received: ../../../output/pages.browser.mjs-wiki-webkit-dark-desktop/wiki-home-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: wiki-new-entry (image/png) ──────────────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-dark-desktop/wiki-new-entry.png
+    Received: ../../../output/pages.browser.mjs-wiki-webkit-dark-desktop/wiki-new-entry-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../output/pages.browser.mjs-wiki-webkit-dark-desktop/attachments/computed-styles-and-timings-6d555a4eae60173a6673bcda145e15dd346dfbf8.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../output/pages.browser.mjs-wiki-webkit-dark-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../output/pages.browser.mjs-wiki-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../output/pages.browser.mjs-wiki-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  12) [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ──────────────────────────────
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share',
+    +   'GET /api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/share'
+    + ]
+    - []
+
+
+       at fixtures.mjs:198
+
+      196 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      197 |   });
+    > 198 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      199 | }
+      200 |
+        at Object.assertHandled (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/fixtures.mjs:198:70)
+        at Object.evidence (/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-orig-base3/runner/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: wiki-home (image/png) ───────────────────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-dark-phone/wiki-home.png
+    Received: ../../../output/pages.browser.mjs-wiki-webkit-dark-phone/wiki-home-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: wiki-contents (image/png) ───────────────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-dark-phone/wiki-contents.png
+    Received: ../../../output/pages.browser.mjs-wiki-webkit-dark-phone/wiki-contents-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: wiki-new-entry (image/png) ──────────────────────────────────────────────────────
+    Expected: ../../../snapshots/webkit-dark-phone/wiki-new-entry.png
+    Received: ../../../output/pages.browser.mjs-wiki-webkit-dark-phone/wiki-new-entry-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #4: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../output/pages.browser.mjs-wiki-webkit-dark-phone/attachments/computed-styles-and-timings-4c6251d0691cd31033b2952649413726e8defaca.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../output/pages.browser.mjs-wiki-webkit-dark-phone/error-context.md
+
+    attachment #6: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../output/pages.browser.mjs-wiki-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../output/pages.browser.mjs-wiki-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  12 failed
+    [chromium-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+    [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ───────────────────────────
+    [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ─────────────────────────────
+    [chromium-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+    [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ────────────────────────────
+    [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ──────────────────────────────
+    [webkit-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+    [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ─────────────────────────────
+    [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ───────────────────────────────
+    [webkit-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+    [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ──────────────────────────────
+    [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ────────────────────────────────
+  4 skipped
+  64 passed (6.5m)

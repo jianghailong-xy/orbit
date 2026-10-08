@@ -28,7 +28,9 @@ class WikiHealthTest {
         cases.forEach { case ->
             val name = case.string("name")
             val health = WikiSpaceHealth.decode(case.jsonObject.getValue("health"))
-            val parts = WikiHealthLogic.parts(health.maintenance, now)
+            // The whole maintenance part: the look's parts, and — while the server runs the wiki — its reason (P9).
+            val parts = WikiHealthLogic.parts(health, now)
+            if (!health.serverExecutes) assertEquals("$name: runner says the look alone", WikiHealthLogic.parts(health.maintenance, now), parts)
             val expected = case.jsonObject.getValue("parts").jsonArray.map { it.jsonObject }
             assertEquals(name, expected.map { it.string("text") }, parts.map { it.text })
             assertEquals("$name: tones", expected.map { it.string("tone") }, parts.map { it.tone.name.lowercase() })
@@ -72,5 +74,18 @@ class WikiHealthTest {
         assertEquals("Maintenance failed", WikiHealthCopy.failed(1))
         assertEquals("Maintenance failed 3 times", WikiHealthCopy.failed(3))
         assertEquals("View run", WikiModeCopy.viewRun)
+    }
+
+    /** A control plane older than P9 sends no executor and none of the new fields, which reads as runner (OrbitKit
+     * `WikiServerExecutionCopyParityTests`); and with maintenance off, a read of the repository that waits still says the runner. */
+    @Test fun aReadOneReleaseApartReadsAsRunnerAndAWaitingReadSaysTheRunner() {
+        val older = WikiSpaceHealth.decode(Wire.json.parseToJsonElement("""{"spaceId":"s","entries":3,"maintenance":{"look":"ok","enabled":true}}"""))
+        assertFalse(older.serverExecutes)
+        assertNull(older.systemModel)
+        assertNull(older.repo)
+        assertNull(WikiHealthLogic.serverReason(older))
+        val waiting = WikiSpaceHealth.decode(Wire.json.parseToJsonElement("""{"spaceId":"s","entries":3,"maintenance":{"look":"off","enabled":false},
+            "repo":{"look":"runner_offline","pending":1},"executor":{"mode":"server","serverExecutes":true},"systemModel":{"state":"up"}}"""))
+        assertEquals("Maintenance off · ● Waiting for the runner to come online · Set up", WikiHealthLogic.text(WikiHealthLogic.parts(waiting, now)))
     }
 }

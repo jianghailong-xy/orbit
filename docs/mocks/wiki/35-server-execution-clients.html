@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>35 server execution clients</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="phone-mock.css">
+<link rel="stylesheet" href="wiki-p2.css">
+<script>addEventListener('load', () => { for (const f of window.__afterLoad || []) f(); });</script>
+<style>
+/* Board 35: real web pages (vite + fake API, the proposal injected into the DOM — 35/*.png) beside
+   iOS drawn in the style of boards 20 and 31. */
+.pb-sheet.p2.b35 { width: 1840px; }
+.b35 .pb-lede { max-width: 1700px; }
+.p2.b35 .pb-grid { grid-template-columns: 600px 402px minmax(0, 1fr); column-gap: 32px; }
+.p2.b35 .pb-grid.wide { grid-template-columns: 840px 402px minmax(0, 1fr); }
+.b35 .shot { display: block; width: 100%; border: 1px solid #dee0e3; border-radius: 12px; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+.b35 .shot.today { opacity: .96; }
+.b35 .cap { margin: 0 0 6px; font-size: 12.5px; color: var(--text-3); }
+.b35 .cap b { color: var(--text-1); font-weight: 600; }
+.b35 .stack > * + * { margin-top: 14px; }
+.b35 .pb-note p { margin-bottom: 10px; }
+.b35 .pb-note .m-n { margin-right: 6px; }
+.b35 table.rt { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.55; background: #fff; border-radius: 10px; overflow: hidden; }
+.b35 table.rt th, .b35 table.rt td { padding: 7px 10px; border-bottom: 1px solid #e8eaee; text-align: left; vertical-align: top; }
+.b35 table.rt th { background: #f3f4f6; font-weight: 600; color: #33373f; white-space: nowrap; }
+.b35 table.rt td.en { font-family: "Nimbus Sans", -apple-system, sans-serif; }
+.b35 table.rt code { font: 11.5px/1.4 "DejaVu Sans Mono", monospace; background: #eef0f3; border-radius: 4px; padding: 0 4px; }
+.b35 .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; white-space: nowrap; }
+.b35 .pill i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.b35 .g { color: var(--success); } .b35 .g i { background: var(--success-solid); }
+.b35 .a { color: var(--warning); } .b35 .a i { background: var(--warning-solid); }
+.b35 .r { color: var(--error); } .b35 .r i { background: var(--error-solid); }
+/* The web status row, drawn with the shipped classes. */
+.b35 .lines { display: flex; flex-direction: column; gap: 8px; }
+.b35 .lines .wk-status-row { margin: 0; }
+/* iOS pieces this board adds (named io35-, so nothing of 20/31 is redrawn). */
+.io35-mrow { display: flex; align-items: flex-start; gap: 10px; min-height: 52px; padding: 13px 16px; position: relative; font-size: 17px; letter-spacing: -.2px; }
+.io35-mrow + .io-lrow::before, .io-lrow + .io35-mrow::before, .io35-mrow + .io35-mrow::before { content: ""; position: absolute; top: 0; left: 16px; right: 16px; height: .5px; background: #E3E3E6; }
+.io35-mrow .lb { flex: 1; min-width: 0; }
+.io35-mrow .v { flex: none; text-align: right; color: #8A8A8D; line-height: 22px; }
+.io35-mrow .v .st { display: block; font-size: 15px; }
+.io35-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
+.io35-ok { color: #248A3D; } .io35-ok .io35-dot { background: #34C759; }
+.io35-amb { color: #B35A00; } .io35-amb .io35-dot { background: #FF9500; }
+.io35-red { color: #D70015; } .io35-red .io35-dot { background: #FF3B30; }
+.io35-status { padding: 6px 16px 10px; font-size: 13px; line-height: 18px; color: #8A8A8D; }
+.io35-status b { font-weight: 600; }
+.io35-banner { display: flex; align-items: center; gap: 9px; padding: 10px 16px; font-size: 16px; }
+.io35-banner .d { width: 7px; height: 7px; border-radius: 50%; }
+.io35-banner .sf { margin-left: auto; color: #C4C4C6; font-size: 13px; }
+.io35-run { position: relative; padding: 10px 16px 11px 34px; }
+.io35-run + .io35-run::before { content: ""; position: absolute; top: 0; left: 34px; right: 0; height: .5px; background: #D8D8DC; }
+.io35-run .mk { position: absolute; left: 15px; top: 17px; width: 9px; height: 9px; border-radius: 50%; background: #C7C7CC; }
+.io35-run .mk.spin { width: 11px; height: 11px; top: 16px; left: 14px; box-sizing: border-box; background: none; border: 2px solid #D6E4FF; border-top-color: #2E6AFF; }
+.io35-run .mk.ok { background: #34C759; } .io35-run .mk.amb { background: #FF9500; } .io35-run .mk.red { background: #FF3B30; }
+.io35-run .l1 { display: flex; align-items: baseline; gap: 8px; }
+.io35-run .l1 .t { font-size: 17px; line-height: 22px; letter-spacing: -.2px; }
+.io35-run .l1 .sp { flex: 1; }
+.io35-run .l1 .when { font-size: 11px; color: #8A8A8D; }
+.io35-run .l1 .sf { font-size: 13px; color: #C4C4C6; align-self: center; }
+.io35-run .l2 { margin-top: 3px; font-size: 15px; line-height: 20px; color: #8A8A8D; }
+.io35-run .l2 b { font-weight: 500; color: #000; }
+.io35-run .l2.amb b { color: #B35A00; } .io35-run .l2.red b { color: #D70015; }
+.io35-call { position: relative; padding: 9px 16px 10px; }
+.io35-call + .io35-call::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; height: .5px; background: #E3E3E6; }
+.io35-call .u { display: flex; align-items: baseline; gap: 8px; font: 14px/20px ui-monospace, "SF Mono", "DejaVu Sans Mono", monospace; color: #3C3C43; }
+.io35-call .u .s { margin-left: auto; font: 15px/20px -apple-system, sans-serif; }
+.io35-call .m { margin-top: 2px; font-size: 13px; line-height: 18px; color: #8A8A8D; }
+.io35-call .why { margin-top: 3px; font-size: 13px; line-height: 18px; color: #D70015; }
+.io35-sech { display: flex; align-items: baseline; gap: 8px; padding: 18px 16px 6px; }
+.io35-sech b { font-size: 15px; font-weight: 700; }
+.io35-sech .n { font-size: 13px; color: #8A8A8D; }
+.io35-sech .rr { margin-left: auto; font-size: 13px; }
+.io35-ro { color: #8A8A8D; }
+</style>
+</head>
+<body class="m">
+<script src="phone-mock-antd.js"></script>
+<script src="phone-mock.js"></script>
+<script src="wiki-p2-icons.js"></script>
+<div class="m-sheet pb-sheet p2 b35">
+<h1 class="m-h1 zh">35 · 服务端执行下的客户端：Wiki 设置、Activity 的运行详情、健康行（web ｜ iOS ｜ 说明）</h1>
+<p class="pb-lede zh">设计 §2.2 与架构图 ①③ 落到 web 和 macOS/iOS。<b>只在本账号的 wiki 由服务端执行时</b>（<code>ORBIT_WIKI_EXECUTOR=server</code>，或 <code>canary</code> 名单内的账号）这样画；<b>runner 模式下界面一字不改</b>。web 图都是本分支真实页面（vite + 假数据）截的，提案用将来实现要用的 class 注入真实 DOM；iOS 照图 20、31 的画法。数据示意：space orbit，System model 是 <code>qwen3.8-27b-fp8</code>。</p>
+<div class="pb-legend zh"><span class="pb-tag sys">iOS 系统</span>系统控件与习惯 <span class="pb-tag con">Orbit 一致性</span>沿用现成组件 / 用词 <span class="pb-tag co">协调性</span>同一个词、同一个数在各处口径一致 <span class="pb-tag new">新词</span>要你拍板 <span class="pb-tag done">已定</span>owner 已拍板 <span class="pb-tag later">另议</span>不在这次范围 <span class="pb-tag guess">假设</span>规格没给，图上先这么画</div>
+
+<div class="pb-grid">
+  <div class="pb-colhead">web <span>· 真实页面 /wiki/orbit/settings（600px 一列，桌面与手机同一张卡）</span></div><div class="pb-colhead">iOS <span>· 402×874pt · 从 Wiki 首页的齿轮 push</span></div><div class="pb-colhead zh">说明</div>
+
+  <div class="pb-band zh"><span class="pb-bn">1</span>设置页 · 维护开着 <small>· 服务端执行：不再选 provider，改为只读的 System model 和它的状态</small></div>
+  <div class="stack">
+    <div><div class="cap"><b>今天（runner 模式，不变）</b> · Maintenance 卡</div><img class="shot today" src="35/settings-today-maint.png"></div>
+    <div><div class="cap"><b>服务端执行</b> · 整页</div><img class="shot" src="35/settings-server.png"></div>
+  </div>
+  <div class="pb-ios top grouped" data-name="ios-set"><div data-ios="status"></div>
+    <div class="io-nav"><span class="io-glass l"><svg class="sf "><use href="#sf-back"/></svg></span><div class="io-navtitle"><b>Wiki settings</b></div></div>
+    <div class="io-set-f" style="padding-top:2px;padding-bottom:4px">orbit · github.com/jianghailong-xy/orbit</div>
+    <div class="io-set-h">Review mode</div><div class="io-card"><div class="io-choice"><div class="tx"><div class="tt">Manual</div><div class="ds">Every change from sessions, maintenance and imports waits for you in Review.</div></div><span class="ck"></span></div><div class="io-choice"><div class="tx"><div class="tt">Tiered<small>default</small></div><div class="ds">Your own words and machine-checked entries apply at once; the rest show as Unreviewed and are not sent to agents.</div></div><span class="ck"></span></div><div class="io-choice pb-mark" style="border-radius:0"><span class="m-n" style="right:6px;top:6px">4</span><div class="tx"><div class="tt">Automatic</div><div class="ds">The System model checks each change against its sources first: supported ones apply, partly supported ones show as Unreviewed, the rest are rejected with a reason.</div></div><svg class="sf ck"><use href="#sf-check"/></svg></div><div class="io-choice"><div class="tx"><div class="tt">Spot-check Automatic</div><div class="ds">Send 1 in 200 of the changes it applies to Review, to see what it lets through. Off by default; spot checks do not count toward the 30 waiting in Review.</div></div><span class="io-toggle" style="margin-top:4px"></span></div></div>
+    <div class="io-set-f">Always asks you, in any mode: principles, anything a session proposed after reading the web, and changes to entries you wrote or confirmed. A run that would change more than 10% of the wiki stops.</div>
+    <div class="io-set-h">Maintenance</div>
+    <div class="io-card">
+      <div class="io-lrow"><span class="lb">Status</span><span class="v"><span style="color:#34C759">●</span> On</span></div>
+      <div class="io-lrow pb-mark" style="border-radius:0"><span class="m-n" style="right:6px;top:4px">1</span><span class="lb">Reads the repository from</span><span class="v">orbit-develop · HPC</span></div>
+      <div class="io35-mrow pb-mark" style="border-radius:0"><span class="m-n" style="right:6px;top:4px">2</span><span class="lb">Model</span><span class="v">System model · qwen3.8-27b-fp8<span class="st io35-ok"><span class="io35-dot"></span>Up</span></span></div>
+      <div class="io-lrow"><span class="lb">Daily limit</span><span class="v">8 runs a day</span></div>
+      <div class="io-lrow"><span class="lb">Look back</span><span class="v">Last 14 days</span></div>
+    </div>
+    <div class="io-set-f pb-mark" style="margin:0 16px;padding:7px 17px 4px;border-radius:12px"><span class="m-n" style="right:4px;top:-8px">3</span>The wiki sends its material — session summaries, entries and repository excerpts — to this deployment’s System model.</div>
+    <div class="io-card" style="margin-top:14px"><div class="io-lrow tint"><span class="lb">Edit…</span></div><div class="io-lrow red"><span class="lb">Turn off</span></div></div>
+    <div style="height:20px"></div>
+  </div>
+  <div class="pb-note zh">
+    <p><span class="m-n note-n">1</span><b>Workspace 改称「从哪里读仓库」</b>：键名 <span class="en">Reads the repository from</span>，值不变（workspace · 它所在的 runner）。服务端执行时 runner 只做仓库操作，不再跑维护会话。<span class="pb-tag new">新词</span><span class="en">Reads the repository from</span></p>
+    <p><span class="m-n note-n">2</span><b>Provider 换成只读的 Model</b>：<span class="en">System model · &lt;模型名&gt;</span>，后面是状态（五种，见 ③）。模型名和状态都来自 <code>GET /api/wiki/system-model</code>，地址和 key 从不出现。iOS 放在值的两行里（名字、状态）。<span class="pb-tag new">新词</span><span class="en">Model · System model</span></p>
+    <p><span class="m-n note-n">3</span><b>隐私说明一句</b>（设计 §2.2）：web 在卡里、Edit 上面；iOS 是这一节的 footer。只在服务端执行时出现。<span class="pb-tag new">新词</span><span class="en">The wiki sends its material — session summaries, entries and repository excerpts — to this deployment’s System model.</span></p>
+    <p><span class="m-n note-n">4</span><b>Automatic 的那句里 local-vllm 换成 System model</b>：服务端执行时核实由服务端作业用 System model 做（P3）。runner 模式仍写 local-vllm。</p>
+    <p><span class="pb-tag con">Orbit 一致性</span>其余行（Status、Daily limit、Look back）、Edit / Turn off、审阅模式整张卡都不动。</p>
+  </div>
+
+  <div class="pb-band zh"><span class="pb-bn">2</span>Set up / Edit <small>· 去掉 Provider 选择；Workspace 同样改称；表单底下同一句隐私说明</small></div>
+  <div class="stack">
+    <div><div class="cap"><b>今天（runner 模式，不变）</b></div><img class="shot today" src="35/setup-today.png" style="width:440px"></div>
+    <div><div class="cap"><b>服务端执行</b></div><img class="shot" src="35/setup-server.png" style="width:440px"></div>
+  </div>
+  <div class="pb-ios full grouped" data-name="ios-setup" data-clip style="height:874px;overflow:hidden"><div data-ios="status"></div>
+    <div class="io-nav"><span class="io-glass l" style="width:auto;padding:0 16px;font-size:17px">Cancel</span><div class="io-navtitle"><b>Set up maintenance</b></div><span class="io-glass r" style="width:auto;padding:0 16px;font-size:17px;font-weight:600;background:#2E6AFF;color:#fff">Save</span></div>
+    <div class="io-set-f" style="padding-top:8px">Keeps the wiki up to date from sessions, tasks and receipts as they settle. Runs on the server with this deployment’s System model.</div>
+    <div class="pb-mark" style="margin:6px 0 0;border-radius:14px"><span class="m-n" style="right:6px;top:6px">1</span>
+      <div class="io-set-h">Reads the repository from</div><div class="io-card"><div class="io-lrow"><span class="lb">orbit-develop</span><span class="v">HPC</span><svg class="sf chev"><use href="#sf-chev-ud"/></svg></div></div>
+      <div class="io-set-f" style="padding-bottom:6px">The runner that checks out this codebase; the server reads the repository there.</div></div>
+    <div class="pb-mark" style="margin:8px 0 0;border-radius:14px"><span class="m-n" style="right:6px;top:6px">2</span>
+      <div class="io-set-h">Model</div><div class="io-card"><div class="io-lrow"><span class="lb">System model</span><span class="v">qwen3.8-27b-fp8 · <span class="io35-ok"><span class="io35-dot"></span>Up</span></span></div></div>
+      <div class="io-set-f" style="padding-bottom:6px">Set by this deployment, the same for every space.</div></div>
+    <div class="io-set-h">Daily limit</div><div class="io-card"><div class="io-lrow"><span class="lb">8 runs a day</span><span class="io-stepper"><span><svg class="sf "><use href="#sf-minus"/></svg></span><span><svg class="sf "><use href="#sf-plus"/></svg></span></span></div></div>
+    <div class="io-set-f">A run starts when 20 sessions have settled, or when the oldest waits a day. Each run writes at most 30 changes.</div>
+    <div class="io-set-h">Look back</div><div class="io-card"><div class="io-lrow"><span class="lb">Last 14 days</span><svg class="sf chev"><use href="#sf-chev-ud"/></svg></div></div>
+    <div class="io-set-f pb-mark" style="margin:0 16px;padding:7px 17px 4px;border-radius:12px"><span class="m-n" style="right:4px;top:-8px">3</span>How far back maintenance starts reading when you turn it on. Changing it later never moves maintenance back.<br><br>The wiki sends its material — session summaries, entries and repository excerpts — to this deployment’s System model.</div>
+  </div>
+  <div class="pb-note zh">
+    <p><span class="m-n note-n">1</span><b>同一个改名</b>，说明换成 <span class="en">The runner that checks out this codebase; the server reads the repository there.</span>（今天是 <span class="en">…; maintenance runs there.</span>）。表单头一句也换：<span class="en">Runs on the server with this deployment’s System model.</span><span class="pb-tag new">新词</span></p>
+    <p><span class="m-n note-n">2</span><b>Model 是只读的一行，不是下拉</b>：没有可选的；说明 <span class="en">Set by this deployment, the same for every space.</span> 写入时也不再发 <code>provider</code>（空间里存着的那个值原样留着，切回 runner 时照旧用它）。<span class="pb-tag new">新词</span></p>
+    <p><span class="m-n note-n">3</span><b>隐私说明放在表单最后</b>：开启之前就看得到。iOS 是最后一节的 footer。</p>
+    <p><span class="pb-tag sys">iOS 系统</span>照图 20 ②：sheet 表单，左 Cancel、右 Turn on / Save；只读行没有选择器箭头。</p>
+  </div>
+
+  <div class="pb-band zh"><span class="pb-bn">3</span>Model 的五种状态 <small>· 设置页、Set up、Activity 的 Runs 卡头一个说法；状态行另有自己的句子（⑥）</small></div>
+  <div style="grid-column: 1 / span 2">
+    <table class="rt">
+      <tr><th>读到的 state</th><th>web / iOS 的 Model 行</th><th>健康行（⑥）</th><th>什么时候</th></tr>
+      <tr><td><code>up</code></td><td class="en">System model · qwen3.8-27b-fp8 <span class="pill g"><i></i>Up</span></td><td class="zh">不加原因</td><td class="zh">探测 /health 答 200 或 404</td></tr>
+      <tr><td><code>down</code></td><td class="en">System model · qwen3.8-27b-fp8 <span class="pill a"><i></i>Unreachable</span></td><td class="en"><span class="pill a"><i></i>System model unreachable</span></td><td class="zh">探测没回答或答了别的；队列暂停，恢复后自己继续</td></tr>
+      <tr><td><code>auth_failed</code></td><td class="en">System model · qwen3.8-27b-fp8 <span class="pill r"><i></i>Key refused</span></td><td class="en"><span class="pill r"><i></i>System model refused the key</span></td><td class="zh">401；一直到部署方改好 key、重启 worker</td></tr>
+      <tr><td><code>unconfigured</code></td><td class="en">System model <span class="pill r"><i></i>Not configured</span></td><td class="en"><span class="pill r"><i></i>System model not configured</span></td><td class="zh">.env 缺地址、key 或模型名；没有模型名，只写 System model</td></tr>
+      <tr><td><code>worker_not_running</code></td><td class="en">System model · qwen3.8-27b-fp8 <span class="pill r"><i></i>wiki worker not running</span></td><td class="en"><span class="pill r"><i></i>wiki worker not running</span></td><td class="zh">没有心跳行，或心跳超过 60 秒</td></tr>
+    </table>
+  </div>
+  <div class="pb-note zh">
+    <p><span class="pb-tag new">新词</span><span class="en">Up · Unreachable · Key refused · Not configured · wiki worker not running</span>（「正常」写 <span class="en">Up</span>，和合同的 state 同名）。</p>
+    <p><b>颜色</b>：会自己恢复的是琥珀（down），要人动手的是红（key、未配置、worker 没跑），同状态行今天的「琥珀=在等，红=坏了」。</p>
+  </div>
+</div>
+
+<div class="pb-grid wide">
+  <div class="pb-colhead">web <span>· 真实页面 /wiki/orbit/activity · 1440×1300 窗口的主区（桌面）</span></div><div class="pb-colhead">iOS <span>· 402×874pt · Activity</span></div><div class="pb-colhead zh">说明</div>
+  <div class="pb-band zh"><span class="pb-bn">4</span>Activity · 新的 Runs 卡 <small>· 每次服务端运行一行：步骤进度、排队位置、已等多久；点开是逐次调用日志</small></div>
+  <div><img class="shot" src="35/activity-server.png"></div>
+  <div class="pb-ios top" data-name="ios-act"><div data-ios="status"></div>
+    <div class="io-nav"><span class="io-glass l"><svg class="sf "><use href="#sf-back"/></svg></span><div class="io-navtitle"><b>Activity</b><span>orbit</span></div></div>
+    <div class="io35-status pb-mark" style="margin:0 10px;border-radius:10px"><span class="m-n" style="right:-6px">4</span>11,689 entries · Anchors verified at 1588c3b · Maintained 2h ago ✓ · 6 to catch up · <b class="io35-amb">● System model unreachable</b></div>
+    <div class="io35-banner" style="background:rgba(255,140,39,.13);margin-top:6px"><span class="d" style="background:#FF9500"></span>1 proposal to review<svg class="sf"><use href="#sf-chev-r"/></svg></div>
+    <div class="io35-banner" style="background:rgba(46,106,255,.10)"><span class="d" style="background:#2E6AFF"></span>No plan yet — draft one<svg class="sf"><use href="#sf-chev-r"/></svg></div>
+    <div class="pb-mark" style="margin:12px 6px 0;border-radius:12px"><span class="m-n" style="right:-6px">1</span>
+      <div class="io35-sech" style="padding-top:12px"><b>Runs</b><span class="rr io35-ro">System model · <span class="io35-ok"><span class="io35-dot"></span>Up</span></span></div>
+      <div class="io35-run pb-mark" style="border-radius:8px"><span class="m-n" style="right:-6px;top:-6px">2</span><span class="mk spin"></span><div class="l1"><span class="t">Verification</span><span class="sp"></span><span class="when">2m ago</span><svg class="sf"><use href="#sf-chev-r"/></svg></div><div class="l2"><b>Running</b> · 3 of 7 calls ended · next call 2 ahead, waited 41s</div></div>
+      <div class="io35-run"><span class="mk amb"></span><div class="l1"><span class="t">Articles</span><span class="sp"></span><span class="when">1m ago</span><svg class="sf"><use href="#sf-chev-r"/></svg></div><div class="l2 amb"><b>Queued</b> · 1 run ahead · waited 1m 12s</div></div>
+      <div class="io35-run"><span class="mk ok"></span><div class="l1"><span class="t">Import</span><span class="sp"></span><span class="when">25m ago</span><svg class="sf"><use href="#sf-chev-r"/></svg></div><div class="l2"><b>Done</b> · 40 calls · 52,310 tokens · took 6m 2s</div></div>
+      <div class="io35-run"><span class="mk red"></span><div class="l1"><span class="t">Maintenance</span><span class="sp"></span><span class="when">3h ago</span><svg class="sf"><use href="#sf-chev-r"/></svg></div><div class="l2 red"><b>Failed</b> · The System model refused the key (401) · 12 calls</div></div>
+      <div class="io35-run"><span class="mk ok"></span><div class="l1"><span class="t">Verification</span><span class="sp"></span><span class="when">5h ago</span><svg class="sf"><use href="#sf-chev-r"/></svg></div><div class="l2"><b>Done</b> · 4 calls · 6,120 tokens · took 48s</div></div>
+    </div>
+    <div class="io35-sech"><b>Recent decisions</b><span class="n">2</span></div>
+    <div class="io-row"><div class="io-l1"><span class="t">Wiki 的模型调用移到服务端的 wiki-worker</span><span class="sp"></span><span class="when">10/7</span></div><div class="io-l2"><span class="act">Active</span> · owner 2026-10-07 定：worker 用 Node.js…</div></div>
+    <div style="height:14px"></div>
+  </div>
+  <div class="pb-note zh">
+    <p><span class="m-n note-n">1</span><b>Runs 卡</b>：放在 Review、Plan 之后、Recent decisions 之前（手机同一顺序，iOS 是 Activity 列表里的一节）。卡头写 <span class="en">System model · &lt;模型名&gt; · ● 状态</span>。最多列最近 10 次运行，新的在上。只有服务端执行（或这个空间有过服务端运行）时出现。<span class="pb-tag new">新词</span><span class="en">Runs</span></p>
+    <p><span class="m-n note-n">2</span><b>一行一次运行</b>：种类、状态一句、时间。种类：<span class="en">Maintenance · Plan draft · Plan revision · Documents · Import · Verification · Articles</span>。状态一句：</p>
+    <p style="margin-left:22px">· 排队：<span class="en">Queued · 1 run ahead · waited 1m 12s</span>（前面还有几个作业、从建作业起等了多久；退避中写 <span class="en">retrying in 30s</span>）<br>· 在跑：<span class="en">Running · 3 of 7 calls ended · next call 2 ahead, waited 41s</span>（流水线写了步骤计数就用它，例如导入 <span class="en">reading 12 of 40 notes</span>；它的调用在排队时说下一个调用前面还有几个、等了多久）<br>· 等仓库：<span class="en">Waiting for the runner · 3m</span><br>· 成功：<span class="en">Done · 40 calls · 52,310 tokens · took 6m 2s</span><br>· 失败：<span class="en">Failed · &lt;原因第一行&gt; · 12 calls</span></p>
+    <p><span class="m-n note-n">3</span><b>点开 = 逐次调用日志</b>（桌面在卡里展开成表，手机每次调用两行，iOS push 一页，见 ⑤）：调用（步骤 · 单元）、状态、<span class="en">Waited</span>（排队时长）、<span class="en">Ran</span>（耗时）、<span class="en">Tokens</span>（入 → 出）；失败的调用下面红字写错误；排队的写 <span class="en">Queued · N ahead</span>。表尾合计。一次运行最多列最近 40 次调用，多了写 <span class="en">Showing the last 40 of 112 calls</span>。</p>
+    <p><span class="m-n note-n">4</span><b>状态行带原因</b>（⑥）。</p>
+    <p><b>不再链接隐藏的任务和会话</b>：服务端运行没有会话；状态行的 <span class="en">View run</span> 在服务端执行时打开这里的那一行（展开），不再去 <code>/sessions/…</code>。</p>
+    <p><span class="pb-tag guess">假设</span>示意数据：Maintenance、Plan、Documents 的服务端运行要等 P6–P8 落地才有，现在能看到的是 Verification、Import、Articles。Plan 卡里的 <span class="en">local-vllm · about 1–2 hours</span> 留给 P6（plan 移到服务端时一起改）。<span class="pb-tag later">另议</span></p>
+  </div>
+
+  <div class="pb-band zh"><span class="pb-bn">5</span>运行详情 · 手机 <small>· web 手机在卡里展开（每次调用两行）；iOS 点一行 push 运行页</small></div>
+  <div style="display:flex;gap:24px;align-items:flex-start"><img class="shot" src="35/activity-phone-runs.png" style="width:358px"><div class="cap zh" style="width:420px;margin-top:6px"><b>web 手机（390）</b>：一行两层——种类和时间一行，状态一句在下面；展开后每次调用两行：<span class="en">verify · op 3f2a9c1e</span> / <span class="en">Done · waited 1s · ran 14s · 1,204 → 296 tokens</span>。</div></div>
+  <div class="pb-ios full grouped" data-name="ios-run" data-clip style="height:874px;overflow:hidden"><div data-ios="status"></div>
+    <div class="io-nav"><span class="io-glass l"><svg class="sf "><use href="#sf-back"/></svg></span><div class="io-navtitle"><b>Verification</b><span>started 2m ago</span></div></div>
+    <div class="io-card" style="margin-top:8px">
+      <div class="io-lrow"><span class="lb">State</span><span class="v"><span style="color:#2E6AFF">Running</span> · 3 of 7 calls ended</span></div>
+      <div class="io-lrow"><span class="lb">Next call</span><span class="v io35-amb">2 ahead · waited 41s</span></div>
+      <div class="io-lrow"><span class="lb">Tokens</span><span class="v">2,592 in · 607 out</span></div>
+    </div>
+    <div class="io35-sech"><b>Calls</b><span class="n">7</span></div>
+    <div class="io-card">
+      <div class="io35-call"><div class="u">verify · op 3f2a9c1e<span class="s io35-ok">Done</span></div><div class="m">waited 1s · ran 14s · 1,204 → 296 tokens</div></div>
+      <div class="io35-call"><div class="u">verify · op 77b0e1d2<span class="s io35-ok">Done</span></div><div class="m">1 retry · waited 2s · ran 17s · 1,388 → 311 tokens</div></div>
+      <div class="io35-call"><div class="u">verify · op a1c3e9f0<span class="s io35-red">Failed</span></div><div class="m">waited 1s · ran 15m</div><div class="why">The call ran past its 15-minute budget; the op keeps waiting for a verdict.</div></div>
+      <div class="io35-call"><div class="u">verify · op 0d93bb12<span class="s" style="color:#2E6AFF">Running</span></div><div class="m">waited 3s · ran 9s</div></div>
+      <div class="io35-call"><div class="u">verify · op 5e7d2a61<span class="s" style="color:#2E6AFF">Running</span></div><div class="m">waited 3s · ran 6s</div></div>
+      <div class="io35-call"><div class="u">verify · op 9b1f0c44<span class="s io35-amb">Queued · 2 ahead</span></div><div class="m">waited 41s</div></div>
+      <div class="io35-call"><div class="u">verify · op c8d27e13<span class="s io35-amb">Queued · 3 ahead</span></div><div class="m">waited 41s</div></div>
+    </div>
+  </div>
+  <div class="pb-note zh">
+    <p><span class="pb-tag sys">iOS 系统</span>运行页是一个 push：导航栏写种类和开始时间，顶上三行事实（状态、下一个调用的排队位置、token 合计），下面 <span class="en">Calls</span> 一节，每次调用两行（同 web 手机）。下拉刷新；在跑或排队时每 5 秒自己刷新一次。</p>
+    <p><span class="pb-tag co">协调性</span>三端同一组词：<span class="en">Queued · N ahead</span>、<span class="en">waited</span>、<span class="en">ran</span>、<span class="en">tokens</span>、<span class="en">Done / Failed / Running / Cancelled</span>。所有文案放进 <code>src/shared/src/wiki-server-execution.fixture.json</code>，web 测试和 OrbitKit 对照测试都读它。</p>
+    <p><span class="pb-tag new">新词</span><span class="en">Calls · Next call · State · Tokens · 1 retry · Showing the last 40 of N calls</span></p>
+  </div>
+</div>
+
+<div class="pb-grid">
+  <div class="pb-band zh"><span class="pb-bn">6</span>健康行（状态行）的五种新原因 <small>· 维护部分后面加一段；web 与 iOS 同一句话</small></div>
+  <div class="lines" style="grid-column: 1 / span 2">
+    <div class="project-integration wk-status-row"><div class="project-integration-row"><span class="project-integration-facts"><span><b>11,689</b> entries</span><span class="wk-sep">·</span><span>Anchors verified at 1588c3b</span><span class="wk-sep">·</span><span class="wk-maint wk-maint--plain">Maintained 2h ago<span class="wk-maint-ok">✓</span></span><span class="wk-sep">·</span><span class="wk-maint wk-maint--plain">6 to catch up</span><span class="wk-sep">·</span><span class="wk-maint wk-maint--warn"><span class="wk-maint-dot"></span><b>Waiting for the runner to come online</b></span></span></div></div>
+    <div class="project-integration wk-status-row"><div class="project-integration-row"><span class="project-integration-facts"><span><b>11,689</b> entries</span><span class="wk-sep">·</span><span>Anchors verified at 1588c3b</span><span class="wk-sep">·</span><span class="wk-maint wk-maint--plain"><span class="wk-maint-spin"></span>Maintaining now · started 4m ago</span><span class="wk-sep">·</span><span class="wk-maint wk-maint--plain">24 to catch up</span><span class="wk-sep">·</span><span class="wk-maint wk-maint--warn"><span class="wk-maint-dot"></span><b>System model unreachable</b></span></span></div></div>
+    <div class="project-integration wk-status-row"><div class="project-integration-row"><span class="project-integration-facts"><span><b>11,689</b> entries</span><span class="wk-sep">·</span><span>Anchors verified at 1588c3b</span><span class="wk-sep">·</span><span class="wk-maint wk-maint--error"><span class="wk-maint-dot"></span><b>Maintenance failed 3 times</b></span><span class="wk-sep">·</span><span class="wk-maint wk-maint--plain">last success 2d ago</span><span class="wk-sep">·</span><span class="wk-maint wk-maint--plain">57 to catch up</span><span class="wk-sep">·</span><span class="wk-maint wk-maint--error"><span class="wk-maint-dot"></span><b>System model refused the key</b></span><span class="wk-sep">·</span><a class="wk-maint-link">View run</a></span></div></div>
+    <div class="project-integration wk-status-row"><div class="project-integration-row"><span class="project-integration-facts"><span><b>11,689</b> entries</span><span class="wk-sep">·</span><span>Anchors verified at 1588c3b</span><span class="wk-sep">·</span><span class="wk-maint wk-maint--muted">Maintenance off</span><span class="wk-sep">·</span><span class="wk-maint wk-maint--error"><span class="wk-maint-dot"></span><b>System model not configured</b></span><span class="wk-sep">·</span><a class="wk-maint-link">Set up</a></span></div></div>
+    <div class="project-integration wk-status-row"><div class="project-integration-row"><span class="project-integration-facts"><span><b>11,689</b> entries</span><span class="wk-sep">·</span><span>Anchors verified at 1588c3b</span><span class="wk-sep">·</span><span class="wk-maint wk-maint--plain">Maintenance on</span><span class="wk-sep">·</span><span class="wk-maint wk-maint--plain">0 to catch up</span><span class="wk-sep">·</span><span class="wk-maint wk-maint--error"><span class="wk-maint-dot"></span><b>wiki worker not running</b></span></span></div></div>
+    <div class="project-integration wk-status-row"><div class="project-integration-row"><span class="project-integration-facts"><span><b>11,689</b> entries</span><span class="wk-sep">·</span><span>Anchors verified at 1588c3b</span><span class="wk-sep">·</span><span class="wk-maint wk-maint--plain">Maintained 2h ago<span class="wk-maint-ok">✓</span></span><span class="wk-sep">·</span><span class="wk-maint wk-maint--plain">6 to catch up</span><span class="wk-sep">·</span><span class="wk-maint wk-maint--warn"><span class="wk-maint-dot"></span><b>Upgrade the runner to read the repository</b></span></span></div></div>
+  </div>
+  <div class="pb-note zh">
+    <p><b>只加一段，排在链接（Set up / View run）前面</b>，同时有几个原因时只说最根本的那个：wiki worker 没跑 → 未配置 → key 被拒 → 不可达 → runner（等它上线 / 要升级）。</p>
+    <p><b>什么时候说</b>：只在服务端执行的账号；模型的四种随时说（核实、导入、文章都要用模型，维护关着也一样）；runner 的两种在维护开着、或者有仓库操作在等时才说。</p>
+    <p><span class="pb-tag new">新词</span><span class="en">Waiting for the runner to come online · System model unreachable · System model refused the key · System model not configured · wiki worker not running</span></p>
+    <p><span class="pb-tag guess">假设</span>任务只列了前五种；P2 的合同还给了 <code>runner_upgrade</code>（runner 在线但没声明 <code>wiki-repo-op/v1</code>，设计 §7「健康行提示升级 runner」），图上一并画成 <span class="en">Upgrade the runner to read the repository</span>，不要就删。<code>no_workspace</code>、<code>runner_missing</code> 不另说：设置页已写明从哪里读仓库。</p>
+  </div>
+
+  <div class="pb-band zh"><span class="pb-bn">7</span>数据从哪来、改哪些文件 <small>· P1b 只留了 System model 的读接口，作业与队列的读要在本任务补上</small></div>
+  <div style="grid-column: 1 / -1">
+    <table class="rt">
+      <tr><th>读</th><th>新增 / 改动</th><th>给谁</th></tr>
+      <tr><td><code>GET /api/wiki/system-model</code></td><td class="zh">加 <code>executor</code>：本账号的 wiki 是 <code>runner</code> 还是 <code>server</code> 执行（照 <code>wikiExecutorServes</code>）。其余字段不变，仍不含地址、key、last_error。</td><td class="zh">设置页、Set up、Runs 卡头</td></tr>
+      <tr><td><code>GET /api/wiki/spaces/:id/health</code></td><td class="zh">加 <code>executor</code>、<code>systemModel</code>（同上那份读），<code>running</code> / <code>lastRun</code> / <code>lastFailure</code> 加 <code>jobId</code>（服务端运行的作业，View run 用）。<code>repo</code>（P2）照旧。</td><td class="zh">状态行的新原因、View run</td></tr>
+      <tr><td><code>GET /api/wiki/spaces/:id/jobs</code> <b>新</b></td><td class="zh">这个空间最近 10 次服务端运行：种类、状态、等什么、时间、错误、流水线写的步骤计数、调用计数与 token 合计、排队位置 <code>ahead</code>；每次运行带最近 40 次调用（步骤、单元、状态、入队 / 开始 / 结束时间、token、HTTP 状态、错误、排队位置 <code>ahead</code>）。只读，只给 owner；不含 prompt、答案和 partial。登记 PAT 装饰器、PUBLIC_ID_FIELDS、租户隔离 census；合同加 <code>jobs.read</code>。</td><td class="zh">Activity 的 Runs 卡与运行详情</td></tr>
+    </table>
+    <p class="cap zh" style="margin-top:10px"><b>改动面</b>：web <code>WikiSettingsPage.tsx</code>、<code>WikiActivityPage.tsx</code>（+ 新 <code>WikiRunsCard.tsx</code>）、<code>WikiMaintenanceStatus.tsx</code>、<code>lib/wikiHealth.ts</code>、<code>lib/wikiReviewMode.ts</code>、新 <code>lib/wikiRuns.ts</code>；OrbitKit <code>WikiHealthLogic</code>、<code>WikiModeLogic</code>、新 <code>WikiRunsLogic</code>、模型与 API；OrbitApp <code>WikiSettingsView</code>、<code>WikiActivityView</code>、新 <code>WikiJobView</code>；共享 <code>wiki-server-execution.fixture.json</code>；apiserver 读接口与 pg spec；<code>contracts/wiki.contract.json</code>、<code>docs/wiki-contract.md</code>。</p>
+    <p class="cap zh"><b>待你定</b>：① <span class="en">Reads the repository from</span> 这个键名；② 「正常」写 <span class="en">Up</span>；③ Runs 卡的位置（Review / Plan 之后）；④ 桌面在卡里展开调用日志、iOS push 一页；⑤ 是否保留 <span class="en">Upgrade the runner…</span> 这第六种原因。</p>
+  </div>
+</div>
+</div>
+</body>
+</html>

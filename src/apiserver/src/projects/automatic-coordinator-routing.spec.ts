@@ -100,10 +100,12 @@ test('a delivery review asks the coordinator to decide, names every door, and sa
     '机械的范围告警', 'src/runner-go/worktree.go', 'src/shared/src/project-done.ts',
     'src/apiserver/src/projects/project-owner-done.pg.spec.ts', '接受范围', 'open_item_resolve',
     '退回', 'task_reopen', '取代', 'supersedesTaskId', '重跑落地', 'integration_retry',
-    'exceptionEscalationSeconds', '不要为它 ask_owner', 'Automatic',
+    '你接手之后它一直归你', '不要为它 ask_owner', 'Automatic',
   ]) {
     assert.ok(message.includes(want), `the review message does not say ${JSON.stringify(want)}`);
   }
+  // Revision 13 (§4.6): a review the coordinator took up is not handed to the owner on a clock.
+  assert.ok(!message.includes('exceptionEscalationSeconds'), 'the review still threatens the escalation clock');
   assert.ok(!message.includes('合并到 main'), 'a review is not an order to merge');
   // The rerun door is offered for what it accepts: a conflict is never rerun.
   assert.match(message, /冲突不能重跑/);
@@ -157,7 +159,14 @@ test('a classified landing failure reaches its coordinator as its own decision, 
     assert.ok(message.includes(want), `the failed-landing message does not say ${JSON.stringify(want)}`);
   }
   assert.ok(!message.includes('supersedesTaskId'), 'a DONE landing must not suggest a successor field');
-  assert.ok(!message.includes('ask_owner'), 'a failed landing was put to the owner');
+  // The landing is never the owner's question. What ask_owner is offered for (revision 13) is a
+  // trade-off only the owner can make while the coordinator handles it — and then the item stays
+  // the coordinator's; it is handed over only for what the owner has to do in person.
+  assert.equal(message.split('ask_owner').length - 1, 1, 'ask_owner is offered once, for one thing');
+  assert.match(message, /只有账号所有者才能决定的取舍（例如跳过或改动合并检查），用 ask_owner 提问/);
+  assert.match(message, /待办仍留在你这里/);
+  assert.match(message, /只有必须由账号所有者亲手处理的事（他的设备、账号或密钥），才用 open_item_hand_over/);
+  assert.ok(!message.includes('如果你无法判断或处理'), 'a failed landing is still handed over by default');
 });
 
 test('a delivery review reads back as the rows its card draws and one line under its title', () => {

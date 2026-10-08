@@ -32,6 +32,8 @@ output into a public report: expanded values can contain secrets.
 | `ORBIT_WATCHES_CANARY_OWNERS` | Optional; empty | Comma-separated account IDs enabled in Watch canary mode. | No; account identifiers are private diagnostic data | Recreate API |
 | `ORBIT_WIKI_MODE` → container `ORBIT_WIKI` | Optional; `on` | Wiki rollout: `on`, `canary`, or `off`. Disabled accounts receive `WIKI_DISABLED` and no Wiki tools/context. | No | Recreate API; no migration or runner release |
 | `ORBIT_WIKI_CANARY_OWNERS` | Optional; empty | Comma-separated account IDs enabled in Wiki canary mode. | No; account identifiers are private diagnostic data | Recreate API |
+| `ORBIT_WIKI_EXECUTOR` | Optional; `runner` | How far the wiki's pipelines run on the server instead of in a runner's maintenance session: `runner`, `canary` (only the accounts `ORBIT_WIKI_EXECUTOR_CANARY_OWNERS` lists), or `server`. Read by both the API and `wiki-worker`; moving it back to `runner` stops new jobs being taken without deleting anything. Requires a System model for the pipelines it moves. | No | Recreate API and `wiki-worker`; no migration or runner release |
+| `ORBIT_WIKI_EXECUTOR_CANARY_OWNERS` | Optional; empty | Comma-separated account IDs run by the server's worker in `ORBIT_WIKI_EXECUTOR=canary` mode. | No; account identifiers are private diagnostic data | Recreate API and `wiki-worker` |
 | `DEEPSEEK_API_KEY` | Optional; empty disables title enrichment | Asynchronous session title/tag enrichment; independent of the coding runtime's credentials. | Yes | Recreate API |
 | `DEEPSEEK_BASE_URL` | Optional; `https://api.deepseek.com` | Endpoint for title/tag enrichment. | No; avoid credential-bearing URLs | Recreate API |
 | `DEEPSEEK_MODEL` | Optional; `deepseek-chat` | Model used for title/tag enrichment. | No | Recreate API |
@@ -85,6 +87,8 @@ state from the status row the worker writes.
 | `ORBIT_WIKI_MODEL_API_KEY` | Required with the base URL | Sent as `Authorization: Bearer`. | Yes | Recreate `wiki-worker` |
 | `ORBIT_WIKI_MODEL` | Required with the base URL | The model name sent with every call; the only part of the configuration clients see. | No | Recreate `wiki-worker` |
 | `ORBIT_WIKI_MODEL_CONCURRENCY` | Optional; `4` | The most model requests in flight at once, across every wiki space. | No | Recreate `wiki-worker` |
+| `ORBIT_WIKI_EXECUTOR` | Optional; `runner` | The same executor switch the API reads (see above): which accounts' jobs this worker may claim. | No | Recreate `wiki-worker` (and the API, to move both together) |
+| `ORBIT_WIKI_EXECUTOR_CANARY_OWNERS` | Optional; empty | The same canary list the API reads. | No; account identifiers are private diagnostic data | Recreate both services |
 
 All three of the base URL, key, and model must be set; otherwise the System model reads as unconfigured and the
 worker calls nothing. The wiki settings and health line show the model's name and one of these states: up,

@@ -300,6 +300,14 @@ internal object WikiHealthCopy {
     fun lastRun(ago: String) = "last run $ago"
     fun lastSuccess(ago: String) = "last success $ago"
     fun failed(count: Int) = if (count == 1) "Maintenance failed" else "Maintenance failed $count times"
+
+    // The server's reasons (mock 35 ⑥, P9): the web's `WIKI_REASON_*`.
+    const val reasonWorker = "wiki worker not running"
+    const val reasonUnconfigured = "System model not configured"
+    const val reasonKeyRefused = "System model refused the key"
+    const val reasonUnreachable = "System model unreachable"
+    const val reasonRunnerOffline = "Waiting for the runner to come online"
+    const val reasonRunnerUpgrade = "Upgrade the runner to read the repository"
 }
 
 internal object WikiArticleCopy {

@@ -524,6 +524,20 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertFalse(merging.contains("ProgressView"), "the landing row below is this card's moving mark")
     }
 
+    /// A blocked candidate's card names what is in front of it — the landing holding the branch,
+    /// off the project's own read — instead of leaving "Coordinator is resolving it" as the whole
+    /// answer (the owner's report of 2026-10-08).
+    func testTheBlockedCardNamesTheLandingInFrontOfIt() throws {
+        let page = code(try appSource("Views/SessionProjectPage.swift"))
+        let card = try slice(page, from: "private var mergeCard: some View {", to: "\n    }")
+        XCTAssertTrue(card.contains("PromotionCards.blockedByLine(view, landings: $0.landTasks)"),
+                      "the blocked card names who is in front of it, from the project's landings")
+        let blocked = try slice(page, from: "@ViewBuilder private func blocked(_ view: ProjectPromotionView) -> some View {",
+                                to: "\n    }\n")
+        XCTAssertTrue(blocked.contains("PromotionCards.blockedByLabel"),
+                      "and it draws only when there is something to name")
+    }
+
     /// A read that failed with no rows in hand says why in one sentence, with Retry, and stays up
     /// through the page's 4-second polls rather than blinking out while each one is in flight.
     func testAFailedReadStaysUpWithItsReasonAndRetry() throws {

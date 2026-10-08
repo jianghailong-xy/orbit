@@ -88,6 +88,12 @@ export interface RunnerObjects {
   /** An integration job, and a Codex reset operation, the machine holds the claim of (`leaseOwner`, generation 1). */
   integrationJobId: string;
   codexOperationId: string;
+  /**
+   * The task that integration job lands: one of the project's own, not `projectTaskId`, whose one
+   * in-flight landing is the first half's queued job. No case names it; it is here so that the write
+   * trap counts it among A's ids, as it counted `projectTaskId` while the job landed that.
+   */
+  landingTaskId: string;
   /** A wiki repository operation of the machine's, claimed by it the same way (migration 0402). */
   wikiRepoOpId: string;
   /** A service token of the machine's, to be revoked. */
@@ -530,6 +536,10 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
       headers: calling(mine.runner.wikiSessionId),
       body: { verdicts: [{ opId: of.runner.wikiVerifyingOpId, verdict: 'supported', reason: 'the census', model: 'census' }] },
     }),
+  },
+  'POST /runner/wiki/spaces/:id/verifications/request': {
+    as: RUNNER,
+    request: (of, mine) => ({ params: { id: of.wikiSpaceId }, headers: calling(mine.runner.wikiSessionId) }),
   },
   'POST /runner/wiki/spaces/:id/notes': {
     as: RUNNER,

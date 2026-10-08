@@ -6,6 +6,7 @@ import { DeleteOutlined, DownloadOutlined, EditOutlined, EllipsisOutlined, Loadi
 import {
   accountToStartOn,
   withEnginePlanUsage,
+  type AccountEngine,
   type InstallEngine,
   type LoginEngine,
   type PlanUsage,
@@ -38,7 +39,8 @@ import { formatResetTime } from '../lib/providerPools';
 import { runnersQuery } from '../lib/queries';
 import { RUNNER_ENGINE_RENEW, runnerEngineNext } from '../lib/runnerCopy';
 import { loginExpiresLine, signedOutNote } from '../lib/accountLogin';
-import { ago, engineVersionNumber, updateNoteOf } from '../lib/runnerEngines';
+import { foldFromAnywhere } from '../lib/foldHead';
+import { ENGINE_CLI_NAME, ago, engineVersionNumber, updateNoteOf } from '../lib/runnerEngines';
 import { ENGINE_PRESET, ENGINE_SLUGS } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 import { ProviderTile } from './ProviderGallery';
@@ -46,6 +48,28 @@ import { ENGINE_NAME, GoogleSignInTerms, KIMI_SITE, RunnerSignIn } from './Runne
 import type { Runner } from './TasksSidePanel';
 
 const ENGINES = Object.keys(ENGINE_NAME) as LoginEngine[];
+
+/** An engine this page has a row for: one a runner signs in with, or OpenCode — which it does not. */
+type RowEngine = LoginEngine | 'opencode';
+
+/** Every engine a card can draw a row for: the CLIs a runner signs in with, and OpenCode — the one
+ *  engine here with no sign-in to relay, whose row exists to be installed and kept current. */
+const ROW_ENGINES: RowEngine[] = [...ENGINE_SLUGS, 'opencode'];
+
+/** The rows one card draws: those, minus OpenCode on a machine that never reports it. A runner
+ *  reports every CLI on the machine, so the row appearing is that report's doing — and one that has
+ *  never mentioned OpenCode has nothing for the row to say. */
+function rowEnginesOf(engines: RunnerEngineHealth[]): RowEngine[] {
+  const reported = new Set(engines.map((health) => health.engine));
+  return ROW_ENGINES.filter((engine) => engine !== 'opencode' || reported.has('opencode'));
+}
+
+/** What a row calls its engine. The sign-in CLIs' names are this page's own; OpenCode's comes from
+ *  the wider map a page showing every engine on a machine reads, so one binary never gets two
+ *  names. */
+function engineNameOf(engine: RowEngine): string {
+  return engine === 'opencode' ? ENGINE_CLI_NAME.opencode : ENGINE_NAME[engine];
+}
 
 // Which runner cards the user opened. Cards start folded — three engines per machine adds up
 // fast, and a runner that is set up and quiet has nothing to say beyond its summary line — so
@@ -121,12 +145,12 @@ const STATUS_TAG: Record<RowKind, { color: string; label: string }> = {
 
 /** An engine's version as a number — the name beside it already says which CLI it is, so
  *  `2.1.287 (Claude Code)` would say it twice — or the CLI's own name when it reported none. */
-function versionOf(engine: LoginEngine, health?: RunnerEngineHealth): string {
-  return health?.version ? engineVersionNumber(health.version) : engine;
+function versionOf(engine: RowEngine, health?: RunnerEngineHealth): string {
+  return health?.version ? engineVersionNumber(health.version) : engineNameOf(engine);
 }
 
 /** The sub-line under an engine's name: what is on this machine, or what would be. */
-function metaFor(kind: RowKind, engine: LoginEngine, health?: RunnerEngineHealth): string {
+function metaFor(kind: RowKind, engine: RowEngine, health?: RunnerEngineHealth): string {
   if (kind === 'installing') return health?.installed ? 'Reinstalling' : 'Not installed yet';
   if (kind === 'installed') return 'Waiting for this runner to check in';
   if (!health?.installed) {
@@ -192,7 +216,7 @@ export function tildePath(path: string): string {
 
 /** Whether this account is on its way out: asked to be removed, and still listed until the re-probe
  *  that follows the machine's "done" drops it, a beat later. */
-function beingRemoved(runner: Runner, engine: LoginEngine, account: string): boolean {
+function beingRemoved(runner: Runner, engine: RowEngine, account: string): boolean {
   const removal = runner.accountRemove;
   return removal?.engine === engine && removal.account === account &&
     (removal.status === 'pending' || removal.status === 'done');
@@ -202,7 +226,7 @@ function beingRemoved(runner: Runner, engine: LoginEngine, account: string): boo
  *  while the probe speaks for the engine, since an install under way is about the binary all of
  *  them share. None otherwise, which leaves the row exactly what it was before accounts. */
 function accountRowsOf(
-  engine: LoginEngine,
+  engine: RowEngine,
   health: RunnerEngineHealth | undefined,
   install: RunnerInstallState | null | undefined,
 ): RunnerEngineAccount[] {
@@ -402,7 +426,7 @@ function EngineRow({
   onFold,
 }: {
   runner: Runner;
-  engine: LoginEngine;
+  engine: RowEngine;
   health?: RunnerEngineHealth;
   /** The accounts listed under this row (accountRowsOf). Any at all make it their group's head. */
   accounts: RunnerEngineAccount[];
@@ -420,12 +444,25 @@ function EngineRow({
   const message = useToast();
   const qc = useQueryClient();
   const kind = rowKindOf(health, runner.install, engine);
+  // This row's engine, where it is one this page signs in. OpenCode is the one row here without a
+  // relayable sign-in — it authenticates per provider, and the runner refuses a login it would
+  // have to drive — so every sign-in affordance hangs off this, and what the row offers instead is
+  // the command to run on the machine (openCodeHint below).
+  const loginEngine: LoginEngine | null = engine === 'opencode' ? null : engine;
   const antigravity = engine === 'antigravity' ? runner.antigravity : undefined;
   const googleLogin = engine === 'antigravity' ? (antigravity?.googleLogin ?? 'needs_update') : undefined;
   const envKey = engine === 'antigravity' && kind === 'in' && health?.authSource !== 'google';
   const loginHint = googleLogin === 'unsupported_platform'
     ? 'Google sign-in is not supported on macOS runners yet. Use a Gemini API key.'
     : googleLogin === 'needs_update' ? 'Update this runner to sign in with Google.' : null;
+  // Nothing here signs OpenCode in, so the row says what does. Only once there is a CLI on the
+  // machine to run it against: an install that hasn't happened yet has no sign-in to point at.
+  const openCodeHint = loginEngine === null && health?.installed
+    ? <>
+        Run <code>opencode auth login</code> on that machine, or use a configured key — OpenCode's
+        sign-in is provider-specific, so it can't be driven from here.
+      </>
+    : null;
   const offline = !runner.online;
   const row = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -465,14 +502,20 @@ function EngineRow({
     // Antigravity's Default on the machine's Gemini key says no for a Google sign-in it does not
     // need: it takes sessions on the key.
     const own = runsOnEnvKey(health, account) ? 'in' : accountKindOf(account);
-    return !accountIsPaused(account.pausedUntil, now) && available(own, quotaOf(own, accountPlanUsage(usage, engine, account.id), !!runner.online, now));
+    // An account's quota is its engine's to read, and only an engine with a sign-in has accounts.
+    const accountQuota = loginEngine === null ? null : accountPlanUsage(usage, loginEngine, account.id);
+    return !accountIsPaused(account.pausedUntil, now) && available(own, quotaOf(own, accountQuota, !!runner.online, now));
   }).length;
   // "Add account" is how a machine gets from one account to two, so it is not the group's to hold:
   // the Codex row offers it whenever the probe speaks for the engine, whether it heads a group yet
-  // or not. An Antigravity account is a Google sign-in, which only some runners can add.
-  const addsAccounts =
-    engineKeepsAccounts(engine) && (kind === 'in' || kind === 'out' || kind === 'unknown') &&
-    (engine !== 'antigravity' || addsAntigravityAccounts(runner));
+  // or not. An Antigravity account is a Google sign-in, which only some runners can add; OpenCode
+  // keeps no accounts at all, and has no sign-in to add one with.
+  const addAccountTo: LoginEngine | null =
+    loginEngine !== null && engineKeepsAccounts(loginEngine) &&
+    (kind === 'in' || kind === 'out' || kind === 'unknown') &&
+    (loginEngine !== 'antigravity' || addsAntigravityAccounts(runner))
+      ? loginEngine
+      : null;
 
   // An offline machine isn't updating anything, and the header already says so — repeating it
   // per row as a warning would put three alarms on one fact the user has already read.
@@ -487,7 +530,9 @@ function EngineRow({
       return <Button size="small" type="primary" disabled={offline} onClick={() => onSignIn(signIn === engine ? null : engine)}>Sign in with Google</Button>;
     }
     if (offline) {
-      return kind === 'in' ? null : <Button size="small" className="re-action" disabled>Sign in</Button>;
+      // Nothing on an offline machine can be pressed. An engine with a sign-in still shows where
+      // the button would be; OpenCode has none to show.
+      return loginEngine === null || kind === 'in' ? null : <Button size="small" className="re-action" disabled>Sign in</Button>;
     }
     switch (kind) {
       case 'missing':
@@ -515,7 +560,9 @@ function EngineRow({
       // and the runner only reports an install done once the binary is on its PATH — waiting for the
       // check-in first left the row with nothing to press for up to a heartbeat.
       default:
-        return (
+        // OpenCode is the exception: there is no sign-in here to relay, so the row carries the
+        // command that does it on the machine instead (openCodeHint).
+        return loginEngine === null ? null : (
           <Button
             size="small"
             type="primary"
@@ -557,15 +604,23 @@ function EngineRow({
   );
 
   return (
-    <div className={`re-row${grouped ? ' re-grp' : ''}${folded ? ' folded' : ''}${focused ? ' focused' : ''}${accountIsPaused(single?.pausedUntil, now) ? ' account-paused' : ''}`} ref={row} data-engine={engine}>
+    <div
+      className={`re-row${grouped ? ' re-grp' : ''}${folded ? ' folded' : ''}${focused ? ' focused' : ''}${accountIsPaused(single?.pausedUntil, now) ? ' account-paused' : ''}`}
+      ref={row}
+      data-engine={engine}
+      // The head's line folds its group from anywhere on it, as a card's head does — not a panel or
+      // note opened under the line, which are the row's and not its head's.
+      onClick={grouped ? foldFromAnywhere(() => onFold(!open), 'button, a, input, .re-panel, .re-login-note') : undefined}
+    >
       {grouped ? (
         // A group folds under its head. The toggle is the identity alone, as a runner card's is, so
-        // Add account beside it stays a button of its own.
+        // Add account beside it stays a button of its own; a press elsewhere on the line is the
+        // toggle's (foldFromAnywhere).
         <button className="re-id re-grp-toggle" type="button" aria-expanded={open} onClick={() => onFold(!open)}>
-          <ProviderTile slug={ENGINE_PRESET[engine] ?? engine} label={ENGINE_NAME[engine]} size={28} />
+          <ProviderTile slug={ENGINE_PRESET[engine] ?? engine} label={engineNameOf(engine)} size={28} />
           <span className="re-grp-copy">
             <span className="re-name">
-              {ENGINE_NAME[engine]}
+              {engineNameOf(engine)}
               <span className={`re-grp-chev${open ? ' open' : ''}`} aria-hidden="true">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
                   <path
@@ -583,9 +638,9 @@ function EngineRow({
         </button>
       ) : (
         <div className="re-id">
-          <ProviderTile slug={ENGINE_PRESET[engine] ?? engine} label={ENGINE_NAME[engine]} size={28} />
+          <ProviderTile slug={ENGINE_PRESET[engine] ?? engine} label={engineNameOf(engine)} size={28} />
           <div style={{ minWidth: 0 }}>
-            <div className="re-name">{ENGINE_NAME[engine]}</div>
+            <div className="re-name">{engineNameOf(engine)}</div>
             <div className="re-meta">{meta}</div>
           </div>
         </div>
@@ -599,19 +654,19 @@ function EngineRow({
           {envKey ? <div className="re-quota re-meta">env key · runs on your Gemini key</div> : <QuotaCell kind={kind} quota={quota} />}
         </>
       )}
-      {folded && (
-        <FoldedAccounts runner={runner} engine={engine} health={health} accounts={kept} next={next} usage={usage} now={now} />
+      {folded && loginEngine !== null && (
+        <FoldedAccounts runner={runner} engine={loginEngine} health={health} accounts={kept} next={next} usage={usage} now={now} />
       )}
       <div className="re-act">
-        {addsAccounts && (
+        {addAccountTo && (
           <Button
             size="small"
             className="re-action re-add-account"
             icon={<PlusOutlined aria-hidden />}
             disabled={offline}
             onClick={() => {
-              if (signIn === addAccountPanel(engine)) return onSignIn(null);
-              onSignIn(addAccountPanel(engine));
+              if (signIn === addAccountPanel(addAccountTo)) return onSignIn(null);
+              onSignIn(addAccountPanel(addAccountTo));
               // The account this adds lands as a row of the group: open it, so that row is there to see.
               onFold(true);
             }}
@@ -624,7 +679,9 @@ function EngineRow({
         {!grouped && (
           <RunnerAccountMenu
             offline={offline}
-            onSignIn={kind === 'in' && (engine !== 'antigravity' || (googleLogin === 'available' && !envKey)) ? () => onSignIn(signIn === engine ? null : engine) : undefined}
+            onSignIn={loginEngine !== null && kind === 'in' && (loginEngine !== 'antigravity' || (googleLogin === 'available' && !envKey))
+              ? () => onSignIn(signIn === engine ? null : engine)
+              : undefined}
             // A Gemini key is not an account of the machine's to pause: Default on it is no Google
             // sign-in at all.
             pause={single && ((kind === 'in' && !envKey) || accountIsPaused(single.pausedUntil, now)) ? {
@@ -647,10 +704,11 @@ function EngineRow({
       )}
       {!grouped && kind === 'out' && !loginHint && (
         <div className="re-dup">
-          <span>{signedOutNote(ENGINE_NAME[engine], true)}</span>
+          <span>{signedOutNote(engineNameOf(engine), true)}</span>
         </div>
       )}
       {loginHint && <div className="re-panel-hint re-login-note">{loginHint}</div>}
+      {openCodeHint && <div className="re-panel-hint re-login-note">{openCodeHint}</div>}
       {googleLogin === 'available' && signIn !== engine && <div className="re-login-note"><GoogleSignInTerms /></div>}
 
       {/* The relay panels. Each one is the row's own news, so it opens under the row it belongs
@@ -658,7 +716,7 @@ function EngineRow({
       {kind === 'installing' && (
         <div className="re-panel">
           <div className="re-panel-row">
-            Installing {ENGINE_NAME[engine]} on {runner.displayName || runner.name}…
+            Installing {engineNameOf(engine)} on {runner.displayName || runner.name}…
           </div>
           {runner.install?.command && <code className="re-cmd">{runner.install.command}</code>}
           <div className="re-panel-hint">
@@ -693,7 +751,7 @@ function EngineRow({
       {warn && (
         <div className="re-panel warn">
           <div className="re-panel-row">
-            {health?.update?.message || `Orbit hasn't managed to update ${ENGINE_NAME[engine]} here.`}
+            {health?.update?.message || `Orbit hasn't managed to update ${engineNameOf(engine)} here.`}
           </div>
           {/* Points at the machine rather than naming a shell command: that is where updating
               lives now, and telling someone to open a terminal for something the UI can do was
@@ -704,15 +762,15 @@ function EngineRow({
           </div>
         </div>
       )}
-      {signIn === engine && (!googleLogin || googleLogin === 'available') && (
+      {loginEngine !== null && signIn === engine && (!googleLogin || googleLogin === 'available') && (
         <div className="re-panel">
-          <RunnerSignIn runnerId={runner.id} engine={engine} />
+          <RunnerSignIn runnerId={runner.id} engine={loginEngine} />
         </div>
       )}
-      {addsAccounts && signIn === addAccountPanel(engine) && (
+      {addAccountTo && signIn === addAccountPanel(addAccountTo) && (
         <div className="re-panel">
           <AddEngineAccount
-            engine={engine}
+            engine={addAccountTo}
             runnerId={runner.id}
             accounts={health?.accounts ?? []}
             onClose={() => onSignIn(null)}
@@ -1137,9 +1195,10 @@ export function summaryOf(runner: Runner): string {
     return updating ? 'Updating…' : 'Installing…';
   }
   if (!runner.engines) return 'Engines not reported';
-  // Only the engines this card actually renders. A runner reports every CLI on the machine,
-  // OpenCode included, but a summary that counted those would put a problem on a folded card
-  // that unfolding never reveals — the row it refers to isn't on this page.
+  // Only the engines a sign-in can be counted for: this line says who is signed in, and how much
+  // of the machine's updating has stopped. A runner reports every CLI on the machine, OpenCode
+  // included, and OpenCode now has a row of its own below — but it has no sign-in to be in or out
+  // of, so it is in neither half of this line; its drift is the machine page's news.
   const engines = ENGINES.filter((engine) => engine !== 'antigravity' || runner.antigravity?.googleLogin === 'available');
   const shown = runner.engines.filter((e) => engines.includes(e.engine as LoginEngine));
   // An engine nothing has updated in a week is exactly the kind of quiet drift folding a card
@@ -1167,7 +1226,9 @@ function RunnerEngineCard({
   focusEngine?: InstallEngine | null;
   /** The groups of accounts the user opened, on every runner (accountsGroup). */
   openAccounts: string[];
-  onFoldAccounts: (engine: LoginEngine, open: boolean) => void;
+  /** The engine whose group folded — a RowEngine, since a row is one, and only an engine that
+   *  keeps accounts ever draws the toggle that calls this. */
+  onFoldAccounts: (engine: RowEngine, open: boolean) => void;
 }) {
   const [signIn, setSignIn] = useState<string | null>(null);
   const engines = runner.engines ?? null;
@@ -1179,9 +1240,11 @@ function RunnerEngineCard({
 
   return (
     <div className={`re-card re-runner-card${runner.online ? '' : ' offline'}${collapsed ? ' collapsed' : ''}`}>
-      <div className="re-head">
+      <div className="re-head" onClick={foldFromAnywhere(onToggle)}>
         {/* The toggle is its own button rather than the whole header: the header also holds a
-            link, and a link inside a button is neither valid nor operable by keyboard. */}
+            link, and a link inside a button is neither valid nor operable by keyboard. A press
+            anywhere else on the header — the summary, the space around it — is the toggle's
+            (foldFromAnywhere); the link stays its own. */}
         <button
           className="re-toggle"
           type="button"
@@ -1227,7 +1290,7 @@ function RunnerEngineCard({
         </Link>
       </div>
       {collapsed ? null : engines ? (
-        ENGINE_SLUGS.map((engine) => {
+        rowEnginesOf(engines).map((engine) => {
           const reported = engines.find((e) => e.engine === engine);
           const state = engine === 'antigravity' ? runner.antigravity : undefined;
           const health = state && state.installed != null
@@ -1236,10 +1299,13 @@ function RunnerEngineCard({
           const accounts = accountRowsOf(engine, health, runner.install);
           // Read across the whole group, since a repeat is a fact about two of its rows.
           const repeats = duplicateAccounts(accounts);
+          // The accounts under a row are an engine's own, and only an engine that keeps them has
+          // any. OpenCode keeps none — its row is the install, and nothing else follows it.
+          const accountEngine: AccountEngine | null = engineKeepsAccounts(engine) ? engine : null;
           // The same question the server asks when a session starts with no account picked.
           const next =
-            engineKeepsAccounts(engine) && accounts.length > 0
-              ? accountToStartOn(engine, accounts, withEnginePlanUsage(runner.planUsage, runner.engines), new Date())
+            accountEngine && accounts.length > 0
+              ? accountToStartOn(accountEngine, accounts, withEnginePlanUsage(runner.planUsage, runner.engines), new Date())
               : null;
           const open = openAccounts.includes(accountsGroup(runner.id, engine));
           return (
@@ -1256,11 +1322,11 @@ function RunnerEngineCard({
                 open={open}
                 onFold={(opened) => onFoldAccounts(engine, opened)}
               />
-              {open && accounts.map((account, index) => (
+              {accountEngine !== null && open && accounts.map((account, index) => (
                 <AccountRow
                   key={account.id}
                   runner={runner}
-                  engine={engine}
+                  engine={accountEngine}
                   account={account}
                   defaultName={accountNameOf(accounts.find((entry) => entry.id === 'default') ?? { id: 'default' })}
                   next={account.id === next}
@@ -1317,13 +1383,15 @@ export function RunnerEngines() {
     );
 
   // Where a "Not signed in" row in the new-session picker sends the user: this exact engine on
-  // this exact machine. Cards start folded, so the one row they came for is exactly what's
-  // hidden — arriving opens that card, and that engine's accounts in it, and the open sticks,
-  // because it is the same edit they'd have made by hand.
+  // this exact machine — the same link the machine's own page carries on every row it draws
+  // (engineSignInHref), so any engine a card can render is one a link can name. Cards start
+  // folded, so the one row they came for is exactly what's hidden — arriving opens that card,
+  // and that engine's accounts in it, and the open sticks, because it is the same edit they'd
+  // have made by hand.
   const [params] = useSearchParams();
   const focusRunner = routeId(params.get('runner'));
   const engineParam = params.get('engine');
-  const focusEngine: InstallEngine | null = engineParam === 'antigravity' ? 'antigravity' : ENGINES.find((e) => e === engineParam) ?? null;
+  const focusEngine: InstallEngine | null = ROW_ENGINES.find((e) => e === engineParam) ?? null;
   useEffect(() => {
     if (!focusRunner) return;
     setExpanded((prev) => (prev.includes(focusRunner) ? prev : write([...prev, focusRunner])));

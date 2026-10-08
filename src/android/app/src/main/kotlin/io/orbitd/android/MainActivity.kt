@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import io.orbitd.android.auth.AuthScreen
 import io.orbitd.android.auth.AuthViewModel
+import io.orbitd.android.auth.loginBackground
 import io.orbitd.android.auth.openInSignInBrowser
 import io.orbitd.android.core.BuildIdentity
 import io.orbitd.android.core.auth.AuthState
@@ -74,6 +75,8 @@ class MainActivity : ComponentActivity() {
         }
     }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); acceptIntent(intent) }
+    // After onNewIntent: back from the browser with Google's answer, or without one (A03c).
+    override fun onResume() { super.onResume(); auth.onResumed() }
     private fun acceptIntent(intent: Intent) {
         // `orbit://auth/google`, from GoogleSignInRedirectActivity; any other address is not Google's answer.
         intent.data?.let { auth.handleGoogleCallback(it.toString()) }
@@ -86,6 +89,7 @@ class MainActivity : ComponentActivity() {
 private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pair<Long, String>?, continueWithGoogle: (String) -> Unit) {
     val authState by auth.state.collectAsState()
     val authMessage by auth.message.collectAsState()
+    val googleBusy by auth.googleBusy.collectAsState()
     val signedIn = authState as? AuthState.SignedIn
     val accountKey = signedIn?.handle?.account?.let { "${it.server}|${it.userId}" }
     val saver = remember { Saver<OrbitNavigation, String>(save = { Wire.json.encodeToString(it) }, restore = { Wire.json.decodeFromString<OrbitNavigation>(it) }) }
@@ -115,13 +119,11 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
     }
     if (signedIn == null) {
         Scaffold { padding ->
-            Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
-                if (showBuild) BuildInformation { showBuild = false } else Column(
-                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineLarge)
-                    AuthScreen(authState, authMessage, auth::login, auth::logout, auth::signInMethods, continueWithGoogle)
-                    Button(onClick = { showBuild = true }) { Text(stringResource(R.string.build_information)) }
-                }
+            val backdrop = if (showBuild) Modifier else Modifier.loginBackground(MaterialTheme.colorScheme.primary)
+            Box(Modifier.fillMaxSize().then(backdrop).padding(padding).consumeWindowInsets(padding).imePadding()) {
+                if (showBuild) BuildInformation { showBuild = false }
+                else AuthScreen(authState, authMessage, googleBusy, auth::login, auth::logout, auth::signInMethods, auth::rememberedEmail,
+                    continueWithGoogle) { showBuild = true }
             }
         }
         return

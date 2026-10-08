@@ -21,6 +21,18 @@ data class Transcript(
     val maxSeq: Long get() = maxOf(resumeSeq, events.lastOrNull()?.seq ?: 0)
     val oldestSeq: Long? get() = events.firstOrNull()?.seq
 
+    /** The engine's guess at the next message (docs/prompt-suggestions-design.md §3.4), while it is
+     * still the newest of user / turn_end / prompt_suggestion. It always arrives after its own turn's
+     * turn_end, so a later turn_end is a newer turn ending and a later user event is a message from
+     * any device. Never drawn as a row: the composer offers it. */
+    val promptSuggestion: String? get() {
+        for (event in events.asReversed()) when (event.type) {
+            "prompt_suggestion" -> return event.fields.text("text")?.trim()?.takeIf { it.isNotEmpty() }
+            "user", "turn_end" -> return null
+        }
+        return null
+    }
+
     /** The server sends the whole current prefix again on each connect. Never persist animation
      * or append that prefix to a draft from a spent connection. */
     fun withoutLive() = copy(textDrafts = emptyMap(), thinkingDrafts = emptyMap(),

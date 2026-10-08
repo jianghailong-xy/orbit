@@ -1,6 +1,6 @@
-import type { IntegrationJobState, TaskIntegrationView } from '@orbit/shared';
+import { INTEGRATION_CLAIM_STALE_MS, type IntegrationJobState, type TaskIntegrationView } from '@orbit/shared';
 import { formatSpan } from '../lib/watches';
-import { JOB_PHASES } from './ProjectPanoramaHeader';
+import { JOB_PHASES, LANDING_NO_REPORT_YET, landingNoReportFor } from './ProjectPanoramaHeader';
 
 /**
  * A task's newest LAND_TASK, as the server's read model describes it
@@ -92,16 +92,30 @@ function Instant({ value }: { value: string | null }) {
 export function LandTaskStatus({
   integration,
   taskStatus,
+  now = Date.now(),
 }: {
   integration: TaskIntegrationView;
   /** The task's own status, printed apart from the landing; omitted where the row already says it. */
   taskStatus?: string;
+  /** Passed in so a test reads a fixed clock; the hosts give it now. Only the "no report" age uses
+   *  it — every other fact here is an instant the server sent. */
+  now?: number;
 }) {
   const badge = landingBadge(integration);
   if (!badge) return null;
   const job = integration.landTask ?? null;
   const step = job?.phase && (job.state === 'RUNNING' || STOPPED.has(job.state)) ? JOB_PHASES[job.phase] : null;
   const receipt = integration.state === 'ON_INTEGRATION_LINE' || integration.state === 'ON_UPSTREAM';
+  // A claimed job whose runner has gone quiet: no report at all, or none since the claim lease the
+  // server itself uses. Said apart from the state and from `blockingReason`, because a silent
+  // runner is neither a stop nor a timeout — the job's own verdict is the only thing that ever
+  // says "timed out", and it arrives as `blockingReason.summary` below.
+  const heartbeat = job?.heartbeatAt ? Date.parse(job.heartbeatAt) : Number.NaN;
+  const reported = Number.isFinite(heartbeat);
+  const silent = job?.state === 'RUNNING' && (!reported || now - heartbeat > INTEGRATION_CLAIM_STALE_MS);
+  const noReport = !silent ? null
+    : reported ? landingNoReportFor(Math.max(0, Math.floor((now - heartbeat) / 60_000)))
+      : LANDING_NO_REPORT_YET;
   return (
     <div className="land-task-status" data-land-task-state={job?.state ?? integration.state}>
       <div className="land-task-status-head">
@@ -109,6 +123,7 @@ export function LandTaskStatus({
         <span className={`tdp-badge tone-${badge.tone}`}>{badge.label}</span>
         {job ? <span className="land-task-generation">generation {job.generation}</span> : null}
         {step ? <span className="land-task-step">{job!.state === 'RUNNING' ? step : `stopped while ${step}`}</span> : null}
+        {noReport ? <span className="land-task-no-report" data-no-report="true">{noReport}</span> : null}
       </div>
       {job?.blockingReason ? (
         <div className="land-task-reason" data-blocking-reason={job.blockingReason.code}>

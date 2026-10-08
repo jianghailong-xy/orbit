@@ -53,12 +53,17 @@ public struct TranscriptState: Equatable, Sendable, Codable {
     /// tool_use id — live from `task_progress`, and the last word from the `background_task` that
     /// ends it.
     public var taskProgress: [String: TaskProgress] = [:]
+    /// The engine's guess at the person's next message (`prompt_suggestion`), while nothing newer has
+    /// been said: a later `user` (from any device) or `turn_end` (a newer turn ending, one the engine
+    /// started itself included) clears it. The composer decides whether to offer it
+    /// (`ComposerLogic.offeredPromptSuggestion`).
+    public var promptSuggestion: String?
     public init() {}
 
     // Tolerant decode so snapshots written before `queued` (or the history-window cursor) existed
     // still rehydrate (the keys just default) instead of discarding the whole cached session; the
     // other fields keep their prior strictness. `encode(to:)` stays synthesized from these keys.
-    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, status, maxSeq, oldestSeq, hasMoreOlder, contextTokens, contextWindow, subagentItems, taskProgress }
+    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, status, maxSeq, oldestSeq, hasMoreOlder, contextTokens, contextWindow, subagentItems, taskProgress, promptSuggestion }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         items = try c.decode([TranscriptItem].self, forKey: .items)
@@ -73,6 +78,7 @@ public struct TranscriptState: Equatable, Sendable, Codable {
         contextWindow = (try? c.decodeIfPresent(Int.self, forKey: .contextWindow)) ?? nil
         subagentItems = (try? c.decodeIfPresent([String: [TranscriptItem]].self, forKey: .subagentItems)) ?? [:]
         taskProgress = (try? c.decodeIfPresent([String: TaskProgress].self, forKey: .taskProgress)) ?? [:]
+        promptSuggestion = (try? c.decodeIfPresent(String.self, forKey: .promptSuggestion)) ?? nil
     }
 }
 
@@ -256,8 +262,11 @@ public struct TranscriptReducer: Sendable, Codable {
         case .toolUse:        openTool(ev)
         case .toolOutput:     applyToolOutput(ev)
         case .toolResult:     closeTool(ev)
-        case .turnEnd:        endTurn(ev)
-        case .user:           appendUser(ev)
+        // A suggestion arrives after its own turn's turn_end, so a later turn_end or user event is
+        // something newer than what it guessed at.
+        case .turnEnd:        state.promptSuggestion = nil; endTurn(ev)
+        case .user:           state.promptSuggestion = nil; appendUser(ev)
+        case .promptSuggestion: state.promptSuggestion = nonEmpty(str(ev, "text")?.trimmingCharacters(in: .whitespacesAndNewlines))
         case .userDelivery:   applyUserDelivery(ev)
         case .interrupt:      appendInterrupt(seq: ev.seq, dropsQueue: Self.dropsQueue(ev))
         case .error:          appendError(ev)

@@ -39,6 +39,18 @@ internal class MemoryInstances : InstanceStore {
     override suspend fun load() = value
     override suspend fun save(server: String) { value = server }
 }
+internal class MemoryEmails : EmailStore {
+    val values = mutableMapOf<String, String>()
+    var fail = false
+    override suspend fun load(server: String): String? {
+        if (fail) throw SecureStorageException()
+        return values[server]
+    }
+    override suspend fun save(server: String, email: String) {
+        if (fail) throw SecureStorageException()
+        values[server] = email
+    }
+}
 internal class MemoryData : SessionDataStore {
     val values = mutableMapOf<Triple<AccountKey, DataKind, String>, ByteArray>()
     override suspend fun read(account: AccountKey, kind: DataKind, key: String) = values[Triple(account, kind, key)]
@@ -50,12 +62,13 @@ internal class Harness(scope: TestScope) {
     val credentials = MemoryCredentials()
     val instances = MemoryInstances()
     val data = MemoryData()
+    val emails = MemoryEmails()
     val requests = mutableListOf<HttpRequest>()
     var handler: suspend (HttpRequest) -> ApiResponse = { ok() }
     val client = AuthSession(HttpTransport {
         requests += it
         if (it.api.path == listOf("auth", "logout")) ok() else handler(it)
-    }, credentials, instances, data, "test", dispatcher = StandardTestDispatcher(scope.testScheduler))
+    }, credentials, instances, data, "test", dispatcher = StandardTestDispatcher(scope.testScheduler), emails = emails)
 
     suspend fun seed(): SessionHandle {
         instances.value = serverA.value

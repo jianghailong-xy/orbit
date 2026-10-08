@@ -183,7 +183,9 @@ struct ComposerView: View {
     }
 
     private var placeholder: String {
-        console.replyContext?.placeholder ?? "Message…"
+        // An offered suggestion takes the placeholder's line (`PromptSuggestionLine`).
+        if offeredSuggestion != nil { return "" }
+        return console.replyContext?.placeholder ?? "Message…"
     }
 
     private var showsCompletedResumeNotice: Bool {
@@ -192,6 +194,36 @@ struct ComposerView: View {
             lifecycleState: session.effectiveLifecycleState,
             capabilities: session.capabilities
         )
+    }
+
+    /// The engine's guess at the next message, when the empty box offers it (`ComposerLogic`,
+    /// docs/prompt-suggestions-design.md §4): the transcript's own `promptSuggestion`, held to the
+    /// same authoritative record the Stop morph reads.
+    private var offeredSuggestion: String? {
+        guard !console.isDraft else { return nil }
+        let session = app.session(id: console.sessionID)
+        return ComposerLogic.offeredPromptSuggestion(
+            console.state.promptSuggestion,
+            session: session?.effectiveRunState,
+            // A message on its way is a turn in flight before the record or the stream says so: the
+            // suggestion it answered must not come back into the box it just left.
+            generating: (session?.isGenerating ?? false) || console.sending || console.awaitingReply,
+            stream: console.state.status,
+            hasText: !console.composerText.isEmpty,
+            hasAttachments: !console.pendingAttachments.isEmpty,
+            replying: console.replyContext != nil,
+            waitingOnReader: !console.state.pendingApprovals.isEmpty
+                || (session?.pendingApprovals ?? 0) > 0 || session?.waitingKind != nil,
+            sendable: console.sendBlockedMessage == nil && console.runnerOnline != false
+                && session?.effectiveLifecycleState == .open)
+    }
+
+    /// Into the box, and the box focused: a guess is where the message starts, not a message sent.
+    /// The person reads it, edits it if they like, and sends it themselves.
+    private func acceptSuggestion() {
+        guard let suggestion = offeredSuggestion else { return }
+        console.composerText = suggestion
+        requestFocus()
     }
 
     // Whether the composer box should draw its focused ring/shadow. macOS keys off the field's
@@ -263,6 +295,12 @@ struct ComposerView: View {
                 ComposerAttachmentsView(console: console)
 
                 inputField
+                    // The guess sits on the empty field's first line, where the placeholder would.
+                    .overlay(alignment: .topLeading) {
+                        if let suggestion = offeredSuggestion {
+                            PromptSuggestionLine(text: suggestion, accept: acceptSuggestion)
+                        }
+                    }
                     .onChange(of: console.slashToken) { _, new in
                         slashIndex = 0
                         if new == nil { console.slashScope = nil }
@@ -385,6 +423,13 @@ struct ComposerView: View {
             .onSubmit { onReturn() }
             .onKeyPress(.upArrow) { moveSlash(-1) }
             .onKeyPress(.downArrow) { moveSlash(1) }
+            // Tab takes the offered suggestion, as on the web; with none on offer it moves focus as
+            // it always has. The box is empty whenever one is offered, so no `/` menu is open.
+            .onKeyPress(keys: [.tab]) { press in
+                guard press.modifiers.isEmpty, offeredSuggestion != nil else { return .ignored }
+                acceptSuggestion()
+                return .handled
+            }
             .onKeyPress(.escape) {
                 if showSlash {
                     slashDismissed = console.slashToken
@@ -644,7 +689,7 @@ struct ComposerView: View {
                         // that, so it is greyed out with its reason instead.
                         let fixable = blocked && choice.fixEngine != nil
                         let reason = choice.unavailable ?? ""
-                        let fix = fixable ? (["antigravity", "dsh", DshRuntime.connectFix].contains(choice.fixEngine ?? "") ? " →" : ", sign in →") : ""
+                        let fix = fixable ? SessionProviderChoices.fixSuffix(choice.fixEngine) : ""
                         // On iOS the engine names a section of its accounts instead of a row above
                         // them (`accountsUnderHeader`).
                         let headsSection = Self.accountsUnderHeader && listsAccounts
@@ -1267,6 +1312,55 @@ struct ComposerView: View {
         console.attach(filename: "pasted.png", mimeType: "image/png", data: png)
     }
     #endif
+}
+
+/// The engine's guess at the next message, drawn on the empty field's first line where the
+/// placeholder would be, with Use at its end (docs/prompt-suggestions-design.md §4.1). Only Use takes
+/// the touch: a tap anywhere else on the line still lands in the field, to type something else.
+private struct PromptSuggestionLine: View {
+    let text: String
+    let accept: () -> Void
+
+    var body: some View {
+        Text(text)
+            .font(.orbitControl)
+            .foregroundStyle(Self.placeholderColor)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // Room for Use, which hangs over the line's end instead of setting its height: the line
+            // keeps the field's own line height, so the words sit exactly where typed ones would.
+            .padding(.trailing, 64)
+            .allowsHitTesting(false)
+            .overlay(alignment: .trailing) {
+                Button(action: accept) {
+                    HStack(spacing: 5) {
+                        Text("Use")
+                        #if os(macOS)
+                        Text("⇥").foregroundStyle(.secondary)
+                        #endif
+                    }
+                    .font(.orbitLabel.weight(.semibold))
+                    .padding(.horizontal, 11)
+                    .frame(height: 26)
+                    .background(Color.accentColor.opacity(0.12), in: Capsule())
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+                .accessibilityLabel("Use suggestion: \(text)")
+                .help("Use this suggestion")
+            }
+    }
+
+    /// The field's own placeholder colour, so the guess reads as the box's grey line and not as text.
+    private static var placeholderColor: Color {
+        #if os(iOS)
+        Color(uiColor: .placeholderText)
+        #else
+        Color(nsColor: .placeholderTextColor)
+        #endif
+    }
 }
 
 /// The staged attachments a message is about to carry: 48² thumbnails for images, name + size
