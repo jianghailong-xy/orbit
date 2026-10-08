@@ -7,8 +7,8 @@ import org.junit.Test
 import java.time.Instant
 import java.time.ZoneOffset
 
-/** OrbitKit's project page cases (ProjectPageTests, ProjectPageSectionsTests, StartProjectTests,
- * ProjectRunSettingsTests), held over the same server JSON the Android page reads. */
+/** OrbitKit's project page cases (ProjectPageTests, ProjectPageSectionsTests, ProjectRunSettingsTests), held over the same
+ * server JSON the Android page reads; the start card's own cases are StartProjectTest's. */
 class ProjectPageTest {
     private val now = Instant.parse("2026-09-24T12:00:00Z")
     private fun iso(secondsBeforeNow: Long) = now.minusSeconds(secondsBeforeNow).toString()
@@ -308,51 +308,17 @@ class ProjectPageTest {
         assertEquals("Waiting for runner", ProjectPage.queueRowState(j("""{"taskId":"t","title":"T","runState":"QUEUED"}""")))
     }
 
-    // MARK: the start
+    // MARK: the start (the card's own derivations are StartProjectTest's)
 
     private val project = "34WvwUS8YMXfOfWbMqVuu"
     private fun mark(id: String, title: String, status: String = "OPEN") = GraphMark(MarkKind.TASK, id, title, status = status)
-    private fun graph(folded: Boolean = false): DependencyGraph {
-        val marks = listOf("task-a" to "A · 提醒规则做成两端共用的真源", "task-b" to "B · OrbitKit：提醒规则、文案、DTO 与接口", "task-c" to "C · web：Runners 列表与 runner 详情页",
-            "task-d" to "D · iOS/macOS：Runners 列表、Add Runner、Edit", "task-e" to "E · 上线").map { mark(it.first, it.second) } +
-            if (folded) listOf(GraphMark(MarkKind.MOTIF, "motif-1", "12 more", taskCount = 12)) else emptyList()
-        val edges = listOf("task-a" to "task-b", "task-a" to "task-c", "task-b" to "task-d", "task-c" to "task-e", "task-d" to "task-e").map { GraphEdge(it.first, it.second) }
-        return DependencyGraph(marks, edges, if (folded) 900 else 5, false, null)
-    }
-
-    @Test fun aTaskIsNamedByItsMarkerAndThePlanIsSaidInOneLine() {
-        assertEquals("A", StartProjectCopy.planTaskLabel("A · 提醒规则做成两端共用的真源"))
-        assertEquals("①", StartProjectCopy.planTaskLabel("① 服务端 · 开工门"))
-        assertEquals("B", StartProjectCopy.planTaskLabel("B：OrbitKit 接口"))
-        assertEquals("12", StartProjectCopy.planTaskLabel("12) wire the card"))
-        assertEquals("Fix login redirect", StartProjectCopy.planTaskLabel("Fix login redirect"))
-        assertEquals("A new card for the start", StartProjectCopy.planTaskLabel("A new card for the start"))
-        assertEquals("x".repeat(23) + "…", StartProjectCopy.planTaskLabel("x".repeat(40)))
-        assertEquals("123) three", StartProjectCopy.planTaskLabel("123) three"))
-        assertEquals("E -mail", StartProjectCopy.planTaskLabel("E -mail"))
-        assertEquals("E", StartProjectCopy.planTaskLabel("E - mail"))
-        val g = graph()
-        assertEquals("A starts now · B, C after A · D after B · E after C and D",
-            StartProjectCopy.planOrderLine(g.marks.map { m -> StartProjectCopy.PlanTask(m.id, m.title, g.edges.filter { it.target == m.id }.map { it.source }) }))
-        assertEquals("X, Y start now · Z after X and Y", StartProjectCopy.planOrderLine(listOf(StartProjectCopy.PlanTask("x", "X · one", emptyList()),
-            StartProjectCopy.PlanTask("y", "Y · two", emptyList()), StartProjectCopy.PlanTask("z", "Z · three", listOf("y", "x")))))
-        assertEquals("X starts now", StartProjectCopy.planOrderLine(listOf(StartProjectCopy.PlanTask("x", "X · one", listOf("elsewhere")))))
-        assertTrue(StartProjectCopy.planOrderLine(listOf(StartProjectCopy.PlanTask("x", "X · one", listOf("y")), StartProjectCopy.PlanTask("y", "Y · two", listOf("x")))).isNotEmpty())
-        assertEquals(StartProjectCopy.PlanView(5, "A starts now · B, C after A · D after B · E after C and D"), StartProjectCopy.planView(g, 0))
-        assertEquals(StartProjectCopy.PlanView(900, null), StartProjectCopy.planView(graph(folded = true), 0))
-        assertEquals(StartProjectCopy.PlanView(5, null), StartProjectCopy.planView(null, 5))
-        val settled = DependencyGraph(listOf(mark("a", "A · one", "DONE"), mark("b", "B · two"), mark("c", "C · three", "CANCELLED")), listOf(GraphEdge("a", "b")), 3, false, null)
-        assertEquals(StartProjectCopy.PlanView(2, "B starts now"), StartProjectCopy.planView(settled, 0))
-    }
 
     @Test fun theStartsWordsAreTheCardsOwn() {
-        val title = "Runner 页整页改版（iOS/macOS + web）"
-        assertEquals("$title · asked by the coordinator · just now · seal c2b4e16c4b59", StartProjectCopy.meta(title, "just now", "c2b4e16c4b59"))
-        assertEquals("$title · seal c2b4e16c4b59", StartProjectCopy.meta(title, null, "c2b4e16c4b59"))
         assertEquals("c2b4e16c4b59", StartProjectCopy.shortSeal("c2b4e16c4b59" + "0".repeat(52)))
         assertEquals("(unreadable)", StartProjectCopy.shortSeal(""))
-        assertEquals(listOf("Done when · 4 criteria", "Done when · 1 criterion", "Plan · 5 tasks", "Plan · 1 task"),
-            listOf(StartProjectCopy.doneWhenHead(4), StartProjectCopy.doneWhenHead(1), StartProjectCopy.planHead(5), StartProjectCopy.planHead(1)))
+        assertEquals(listOf("Done when · 4 criteria", "Done when · 1 criterion", "Plan · 5 tasks", "Plan · 1 task", "Plan · 5 tasks in 4 levels"),
+            listOf(StartProjectCopy.doneWhenHead(4), StartProjectCopy.doneWhenHead(1), StartProjectCopy.planHead(5), StartProjectCopy.planHead(1),
+                StartProjectCopy.planHead(5, levels = 4)))
         assertEquals("project/34Wvw…", RunSettings.shortBranch("refs/heads/project/$project"))
         assertEquals("release/next", RunSettings.shortBranch("refs/heads/release/next"))
         assertEquals("project/short", RunSettings.shortBranch("project/short"))
@@ -383,11 +349,13 @@ class ProjectPageTest {
         val decided = j("""{"line":"PROJECT_BRANCH","ref":"project/34Wzv"}""")
         assertEquals(StartProjectCopy.Settings("PROJECT_BRANCH", "refs/heads/project/34Wzv", true, 3, null), StartProjectCopy.defaultSettings(decided, 3, loose))
         assertEquals(StartProjectCopy.Settings("MAIN", null, true, 3, null), StartProjectCopy.defaultSettings(j("""{"line":"MAIN","ref":"main"}"""), 3, chain))
-        val settings = StartProjectCopy.defaultSettings(decided, 3, loose)
-        val branch = StartProjectCopy.body("seal", settings, "PROJECT_BRANCH", false, 5, "  npm test  ")
+        // Nobody asked: no reason, and no request for the press to answer.
+        val request = StartProjectCopy.ownerRequest(StartProjectCopy.defaultSettings(decided, 3, loose), "seal")
+        assertEquals("", request.why)
+        val branch = StartProjectCopy.body(request, StartProjectCopy.Draft("PROJECT_BRANCH", false, 5, "  npm test  "), requestId = null)
         assertEquals(j("""{"criteriaDigest":"seal","line":"PROJECT_BRANCH","projectBranchName":"refs/heads/project/34Wzv","automatic":false,"maxConcurrentTasks":5,
             "mergeCheckCommand":"npm test","requestId":null}"""), branch)
-        val main = StartProjectCopy.body("seal", settings, "MAIN", true, 3, "   ")
+        val main = StartProjectCopy.body(request, StartProjectCopy.Draft("MAIN", true, 3, "   "), requestId = null)
         assertFalse("directly into main names no branch", main.containsKey("projectBranchName"))
         assertEquals(JsonNull, main["mergeCheckCommand"]); assertEquals(JsonNull, main["requestId"])
     }

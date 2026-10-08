@@ -124,27 +124,20 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit) {
             }
             row.obj("decidability")?.takeIf { !it.flag("decidable") }?.let { CardFields(it, listOf("refusal", "requiredAction"), open) }
         }
-        CardFamily.ACCEPTANCE, CardFamily.START -> {
+        CardFamily.ACCEPTANCE -> {
             Text(card.context.text("title") ?: "", style = MaterialTheme.typography.titleSmall)
             card.context.objects("acceptanceCriteriaItems").forEach { criterion ->
                 Text("${criterion.number("ordinal") ?: ""}. ${criterion.text("text") ?: ""}")
                 Field("Verification", criterion["verificationMethod"], open)
             }
-            if (card.family == CardFamily.ACCEPTANCE) {
-                row.obj("currentVersion")?.text("digest")?.let { Text("Seal ${it.take(8)}", style = MaterialTheme.typography.labelMedium) }
-                CardFields(row, listOf("changesSinceConfirmed"), open)
-                row.obj("confirmation")?.let { recorded ->
-                    Field("Confirmed at", recorded["confirmedAt"], open)
-                    DetailFold("confirmed criteria") { CardFields(recorded, listOf("criteriaMaterial", "startedWith"), open) }
-                }
-            }
-            else row.obj("startRequest")?.let {
-                CardFields(it, listOf("why", "repository", "warnings"), open)
-                if (card.context.obj("plan") != null) Field("Task plan and dependencies", card.context["plan"], open)
-                else Text("The task plan could not be read. Check status before starting.")
-                Text("Starting confirms the criteria shown above and uses the settings below.", style = MaterialTheme.typography.bodySmall)
+            row.obj("currentVersion")?.text("digest")?.let { Text("Seal ${it.take(8)}", style = MaterialTheme.typography.labelMedium) }
+            CardFields(row, listOf("changesSinceConfirmed"), open)
+            row.obj("confirmation")?.let { recorded ->
+                Field("Confirmed at", recorded["confirmedAt"], open)
+                DetailFold("confirmed criteria") { CardFields(recorded, listOf("criteriaMaterial", "startedWith"), open) }
             }
         }
+        CardFamily.START -> Unit // Drawn whole by the start card (projects/StartProjectCard.kt `CoordinatorStartCard`).
         CardFamily.OWNER_QUESTION -> {
             Field("Question", row.obj("question")?.get("question"), open)
             CardFields(row, listOf("detailLine", "waitingSince"), open)

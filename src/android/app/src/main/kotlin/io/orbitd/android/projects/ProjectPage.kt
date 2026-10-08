@@ -527,42 +527,123 @@ object ProjectPage {
     const val searchProjects = "Search projects"
 }
 
-/** The start, as the project page and its sheet say it (`StartProject`, `RunSettings`). */
+/** "Start this project?" as the project page, the owner's sheet and the coordinator's card say it — OrbitKit's
+ * `StartProject` (StartProject.swift, ProjectRunSettings.swift) with `CriteriaDecision.swift`'s seal words. */
 object StartProjectCopy {
     const val title = "Start this project?"
     const val readyToStart = "Ready to start"
+    const val doneWhen = "Done when"
+    const val plan = "Plan"
     const val howItRuns = "How it runs"
+    const val viewTasks = "View tasks ›"
+    const val action = "Start the project"
+    const val nobodyAsked = "Nobody asked yet"
+    const val noCoordinatorYet = "no coordinator yet"
+    const val coordinator = "Coordinator"
+    const val more = "More"
+    const val less = "Less"
+    const val notRecorded = "That start was not recorded"
+    const val requestGone = "The plan changed after the coordinator asked, so this request no longer stands. Orbit " +
+        "shows the card again when the coordinator asks to start the new plan."
+    const val opensCoordinator = "This project has no coordinator yet. Orbit opens one where its tasks run when it starts."
+    const val now = "Now"
+    const val you = "You"
     const val notStarted = "Not started"
     const val rowAsked = "The coordinator asked"
     const val rowOwn = "Start…"
     const val rowNotAsked = "not asked yet"
-    const val notRecorded = "That start was not recorded"
-    const val action = "Start the project"
-    const val viewTasks = "View tasks ›"
-    const val askedByCoordinator = "asked by the coordinator"
+    const val coordinatorAsked = "The coordinator asked"
     const val showLess = "Show less"
     fun readAll(count: Int) = "Read all $count in full"
     /** `AcceptanceConfirmations.staleExplanation(nil)`: the seal could not be read, so no press is offered. */
     const val unreadSeal = "This card could not be re-read just now, so the version it would confirm cannot be named — and a confirmation " +
         "that names no version is not one. The criteria themselves are untouched by this."
     const val maxConcurrentTasks = 100
+    /** The escalation window a project has when the read does not say. */
+    const val defaultEscalationSeconds = 7_200
     /** `CriteriaDecisions.shortSeal`: enough to tell two seals apart. */
     fun shortSeal(seal: String) = if (seal.isEmpty()) "(unreadable)" else seal.take(12)
-    fun meta(projectTitle: String, askedAgo: String?, seal: String) = "$projectTitle${askedAgo?.let { " · $askedByCoordinator · $it" }.orEmpty()} · seal $seal"
     /** The project branch as the first option names it, without `refs/heads/`. */
     fun branch(projectBranchName: String?, projectId: String) = (projectBranchName ?: "refs/heads/project/$projectId").removePrefix("refs/heads/")
-    /** What the order line calls a task: the marker its title opens with, else the title, cut short. */
+
+    fun doneWhenHead(count: Int) = "$doneWhen · $count ${if (count == 1) "criterion" else "criteria"}"
+    /** "Plan · 12 tasks in 7 levels": the levels only when there are more than one. */
+    fun planHead(count: Int, levels: Int = 1): String {
+        val head = "$plan · $count ${if (count == 1) "task" else "tasks"}"
+        return if (levels > 1) "$head in $levels levels" else head
+    }
+    /** "The coordinator asked 56m ago"; a time the clock cannot say is the words alone. */
+    fun askedLine(ago: String?) = ago?.let { "$coordinatorAsked $it" } ?: coordinatorAsked
+    fun nobodyAskedLine(hasCoordinator: Boolean) = if (hasCoordinator) nobodyAsked else "$nobodyAsked · $noCoordinatorYet"
+    fun explanation(count: Int) = "Orbit derives done from these $count criteria and nothing else. If they change later, it " +
+        "asks you to confirm the new version — the project keeps running."
+    /** What pressing Start does: who it opens, what starts at once, what it confirms — the seal left out when it opens a coordinator. */
+    fun barCaption(opensCoordinator: Boolean, startsNow: List<String>, criteria: Int, seal: String): String {
+        val parts = buildList {
+            if (opensCoordinator) add("opens a coordinator")
+            if (startsNow.isNotEmpty()) add("starts ${joinAnd(startsNow)} now")
+            add(if (criteria == 1) "confirms this criterion" else "confirms these $criteria criteria")
+            if (!opensCoordinator) add("seal $seal")
+        }
+        val line = parts.joinToString(" · ")
+        return line.take(1).uppercase() + line.drop(1)
+    }
+
+    // The footnote under How it runs.
+    const val automaticByDefault = "Automatic is on by default"
+    const val coordinatorSuggestedOff = "the coordinator suggested off"
+    const val restSuggested = "The rest is the coordinator’s suggestion."
+    const val changeLater = "You can change any of these later on the project page."
+    fun howItRunsNote(asked: Boolean, suggestedOff: Boolean): String {
+        val automatic = if (suggestedOff) "$automaticByDefault ($coordinatorSuggestedOff)." else "$automaticByDefault."
+        return (listOf(automatic) + (if (asked) listOf(restSuggested) else emptyList()) + changeLater).joinToString(" ")
+    }
+
+    // What still comes to the owner under the Automatic switch.
+    const val comesToYou = "Comes to you"
+    const val decideDone = "Whether each task is done"
+    const val youConfirm = "you confirm it"
+    const val problems = "Problems along the way"
+    const val problemsDetail = "conflicts, failed checks"
+    const val mergingIntoMain = "Merging the branch into main"
+    const val eachMergeIntoMain = "Each merge into main"
+    const val criteriaChanges = "Any change to the criteria"
+    fun reviews(count: Int) = "$count ${if (count == 1) "review" else "reviews"}"
+    fun tasksYouConfirm(count: Int) = "$count tasks you confirm"
+    fun problemsUnresolved(within: String) = "Problems it can’t resolve within $within"
+    /** An escalation window as the list says it: "30 min", "2 h". */
+    fun within(seconds: Int) = if (seconds < 3600) "${max(1, (seconds / 60.0).roundToInt())} min" else "${(seconds / 3600.0).roundToInt()} h"
+    data class ComesToYouItem(val text: String, val detail: String? = null)
+    /** The Automatic switch's consequence, listed (`StartProject.comesToYou`). */
+    fun comesToYou(automatic: Boolean, line: String, ownerConfirmed: List<NamedTask>, evidenceJudged: Int, escalationSeconds: Int): List<ComesToYouItem> {
+        val confirms = if (ownerConfirmed.size > 3) listOf(ComesToYouItem(tasksYouConfirm(ownerConfirmed.size)))
+            else ownerConfirmed.map { ComesToYouItem("${it.label} · ${it.title}", youConfirm) }
+        val merges = if (line == "MAIN") listOf(ComesToYouItem(eachMergeIntoMain)) else if (automatic) emptyList() else listOf(ComesToYouItem(mergingIntoMain))
+        val criteria = ComesToYouItem(criteriaChanges)
+        if (automatic) return confirms + merges + criteria + ComesToYouItem(problemsUnresolved(within(escalationSeconds)))
+        return listOf(ComesToYouItem(decideDone, if (evidenceJudged > 0) reviews(evidenceJudged) else null)) + confirms +
+            ComesToYouItem(problems, problemsDetail) + merges + criteria
+    }
+
+    // The plan, by level.
+    /** What the plan calls a task: the marker or code its title opens with, else the title, cut short. */
     fun planTaskLabel(title: String): String {
         val text = title.trim()
         val points = text.codePoints().toArray()
         points.firstOrNull()?.let { first -> if (first in 0x2460..0x2473 || first in 0x2776..0x277F) return String(Character.toChars(first)) }
         leadingMarker(points)?.let { return it }
+        leadingCode(points)?.let { return it }
         if (points.size <= 24) return text
         return String(points, 0, 23) + "…"
     }
+    /** Swift's `Unicode.Scalar.Properties.isWhitespace`: the White_Space property. */
+    private fun white(c: Int) = c in 0x09..0x0D || c == 0x20 || c == 0x85 || c == 0xA0 || c == 0x1680 || c in 0x2000..0x200A ||
+        c == 0x2028 || c == 0x2029 || c == 0x202F || c == 0x205F || c == 0x3000
+    private fun digit(c: Int) = c in '0'.code..'9'.code
+    private fun among(c: Int, set: String) = set.codePoints().anyMatch { it == c }
+    /** One ASCII letter or one or two digits, then `.`, `)`, `:` or `：`, or spaces and a lone `· - – — : ： |`. */
     private fun leadingMarker(s: IntArray): String? {
         val first = s.firstOrNull() ?: return null
-        val digit = { c: Int -> c in '0'.code..'9'.code }
         val lengths = when {
             first < 128 && Character.isLetter(first) -> listOf(1)
             digit(first) -> if (s.size > 1 && digit(s[1])) listOf(2, 1) else listOf(1)
@@ -570,21 +651,43 @@ object StartProjectCopy {
         }
         fun separatorFollows(p: Int): Boolean {
             if (p >= s.size) return false
-            if (s[p] in ".):：".codePoints().toArray()) return true
+            if (among(s[p], ".):：")) return true
             var q = p
-            while (q < s.size && Character.isWhitespace(s[q])) q++
-            if (q <= p || q >= s.size || s[q] !in "·-–—:：|".codePoints().toArray()) return false
-            return q + 1 == s.size || Character.isWhitespace(s[q + 1])
+            while (q < s.size && white(s[q])) q++
+            if (q <= p || q >= s.size || !among(s[q], "·-–—:：|")) return false
+            return q + 1 == s.size || white(s[q + 1])
         }
         return lengths.firstOrNull { separatorFollows(it) }?.let { String(s, 0, it) }
     }
+    /** A capital, one or two digits and at most one small letter — "P1", "D12", "P1a" — then `.`, `)`, `:`, `：` or a space. */
+    private fun leadingCode(s: IntArray): String? {
+        if (s.size <= 2 || s[0] !in 'A'.code..'Z'.code || !digit(s[1])) return null
+        var length = if (digit(s[2])) 3 else 2
+        if (length < s.size && s[length] in 'a'.code..'z'.code) length++
+        if (length >= s.size || !(among(s[length], ".):：") || white(s[length]))) return null
+        return String(s, 0, length)
+    }
+    /** "A, B and C". */
     fun joinAnd(words: List<String>) = if (words.size <= 1) words.firstOrNull().orEmpty() else "${words.dropLast(1).joinToString(", ")} and ${words.last()}"
-    data class PlanTask(val id: String, val title: String, val after: List<String>)
-    /** "A starts now · B, C after A · D after B": tasks waiting on the same prerequisites said together. */
-    fun planOrderLine(tasks: List<PlanTask>): String {
-        val index = tasks.withIndex().associate { it.value.id to it.index }
-        val label = tasks.associate { it.id to planTaskLabel(it.title) }
-        val prerequisites = tasks.associate { task -> task.id to task.after.distinct().filter { index[it] != null && it != task.id }.sortedBy { index.getValue(it) } }
+    /** A task's title without the label the plan calls it by: "P1a · wiki-worker …" → "wiki-worker …". */
+    fun planTaskRest(title: String, label: String): String {
+        val text = title.trim()
+        if (label == text || !text.startsWith(label)) return text
+        var rest = text.substring(label.length).codePoints().toArray().dropWhile(::white)
+        if (rest.isNotEmpty() && among(rest.first(), ".):：·-–—|")) rest = rest.drop(1)
+        val trimmed = rest.dropWhile(::white)
+        return if (trimmed.isEmpty()) text else String(trimmed.toIntArray(), 0, trimmed.size)
+    }
+    fun inParallel(count: Int) = "$count in parallel"
+    data class PlanTask(val id: String, val title: String, val after: List<String> = emptyList(), val completionCriterion: String? = null,
+        val autoRunWhenReady: Boolean? = null)
+    /** One task as a level lists it: `now` — first level and not set to start by hand; `you` — the owner confirms it. */
+    data class LevelTask(val id: String, val label: String, val title: String, val now: Boolean, val you: Boolean)
+    data class NamedTask(val label: String, val title: String)
+    /** A task sits one level after the deepest of what it waits on; an edge out of the plan waits on nothing, a cycle is cut. */
+    fun planLevels(tasks: List<PlanTask>): List<List<LevelTask>> {
+        val known = tasks.map { it.id }.toSet()
+        val prerequisites = tasks.associate { task -> task.id to task.after.filter { it in known && it != task.id }.distinct() }
         val level = mutableMapOf<String, Int>()
         fun depth(id: String, seen: MutableSet<String>): Int {
             level[id]?.let { return it }
@@ -593,31 +696,31 @@ object StartProjectCopy {
             level[id] = at
             return at
         }
-        data class Group(val level: Int, val order: Int, val members: MutableList<String>, val after: List<String>)
-        val groups = linkedMapOf<String, Group>()
-        tasks.forEachIndexed { order, task ->
-            val after = prerequisites[task.id].orEmpty()
-            val key = after.joinToString(",")
-            groups[key]?.members?.add(task.id) ?: run { groups[key] = Group(depth(task.id, mutableSetOf()), order, mutableListOf(task.id), after) }
+        val levels = mutableListOf<MutableList<LevelTask>>()
+        tasks.forEach { task ->
+            val at = depth(task.id, mutableSetOf())
+            while (levels.size <= at) levels += mutableListOf<LevelTask>()
+            levels[at] += LevelTask(task.id, planTaskLabel(task.title), task.title, at == 0 && task.autoRunWhenReady != false,
+                task.completionCriterion == "OWNER_CONFIRMED")
         }
-        return groups.values.sortedWith(compareBy({ it.level }, { it.order })).joinToString(" · ") { group ->
-            val who = group.members.joinToString(", ") { label[it] ?: it }
-            if (group.after.isEmpty()) "$who ${if (group.members.size == 1) "starts" else "start"} now"
-            else "$who after ${joinAnd(group.after.map { label[it] ?: it })}"
-        }
+        return levels.filter { it.isNotEmpty() }
     }
-    data class PlanView(val count: Int, val order: String?)
-    /** The plan off the project's graph; a folded or cut graph says only how many tasks it holds. The owner's own start carries no warnings. */
+    /** The plan as the card reads it: `levels` null when the graph came back folded (a plan too big to list). */
+    data class PlanView(val count: Int, val levels: List<List<LevelTask>>?, val ownerConfirmed: List<NamedTask> = emptyList(),
+        val evidenceJudged: Int = 0, val startsNow: List<String> = emptyList())
+    /** Off the project's graph: the tasks nothing cancelled, in levels; settled ones are counted and not listed. */
     fun planView(graph: DependencyGraph?, fallbackCount: Int): PlanView {
         if (graph == null || graph.truncated || graph.marks.any { it.kind != MarkKind.TASK }) return PlanView(graph?.taskCount ?: fallbackCount, null)
         val tasks = graph.marks.filter { it.status != "CANCELLED" }
-        val planned = tasks.filter { it.status != "DONE" }.map { mark -> PlanTask(mark.id, mark.title, graph.edges.filter { it.target == mark.id }.map { it.source }) }
-        return PlanView(tasks.size, if (planned.isEmpty()) null else planOrderLine(planned))
+        val planned = tasks.filter { it.status != "DONE" }.map { mark ->
+            PlanTask(mark.id, mark.title, graph.edges.filter { it.target == mark.id }.map { it.source }, mark.completionCriterion, mark.autoRunWhenReady)
+        }
+        val levels = if (planned.isEmpty()) null else planLevels(planned)
+        return PlanView(tasks.size, levels,
+            planned.filter { it.completionCriterion == "OWNER_CONFIRMED" }.map { val label = planTaskLabel(it.title); NamedTask(label, planTaskRest(it.title, label)) },
+            planned.count { it.completionCriterion == "EVIDENCE_JUDGMENT" }, levels?.firstOrNull().orEmpty().filter { it.now }.map { it.label })
     }
-    fun doneWhenHead(count: Int) = "Done when · $count ${if (count == 1) "criterion" else "criteria"}"
-    fun planHead(count: Int) = "Plan · $count ${if (count == 1) "task" else "tasks"}"
-    fun explanation(count: Int) = "Orbit derives done from these $count criteria and nothing else. If they change later, it " +
-        "asks you to confirm the new version — the project keeps running."
+
     fun requestSummary(settings: JsonObject) = listOf(rowAsked, RunSettings.lineInSentence(settings.text("line")),
         "${RunSettings.automatic} ${if (settings.flag("automatic")) "on" else "off"}", "at most ${settings.number("maxConcurrentTasks") ?: 1} at a time").joinToString(" · ")
     /** The plan has dependencies when a run is filed or a live edge joins two live marks. */
@@ -637,14 +740,55 @@ object StartProjectCopy {
         val branch = if (decided == "PROJECT_BRANCH") view?.text("ref")?.takeIf { it.isNotEmpty() }?.let { "refs/heads/$it" } else null
         return Settings(line, branch, true, maxConcurrentTasks ?: 1, view?.text("mergeCheckCommand"))
     }
-    /** `StartProject.body` for the owner's own start: no request answered. */
-    fun body(digest: String, settings: Settings, line: String, automatic: Boolean, maxConcurrentTasks: Int, mergeCheck: String): JsonObject = buildJsonObject {
-        put("criteriaDigest", digest); put("line", line)
-        if (line == "PROJECT_BRANCH" && !settings.projectBranchName.isNullOrEmpty()) put("projectBranchName", settings.projectBranchName)
-        put("automatic", automatic); put("maxConcurrentTasks", maxConcurrentTasks)
-        put("mergeCheckCommand", mergeCheck.trim().ifEmpty { null }?.let(::JsonPrimitive) ?: JsonNull)
-        put("requestId", JsonNull)
+
+    /** What the card is drawn from (`ProjectStartRequest`): the coordinator's request, or the owner's own with nobody quoted. */
+    data class Request(val settings: Settings, val why: String, val criteriaDigest: String)
+    fun ownerRequest(settings: Settings, criteriaDigest: String) = Request(settings, "", criteriaDigest)
+    /** The open `START_REQUEST` row's request, or null when its settings are not whole settings this build can read. */
+    fun request(row: JsonObject?): Request? {
+        val asked = row?.obj("startRequest") ?: return null
+        val settings = asked.obj("settings") ?: return null
+        val line = settings.text("line")?.takeIf { it == "MAIN" || it == "PROJECT_BRANCH" } ?: return null
+        val automatic = (settings["automatic"] as? JsonPrimitive)?.booleanOrNull ?: return null
+        val count = settings.number("maxConcurrentTasks")?.takeIf { it >= 0 } ?: return null
+        val check = when (val value = settings["mergeCheckCommand"]) { null, JsonNull -> null; is JsonPrimitive -> if (value.isString) value.content else return null; else -> return null }
+        val digest = asked.text("criteriaDigest") ?: return null
+        return Request(Settings(line, settings.text("projectBranchName"), automatic, count, check), asked.text("why").orEmpty(), digest)
     }
+    /** The settings as the card edits them — opened with Automatic on whatever was suggested (`StartSettingsDraft`). */
+    data class Draft(val line: String, val automatic: Boolean, val maxConcurrentTasks: Int, val mergeCheckCommand: String = "") {
+        val complete get() = (line == "MAIN" || line == "PROJECT_BRANCH") && maxConcurrentTasks in 1..StartProjectCopy.maxConcurrentTasks
+        val hasMergeCheck get() = mergeCheckCommand.isNotBlank()
+        companion object { fun of(settings: Settings) = Draft(settings.line, true, settings.maxConcurrentTasks, settings.mergeCheckCommand.orEmpty()) }
+    }
+    /** `StartProject.body`: the seal, every setting, and the request answered — the branch only with a project branch, a blank check as none. */
+    fun body(request: Request, draft: Draft, requestId: String?): JsonObject = buildJsonObject {
+        val branch = request.settings.projectBranchName.orEmpty()
+        val check = draft.mergeCheckCommand.trim()
+        put("criteriaDigest", request.criteriaDigest); put("line", draft.line)
+        if (draft.line == "PROJECT_BRANCH" && branch.isNotEmpty()) put("projectBranchName", branch)
+        put("automatic", draft.automatic); put("maxConcurrentTasks", draft.maxConcurrentTasks)
+        put("mergeCheckCommand", if (check.isEmpty()) JsonNull else JsonPrimitive(check))
+        put("requestId", requestId?.let(::JsonPrimitive) ?: JsonNull)
+    }
+
+    /** The request asked about right now: the open `START_REQUEST` of a project nobody has started, or null — also while a read has not answered. */
+    fun live(openItems: JsonObject?, started: Boolean?): JsonObject? {
+        if (started != false) return null
+        val row = openItems?.obj("startRequest") ?: return null
+        return row.takeIf { request(it) != null }
+    }
+    enum class Standing { LIVE, GONE, UNREAD }
+    /** Where the card drawn for request `itemId` stands, from the reads alone. */
+    fun standing(itemId: String, request: Request, openItems: JsonObject?, confirmation: JsonObject?, started: Boolean?): Standing {
+        val digest = confirmation?.obj("currentVersion")?.text("digest")
+        if (openItems == null || digest == null || started == null) return Standing.UNREAD
+        val live = live(openItems, started)
+        return if (live?.text("itemId") == itemId && digest == request.criteriaDigest) Standing.LIVE else Standing.GONE
+    }
+    fun staleExplanation(standing: Standing) = when (standing) { Standing.LIVE -> null; Standing.GONE -> requestGone; Standing.UNREAD -> unreadSeal }
+    /** A card whose request no longer stands stays on screen, dimmed, and is not pointed at. */
+    fun isOpen(standing: Standing) = standing != Standing.GONE
 }
 
 object RunSettings {
@@ -660,6 +804,23 @@ object RunSettings {
     const val automaticHintMain = "The coordinator runs it for you: it decides when each task is done and handles conflicts " +
         "and failed checks. Merging into main always asks you — a project that lands directly on " +
         "main never merges by itself. The criteria and anything irreversible stay yours."
+    /** The start card's one sentence under the switch, for the line and merge check chosen (`automaticSays`). */
+    const val automaticOnChecked = "The coordinator decides when each task is done and merges into main once the merge check " +
+        "passes — with a receipt you can revert."
+    const val automaticOnUnchecked = "The coordinator decides when each task is done and merges into main by itself — with a " +
+        "receipt you can revert."
+    const val automaticOnMain = "The coordinator decides when each task is done. Each merge into main still asks you."
+    const val automaticOff = "You decide when each task is done and when the branch goes into main."
+    const val automaticOffMain = "You decide when each task is done, and each merge into main asks you."
+    fun automaticSays(automatic: Boolean, line: String, hasMergeCheck: Boolean) = when {
+        !automatic -> if (line == "MAIN") automaticOffMain else automaticOff
+        line == "MAIN" -> automaticOnMain
+        else -> if (hasMergeCheck) automaticOnChecked else automaticOnUnchecked
+    }
+    /** The start card's merge check row, folded to its value, and what an empty one means. */
+    const val mergeCheckSet = "Set"
+    const val mergeCheckNone = "None"
+    const val mergeCheckNoneSays = "Work lands once it rebases cleanly."
     const val atMost = "At most"
     const val mergeCheck = "Merge check"
     const val mergeCheckHint = "Runs on the combined tree before anything lands — on the project branch and again before main."

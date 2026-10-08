@@ -47,7 +47,8 @@ class ProjectDataTest {
         api.authorize("p1", RunSettings.authorization(obj("""{"configRevision":"8"}"""), maxConcurrentTasks = 4)!!)
         api.updateIntegration("p1", buildJsonObject { put("line", "MAIN"); put("mergeCheckCommand", JsonNull); put("exceptionEscalationSeconds", 3600) }, "r:1")
         api.pause("p1", true, "r:1"); api.pause("p1", false, "r:2")
-        api.start("p1", StartProjectCopy.body("d1", StartProjectCopy.Settings("MAIN", null, true, 2, null), "MAIN", true, 2, " "))
+        api.start("p1", StartProjectCopy.body(StartProjectCopy.ownerRequest(StartProjectCopy.Settings("MAIN", null, true, 2, null), "d1"),
+            StartProjectCopy.Draft("MAIN", true, 2, " "), requestId = null))
         api.resumeFuse("p1", "f1"); api.resolveBlocker("p1", "b1", "agent added")
         api.run("t1", "press-1", "t1:OPEN:READY"); api.resumeList("l1")
         assertEquals("s2", api.replaceCoordinator("p1", "replace:s1")?.text("sessionId"))

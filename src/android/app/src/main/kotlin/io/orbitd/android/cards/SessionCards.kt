@@ -17,6 +17,7 @@ import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.text.LocalReaderResources
 import io.orbitd.android.navigation.ObjectId
+import io.orbitd.android.projects.CoordinatorStartCard
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -86,9 +87,12 @@ fun SessionCards(open: (String) -> Unit, discuss: ((String) -> Unit)? = null) {
                 requester.bringIntoView(); CardFocus.spend(session.id)
             }
             Box(Modifier.bringIntoViewRequester(requester)) {
-                BusinessCard(card, session.fresh && actions.valid(resources.handle, session.id) && (card.family != CardFamily.START || graph != null), results[card.key]?.takeIf { it.binding == card.binding } ?: CardActionState(), open, discuss) { verb, input ->
-                    actions.submit(resources.handle, card, verb, input)
-                }
+                val fresh = session.fresh && actions.valid(resources.handle, session.id) && (card.family != CardFamily.START || graph != null)
+                val result = results[card.key]?.takeIf { it.binding == card.binding } ?: CardActionState()
+                val submit = { verb: CardVerb, input: CardInput -> actions.submit(resources.handle, card, verb, input); Unit }
+                // A11b hook: the coordinator's request draws the start card (iOS `StartProjectCardView`), not the generic card.
+                if (card.family == CardFamily.START) CoordinatorStartCard(card, session.snapshot?.standing.orEmpty(), fresh, result, open, discuss, submit)
+                else BusinessCard(card, fresh, result, open, discuss, submit)
             }
         } }
         merged.filter { it.text("state") == "MERGED" }.forEach { receipt ->

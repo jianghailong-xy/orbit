@@ -28,8 +28,8 @@ import kotlinx.serialization.json.*
 import java.time.Instant
 
 // How it runs on the project page, the merge check's own sheet and the owner's own Start… —
-// ProjectsView.swift's `runSettingsSection`, `MergeCheckEditor` and `OwnerStartProjectSheet`,
-// with OrbitKit's words (`RunSettings`, `StartProject`).
+// ProjectsView.swift's `runSettingsSection`, `MergeCheckEditor` and `OwnerStartProjectSheet` (whose card is
+// StartProjectCard.kt), with OrbitKit's words (`RunSettings`, `StartProject`).
 
 /** Each control writes as it is changed; a write the door refuses says so over its own words (`runSettingsSection`). */
 @Composable
@@ -199,8 +199,8 @@ internal fun MergeCheckEditor(view: JsonObject, automatic: Boolean, enabled: Boo
         dismissButton = { TextButton(onClick = close, enabled = !saving) { Text("Cancel") } })
 }
 
-/** "Start…" — the start card over the project page for a project whose coordinator has not asked: the default
- * rule's settings, the same door, no request to answer (`OwnerStartProjectSheet`). */
+/** "Start…" — the start card over the project page for a project whose coordinator has not asked: the default rule's
+ * settings, the same door, no request to answer, nobody quoted and no Chat about this (`OwnerStartProjectSheet`). */
 @Composable
 internal fun OwnerStartSheet(api: ProjectApi, id: String, state: ProjectPageState, enabled: Boolean, viewTasks: () -> Unit, close: () -> Unit,
     start: suspend (JsonObject) -> String?) {
@@ -214,17 +214,21 @@ internal fun OwnerStartSheet(api: ProjectApi, id: String, state: ProjectPageStat
     Dialog(onDismissRequest = { if (!starting) close() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxWidth(0.94f).testTag("project-start-sheet"), shape = MaterialTheme.shapes.large) {
             Column(Modifier.heightIn(max = 720.dp).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("▶ ${StartProjectCopy.title}", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary)
-                    TextButton(onClick = close, enabled = !starting, modifier = Modifier.testTag("project-start-cancel")) { Text("Cancel") }
-                }
+                val cancel: @Composable () -> Unit = { TextButton(onClick = close, enabled = !starting, modifier = Modifier.testTag("project-start-cancel")) { Text("Cancel") } }
                 val doc = state.document
                 val digest = confirmation?.obj("currentVersion")?.text("digest")
-                when {
-                    doc != null && digest != null && state.integration != null -> StartCard(doc, digest, state, enabled, starting, { starting = it }, viewTasks, start, close)
-                    unread || state.integrationReadFailed -> Note(StartProjectCopy.unreadSeal)
-                    else -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
+                // Drawn once the document, the seal and the line the project may already be on have answered: a card set before
+                // the line was read would suggest one over it.
+                if (doc != null && digest != null && state.integration != null) OwnerStartCard(doc, digest, state, enabled, starting, { starting = it },
+                    viewTasks, start, close, cancel)
+                else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("▶ ${StartProjectCopy.title}", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary)
+                        cancel()
+                    }
+                    if (unread || state.integrationReadFailed) Note(StartProjectCopy.unreadSeal)
+                    else CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
                 }
             }
         }
@@ -232,89 +236,34 @@ internal fun OwnerStartSheet(api: ProjectApi, id: String, state: ProjectPageStat
 }
 
 @Composable
-private fun StartCard(doc: JsonObject, digest: String, state: ProjectPageState, enabled: Boolean, starting: Boolean, setStarting: (Boolean) -> Unit,
-    viewTasks: () -> Unit, start: suspend (JsonObject) -> String?, close: () -> Unit) {
+private fun OwnerStartCard(doc: JsonObject, digest: String, state: ProjectPageState, enabled: Boolean, starting: Boolean, setStarting: (Boolean) -> Unit,
+    viewTasks: () -> Unit, start: suspend (JsonObject) -> String?, close: () -> Unit, cancel: @Composable () -> Unit) {
     val graph = state.graph?.let(DependencyGraph::of)
-    val settings = remember(doc.text("id"), digest) { StartProjectCopy.defaultSettings(state.integration, doc.number("maxConcurrentTasks"), graph) }
-    // The settings as the owner leaves them live and die with this sheet.
-    var line by remember(digest) { mutableStateOf(settings.line) }
-    var automatic by remember(digest) { mutableStateOf(settings.automatic) }
-    var maxConcurrent by remember(digest) { mutableStateOf(settings.maxConcurrentTasks) }
-    var mergeCheck by remember(digest) { mutableStateOf(settings.mergeCheckCommand.orEmpty()) }
-    var criteriaOpen by remember { mutableStateOf(false) }
+    val settings = StartProjectCopy.defaultSettings(state.integration, doc.number("maxConcurrentTasks"), graph)
+    val request = StartProjectCopy.ownerRequest(settings, digest)
+    // The owner's edits live and die with this sheet; until there are any, the default rule's settings as the reads resolve them.
+    var edited by remember(digest) { mutableStateOf<StartProjectCopy.Draft?>(null) }
+    val draft = edited ?: StartProjectCopy.Draft.of(settings)
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    val editable = enabled && !starting
-    val criteria = doc.objects("acceptanceCriteriaItems").sortedBy { it.number("ordinal") ?: 0 }
-    val plan = StartProjectCopy.planView(graph, ProjectDoc.taskCount(doc))
-    val warning = LocalOrbitColors.current.needsYou
-    val complete = (line == "MAIN" || line == "PROJECT_BRANCH") && maxConcurrent in 1..StartProjectCopy.maxConcurrentTasks
-    Note(StartProjectCopy.meta(doc.text("title").orEmpty(), null, StartProjectCopy.shortSeal(digest)))
-    StartHead(StartProjectCopy.doneWhenHead(criteria.size))
-    criteria.forEach { item -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("${item.number("ordinal") ?: ""}", Modifier.widthIn(min = 14.dp), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(item.text("text").orEmpty(), maxLines = if (criteriaOpen) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis)
-    } }
-    if (criteria.isNotEmpty()) Text(if (criteriaOpen) StartProjectCopy.showLess else StartProjectCopy.readAll(criteria.size),
-        Modifier.clickable { criteriaOpen = !criteriaOpen }, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-    StartHead(StartProjectCopy.planHead(plan.count))
-    StartPanel {
-        plan.order?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        // Not while the start is out: leaving the sheet then would lose the server's answer to it.
-        Text(StartProjectCopy.viewTasks, Modifier.clickable(enabled = !starting, onClick = viewTasks).testTag("project-start-view-tasks"), style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.primary)
-    }
-    StartHead(StartProjectCopy.howItRuns)
-    StartPanel {
-        var menu by remember { mutableStateOf(false) }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(RunSettings.tasksLandOn, Modifier.weight(1f))
-            Box {
-                TextButton(onClick = { menu = true }, enabled = editable, modifier = Modifier.testTag("project-start-line")) {
-                    Text("${if (line == "MAIN") RunSettings.lineMain else RunSettings.lineProjectBranch} ▾") }
-                DropdownMenu(menu, { menu = false }) {
-                    listOf(Triple("PROJECT_BRANCH", RunSettings.lineProjectBranch, RunSettings.lineProjectBranchHint), Triple("MAIN", RunSettings.lineMain, RunSettings.lineMainHint))
-                        .forEach { (value, title, hint) -> DropdownMenuItem(text = { Column(Modifier.widthIn(max = 280.dp)) {
-                            Text(if (line == value) "✓ $title" else title); Text(hint, style = MaterialTheme.typography.labelSmall) } },
-                            onClick = { menu = false; line = value }) }
+    val criteria = doc.objects("acceptanceCriteriaItems").sortedBy { it.number("ordinal") ?: 0 }.map { StartCriterion(it.number("ordinal") ?: 0, it.text("text").orEmpty()) }
+    StartProjectCard(doc.text("id").orEmpty(), doc.text("title").orEmpty(), asked = false, askedAgo = null, request = request, criteria = criteria,
+        plan = StartProjectCopy.planView(graph, ProjectDoc.taskCount(doc)),
+        // A project nobody coordinates yet gets its first coordinator from a start with Automatic on, and the card says so.
+        hasCoordinator = doc.text("coordinatorSessionId") != null,
+        escalationSeconds = state.integration?.number("escalationSeconds") ?: doc.obj("integration")?.number("escalationSeconds") ?: StartProjectCopy.defaultEscalationSeconds,
+        draft = draft, onDraft = { edited = it },
+        // A project started at another end meanwhile is the door's to refuse, 409, said over the door's words.
+        standing = StartProjectCopy.Standing.LIVE, enabled = enabled, starting = starting, error = error, tag = "project-start", startTag = "project-start-confirm",
+        onStart = {
+            if (draft.complete && !starting) {
+                setStarting(true)
+                scope.launch {
+                    try { val failure = start(StartProjectCopy.body(request, draft, requestId = null)); if (failure == null) close() else error = failure }
+                    finally { setStarting(false) }
                 }
             }
-        }
-        if (line == "PROJECT_BRANCH") Text(StartProjectCopy.branch(settings.projectBranchName, doc.text("id").orEmpty()), fontFamily = FontFamily.Monospace,
-            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        HorizontalDivider()
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(RunSettings.automatic, Modifier.weight(1f))
-            Switch(automatic, { automatic = it }, enabled = editable, modifier = Modifier.testTag("project-start-automatic").semantics { contentDescription = RunSettings.automatic })
-        }
-        Note(RunSettings.automaticHint(line))
-        HorizontalDivider()
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(RunSettings.atMost); Spacer(Modifier.weight(1f))
-            Text("$maxConcurrent ${RunSettings.tasksAtATime(maxConcurrent)}", color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-            Stepper(maxConcurrent, 1..StartProjectCopy.maxConcurrentTasks, editable, "project-start-at-most") { maxConcurrent = it }
-        }
-        HorizontalDivider()
-        val missing = RunSettings.mergeCheckMissing(line, automatic, mergeCheck)
-        Text(RunSettings.mergeCheck, color = if (missing) warning else MaterialTheme.colorScheme.onSurface)
-        OutlinedTextField(mergeCheck, { mergeCheck = it }, Modifier.fillMaxWidth().testTag("project-start-merge-check"), enabled = editable,
-            placeholder = { Text(RunSettings.mergeCheckPlaceholder) }, textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace))
-        Note(RunSettings.mergeCheckHint)
-        if (missing) Note("⚠ ${RunSettings.noMergeCheckWarning}", warning)
-    }
-    Text(StartProjectCopy.explanation(criteria.size), style = MaterialTheme.typography.bodyMedium)
-    error?.let { Note(it, MaterialTheme.colorScheme.error) }
-    Button(onClick = {
-        if (!complete || starting) return@Button
-        setStarting(true)
-        scope.launch {
-            try {
-                val failure = start(StartProjectCopy.body(digest, settings, line, automatic, maxConcurrent, mergeCheck))
-                if (failure == null) close() else error = failure
-            } finally { setStarting(false) }
-        }
-    }, Modifier.fillMaxWidth().testTag("project-start-confirm"), enabled = editable && complete) { Text(StartProjectCopy.action) }
+        }, onViewTasks = viewTasks, trailing = cancel)
 }
 
 @Composable

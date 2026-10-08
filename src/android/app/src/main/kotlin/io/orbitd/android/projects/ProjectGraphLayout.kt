@@ -18,7 +18,9 @@ data class GraphMember(val taskId: String, val title: String, val status: String
 data class GraphMark(val kind: MarkKind, val id: String, val title: String, val parentTaskId: String? = null, val taskId: String? = null,
     val status: String? = null, val running: Boolean = false, val queued: Boolean = false, val workState: String? = null,
     val verificationState: String? = null, val taskCount: Int = 1, val statusCounts: Map<String, Int> = emptyMap(),
-    val members: List<GraphMember> = emptyList(), val samples: List<GraphMember> = emptyList(), val expandable: Boolean = false) {
+    val members: List<GraphMember> = emptyList(), val samples: List<GraphMember> = emptyList(), val expandable: Boolean = false,
+    /** How the task is settled and whether Orbit starts it once ready — what the start card reads; absent from an older server. */
+    val completionCriterion: String? = null, val autoRunWhenReady: Boolean? = null) {
     companion object {
         fun of(json: JsonObject): GraphMark? {
             val id = json.text("id") ?: return null
@@ -28,7 +30,8 @@ data class GraphMark(val kind: MarkKind, val id: String, val title: String, val 
                 json.text("parentTaskId"), json.text("taskId"), json.text("status"), json.flag("running"), json.flag("queued"), json.text("workState"),
                 json.text("verificationState"), json.number("taskCount") ?: 1,
                 json.obj("statusCounts")?.mapNotNull { (k, v) -> (v as? JsonPrimitive)?.intOrNull?.let { k to it } }?.toMap().orEmpty(),
-                json.objects("members").mapNotNull(::member), json.objects("samples").mapNotNull(::member), json.flag("expandable"))
+                json.objects("members").mapNotNull(::member), json.objects("samples").mapNotNull(::member), json.flag("expandable"),
+                completionCriterion = json.text("completionCriterion"), autoRunWhenReady = (json["autoRunWhenReady"] as? JsonPrimitive)?.booleanOrNull)
         }
     }
 }

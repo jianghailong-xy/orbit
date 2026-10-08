@@ -80,7 +80,7 @@ def reset():
     project = copy.deepcopy(cards.CORPUS['snapshot']['standing']['project'])
     project.update(title='A11 Android launch', goal='Ship **Tasks and Projects** with server authority.', instructions='Keep review decisions in their original conversation.',
                    startedAt=NOW, pausedAt=None, pauseReason=None, configRevision='1', maxConcurrentTasks=2, automatic=True,
-                   coordinatorEnabled=True, coordinatorAgentId=WS, createdAt=NOW, updatedAt=NOW, lastActivityAt=NOW,
+                   coordinatorEnabled=True, coordinatorAgentId=WS, exceptionEscalationSeconds=3600, createdAt=NOW, updatedAt=NOW, lastActivityAt=NOW,
                    _count=dict(tasks=2), blockers=dict(open=[], resolved=[], resolvedCount=0), criteriaConfirmed=True)
     for criterion in project['acceptanceCriteriaItems']:
         criterion.update(key='cards', satisfied=False, landing='NONE', taskCount=1, doneCount=0, unmet=[dict(taskId=TID, title='A11 project delivery', status='OPEN')], heldUpBy=[], definitionId=criterion['id'])
@@ -97,6 +97,23 @@ def reset():
                                 mergeCheckTimeoutSeconds=600, escalationSeconds=3600, commitsAheadOfUpstream=1,
                                 commitsAheadOfUpstreamAbsentReason=None, lastUpstreamSyncAt=NOW, lastUpstreamSyncAbsentReason=None,
                                 integratingCount=0, queuedCount=0, mergeCheckOnTip='UNKNOWN', inFlight=None, landTasks=[])
+
+
+PLAN = [('A', 'A · 提醒规则做成两端共用的真源', 'EVIDENCE_JUDGMENT', []), ('B', 'B · OrbitKit：提醒规则、文案、DTO 与接口', 'EVIDENCE_JUDGMENT', ['A']),
+        ('C', 'C · web：Runners 列表与 runner 详情页', 'EVIDENCE_JUDGMENT', ['A']), ('D', 'D · iOS/macOS：Runners 列表、Add Runner、Edit', 'EVIDENCE_JUDGMENT', ['B']),
+        ('E', 'E · 上线', 'OWNER_CONFIRMED', ['C', 'D'])]
+
+
+def plan():
+    for row in state['tasks'].values():
+        if row['projectId'] == PID: row['projectId'] = None
+    ids = {label: '34ZaIKb2sLBtndX7DqxP' + label for label, *_ in PLAN}
+    for label, title, criterion, after in PLAN:
+        row = task(ids[label], title, PID, labels=['Plan'])
+        row.update(completionCriterion=criterion, autoRunWhenReady=True, project=dict(id=PID, title=state['project']['title'], status='OPEN'),
+                   dependsOn=[dict(taskId=ids[label], dependsOnTaskId=ids[a], dependsOnTask=dict(id=ids[a], title=a, status='OPEN')) for a in after])
+        state['tasks'][ids[label]] = row
+    state['project']['_count'] = dict(tasks=len(PLAN))
 
 
 def bump(resource=None):
@@ -170,7 +187,9 @@ def graph(project=False, focus=None):
     if project:
         return dict(projectId=PID, taskCount=len(rows), edgeCount=len(edges), truncated=False,
                     marks=[dict(kind='TASK', id=r['id'], taskId=r['id'], title=r['title'], status=r['status'], running=r['running'], queued=r['queued'], taskCount=1,
-                                statusCounts={r['status']: 1}, members=[], samples=[], expandable=False) for r in rows],
+                                statusCounts={r['status']: 1}, members=[], samples=[], expandable=False,
+                                # main's taskMark (project-graph-fold.ts): what the start card reads.
+                                completionCriterion=r['completionCriterion'], autoRunWhenReady=r['autoRunWhenReady']) for r in rows],
                     edges=[dict(sourceMarkId=e['sourceTaskId'], targetMarkId=e['targetTaskId']) for e in edges])
     return dict(focusTaskId=focus, nodes=[dict(id=r['id'], title=r['title'], status=r['status'], depth=0 if r['id'] == focus else 1,
                                              running=r['running'], queued=r['queued']) for r in rows], edges=edges, truncated=False,
@@ -349,6 +368,7 @@ class Handler(cards.Handler):
                     state['tasks'][identifier].update(patch)
                 if 'project' in body: state['project'].update(body['project'])
                 if 'integration' in body: state['integration'].update(body['integration'])
+                if body.get('plan'): plan()
                 if state['case'] in ('owner', 'owner-review'):
                     state['tasks'][TID].update(completionCriterion='OWNER_CONFIRMED', status='IN_PROGRESS', awaitingOwnerConfirmation=True, runnable=False)
                 if body.get('mode') == 'unknown': state['tasks'][OUTSIDE].update(status='FUTURE_STATUS', runnable=False)
@@ -440,7 +460,9 @@ class Handler(cards.Handler):
         if path == '/api/projects/' + PID + '/integration':
             if 'line' in body and state['integration']['locked']: return dict(code='INTEGRATION_LINE_LOCKED', message='Integration has started.'), 409
             patch = dict(body)
-            if 'exceptionEscalationSeconds' in patch: patch['escalationSeconds'] = patch.pop('exceptionEscalationSeconds')
+            if 'exceptionEscalationSeconds' in patch:
+                project['exceptionEscalationSeconds'] = patch['exceptionEscalationSeconds']
+                patch['escalationSeconds'] = patch.pop('exceptionEscalationSeconds')
             state['integration'].update(patch); bump(); return state['integration'], 200
         if path in ('/api/projects/' + PID + '/pause', '/api/projects/' + PID + '/resume'):
             project['pausedAt'] = NOW if path.endswith('/pause') else None

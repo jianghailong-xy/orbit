@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.os.Process
 import android.os.SystemClock
 import android.view.KeyEvent
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -323,6 +324,77 @@ class TasksProjectsDeviceTest {
         assertEquals("PROJECT_BRANCH", start.text("line")); assertEquals("refs/heads/project/a11", start.text("projectBranchName"))
         awaitGone("project-start-sheet"); awaitGone("project-start-own")
         awaitScrollTo("project-detail", hasTestTag("project-settings")); capture("project-started")
+    }
+
+    // MARK: the start card (A11b: main's redesigned card, both ways it is drawn; run again under dark mode)
+
+    /** None of the card's old lines: the meta line ("asked by the coordinator"), the plan's order line ("A starts now"), the ready
+     * check's line and the generic settings form the coordinator's card used to be. */
+    private fun assertNoOldStartLines() {
+        val old = listOf("asked by the coordinator", "starts now", "start now", "Orbit checked the plan", "Run settings", "Starting confirms the criteria")
+        compose.onAllNodes(hasText("", substring = true), useUnmergedTree = true).fetchSemanticsNodes()
+            .flatMap { node -> if (SemanticsProperties.Text in node.config) node.config[SemanticsProperties.Text].map { it.text } else emptyList() }
+            .forEach { text -> old.forEach { line -> assertFalse("old start line \"$line\" in \"$text\"", text.contains(line)) } }
+    }
+
+    /** The owner's own Start… on a project with no coordinator yet: nobody asked, Automatic on and the coordinator it opens, what
+     * still comes to the owner, the plan by level and the line under Start; the press sends every setting and no request. */
+    @Test fun startCardTheOwnersOwn() = journey("start-card-own") {
+        login(case = "own-start"); http("/__control", """{"plan":true,"project":{"coordinatorSessionId":null}}""")
+        open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch"); awaitScrollTo("project-detail", hasTestTag("project-start-own"))
+        tap("project-start-own"); awaitTag("project-start-confirm")
+        compose.onNodeWithTag("project-start-asked").assertTextEquals(StartProjectCopy.nobodyAskedLine(hasCoordinator = false))
+        capture("start-own-1-top")
+        compose.onNodeWithTag("project-start-opens").performScrollTo().assertTextEquals(StartProjectCopy.opensCoordinator)
+        compose.onNodeWithTag("project-start-comes-to-you").performScrollTo()
+        compose.onNodeWithText("E · 上线 · you confirm it").assertIsDisplayed(); compose.onNodeWithText("Problems it can’t resolve within 1 h").assertIsDisplayed()
+        capture("start-own-2-how-it-runs")
+        compose.onNodeWithTag("project-start-note").performScrollTo().assertTextEquals(StartProjectCopy.howItRunsNote(asked = false, suggestedOff = false))
+        compose.onNodeWithTag("project-start-level:1").performScrollTo().assertTextContains("A").assertTextContains(StartProjectCopy.now)
+        compose.onNodeWithTag("project-start-level:2").assertTextContains("B · C").assertTextContains(StartProjectCopy.inParallel(2))
+        compose.onNodeWithTag("project-start-level:4").assertTextContains("E").assertTextContains(StartProjectCopy.you)
+        compose.onNodeWithTag("project-start-caption").performScrollTo().assertTextEquals("Opens a coordinator · starts A now · confirms this criterion")
+        capture("start-own-3-plan-and-start")
+        assertNoOldStartLines()
+        compose.onNodeWithTag("project-start-confirm").performScrollTo().performClick()
+        compose.waitUntil(20_000) { http("/__stats").obj("project")?.text("startedAt") != null }
+        assertEquals(buildJsonObject {
+            put("criteriaDigest", "seal1"); put("line", "PROJECT_BRANCH"); put("projectBranchName", "refs/heads/project/a11"); put("automatic", true)
+            put("maxConcurrentTasks", 2); put("mergeCheckCommand", "true"); put("requestId", JsonNull)
+        }, journal().last { it.text("path") == "/api/projects/$projectId/start" }.obj("body"))
+        awaitGone("project-start-sheet")
+    }
+
+    /** The coordinator's request: its row on the project page, Review into the conversation onto the start card — who asked and
+     * in their words, Automatic on whatever was suggested, what still comes to the owner, the plan by level — and Start answering
+     * the request through the card actions with every setting the card shows. */
+    @Test fun startCardTheCoordinatorAsked() = journey("start-card-asked") {
+        login(case = "start"); http("/__control", """{"plan":true}""")
+        open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch"); awaitScrollTo("project-detail", hasTestTag("start-request"))
+        compose.onNodeWithTag("start-request").assertTextContains("The coordinator asked · a project branch · Automatic on · at most 2 at a time")
+        capture("start-asked-0-project-row")
+        tap("start-request:action")
+        awaitTag("interaction-cards"); awaitScrollTo("transcript-list", hasTestTag("start:start1"))
+        compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag("start:start1:START") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("start:start1-asked").assertTextContains("${StartProjectCopy.coordinatorAsked} ", substring = true)
+        compose.onNodeWithText("The plan is ready.").assertExists(); compose.onNodeWithTag("start:start1-why").assertTextEquals(StartProjectCopy.more)
+        capture("start-asked-1-top")
+        compose.onNodeWithTag("start:start1-comes-to-you").performScrollTo()
+        compose.onNodeWithText("E · 上线 · you confirm it").assertIsDisplayed(); compose.onNodeWithText("Problems it can’t resolve within 1 h").assertIsDisplayed()
+        compose.onNodeWithTag("start:start1-automatic-says").assertTextEquals(RunSettings.automaticOnChecked)
+        capture("start-asked-2-how-it-runs")
+        compose.onNodeWithTag("start:start1-note").performScrollTo().assertTextEquals(StartProjectCopy.howItRunsNote(asked = true, suggestedOff = false))
+        compose.onNodeWithTag("start:start1-level:2").performScrollTo().assertTextContains("B · C").assertTextContains(StartProjectCopy.inParallel(2))
+        compose.onNodeWithTag("start:start1-caption").performScrollTo().assertTextEquals("Starts A now · confirms this criterion · seal seal1")
+        capture("start-asked-3-plan-and-start")
+        assertNoOldStartLines()
+        compose.onNodeWithTag("start:start1:START").performScrollTo().performClick()
+        compose.waitUntil(20_000) { journal().any { it.text("method") == "POST" && it.text("path") == "/api/projects/$projectId/start" } }
+        assertEquals(buildJsonObject {
+            put("criteriaDigest", "seal1"); put("requestId", "start1"); put("line", "PROJECT_BRANCH"); put("automatic", true); put("maxConcurrentTasks", 2)
+            put("mergeCheckCommand", "./verify"); put("projectBranchName", "refs/heads/project/cards")
+        }, journal().last { it.text("path") == "/api/projects/$projectId/start" }.obj("body"))
+        awaitText("Request accepted"); capture("start-asked-4-accepted")
     }
 
     @Test fun aDeliveryBlockerIsReviewedWithItsReasonRecorded() = journey("project-blocker") {
