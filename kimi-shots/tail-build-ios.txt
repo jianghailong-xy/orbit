@@ -1,0 +1,300 @@
+    t =     0.00s Start Test at 2026-10-08 17:38:15.693
+    t =     0.03s Set Up
+    t =     0.07s Open io.orbitd.kimiprobe
+    t =     0.07s     Launch io.orbitd.kimiprobe
+    t =     0.07s         Terminate io.orbitd.kimiprobe:33625
+2026-10-08 17:38:16.800 xcodebuild[3181:15002] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-08 17:38:16.801 xcodebuild[3181:15002] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     2.47s         Setting up automation session
+    t =     4.41s         Wait for io.orbitd.kimiprobe to idle
+    t =     7.05s Checking existence of `Any (First Match)`
+    t =    11.35s Checking existence of `Any (First Match)`
+    t =    14.37s Checking existence of `Any (First Match)`
+    t =    14.85s Find the Any (First Match)
+    t =    15.26s Find the "alex.team@example.com" StaticText
+    t =    15.74s Find the "alex.team@example.com" StaticText
+    t =    16.09s Get all elements bound by index for: Elements matching predicate 'label == "NEXT"'
+    t =    16.22s Get all elements bound by index for: Elements matching predicate 'label == "alex.team@example.com"'
+    t =    16.35s Find the StaticText (Element at index 0)
+    t =    16.49s Find the StaticText (Element at index 0)
+    t =    16.61s Find the "alex.team@example.com" StaticText
+    t =    16.72s Find the "NEXT" StaticText
+    t =    16.84s Find the "alex.team@example.com" StaticText
+    t =    16.95s Find the "NEXT" StaticText
+    t =    17.23s Added attachment named 'ios-11-claude-next-team'
+    t =    17.23s Terminate io.orbitd.kimiprobe:35192
+    t =    18.26s Open io.orbitd.kimiprobe
+    t =    18.26s     Launch io.orbitd.kimiprobe
+2026-10-08 17:38:33.954 xcodebuild[3181:15002] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-08 17:38:33.954 xcodebuild[3181:15002] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    19.24s         Setting up automation session
+    t =    21.75s         Wait for io.orbitd.kimiprobe to idle
+    t =    24.12s Checking existence of `Any (First Match)`
+    t =    27.43s Get all elements bound by index for: Elements matching predicate 'label == "NEXT"'
+    t =    27.88s Get all elements bound by index for: Elements matching predicate 'label == "Pro"'
+    t =    27.99s Find the StaticText (Element at index 0)
+    t =    28.13s Find the StaticText (Element at index 0)
+    t =    28.28s Find the "Pro" StaticText
+    t =    28.40s Find the "NEXT" StaticText
+    t =    28.52s Find the "Pro" StaticText
+    t =    28.64s Find the "NEXT" StaticText
+    t =    28.96s Added attachment named 'ios-12-codex-next-pro'
+    t =    28.96s Terminate io.orbitd.kimiprobe:36283
+    t =    29.99s Open io.orbitd.kimiprobe
+    t =    29.99s     Launch io.orbitd.kimiprobe
+2026-10-08 17:38:45.685 xcodebuild[3181:15002] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-08 17:38:45.685 xcodebuild[3181:15002] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    30.58s         Setting up automation session
+    t =    32.90s         Wait for io.orbitd.kimiprobe to idle
+    t =    35.11s Checking existence of `Any (First Match)`
+    t =    37.78s Get all elements bound by index for: Elements matching predicate 'label == "NEXT"'
+    t =    38.05s Get all elements bound by index for: Elements matching predicate 'label == "Default"'
+    t =    38.19s Find the StaticText (Element at index 0)
+    t =    38.35s Find the StaticText (Element at index 0)
+    t =    38.48s Find the "Default" StaticText
+    t =    38.62s Find the "NEXT" StaticText
+    t =    38.75s Find the "Default" StaticText
+    t =    38.87s Find the "NEXT" StaticText
+    t =    39.22s Added attachment named 'ios-13-antigravity-next-default'
+    t =    39.23s Tear Down
+Test Case '-[KimiProbeUITests.KimiShotTests test7NextOnTheOtherEnginesPages]' passed (39.533 seconds).
+Test Case '-[KimiProbeUITests.KimiShotTests test8TheComposerMovesAKimiSessionBetweenAccounts]' started.
+    t =     0.00s Start Test at 2026-10-08 17:38:55.227
+    t =     0.04s Set Up
+    t =     0.07s Open io.orbitd.kimiprobe
+    t =     0.07s     Launch io.orbitd.kimiprobe
+    t =     0.08s         Terminate io.orbitd.kimiprobe:36506
+2026-10-08 17:38:56.322 xcodebuild[3181:15002] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-08 17:38:56.322 xcodebuild[3181:15002] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.73s         Setting up automation session
+    t =     3.96s         Wait for io.orbitd.kimiprobe to idle
+    t =     6.35s Checking existence of `Any (First Match)`
+    t =    10.34s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Plan usage"'
+    t =    10.64s Checking existence of `Button (Element at index 0)`
+    t =    10.76s Find the Button (Element at index 0)
+    t =    10.94s Checking existence of `"Plan usage 91%" Button`
+    t =    11.08s Find the "Plan usage 91%" Button
+    t =    11.22s Find the "Plan usage 91%" Button
+    t =    11.35s Find the "Plan usage 91%" Button
+    t =    11.47s Find the "Plan usage 91%" Button
+    t =    11.63s Find the "Plan usage 91%" Button
+    t =    11.81s Find the "Plan usage 91%" Button
+    t =    12.12s Added attachment named 'ios-14-console-on-work'
+    t =    12.12s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Model K3"'
+    t =    12.24s Checking existence of `Button (Element at index 0)`
+    t =    12.33s Find the Button (Element at index 0)
+    t =    12.49s Checking existence of `"Model K3, effort High" Button`
+    t =    12.61s Find the "Model K3, effort High" Button
+    t =    12.73s Find the "Model K3, effort High" Button
+    t =    12.83s Find the "Model K3, effort High" Button
+    t =    12.94s Find the "Model K3, effort High" Button
+    t =    13.04s Find the "Model K3, effort High" Button
+    t =    13.15s Checking existence of `"Model K3, effort High" Button`
+    t =    13.23s Tap "Model K3, effort High" Button
+    t =    13.23s     Wait for io.orbitd.kimiprobe to idle
+    t =    13.23s     Find the "Model K3, effort High" Button
+    t =    13.35s     Check for interrupting elements affecting "Model K3, effort High" Button
+    t =    13.45s     Synthesize event
+    t =    13.75s     Wait for io.orbitd.kimiprobe to idle
+    t =    16.67s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Provider"'
+    t =    16.87s Checking existence of `Button (Element at index 0)`
+    t =    17.05s Find the Button (Element at index 0)
+    t =    17.30s Checking existence of `"Provider, Kimi" Button`
+    t =    17.43s Find the "Provider, Kimi" Button
+    t =    17.54s Find the "Provider, Kimi" Button
+    t =    17.64s Find the "Provider, Kimi" Button
+    t =    17.74s Find the "Provider, Kimi" Button
+    t =    17.83s Find the "Provider, Kimi" Button
+    t =    17.95s Checking existence of `"Provider, Kimi" Button`
+    t =    18.26s Added attachment named 'ios-15-model-menu-provider'
+    t =    18.27s Requesting snapshot of accessibility hierarchy for app with pid 37030
+    t =    18.83s Requesting snapshot of accessibility hierarchy for app with pid 37030
+    t =    19.00s Tap "Provider, Kimi" Button
+    t =    19.00s     Wait for io.orbitd.kimiprobe to idle
+    t =    19.01s     Find the "Provider, Kimi" Button
+    t =    19.13s     Check for interrupting elements affecting "Provider, Kimi" Button
+    t =    19.21s     Synthesize event
+    t =    19.53s     Wait for io.orbitd.kimiprobe to idle
+    t =    22.98s Get all elements bound by index for: Elements matching predicate 'label == "Kimi"'
+    t =    23.09s Checking existence of `Button (First Match)`
+    t =    23.18s Checking existence of `Button (First Match)`
+    t =    23.28s Checking existence of `Button (First Match)`
+    t =    23.62s Added attachment named 'ios-16-provider-kimi-accounts'
+    t =    23.63s Requesting snapshot of accessibility hierarchy for app with pid 37030
+    t =    24.22s Requesting snapshot of accessibility hierarchy for app with pid 37030
+    t =    24.40s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Default"'
+    t =    24.54s Checking existence of `Button (Element at index 0)`
+    t =    24.67s Find the Button (Element at index 0)
+    t =    24.77s Checking existence of `Button (Element at index 1)`
+    t =    24.92s Find the Button (Element at index 1)
+    t =    25.33s Checking existence of `"Default" Button`
+    t =    25.63s Find the "Default" Button
+    t =    25.79s Find the "Default" Button
+    t =    25.88s Find the "Default" Button
+    t =    25.97s Find the "Default" Button
+    t =    26.08s Find the "Default" Button
+    t =    26.17s Find the "Default" Button
+    t =    26.30s Find the "Default" Button
+    t =    26.38s Checking existence of `"Default" Button`
+    t =    26.49s Tap "Default" Button
+    t =    26.49s     Wait for io.orbitd.kimiprobe to idle
+    t =    26.49s     Find the "Default" Button
+    t =    26.59s     Check for interrupting elements affecting "Default" Button
+    t =    26.66s     Synthesize event
+    t =    26.99s     Wait for io.orbitd.kimiprobe to idle
+    t =    32.52s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Plan usage"'
+    t =    32.63s Checking existence of `Button (Element at index 0)`
+    t =    32.72s Find the Button (Element at index 0)
+    t =    32.80s Checking existence of `"Plan usage 34%" Button`
+    t =    32.88s Find the "Plan usage 34%" Button
+    t =    32.98s Find the "Plan usage 34%" Button
+    t =    33.26s Find the "Plan usage 34%" Button
+    t =    33.38s Find the "Plan usage 34%" Button
+    t =    33.46s Find the "Plan usage 34%" Button
+    t =    33.56s Find the "Plan usage 34%" Button
+    t =    33.78s Added attachment named 'ios-17-moved-to-default'
+    t =    33.79s Get all elements bound by index for: Descendants matching type TextView
+    t =    33.85s Checking existence of `TextView (Element at index 0)`
+    t =    33.94s Find the TextView (Element at index 0)
+    t =    34.00s Checking existence of `TextView (Element at index 1)`
+    t =    34.07s Find the TextView (Element at index 1)
+    t =    34.14s Checking existence of `TextView (Element at index 2)`
+    t =    34.20s Find the TextView (Element at index 2)
+    t =    34.27s Checking existence of `TextView (Element at index 3)`
+    t =    34.32s Find the TextView (Element at index 3)
+    t =    34.38s Checking existence of `TextView (Element at index 4)`
+    t =    34.44s Find the TextView (Element at index 4)
+    t =    34.50s Checking existence of `TextView (Element at index 5)`
+    t =    34.56s Find the TextView (Element at index 5)
+    t =    34.62s Checking existence of `TextView (Element at index 6)`
+    t =    34.68s Find the TextView (Element at index 6)
+    t =    34.74s Checking existence of `TextView (Element at index 7)`
+    t =    34.80s Find the TextView (Element at index 7)
+    t =    34.86s Checking existence of `TextView (Element at index 8)`
+    t =    34.94s Find the TextView (Element at index 8)
+    t =    35.01s Checking existence of `TextView (Element at index 9)`
+    t =    35.07s Find the TextView (Element at index 9)
+    t =    35.14s Find the TextView at {{32.0, 754.0}, {338.0, 22.0}}
+    t =    35.21s Find the "Kimi 的额度从哪儿读？" TextView
+    t =    35.28s Find the TextView at {{32.0, 754.0}, {338.0, 22.0}}
+    t =    35.36s Find the "账号目录 config.toml 里 managed:kimi-code 的 base_url 加 /usages，带上这个账号的 access token 就行。" TextView
+    t =    35.44s Find the TextView at {{32.0, 754.0}, {338.0, 22.0}}
+    t =    35.50s Find the "把 /usages 的返回整理成表，再接着写解析。" TextView
+    t =    35.58s Find the TextView at {{32.0, 754.0}, {338.0, 22.0}}
+    t =    35.66s Find the "四个窗口都是 {used_ratio, reset_time}：limit_5h、limit_7d、limit_month_total，还有 limit_month_code——月度里 Kimi Code 用掉的那段。
+表写在 notes/usages.m" TextView
+    t =    35.73s Find the TextView at {{32.0, 754.0}, {338.0, 22.0}}
+    t =    35.80s Find the "Kimi 的额度从哪儿读？" TextView
+    t =    35.88s Find the TextView at {{32.0, 754.0}, {338.0, 22.0}}
+    t =    35.95s Find the "账号目录 config.toml 里 managed:kimi-code 的 base_url 加 /usages，带上这个账号的 access token 就行。" TextView
+    t =    36.04s Find the TextView at {{32.0, 754.0}, {338.0, 22.0}}
+    t =    36.12s Find the "把 /usages 的返回整理成表，再接着写解析。" TextView
+    t =    36.21s Find the TextView at {{32.0, 754.0}, {338.0, 22.0}}
+    t =    36.27s Find the "四个窗口都是 {used_ratio, reset_time}：limit_5h、limit_7d、limit_month_total，还有 limit_month_code——月度里 Kimi Code 用掉的那段。" TextView
+    t =    36.36s Find the TextView at {{32.0, 754.0}, {338.0, 22.0}}
+    t =    36.45s Find the "表写在 notes/usages.md，下一步写 parseUsages()。" TextView
+    t =    36.57s Waiting 10.0s for TextView at {{32.0, 754.0}, {338.0, 22.0}} to exist
+    t =    37.58s     Checking `Expect predicate `existsNoRetry == 1` for object TextView at {{32.0, 754.0}, {338.0, 22.0}}`
+    t =    37.58s         Checking existence of `TextView at {{32.0, 754.0}, {338.0, 22.0}}`
+    t =    37.64s Tap TextView at {{32.0, 754.0}, {338.0, 22.0}}
+    t =    37.64s     Wait for io.orbitd.kimiprobe to idle
+    t =    37.64s     Find the TextView at {{32.0, 754.0}, {338.0, 22.0}}
+    t =    37.72s     Check for interrupting elements affecting TextView
+    t =    37.81s     Synthesize event
+    t =    38.16s     Wait for io.orbitd.kimiprobe to idle
+    t =    44.80s Type '换到 Default 了，接着写 p...' into TextView at {{32.0, 754.0}, {338.0, 22.0}}
+    t =    44.81s     Wait for io.orbitd.kimiprobe to idle
+    t =    44.82s     Find the TextView at {{32.0, 754.0}, {338.0, 22.0}}
+    t =    45.21s     Check for interrupting elements affecting TextView
+    t =    45.32s     Synthesize event
+    t =    46.07s     Wait for io.orbitd.kimiprobe to idle
+    t =    46.89s Checking existence of `Button (First Match)`
+    t =    48.02s Checking existence of `Button (First Match)`
+    t =    48.48s Checking existence of `Button (First Match)`
+    t =    48.91s Checking existence of `Button (First Match)`
+    t =    49.16s Checking existence of `Button (First Match)`
+    t =    49.39s Find the Button (First Match)
+    t =    49.64s Find the "arrow.up.circle.fill" Button
+    t =    49.91s Find the "arrow.up.circle.fill" Button
+    t =    50.24s Find the "arrow.up.circle.fill" Button
+    t =    50.55s Find the "arrow.up.circle.fill" Button
+    t =    50.84s Checking existence of `"arrow.up.circle.fill" Button`
+    t =    51.16s Find the "arrow.up.circle.fill" Button
+    t =    51.44s Tap "arrow.up.circle.fill" Button
+    t =    51.44s     Wait for io.orbitd.kimiprobe to idle
+    t =    51.45s     Find the "arrow.up.circle.fill" Button
+    t =    51.76s     Check for interrupting elements affecting "arrow.up.circle.fill" Button
+    t =    51.84s     Synthesize event
+    t =    52.17s     Wait for io.orbitd.kimiprobe to idle
+    t =    52.18s Checking existence of `Any (First Match)`
+    t =    54.70s Checking existence of `Any (First Match)`
+    t =    57.11s Checking existence of `Keyboard (First Match)`
+    t =    57.14s Tap Window (First Match)[0.50, 0.30]
+    t =    57.14s     Wait for io.orbitd.kimiprobe to idle
+    t =    57.15s     Find the Window (First Match)
+    t =    57.16s     Check for interrupting elements affecting Window
+    t =    57.28s     Synthesize event
+    t =    57.30s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    57.38s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    57.41s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    57.73s     Wait for io.orbitd.kimiprobe to idle
+    t =    59.07s Added attachment named 'ios-18-same-conversation-goes-on'
+    t =    59.08s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Plan usage"'
+    t =    62.39s Checking existence of `Button (Element at index 0)`
+    t =    63.52s Find the Button (Element at index 0)
+    t =    63.94s Tap "Plan usage 34%" Button
+    t =    63.94s     Wait for io.orbitd.kimiprobe to idle
+    t =    63.95s     Find the "Plan usage 34%" Button
+    t =    64.20s     Check for interrupting elements affecting "Plan usage 34%" Button
+    t =    64.39s     Synthesize event
+    t =    64.75s     Wait for io.orbitd.kimiprobe to idle
+    t =    64.90s Checking existence of `Any (First Match)`
+    t =    67.32s Checking existence of `Any (First Match)`
+    t =    67.48s Checking existence of `Any (First Match)`
+    t =    67.64s Checking existence of `Any (First Match)`
+    t =    68.00s Checking existence of `Any (First Match)`
+    t =    68.12s Checking existence of `Any (First Match)`
+    t =    68.29s Checking existence of `Any (First Match)`
+    t =    69.14s Added attachment named 'ios-19-plan-usage-default'
+    t =    69.17s Tear Down
+Test Case '-[KimiProbeUITests.KimiShotTests test8TheComposerMovesAKimiSessionBetweenAccounts]' passed (69.527 seconds).
+Test Case '-[KimiProbeUITests.KimiShotTests test9DarkPage]' started.
+    t =     0.00s Start Test at 2026-10-08 17:40:04.754
+    t =     0.12s Set Up
+    t =     0.16s Open io.orbitd.kimiprobe
+    t =     0.17s     Launch io.orbitd.kimiprobe
+    t =     0.17s         Terminate io.orbitd.kimiprobe:37030
+2026-10-08 17:40:06.947 xcodebuild[3181:15002] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-08 17:40:06.948 xcodebuild[3181:15002] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    10.26s         Setting up automation session
+    t =    14.89s         Wait for io.orbitd.kimiprobe to idle
+    t =    18.63s Checking existence of `Any (First Match)`
+    t =    20.69s Checking existence of `Any (First Match)`
+    t =    23.20s Checking existence of `Any (First Match)`
+    t =    28.00s Get all elements bound by index for: Elements matching predicate 'label == "NEXT"'
+    t =    28.16s Get all elements bound by index for: Elements matching predicate 'label == "Default"'
+    t =    28.30s Find the StaticText (Element at index 0)
+    t =    28.46s Find the StaticText (Element at index 0)
+    t =    28.59s Find the "Default" StaticText
+    t =    28.77s Find the "NEXT" StaticText
+    t =    28.88s Find the "Default" StaticText
+    t =    29.00s Find the "NEXT" StaticText
+    t =    29.46s Added attachment named 'ios-20-kimi-two-accounts-dark'
+    t =    29.46s Tear Down
+Test Case '-[KimiProbeUITests.KimiShotTests test9DarkPage]' passed (29.696 seconds).
+Test Suite 'KimiShotTests' passed at 2026-10-08 17:40:34.452.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 585.717 (585.730) seconds
+Test Suite 'KimiProbeUITests.xctest' passed at 2026-10-08 17:40:34.453.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 585.717 (585.731) seconds
+Test Suite 'All tests' passed at 2026-10-08 17:40:34.453.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 585.717 (585.733) seconds
+2026-10-08 17:41:17.535 xcodebuild[3181:15002] [MT] IDETestOperationsObserverDebug: 672.761 elapsed -- Testing started completed.
+2026-10-08 17:41:17.541 xcodebuild[3181:15002] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-08 17:41:17.541 xcodebuild[3181:15002] [MT] IDETestOperationsObserverDebug: 672.761 sec, +672.761 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.kimi-probe/results/ios.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

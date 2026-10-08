@@ -1,0 +1,372 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "32382973-A643-4FFE-B0BA-A5D64D43521D.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-21-runner-row-one-account_0_B1279C60-D445-441B-9CCF-FD94754B35CC.png",
+        "timestamp" : 1791480706.272
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "2FCAB518-183C-4F85-9023-5187DFC3DC9D.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "KimiShotTests/test10TheRunnerRowWithOneAccountKeepsItsSite()",
+    "testIdentifierURL" : "test://com.apple.xcode/KimiProbe/KimiProbeUITests/KimiShotTests/test10TheRunnerRowWithOneAccountKeepsItsSite"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "F45301F1-665E-4CA3-B20D-124D37FB63A9.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-23-kimi-work-signed-out_0_4288EE72-1E10-4E81-B103-B28814D6FC27.png",
+        "timestamp" : 1791480779.254
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "5A0950A4-941D-41A7-824B-B990EC58C2A7.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-22-runner-row-work-signed-out_0_1A2033F4-83D9-44DF-9903-1352353F18BA.png",
+        "timestamp" : 1791480754.406
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "3845779E-FDC7-445E-A0AC-D26C17960885.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "KimiShotTests/test11WorkSignedOut()",
+    "testIdentifierURL" : "test://com.apple.xcode/KimiProbe/KimiProbeUITests/KimiShotTests/test11WorkSignedOut"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "8E4D056D-71CB-4B9E-898A-965232518885.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-01-kimi-older-runner_0_6C4563AF-6889-411B-9A16-F78E776758BC.png",
+        "timestamp" : 1791480797.096
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "6C871AF1-61C1-416E-95EC-B526C59F9256.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "KimiShotTests/test1AnOlderRunnersPageIsAsItWas()",
+    "testIdentifierURL" : "test://com.apple.xcode/KimiProbe/KimiProbeUITests/KimiShotTests/test1AnOlderRunnersPageIsAsItWas"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "DF79DE49-6FF0-4227-BCFB-B312E54EB810.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-02-kimi-one-account_0_D6409F50-36D6-43C5-A5FE-398AB54B16FE.png",
+        "timestamp" : 1791480817.41
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "AD1A3420-AB29-4428-AC10-4715D259AF3B.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "KimiShotTests/test2OneAccountOffersAddAccount()",
+    "testIdentifierURL" : "test://com.apple.xcode/KimiProbe/KimiProbeUITests/KimiShotTests/test2OneAccountOffersAddAccount"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "05D09D36-DC51-4533-B5EF-409C95069A60.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-06-added-work-folded_0_60BA562E-EE38-4F90-B9D2-D2D5A066E0F9.png",
+        "timestamp" : 1791480979.241
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "90FDB030-CA58-44BD-9232-1981F688A8BA.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-05-add-account-device-code-kimi-com_0_DEB1FD22-7F55-4B60-981E-EF3CD4C96F01.png",
+        "timestamp" : 1791480959.786
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "A5F8C83B-0427-4295-8A0C-5AB4487D9D4D.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-04-add-account-no-name_0_8EE18266-6818-4076-9AC7-79BB05E77351.png",
+        "timestamp" : 1791480943.655
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "94EB8B0B-1C2A-4BF8-849E-702ACDE4C378.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-03-add-account-name-then-sites_0_B064C294-1830-404E-B3F9-66A4A0D4B11F.png",
+        "timestamp" : 1791480926.41
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "B5CF75DC-4239-43CD-B71A-A7832D5AB82C.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "KimiShotTests/test3AddAccountNamesTheAccountThenPicksItsSite()",
+    "testIdentifierURL" : "test://com.apple.xcode/KimiProbe/KimiProbeUITests/KimiShotTests/test3AddAccountNamesTheAccountThenPicksItsSite"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "90940AC9-AA23-4B4A-ABC7-CAE0374F4FE9.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-08-kimi-two-accounts-work_0_27A65BA2-A619-4CAE-A5E0-AF077B295CC7.png",
+        "timestamp" : 1791481020.12
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "9D95F12B-F626-40DC-B369-62DAE084A93C.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-07-kimi-two-accounts-next-default_0_2C7C5258-DAB8-4999-873B-B23771232D6E.png",
+        "timestamp" : 1791481011.927
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "D7FA6CC3-0A03-49FB-A90A-8AE119E04F5E.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "KimiShotTests/test4TwoAccountsEachSayTheirSiteAndWindowsAndDefaultIsNext()",
+    "testIdentifierURL" : "test://com.apple.xcode/KimiProbe/KimiProbeUITests/KimiShotTests/test4TwoAccountsEachSayTheirSiteAndWindowsAndDefaultIsNext"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "D24CA1EB-5C20-41EC-A979-EAB0E602C611.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-09-runner-page-next_0_6FB7A60E-CCDB-41AF-9E76-C2242BB942A5.png",
+        "timestamp" : 1791481056.432
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "959F3A9A-2A3C-494C-B176-9664B7829AFE.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "KimiShotTests/test5TheRunnerPageNamesTheNextAccount()",
+    "testIdentifierURL" : "test://com.apple.xcode/KimiProbe/KimiProbeUITests/KimiShotTests/test5TheRunnerPageNamesTheNextAccount"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "D033130E-B52C-47A1-AD87-588198CE3CC8.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-10-work-sign-in-again-current-kimi-com_0_1C295D7C-6448-481C-A632-601F9C7F4599.png",
+        "timestamp" : 1791481095.417
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "25BE437F-FCCA-4C83-A81F-A7E31406F211.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-10a-work-menu_0_B45A26E0-ECE8-44B4-9C5B-2FB325896C86.png",
+        "timestamp" : 1791481080.226
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "A2384E56-840C-40C2-B6CE-5FC491C89CA2.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "KimiShotTests/test6SignInAgainMarksTheAccountsOwnSite()",
+    "testIdentifierURL" : "test://com.apple.xcode/KimiProbe/KimiProbeUITests/KimiShotTests/test6SignInAgainMarksTheAccountsOwnSite"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "C5B518BC-1917-440A-800F-A76E77E04D74.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-13-antigravity-next-default_0_03713EB6-5B95-4790-B391-50D49F2ACF21.png",
+        "timestamp" : 1791481134.914
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "B399052B-834B-4284-9C0E-5A92A61AC6F7.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-12-codex-next-pro_0_8BF4F99A-65A7-4BCC-8D0F-D3FC0F08BCBD.png",
+        "timestamp" : 1791481124.651
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "D5AD0724-E075-4146-A5D7-AFA051A30891.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-11-claude-next-team_0_7BB98CE1-F09D-425C-97BB-848A16B5E1DB.png",
+        "timestamp" : 1791481112.922
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "CA46D4F3-07E9-4EFF-96DE-91C0529739C9.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "KimiShotTests/test7NextOnTheOtherEnginesPages()",
+    "testIdentifierURL" : "test://com.apple.xcode/KimiProbe/KimiProbeUITests/KimiShotTests/test7NextOnTheOtherEnginesPages"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "9F51DB39-602F-4572-8F0A-6EC3279052AE.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-19-plan-usage-default_0_00075C26-1979-478E-987B-AAF9B898D0EB.png",
+        "timestamp" : 1791481204.365
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "F9590E4A-B362-458D-A2BD-15A03DC7B092.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-18-same-conversation-goes-on_0_BFB0429C-358F-4FE3-98E8-FB613EF7EAD5.png",
+        "timestamp" : 1791481194.297
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "640A13E7-291F-4CBC-9128-E5A17F65214F.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-17-moved-to-default_0_632B90C2-FF1A-4DD2-94E8-7107238B4F39.png",
+        "timestamp" : 1791481169.008
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "2C1C5EA3-C9BA-43CC-A667-EF1DB85F8791.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-16-provider-kimi-accounts_0_FC3AB270-C660-4E95-BD98-5948AE5427C3.png",
+        "timestamp" : 1791481158.85
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "E80E94D9-C2DE-466F-A452-3503C938EFB5.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-15-model-menu-provider_0_AFBB0728-15BB-4F55-85D2-DC24735CBC75.png",
+        "timestamp" : 1791481153.49
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "35A83EA4-3FC4-4AA1-9291-889C935FA428.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-14-console-on-work_0_25FE89C1-18C6-4A9E-9A0A-8D8418DC0358.png",
+        "timestamp" : 1791481147.347
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "E0E328CB-BA8B-4B4F-97E0-81C89FFA0E72.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "KimiShotTests/test8TheComposerMovesAKimiSessionBetweenAccounts()",
+    "testIdentifierURL" : "test://com.apple.xcode/KimiProbe/KimiProbeUITests/KimiShotTests/test8TheComposerMovesAKimiSessionBetweenAccounts"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "3A58E21E-B9F6-42C8-9167-74C212C15C98.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-20-kimi-two-accounts-dark_0_32F4038F-541E-4339-9008-74E42FFB6050.png",
+        "timestamp" : 1791481234.214
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "3712E4C1-89C5-44EE-8075-918A1FB39939.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "KimiShotTests/test9DarkPage()",
+    "testIdentifierURL" : "test://com.apple.xcode/KimiProbe/KimiProbeUITests/KimiShotTests/test9DarkPage"
+  }
+]

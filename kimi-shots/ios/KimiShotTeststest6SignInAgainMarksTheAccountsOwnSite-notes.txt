@@ -1,0 +1,3 @@
+again-row: in view after 0 drag(s) at (32.0, 524.0, 41.66666666666666, 20.33333333333337)
+again: Current ["(301.33333333333337, 762.6666666666666, 48.666666666666686, 15.666666666666742)"]; kimi.com 9 label="kimi.com, Mainland China, Current" value="" frame=(32.0, 751.6666666666666, 338.0, 51.0) hittable=true; kimi.ai 9 label="kimi.ai, International" value="" frame=(32.0, 810.6666666666666, 338.0, 51.0) hittable=true
+again-sites: in view after 2 drag(s) at (32.0, 550.6666666666666, 338.0, 51.0)

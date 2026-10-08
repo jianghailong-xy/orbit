@@ -1,0 +1,228 @@
+Attributes: Application, 0x117473e80, pid: 24511, label: 'KimiProbe'
+Element subtree:
+ →Application, 0x117473e80, pid: 24511, label: 'KimiProbe'
+    Window (Main), 0x117470b40, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x117470c80, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x117470dc0, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x117470f00, {{-402.0, -874.0}, {1206.0, 2622.0}}
+          Other, 0x117471040, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x117471180, {{0.0, 0.0}, {402.0, 874.0}}
+              StaticText, 0x1174712c0, {{22.0, 84.8}, {52.3, 26.3}}, label: 'Orbit'
+              Button, 0x117471400, {{251.7, 76.0}, {44.0, 44.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+              CollectionView, 0x117471540, {{0.0, 128.0}, {305.7, 746.0}}
+                Other, 0x117471680, {{0.0, -1364.0}, {305.7, 3206.0}}
+                Cell, 0x1174717c0, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x117471900, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x1174735c0, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x117473840, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x117473980, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x117473ac0, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x117473c00, {{0.0, 128.0}, {305.3, 44.3}}
+                        Button, 0x117473d40, {{0.0, 128.0}, {305.3, 44.3}}, label: 'Projects'
+                          Image, 0x1174d0000, {{26.3, 142.3}, {15.3, 15.3}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                          StaticText, 0x1174d0140, {{58.0, 140.0}, {62.3, 20.3}}, label: 'Projects'
+                Cell, 0x1174d0280, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x1174d03c0, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x1174d0500, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x1174d0640, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x1174d0780, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x1174d08c0, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x1174d0a00, {{0.0, 172.3}, {305.3, 44.3}}
+                        Button, 0x1174d0b40, {{0.0, 172.3}, {305.3, 44.3}}, label: 'Tasks'
+                          Image, 0x1174d0c80, {{24.7, 186.0}, {18.7, 17.0}}, identifier: 'checklist', label: 'checklist'
+                          StaticText, 0x1174d0dc0, {{58.0, 184.3}, {43.0, 20.3}}, label: 'Tasks'
+                Cell, 0x1174d0f00, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x1174d1040, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x1174d1180, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x1174d12c0, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x1174d1400, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x1174d1540, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x1174d1680, {{0.0, 216.7}, {305.3, 44.3}}
+                        Button, 0x1174d17c0, {{0.0, 216.7}, {305.3, 44.3}}, label: 'Wiki'
+                          Image, 0x1174d1900, {{27.0, 230.0}, {14.0, 18.0}}, identifier: 'book.closed', label: 'book.closed'
+                          StaticText, 0x1174d1a40, {{58.0, 228.7}, {32.7, 20.3}}, label: 'Wiki'
+                Cell, 0x1174d1b80, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x1174d1cc0, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x1174d1e00, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x1174d1f40, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x1174d2080, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x1174d21c0, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x1174d2300, {{0.0, 261.0}, {305.3, 44.7}}
+                        StaticText, 0x1174d2440, {{0.0, 261.0}, {305.3, 44.7}}, label: 'Workspaces'
+                Cell, 0x1174d2580, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x1174d26c0, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x1174d2800, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x1174d2940, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x1174d2a80, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x1174d2bc0, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x1174d2d00, {{0.0, 305.7}, {305.3, 44.3}}
+                        Button, 0x1174d2e40, {{0.0, 305.7}, {305.3, 44.3}}, label: 'orbit-develop,  · HPC'
+                          Other, 0x1174d2f80, {{24.7, 320.0}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x1174d30c0, {{24.7, 320.0}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x1174d3200, {{58.0, 317.7}, {103.0, 20.3}}, label: 'orbit-develop'
+                          StaticText, 0x1174d3340, {{161.0, 317.7}, {47.7, 20.3}}, label: ' · HPC'
+                Other, 0x1174d3480, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x1174d35c0, {{299.3, 561.0}, {3.0, 310.0}}
+                Other, 0x1174d3700, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x1174d3840, {{299.3, 561.0}, {3.0, 310.0}}
+              Button, 0x1174d3980, {{10.0, 788.7}, {165.0, 43.0}}, label: 'New session'
+                Image, 0x1174d3ac0, {{31.0, 801.0}, {18.3, 18.3}}, identifier: 'square.and.pencil', label: 'Compose'
+                StaticText, 0x1174d3c00, {{57.0, 799.8}, {100.0, 20.3}}, label: 'New session'
+              Button, 0x1174d3d40, {{251.7, 788.0}, {44.0, 44.0}}, identifier: 'gearshape', label: 'Settings'
+              Other, 0x1174d3e80, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x1174d4000, {{0.0, 62.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI29PresentationHosting'
+                  Other, 0x1174d4140, {{20.0, 66.0}, {36.0, 36.0}}, identifier: 'line.3.horizontal', label: 'Open navigation'
+                    Other, 0x1174d4280, {{20.0, 66.0}, {36.0, 36.0}}
+                      Button, 0x1174d43c0, {{22.3, 66.0}, {31.3, 36.0}}, identifier: 'line.3.horizontal', label: 'Open navigation'
+                  Other, 0x1174d4500, {{76.0, 73.7}, {108.0, 20.7}}, label: 'Workspace: orbit-develop'
+                    Other, 0x1174d4640, {{76.0, 73.7}, {108.0, 20.7}}
+                      StaticText, 0x1174d4780, {{76.0, 74.0}, {108.0, 20.3}}, label: 'Workspace: orbit-develop'
+                  Other, 0x1174d48c0, {{283.7, 66.0}, {41.7, 36.0}}, label: 'Session scope, Open'
+                    Other, 0x1174d4a00, {{283.7, 66.0}, {41.7, 36.0}}
+                      Button, 0x1174d4b40, {{283.7, 66.0}, {41.7, 36.0}}, label: 'Session scope, Open'
+                        Button, 0x1174d4c80, {{283.7, 66.0}, {41.7, 36.0}}
+                          Image, 0x1174d4dc0, {{293.3, 77.7}, {22.0, 13.0}}, identifier: 'line.3.horizontal.decrease', label: 'Filter'
+                  Button, 0x1174d4f00, {{341.3, 66.0}, {40.7, 36.0}}, label: 'Start a new session with orbit-develop'
+                Other, 0x1174d5040, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x1174d5180, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x1174d52c0, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x1174d5400, {{0.0, 0.0}, {402.0, 874.0}}
+                        Other, 0x1174d5540, {{0.0, 116.0}, {402.0, 672.0}}
+                        CollectionView, 0x1174d5680, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x1174d57c0, {{0.0, -1632.0}, {402.0, 3571.3}}
+                          Other, 0x1174d5900, {{0.0, 0.0}, {402.0, 874.0}}
+                            Other, 0x1174d5a40, {{0.0, 0.0}, {402.0, 170.8}}
+                            Other, 0x1174d5b80, {{0.0, 733.2}, {402.0, 140.8}}
+                          Other, 0x1174d5cc0, {{0.0, 0.0}, {402.0, 874.0}}
+                          Cell, 0x1174d5e00, {{0.0, 116.0}, {402.0, 75.3}}
+                            Other, 0x1174d5f40, {{0.0, 116.0}, {402.0, 75.3}}
+                              Other, 0x1174d6080, {{0.0, 116.0}, {402.0, 75.3}}
+                            Other, 0x1174d61c0, {{0.0, 116.0}, {402.0, 75.3}}
+                              Other, 0x1174d6300, {{0.0, 116.0}, {402.0, 75.3}}
+                                Other, 0x1174d6440, {{0.0, 116.0}, {402.0, 75.3}}
+                                  Other, 0x1174d6580, {{0.0, 120.3}, {150.0, 66.7}}
+                                  Other, 0x1174d66c0, {{182.0, 120.3}, {220.0, 66.7}}
+                                  Button, 0x1174d6800, {{0.0, 116.0}, {402.0, 75.3}}, label: 'Kimi 额度：按账号读取与上报, just now, 表写在 notes/usages.md，下一步写 parseUsages()。', value: Waiting for your r...
+                                    StaticText, 0x1174d6940, {{16.0, 133.0}, {222.7, 20.3}}, label: 'Kimi 额度：按账号读取与上报'
+                                    StaticText, 0x1174d6a80, {{342.3, 136.5}, {43.7, 13.3}}, label: 'just now'
+                                    StaticText, 0x1174d6bc0, {{16.0, 156.3}, {360.3, 18.0}}, label: '表写在 notes/usages.md，下一步写 parseUsages()。'
+                          Other, 0x1174d6d00, {{369.0, 116.0}, {30.0, 672.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x1174d6e40, {{396.0, 715.7}, {3.0, 69.3}}
+                          Other, 0x1174d6f80, {{369.0, 116.0}, {30.0, 672.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x1174d70c0, {{396.0, 715.7}, {3.0, 69.3}}
+                Other, 0x1174d7200, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x1174d7340, {{0.0, 0.0}, {402.0, 874.0}}
+                    Toolbar, 0x1174d7480, {{0.0, 788.0}, {402.0, 86.0}}, identifier: 'Toolbar', label: 'Toolbar'
+                      Other, 0x1174d75c0, {{28.0, 798.0}, {346.0, 48.0}}
+                        Other, 0x1174d7700, {{28.0, 798.0}, {346.0, 48.0}}
+                          Other, 0x1174d7840, {{28.0, 798.0}, {0.0, 0.0}}
+                            Other, 0x1174d7980, {{28.0, 798.0}, {346.0, 48.0}}
+                              Other, 0x1174d7ac0, {{28.0, 798.0}, {346.0, 48.0}}
+                                Other, 0x1174d7c00, {{33.0, 803.0}, {336.0, 38.0}}
+                                  SearchField, 0x1174d7d40, {{33.0, 803.0}, {336.0, 38.0}}, label: 'Search sessions', placeholderValue: 'Search sessions'
+                                    Image, 0x1174d7e80, {{46.0, 812.3}, {20.3, 18.7}}, identifier: 'magnifyingglass', label: 'Search'
+      Other, 0x1174d8000, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x1174d8140, {{-402.0, -874.0}, {1206.0, 2622.0}}
+        Other, 0x1174d8280, {{0.0, 62.0}, {402.0, 812.0}}
+          Other, 0x1174d83c0, {{0.0, 62.0}, {402.0, 812.0}}
+            Other, 0x1174d8500, {{0.0, 62.0}, {402.0, 812.0}}
+              Other, 0x1174d8640, {{0.0, 62.0}, {402.0, 812.0}}
+                Other, 0x1174d8780, {{0.0, 62.0}, {402.0, 812.0}}
+                  Other, 0x1174d88c0, {{0.0, 62.0}, {402.0, 812.0}}
+                    NavigationBar, 0x1174d8a00, {{0.0, 78.0}, {402.0, 54.0}}, identifier: 'Kimi Code'
+                      Button, 0x1174d8b40, {{16.0, 78.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'HPC'
+                      StaticText, 0x1174d8c80, {{160.3, 89.7}, {81.0, 20.7}}, label: 'Kimi Code'
+                      Other, 0x1174d8dc0, {{346.0, 82.0}, {36.0, 36.0}}, identifier: 'xmark', label: 'Close'
+                        Other, 0x1174d8f00, {{346.0, 82.0}, {36.0, 36.0}}
+                          Button, 0x1174d9040, {{350.7, 82.0}, {26.7, 36.0}}, identifier: 'xmark', label: 'Close'
+                    Other, 0x1174d9180, {{0.0, 62.0}, {402.0, 812.0}}
+                      Other, 0x1174d92c0, {{0.0, 62.0}, {402.0, 812.0}}
+                        Other, 0x1174d9400, {{0.0, 62.0}, {402.0, 812.0}}
+                          Other, 0x1174d9540, {{0.0, 62.0}, {402.0, 812.0}}
+                            CollectionView, 0x1174d9680, {{0.0, 62.0}, {402.0, 812.0}}
+                              Other, 0x1174d97c0, {{-16.0, -1492.0}, {434.0, 1728.7}}
+                              Other, 0x1174d9900, {{0.0, 62.0}, {402.0, 812.0}}
+                              Other, 0x1174d9a40, {{0.0, 62.0}, {402.0, 812.0}}
+                              Cell, 0x1174d9b80, {{16.0, 167.0}, {370.0, 52.0}}
+                                Other, 0x1174d9cc0, {{16.0, 167.0}, {370.0, 52.0}}
+                                  Other, 0x1174d9e00, {{16.0, 167.0}, {370.0, 52.0}}
+                                    Other, 0x1174d9f40, {{16.0, 167.0}, {370.0, 52.0}}
+                                Other, 0x1174da080, {{16.0, 167.0}, {370.0, 52.0}}
+                                  Other, 0x1174da1c0, {{16.0, 167.0}, {370.0, 52.0}}
+                                    Other, 0x1174da300, {{16.0, 167.0}, {370.0, 52.0}}
+                                      StaticText, 0x1174da440, {{62.0, 173.3}, {81.0, 20.3}}, label: 'Kimi Code'
+                                      StaticText, 0x1174da580, {{62.0, 194.7}, {163.0, 18.0}}, label: '2.1.1 · updated 29m ago'
+                              Other, 0x1174da6c0, {{-16.0, 236.7}, {434.0, 522.7}}
+                              Cell, 0x1174da800, {{16.0, 236.7}, {370.0, 35.7}}
+                                Other, 0x1174da940, {{16.0, 236.7}, {370.0, 35.7}}
+                                Other, 0x1174daa80, {{16.0, 236.7}, {370.0, 35.7}}
+                                  Other, 0x1174dabc0, {{16.0, 236.7}, {370.0, 35.7}}
+                                    Other, 0x1174dad00, {{16.0, 236.7}, {370.0, 35.7}}
+                                      StaticText, 0x1174dae40, {{16.0, 236.7}, {370.0, 35.7}}, label: 'Accounts'
+                              Cell, 0x1174daf80, {{16.0, 272.3}, {370.0, 232.0}}
+                                Other, 0x1174db0c0, {{16.0, 272.3}, {370.0, 232.0}}
+                                  Other, 0x1174db200, {{16.0, 272.3}, {370.0, 232.0}}
+                                Other, 0x1174db340, {{16.0, 272.3}, {370.0, 232.0}}
+                                  Other, 0x1174db480, {{16.0, 272.3}, {370.0, 232.0}}
+                                    Other, 0x1174db5c0, {{16.0, 272.3}, {370.0, 232.0}}
+                                      Other, 0x1174db700, {{16.0, 388.3}, {20.0, 0.0}}
+                                      Other, 0x1174db840, {{306.0, 355.0}, {80.0, 66.7}}
+                                      StaticText, 0x1174db980, {{32.0, 291.3}, {57.7, 20.3}}, label: 'Default'
+                                      StaticText, 0x1174dbac0, {{32.0, 313.7}, {125.3, 15.7}}, label: 'kimi.ai · ~/.kimi-code'
+                                      StaticText, 0x1174dbc00, {{306.3, 293.3}, {63.7, 18.0}}, label: 'Signed in'
+                                      StaticText, 0x1174dbd40, {{32.0, 339.3}, {47.0, 15.7}}, label: '5h limit'
+                                      StaticText, 0x1174dbe80, {{341.7, 339.3}, {28.3, 15.7}}, label: '12%'
+                                      StaticText, 0x1174dc000, {{32.0, 368.0}, {82.0, 13.3}}, label: 'Resets 7:29 PM'
+                                      StaticText, 0x1174dc140, {{32.0, 391.3}, {76.7, 15.7}}, label: 'Weekly limit'
+                                      StaticText, 0x1174dc280, {{341.7, 391.3}, {28.3, 15.7}}, label: '34%'
+                                      StaticText, 0x1174dc3c0, {{32.0, 420.0}, {160.0, 13.3}}, label: 'Resets Tue, Oct 13 at 8:49 AM'
+                                      StaticText, 0x1174dc500, {{32.0, 443.3}, {82.0, 15.7}}, label: 'Monthly limit'
+                                      StaticText, 0x1174dc640, {{349.7, 443.3}, {20.3, 15.7}}, label: '8%'
+                                      StaticText, 0x1174dc780, {{32.0, 472.0}, {154.7, 13.3}}, label: 'Resets Sun, Nov 1 at 7:49 AM'
+                              Cell, 0x1174dc8c0, {{16.0, 504.3}, {370.0, 237.3}}
+                                Other, 0x1174dca00, {{16.0, 504.3}, {370.0, 237.3}}
+                                  Other, 0x1174dcb40, {{16.0, 504.3}, {370.0, 237.3}}
+                                Other, 0x1174dcc80, {{16.0, 504.3}, {370.0, 237.3}}
+                                  Other, 0x1174dcdc0, {{16.0, 504.3}, {370.0, 237.3}}
+                                    Other, 0x1174dcf00, {{16.0, 504.3}, {370.0, 237.3}}
+                                      TextField, 0x1174dd040, {{32.0, 523.3}, {338.0, 34.0}}, placeholderValue: 'Work', value: Work
+                                      StaticText, 0x1174dd180, {{32.0, 567.3}, {334.3, 33.7}}, label: 'Sign in with the kimi.com account you are adding, then enter this one-time code:'
+                                      StaticText, 0x1174dd2c0, {{32.0, 609.0}, {111.3, 24.0}}, label: '7K06-QP86'
+                                      Button, 0x1174dd400, {{32.0, 641.0}, {283.0, 34.3}}, label: 'Copy Code & Open kimi.com'
+                                        Image, 0x1174dd540, {{45.0, 644.7}, {22.0, 27.0}}, identifier: 'doc.on.doc', label: 'Copy'
+                                        StaticText, 0x1174dd680, {{32.0, 641.0}, {283.0, 34.3}}, label: 'Copy Code & Open kimi.com'
+                                      ActivityIndicator, 0x1174dd7c0, {{32.0, 684.3}, {14.0, 14.0}}, value: 1
+                                        ActivityIndicator, 0x1174dd900, {{32.0, 684.3}, {14.0, 14.0}}, value: 1
+                                      StaticText, 0x1174dda40, {{54.0, 683.3}, {181.3, 15.7}}, label: 'Waiting for you to approve it…'
+                                      Button, 0x1174ddb80, {{32.0, 707.0}, {41.7, 15.7}}, label: 'Cancel'
+                                      Button, 0x1174ddcc0, {{89.7, 707.0}, {113.7, 15.7}}, label: 'Use kimi.ai instead'
+                              Other, 0x1174dde00, {{-16.0, 759.0}, {434.0, 1755.3}}
+                              Cell, 0x1174ddf40, {{16.0, 776.7}, {370.0, 52.0}}
+                                Other, 0x1174de080, {{16.0, 776.7}, {370.0, 52.0}}
+                                  Other, 0x1174de1c0, {{16.0, 776.7}, {370.0, 52.0}}
+                                Other, 0x1174de300, {{16.0, 776.7}, {370.0, 52.0}}
+                                  Other, 0x1174de440, {{16.0, 776.7}, {370.0, 52.0}}
+                                    Other, 0x1174de580, {{16.0, 776.7}, {370.0, 52.0}}
+                                      Button, 0x1174de6c0, {{16.0, 776.7}, {370.0, 52.0}}, label: 'Update Engines Now'
+                              Cell, 0x1174de800, {{16.0, 828.7}, {370.0, 61.7}}
+                                Other, 0x1174de940, {{16.0, 828.7}, {370.0, 61.7}}
+                                Other, 0x1174dea80, {{16.0, 828.7}, {370.0, 61.7}}
+                                  Other, 0x1174debc0, {{16.0, 828.7}, {370.0, 61.7}}
+                                    Other, 0x1174ded00, {{16.0, 828.7}, {370.0, 61.7}}
+                                      StaticText, 0x1174dee40, {{16.0, 828.7}, {370.0, 61.7}}, label: 'Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends that subscription, nothing to paste.'
+                              Other, 0x1174def80, {{369.0, 132.0}, {30.0, 680.0}}, label: 'Vertical scroll bar, 2 pages', value: 0%
+                                Other, 0x1174df0c0, {{396.0, 135.0}, {3.0, 604.0}}
+                              Other, 0x1174df200, {{369.0, 132.0}, {30.0, 680.0}}, label: 'Vertical scroll bar, 2 pages', value: 0%
+                                Other, 0x1174df340, {{396.0, 135.0}, {3.0, 604.0}}
+                    Other, 0x1174df480, {{0.0, 62.0}, {402.0, 812.0}}
+                      Other, 0x1174df5c0, {{0.0, 62.0}, {402.0, 812.0}}
+    Window, 0x1174df700, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x1174df840, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x1174df980, {{0.0, 0.0}, {402.0, 874.0}}
+Path to element:
+ →Application, 0x117473e80, pid: 24511, label: 'KimiProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.kimiprobe'
+  Output: {
+    Application, 0x1174dfac0, pid: 24511, label: 'KimiProbe'
+  }

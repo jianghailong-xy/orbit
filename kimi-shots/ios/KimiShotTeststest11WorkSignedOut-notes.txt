@@ -1,0 +1,4 @@
+row-out-kimi: in view after 4 drag(s) at (16.0, 277.66666666666663, 370.0, 189.00000000000006)
+row-out: row 9 label="Kimi Code, 2.1.1 · Signed out, Sign In, Next: Default, Weekly limit, 34%, Resets Tue, Oct 13 at 8:49 AM" value="" frame=(16.0, 277.66666666666663, 370.0, 189.00000000000006) hittable=true
+page-out-work: in view after 1 drag(s) at (32.0, 541.3333333333334, 251.66666666666663, 15.666666666666629)
+page-out: NEXT at ["(98.66666666666667, 290.4166666666667, 30.999999999999986, 13.333333333333314)"]; Default at ["(32.0, 286.9166666666667, 57.66666666666667, 20.333333333333314)"]

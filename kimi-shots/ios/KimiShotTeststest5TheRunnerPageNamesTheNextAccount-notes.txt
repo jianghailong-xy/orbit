@@ -1,0 +1,3 @@
+runner-kimi: in view after 3 drag(s) at (16.0, 407.6666666666667, 370.0, 147.99999999999994)
+runner: Kimi row 9 label="Kimi Code, 2.1.1 · 2 accounts signed in, Next: Default, Weekly limit, 34%, Resets Tue, Oct 13 at 8:49 AM" value="" frame=(16.0, 407.6666666666667, 370.0, 147.99999999999994) hittable=true
+runner-kimi: row 9 label="Kimi Code, 2.1.1 · 2 accounts signed in, Next: Default, Weekly limit, 34%, Resets Tue, Oct 13 at 8:49 AM" value="" frame=(16.0, 407.6666666666667, 370.0, 147.99999999999994) hittable=true

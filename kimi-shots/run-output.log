@@ -1,0 +1,79 @@
+==> stub ready after 2s
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+Test Case '-[KimiProbeUITests.KimiShotTests test10TheRunnerRowWithOneAccountKeepsItsSite]' started.
+Test Case '-[KimiProbeUITests.KimiShotTests test10TheRunnerRowWithOneAccountKeepsItsSite]' passed (57.908 seconds).
+Test Case '-[KimiProbeUITests.KimiShotTests test11WorkSignedOut]' started.
+Test Case '-[KimiProbeUITests.KimiShotTests test11WorkSignedOut]' passed (72.927 seconds).
+Test Case '-[KimiProbeUITests.KimiShotTests test1AnOlderRunnersPageIsAsItWas]' started.
+Test Case '-[KimiProbeUITests.KimiShotTests test1AnOlderRunnersPageIsAsItWas]' passed (17.776 seconds).
+Test Case '-[KimiProbeUITests.KimiShotTests test2OneAccountOffersAddAccount]' started.
+Test Case '-[KimiProbeUITests.KimiShotTests test2OneAccountOffersAddAccount]' passed (21.256 seconds).
+Test Case '-[KimiProbeUITests.KimiShotTests test3AddAccountNamesTheAccountThenPicksItsSite]' started.
+Test Case '-[KimiProbeUITests.KimiShotTests test3AddAccountNamesTheAccountThenPicksItsSite]' passed (161.134 seconds).
+Test Case '-[KimiProbeUITests.KimiShotTests test4TwoAccountsEachSayTheirSiteAndWindowsAndDefaultIsNext]' started.
+Test Case '-[KimiProbeUITests.KimiShotTests test4TwoAccountsEachSayTheirSiteAndWindowsAndDefaultIsNext]' passed (40.640 seconds).
+Test Case '-[KimiProbeUITests.KimiShotTests test5TheRunnerPageNamesTheNextAccount]' started.
+Test Case '-[KimiProbeUITests.KimiShotTests test5TheRunnerPageNamesTheNextAccount]' passed (37.401 seconds).
+Test Case '-[KimiProbeUITests.KimiShotTests test6SignInAgainMarksTheAccountsOwnSite]' started.
+Test Case '-[KimiProbeUITests.KimiShotTests test6SignInAgainMarksTheAccountsOwnSite]' passed (37.919 seconds).
+Test Case '-[KimiProbeUITests.KimiShotTests test7NextOnTheOtherEnginesPages]' started.
+Test Case '-[KimiProbeUITests.KimiShotTests test7NextOnTheOtherEnginesPages]' passed (39.533 seconds).
+Test Case '-[KimiProbeUITests.KimiShotTests test8TheComposerMovesAKimiSessionBetweenAccounts]' started.
+Test Case '-[KimiProbeUITests.KimiShotTests test8TheComposerMovesAKimiSessionBetweenAccounts]' passed (69.527 seconds).
+Test Case '-[KimiProbeUITests.KimiShotTests test9DarkPage]' started.
+Test Case '-[KimiProbeUITests.KimiShotTests test9DarkPage]' passed (29.696 seconds).
+	 Executed 11 tests, with 0 failures (0 unexpected) in 585.717 (585.730) seconds
+	 Executed 11 tests, with 0 failures (0 unexpected) in 585.717 (585.731) seconds
+	 Executed 11 tests, with 0 failures (0 unexpected) in 585.717 (585.733) seconds
+** TEST SUCCEEDED **
+.kimi-probe/run.sh: line 53:  1710 Terminated: 15          python3 -u stub.py 8765 "$OUT/ios/requests.log" > "$OUT/ios/stub.out" 2>&1
+total 17760
+drwxr-xr-x  49 runner  staff    1568 Oct  8 17:41 .
+drwxr-xr-x   3 runner  staff      96 Oct  8 17:19 ..
+drwxr-xr-x  38 runner  staff    1216 Oct  8 17:41 attachments
+-rw-r--r--   1 runner  staff  173929 Oct  8 17:33 ios-01-kimi-older-runner.png
+-rw-r--r--   1 runner  staff  218320 Oct  8 17:33 ios-02-kimi-one-account.png
+-rw-r--r--   1 runner  staff  337564 Oct  8 17:35 ios-03-add-account-name-then-sites.png
+-rw-r--r--   1 runner  staff  407238 Oct  8 17:35 ios-04-add-account-no-name.png
+-rw-r--r--   1 runner  staff  259924 Oct  8 17:35 ios-05-add-account-device-code-kimi-com.png
+-rw-r--r--   1 runner  staff  352625 Oct  8 17:36 ios-06-added-work-folded.png
+-rw-r--r--   1 runner  staff  252903 Oct  8 17:36 ios-07-kimi-two-accounts-next-default.png
+-rw-r--r--   1 runner  staff  352625 Oct  8 17:37 ios-08-kimi-two-accounts-work.png
+-rw-r--r--   1 runner  staff  390983 Oct  8 17:37 ios-09-runner-page-next.png
+-rw-r--r--   1 runner  staff  350860 Oct  8 17:38 ios-10-work-sign-in-again-current-kimi-com.png
+-rw-r--r--   1 runner  staff  372920 Oct  8 17:38 ios-10a-work-menu.png
+-rw-r--r--   1 runner  staff  279238 Oct  8 17:38 ios-11-claude-next-team.png
+-rw-r--r--   1 runner  staff  231259 Oct  8 17:38 ios-12-codex-next-pro.png
+-rw-r--r--   1 runner  staff  278613 Oct  8 17:38 ios-13-antigravity-next-default.png
+-rw-r--r--   1 runner  staff  304129 Oct  8 17:39 ios-14-console-on-work.png
+-rw-r--r--   1 runner  staff  379805 Oct  8 17:39 ios-15-model-menu-provider.png
+-rw-r--r--   1 runner  staff  405093 Oct  8 17:39 ios-16-provider-kimi-accounts.png
+-rw-r--r--   1 runner  staff  304143 Oct  8 17:39 ios-17-moved-to-default.png
+-rw-r--r--   1 runner  staff  390948 Oct  8 17:39 ios-18-same-conversation-goes-on.png
+-rw-r--r--   1 runner  staff  700827 Oct  8 17:40 ios-19-plan-usage-default.png
+-rw-r--r--   1 runner  staff  241644 Oct  8 17:40 ios-20-kimi-two-accounts-dark.png
+-rw-r--r--   1 runner  staff  390026 Oct  8 17:31 ios-21-runner-row-one-account.png
+-rw-r--r--   1 runner  staff  379194 Oct  8 17:32 ios-22-runner-row-work-signed-out.png
+-rw-r--r--   1 runner  staff  253526 Oct  8 17:32 ios-23-kimi-work-signed-out.png
+-rw-r--r--@  1 runner  staff     291 Oct  8 17:31 KimiShotTeststest10TheRunnerRowWithOneAccountKeepsItsSite-notes.txt
+-rw-r--r--@  1 runner  staff     595 Oct  8 17:32 KimiShotTeststest11WorkSignedOut-notes.txt
+-rw-r--r--@  1 runner  staff       0 Oct  8 17:33 KimiShotTeststest1AnOlderRunnersPageIsAsItWas-notes.txt
+-rw-r--r--@  1 runner  staff       0 Oct  8 17:33 KimiShotTeststest2OneAccountOffersAddAccount-notes.txt
+-rw-r--r--@  1 runner  staff   20037 Oct  8 17:36 KimiShotTeststest3AddAccountNamesTheAccountThenPicksItsSite-notes.txt
+-rw-r--r--@  1 runner  staff     267 Oct  8 17:37 KimiShotTeststest4TwoAccountsEachSayTheirSiteAndWindowsAndDefaultIsNext-notes.txt
+-rw-r--r--@  1 runner  staff     522 Oct  8 17:37 KimiShotTeststest5TheRunnerPageNamesTheNextAccount-notes.txt
+-rw-r--r--@  1 runner  staff     499 Oct  8 17:38 KimiShotTeststest6SignInAgainMarksTheAccountsOwnSite-notes.txt
+-rw-r--r--@  1 runner  staff     646 Oct  8 17:38 KimiShotTeststest7NextOnTheOtherEnginesPages-notes.txt
+-rw-r--r--@  1 runner  staff   37342 Oct  8 17:40 KimiShotTeststest8TheComposerMovesAKimiSessionBetweenAccounts-notes.txt
+-rw-r--r--@  1 runner  staff     177 Oct  8 17:40 KimiShotTeststest9DarkPage-notes.txt
+-rw-r--r--@  1 runner  staff   18572 Oct  8 17:35 missing-band-add-button.txt
+-rw-r--r--   1 runner  staff     590 Oct  8 17:41 not-served.txt
+-rw-r--r--   1 runner  staff   38640 Oct  8 17:40 requests.log
+-rw-r--r--   1 runner  staff      49 Oct  8 17:19 stub.out
+-rw-r--r--@  1 runner  staff   20041 Oct  8 17:36 tree-device-code.txt
+-rw-r--r--@  1 runner  staff   20001 Oct  8 17:39 tree-model-menu.txt
+-rw-r--r--@  1 runner  staff   18572 Oct  8 17:33 tree-one-account.txt
+-rw-r--r--@  1 runner  staff   19946 Oct  8 17:39 tree-provider-menu.txt
+-rw-r--r--@  1 runner  staff   24703 Oct  8 17:37 tree-runner.txt
+-rw-r--r--@  1 runner  staff   20138 Oct  8 17:36 tree-two-accounts.txt
+-rw-r--r--   1 runner  staff  734508 Oct  8 17:41 xcodebuild-ios.log

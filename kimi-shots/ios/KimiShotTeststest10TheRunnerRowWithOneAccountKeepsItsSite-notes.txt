@@ -1,0 +1,2 @@
+row-one-kimi: in view after 3 drag(s) at (16.0, 407.99999999999994, 370.0, 126.33333333333331)
+row-one: row 9 label="Kimi Code, 2.1.1 · kimi.ai · Signed in, Weekly limit, 34%, Resets Tue, Oct 13 at 8:49 AM" value="" frame=(16.0, 407.99999999999994, 370.0, 126.33333333333331) hittable=true
