@@ -12,6 +12,10 @@ import (
 	"unsafe"
 )
 
+// antigravityGooglePTYOutput is where the PTY's output is copied to. A variable only so a test can
+// hold that copy back and have agy's exit seen before its last output, an order nothing else forces.
+var antigravityGooglePTYOutput = func(out io.Writer) io.Writer { return out }
+
 // agy itself owns the PTY session/process group, so cancellation can target precisely the PID
 // this relay started. No script shell or detached wrapper can outlive it.
 func startAntigravityGooglePTY(cmd *exec.Cmd, out io.Writer) (io.WriteCloser, error) {
@@ -52,6 +56,6 @@ func startAntigravityGooglePTY(cmd *exec.Cmd, out io.Writer) (io.WriteCloser, er
 	if err := cmd.Start(); err != nil {
 		return fail(err)
 	}
-	go func() { _, _ = io.Copy(out, master) }()
+	go func() { _, _ = io.Copy(antigravityGooglePTYOutput(out), master) }()
 	return master, nil
 }
