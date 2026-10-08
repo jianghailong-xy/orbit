@@ -518,7 +518,9 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
     doors.push(openCoordinator(assignee), openTaskSession(assignee), commentOnTask(assignee),
       reopenTask(assignee, 'RETRY'), cancelTask(assignee, false));
   } else if ((sourceJob === 'LAND_TASK' || sourceJob === 'MAIN_SYNC') && assignee === 'COORDINATOR') {
-    doors.push(openCoordinator(assignee), openTaskSession(assignee));
+    // Revision 13: what only the owner can decide while the coordinator handles the item is asked,
+    // and the item stays the coordinator's (§4.6, §4.7) — the same door the candidate's cells have.
+    doors.push(openCoordinator(assignee), openTaskSession(assignee), askOwner(assignee));
     if (failureClass === 'CONFLICT') {
       doors.push(...taskRepair(assignee, 'RETRY'));
     } else {

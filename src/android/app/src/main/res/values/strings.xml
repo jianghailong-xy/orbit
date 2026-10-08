@@ -1,20 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Orbit Android</string>
-    <string name="sign_in">Sign in</string>
     <string name="signed_in">Signed in</string>
     <string name="sign_out">Sign out</string>
     <string name="switch_account_instance">Switch account or instance</string>
     <string name="cancel_sign_in">Cancel sign in</string>
-    <string name="instance_address">Instance address</string>
+    <!-- The login page, in iOS LoginView's words (fdeb033ad). -->
+    <string name="orbit_logo">Orbit</string>
+    <string name="change_server">Change server</string>
+    <string name="welcome_back">Welcome back</string>
+    <string name="sign_in_subtitle">Sign in to continue to Orbit</string>
     <string name="email">Email</string>
+    <string name="email_placeholder">you@example.com</string>
     <string name="password">Password</string>
+    <string name="password_placeholder">Enter your password</string>
+    <string name="show_password">Show password</string>
+    <string name="hide_password">Hide password</string>
+    <string name="sign_in_button">Sign In</string>
+    <string name="signing_in">Signing in…</string>
+    <string name="or">or</string>
+    <string name="server_title">Server</string>
+    <string name="server_address">Server address</string>
+    <string name="server_hint">For self-hosted Orbit. Leave as %1$s unless your admin gave you another address.</string>
+    <string name="server_invalid">Enter a valid server address.</string>
+    <string name="server_reset">Reset to %1$s</string>
+    <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
     <string name="session_expired">Your session expired. Sign in again.</string>
     <string name="auth_address_error">Enter an HTTPS instance address without credentials, query or fragment.</string>
-    <string name="auth_credentials_error">Check your email and password.</string>
-    <string name="auth_network_error">Could not reach the server. Check your connection and try again.</string>
+    <string name="auth_credentials_error">Incorrect email or password.</string>
+    <string name="auth_network_error">Couldn\'t reach the server — check the instance URL and your network connection.</string>
     <string name="auth_storage_error">Could not access secure storage. Sign in again.</string>
-    <string name="auth_server_error">The server could not complete sign in. Try again.</string>
+    <string name="auth_server_error">The server ran into an error. Try again in a moment.</string>
+    <string name="auth_unexpected_error">Sign-in failed — the server\'s answer wasn\'t an Orbit sign-in. Check the instance URL.</string>
     <string name="continue_with_google">Continue with Google</string>
     <string name="google_signup_hint">New to Orbit? Continue with Google to create an account.</string>
     <string name="auth_google_failed">Couldn\'t sign in with Google. Continue with Google to try again, or sign in with your password.</string>
@@ -25,8 +43,8 @@
     <string name="auth_setup_required">This Orbit server has no accounts yet. Create its first administrator in a browser at /setup, with an email and a password.</string>
     <string name="auth_google_not_configured">Google sign-in is turned off on this server. Sign in with your email and password, or ask an administrator to turn it on.</string>
     <string name="auth_google_rate_limited">Too many Google sign-ins from your network. Wait a minute, then continue with Google again.</string>
-    <string name="auth_google_sign_in_busy">Too many Google sign-ins are in progress on this server. Try again in a few minutes.</string>
-    <string name="auth_google_bad_request">The server turned down this app\'s Google sign-in request. Try again; if it keeps failing, sign in with your password.</string>
+    <string name="auth_google_sign_in_busy">Too many Google sign-ins are in progress on this Orbit server. Wait a few minutes, then continue with Google again, or sign in with your password.</string>
+    <string name="auth_google_bad_request">Orbit couldn\'t start Google sign-in from this app. Continue with Google to try again; if it keeps failing, sign in with your password.</string>
     <string name="auth_google_flow_expired">That Google sign-in expired before it finished. Continue with Google to try again.</string>
     <string name="auth_google_cancelled">Google sign-in was cancelled. Continue with Google to try again, or sign in with your password.</string>
     <string name="auth_google_exchange_failed">Orbit couldn\'t confirm your sign-in with Google. Try again in a moment; if it keeps failing, ask an administrator to check this server\'s Google sign-in settings.</string>

@@ -2314,6 +2314,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// A long turn is many minutes from its turn_end, so ctxPing also reports it mid-turn.
 	var contextTokens int
 	var ctxPing contextPinger
+	// The turn the latest `result` answered, which a prompt_suggestion arriving after it is filed
+	// against. Empty when that result failed or closed a turn the engine started on its own.
+	var lastAnsweredTurnID string
 	targetFenceTripped := false
 scanLoop:
 	for sc.Scan() {
@@ -2336,6 +2339,18 @@ scanLoop:
 				logln("dropping an unmatched control_response", resp.RequestID,
 					fmt.Sprintf("(generation %d)", controlIDGeneration(resp.RequestID)),
 					"for", job.SessionID, "on", rt.String())
+			}
+			continue
+		}
+		// The engine's guess at the person's next message (claude_prompt_suggestion.go). It belongs
+		// to the turn that just ended, and only while nothing newer has been handed to the engine: a
+		// message already on its way has answered what the suggestion was guessing at.
+		if msg["type"] == claudePromptSuggestionFrame {
+			activeOrbitMu.Lock()
+			busy := activeOrbitTurnID != "" || len(pending) > 0
+			activeOrbitMu.Unlock()
+			if p := promptSuggestionPayload(msg); p != nil && lastAnsweredTurnID != "" && !busy {
+				emitFor(lastAnsweredTurnID, evPromptSuggestion, p)
 			}
 			continue
 		}
@@ -2459,6 +2474,11 @@ scanLoop:
 				turnStatus = stFailed
 			}
 			lastAssistantText = ""
+			// A failed turn's own card is what comes next, so nothing is suggested after it.
+			lastAnsweredTurnID = ""
+			if turnID != "" && turnStatus != stFailed {
+				lastAnsweredTurnID = turnID
+			}
 			emit(evTurnEnd, withContextWindow(map[string]interface{}{
 				"subtype":       r.Subtype,
 				"numTurns":      r.NumTurns,

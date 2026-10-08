@@ -59,6 +59,7 @@ import {
   primaryAction,
   openItemChat,
   openItemFacts,
+  type LandedFix,
   openItemMessage,
   openItemOwed,
   openItemTurnId,
@@ -556,6 +557,7 @@ export class ProjectOpenItemService {
         projectId: true,
         ownerId: true,
         handlingJobId: true,
+        integrationJobId: true,
         project: { select: { coordinatorEnabled: true, coordinatorSessionId: true } },
       },
     });
@@ -596,6 +598,7 @@ export class ProjectOpenItemService {
       return;
     }
     const clientTurnId = openItemTurnId(item.id, item.assignedAt);
+    const fixed = await this.landedFixesOf(item.id, item.integrationJobId);
     try {
       const turn = await this.sessions.createTurn(item.ownerId, sessionId, {
         clientTurnId,
@@ -607,6 +610,8 @@ export class ProjectOpenItemService {
           taskId: item.taskId,
           promotionId: item.promotionId,
           payload: item.payload,
+          landedFixes: fixed.landedFixes,
+          failedSourceSha: fixed.failedSourceSha,
         }),
         intent: 'NEXT_TURN',
       }, {
@@ -651,6 +656,47 @@ export class ProjectOpenItemService {
       }
       throw error;
     }
+  }
+
+  /**
+   * The fixes of this item whose landing is in, and the commit the item's own failed landing was
+   * handed (§4.4 X-D4 5). Read only from rows that no longer change — a fix task's id and its latest
+   * landing job once that job has ended — so the same key words the same text (G6). A landing that
+   * answered about a branch the work did not end on is followed by the generation it queued, so the
+   * latest job is the one that counts; a `NOTHING_TO_LAND` counts only with the receipt it writes
+   * when the task has no work of its own anywhere.
+   */
+  private async landedFixesOf(
+    itemId: string,
+    failedJobId: string | null,
+  ): Promise<{ landedFixes: LandedFix[]; failedSourceSha: string | null }> {
+    const fixes = await this.prisma.task.findMany({ where: { fixesOpenItemId: itemId }, select: { id: true } });
+    if (fixes.length === 0) return { landedFixes: [], failedSourceSha: null };
+    const jobs = await this.prisma.projectIntegrationJob.findMany({
+      where: { taskId: { in: fixes.map((fix) => fix.id) }, kind: 'LAND_TASK' },
+      orderBy: [{ generation: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+      select: {
+        id: true, taskId: true, state: true, targetRef: true, landedSha: true, receiptIds: true, finishedAt: true,
+      },
+    });
+    const latest = new Map<string, (typeof jobs)[number]>();
+    for (const job of jobs) if (job.taskId && !latest.has(job.taskId)) latest.set(job.taskId, job);
+    const landedFixes = [...latest.values()]
+      .filter((job) => job.state === 'LANDED' || job.state === 'ALREADY_LANDED'
+        || (job.state === 'NOTHING_TO_LAND' && job.receiptIds.length > 0))
+      .sort((a, b) => (a.finishedAt?.getTime() ?? 0) - (b.finishedAt?.getTime() ?? 0) || a.id.localeCompare(b.id))
+      .map((job) => ({
+        taskId: job.taskId!,
+        jobId: job.id,
+        state: job.state,
+        targetRef: job.targetRef,
+        landedSha: job.landedSha,
+      }));
+    if (landedFixes.length === 0) return { landedFixes, failedSourceSha: null };
+    const failed = failedJobId
+      ? await this.prisma.projectIntegrationJob.findUnique({ where: { id: failedJobId }, select: { sourceSha: true } })
+      : null;
+    return { landedFixes, failedSourceSha: failed?.sourceSha ?? null };
   }
 
   /**

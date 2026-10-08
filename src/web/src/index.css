@@ -6416,6 +6416,77 @@ html[data-theme='dark'] .session-tag-chip {
 .composer-field textarea.orbit-textarea:focus-visible {
   outline: none;
 }
+/* The engine's guess at the next message, offered in the empty box (lib/promptSuggestion). It sits
+   on the first line exactly where the placeholder would — same inset, same 24px line — so nothing
+   moves when it arrives a second after the turn ends. Only Use takes the pointer: a click anywhere
+   else on the line still lands in the textarea, to type something else instead. */
+.composer-suggestion {
+  position: absolute;
+  top: 12px;
+  left: 23px;
+  right: 12px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+  font-size: 15px;
+}
+.composer-suggestion-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-4);
+}
+.composer-suggestion-use {
+  pointer-events: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 6px 0 11px;
+  border: 0;
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--brand) 9%, transparent);
+  color: var(--brand);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.composer-suggestion-use:hover {
+  background: color-mix(in srgb, var(--brand) 15%, transparent);
+}
+.composer-suggestion-use:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.composer-suggestion-key {
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--bg-raised);
+  box-shadow:
+    inset 0 0 0 1px var(--border),
+    0 1px 0 var(--border);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+}
+/* No keyboard to press Tab on: the button alone. */
+@media (hover: none) {
+  .composer-suggestion-use {
+    padding: 0 11px;
+  }
+  .composer-suggestion-key {
+    display: none;
+  }
+}
 /* Zero net layout width: the padding shaping the pill is cancelled by an equal negative margin,
    so the background bleeds outward while the glyphs stay exactly where the textarea puts them.
    Any residual width here compounds — every chip pushes the rest of the line further off. */
@@ -15038,6 +15109,11 @@ button.chat-jump-start:hover {
   text-align: left;
   cursor: pointer;
 }
+/* A card whose head has the toggle folds from a press anywhere on that head (foldFromAnywhere), so
+   the whole head says so. */
+.re-head:has(> .re-toggle) {
+  cursor: pointer;
+}
 .re-chev {
   flex: none;
   width: 10px;
@@ -15123,8 +15199,9 @@ button.chat-jump-start:hover {
   color: var(--text-2);
   transition: color 0.15s, transform 0.15s;
 }
+/* Lit wherever a press would fold the card — anywhere on its head but Manage. */
 .re-runner-card .re-chev.open,
-.re-runner-card .re-toggle:hover .re-chev {
+.re-runner-card .re-head:hover:not(:has(.re-manage:hover)) .re-chev {
   color: var(--brand);
 }
 .re-runner-copy {
@@ -15524,7 +15601,17 @@ button.chat-jump-start:hover {
 .re-grp-chev.open svg {
   transform: rotate(90deg);
 }
-.re-grp-toggle:hover .re-grp-chev {
+/* The whole of the head's line folds it (foldFromAnywhere), so the whole line says so: the pointer
+   anywhere on it, and the chevron lit as the name lights it — not over Add account, or a panel or
+   note opened under the line. */
+.re-row.re-grp {
+  cursor: pointer;
+}
+.re-grp > .re-panel,
+.re-grp > .re-login-note {
+  cursor: auto;
+}
+.re-grp:hover:not(:has(.re-action:hover, > .re-panel:hover, > .re-login-note:hover)) .re-grp-chev {
   color: var(--brand);
 }
 /* Folded, the identity shares the row with a status and a quota: the version line wraps rather than
