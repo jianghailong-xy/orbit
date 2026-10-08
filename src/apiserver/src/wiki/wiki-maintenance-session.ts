@@ -141,12 +141,17 @@ export function wikiMaintenanceSessionSql(sessionAlias: string): Prisma.Sql {
 }
 
 /**
- * How many maintenance tasks a space has made today (the UTC day `now` is in) against its daily limit
- * (contract `space.settings.maintenance.keys.dailyRunLimit`): every task of its maintenance list made
- * since midnight UTC, however it ended — but a plan job's (contract `plan.jobs`), which is not a
- * maintenance run and is not counted against the day, and a run made in catch-up that is not counted either
- * (contract `maintenance.job.catchUp.dailyLimit`): one pinned to a local endpoint, or one that failed. The
- * maintenance job asks it before it makes another.
+ * How many maintenance runs a space has made today (the UTC day `now` is in) against its daily limit
+ * (contract `space.settings.maintenance.keys.dailyRunLimit`): counted per RUN — the tasks of its
+ * maintenance list made since midnight UTC, however they ended, and the runs a wiki job ran (migration
+ * 0401), which have no task and are found through their own rows. A plan job's task (contract `plan.jobs`)
+ * is not a maintenance run and is not counted against the day, and a run made in catch-up that is not
+ * counted either (contract `maintenance.job.catchUp.dailyLimit`): one pinned to a local endpoint, or one
+ * that failed. The maintenance job asks it before it makes another.
+ *
+ * The task branch is the count this has always been, unchanged: a run made by a task is counted off its
+ * task exactly as before, so the numbers a deployment computes today are the numbers it computed
+ * yesterday, and a run made by a job is read off the row the design gives it.
  */
 export async function wikiMaintenanceRunsToday(
   db: Pick<Prisma.TransactionClient, 'wikiSpace' | 'task' | 'wikiPlanJob' | 'wikiMaintenanceRun'>,
@@ -171,19 +176,34 @@ export async function wikiMaintenanceRunsToday(
       where: {
         ownerId,
         spaceId,
+        taskId: { not: null },
         catchUp: 'active',
         createdAt: { gte: since },
         OR: [{ localEndpoint: true }, { outcome: { in: ['failed', 'truncated'] } }],
       },
       select: { taskId: true },
-    })).map((run) => run.taskId)
+    })).map((run) => run.taskId as string)
     : [];
   const left = [...planTasks, ...uncounted];
-  const used = settings.listId
+  const byTask = settings.listId
     ? await db.task.count({
       where: { ownerId, listId: settings.listId, createdAt: { gte: since }, ...(left.length > 0 ? { id: { notIn: left } } : {}) },
     })
     : 0;
+  // The server path's runs: made by a wiki job, counted off the run row itself, under the same rules the
+  // task branch has — not a catch-up run on a local endpoint, and not one that failed.
+  const byJob = settings.listId
+    ? await db.wikiMaintenanceRun.count({
+      where: {
+        ownerId,
+        spaceId,
+        jobId: { not: null },
+        createdAt: { gte: since },
+        NOT: { catchUp: 'active', OR: [{ localEndpoint: true }, { outcome: { in: ['failed', 'truncated'] } }] },
+      },
+    })
+    : 0;
+  const used = byTask + byJob;
   return {
     limit: settings.dailyRunLimit,
     used,

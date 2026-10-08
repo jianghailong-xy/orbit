@@ -9,8 +9,10 @@ import { WikiWorkerModule } from './wiki-worker.module';
  * than an application — Prisma and the worker's providers, no controller, no port. It applies no migration: Compose
  * starts it once the apiserver, which applies them on boot, is healthy.
  *
- * At this phase it probes the System model and writes the model's state and its own heartbeat to wiki_model_status
- * (wiki-model-status.ts); the job table and the request queue come with the next.
+ * It probes the System model and writes the model's state and its own heartbeat to wiki_model_status
+ * (wiki-model-status.ts), runs the model request queue (wiki-model-queue.service.ts) and executes the jobs the
+ * executor switch hands it (wiki-job-executor.ts); under the default ORBIT_WIKI_EXECUTOR=runner it claims nothing
+ * and only probes.
  *
  * On SIGTERM — `docker compose stop` gives it 30 s — the shutdown hooks stop the probe, let the last write finish and
  * close the database, and then the process exits: in the container it is PID 1, which a signal with no handler left

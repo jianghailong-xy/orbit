@@ -320,7 +320,8 @@ export async function considerWikiMaintenance(
 
 /**
  * Whether a hint names the end of the space's latest run (contract `maintenance.job.catchUp.trigger`): that run's
- * task, or one of its sessions, once the task has ended. The run's own events name nothing else of the space.
+ * task, or one of its sessions, once the task has ended. The run's own events name nothing else of the space — and
+ * a run a wiki job ran (task_id NULL, migration 0401) is named by none of them, so it names no next run either.
  */
 async function namesLatestRunEnd(
   prisma: TriggerDb,
@@ -334,7 +335,7 @@ async function namesLatestRunEnd(
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     select: { taskId: true },
   });
-  if (!latest) return false;
+  if (!latest?.taskId) return false;
   const named = taskIds.includes(latest.taskId) || (sessionIds.length > 0
     && (await prisma.session.findFirst({ where: { id: { in: sessionIds }, ownerId, taskId: latest.taskId }, select: { id: true } })) !== null);
   if (!named) return false;
