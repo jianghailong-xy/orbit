@@ -100,13 +100,15 @@ class Device:
         self.shell(f'input tap {(left + right) // 2} {(top + bottom) // 2}')
 
     def visible(self, texts, attempts=8):
-        """The node, swiped into the upper part of the screen first when the page has to scroll."""
+        """The node, swiped into the upper part of the screen first when the page has to scroll. Compose leaves
+        rows outside the viewport out of the window dump, so a missing node also means: scroll on."""
         width, height = map(int, re.search(r'(\d+)x(\d+)', self.shell('wm size')).groups())
         for _ in range(attempts):
-            node = self.find(texts=texts, timeout=30)
-            left, top, right, bottom = map(int, re.findall(r'\d+', node.get('bounds')))
-            if bottom > top and 0 <= top and bottom <= height * 0.85:
-                return node
+            node = self.find(texts=texts, timeout=5, absent_ok=True)
+            if node is not None:
+                left, top, right, bottom = map(int, re.findall(r'\d+', node.get('bounds')))
+                if bottom > top and 0 <= top and bottom <= height * 0.85:
+                    return node
             self.shell(f'input swipe {width // 2} {height * 3 // 4} {width // 2} {height // 4} 400')
             time.sleep(1)
         raise RuntimeError(f'{texts} did not scroll into view')
