@@ -223,12 +223,6 @@ func (t *Transport) checkWikiPlanJob(spaceID, jobID string) (json.RawMessage, er
 // wikiPlanNoJobCode is the refusal a run's job routes give a session with no job, or a job that ended.
 const wikiPlanNoJobCode = "WIKI_PLAN_NO_JOB"
 
-// wikiServerExecutesCode is the refusal a runner door route gives when the account's pipeline is the server's
-// (contract `refusals`, `plan.jobs.server.door`): the wiki-worker drafts with the System model, so the door hands
-// no session the job, its materials or a place for what a session's own model wrote. A run of this command meets
-// it at its first call, before it has asked any model anything.
-const wikiServerExecutesCode = "WIKI_SERVER_EXECUTES"
-
 // wikiPlanCallError says what a call to the plan's routes came to.
 func wikiPlanCallError(command, spaceID string, err error) error {
 	var httpErr *transportHTTPError
