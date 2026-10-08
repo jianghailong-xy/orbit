@@ -326,6 +326,10 @@ test('tenant isolation: past the runner gate and through the share links, anothe
       update: { state: 'made', taskId: maintenanceTaskId, madeAt: new Date(), heldReason: null, heldAt: null },
       create: { id: wikiPlanJobId, spaceId: of.wikiSpaceId, ownerId, kind: 'draft', trigger: 'owner', state: 'made', taskId: maintenanceTaskId, madeAt: new Date() },
     });
+    const wikiImportJobId = randomUUID();
+    await db.wikiJob.create({
+      data: { id: wikiImportJobId, ownerId, spaceId: of.wikiSpaceId, kind: 'import', input: {}, state: 'succeeded', report: {}, endedAt: new Date() },
+    });
     const confirmedDoc = await db.wikiPlanDoc.findFirstOrThrow({ where: { ownerId, slug: of.wikiDocSlug, plan: { status: 'confirmed' } }, select: { id: true } });
     await db.wikiPlanSection.create({
       data: {
@@ -375,7 +379,7 @@ test('tenant isolation: past the runner gate and through the share links, anothe
       deletedSessionId, archivedSessionId, coordinatorItemId, handOverItemId, watchId, verifierTaskId, verifiedTaskId,
       providerSlug: await slugOf(of.providerId), spareProviderSlug: await slugOf(of.spare.providerId), listTaskId,
       confirmTaskId, confirmRunSessionId, confirmRequestId, reviewerSessionId, wikiSessionId, wikiMaintainerSessionId,
-      wikiPlanJobId, wikiVerifyingOpId, wikiAdoptableOpId, sharedSessionId, sharedSessionAttachmentId, sharedTaskId,
+      wikiPlanJobId, wikiImportJobId, wikiVerifyingOpId, wikiAdoptableOpId, sharedSessionId, sharedSessionAttachmentId, sharedTaskId,
       sharedTaskRunSessionId, sharedTaskAttachmentId, sharedProjectId, sharedProjectTaskId, sharedProjectRunSessionId,
       sharedProjectAttachmentId,
     };
