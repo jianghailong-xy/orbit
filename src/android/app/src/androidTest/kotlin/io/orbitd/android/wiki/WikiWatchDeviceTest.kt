@@ -14,6 +14,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.orbitd.android.BuildConfig
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
+import io.orbitd.android.auth.chooseServer
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.net.ServerAddress
 import io.orbitd.android.core.protocol.Wire
@@ -114,10 +115,11 @@ class WikiWatchDeviceTest {
                         await("Email")
                         // The link waits on the login form, across recreation.
                         scenario.recreate()
-                        compose.onNodeWithText("Instance address").performTextReplacement(server)
-                        compose.onNodeWithText("Email").performTextInput("a12@example.test")
-                        compose.onNodeWithText("Password").performTextInput("a12-fixture-password")
-                        compose.onAllNodesWithText("Sign in")[1].performScrollTo().performClick()
+                        // The server is behind the logo since A03-1 (iOS fdeb033ad), and the last email may be filled in.
+                        compose.chooseServer(server)
+                        compose.onNodeWithText("Email").performTextReplacement("a12@example.test")
+                        compose.onNodeWithText("Password").performTextReplacement("a12-fixture-password")
+                        compose.onNodeWithText("Sign In").performScrollTo().performClick()
                     }
                     compose.waitUntil(20_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
                     block(scenario, ids)
