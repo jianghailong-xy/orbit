@@ -88,6 +88,7 @@ import {
   WIKI_MAINTENANCE_DUE,
   WIKI_MAINTENANCE_FAILURE_KINDS,
   WIKI_MAINTENANCE_HELD_REASONS,
+  WIKI_MAINTAIN_JOB,
   WIKI_MAINTENANCE_JOB,
   WIKI_MAINTENANCE_RECOVERY,
   wikiMaintenanceBehind,
@@ -1753,6 +1754,45 @@ describe('wiki contract', () => {
       'orbit_wiki_model_calls_total',
       'orbit_wiki_model_call_duration_seconds',
     ]);
+  });
+
+  it('runs the maintenance pipeline on the server: the job, its numbers, its identity and its door (server execution P8)', () => {
+    // The run moves off the runner for an account the switch gives the server: a `maintain` wiki job, the
+    // System model in place of a session's provider, and the repository through `wiki_repo_op` alone.
+    const server = CONTRACT.maintenance.job.server;
+    expect(existsSync(path.join(ROOT, server.migration)), `${server.migration} does not exist`).toBe(true);
+    const sql = readFileSync(path.join(ROOT, server.migration), 'utf8').replace(/\s+/gu, ' ');
+    // One nullable `job_id` on a changeset, and one author column beside the session's on a proposal.
+    expect(sql).toContain('ALTER TABLE "wiki_changeset" ADD COLUMN IF NOT EXISTS "job_id" UUID');
+    expect(sql).toContain('ALTER TABLE "wiki_plan_proposal" ADD COLUMN IF NOT EXISTS "author_job_id" UUID');
+    expect(sql).toContain('ALTER TABLE "wiki_plan_proposal" ALTER COLUMN "author_session_id" DROP NOT NULL');
+    expect(sql).toContain('("author_session_id" IS NULL) <> ("author_job_id" IS NULL)');
+    // The numbers are the runner's, kept in one place: WIKI_MAINTAIN_JOB, held to this block.
+    expect(server.rules.kind).toBe(WIKI_MAINTAIN_JOB.kind);
+    expect(server.rules.priority).toMatch(/^0:/u);
+    expect(server.rules.steps).toEqual(WIKI_MAINTAIN_JOB.steps);
+    expect(server.rules.extractMaxTokens).toBe(WIKI_MAINTAIN_JOB.extractMaxTokens);
+    expect(server.rules.planMaxTokens).toBe(WIKI_MAINTAIN_JOB.planMaxTokens);
+    expect(server.rules.pageSessions).toBe(WIKI_MAINTAIN_JOB.pageSessions);
+    expect(server.rules.opsPerChangeset).toBe(WIKI_MAINTAIN_JOB.opsPerChangeset);
+    expect(server.rules.opsPerTurn).toBe(WIKI_MAINTAIN_JOB.opsPerTurn);
+    expect(server.rules.quoteMaxChars).toBe(WIKI_MAINTAIN_JOB.quoteMaxChars);
+    expect(server.rules.aboutMaxChars).toBe(WIKI_MAINTAIN_JOB.aboutMaxChars);
+    expect(server.rules.proposalRoundsMax).toBe(WIKI_MAINTAIN_JOB.proposalRoundsMax);
+    expect(server.rules.proposalItemsMax).toBe(WIKI_MAINTAIN_JOB.proposalItemsMax);
+    expect(server.rules.repoWaitSeconds).toBe(WIKI_MAINTAIN_JOB.repoWaitSeconds);
+    expect(server.rules.docsExcluded).toEqual([...WIKI_MAINTAIN_JOB.docsExcluded]);
+    // The batch sizes are the contract's own limits, and the entry cap the maintenance job's.
+    expect(WIKI_MAINTAIN_JOB.opsPerChangeset).toBe(WIKI_LIMITS.opsPerChangeset);
+    expect(WIKI_MAINTAIN_JOB.opsPerTurn).toBe(WIKI_LIMITS.opsPerTurn);
+    expect(WIKI_MAINTAIN_JOB.extractMaxTokens).toBeLessThanOrEqual(WIKI_MAINTAIN_JOB.planMaxTokens);
+    // The pipeline the kind runs is stated, and no provider is in it.
+    expect(CONTRACT.jobs.kindRuns.maintain).toMatch(/maintenance\.job\.server/u);
+    expect(server.trigger).toMatch(/MaintenanceJobWriter/u);
+    expect(server.identity).toMatch(/wiki_changeset\.job_id/u);
+    expect(server.door).toMatch(/WIKI_SERVER_EXECUTES/u);
+    expect(server.skip).toMatch(/catch-up active or paused/u);
+    expect(server.failureKinds).toMatch(/nothing is counted/u);
   });
 
   it('runs wiki jobs on the server: the table, the kinds, the lease, the retry and the switch (server execution P1b)', () => {
