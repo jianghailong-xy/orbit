@@ -479,9 +479,11 @@ public final class APIClient: @unchecked Sendable {
     }
 
     /// Every link this account has made — Active, Paused and Ended alike — for Settings → Shared
-    /// links. Web parity: `listShareLinks`.
+    /// links, of every kind this build draws: a server lists only the kinds a client names, so a
+    /// build that predates a kind is never handed one it cannot decode. Web parity: `listShareLinks`.
     public func shareLinks() async throws -> [ShareLink] {
-        let list: ShareLinkList = try await get("share-links")
+        let kinds = ShareRootKind.allCases.map(\.rawValue).joined(separator: ",")
+        let list: ShareLinkList = try await get("share-links", query: [URLQueryItem(name: "kind", value: kinds)])
         return list.links
     }
 

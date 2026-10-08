@@ -1531,6 +1531,10 @@ export const SHARED_BY_HAND: Readonly<Record<string, string>> = {
   'GET /shared/:token/events/:seq':
     'a position in the link\'s own session\'s transcript, not an object: read WHERE session_id = the link\'s '
     + '(sessions.service.ts:3719)',
+  'GET /shared/:token/docs/:slug':
+    'a document slug of the link\'s own wiki space, not an object a caller can name: the space is the link\'s '
+    + '(share-links.service.ts:378), and the slug is looked up among that space\'s own written documents — any '
+    + 'other is the one 404 (public-wiki.ts:155)',
 };
 
 /**

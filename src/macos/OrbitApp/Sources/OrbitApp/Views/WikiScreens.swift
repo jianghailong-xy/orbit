@@ -17,6 +17,9 @@ struct WikiHomeView: View {
     @State private var contentsShown = false
     /// When the reader last looked, read as the home opens, before its look moves it: what the dots mark.
     @State private var seen: Double?
+    /// The Share panel, and the space's public link as last read or saved — what the bar's globe says.
+    @State private var sharing = false
+    @State private var shareRead: ShareLinkRead?
 
     var body: some View {
         if let wiki = model.wiki {
@@ -31,6 +34,7 @@ struct WikiHomeView: View {
                                                                     maintenance: space.settings?.maintenance?.enabled == true,
                                                                     seen: seen),
                                  seen: seen, failed: loading && wiki.homeState.lastLoadFailed, waiting: wiki.waiting,
+                                 shareLive: shareRead?.link.map { $0.state != .ended } ?? false,
                                  besideContents: rowNavigation == .selection, actions: actions(wiki))
                 } else {
                     WikiHomePlaceholder(wiki: wiki, state: wiki.spacesState) { await wiki.loadSpaces() }
@@ -53,9 +57,24 @@ struct WikiHomeView: View {
             .sheet(isPresented: $contentsShown) {
                 WikiContentsScreen(at: .home) { pick in go(pick) }
             }
+            // The space's public link: read as each space opens, so the globe says whether it has one.
+            .task(id: wiki.currentSpace?.id) { shareRead = await readShareLink(wiki.currentSpace?.id) }
+            .sheet(isPresented: $sharing) {
+                if let baseURL = model.baseURL, let space = wiki.currentSpace {
+                    ShareSheet(kind: .wiki, rootID: space.id, baseURL: baseURL, tokenStore: model.tokenStore) {
+                        shareRead = $0
+                    }
+                }
+            }
         } else {
             ProgressView()
         }
+    }
+
+    /// The space's public link, if it could be read: nil leaves the globe as it is when there is none.
+    private func readShareLink(_ spaceID: String?) async -> ShareLinkRead? {
+        guard let spaceID, let baseURL = model.baseURL else { return nil }
+        return try? await APIClient(baseURL: baseURL, tokenStore: model.tokenStore).shareLink(.wiki, spaceID)
     }
 
     /// The home's reads, and the plan's beside them — the count on the Contents' Plan row — through a task
@@ -88,6 +107,7 @@ struct WikiHomeView: View {
             openSettings: { open(.wikiSettings) },
             openContents: { contentsShown = true },
             openActivity: { open(.wikiActivity) },
+            openShare: { sharing = true },
             openDoc: { slug in go(.doc(slug: slug, section: nil)) },
             openArticle: { topic in go(.article(topic: topic, part: 0)) },
             openBrowse: { go(.browse) },
