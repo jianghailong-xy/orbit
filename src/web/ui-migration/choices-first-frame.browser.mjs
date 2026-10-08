@@ -140,7 +140,18 @@ async function sample(page, info, kind, system, place, opening) {
   // The pointer stays where the last sample left it, which can be where this sample's popup will open.
   await page.mouse.move(0, 0);
   if (kind.before) {
-    await page.evaluate(() => document.fonts.ready);
+    // A fixed sample inside the replaced modal moves with the modal's zoom-in: wait it out before the first step too.
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+      let last = '';
+      for (let count = 0; count < 120; count += 1) {
+        await Promise.all(document.getAnimations().map((animation) => animation.finished.catch(() => {})));
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const box = JSON.stringify(document.querySelector('[data-testid="neutral"]')?.getBoundingClientRect() ?? null);
+        if (box !== 'null' && box === last && document.getAnimations().every((animation) => animation.playState !== 'running')) return;
+        last = box;
+      }
+    });
     await kind.before(page, info);
   }
   await arm(page, kind.surface?.[system] ?? '.sample-surface', kind.anchor?.[system] ?? '[aria-label="Appearance sample"] button',
