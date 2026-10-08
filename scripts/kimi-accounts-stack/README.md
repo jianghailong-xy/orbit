@@ -15,7 +15,7 @@ bash scripts/kimi-accounts-stack/run-all.sh          # build, fresh stack, seed,
 
 Two helpers:
 
-- `collect.sh <dest>` copies a run's logs and screenshots out with `SHA256SUMS`, and never the files that hold credentials.
+- `collect.sh <dest>` copies a run's logs (as `.txt`, since `*.log` is gitignored) and screenshots out with `SHA256SUMS`, and never the files that hold credentials.
 - `node peek.mjs <api path> [field.path]` prints an API answer as the stack's owner.
 
 Needs docker, Go, and node at `/usr/local/bin/node`. That is the fake `kimi`'s interpreter: the runners' `PATH` leaves

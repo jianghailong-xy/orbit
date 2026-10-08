@@ -11,7 +11,7 @@ project line at 6c10d1ed9, plus this harness, and started from nothing:
 - new runners, each with its own `ORBIT_HOME`, `HOME` and Default `~/.kimi-code`;
 - a new fake Kimi server.
 
-`logs/run-all.out` is the summary. Each `<n>-…/scenario<n>.log` lists that scenario's API calls, the web's own
+`logs/run-all.out` is the summary. Each `<n>-…/scenario<n>.txt` lists that scenario's API calls, the web's own
 requests, what the runner and the fake `kimi` recorded, and its PASS/FAIL checks. `SHA256SUMS` covers every file.
 The harness, the stack and the fake `kimi` are described in `scripts/kimi-accounts-stack/README.md`.
 

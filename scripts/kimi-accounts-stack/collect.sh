@@ -15,6 +15,8 @@ for n in 1 2 3 4 5 6; do
   [ -f "$S/logs/run-scenario$n.out" ] && grep -v 'destroyOnClose\|Warning: \[antd' "$S/logs/run-scenario$n.out" > "$DEST/logs/run-scenario$n.out"
 done
 cp "$S/seed.json" "$DEST/logs/seed.json"
+# *.log is gitignored in this repository: keep the logs as .txt so they are committed with the screenshots
+find "$DEST" -name '*.log' -exec sh -c 'mv "$1" "${1%.log}.txt"' _ {} \;
 # nothing secret may leave the stack
 ! grep -rIl -e '"password":"[^<]' -e 'fk_at_' -e 'fk_rt_' -e 'JWT_SECRET' "$DEST" || { echo "collect.sh: a secret would be copied" >&2; exit 1; }
 (cd "$DEST" && find . -type f ! -name SHA256SUMS -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > SHA256SUMS)
