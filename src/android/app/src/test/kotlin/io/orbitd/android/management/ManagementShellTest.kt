@@ -132,10 +132,11 @@ class ManagementShellTest {
         fixture.theme = "dark"
         signIn()
         compose.waitUntil(60_000) { fixture.calls.contains("GET users/me") }
-        compose.waitForIdle()
         val window = compose.activity.window
-        assertFalse("Dark app, light system: the status bar's icons must be light",
-            WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars)
+        fun lightIcons() = WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars
+        // The fixture sees the read when it is asked; the answer reaches the activity on a real thread, later on a loaded host.
+        compose.waitUntil(60_000) { compose.runOnIdle { !lightIcons() } }
+        assertFalse("Dark app, light system: the status bar's icons must be light", lightIcons())
     }
 
     private fun app() = compose.activity.application as OrbitApplication

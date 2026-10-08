@@ -66,7 +66,8 @@ class ManagementPanelTest {
         fixture.accessFails = true
         reread()
         compose.waitUntil(60_000) { fixture.calls.count { it == "GET providers/shared-pools/${fixture.POOL}" } >= 2 }
-        compose.waitForIdle()
+        // The fixture sees the read when it is asked; the failed answer reaches the page on a real thread, later on a loaded host.
+        await("pool read failed")
         compose.onNodeWithText("Me and 1 person", substring = true).assertExists()
         // Not said to be the owner's alone: no "Just me ·" line, and the owner's mode switch is not on Just me.
         compose.onAllNodesWithText("Just me ·", substring = true).assertCountEquals(0)
@@ -140,7 +141,8 @@ class ManagementPanelTest {
         fixture.shareFails = true
         reread()
         compose.waitUntil(60_000) { fixture.calls.count { it == "GET sessions/${fixture.SESSION}/share" } >= 2 }
-        compose.waitForIdle()
+        // The fixture sees the read when it is asked; the failed answer reaches the panel on a real thread, later on a loaded host.
+        await("share read failed")
         compose.onNodeWithText("share read failed", substring = true).assertExists()
         compose.onNode(hasText("Retry") and hasClickAction()).assertExists()
         compose.onAllNodes(hasText("Only you") and isSelectable() and isEnabled()).assertCountEquals(0)
