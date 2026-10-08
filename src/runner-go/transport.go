@@ -91,6 +91,7 @@ func init() {
 		kimiLoginRegionCapabilityV1,
 		kimiAccountLoginCapabilityV1,
 		kimiAccountRemoveCapabilityV1,
+		kimiAccountMoveCapabilityV1,
 		sessionMoveCapabilityV1,
 		wikiMaintenanceRunV1,
 		wikiRepoOpCapabilityV1,

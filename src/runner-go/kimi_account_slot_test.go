@@ -700,17 +700,14 @@ func TestKimiSiteChangeOfAnyAccountRefreshesTheCatalog(t *testing.T) {
 	}
 }
 
-// The runner says it keeps Kimi accounts in the words the project's contract gives — and not that it
-// carries a conversation between them, which is another change's to declare.
+// The runner says it keeps Kimi accounts, and carries a conversation between them
+// (carryKimiConversation), in the words the project's contract gives.
 func TestTheRunnerDeclaresItKeepsKimiAccounts(t *testing.T) {
 	declared := "," + runnerCapabilitiesV1 + ","
-	for _, capability := range []string{"kimi-account-login/v1", "kimi-account-remove/v1"} {
+	for _, capability := range []string{"kimi-account-login/v1", "kimi-account-remove/v1", "kimi-account-move/v1"} {
 		if !strings.Contains(declared, ","+capability+",") {
 			t.Fatalf("this runner does not declare %s: %q", capability, runnerCapabilitiesV1)
 		}
-	}
-	if strings.Contains(declared, ",kimi-account-move/v1,") {
-		t.Fatalf("this runner declares kimi-account-move/v1 without carrying conversations: %q", runnerCapabilitiesV1)
 	}
 }
 
