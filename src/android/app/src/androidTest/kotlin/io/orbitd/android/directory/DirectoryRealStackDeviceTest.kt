@@ -9,7 +9,6 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import io.orbitd.android.BuildConfig
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.AuthState
@@ -54,6 +53,8 @@ class DirectoryRealStackDeviceTest {
         return Wire.json.parseToJsonElement(http("GET", "/workspaces", null, token)).jsonArray.map { it.jsonObject }
     }
     private fun JsonObject.text(key: String) = (get(key) as? JsonPrimitive)?.contentOrNull
+    /** The installed app's own build identity. `BuildConfig.X` in this file would be the test APK's compile-time copy. */
+    private fun appBuild(field: String) = Class.forName("io.orbitd.android.BuildConfig", true, app.javaClass.classLoader).getField(field).get(null)
 
     private fun awaitText(text: String) { compose.waitUntil(30_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() } }
     private fun top(matcher: SemanticsMatcher) = compose.onNode(matcher).fetchSemanticsNode().boundsInRoot.top
@@ -71,7 +72,7 @@ class DirectoryRealStackDeviceTest {
     @Test fun drawerListsAWorkspaceNobodyReorderedInIosOrder() {
         instrument.sendStatus(0, Bundle().apply { putString("a11_pid", Process.myPid().toString()) })
         try {
-            reads += "app sha=${BuildConfig.SOURCE_SHA} dirty=${BuildConfig.SOURCE_DIRTY} server=$server"
+            reads += "app sha=${appBuild("SOURCE_SHA")} dirty=${appBuild("SOURCE_DIRTY")} server=$server"
             val answer = serverWorkspaces()
             answer.forEach { reads += "GET /workspaces: ${it.text("name")} position=${it["position"]} runnerId=${it.text("runnerId")} createdAt=${it.text("createdAt")}" }
             assertTrue("the stack has a workspace nobody has reordered", answer.any { it["position"] is JsonNull })
