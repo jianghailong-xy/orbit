@@ -26,6 +26,7 @@ import { SharedLinksPage } from './pages/SharedLinksPage';
 import { AccessTokensPage } from './pages/AccessTokensPage';
 import { SharedLinkPage, SharedProjectTaskRoute } from './pages/SharedLinkPage';
 import { SharedSessionPage } from './pages/SharedSessionPage';
+import { SharedWikiDocRoute } from './pages/SharedWikiPage';
 import { TaskRoute } from './pages/TaskRoute';
 import { FollowingPage } from './pages/FollowingPage';
 import { WikiPage } from './pages/WikiPage';
@@ -98,6 +99,7 @@ export function App() {
       <Route path="/s/:token" element={<SharedLinkPage />} />
       <Route path="/s/:token/c/:sessionId" element={<SharedSessionPage />} />
       <Route path="/s/:token/t/:taskId" element={<SharedProjectTaskRoute />} />
+      <Route path="/s/:token/d/:slug" element={<SharedWikiDocRoute />} />
       <Route path="/login" element={authed ? <Navigate to="/" /> : <LoginPage />} />
       {/* First-run setup. Signed-out only; once a user exists SetupPage itself bounces to
           login, and a signed-in visitor (so users exist) is sent to the app. */}

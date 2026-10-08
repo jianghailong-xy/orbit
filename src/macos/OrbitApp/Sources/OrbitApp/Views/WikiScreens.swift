@@ -17,6 +17,9 @@ struct WikiHomeView: View {
     @State private var contentsShown = false
     /// When the reader last looked, read as the home opens, before its look moves it: what the dots mark.
     @State private var seen: Double?
+    /// The Share panel, and the space's public link as last read or saved — what the bar's globe says.
+    @State private var sharing = false
+    @State private var shareRead: ShareLinkRead?
 
     var body: some View {
         if let wiki = model.wiki {
@@ -31,6 +34,7 @@ struct WikiHomeView: View {
                                                                     maintenance: space.settings?.maintenance?.enabled == true,
                                                                     seen: seen),
                                  seen: seen, failed: loading && wiki.homeState.lastLoadFailed, waiting: wiki.waiting,
+                                 shareLive: shareRead?.link.map { $0.state != .ended } ?? false,
                                  besideContents: rowNavigation == .selection, actions: actions(wiki))
                 } else {
                     WikiHomePlaceholder(wiki: wiki, state: wiki.spacesState) { await wiki.loadSpaces() }
@@ -53,9 +57,24 @@ struct WikiHomeView: View {
             .sheet(isPresented: $contentsShown) {
                 WikiContentsScreen(at: .home) { pick in go(pick) }
             }
+            // The space's public link: read as each space opens, so the globe says whether it has one.
+            .task(id: wiki.currentSpace?.id) { shareRead = await readShareLink(wiki.currentSpace?.id) }
+            .sheet(isPresented: $sharing) {
+                if let baseURL = model.baseURL, let space = wiki.currentSpace {
+                    ShareSheet(kind: .wiki, rootID: space.id, baseURL: baseURL, tokenStore: model.tokenStore) {
+                        shareRead = $0
+                    }
+                }
+            }
         } else {
             ProgressView()
         }
+    }
+
+    /// The space's public link, if it could be read: nil leaves the globe as it is when there is none.
+    private func readShareLink(_ spaceID: String?) async -> ShareLinkRead? {
+        guard let spaceID, let baseURL = model.baseURL else { return nil }
+        return try? await APIClient(baseURL: baseURL, tokenStore: model.tokenStore).shareLink(.wiki, spaceID)
     }
 
     /// The home's reads, and the plan's beside them — the count on the Contents' Plan row — through a task
@@ -88,6 +107,7 @@ struct WikiHomeView: View {
             openSettings: { open(.wikiSettings) },
             openContents: { contentsShown = true },
             openActivity: { open(.wikiActivity) },
+            openShare: { sharing = true },
             openDoc: { slug in go(.doc(slug: slug, section: nil)) },
             openArticle: { topic in go(.article(topic: topic, part: 0)) },
             openBrowse: { go(.browse) },
@@ -658,19 +678,21 @@ struct WikiReviewView: View {
             // queue changes, not only when the page first appears.
             .task(id: wiki.review.map(\.id)) { await wiki.loadEntriesNamed(by: wiki.reviewCards) }
             .refreshable { await wiki.loadReview() }
+            // A form's refusal stays in the form, beside the words it is about; the page's alert is
+            // under the sheet.
             .sheet(item: $editing) { card in
                 WikiProposalForm(card: card, entry: card.op.entryId.flatMap { wiki.detail($0)?.entry }) { edited in
                     let answer = await wiki.decide(card, .edit, edited: edited)
-                    finish(answer, card: card, action: .edit, renamed: edited.title)
-                    return answer == nil
+                    if answer == nil { landed(card, action: .edit, renamed: edited.title) }
+                    return answer
                 }
             }
             .sheet(item: $amending) { card in
                 if let entry = card.op.entryId.flatMap({ wiki.detail($0)?.entry }) {
                     WikiChallengeAmendForm(entry: entry) { edited in
                         let answer = await wiki.decide(card, .amend, edited: edited)
-                        finish(answer, card: card, action: .amend, renamed: edited.title)
-                        return answer == nil
+                        if answer == nil { landed(card, action: .amend, renamed: edited.title) }
+                        return answer
                     }
                 }
             }
@@ -698,19 +720,22 @@ struct WikiReviewView: View {
             amend: { card in amending = card })
     }
 
-    /// A refusal opens the alert with the server's reason. An answer that landed floats its outcome
-    /// in the answer's own words, with the entry it was about under it — by then the pager has moved
-    /// on to the next card, so a bare "Decided" named neither. An edit names the entry by the title
-    /// the owner gave it.
-    private func finish(_ answer: String?, card: WikiLogic.ReviewCard, action: WikiDecideAction,
-                        renamed: String? = nil) {
+    /// A refusal opens the alert with the server's reason; an answer that landed is floated.
+    private func finish(_ answer: String?, card: WikiLogic.ReviewCard, action: WikiDecideAction) {
         if let answer {
             notice = answer
         } else {
-            let entry = card.op.entryId.flatMap { model.wiki?.detail($0)?.entry }
-            model.showToast(WikiLogic.decidedToast(op: card.op.op, action: action),
-                            subtitle: renamed ?? WikiLogic.knownTitle(card, entry: entry))
+            landed(card, action: action)
         }
+    }
+
+    /// An answer that landed floats its outcome in the answer's own words, with the entry it was about
+    /// under it — by then the pager has moved on to the next card, so a bare "Decided" named neither.
+    /// An edit names the entry by the title the owner gave it.
+    private func landed(_ card: WikiLogic.ReviewCard, action: WikiDecideAction, renamed: String? = nil) {
+        let entry = card.op.entryId.flatMap { model.wiki?.detail($0)?.entry }
+        model.showToast(WikiLogic.decidedToast(op: card.op.op, action: action),
+                        subtitle: renamed ?? WikiLogic.knownTitle(card, entry: entry))
     }
 }
 
@@ -720,14 +745,16 @@ struct WikiReviewView: View {
 /// is a Re-confirm.
 private struct WikiChallengeAmendForm: View {
     let entry: WikiEntry
-    let submit: (WikiEntryChanges) async -> Bool
+    /// The answer: nil once it landed and the form can close, else the refusal, which stays here.
+    let submit: (WikiEntryChanges) async -> String?
 
     @Environment(\.dismiss) private var dismiss
     @State private var title: String
     @State private var summary: String
     @State private var saving = false
+    @State private var refusal: String?
 
-    init(entry: WikiEntry, submit: @escaping (WikiEntryChanges) async -> Bool) {
+    init(entry: WikiEntry, submit: @escaping (WikiEntryChanges) async -> String?) {
         self.entry = entry
         self.submit = submit
         _title = State(initialValue: entry.title ?? "")
@@ -752,6 +779,9 @@ private struct WikiChallengeAmendForm: View {
                 } footer: {
                     Text(WikiModeCopy.amendNote)
                 }
+                if let refusal {
+                    Section { Text(refusal).foregroundStyle(.red) }
+                }
             }
             .navigationTitle(WikiModeCopy.amend)
             #if os(iOS)
@@ -766,9 +796,9 @@ private struct WikiChallengeAmendForm: View {
                         saving = true
                         let edited = changes
                         Task {
-                            let landed = await submit(edited)
+                            refusal = await submit(edited)
                             saving = false
-                            if landed { dismiss() }
+                            if refusal == nil { dismiss() }
                         }
                     }
                     .disabled(saving || (changes.title == nil && changes.summary == nil)
@@ -784,14 +814,16 @@ private struct WikiChallengeAmendForm: View {
 private struct WikiProposalForm: View {
     let card: WikiLogic.ReviewCard
     let entry: WikiEntry?
-    let submit: (WikiEntryChanges) async -> Bool
+    /// The answer: nil once it landed and the form can close, else the refusal, which stays here.
+    let submit: (WikiEntryChanges) async -> String?
 
     @Environment(\.dismiss) private var dismiss
     @State private var title: String
     @State private var summary: String
     @State private var saving = false
+    @State private var refusal: String?
 
-    init(card: WikiLogic.ReviewCard, entry: WikiEntry?, submit: @escaping (WikiEntryChanges) async -> Bool) {
+    init(card: WikiLogic.ReviewCard, entry: WikiEntry?, submit: @escaping (WikiEntryChanges) async -> String?) {
         self.card = card
         self.entry = entry
         self.submit = submit
@@ -826,6 +858,9 @@ private struct WikiProposalForm: View {
                 } footer: {
                     Text(WikiCopy.acceptNote)
                 }
+                if let refusal {
+                    Section { Text(refusal).foregroundStyle(.red) }
+                }
             }
             .navigationTitle(WikiCopy.reviewEdit)
             #if os(iOS)
@@ -840,9 +875,9 @@ private struct WikiProposalForm: View {
                         saving = true
                         let version = edited
                         Task {
-                            let landed = await submit(version)
+                            refusal = await submit(version)
                             saving = false
-                            if landed { dismiss() }
+                            if refusal == nil { dismiss() }
                         }
                     }
                     .disabled(saving || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

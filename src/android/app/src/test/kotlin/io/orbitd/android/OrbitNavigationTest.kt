@@ -55,7 +55,7 @@ class OrbitNavigationTest {
     @Test fun rejectsForeignInstancePrivilegedPathsMalformedIdsAndUnsupportedIosSchemes() {
         listOf("https://other.test/tasks/$publicId", "https://orbitd.io:444/tasks/$publicId",
             "https://orbitd.io/api/sessions/$publicId", "https://orbitd.io/s/$publicId",
-            "orbit://project/$publicId", "orbit://wiki/$publicId", "orbit://session/../x",
+            "orbit://project/$publicId", "orbit://session/../x",
             "orbit-task:invalid!", "orbit://watch/zzzzzzzzzzzzzzzzzzzzzz", "https://orbitd.io/lists/none").forEach {
             assertNull(it, OrbitLinks.parse(it, "https://orbitd.io"))
         }

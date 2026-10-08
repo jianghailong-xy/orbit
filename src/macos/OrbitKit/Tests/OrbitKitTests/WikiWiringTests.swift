@@ -299,6 +299,9 @@ final class WikiWiringTests: XCTestCase {
                               "Button(action: actions.openActivity)", "WikiActivityGlyph(waiting: waiting)",
                               ".accessibilityLabel(WikiCopy.activity)",
                               ".accessibilityValue(waiting > 0 ? WikiCopy.waitingOnYou(waiting) : \"\")",
+                              "Button(action: actions.openShare)", "WikiShareGlyph(live: shareLive)",
+                              ".accessibilityLabel(SharePanelCopy.share)",
+                              ".accessibilityValue(shareLive ? SharePanelCopy.liveLink : \"\")",
                               "Button(action: actions.openSettings)", "Image(systemName: \"gearshape\")"],
                     "the home's bar")
         let glyph = code(try slice(try source("Views/WikiView.swift"),
@@ -312,6 +315,17 @@ final class WikiWiringTests: XCTestCase {
         XCTAssertTrue(home.contains("waiting: wiki.waiting,"), "the badge is the drawer's number, from the same model")
         XCTAssertTrue(home.contains("besideContents: rowNavigation == .selection,"), "the detail pane's home has no head")
         XCTAssertTrue(home.contains("openActivity: { open(.wikiActivity) },"))
+        // The globe opens the one Share panel on the space, and says whether the space has a link open.
+        XCTAssertTrue(home.contains("openShare: { sharing = true },"))
+        XCTAssertTrue(home.contains("ShareSheet(kind: .wiki, rootID: space.id, baseURL: baseURL, tokenStore: model.tokenStore)"))
+        XCTAssertTrue(home.contains("shareLive: shareRead?.link.map { $0.state != .ended } ?? false,"))
+        let globe = code(try slice(try source("Views/WikiView.swift"), from: "struct WikiShareGlyph: View {",
+                                   to: "let wikiMenuIconsDrawAmber"))
+        assertOrder(globe, ["if live {", "Image(systemName: \"globe\").foregroundStyle(Color.green)", "} else {"],
+                    "the Share globe")
+        let quiet = try XCTUnwrap(globe.components(separatedBy: "} else {").last)
+        XCTAssertTrue(quiet.contains("Image(systemName: \"globe\")"), "with no link open, the globe is still there")
+        XCTAssertFalse(quiet.contains(".foregroundStyle("), "with no link open, the globe is the bar's own colour")
         XCTAssertTrue(home.contains("case .push:      model.push(node)"))
         XCTAssertTrue(home.contains("case .selection: model.nav.replaceTop(with: node)"))
     }
@@ -481,6 +495,47 @@ final class WikiWiringTests: XCTestCase {
         XCTAssertTrue(page.contains("WikiLogic.clampedIndex(index, count: visible.count)"))
         let screens = code(try source("Views/WikiScreens.swift"))
         XCTAssertTrue(screens.contains("await wiki.decide(card, action, reason: reason)"))
+    }
+
+    /// A decide's answer is read, not dropped. The server answers 200 for an op it could not apply too —
+    /// recorded `conflict` (the entry moved past it, or is no longer active) or `withdrawn` — and that
+    /// comes back as the refusal: the card is not put in `answered`, the queue is read again, and the
+    /// caller says it where it says any refusal, never "Accepted" (`WikiDecisionRefusalTests`).
+    func testADecideReadsWhatTheServerRecorded() throws {
+        let model = code(try source("WikiModel.swift"))
+        let decide = try slice(model, from: "func decide(_ card: WikiLogic.ReviewCard,", to: "func loadEntriesNamed(")
+        XCTAssertFalse(decide.contains("_ = try await api.decideWikiChangeset("), "a decide drops the server's answer")
+        XCTAssertTrue(decide.contains("answer = try await api.decideWikiChangeset("))
+        let refused = try slice(decide, from: "if let refusal = WikiLogic.decisionRefusal(", to: "answered.insert(card.op.id)")
+        assertOrder(refused, ["WikiLogic.recordedDecision(answer, opID: card.op.id)", "op: card.op.op, action: action)",
+                              "await reloadAfterWrite()", "return refusal", "answered.insert(card.op.id)"],
+                    "a refusal the server recorded, ahead of the card leaving the queue")
+    }
+
+    /// Edit's form and a challenge's Amend form keep a refusal in the form, beside the words it is about —
+    /// one the server recorded as much as one it threw — and float only an answer that landed. The page's
+    /// alert is no place for it: the form's sheet is over the page.
+    func testReviewsFormsKeepTheirRefusalInTheForm() throws {
+        let screens = code(try source("Views/WikiScreens.swift"))
+        let view = try slice(screens, from: "struct WikiReviewView: View {", to: "private struct WikiChallengeAmendForm: View {")
+        for (sheet, action) in [(".sheet(item: $editing) { card in", ".edit"), (".sheet(item: $amending) { card in", ".amend")] {
+            let answer = try slice(view, from: sheet, to: "return answer")
+            assertOrder(answer, ["let answer = await wiki.decide(card, \(action), edited: edited)",
+                                 "if answer == nil { landed(card, action: \(action), renamed: edited.title) }",
+                                 "return answer"], "the \(action) form's answer")
+            XCTAssertFalse(answer.contains("finish("), "the \(action) form's refusal goes to the page's alert")
+        }
+        let amendStart = try XCTUnwrap(screens.range(of: "private struct WikiChallengeAmendForm: View {"))
+        let editStart = try XCTUnwrap(screens.range(of: "private struct WikiProposalForm: View {"))
+        let forms = ["a challenge's Amend": String(screens[amendStart.lowerBound..<editStart.lowerBound]),
+                     "Edit's": String(screens[editStart.lowerBound...])]
+        for (name, form) in forms {
+            XCTAssertTrue(form.contains("let submit: (WikiEntryChanges) async -> String?"), "\(name) form")
+            XCTAssertTrue(form.contains("@State private var refusal: String?"), "\(name) form")
+            assertOrder(form, ["if let refusal {", "Text(refusal)", ".foregroundStyle(.red)"], "\(name) form's refusal")
+            let submitted = try slice(form, from: "refusal = await submit(", to: "if refusal == nil { dismiss() }")
+            XCTAssertTrue(submitted.contains("saving = false"), "\(name) form stays open on a refusal")
+        }
     }
 
     /// Alerts say which write failed, while their message remains the server's reason.

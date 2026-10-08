@@ -61,7 +61,8 @@ public enum SharedLinksList {
     }
 
     /// The line under a link's title: what it is and where it stands. "Session · Completed Sep 22",
-    /// "Task · Done", "Paused · in Trash — …", "Project · Turned off Sep 24".
+    /// "Task · Done", "Paused · in Trash — …", "Project · Turned off Sep 24". A wiki has no status:
+    /// "Wiki".
     public static func whereLine(_ link: ShareLink) -> String {
         let kind = kindWord(link.kind)
         switch link.state {
@@ -72,7 +73,7 @@ public enum SharedLinksList {
             let day = (link.revokedAt ?? link.expiresAt).flatMap(SharePanelCopy.shortDate)
             return "\(kind) · " + (day.map { "\(word) \($0)" } ?? word)
         case .active, .unknown:
-            return "\(kind) · \(rootStatus(link))"
+            return link.kind == .wiki ? kind : "\(kind) · \(rootStatus(link))"
         }
     }
 
@@ -81,6 +82,7 @@ public enum SharedLinksList {
         case .session: return "Session"
         case .task:    return "Task"
         case .project: return "Project"
+        case .wiki:    return "Wiki"
         }
     }
 
@@ -98,6 +100,8 @@ public enum SharedLinksList {
                 return "\(lifecycle) \(day)"
             }
             return lifecycle
+        case .wiki:
+            return ""
         }
     }
 
