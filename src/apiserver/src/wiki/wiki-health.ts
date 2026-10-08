@@ -64,11 +64,20 @@ export class WikiHealth {
       oldestPendingAt = counted.oldestPendingAt;
     }
     const today = await wikiMaintenanceRunsToday(this.prisma, ownerId, spaceId, now);
+    // The server's half (contract `jobs.executor.read`, P9): whether the server executes this account's wiki,
+    // and the System model it calls while it does — what the line's server reasons are said from. Under runner
+    // the model is none of this account's business, and is not read.
+    const executor = wikiExecutorView(currentWikiExecutorSwitch(), ownerId);
     // A run made in active catch-up on a local endpoint is not counted against the day (contract
-    // `maintenance.job.catchUp.dailyLimit`): while that holds, the day's limit holds no run back.
+    // `maintenance.job.catchUp.dailyLimit`): while that holds, the day's limit holds no run back. An account
+    // the server executes has no provider to read (P8): the run row says whether the System model's endpoint
+    // was the machine's own or a private one — the worker records it when it starts the run — and nothing
+    // about a provider is validated here.
     const uncounted = settings.enabled
       && (await wikiMaintenanceCatchUpOf(this.prisma, ownerId, spaceId, oldestPendingAt, now)).state === 'active'
-      && (await wikiMaintenanceProviderIsLocal(this.prisma, ownerId, settings.provider));
+      && (executor.serverExecutes
+        ? await this.latestRunIsLocal(ownerId, spaceId)
+        : await wikiMaintenanceProviderIsLocal(this.prisma, ownerId, settings.provider));
 
     const maintenance: Omit<WikiMaintenanceHealth, 'look'> = {
       enabled: settings.enabled,
@@ -90,10 +99,6 @@ export class WikiHealth {
     // that need a repository can run at all, and why not when they cannot — an old runner is the one a
     // person can act on, so it is named as such rather than as a wait.
     const repo = await readWikiRepoReadiness(this.prisma, { ownerId, spaceId, now });
-    // The server's half (contract `jobs.executor.read`, P9): whether the server executes this account's wiki,
-    // and the System model it calls while it does — what the line's server reasons are said from. Under runner
-    // the model is none of this account's business, and is not read.
-    const executor = wikiExecutorView(currentWikiExecutorSwitch(), ownerId);
     return {
       spaceId,
       entries,
@@ -116,6 +121,21 @@ export class WikiHealth {
       executor,
       systemModel: executor.serverExecutes ? await new WikiSystemModelReads(this.prisma).read(now) : null,
     };
+  }
+
+  /**
+   * Whether the space's latest maintenance run was made on an endpoint of this machine or a private network
+   * (P8): the run row's `localEndpoint`, which the worker writes when it starts a run the server executes
+   * from the System model's address. A space that has not run reads as not local, as a provider nothing
+   * holds does.
+   */
+  private async latestRunIsLocal(ownerId: string, spaceId: string): Promise<boolean> {
+    const run = await this.prisma.wikiMaintenanceRun.findFirst({
+      where: { ownerId, spaceId, jobId: { not: null } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: { localEndpoint: true },
+    });
+    return run?.localEndpoint === true;
   }
 
   /**

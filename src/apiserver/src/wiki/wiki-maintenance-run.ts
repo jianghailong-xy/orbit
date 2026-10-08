@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { BadRequestException, Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { Prisma, RunStatus } from '@prisma/client';
 import {
@@ -7,6 +8,7 @@ import {
   WIKI_MAINTENANCE_FAILURE_KINDS,
   WIKI_MAINTENANCE_JOB,
   WIKI_MAINTENANCE_RECOVERY,
+  WIKI_MAINTAIN_JOB,
   WIKI_MAINTENANCE_RULES,
   WIKI_REVIEW_RULES,
   isRetryableApiErrorText,
@@ -32,7 +34,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { TASK_COMPLETION_FENCE_REVISION } from '../tasks/task-completion-criterion';
 import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
-import { queueWikiArticlesAfterSessionRun } from './wiki-articles-jobs';
+import { queueWikiArticlesAfterRun, queueWikiArticlesAfterSessionRun } from './wiki-articles-jobs';
 import {
   afterSql,
   comparePositions,
@@ -50,6 +52,7 @@ import {
 } from './wiki-maintenance';
 import { WIKI_RUN_BASH_TIMEOUT, wikiMaintenanceCatchUpOf, wikiMaintenanceRunsToday, wikiRunCutOff } from './wiki-maintenance-session';
 import { wikiMaintenanceProviderIsLocal } from './wiki-maintenance-settings';
+import { currentWikiExecutorSwitch, wikiExecutorServes } from './wiki-executor-switch';
 import { hasQueuedWikiPlanJob, resumeWikiPlanJobs } from './wiki-plan-job';
 import { currentWikiRollout, wikiOnFor } from './wiki-rollout';
 
@@ -154,14 +157,19 @@ export function wikiMaintenanceHintFor(
 }
 
 /**
- * Why a hint made no task, or the task it made — and, only when it did any, what settling the list's dead
- * tasks did first (`settled`).
+ * Why a hint made no task, or the run it made — and, only when it did any, what settling the list's dead
+ * tasks did first (`settled`). Exactly one of `taskId` and `jobId` names the maker (contract
+ * `maintenance.job.server`, P8): a maintenance task under the runner executor, or a `maintain` wiki job
+ * under an account the server executes.
  */
 export type WikiMaintenanceTriggerOutcome =
   | {
     made: true;
     spaceId: string;
-    taskId: string;
+    /** The maintenance task made, under the runner executor; null when the server's job was made. */
+    taskId: string | null;
+    /** The `maintain` job made, under server execution; null when a task was. */
+    jobId: string | null;
     runId: string;
     due: WikiMaintenanceDue;
     expect: string;
@@ -184,6 +192,12 @@ type TriggerDb = PrismaService;
  * Whether a hint makes the space's maintenance task, and the task when it does (contract
  * `maintenance.job.trigger`). Reads first — every refusal is a read — and writes only under the list's
  * lock: the task, its run row, and the cursor's `held` cleared. A held space writes its reason alone.
+ *
+ * AN ACCOUNT THE SERVER EXECUTES MAKES A JOB, NOT A TASK (contract `maintenance.job.server`, P8): the same
+ * reads decide the same thing — due, the day's runs, the room, the position — and the writer makes a
+ * `wiki_job` (`maintain`) with the run row that names it, under the space's lock. No task and no session
+ * are made, no provider is asked for, and the hidden list is not required to exist: a workspace and the
+ * space's own on-switch are all the run needs. Under the default `runner` everything here is unchanged.
  */
 export async function considerWikiMaintenance(
   prisma: TriggerDb,
@@ -205,14 +219,19 @@ export async function considerWikiMaintenance(
   });
   if (!space) return no('off');
   const settings = wikiMaintenanceSettings((space.settings as Record<string, unknown> | null)?.maintenance);
-  if (!settings.enabled || !settings.workspaceId || !settings.listId) return no('off');
+  // The server's path needs the space turned on and a workspace to read the repository from; a list it has
+  // none of, since it makes no task. The runner's path is what it always was.
+  const onServer = wikiExecutorServes(currentWikiExecutorSwitch(), ownerId);
+  if (!settings.enabled || !settings.workspaceId || (!onServer && !settings.listId)) return no('off');
   const listId = settings.listId;
   // A task of the list that died is started again or closed before anything else is asked: it holds the
   // list no more (contract `maintenance.job.recovery`). Its own session's end is the hint that gets here.
-  const settling = await settleWikiMaintenanceList(prisma, ownerId, spaceId, listId, now);
+  const settling = listId ? await settleWikiMaintenanceList(prisma, ownerId, spaceId, listId, now) : { rerun: [], closed: [] };
   if (settling.rerun.length > 0 || settling.closed.length > 0) recovered = settling;
-  // Cheap first: a run that has not ended is the one this fact waits for.
-  if (await unfinishedTask(prisma, ownerId, listId)) return no('unfinished');
+  // Cheap first: a run that has not ended is the one this fact waits for — the list's open task, or the
+  // server's own unfinished job.
+  if (listId && (await unfinishedTask(prisma, ownerId, listId))) return no('unfinished');
+  if (await unfinishedMaintainJob(prisma, ownerId, spaceId)) return no('unfinished');
   // And a plan job that waits for the list goes before the next run.
   if (await hasQueuedWikiPlanJob(prisma, ownerId, spaceId)) return no('plan_job_queued');
 
@@ -246,7 +265,9 @@ export async function considerWikiMaintenance(
 
   // The day's runs, and — Manual — the review queue's room. A run made in active catch-up on a local endpoint is
   // not counted against the day (contract `maintenance.job.catchUp.dailyLimit`), so the day holds it back no more.
-  const localEndpoint = await wikiMaintenanceProviderIsLocal(prisma, ownerId, settings.provider);
+  // A run the server executes has no provider to read: its endpoint is the System model's, whose locality the
+  // worker records on the run row when it starts it, and the day is counted as it stands now.
+  const localEndpoint = onServer ? false : await wikiMaintenanceProviderIsLocal(prisma, ownerId, settings.provider);
   if (!(catchUp.state === 'active' && localEndpoint) && (await wikiMaintenanceRunsToday(prisma, ownerId, spaceId, now)).remaining <= 0) {
     await hold(prisma, cursor.id, cursor.heldReason, 'daily_limit_reached', now);
     return no('daily_limit_reached');
@@ -273,11 +294,37 @@ export async function considerWikiMaintenance(
   if (!expect || comparePositions(expect, watermark) <= 0) return no('nothing_settled');
   const token = encodeCursorToken(spaceId, expect);
   const why: WikiMaintenanceDue = due.backlog ? 'backlog' : 'age';
+  const run = {
+    due: why,
+    backlog: backlog.backlog,
+    pendingSessions: backlog.pendingSessions,
+    oldestPendingAt: backlog.oldestPendingAt,
+    expect,
+    catchUp: catchUp.state,
+    localEndpoint,
+  };
+
+  if (onServer) {
+    const made = await new MaintenanceJobWriter(prisma).makeJob({ ownerId, spaceId, cursorId: cursor.id, now, run });
+    if ('why' in made) return no(made.why);
+    return {
+      made: true,
+      spaceId,
+      taskId: null,
+      jobId: made.jobId,
+      runId: made.runId,
+      due: why,
+      expect: token,
+      runSessions,
+      catchUp: catchUp.state,
+      ...(recovered ? { settled: recovered } : {}),
+    };
+  }
 
   const made = await new MaintenanceTaskWriter(prisma).makeTask({
     ownerId,
     spaceId,
-    listId,
+    listId: listId!,
     cursorId: cursor.id,
     now,
     task: {
@@ -295,21 +342,14 @@ export async function considerWikiMaintenance(
       workspaceId: settings.workspaceId,
       provider: settings.provider,
     },
-    run: {
-      due: why,
-      backlog: backlog.backlog,
-      pendingSessions: backlog.pendingSessions,
-      oldestPendingAt: backlog.oldestPendingAt,
-      expect,
-      catchUp: catchUp.state,
-      localEndpoint,
-    },
+    run,
   });
   if ('why' in made) return no(made.why);
   return {
     made: true,
     spaceId,
     taskId: made.taskId,
+    jobId: null,
     runId: made.runId,
     due: why,
     expect: token,
@@ -435,6 +475,87 @@ class MaintenanceTaskWriter {
   }
 }
 
+/**
+ * The one writer of a maintenance job (contract `maintenance.job.server`, P8): a run the server executes is
+ * a `wiki_job` of kind `maintain` with the run row that names it, and no task. The space's row is locked
+ * first (rank 60, the lock the run rows and the cursor sit behind), and everything is read again under it:
+ * of two facts arriving together, the second finds the first's job, a plan job queued meanwhile is found
+ * and goes first, and the day's limit is counted once more with the lock held.
+ */
+class MaintenanceJobWriter {
+  private readonly logger = new Logger('WikiMaintenanceTrigger');
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  async makeJob(input: {
+    ownerId: string;
+    spaceId: string;
+    cursorId: string;
+    now: Date;
+    run: {
+      due: WikiMaintenanceDue;
+      backlog: number;
+      pendingSessions: number;
+      oldestPendingAt: Date | null;
+      expect: FactPosition;
+      catchUp: WikiMaintenanceCatchUp | null;
+      localEndpoint: boolean;
+    };
+  }): Promise<{ jobId: string; runId: string } | { why: 'off' | 'unfinished' | 'plan_job_queued' | 'daily_limit_reached' }> {
+    const { ownerId, spaceId, now } = input;
+    const counted = !(input.run.catchUp === 'active' && input.run.localEndpoint);
+    return withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        const [space] = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT "id" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR NO KEY UPDATE`;
+        if (!space) return { why: 'off' } as const;
+        if (await unfinishedMaintainJob(tx, ownerId, spaceId)) return { why: 'unfinished' } as const;
+        if (await hasQueuedWikiPlanJob(tx, ownerId, spaceId)) return { why: 'plan_job_queued' } as const;
+        if (counted && (await wikiMaintenanceRunsToday(tx, ownerId, spaceId, now)).remaining <= 0) return { why: 'daily_limit_reached' } as const;
+        // Both ids are the application's: the row must name its maker from the moment it exists (the
+        // maker CHECK holds every run row), and the job's input names the run it executes.
+        const runId = randomUUID();
+        const jobId = randomUUID();
+        await tx.wikiMaintenanceRun.create({
+          data: {
+            id: runId,
+            spaceId,
+            ownerId,
+            jobId,
+            due: input.run.due,
+            backlog: input.run.backlog,
+            pendingSessions: input.run.pendingSessions,
+            oldestPendingAt: input.run.oldestPendingAt,
+            expectAt: input.run.expect.at,
+            expectKind: input.run.expect.kind,
+            expectRef: input.run.expect.ref,
+            catchUp: input.run.catchUp,
+            localEndpoint: input.run.localEndpoint,
+          },
+          select: { id: true },
+        });
+        const job = await tx.wikiJob.create({
+          data: {
+            id: jobId,
+            ownerId,
+            spaceId,
+            kind: 'maintain',
+            // The run the job executes: what it is for is the run row's, and the row is the job's.
+            input: { runId },
+            priority: WIKI_MAINTAIN_JOB.priority,
+            state: 'queued',
+          },
+          select: { id: true },
+        });
+        await tx.wikiCursor.updateMany({ where: { id: input.cursorId }, data: { heldReason: null, heldAt: null } });
+        return { jobId: job.id, runId };
+      },
+      loggedRetry(this.logger, 'wiki.maintenanceJob'),
+    );
+  }
+}
+
 /** The space's cursor row, made the first time a fact asks about the space. */
 async function cursorOf(prisma: TriggerDb, ownerId: string, spaceId: string) {
   const select = { id: true, positionAt: true, positionKind: true, positionRef: true, heldReason: true } as const;
@@ -454,6 +575,23 @@ async function cursorOf(prisma: TriggerDb, ownerId: string, spaceId: string) {
 
 async function unfinishedTask(db: Pick<Prisma.TransactionClient, 'task'>, ownerId: string, listId: string): Promise<boolean> {
   return (await db.task.findFirst({ where: { ownerId, listId, status: { in: ['OPEN', 'IN_PROGRESS'] } }, select: { id: true } })) !== null;
+}
+
+/**
+ * Whether the space's server-executed maintenance has a run that has not ended: a `maintain` job queued,
+ * running or parked on its repository (contract `maintenance.job.server`, P8). It is the task check's
+ * counterpart — one run of a space at a time — and the fact that arrives while one waits is answered
+ * `unfinished`, exactly as it is for a list whose task is open.
+ */
+async function unfinishedMaintainJob(
+  db: Pick<Prisma.TransactionClient, 'wikiJob'>,
+  ownerId: string,
+  spaceId: string,
+): Promise<boolean> {
+  return (await db.wikiJob.findFirst({
+    where: { ownerId, spaceId, kind: WIKI_MAINTAIN_JOB.kind, state: { in: ['queued', 'running', 'waiting'] } },
+    select: { id: true },
+  })) !== null;
 }
 
 /** Say on the cursor row why a due space made no task; the first fact held for a reason keeps its time. */
@@ -828,10 +966,15 @@ export class WikiMaintenanceTrigger implements OnModuleInit, OnModuleDestroy {
         this.logger.log(`space ${space.id}: dead maintenance tasks — started again ${rerun.join(', ') || 'none'}, closed ${closed.join(', ') || 'none'}`);
         this.realtime?.publishForUser(ownerId, RunEventType.TASK_CHANGED, { taskIds: [...rerun, ...closed], resync: false });
       }
-      if (outcome.made) {
+      if (outcome.made && outcome.taskId) {
         this.logger.log(`space ${space.id}: made maintenance task ${outcome.taskId} (${outcome.due})`);
         this.realtime?.publishForUser(ownerId, RunEventType.TASK_CHANGED, { taskIds: [outcome.taskId], resync: false });
-      } else if (outcome.why === 'plan_job_queued') {
+      } else if (outcome.made && outcome.jobId) {
+        // A run the server executes is a job and no task: Activity's Runs card is what hears it (P9), through
+        // the same `wiki.changed` a write publishes — no task is made, so nothing about a task is announced.
+        this.logger.log(`space ${space.id}: made maintenance job ${outcome.jobId} (${outcome.due})`);
+        this.realtime?.publishWikiChanged(ownerId, space.id);
+      } else if (!outcome.made && outcome.why === 'plan_job_queued') {
         const made = await resumeWikiPlanJobs(this.prisma, ownerId, { spaceId: space.id, states: ['queued'] }, now);
         if (made.length > 0) {
           this.logger.log(`space ${space.id}: made plan job tasks ${made.join(', ')} before the next maintenance run`);
@@ -958,22 +1101,7 @@ export async function finishWikiMaintenanceRun(
   input: WikiMaintenanceFinishInput,
   now: Date = new Date(),
 ): Promise<{ advanced: boolean; outcome: WikiCursorOutcome; state: WikiCursorState }> {
-  const outcome = input.outcome ?? 'succeeded';
-  if (!(WIKI_CURSOR_OUTCOMES as readonly string[]).includes(outcome)) {
-    throw new BadRequestException(`outcome must be one of ${WIKI_CURSOR_OUTCOMES.join(', ')}`);
-  }
-  const report = input.report ?? null;
-  if (report !== null && (typeof report !== 'object' || Array.isArray(report))) {
-    throw new BadRequestException('report must be an object: what the run did, in counts');
-  }
-  if (report !== null && Buffer.byteLength(JSON.stringify(report), 'utf8') > REPORT_MAX_BYTES) {
-    throw new BadRequestException(`report is at most ${REPORT_MAX_BYTES} bytes of JSON: counts, not content`);
-  }
-  const failureKind = input.failureKind ?? null;
-  if (failureKind !== null && !(WIKI_MAINTENANCE_FAILURE_KINDS as readonly string[]).includes(failureKind)) {
-    throw new BadRequestException(`failureKind must be one of ${WIKI_MAINTENANCE_FAILURE_KINDS.join(', ')}`);
-  }
-  const refused = opsRefusedOf(report);
+  const { outcome, report, failureKind, refused } = checkedFinish(input);
   try {
     const answer = await maintenance.advanceCursor(ownerId, spaceId, { to: input.to ?? '', outcome, error: input.error ?? null }, now);
     await noteWikiMaintenanceRunEnd(prisma, ownerId, spaceId, sessionId, {
@@ -998,6 +1126,82 @@ export async function finishWikiMaintenanceRun(
     }, now);
     throw error;
   }
+}
+
+/**
+ * The same end for a run the server's wiki job ran (contract `maintenance.job.server`, P8): the run row is
+ * the job's (`wiki_maintenance_run.job_id`), there is no session, and the articles the end owes are asked
+ * of the job's own facts — the run's outcome, how it was made, and whether it recorded an op — through the
+ * one entry the owner's decision of 2026-10-08 names (`queueWikiArticlesAfterRun`).
+ */
+export async function finishWikiMaintenanceJob(
+  prisma: PrismaService,
+  maintenance: WikiMaintenance,
+  ownerId: string,
+  spaceId: string,
+  jobId: string,
+  input: WikiMaintenanceFinishInput,
+  now: Date = new Date(),
+): Promise<{ advanced: boolean; outcome: WikiCursorOutcome; state: WikiCursorState }> {
+  const { outcome, report, failureKind, refused } = checkedFinish(input);
+  const run = await prisma.wikiMaintenanceRun.findFirst({
+    where: { ownerId, spaceId, jobId },
+    select: { catchUp: true },
+  });
+  const recordedOps = (report?.ops as { recorded?: unknown } | undefined)?.recorded;
+  try {
+    const answer = await maintenance.advanceCursor(ownerId, spaceId, { to: input.to ?? '', outcome, error: input.error ?? null }, now);
+    await noteWikiMaintenanceJobEnd(prisma, ownerId, spaceId, jobId, {
+      outcome,
+      error: input.error ?? null,
+      failureKind,
+      report,
+      opsRefused: refused,
+    }, now);
+    await queueWikiArticlesAfterRun(prisma, {
+      ownerId,
+      spaceId,
+      outcome,
+      catchUp: run?.catchUp ?? null,
+      recordedOps: typeof recordedOps === 'number' && recordedOps > 0,
+    });
+    return answer;
+  } catch (error) {
+    const said = (error as { response?: { message?: unknown } }).response?.message;
+    await noteWikiMaintenanceJobEnd(prisma, ownerId, spaceId, jobId, {
+      outcome: 'failed',
+      error: `the cursor refused the run's advance: ${typeof said === 'string' ? said : (error as Error).message}`,
+      failureKind: 'content',
+      report,
+      opsRefused: refused,
+    }, now);
+    throw error;
+  }
+}
+
+/** What a finish request is held to before anything is written: the outcome, the report, whose failure it was. */
+function checkedFinish(input: WikiMaintenanceFinishInput): {
+  outcome: WikiCursorOutcome;
+  report: Record<string, unknown> | null;
+  failureKind: WikiMaintenanceFailureKind | null;
+  refused: number | null;
+} {
+  const outcome = input.outcome ?? 'succeeded';
+  if (!(WIKI_CURSOR_OUTCOMES as readonly string[]).includes(outcome)) {
+    throw new BadRequestException(`outcome must be one of ${WIKI_CURSOR_OUTCOMES.join(', ')}`);
+  }
+  const report = input.report ?? null;
+  if (report !== null && (typeof report !== 'object' || Array.isArray(report))) {
+    throw new BadRequestException('report must be an object: what the run did, in counts');
+  }
+  if (report !== null && Buffer.byteLength(JSON.stringify(report), 'utf8') > REPORT_MAX_BYTES) {
+    throw new BadRequestException(`report is at most ${REPORT_MAX_BYTES} bytes of JSON: counts, not content`);
+  }
+  const failureKind = input.failureKind ?? null;
+  if (failureKind !== null && !(WIKI_MAINTENANCE_FAILURE_KINDS as readonly string[]).includes(failureKind)) {
+    throw new BadRequestException(`failureKind must be one of ${WIKI_MAINTENANCE_FAILURE_KINDS.join(', ')}`);
+  }
+  return { outcome, report, failureKind, refused: opsRefusedOf(report) };
 }
 
 /** `report.ops.refused` when the report says it, else null: a run that says nothing of its ops proved nothing. */
@@ -1032,6 +1236,41 @@ export async function noteWikiMaintenanceRunEnd(
     where: { id: run.id },
     data: {
       sessionId,
+      startedAt: run.startedAt ?? now,
+      endedAt: now,
+      outcome: end.outcome,
+      failureKind: end.outcome === 'succeeded' ? null : (end.failureKind ?? wikiMaintenanceFailureKindOf(error)),
+      error,
+      ...(end.report !== undefined ? { report: (end.report ?? Prisma.DbNull) as Prisma.InputJsonValue } : {}),
+      ...(end.opsRefused !== undefined ? { opsRefused: end.opsRefused } : {}),
+    },
+  });
+}
+
+/**
+ * The same, for a run the server's wiki job ran (P8): the row is found by `job_id`, there is no session,
+ * and the same fields are kept — whose the failure was, the report, and how many ops the server refused.
+ */
+export async function noteWikiMaintenanceJobEnd(
+  prisma: PrismaService,
+  ownerId: string,
+  spaceId: string,
+  jobId: string,
+  end: {
+    outcome: WikiCursorOutcome;
+    error: string | null;
+    failureKind?: WikiMaintenanceFailureKind | null;
+    report?: Record<string, unknown> | null;
+    opsRefused?: number | null;
+  },
+  now: Date = new Date(),
+): Promise<void> {
+  const run = await prisma.wikiMaintenanceRun.findFirst({ where: { ownerId, spaceId, jobId }, select: { id: true, startedAt: true } });
+  if (!run) return;
+  const error = redactSecrets((end.error ?? '').trim()).text.slice(0, 2000).trim() || null;
+  await prisma.wikiMaintenanceRun.updateMany({
+    where: { id: run.id },
+    data: {
       startedAt: run.startedAt ?? now,
       endedAt: now,
       outcome: end.outcome,
