@@ -1103,6 +1103,7 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 
 func codexAppServerCommandArgs(job *ClaimedSession, stateDir, exe string) []string {
 	args := []string{"app-server", "--stdio", "-c", fmt.Sprintf("sqlite_home=%q", stateDir)}
+	args = appendCodexSessionToolConfig(args)
 	args = appendCodexOrbitMCPConfig(args, exe)
 	return append(args, codexProviderArgs(job.Agent.Env)...)
 }
