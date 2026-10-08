@@ -33,7 +33,7 @@ import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { PrismaClient } from '@prisma/client';
-import { toUuid, WIKI_DOCS_BUILD_JOB, WIKI_REPO_OP_CAPABILITY } from '@orbit/shared';
+import { toUuid, WIKI_DOCS_BUILD_JOB, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY, WIKI_REPO_OPS } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -299,18 +299,24 @@ interface Tree {
   files: Record<string, string>;
 }
 
-/** What one `read` item answers, as src/runner-go/wiki_repo_ops.go's wikiRepoOpReadOne answers it. */
-function readOne(tree: Tree, item: { path: string; maxChars?: number }, left: number): Record<string, unknown> {
-  const text = tree.files[item.path] ?? '';
-  if (text === '') return { path: item.path, found: false, chars: 0 };
-  let max = item.maxChars && item.maxChars > 0 ? item.maxChars : (item.path.startsWith('contracts/') || item.path.endsWith('.json') ? 2500 : 4200);
-  max = Math.min(max, 22_000, left);
-  if (max <= 0) return { path: item.path, found: true, truncated: true, chars: 0 };
-  const runes = Array.from(text);
-  if (runes.length <= max) return { path: item.path, found: true, text, chars: runes.length };
-  const marker = '\n…（后略）\n';
-  const cut = runes.slice(0, max - Array.from(marker).length).join('') + marker;
-  return { path: item.path, found: true, text: cut, truncated: true, chars: Array.from(cut).length };
+/** What one `read` item answers, as src/runner-go/wiki_repo_ops.go's wikiRepoOpReadOne answers it: the whole
+ *  file up to the file cap (owner 2026-10-08), `too_large` past it, and the bounded window when a limit is
+ *  named (what an older control plane asks by). */
+function readOne(tree: Tree, item: { path: string; maxChars?: number }): Record<string, unknown> {
+  if (!(item.path in tree.files)) return { path: item.path, found: false, chars: 0 };
+  const text = tree.files[item.path];
+  const size = Buffer.byteLength(text, 'utf8');
+  if (size > WIKI_REPO_OPS.wholeFileBytes) return { path: item.path, found: false, reason: 'too_large', size, chars: 0 };
+  let out = text;
+  if (item.maxChars && item.maxChars > 0) {
+    const max = Math.min(item.maxChars, WIKI_REPO_OPS.boundedChars);
+    const runes = Array.from(text);
+    if (runes.length > max) {
+      const marker = '\n…（后略）\n';
+      out = runes.slice(0, max - Array.from(marker).length).join('') + marker;
+    }
+  }
+  return { path: item.path, found: true, size, text: out, truncated: out !== text, chars: Array.from(out).length };
 }
 
 /**
@@ -323,7 +329,7 @@ function playRunner(h: Harness, runnerId: string, tree: () => Tree): { ops: Arra
   let running = true;
   const loop = (async () => {
     while (running) {
-      const claimed = await ops.dispatch({ runnerId, leaseOwner: randomUUID(), draining: false, capabilities: [WIKI_REPO_OP_CAPABILITY] }).catch(() => []);
+      const claimed = await ops.dispatch({ runnerId, leaseOwner: randomUUID(), draining: false, capabilities: [WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY] }).catch(() => []);
       for (const op of claimed) {
         seen.push({ kind: op.kind, input: op.input });
         const at = tree();
@@ -337,7 +343,7 @@ function playRunner(h: Harness, runnerId: string, tree: () => Tree): { ops: Arra
           const items = (op.input.items as Array<{ path: string; maxChars?: number }>) ?? [];
           let chars = 0;
           const answered = items.map((item) => {
-            const one = readOne(at, item, 22_000 - chars);
+            const one = readOne(at, item);
             chars += one.chars as number;
             return one;
           });
@@ -428,7 +434,7 @@ async function scene(h: Harness, name: string): Promise<Scene> {
   await h.sql.query(
     `INSERT INTO "runner"("id","name","owner_id","token_hash","capabilities","capabilities_reported_at","last_heartbeat_at")
      VALUES ($1,'spec',$2,$3,$4,now(),now())`,
-    [runnerId, ownerId, createHash('sha256').update(token).digest('hex'), [WIKI_REPO_OP_CAPABILITY]],
+    [runnerId, ownerId, createHash('sha256').update(token).digest('hex'), [WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY]],
   );
   const workspaceId = randomUUID();
   await h.sql.query(`INSERT INTO "workspace"("id","name","owner_id","env","runner_id","work_dir") VALUES ($1,'spec',$2,'{}',$3,'/tmp/docs-build-spec')`, [

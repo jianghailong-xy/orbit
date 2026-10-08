@@ -1688,11 +1688,11 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'wiki-worker/wiki-repo-ops.ts#applyWikiRepoOpResult',
     shape: 'TX_RETRIED',
-    locks: 'The operation row (60) first, by one UPDATE … WHERE (id, state = running, lease_owner, claim_generation, runner_id) — the claim as a compare-and-set, and the fence everything below is written under. Then the space\'s snapshot (60): one DELETE of the header (its fragments follow through the foreign key, so they are locked here) and one INSERT each of the new header and of each fragment of the payload. Then the staged fragments (60) by one DELETE, and `SELECT pg_notify` on the `wiki_repo_op` channel, which locks nothing. Every table named is a child of a space, all at the same rank, and the two snapshot writers of one space serialize on that space\'s header — no statement takes a parent after a child.',
-    identity: 'The result is the row\'s and the row is the claim\'s: a result under a generation that is no longer the row\'s matches nothing and is refused STALE_CLAIM, and a result that arrives twice finds a terminal state and is answered with it rather than written again. The snapshot cache is keyed by the space, so the second write of one commit replaces the first whole rather than adding to it.',
+    locks: 'The operation row (60) first, by one UPDATE … WHERE (id, state = running, lease_owner, claim_generation, runner_id) — the claim as a compare-and-set, and the fence everything below is written under. Then the space\'s snapshot (60): one DELETE of the header (its fragments follow through the foreign key, so they are locked here) and one INSERT each of the new header and of each fragment of the payload. Then the files read at that commit (60): one DELETE of the rows of another sha (migration 0406, which the snapshot\'s replacement drops), and one upsert per item of a read — each locking that row of wiki_repo_file by its (space_id, sha, path) unique index. Then the staged fragments (60) by one DELETE, and `SELECT pg_notify` on the `wiki_repo_op` channel, which locks nothing. Every table named is a child of a space, all at the same rank, and the writers of one space\'s snapshot and file cache serialize on that space\'s rows — no statement takes a parent after a child.',
+    identity: 'The result is the row\'s and the row is the claim\'s: a result under a generation that is no longer the row\'s matches nothing and is refused STALE_CLAIM, and a result that arrives twice finds a terminal state and is answered with it rather than written again. The snapshot cache is keyed by the space, so the second write of one commit replaces the first whole rather than adding to it. A read\'s files are keyed by (space_id, sha, path) and written as upserts, so the same path read twice at one sha is one row and the later answer replaces the earlier.',
     isolation: '',
     attempts: 4,
-    replay: 'Everything the settle decides — the row\'s state, the staged fragments, the space\'s snapshot — is read inside the closure, under the row lock the compare-and-set took, so a re-run re-decides against the committed world: a re-run after a takeover is refused, and a re-run of the same generation finds the row already settled and answers with what it says.',
+    replay: 'Everything the settle decides — the row\'s state, the staged fragments, the space\'s snapshot and the files a read answered — is read inside the closure, under the row lock the compare-and-set took, so a re-run re-decides against the committed world: a re-run after a takeover is refused, and a re-run of the same generation finds the row already settled and answers with what it says.',
     effects: 'None inside. One `pg_notify` on the `wiki_repo_op` channel travels with the transaction: Postgres delivers it at COMMIT, so a job parked on this operation wakes as the row it settles becomes visible, and a transaction that rolls back wakes nobody.',
     answer: 'Typed 503 from the global boundary; the runner retries the result, which is answered idempotently when the first attempt did commit.',
   },
@@ -1719,10 +1719,12 @@ export interface TransactionParticipant {
  */
 export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'common/lock-order.ts#lockOwnerTaskGraph', under: 'every rank-10 caller (I1)' },
-  // The repository operations' two participants (migration 0402): a snapshot's payload becoming the
-  // space's cache, and the announcement of a settled operation. Neither opens a transaction of its own;
-  // both are re-run exactly when their caller is, under the claim the caller took.
+  // The repository operations' three participants (migration 0402, and 0406 for the files a read answers):
+  // a snapshot's payload becoming the space's cache, the files a read answered becoming the read cache, and the
+  // announcement of a settled operation. None opens a transaction of its own; each is re-run exactly when its
+  // caller is, under the claim the caller took.
   { at: 'wiki-worker/wiki-repo-ops.ts#settleSnapshot', under: 'wiki-worker/wiki-repo-ops.ts#applyWikiRepoOpResult' },
+  { at: 'wiki-worker/wiki-repo-ops.ts#settleRead', under: 'wiki-worker/wiki-repo-ops.ts#applyWikiRepoOpResult' },
   { at: 'wiki-worker/wiki-repo-ops.ts#notifyRepoOpSettled', under: 'wiki-worker/wiki-repo-ops.ts#applyWikiRepoOpResult' },
   { at: 'common/lock-order.ts#lockCreatorSessions', under: 'every rank-30 caller (I2)' },
   { at: 'common/lock-order.ts#lockTaskLists', under: 'every rank-20 caller (I2)' },

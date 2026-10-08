@@ -1,3 +1,21 @@
+<!--
+  Frozen test data for the whole-file read (owner 2026-10-08): a byte-for-byte copy of docs/wiki-contract.md as it stood
+  at the copy, taken so that the consistency fixture for `read` — a section and a footnote quote from PAST the old
+  22,000-character window, cut, fingerprinted and located identically by src/runner-go and src/apiserver/src/wiki-worker —
+  does not go red every time the live contract is edited by another task (the contract is edited first, by rule).
+
+  Source: docs/wiki-contract.md
+  Source bytes: 262906, sha256 c05bb55e89b8522b026e701380d47b257b8669a47d71c4376d1047142846ed0d
+  Copied at: 04b5101e48a5434bca5a611ab5c49a37b3a467a0 (2026-10-08)
+
+  DO NOT EDIT IN PLACE. To move the fixture to a newer copy of the document: replace this file with the new bytes, then
+  rewrite src/shared/src/wiki-docs-wholefile.fixture.json:
+
+      ORBIT_WIKI_DOCS_WHOLEFILE_FIXTURE=write go test -run TestWikiDocsWholeFileFixtureIsTheServersToo .
+
+  (in src/runner-go) and make src/apiserver/src/wiki-worker/wiki-docs-wholefile.spec.ts answer the same.
+-->
+
 # Orbit Wiki 契约（v1，阶段 1）
 
 **状态**：任务「T2 wiki 契约、迁移与共享类型」的产物，是项目「Orbit Wiki · 阶段 1」其余任务（T3 写入口与 REST、
