@@ -713,6 +713,20 @@ internal object WikiPlanLogic {
     fun pending(state: WikiPlanState, runnerOnline: Boolean?) = (if (held(openJob(state) ?: buildJob(state), runnerOnline) != null) 1 else 0) +
         (if (failedJob(state) != null) 1 else 0) + (if (state.draft != null) 1 else 0) + state.proposals.orEmpty().size
     data class Banner(val text: String, val amber: Boolean, val toSettings: Boolean)
+
+    /** One of Activity's amber plan banners: the banner for one kind of thing that waits, and how many of [pending] it is. */
+    data class WaitingBanner(val banner: Banner, val look: Look, val count: Int)
+
+    /** Activity's amber plan banners (`wikiPlanWaitingBanners`, design §12.3.3): the banner for each kind of thing of the plan
+     * that waits on the owner, in the order the looks win — held, the draft that failed, the draft to confirm, the changes
+     * — each with how many of [pending] it is, so a page's amber banners add up to the number on the bar's Activity badge.
+     * Empty when nothing waits. */
+    fun waitingBanners(state: WikiPlanState, now: Instant, docs: Pair<Int, Int>?, runnerOnline: Boolean?): List<WaitingBanner> =
+        listOf(Look.HELD to (if (held(openJob(state) ?: buildJob(state), runnerOnline) != null) 1 else 0),
+            Look.DRAFT_FAILED to (if (failedJob(state) != null) 1 else 0), Look.DRAFT_READY to (if (state.draft != null) 1 else 0),
+            Look.CHANGES to state.proposals.orEmpty().size)
+            .filter { (_, count) -> count > 0 }
+            .map { (look, count) -> WaitingBanner(banner(look, state, now, docs, runnerOnline), look, count) }
     fun banner(look: Look, state: WikiPlanState, now: Instant, docs: Pair<Int, Int>?, runnerOnline: Boolean?): Banner {
         val job = openJob(state)
         return when (look) {

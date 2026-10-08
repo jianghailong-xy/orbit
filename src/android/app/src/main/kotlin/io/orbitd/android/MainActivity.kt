@@ -35,7 +35,9 @@ import io.orbitd.android.tasks.TasksScreen
 import io.orbitd.android.projects.ProjectsScreen
 import io.orbitd.android.wiki.PageBar
 import io.orbitd.android.wiki.WikiDrawerCount
+import io.orbitd.android.wiki.WikiDrawerRow
 import io.orbitd.android.wiki.WikiDestination
+import io.orbitd.android.wiki.wikiEntered
 import io.orbitd.android.watch.WatchDestination
 import io.orbitd.android.composer.NewSessionComposer
 import io.orbitd.android.text.LocalReaderResources
@@ -183,9 +185,16 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         }
                         listOf(Triple("Projects", Destination.PROJECTS, R.drawable.ic_project), Triple("Tasks", Destination.TASKS, R.drawable.ic_task),
                             Triple("Wiki", Destination.WIKI, R.drawable.ic_wiki)).forEach { (name, dest, icon) ->
-                            NavigationDrawerItem(label = { Text(name) }, selected = navigation.section == name,
-                                icon = { Icon(painterResource(icon), null) }, onClick = { select(name, OrbitRoute(dest, origin = Origin.DRAWER)) },
-                                badge = if (dest == Destination.WIKI) ({ WikiDrawerCount(app, signedIn.handle, drawer.isOpen) }) else null)
+                            val row = @Composable {
+                                NavigationDrawerItem(label = { Text(name) }, selected = navigation.section == name,
+                                    icon = { Icon(painterResource(icon), null) }, onClick = {
+                                        // Coming into the Wiki from another section, it opens the space bound to where the reader was.
+                                        if (dest == Destination.WIKI && navigation.section != name) wikiEntered(app, signedIn.handle, navigation)
+                                        select(name, OrbitRoute(dest, origin = Origin.DRAWER))
+                                    },
+                                    badge = if (dest == Destination.WIKI) ({ WikiDrawerCount(app, signedIn.handle) }) else null)
+                            }
+                            if (dest == Destination.WIKI) WikiDrawerRow(app, signedIn.handle, drawer.isOpen, row) else row()
                         }
                         SectionHeading("Workspaces")
                         DirectoryStatus(data) { app.realtime.refreshDirectory() }
@@ -245,7 +254,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.PROJECTS, Destination.PROJECT -> ProjectsScreen(app, signedIn.handle, route, revision, ::open) { navigation = navigation.back() }
                                 Destination.WIKI, Destination.WIKI_ENTRY, Destination.WIKI_BROWSE, Destination.WIKI_INDEX,
                                 Destination.WIKI_ARTICLE, Destination.WIKI_DOC, Destination.WIKI_REVIEW, Destination.WIKI_SETTINGS,
-                                Destination.WIKI_RUN, Destination.WIKI_JOB, Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION ->
+                                Destination.WIKI_RUN, Destination.WIKI_JOB, Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION,
+                                Destination.WIKI_ACTIVITY ->
                                     WikiDestination(app, signedIn.handle, route, data, ::open) { change -> navigation = change(navigation) }
                                 Destination.WATCH -> WatchDestination(app, signedIn.handle, route,
                                     navigate = { change -> navigation = change(navigation) }, open = ::open)
@@ -281,6 +291,7 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     Destination.WIKI_ARTICLE -> "Article"
     Destination.WIKI_DOC -> "Document"
     Destination.WIKI_REVIEW -> "Review"
+    Destination.WIKI_ACTIVITY -> "Activity"
     Destination.WIKI_SETTINGS -> "Wiki settings"
     Destination.WIKI_RUN -> "Maintenance"
     Destination.WIKI_JOB -> "Run"

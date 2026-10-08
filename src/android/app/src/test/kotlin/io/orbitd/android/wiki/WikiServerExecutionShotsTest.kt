@@ -169,12 +169,12 @@ class WikiServerExecutionShotsTest {
         compose.onNodeWithTag("wiki-settings-privacy").assertTextContains(WikiModeCopy.privacyNote)
         shot("settings-server")
 
-        // ② the Runs band on the Wiki page, after Review and Plan.
-        val home = OrbitRoute(Destination.WIKI)
-        show(home) { WikiHomeScreen(it, home, DirectoryData(), nav) }
+        // ② the Runs band on Activity (the Wiki page's management half since A12-2), after Review and Plan.
+        val activity = OrbitRoute(Destination.WIKI_ACTIVITY)
+        show(activity) { WikiActivityScreen(it, activity, DirectoryData(), nav) }
         compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-job-row").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag("wiki-home-list").performScrollToIndex(3)
-        compose.onNodeWithTag("wiki-home-list").performScrollToNode(hasText(WikiRunsCopy.systemModelLabel("qwen3.8-27b-fp8")))
+        compose.onNodeWithTag("wiki-activity-list").performScrollToIndex(3)
+        compose.onNodeWithTag("wiki-activity-list").performScrollToNode(hasText(WikiRunsCopy.systemModelLabel("qwen3.8-27b-fp8")))
         val rows = compose.onAllNodesWithTag("wiki-job-row")
         assertTrue("the band lists the runs", rows.fetchSemanticsNodes().size >= 4)
         rows[0].assertTextContains(WikiRunsCopy.running, substring = true)

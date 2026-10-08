@@ -41,4 +41,10 @@ interface SessionDataStore {
     suspend fun clearAll()
 }
 
-class SecureStorageException : Exception("Secure session storage is unavailable")
+/**
+ * [cause] is the store's original failure, kept for diagnosis; the message never carries a stored value. [unrecoverable]
+ * means what is stored can never be read again (corrupt, or its key is gone or invalidated). Anything else may pass, such
+ * as an I/O error or a Keystore that is busy, so restoring keeps what is stored rather than deleting it.
+ */
+class SecureStorageException(cause: Throwable? = null, val unrecoverable: Boolean = false) :
+    Exception("Secure session storage is unavailable", cause)

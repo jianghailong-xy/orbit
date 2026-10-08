@@ -89,14 +89,17 @@ class UpgradeDeviceTest {
             assertTrue("Upgrade uses a new process", before[0].toInt() != Process.myPid())
             assertTrue("Upgrade must increase versionCode", before[1].toLong() < info.longVersionCode)
             assertNotEquals("Upgrade must identify a new version", before[2], version)
-            assertTrue("Encrypted credential must survive", stored(context, "credentials.load") { credentials.load() } == StoredSession(server.value, tokens))
-            assertEquals(server.value, stored(context, "instances.load") { instances.load() })
-            // Restore the production Application's own AuthSession without contacting a real backend.
+            // The production Application's own AuthSession reads storage first, as the first launch after an update does,
+            // without contacting a real backend. Its log ("OrbitAuth" in this process's logcat) names any failure's classes.
             val applicationSession = (context as OrbitApplication).session
             applicationSession.restore()
-            val restored = applicationSession.state.value as AuthState.SignedIn
+            val restored = applicationSession.state.value as? AuthState.SignedIn
+                ?: throw AssertionError("Restored ${applicationSession.state.value}; ${storageState(context)}",
+                    runCatching { credentials.load() }.exceptionOrNull())
             assertEquals(accounts.first(), restored.handle.account)
             assertEquals(tokens.user, restored.user)
+            assertTrue("Encrypted credential must survive", stored(context, "credentials.load") { credentials.load() } == StoredSession(server.value, tokens))
+            assertEquals(server.value, stored(context, "instances.load") { instances.load() })
             session.restore()
             val handle = (session.state.value as AuthState.SignedIn).handle
             session.request(handle, ApiRequest(listOf("users", "me")))
@@ -143,7 +146,7 @@ private fun storageState(context: Context): String {
     return "orbit/ files ${files.filterNot { it.startsWith("accounts/") }} + ${files.count { it.startsWith("accounts/") }} under accounts/; keys $aliases"
 }
 
-/** A storage read that names itself, and what storage held, when it fails (SecureStorageException carries no cause). */
+/** A storage read that names itself, and what storage held, when it fails; the SecureStorageException's cause is the original. */
 private suspend fun <T> stored(context: Context, step: String, read: suspend () -> T): T = try {
     read()
 } catch (error: SecureStorageException) {

@@ -255,6 +255,143 @@ class RunnerEnginePageTest {
         compose.onNode(hasText("Sign In") and hasClickAction()).assertExists()
     }
 
+    // Kimi Code's accounts (docs/mocks/kimi-accounts/02-ios and its Android notes)
+
+    private val kimiCapabilities = ""","capabilities":["kimi-account-login/v1","kimi-account-remove/v1","kimi-account-move/v1","kimi-login-region/v1"]"""
+    private fun kimiWindows(five: Int, week: Int, month: Int) = """"provider":"kimi","fiveHour":{"utilization":$five,"resetsAt":"${at(2)}"},
+        "sevenDay":{"utilization":$week,"resetsAt":"${at(96)}"},"month":{"utilization":$month,"resetsAt":"${at(552)}"},"monthCode":{"utilization":${month / 2},"resetsAt":"${at(552)}"}"""
+    private val kimiUsage get() = ""","planUsage":{"kimi":{${kimiWindows(12, 34, 8)},"accounts":{"5c2e91a0":{${kimiWindows(91, 61, 22)}}}}}"""
+    private val kimiDefault = """{"id":"default","auth":"yes","home":"/root/.kimi-code","kimiRegion":"global"}"""
+    private val kimiWork = """{"id":"5c2e91a0","name":"Work","auth":"yes","home":"/root/.orbit/kimi-accounts/5c2e91a0","kimiRegion":"mainland-cn"}"""
+    private fun kimiEngine(vararg accounts: String) =
+        """{"engine":"kimi","installed":true,"version":"2.1.1","auth":"yes","kimiRegion":"global","accounts":[${accounts.joinToString(",")}]}"""
+    private fun site(domain: String) = hasText(domain) and hasClickAction()
+
+    @Test fun theKimiRowSaysItsSiteWithOneLoginAndTheNextAccountWithTwo() {
+        fixture.runnerEngines = "[${kimiEngine(kimiDefault)}]"
+        fixture.runnerExtra = kimiCapabilities + kimiUsage
+        page(null)
+        await("2.1.1 · kimi.ai · Signed in")
+        await("Weekly limit"); await("34%")
+        fixture.runnerEngines = "[${kimiEngine(kimiDefault, kimiWork)}]"
+        page(null)
+        await("2.1.1 · 2 accounts signed in")
+        // Work's five hours are 91% used: a new session starts on Default, whose window the row carries.
+        await("Next: Default")
+        assertEquals("two accounts can be on different sites: each says its own on the engine page", 0, shown("kimi.ai"))
+    }
+
+    /** One account still offers Add Account; the form takes a name first, then asks the site — nothing starts until a site is
+     * pressed, neither can be pressed without a name, and the device step names the site of the account being added, with the
+     * other site one press away under the same name. */
+    @Test fun kimiAddAccountTakesANameThenAsksTheSite() {
+        fixture.runnerEngines = "[${kimiEngine(kimiDefault)}]"
+        fixture.runnerExtra = kimiCapabilities + kimiUsage
+        fixture.loginStarted = """{"engine":"kimi","status":"awaiting_approval","userCode":"7K06-QP86","url":"https://www.kimi.com/code/authorize_device?user_code=7K06-QP86"}"""
+        page("engine:kimi")
+        await("Accounts"); await("kimi.ai · ~/.kimi-code")
+        await("5h limit"); await("Weekly limit"); await("Monthly limit")
+        assertEquals("the month is drawn once", 1, shown("Monthly"))
+        click(hasText("Add Account") and hasClickAction())
+        await("Which Kimi account are you signing in with?")
+        await("The two sites keep separate accounts — pick the one you signed up on.")
+        compose.onNode(hasSetTextAction()).assertTextContains("Account 2")
+        assertTrue("nothing starts until a site is pressed", fixture.loginBodies.isEmpty())
+        assertEquals("an account being added has no site yet", 0, shown("Current"))
+        compose.onNode(hasSetTextAction()).performTextClearance()
+        compose.onNode(site("kimi.com")).assertIsNotEnabled()
+        compose.onNode(site("kimi.ai")).assertIsNotEnabled()
+        compose.onNode(hasSetTextAction()).performTextInput("Work")
+        click(site("kimi.com"))
+        compose.waitUntil(10_000) { fixture.loginBodies.isNotEmpty() }
+        assertEquals(buildJsonObject { put("engine", "kimi"); put("accountName", "Work"); put("region", "mainland-cn") }, fixture.loginBodies.single())
+        await("Sign in with the kimi.com account you are adding, then enter this one-time code:")
+        await("7K06-QP86")
+        compose.onNode(hasText("Copy Code & Open kimi.com") and hasClickAction()).assertExists()
+        fixture.loginStarted = """{"engine":"kimi","status":"awaiting_approval","userCode":"Q2PF-8XWA","url":"https://www.kimi.ai/code/authorize_device?user_code=Q2PF-8XWA"}"""
+        click(hasText("Use kimi.ai instead") and hasClickAction())
+        compose.waitUntil(10_000) { fixture.loginBodies.size == 2 }
+        assertEquals(buildJsonObject { put("engine", "kimi"); put("accountName", "Work"); put("region", "global") }, fixture.loginBodies[1])
+        await("Sign in with the kimi.ai account you are adding"); await("Q2PF-8XWA"); await("Use kimi.com instead")
+    }
+
+    /** Sign In Again asks the site too, marking Current the account's own — Work's kimi.com, not Default's kimi.ai. */
+    @Test fun kimiSignInAgainMarksTheAccountsOwnSiteCurrent() {
+        fixture.runnerEngines = "[${kimiEngine(kimiDefault, kimiWork)}]"
+        fixture.runnerExtra = kimiCapabilities + kimiUsage
+        page("engine:kimi")
+        await("kimi.ai · ~/.kimi-code"); await("kimi.com · ~/.orbit/kimi-accounts/5c2e91a0")
+        menu("Work")
+        click(hasText("Sign In Again"))
+        await("Which Kimi account are you signing in with?")
+        compose.onNode(site("kimi.com")).assert(hasText(KimiSite.CURRENT))
+        compose.onNode(site("kimi.ai")).assert(!hasText(KimiSite.CURRENT))
+        assertTrue("the press asked for the site, not the sign-in", fixture.loginBodies.isEmpty())
+        click(site("kimi.ai"))
+        compose.waitUntil(10_000) { fixture.loginBodies.isNotEmpty() }
+        assertEquals(buildJsonObject { put("engine", "kimi"); put("account", "5c2e91a0"); put("region", "global") }, fixture.loginBodies.single())
+    }
+
+    /** A runner that declares none of Kimi's capabilities keeps its one login under Sign-In, with no Add Account. Its sign-in
+     * still asks the site: kimi.com goes to it unnamed, a bare `kimi login`, and kimi.ai is named for the server to refuse in
+     * words that say to update it. */
+    @Test fun anOlderRunnerKeepsOneKimiLoginAndGetsKimiComUnnamed() {
+        fixture.runnerEngines = """[{"engine":"kimi","installed":true,"version":"2.1.1","auth":"no","kimiRegion":"mainland-cn"}]"""
+        page("engine:kimi")
+        await("Sign-In"); await("Sessions on this runner can’t use Kimi Code until you sign in again.")
+        assertEquals(0, shown("Add Account")); assertEquals(0, shown("Accounts"))
+        click(hasText("Sign In") and hasClickAction())
+        await("Which Kimi account are you signing in with?")
+        compose.onNode(site("kimi.com")).assert(hasText(KimiSite.CURRENT))
+        click(site("kimi.com"))
+        compose.waitUntil(10_000) { fixture.loginBodies.isNotEmpty() }
+        assertEquals("a bare kimi login", buildJsonObject { put("engine", "kimi") }, fixture.loginBodies.single())
+        click(hasText("Cancel") and hasClickAction())
+        click(hasText("Sign In") and hasClickAction())
+        await("Which Kimi account are you signing in with?")
+        click(site("kimi.ai"))
+        compose.waitUntil(10_000) { fixture.loginBodies.size == 2 }
+        assertEquals(buildJsonObject { put("engine", "kimi"); put("region", "global") }, fixture.loginBodies[1])
+        // The runner's next check-in refuses it.
+        fixture.loginRelay = """{"engine":"kimi","status":"failed","message":"This runner is too old to choose a Kimi site — update it, then try again."}"""
+        until { shown("This runner is too old to choose a Kimi site — update it, then try again.") == 1 }
+        await("Which Kimi account are you signing in with?")
+    }
+
+    /** NEXT sits beside the account a new session starts on, on all four engines' pages, and nowhere with one account. */
+    @Test fun everyEnginePageMarksTheNextAccount() {
+        fun beside(name: String) {
+            await("NEXT")
+            assertEquals("one account is next", 1, compose.onAllNodesWithText("NEXT", useUnmergedTree = true).fetchSemanticsNodes().size)
+            fun centre(text: String) = compose.onAllNodesWithText(text, useUnmergedTree = true).onFirst().fetchSemanticsNode().boundsInRoot.center.y
+            assertEquals("NEXT beside $name", centre(name), centre("NEXT"), 8f)
+        }
+        fixture.runnerExtra = kimiCapabilities + kimiUsage + ""","antigravity":{"supported":true,"installed":true,"googleLogin":"available"}"""
+        fixture.runnerEngines = "[${kimiEngine(kimiDefault, kimiWork)}]"
+        page("engine:kimi"); await("Work")
+        beside("Default")
+        // Claude Code: Work is paused and Old signed out, so Default.
+        fixture.runnerEngines = claudeAccounts(at(47))
+        page("engine:claude"); await("Old")
+        beside("Default")
+        // Antigravity: Work's five hours are down to 4%.
+        fixture.runnerEngines = "[$twoGoogleAccounts]"
+        page("engine:antigravity"); await("gemini-5h")
+        beside("Default")
+        // Codex: Default's five hours are nearly spent, so the second account.
+        fixture.runnerEngines = """[{"engine":"codex","installed":true,"version":"codex-cli 0.158.0","auth":"yes","accounts":[{"id":"default","auth":"yes","home":"/root/.codex"},
+            {"id":"1a2b3c4d","name":"Second","auth":"yes","home":"/root/.orbit/codex-accounts/1a2b3c4d"}]}]"""
+        fixture.runnerExtra = ""","planUsage":{"codex":{"provider":"codex","primary":{"utilization":85,"windowDurationMins":300},
+            "accounts":{"1a2b3c4d":{"provider":"codex","primary":{"utilization":30,"windowDurationMins":300}}}}}"""
+        page("engine:codex"); await("Second")
+        beside("Second")
+        // One account: nothing to choose between.
+        fixture.runnerEngines = "[${kimiEngine(kimiDefault)}]"
+        fixture.runnerExtra = kimiCapabilities + kimiUsage
+        page("engine:kimi"); await("kimi.ai · ~/.kimi-code")
+        gone("NEXT")
+    }
+
     @Test fun addAccountStartsAtOnceUnderAPickedNameWithOneWayOut() {
         fixture.runnerEngines = "[$twoGoogleAccounts]"
         fixture.runnerExtra = extra()

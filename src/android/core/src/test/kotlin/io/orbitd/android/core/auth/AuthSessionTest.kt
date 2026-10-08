@@ -8,10 +8,13 @@ import io.orbitd.android.core.net.NetworkException
 import io.orbitd.android.core.protocol.RefreshRequest
 import io.orbitd.android.core.protocol.SignInMethods
 import io.orbitd.android.core.protocol.Wire
+import java.io.IOException
+import java.security.InvalidKeyException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -279,12 +282,89 @@ class AuthSessionTest {
             val h = Harness(this)
             h.instances.value = serverB.value
             h.credentials.value = StoredSession(serverA.value, tokens())
-            h.credentials.failLoad = corrupt
+            if (corrupt) h.credentials.loadFailures += SecureStorageException(unrecoverable = true)
             h.data.write(AccountKey(serverA.value, "alice"), DataKind.DRAFT, "s1", byteArrayOf(1))
             h.client.restore()
             assertTrue(h.client.state.value is AuthState.SignedOut)
             assertNull(h.credentials.value)
             assertTrue(h.data.values.isEmpty())
+        }
+    }
+
+    /** A03d: a storage failure that may pass (I/O, a busy Keystore) is read again; it costs neither credentials nor data. */
+    @Test fun aStorageFailureThatPassesIsReadAgainAndKeepsTheSessionAndData() = runTest {
+        val h = Harness(this)
+        val stored = storeSessionAndData(h)
+        h.credentials.loadFailures += SecureStorageException(IOException("fixture I/O failure"))
+        h.client.restore()
+        assertTrue("the stored session survives", h.credentials.value == stored)
+        val handle = (h.client.state.value as AuthState.SignedIn).handle
+        assertEquals(AccountKey(serverA.value, "alice"), handle.account)
+        assertArrayEquals("account data survives", byteArrayOf(1), h.client.readData(handle, DataKind.DRAFT, "s1"))
+        assertEquals("read again once, 200 ms later", 2, h.credentials.loads)
+        assertEquals(200L, currentTime)
+        assertLogged(h, "attempt 1 of 3 failed", IOException::class.java.name, "restored on attempt 2")
+    }
+
+    /** As iOS, whose Keychain read that fails only returns nil: signed out for this launch, nothing deleted, the next restores. */
+    @Test fun aStorageFailureThatPersistsSignsOutButKeepsTheSessionAndDataForTheNextLaunch() = runTest {
+        val h = Harness(this)
+        val stored = storeSessionAndData(h)
+        repeat(3) { h.credentials.loadFailures += SecureStorageException(IOException("fixture I/O failure")) }
+        h.client.restore()
+        assertTrue("nothing is deleted", h.credentials.value == stored)
+        assertEquals(1, h.data.values.size)
+        assertEquals(AuthState.SignedOut(serverA, SignOutReason.STORAGE), h.client.state.value)
+        assertEquals("three reads, 200 ms apart", 3, h.credentials.loads)
+        assertEquals(400L, currentTime)
+        assertLogged(h, "attempt 2 of 3 failed", "unreadable after 3 attempts", "kept for the next launch")
+        val next = h.launch()
+        next.restore()
+        val handle = (next.state.value as AuthState.SignedIn).handle
+        assertArrayEquals(byteArrayOf(1), next.readData(handle, DataKind.DRAFT, "s1"))
+        assertTrue(h.credentials.value == stored)
+    }
+
+    /** The Android store reports KeyPermanentlyInvalidatedException (an InvalidKeyException) as unrecoverable. */
+    @Test fun aStoredSessionWhoseKeyIsPermanentlyInvalidatedIsStillRetiredAndCleared() = runTest {
+        val h = Harness(this)
+        storeSessionAndData(h)
+        h.credentials.loadFailures += SecureStorageException(InvalidKeyException("fixture key invalidated"), unrecoverable = true)
+        h.client.restore()
+        assertEquals(AuthState.SignedOut(serverA, SignOutReason.STORAGE), h.client.state.value)
+        assertNull(h.credentials.value)
+        assertTrue(h.data.values.isEmpty())
+        assertEquals("never read again", 1, h.credentials.loads)
+        assertEquals(0L, currentTime)
+        assertLogged(h, "can never be read", InvalidKeyException::class.java.name, "cleared")
+    }
+
+    @Test fun withoutAStoredSessionRestoreIsUnchanged() = runTest {
+        val h = Harness(this)
+        h.instances.value = serverA.value
+        h.data.write(AccountKey(serverA.value, "alice"), DataKind.DRAFT, "s1", byteArrayOf(1))
+        h.client.restore()
+        assertEquals(AuthState.SignedOut(serverA), h.client.state.value)
+        assertNull(h.credentials.value)
+        assertTrue("orphan account data is still cleared", h.data.values.isEmpty())
+        assertEquals(1, h.credentials.loads)
+        assertEquals(0L, currentTime)
+        assertLogged(h, "no stored session")
+    }
+
+    private suspend fun storeSessionAndData(h: Harness): StoredSession {
+        h.instances.value = serverA.value
+        h.credentials.value = StoredSession(serverA.value, tokens())
+        h.data.write(AccountKey(serverA.value, "alice"), DataKind.DRAFT, "s1", byteArrayOf(1))
+        return h.credentials.value!!
+    }
+
+    /** The log names the way restore went and the failure's classes, never a credential, account, server or message. */
+    private fun assertLogged(h: Harness, vararg expected: String) {
+        val text = h.logs.joinToString("\n")
+        for (part in expected) assertTrue("log names \"$part\": $text", text.contains(part))
+        for (value in listOf(tokens().accessToken, tokens().refreshToken, tokens().user.email, "alice", "orbit.example", "fixture")) {
+            assertFalse("log holds \"$value\": $text", text.contains(value))
         }
     }
 
