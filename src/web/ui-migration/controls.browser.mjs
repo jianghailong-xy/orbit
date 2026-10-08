@@ -23,6 +23,8 @@ async function contentGeometry(locator) {
     const texts = [];
     while (walker.nextNode()) {
       if (!walker.currentNode.textContent.trim()) continue;
+      // An illustration's <title> names it; it is not painted text.
+      if (walker.currentNode.parentElement?.closest('svg')) continue;
       const range = document.createRange();
       range.selectNodeContents(walker.currentNode);
       texts.push(rect(range.getBoundingClientRect()));
@@ -36,6 +38,54 @@ async function contentGeometry(locator) {
     return { texts, icons };
   });
 }
+
+// The P4.3a composites, part by part: each pair is [Orbit selector, AntD selector] inside the case's two
+// roots; '' is the root itself. Each part is compared for its box, margins, text and surface, and for
+// where it sits inside its root.
+// A card head's own font and corner radius are not painted (the title and extra carry their own text, and
+// the head has no fill), so they are left out for that part.
+const PART_PROPERTIES = [...surfaceProperties, 'marginTop', 'marginRight', 'marginBottom', 'marginLeft', 'display', 'visibility',
+  'textAlign', 'wordBreak', 'backgroundImage', 'backgroundSize', 'opacity'];
+const UNPAINTED = { '.orbit-card-head': ['fontSize', 'fontWeight', 'lineHeight', 'borderRadius'], '.orbit-card-body': ['borderRadius'] };
+const COMPOSITE_PARTS = {
+  alert: [['', ''], ['.orbit-alert-icon', '.ant-alert-icon'], ['.orbit-alert-title', '.ant-alert-title'],
+    ['.orbit-alert-description', '.ant-alert-description'], ['.orbit-alert-actions', '.ant-alert-actions']],
+  card: [['', ''], ['.orbit-card-head', '.ant-card-head'], ['.orbit-card-title', '.ant-card-head-title'],
+    ['.orbit-card-extra', '.ant-card-extra'], ['.orbit-card-body', '.ant-card-body']],
+  empty: [['', ''], ['.orbit-empty-image', '.ant-empty-image'], ['svg', 'svg'], ['.orbit-empty-description', '.ant-empty-description'],
+    ['.orbit-empty-footer', '.ant-empty-footer']],
+  skeleton: [['.orbit-skeleton', '.ant-skeleton'], ['.orbit-skeleton-section', '.ant-skeleton-section'],
+    ['.orbit-skeleton-paragraph', '.ant-skeleton-paragraph'], ...[0, 1, 2].map((n) => [`.orbit-skeleton-paragraph > li:nth-child(${n + 1})`,
+      `.ant-skeleton-paragraph > li:nth-child(${n + 1})`])],
+  typography: [['', ''], ['code', 'code'], ['strong', 'strong'], ['.orbit-typography-copy', '.ant-typography-copy']],
+  list: [['', ''], ['.orbit-list-items', '.ant-list-items'], ...[0, 1].flatMap((n) => [
+    [`.orbit-list-item:nth-child(${n + 1})`, `.ant-list-item:nth-child(${n + 1})`],
+    [`.orbit-list-item:nth-child(${n + 1}) .orbit-list-item-meta`, `.ant-list-item:nth-child(${n + 1}) .ant-list-item-meta`],
+    [`.orbit-list-item:nth-child(${n + 1}) .orbit-list-item-meta-content`, `.ant-list-item:nth-child(${n + 1}) .ant-list-item-meta-content`],
+    [`.orbit-list-item:nth-child(${n + 1}) .orbit-list-item-meta-title`, `.ant-list-item:nth-child(${n + 1}) .ant-list-item-meta-title`],
+    [`.orbit-list-item:nth-child(${n + 1}) .orbit-list-item-meta-description`, `.ant-list-item:nth-child(${n + 1}) .ant-list-item-meta-description`]])],
+  // The affix boxes are laid out differently (a gap, not margins), as P1.2 accepted for the field itself:
+  // what is compared is the frame, the text field and the clear control, and every glyph's position.
+  'input-clear': [['', ''], ['.orbit-input-field', 'input'], ['.orbit-input-clear', '.ant-input-clear-icon']],
+};
+const compositeOf = (name) => Object.keys(COMPOSITE_PARTS).find((kind) => name.startsWith(kind));
+
+async function partMeasurement(root, selector) {
+  const part = selector ? root.locator(selector).first() : root;
+  if (!(await part.count())) return { present: false };
+  const keys = PART_PROPERTIES.filter((key) => !(UNPAINTED[selector] ?? []).includes(key));
+  return part.evaluate((element, { keys, rootElement }) => {
+    const style = getComputedStyle(element), rect = element.getBoundingClientRect(), base = rootElement.getBoundingClientRect();
+    return { present: true, left: rect.left - base.left, top: rect.top - base.top, width: rect.width, height: rect.height,
+      ...Object.fromEntries(keys.map((key) => [key, style[key]])) };
+  }, { keys, rootElement: await root.elementHandle() });
+}
+
+/** Each painted shape of an illustration: its computed fill, stroke and opacity, in document order. */
+const shapes = (root) => root.evaluate((element) => [...element.querySelectorAll('svg ellipse, svg path, svg circle')].map((shape) => {
+  const style = getComputedStyle(shape);
+  return { fill: style.fill, fillOpacity: style.fillOpacity, stroke: style.stroke, d: shape.getAttribute('d') ?? shape.tagName };
+}));
 
 function sides(page, name) {
   const row = page.locator(`[data-case="${name}"]`);
@@ -119,6 +169,24 @@ test('fixed control states match AntD geometry, typography and surfaces', async 
       for (let index = 0; index < 4; index++) {
         record(`${name} dot ${index}`, await motion(orbit.locator('i').nth(index)), await motion(ant.locator('.ant-spin-dot-item').nth(index)));
       }
+    } else if (compositeOf(name)) {
+      for (const [orbitPart, antPart] of COMPOSITE_PARTS[compositeOf(name)]) {
+        record(`${name} ${orbitPart || 'root'}`, await partMeasurement(orbit, orbitPart), await partMeasurement(ant, antPart));
+      }
+      if (name.startsWith('empty')) {
+        const actual = await shapes(orbit), reference = await shapes(ant);
+        record(`${name} shapes count`, { count: actual.length }, { count: reference.length });
+        actual.forEach((shape, index) => record(`${name} shape ${index}`, shape, reference[index] ?? {}));
+      }
+      if (name.startsWith('skeleton')) {
+        const motion = (locator) => locator.evaluate((element) => {
+          const style = getComputedStyle(element);
+          return Object.fromEntries(['animationName', 'animationDuration', 'animationTimingFunction', 'animationIterationCount']
+            .map((key) => [key, key === 'animationName' ? (style[key] === 'none' ? 'none' : 'named') : style[key]]));
+        });
+        record(`${name} motion`, await motion(orbit.locator('li').first()), await motion(ant.locator('li').first()));
+      }
+      await compareContent(name, orbit, ant);
     } else {
       await compare(name, orbit, ant);
       if (name.startsWith('button') || name.startsWith('badge')) await compareContent(name, orbit, ant);

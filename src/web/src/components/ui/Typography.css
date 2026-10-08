@@ -1,0 +1,73 @@
+/* The replaced Typography, for native text elements (P4.3a). Business markup uses plain elements
+   carrying these classes, as the replaced components drew them:
+     <span class="orbit-typography [orbit-typography-secondary|-warning]">  a text run
+     <div class="orbit-typography">                                       a paragraph (1em below)
+     <h2|h4|h5 class="orbit-typography">                                  a title
+   with <strong> / <code> inside for emphasis and code. Selectors keep the replaced rules' weight
+   (`.orbit-typography` = 0,1,0; `h4.orbit-typography` = 0,1,1) and this file loads after index.css,
+   so the pages' own rules over these elements cascade exactly as they did over the replaced ones. */
+.orbit-typography {
+  color: var(--text-1);
+  word-break: break-word;
+  line-height: 1.5714285714285714;
+}
+.orbit-typography.orbit-typography-secondary { color: var(--text-3); }
+.orbit-typography.orbit-typography-warning { color: var(--orbit-badge-warning); }
+div.orbit-typography,
+.orbit-typography p { margin-bottom: 1em; }
+
+/* Titles: semibold heading colour, 0.5em below; 30/38px, 20/28px and 16/24px. A title that follows
+   another Typography element keeps 1.2em above it. The top margin is otherwise the page's (the global
+   reset's zero until P6), as it was for the replaced titles. */
+h2.orbit-typography,
+h4.orbit-typography,
+h5.orbit-typography {
+  margin-bottom: 0.5em;
+  color: var(--text-1);
+  font-weight: 600;
+}
+h2.orbit-typography { font-size: 30px; line-height: 1.2666666666666666; }
+h4.orbit-typography { font-size: 20px; line-height: 1.4; }
+h5.orbit-typography { font-size: 16px; line-height: 1.5; }
+.orbit-typography + h2.orbit-typography,
+.orbit-typography + h4.orbit-typography,
+.orbit-typography + h5.orbit-typography { margin-top: 1.2em; }
+
+.orbit-typography code {
+  margin: 0 0.2em;
+  padding-inline: 0.4em;
+  padding-block: 0.2em 0.1em;
+  font-size: 85%;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+  background: rgba(150, 150, 150, 0.1);
+  border: 1px solid rgba(100, 100, 100, 0.2);
+  border-radius: 3px;
+}
+.orbit-typography strong { font-weight: 600; }
+
+/* A copy press after the text (inside its <code>, as the replaced one sat): a bare link-coloured
+   icon 4px after it, green once copied. */
+.orbit-typography-actions { display: inline; }
+.orbit-typography-copy {
+  margin-inline-start: 4px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--orbit-control-primary);
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.3s;
+}
+.orbit-typography-copy:focus-visible {
+  outline: var(--orbit-focus-width) solid var(--orbit-focus-color);
+  outline-offset: var(--orbit-focus-offset);
+  transition: outline-offset 0s, outline 0s;
+}
+.orbit-typography-copy:hover,
+.orbit-typography-copy:focus { color: var(--orbit-control-link-hover); }
+.orbit-typography-copy:active { color: var(--orbit-control-primary-active); }
+.orbit-typography-copy.orbit-typography-copy-success,
+.orbit-typography-copy.orbit-typography-copy-success:hover,
+.orbit-typography-copy.orbit-typography-copy-success:focus { color: var(--orbit-badge-success); }
