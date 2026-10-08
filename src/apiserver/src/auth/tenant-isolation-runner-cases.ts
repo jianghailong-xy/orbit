@@ -122,6 +122,8 @@ export interface RunnerObjects {
   wikiSessionId: string;
   wikiMaintainerSessionId: string;
   wikiPlanJobId: string;
+  /** An import job of the space (server execution P5, contract `import.server`), ended, to be read back. */
+  wikiImportJobId: string;
   /** An op of a changeset `wikiSessionId` proposed, waiting for its verdict. */
   wikiVerifyingOpId: string;
   /** An op of an ended session's changeset, waiting for the maintenance run to adopt its verdict. */
@@ -540,6 +542,23 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
       headers: calling(mine.runner.wikiSessionId),
       body: { ops: [{ op: 'challenge', entryId: of.wikiEntryId, reason: 'the census challenges it' }], rationale: 'the census', dryRun: true },
     }),
+  },
+  'GET /runner/wiki/spaces/:id/import': {
+    as: RUNNER,
+    request: (of, mine) => ({ params: { id: of.wikiSpaceId }, headers: calling(mine.runner.wikiSessionId) }),
+  },
+  'POST /runner/wiki/spaces/:id/import-jobs': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: of.wikiSpaceId },
+      headers: calling(mine.runner.wikiSessionId),
+      body: { id: '00000000-0000-4000-8000-0000000a5e1b', maxOps: 1, notes: [{ noteId: '00000000-0000-4000-8000-0000000a5e1c', file: 'census.md', date: '2026-10-08' }] },
+    }),
+  },
+  'GET /runner/wiki/spaces/:id/import-jobs/:jobId': {
+    as: RUNNER,
+    request: (of, mine) => ({ params: { id: of.wikiSpaceId, jobId: of.runner.wikiImportJobId }, headers: calling(mine.runner.wikiSessionId) }),
+    nested: ['jobId'],
   },
   'GET /runner/wiki/entries/:id': { as: RUNNER, request: (of, mine) => ({ params: { id: of.wikiEntryId }, headers: calling(mine.runner.wikiSessionId) }) },
   'GET /runner/wiki/spaces/:id/dossiers': {
@@ -1235,6 +1254,11 @@ const planUsageReadings = Object.fromEntries(
 
 /** Ids a runner-gate request carries that name nothing of an account's to reach, with why and where. */
 export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
+  // ── the wiki's import on the server ──────────────────────────────────────────────────────────────
+  'POST /runner/wiki/spaces/:id/import-jobs body id':
+    'the id the command names for the job it is making: the insert does nothing when the id is taken, and the job '
+    + 'answered is read back by (id, the caller\'s owner, the path\'s space, kind import), so another account\'s job '
+    + 'under that id is neither read nor written (wiki-import-jobs.ts:115)',
   // ── the machine protocol: tokens the machine or the engine makes up, and the machine's own snapshots ──
   'POST /runner/heartbeat body expiredCommitErrors[].operationId':
     'the commit attempt token the server minted for one of the machine\'s own sessions: compared only in the update '

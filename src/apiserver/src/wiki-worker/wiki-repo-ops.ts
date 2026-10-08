@@ -657,9 +657,18 @@ export class WikiRepoOpWaitTimedOut extends Error {
   }
 }
 
+/** The waiter's own signal ended the wait (the worker is stopping); the row is still whatever it was. */
+export class WikiRepoOpWaitCancelled extends Error {
+  constructor(readonly opId: string) {
+    super(`the wait for the repository operation ${opId} was cancelled`);
+    this.name = 'WikiRepoOpWaitCancelled';
+  }
+}
+
 /**
  * Wait for one operation to settle (§7): the notification is the wake-up and the poll is the fallback, so
- * an announcement lost to a dropped listener costs the waiter one poll interval rather than its answer.
+ * an announcement lost to a dropped listener costs the waiter one poll interval rather than its answer. The
+ * signal ends the wait at once — a stopping worker must not keep reading the row until the deadline.
  */
 export async function waitForWikiRepoOp(
   prisma: PrismaService,
@@ -675,6 +684,7 @@ export async function waitForWikiRepoOp(
   const pollMs = input.pollMs ?? WIKI_REPO_OPS.pollSeconds * 1000;
   const deadline = Date.now() + input.timeoutMs;
   for (;;) {
+    if (input.signal?.aborted) throw new WikiRepoOpWaitCancelled(input.id);
     const read = await readWikiRepoOp(prisma, { id: input.id, ownerId: input.ownerId });
     if (!read) throw new WikiRepoOpRefused('NOT_FOUND', `no repository operation ${input.id}`);
     if (read.state !== 'queued' && read.state !== 'running') {

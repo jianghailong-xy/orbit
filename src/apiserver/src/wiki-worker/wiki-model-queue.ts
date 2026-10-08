@@ -365,6 +365,25 @@ export async function releaseWikiModelRequestLease(
   return updated > 0;
 }
 
+/**
+ * The attempt a job's call of (step, unit) is made under: the unit's newest row, unless that row failed on its
+ * wait limit — the one way a request ends that is the platform's and not the call's (design §5.3) — and then
+ * the next. A job retried after the model was away meets its own failed row on every replay otherwise, and
+ * never asks again however long the model has been back.
+ */
+export async function wikiModelRequestAttempt(
+  prisma: PrismaService,
+  input: { jobId: string; step: string; unit: string },
+): Promise<number> {
+  const [newest] = await prisma.$queryRaw<Array<{ attempt: number; state: string; error: string | null }>>`
+    SELECT "attempt", "state", "error" FROM "wiki_model_request"
+    WHERE "job_id" = ${input.jobId}::uuid AND "step" = ${input.step} AND "unit" = ${input.unit}
+    ORDER BY "attempt" DESC
+    LIMIT 1`;
+  if (!newest) return 1;
+  return newest.state === 'failed' && wikiModelRequestFailedOnWaitLimit(newest.error) ? newest.attempt + 1 : newest.attempt;
+}
+
 /** Enqueue one call (`job_id`, `step`, `unit`, `attempt` is its identity). A row already there is that row. */
 export async function enqueueWikiModelRequest(
   prisma: PrismaService,
