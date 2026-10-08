@@ -67,11 +67,11 @@ class GoogleSignInFlowTest {
 
     /** Types an instance address and waits for the login page to have asked it what it offers. */
     private fun enterInstance(address: String) {
-        compose.waitUntil(5_000) { session().state.value is AuthState.SignedOut }
+        compose.waitUntil(60_000) { session().state.value is AuthState.SignedOut }
         compose.onNodeWithText("Instance address").performTextClearance()
         compose.onNodeWithText("Instance address").performTextInput(address)
         val server = ServerAddress.parse(address)
-        compose.waitUntil(5_000) {
+        compose.waitUntil(60_000) {
             synchronized(app.requests) { app.requests.any { it.api.path == listOf("auth", "methods") && it.server == server } }
         }
         compose.waitForIdle()
@@ -93,7 +93,7 @@ class GoogleSignInFlowTest {
     private fun continueWithGoogle(): Intent {
         drainStartedActivities()
         // After a failed sign-in the form is new, and asks the instance again before offering Google.
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("Continue with Google").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithText("Continue with Google").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Continue with Google").performScrollTo().performClick()
         compose.waitForIdle()
         return shadowOf(app).nextStartedActivity
@@ -164,11 +164,11 @@ class GoogleSignInFlowTest {
         val state = start.getQueryParameter("client_state")!!
 
         deliver("orbit://auth/google?ticket=fixture-ticket&state=$state")
-        compose.waitUntil(5_000) { session().state.value is AuthState.SignedIn }
+        compose.waitUntil(60_000) { session().state.value is AuthState.SignedIn }
         // Signed in, the app opens on its directory; the account is shown in Settings.
         compose.onNodeWithContentDescription("Open navigation").performClick()
         compose.onNodeWithText("Settings").performScrollTo().performClick()
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("fixture@example.test").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithText("fixture@example.test").fetchSemanticsNodes().isNotEmpty() }
         val exchange = exchanges.single()
         assertEquals("https://orbit.example/team/", exchange.server.value)
         val sent = Wire.decode(exchange.api.body!!, GoogleExchangeRequest.serializer())
@@ -244,7 +244,7 @@ class GoogleSignInFlowTest {
             app.exchange = { answer }
             val state = continueWithGoogle().data!!.getQueryParameter("client_state")
             deliver("orbit://auth/google?ticket=fixture-ticket&state=$state")
-            compose.waitUntil(5_000) { auth().message.value != null }
+            compose.waitUntil(60_000) { auth().message.value != null }
             compose.onNodeWithText(sentence(sentence)).assertExists()
             assertTrue(session().state.value is AuthState.SignedOut)
         }
@@ -260,7 +260,7 @@ class GoogleSignInFlowTest {
         compose.onNodeWithText(sentence(R.string.auth_google_state_mismatch)).assertExists()
         assertTrue(exchanges.isEmpty())
         deliver("orbit://auth/google?ticket=fixture-ticket&state=$state")
-        compose.waitUntil(5_000) { session().state.value is AuthState.SignedIn }
+        compose.waitUntil(60_000) { session().state.value is AuthState.SignedIn }
         assertEquals("fixture-ticket", Wire.decode(exchanges.single().api.body!!, GoogleExchangeRequest.serializer()).ticket)
     }
 

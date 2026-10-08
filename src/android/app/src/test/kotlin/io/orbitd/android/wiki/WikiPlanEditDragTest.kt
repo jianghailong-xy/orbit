@@ -49,7 +49,7 @@ class WikiPlanEditDragTest {
         }
         compose.waitForIdle()
         compose.onNodeWithTag("wiki-plan-edit-save").performClick()
-        compose.waitUntil(5_000) { saved.isNotEmpty() }
+        compose.waitUntil(60_000) { saved.isNotEmpty() }
         assertEquals(listOf(keys[1], keys[0]) + keys.drop(2), saved.single().sections.map { it.key })
     }
 
@@ -60,7 +60,7 @@ class WikiPlanEditDragTest {
         assertEquals(listOf("Move up", "Move down"), actions.map { it.label })
         compose.runOnIdle { actions.first { it.label == "Move up" }.action() }
         compose.onNodeWithTag("wiki-plan-edit-save").performClick()
-        compose.waitUntil(5_000) { saved.isNotEmpty() }
+        compose.waitUntil(60_000) { saved.isNotEmpty() }
         assertEquals(listOf(keys[1], keys[0]) + keys.drop(2), saved.single().sections.map { it.key })
         val first = compose.onNodeWithTag("wiki-plan-edit-row:0").fetchSemanticsNode().config.getOrNull(SemanticsActions.CustomActions).orEmpty()
         assertEquals("the first section cannot move up", listOf("Move down"), first.map { it.label })

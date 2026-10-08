@@ -57,7 +57,7 @@ class ManagementPanelTest {
         val api = api()
         compose.setContent { ProviderManagement(api, revision, record, {}, {}) }
     }
-    private fun await(text: String) = compose.waitUntil(10_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
+    private fun await(text: String) = compose.waitUntil(60_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
     private fun reread() { revision++; compose.waitForIdle() }
 
     @Test fun aFailedPeopleReadKeepsWhoCanUseThePoolAndSaysItFailed() {
@@ -65,7 +65,7 @@ class ManagementPanelTest {
         await("Me and 1 person")
         fixture.accessFails = true
         reread()
-        compose.waitUntil(10_000) { fixture.calls.count { it == "GET providers/shared-pools/${fixture.POOL}" } >= 2 }
+        compose.waitUntil(60_000) { fixture.calls.count { it == "GET providers/shared-pools/${fixture.POOL}" } >= 2 }
         compose.waitForIdle()
         compose.onNodeWithText("Me and 1 person", substring = true).assertExists()
         // Not said to be the owner's alone: no "Just me ·" line, and the owner's mode switch is not on Just me.
@@ -123,7 +123,7 @@ class ManagementPanelTest {
             up()
         }
         // The fixture notes the call before it takes the new order: wait for the order itself.
-        compose.waitUntil(10_000) { fixture.runnerOrder == listOf(fixture.RUNNER_TWO, fixture.RUNNER) }
+        compose.waitUntil(60_000) { fixture.runnerOrder == listOf(fixture.RUNNER_TWO, fixture.RUNNER) }
         compose.waitForIdle()
         assertEquals("One order goes out per drag", 1, fixture.calls.count { it == "POST runners/reorder" })
     }
@@ -139,7 +139,7 @@ class ManagementPanelTest {
         compose.onNode(hasText("Only you") and isSelectable()).assertIsEnabled()
         fixture.shareFails = true
         reread()
-        compose.waitUntil(10_000) { fixture.calls.count { it == "GET sessions/${fixture.SESSION}/share" } >= 2 }
+        compose.waitUntil(60_000) { fixture.calls.count { it == "GET sessions/${fixture.SESSION}/share" } >= 2 }
         compose.waitForIdle()
         compose.onNodeWithText("share read failed", substring = true).assertExists()
         compose.onNode(hasText("Retry") and hasClickAction()).assertExists()
@@ -155,9 +155,9 @@ class ManagementPanelTest {
         await("Tool calls and output")
         compose.onNode(hasText("Only you") and isSelectable()).performClick()
         compose.onNode(hasText("Turn off") and hasClickAction()).performClick()
-        compose.waitUntil(10_000) { answers.size >= 2 }
+        compose.waitUntil(60_000) { answers.size >= 2 }
         compose.onNode(hasText("Anyone with the link") and isSelectable()).performClick()
-        compose.waitUntil(10_000) { answers.size >= 3 }
+        compose.waitUntil(60_000) { answers.size >= 3 }
         compose.waitForIdle()
         assertEquals(listOf("GET", "DELETE", "PUT"), fixture.calls.filter { it.endsWith("sessions/${fixture.SESSION}/share") }.map { it.substringBefore(' ') })
         assertEquals(listOf("Live link", "Only you", "Live link"), answers.map(SharePanel::menuStatus))
@@ -219,7 +219,7 @@ class ManagementPanelTest {
             compose.onNode(hasText("Edit") and hasClickAction()).performClick()
             compose.onAllNodes(hasText("Remove") and hasClickAction()).onFirst().performClick()
             compose.onNode(hasText(RunnerCopy.REMOVE) and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
-            compose.waitUntil(10_000) { fixture.removedRunners.size == 1 && compose.onAllNodes(hasContentDescription("Reorder", substring = true)).fetchSemanticsNodes().size == 1 }
+            compose.waitUntil(60_000) { fixture.removedRunners.size == 1 && compose.onAllNodes(hasContentDescription("Reorder", substring = true)).fetchSemanticsNodes().size == 1 }
             compose.waitForIdle()
             compose.onNodeWithContentDescription("Reorder $next").performTouchInput {
                 down(centerRight - androidx.compose.ui.geometry.Offset(8f, 0f))

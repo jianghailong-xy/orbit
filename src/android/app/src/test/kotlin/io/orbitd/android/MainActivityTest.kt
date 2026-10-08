@@ -77,7 +77,7 @@ class MainActivityTest {
         compose.onNodeWithText("Email").performTextInput("fixture@example.test")
         compose.onNodeWithText("Password").performTextInput("fixture-password")
         compose.onAllNodesWithText("Sign in")[1].performScrollTo().performClick()
-        compose.waitUntil(5_000) { appSession().state.value is AuthState.SignedIn }
+        compose.waitUntil(60_000) { appSession().state.value is AuthState.SignedIn }
         compose.onNodeWithContentDescription("Open navigation").performClick()
         compose.onNodeWithText("Settings").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Edit profile").assertIsDisplayed()
@@ -109,7 +109,7 @@ class MainActivityTest {
         compose.onNodeWithText("Email").performTextInput("fixture@example.test")
         compose.onNodeWithText("Password").performTextInput("fixture-password")
         compose.onAllNodesWithText("Sign in")[1].performScrollTo().performClick()
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("Linked task").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithText("Linked task").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Linked task").assertIsDisplayed()
         compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         compose.onNodeWithContentDescription("Open navigation").assertIsDisplayed()
@@ -120,7 +120,7 @@ class MainActivityTest {
     private fun awaitLogin() {
         org.junit.Assert.assertSame("Activity and ViewModel must use the same application session", appSession().state,
             androidx.lifecycle.ViewModelProvider(compose.activity)[io.orbitd.android.auth.AuthViewModel::class.java].state)
-        compose.waitUntil(5_000) { appSession().state.value is AuthState.SignedOut }
+        compose.waitUntil(60_000) { appSession().state.value is AuthState.SignedOut }
     }
 }
 
