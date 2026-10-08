@@ -994,6 +994,13 @@ JSON 里是 `anchorRules.verify`；实现在 `src/apiserver/src/wiki/wiki-anchor
 
 - 每个条目一个事务（同核实结论）。条目已不 active、已不是报告里的 revision、或某个下标上已不是报告的那种锚点，就回 `stale`，
   什么都不写，下次运行重读。畸形的条目 `WIKI_SCHEMA` 并指出字段；别的 space 的条目 404。全部被拒才按第一个拒绝的状态码回。
+- **身份核对**（2026-10-09，canary 事故修复）：报告里每个 check 可以带它说 belongs 的那个锚点的身份——path 锚点带 `path`，symbol 带
+  `path` + `symbol`，commit 带 40 位 `sha`，只带类型自己名字的字段。带了身份的检查只写在该身份对得上的锚点上：下标对了但
+  path / symbol / sha 对不上（那是对别的条目的结论被摊平的下标对回来了），整个条目回 `stale`，什么都不写，维护作业把它计为失败、
+  当次运行判失败——不许默默跳过。不带身份的检查（runner 自己的 CLI 就不带）按老规矩只核对该下标的类型。服务端的维护作业发
+  一页锚点时把整页摊平成一个仓库操作、**按页内全局序号**下发（runner 原样回填），收回时经这个序号对回（条目，条目内序号），再带上
+  身份写回；条目内序号在一页之内不唯一，直接拿它对回会让同号锚点互相覆盖（2026-10-08 canary 事故，两次运行 content 失败、
+  无基线的 symbol 锚点错采了页邻的 region 当基线）。
 - **基线**：symbol 锚点对自己的 `regionSha256`；没写的，对第一次检查找到的区域（存为检查里的 `baselineSha256`）。找到的 symbol 由服务端
   对基线判 verified / changed，runner 的判断不作数；changed / missing 的检查不会移动基线，只有 owner 的 Re-confirm 会。
 - 每个锚点最近一次检查存在 `wiki_entry.anchors[i].check`：`{ state, ref, at }`，找到的 symbol 另有 `regionSha256`（这次找到的）和

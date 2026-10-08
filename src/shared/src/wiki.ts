@@ -1266,13 +1266,22 @@ export interface WikiAnchorList {
   next: string | null;
 }
 
-/** One anchor's check, as the runner reports it. */
+/**
+ * One anchor's check, as the runner reports it. `path` / `symbol` / `sha` are the identity of the
+ * anchor the reporter says it checked — the fields its type names. A report may leave them out (the
+ * runner's own CLI does), and then the server checks the type at the index alone; when they are
+ * there, the server applies the check only to the anchor they name (`anchorRules.verify.identity`).
+ */
 export interface WikiAnchorCheckInput {
   index: number;
   type: WikiGitAnchorType;
   state: 'verified' | 'changed' | 'missing';
   /** A symbol found: the sha256 of its region on the checked ref. */
   regionSha256?: string;
+  /** The identity a check may carry, per its type: a path anchor's path; a symbol's path and symbol; a commit's sha. */
+  path?: string;
+  symbol?: string;
+  sha?: string;
 }
 
 /** `POST /api/runner/wiki/spaces/:id/anchor-checks`. */

@@ -57,7 +57,7 @@ import {
 } from './wiki-maintain-plan';
 import { cutRunes, parseWikiImportAnswer, WikiImportRepo, wikiImportIsObject } from './wiki-import-extract';
 import { WikiPlanRepo, type WikiPlanSnapshotIndex } from './wiki-plan-repo';
-import { type WikiRepoFileRead } from '@orbit/shared';
+import { type WikiAnchorCheckInput, type WikiRepoFileRead } from '@orbit/shared';
 import {
   readWikiRepoFiles,
   readWikiRepoReadiness,
@@ -876,6 +876,14 @@ class WikiMaintainRun {
    * Re-check the space's anchors (`anchorRules.verify`): one page of the entries that carry one, the checks
    * as one `wiki_repo_op` the space's runner executes, and each entry's result written back through the
    * server's own writer.
+   *
+   * The page's anchors reach the runner as ONE flat list, so the index the runner echoes is the
+   * anchor's place in THAT list — renumbered here as the list is built — and the checks come back
+   * through `slots` to (entry, the anchor's place in its entry). Recording them under the per-entry
+   * index instead mapped a page's entries onto each other: every entry took the last entry's verdict
+   * for its index, a symbol without a baseline adopted a page-mate's region as its own, and a type
+   * that no longer matched was refused and failed the run. Every check the report carries also names
+   * its anchor (type, path, symbol, sha), and `recordAnchorChecks` writes it only on that anchor.
    */
   private async anchors(): Promise<void> {
     const { job } = this.jobContext;
@@ -891,22 +899,61 @@ class WikiMaintainRun {
       after = page.next;
       const wanted = page.entries.filter((entry) => entry.anchors.length > 0);
       if (wanted.length > 0) {
-        const flat = wanted.flatMap((entry) => entry.anchors.map((anchor) => ({ ...anchor })));
+        // One flat list for the operation: the runner echoes each check's place in this list, so
+        // `slots` — not the per-entry index the checks are recorded under — is what maps a check home.
+        const slots: Array<{ entry: number; anchor: number }> = [];
+        const flat = wanted.flatMap((entry, entryAt) =>
+          entry.anchors.map((anchor) => {
+            slots.push({ entry: entryAt, anchor: anchor.index });
+            return { ...anchor, index: slots.length - 1 };
+          }),
+        );
         const settled = await this.operation('anchors', { sha: this.snapshot?.sha ?? '', anchors: flat }, 'the anchor checks');
         if (settled.state !== 'succeeded') {
           throw new WikiJobInfraError(`REPO_OP_FAILED: the anchor checks ${settled.state}: ${settled.error ?? ''}`);
         }
         const answer = (settled.result?.anchors ?? {}) as { sha?: string; anchors?: unknown[] };
-        const byIndex = new Map<number, unknown>();
-        for (const check of answer.anchors ?? []) {
-          if (wikiImportIsObject(check) && typeof check.index === 'number') byIndex.set(check.index, check);
+        const byEntry = wanted.map(() => new Map<number, WikiAnchorCheckInput>());
+        let unanswered = 0;
+        for (const reported of Array.isArray(answer.anchors) ? answer.anchors : []) {
+          if (!wikiImportIsObject(reported) || typeof reported.index !== 'number' || !Number.isInteger(reported.index)) {
+            unanswered += 1;
+            continue;
+          }
+          const at = reported.index;
+          const slot = at >= 0 && at < slots.length ? slots[at]! : null;
+          const asked = slot ? flat[at] : null;
+          const state = reported.state === 'verified' || reported.state === 'changed' || reported.state === 'missing' ? reported.state : null;
+          // The runner's answer is one check per anchor it was handed, echoing the index and the
+          // type. Anything else is a runner the run cannot lay back safely: it fails the run rather
+          // than guess which anchor a verdict belongs to.
+          if (!slot || !asked || !state || reported.type !== asked.type) {
+            unanswered += 1;
+            continue;
+          }
+          byEntry[slot.entry]!.set(slot.anchor, {
+            index: slot.anchor,
+            type: asked.type,
+            state,
+            ...(asked.type === 'symbol' && state !== 'missing' && typeof reported.regionSha256 === 'string' ? { regionSha256: reported.regionSha256 } : {}),
+            ...(asked.type === 'path' || asked.type === 'symbol' ? { path: asked.path } : {}),
+            ...(asked.type === 'symbol' ? { symbol: asked.symbol } : {}),
+            ...(asked.type === 'commit' ? { sha: asked.sha } : {}),
+          });
+        }
+        unanswered += flat.length - byEntry.reduce((total, checks) => total + checks.size, 0);
+        if (unanswered > 0) {
+          throw new WikiJobContentError(`the anchor checks named ${unanswered} anchor(s) no entry asked for: the run refuses to guess whose they are`);
         }
         const report = {
           ref: String(answer.sha ?? this.snapshot?.sha ?? ''),
-          entries: wanted.map((entry) => ({
+          entries: wanted.map((entry, entryAt) => ({
             entryId: entry.entryId,
             revision: entry.revision,
-            checks: entry.anchors.map((anchor) => byIndex.get(anchor.index)).filter((check) => check !== undefined),
+            checks: entry.anchors.flatMap((anchor) => {
+              const check = byEntry[entryAt]!.get(anchor.index);
+              return check ? [check] : [];
+            }),
           })),
         };
         const written = await this.deps.wiki.recordAnchorChecks(
