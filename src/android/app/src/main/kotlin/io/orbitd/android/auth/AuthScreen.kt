@@ -122,6 +122,7 @@ fun Modifier.loginBackground(accent: Color): Modifier = drawBehind {
 fun AuthScreen(
     state: AuthState,
     message: AuthMessage?,
+    googleBusy: Boolean,
     login: (String, String, String) -> Unit,
     logout: () -> Unit,
     signInMethods: suspend (String) -> SignInMethods?,
@@ -145,6 +146,7 @@ fun AuthScreen(
         else -> LoginPage(
             sessionServer = (state as? AuthState.SigningIn)?.server ?: (state as AuthState.SignedOut).server,
             busy = state is AuthState.SigningIn,
+            googleBusy = googleBusy,
             reason = (state as? AuthState.SignedOut)?.reason,
             message = message,
             login = login,
@@ -197,6 +199,7 @@ internal fun AuthMessage.sentence(): Int = when (this) {
 private fun LoginPage(
     sessionServer: ServerAddress?,
     busy: Boolean,
+    googleBusy: Boolean,
     reason: SignOutReason?,
     message: AuthMessage?,
     login: (String, String, String) -> Unit,
@@ -222,7 +225,7 @@ private fun LoginPage(
     // While typing on a phone the keyboard takes half the screen: the brand folds into one row to keep the form above it.
     // iOS folds while a field has focus; here it takes the keyboard too, so focus from a hardware keyboard folds nothing.
     val compact = focusedFields.isNotEmpty() && WindowInsets.isImeVisible
-    val canSubmit = !busy && email.text.isNotBlank() && password.text.isNotEmpty()
+    val canSubmit = !busy && !googleBusy && email.text.isNotBlank() && password.text.isNotEmpty()
 
     fun submit() {
         if (!canSubmit) return
@@ -299,12 +302,14 @@ private fun LoginPage(
                         colors = ButtonDefaults.buttonColors(containerColor = SignInBlue, contentColor = Color.White,
                             disabledContainerColor = SignInBlue.copy(alpha = 0.38f), disabledContentColor = Color.White),
                     ) {
-                        Text(stringResource(if (busy) R.string.signing_in else R.string.sign_in_button), style = MaterialTheme.typography.titleMedium)
+                        Text(stringResource(if (busy && !googleBusy) R.string.signing_in else R.string.sign_in_button), style = MaterialTheme.typography.titleMedium)
                     }
                     if (busy) TextButton(onClick = cancel, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                         Text(stringResource(R.string.cancel_sign_in))
                     }
-                    if (methods?.google == true) GoogleSection(enabled = !busy, signup = methods?.googleSignup == true) { continueWithGoogle(server) }
+                    if (methods?.google == true) {
+                        GoogleSection(enabled = !busy && !googleBusy, busy = googleBusy, signup = methods?.googleSignup == true) { continueWithGoogle(server) }
+                    }
                 }
             }
             if (!compact) TextButton(onClick = showBuildInformation, modifier = Modifier.height(BuildLinkHeight)) {
@@ -436,7 +441,7 @@ private fun LoginField(
 
 /** Continue with Google under the form, for a server that offers it (§8.2), and the line that says Google opens new accounts. */
 @Composable
-private fun GoogleSection(enabled: Boolean, signup: Boolean, onClick: () -> Unit) {
+private fun GoogleSection(enabled: Boolean, busy: Boolean, signup: Boolean, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         HorizontalDivider(Modifier.weight(1f), color = colors.outlineVariant)
@@ -454,7 +459,9 @@ private fun GoogleSection(enabled: Boolean, signup: Boolean, onClick: () -> Unit
             disabledContainerColor = container, disabledContentColor = content),
         border = BorderStroke(1.dp, if (dark) Color(0xFF8E918F) else Color(0xFF747775)),
     ) {
-        Image(painterResource(R.drawable.google_g), contentDescription = null, modifier = Modifier.size(18.dp))
+        // While its sign-in is under way the mark gives way to a spinner, as on iOS.
+        if (busy) CircularProgressIndicator(Modifier.size(18.dp), color = content, strokeWidth = 2.dp)
+        else Image(painterResource(R.drawable.google_g), contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(10.dp))
         Text(stringResource(R.string.continue_with_google), style = MaterialTheme.typography.titleMedium)
     }

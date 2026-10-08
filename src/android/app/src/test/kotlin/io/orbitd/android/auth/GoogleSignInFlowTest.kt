@@ -6,7 +6,11 @@ import android.content.IntentFilter
 import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.browser.customtabs.CustomTabsService
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasProgressBarRangeInfo
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -15,6 +19,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performCustomAccessibilityActionWithLabel
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
+import androidx.lifecycle.Lifecycle
 import androidx.test.platform.app.InstrumentationRegistry
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
@@ -34,6 +39,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -263,6 +269,49 @@ class GoogleSignInFlowTest {
         compose.onNodeWithText(sentence(R.string.auth_google_state_mismatch)).assertExists()
         assertTrue(exchanges.isEmpty())
         deliver("orbit://auth/google?ticket=fixture-ticket&state=$state")
+        compose.waitUntil(5_000) { session().state.value is AuthState.SignedIn }
+        assertEquals("fixture-ticket", Wire.decode(exchanges.single().api.body!!, GoogleExchangeRequest.serializer()).ticket)
+    }
+
+    /** fbe1c83af: one Google sign-in at a time. A second press while the first is open in the browser opens nothing, and the
+     *  first one's answer still signs in. */
+    @Test fun aSecondPressWhileGoogleSignInIsOpenOpensNothing() {
+        installCustomTabsBrowser()
+        answerMethods(google = true)
+        enterInstance("https://orbit.example")
+        val first = continueWithGoogle()
+        // The button shows the sign-in under way and takes no press; Sign In waits for it too.
+        compose.onNodeWithText("Continue with Google").assertIsNotEnabled()
+        compose.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertExists()
+        compose.onNodeWithText("Email").performTextReplacement("fixture@example.test")
+        compose.onNodeWithText("Password").performTextReplacement("fixture-password")
+        compose.onNodeWithText("Sign In").assertIsNotEnabled()
+        // A press that reaches the page before it has redrawn opens nothing either.
+        var opened = 0
+        auth().continueWithGoogle("https://orbit.example") { opened++; true }
+        assertEquals(0, opened)
+        assertNull(shadowOf(app).nextStartedActivity)
+        val state = first.data!!.getQueryParameter("client_state")
+        deliver("orbit://auth/google?ticket=fixture-ticket&state=$state")
+        compose.waitUntil(5_000) { session().state.value is AuthState.SignedIn }
+        assertEquals("fixture-ticket", Wire.decode(exchanges.single().api.body!!, GoogleExchangeRequest.serializer()).ticket)
+    }
+
+    /** Back in the app with no answer (the tab was closed, as closing iOS's sheet ends its sign-in), Google can start again; the
+     *  answer the closed tab might still send belongs to a sign-in that is no longer waiting. */
+    @Test fun backWithoutAnAnswerGoogleSignInCanStartAgain() {
+        installCustomTabsBrowser()
+        answerMethods(google = true)
+        enterInstance("https://orbit.example")
+        val first = continueWithGoogle().data!!.getQueryParameter("client_state")
+        compose.activityRule.scenario.moveToState(Lifecycle.State.STARTED)
+        compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        compose.onNodeWithText("Continue with Google").assertIsEnabled()
+        val second = continueWithGoogle().data!!.getQueryParameter("client_state")
+        assertNotEquals(first, second)
+        deliver("orbit://auth/google?ticket=old-ticket&state=$first")
+        compose.onNodeWithText(sentence(R.string.auth_google_state_mismatch)).assertExists()
+        deliver("orbit://auth/google?ticket=fixture-ticket&state=$second")
         compose.waitUntil(5_000) { session().state.value is AuthState.SignedIn }
         assertEquals("fixture-ticket", Wire.decode(exchanges.single().api.body!!, GoogleExchangeRequest.serializer()).ticket)
     }

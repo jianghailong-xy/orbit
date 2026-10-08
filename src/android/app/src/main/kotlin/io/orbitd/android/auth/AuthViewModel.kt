@@ -37,6 +37,11 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private val mutableMessage = MutableStateFlow<AuthMessage?>(null)
     val message = mutableMessage.asStateFlow()
     private var attempt = 0
+    private val mutableGoogleBusy = MutableStateFlow(false)
+    /** A Google sign-in this page started is open in the browser, or its ticket is being traded (iOS `googleBusy`). */
+    val googleBusy = mutableGoogleBusy.asStateFlow()
+    private var googleStep: GoogleStep? = null
+        set(value) { field = value; mutableGoogleBusy.value = value != null }
 
     init {
         viewModelScope.launch {
@@ -58,6 +63,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     fun logout() {
         val mine = ++attempt
         mutableMessage.value = null
+        googleStep = null
         viewModelScope.launch {
             try {
                 app.push.beforeSignOut()
@@ -85,6 +91,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Opens the instance's Google sign-in with [open]; its answer comes back to [handleGoogleCallback]. */
     fun continueWithGoogle(address: String, open: (String) -> Boolean) {
+        // A second press before the button has redrawn as disabled: one sign-in at a time (iOS fbe1c83af).
+        if (googleStep != null || state.value is AuthState.SigningIn) return
         ++attempt
         mutableMessage.value = null
         val server = try {
@@ -93,28 +101,42 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             mutableMessage.value = AuthMessage.INVALID_ADDRESS
             return
         }
+        googleStep = GoogleStep.BROWSER
         if (!open(google.begin(server))) {
             google.abandon()
+            googleStep = null
             mutableMessage.value = AuthMessage.GOOGLE_UNAVAILABLE
         }
+    }
+
+    /**
+     * The app is in front again. With no answer from the browser (its tab was closed, as closing iOS's sheet ends a sign-in),
+     * Google can be started again. The sign-in stays waiting until then, so an answer that still comes is taken.
+     */
+    fun onResumed() {
+        if (googleStep == GoogleStep.BROWSER) googleStep = null
     }
 
     /** An address the app was opened with: a Google sign-in's answer finishes the sign-in this process started. */
     fun handleGoogleCallback(uri: String) {
         val failure = when (val callback = google.complete(uri)) {
             GoogleCallback.NotGoogle -> return
-            is GoogleCallback.Ticket -> return signIn(::googleMessageFor) {
-                session.loginWithGoogleTicket(callback.server, callback.ticket, callback.codeVerifier)
+            is GoogleCallback.Ticket -> {
+                googleStep = GoogleStep.EXCHANGE
+                return signIn(::googleMessageFor, done = { if (googleStep == GoogleStep.EXCHANGE) googleStep = null }) {
+                    session.loginWithGoogleTicket(callback.server, callback.ticket, callback.codeVerifier)
+                }
             }
             GoogleCallback.Interrupted -> AuthMessage.GOOGLE_INTERRUPTED
             GoogleCallback.StateMismatch -> AuthMessage.GOOGLE_STATE_MISMATCH
             is GoogleCallback.Refused -> refusalMessage(callback.code) ?: AuthMessage.GOOGLE_FAILED
         }
         ++attempt
+        googleStep = null
         mutableMessage.value = failure
     }
 
-    private fun signIn(describe: (Exception) -> AuthMessage, block: suspend () -> Unit) {
+    private fun signIn(describe: (Exception) -> AuthMessage, done: () -> Unit = {}, block: suspend () -> Unit) {
         val mine = ++attempt
         mutableMessage.value = null
         viewModelScope.launch {
@@ -126,9 +148,13 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             }
             catch (_: CancellationException) { /* Superseded or cancelled. */ }
             catch (error: Exception) { if (mine == attempt) mutableMessage.value = describe(error) }
+            finally { done() }
         }
     }
 }
+
+/** Where a Google sign-in this page started stands: open in the browser, or its ticket being traded. */
+private enum class GoogleStep { BROWSER, EXCHANGE }
 
 /**
  * Why signing in or restoring failed: a code the server names comes first, so no refusal reads as a wrong password; then, as

@@ -51,4 +51,25 @@ class LoginCopyParityTest {
             assertTrue("LoginView.swift no longer says \"$sentence\"", view.contains("\"$sentence\""))
         }
     }
+
+    /** LoginFailure.refusals: each code the server names, with iOS's sentence (a literal, or one of the static lets). */
+    private fun refusals(): Map<String, String> {
+        val block = failure.substringAfter("public static let refusals: [String: String] = [").substringBefore("\n    ]")
+        return Regex("""^\s*"([A-Z_]+)": (?:"((?:[^"\\]|\\.)*)"|(\w+)),$""", RegexOption.MULTILINE).findAll(block)
+            .associate { it.groupValues[1] to it.groupValues[2].ifEmpty { swift(it.groupValues[3]) } }
+    }
+
+    /** 56a2c8024: /start's GOOGLE_SIGN_IN_BUSY and GOOGLE_BAD_REQUEST say what to do, as every other refusal already did. */
+    @Test fun everyCodeTheServerNamesSaysWhatIosSays() {
+        val refusals = refusals()
+        assertTrue("LoginFailure.swift's refusals could not be read", refusals.keys.containsAll(listOf("GOOGLE_SIGN_IN_BUSY", "GOOGLE_BAD_REQUEST")))
+        for ((code, sentence) in refusals) {
+            val message = refusalMessage(code) ?: throw AssertionError("Android has no sentence for $code")
+            assertEquals(code, sentence, text(message.sentence()))
+        }
+        assertEquals(swift("googleFailed"), text(R.string.auth_google_failed))
+        assertEquals(swift("googleCancelled"), text(R.string.auth_google_cancelled))
+        assertEquals(swift("googleStateMismatch"), text(R.string.auth_google_state_mismatch))
+        assertEquals(swift("googleTooMany"), text(R.string.auth_google_rate_limited))
+    }
 }

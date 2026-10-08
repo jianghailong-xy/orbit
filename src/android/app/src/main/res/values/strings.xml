@@ -43,8 +43,8 @@
     <string name="auth_setup_required">This Orbit server has no accounts yet. Create its first administrator in a browser at /setup, with an email and a password.</string>
     <string name="auth_google_not_configured">Google sign-in is turned off on this server. Sign in with your email and password, or ask an administrator to turn it on.</string>
     <string name="auth_google_rate_limited">Too many Google sign-ins from your network. Wait a minute, then continue with Google again.</string>
-    <string name="auth_google_sign_in_busy">Too many Google sign-ins are in progress on this server. Try again in a few minutes.</string>
-    <string name="auth_google_bad_request">The server turned down this app\'s Google sign-in request. Try again; if it keeps failing, sign in with your password.</string>
+    <string name="auth_google_sign_in_busy">Too many Google sign-ins are in progress on this Orbit server. Wait a few minutes, then continue with Google again, or sign in with your password.</string>
+    <string name="auth_google_bad_request">Orbit couldn\'t start Google sign-in from this app. Continue with Google to try again; if it keeps failing, sign in with your password.</string>
     <string name="auth_google_flow_expired">That Google sign-in expired before it finished. Continue with Google to try again.</string>
     <string name="auth_google_cancelled">Google sign-in was cancelled. Continue with Google to try again, or sign in with your password.</string>
     <string name="auth_google_exchange_failed">Orbit couldn\'t confirm your sign-in with Google. Try again in a moment; if it keeps failing, ask an administrator to check this server\'s Google sign-in settings.</string>

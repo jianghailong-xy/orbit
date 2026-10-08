@@ -73,6 +73,8 @@ class MainActivity : ComponentActivity() {
         }
     }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); acceptIntent(intent) }
+    // After onNewIntent: back from the browser with Google's answer, or without one (A03c).
+    override fun onResume() { super.onResume(); auth.onResumed() }
     private fun acceptIntent(intent: Intent) {
         // `orbit://auth/google`, from GoogleSignInRedirectActivity; any other address is not Google's answer.
         intent.data?.let { auth.handleGoogleCallback(it.toString()) }
@@ -85,6 +87,7 @@ class MainActivity : ComponentActivity() {
 private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pair<Long, String>?, continueWithGoogle: (String) -> Unit) {
     val authState by auth.state.collectAsState()
     val authMessage by auth.message.collectAsState()
+    val googleBusy by auth.googleBusy.collectAsState()
     val signedIn = authState as? AuthState.SignedIn
     val accountKey = signedIn?.handle?.account?.let { "${it.server}|${it.userId}" }
     val saver = remember { Saver<OrbitNavigation, String>(save = { Wire.json.encodeToString(it) }, restore = { Wire.json.decodeFromString<OrbitNavigation>(it) }) }
@@ -117,7 +120,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             val backdrop = if (showBuild) Modifier else Modifier.loginBackground(MaterialTheme.colorScheme.primary)
             Box(Modifier.fillMaxSize().then(backdrop).padding(padding).consumeWindowInsets(padding).imePadding()) {
                 if (showBuild) BuildInformation { showBuild = false }
-                else AuthScreen(authState, authMessage, auth::login, auth::logout, auth::signInMethods, auth::rememberedEmail,
+                else AuthScreen(authState, authMessage, googleBusy, auth::login, auth::logout, auth::signInMethods, auth::rememberedEmail,
                     continueWithGoogle) { showBuild = true }
             }
         }

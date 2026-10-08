@@ -165,9 +165,16 @@ different state uses nothing and leaves the sign-in waiting. When the process wa
 browser was open, the answer finds no verifier and the page asks to try again; the ticket is never
 exchanged and expires unused.
 
+One Google sign-in at a time (iOS `fbe1c83af`): while one is open in the browser or its ticket is
+being exchanged, Continue with Google shows a spinner and takes no press — a press that reaches the
+page before it redraws is ignored too — and Sign In waits for it. Back in the app without an answer
+(the tab was closed, as closing iOS's sheet ends its sign-in), Google can start again; the closed
+tab's answer, should it still come, belongs to a sign-in that is no longer waiting.
+
 Messages read a server `code` before the HTTP status, so `ACCOUNT_DISABLED` or a Google refusal is
 never shown as a wrong password; a Google exchange never blames the password at all (429 without a
-code is the exchange's rate limit).
+code is the exchange's rate limit). Every code's sentence is iOS `LoginFailure`'s, including /start's
+`GOOGLE_SIGN_IN_BUSY` and `GOOGLE_BAD_REQUEST` (`56a2c8024`).
 
 ## Login page (A03c)
 
@@ -247,6 +254,14 @@ requires positive test counts and rejects skips/failures, scans captured output/
 fixture credentials, and exports APK hashes, signature, device build, key security level,
 source SHA, phase records, signed-in/signed-out screenshots and twelve login page screenshots
 (`login-screenshots/`: server, server-invalid, login, typing, refused, remembered × light, dark).
+
+`LoginRealStackDeviceTest` runs the same page against a real server, the A11 isolated stack
+(`scripts/a11-stack`, a bootstrapped admin, Google sign-in on with a placeholder client), through
+`tasks-projects-stack-device-test.sh` with `A11_TEST=io.orbitd.android.auth.LoginRealStackDeviceTest`
+and an args file of base64 `server`, `ownerEmail`, `ownerPassword`: the stack's `auth/methods`, its
+400 for an email it cannot read, an unreachable server, its 401, its `/start` refusal
+(`GOOGLE_BAD_REQUEST`, delivered through the real redirect activity) with a second press ignored, and
+a sign-in that is remembered through sign-out.
 
 API29/API36 runs are emulator evidence until an actual phone serial/device record says
 otherwise. No simulated result establishes the D09 R-min/R-ref/R-oem physical requirement.
