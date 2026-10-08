@@ -88,6 +88,19 @@ export function SettingsPage() {
             loading={save.isPending}
           />
         </Field>
+        {/* Absent means on, like the switches below. The engine reads it when it starts, so a
+            session already running keeps what it started with. */}
+        <Field
+          label="Suggested replies"
+          hint="When a Claude turn ends, the empty message box offers what you'd probably type next. Each suggestion is one more request on that session's Claude account."
+        >
+          <Switch
+            aria-label="Suggested replies"
+            checked={prefs.promptSuggestions ?? true}
+            onCheckedChange={(v) => save.mutate({ promptSuggestions: v })}
+            loading={save.isPending}
+          />
+        </Field>
       </Card>
 
       {/* One switch for the whole account, not one per workspace: the server reads it live on
