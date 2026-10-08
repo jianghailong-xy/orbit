@@ -64,7 +64,9 @@ Logout, selecting an instance, beginning another login, and refresh failure canc
 job, clear credentials, and purge all local draft/cache namespaces. Only one active login
 is retained. This intentionally forgets inactive-account drafts when switching; it never
 restores another server/account's content. The instance address is retained without
-credentials. Every response and storage mutation is checked against the current identity.
+credentials, and so is each server's last signed-in email (below). Only a successful sign-in
+records either, so a mistyped server or a refused email never sticks (iOS `fdeb033ad`).
+Every response and storage mutation is checked against the current identity.
 Cleanup completes with cancellation masked; a cancelled caller cannot leave half a session.
 
 Refresh is never automatically retried. The server consumes a token once and replay can
@@ -92,6 +94,18 @@ Corruption, unavailable/lost keys, malformed records or mismatched selected inst
 closed. Logout deletes both key and file, and purges account data. No password is persisted.
 Debug and release use separate package identities and Keystore aliases.
 
+The login page prefills the email of the last successful **password** sign-in on its server.
+This is a deliberate change to A03's original "no email on disk": the coordinator decided for
+A03c to follow iOS `fdeb033ad`, which remembers the email and keeps it through sign-out. The
+emails are one JSON map (canonical server → email) in its own AES-256-GCM record
+(`orbit/emails.bin`, its own Keystore key, the same format, location and backup/transfer
+exclusions as the credentials). Sign-out and session expiry leave it, as iOS does; the next
+successful sign-in on a server replaces that server's email; it disappears only with the app's
+data (uninstall or clear storage). A Google sign-in records no email, and a store that cannot be
+read or written costs only the prefill, never the sign-in. The page prefills only the current
+server's email: switching servers swaps in that server's email or clears a prefilled one, and
+keeps an email typed by hand.
+
 All records are under credential-encrypted `noBackupFilesDir/orbit`; cloud backup and
 device-transfer exclusions are explicit as well as `allowBackup=false`. Keystore work runs
 on IO. This does not claim StrongBox or hardware-backed keys on every device; the device
@@ -99,7 +113,8 @@ test records actual `KeyInfo` security level. It does not require biometric prom
 each request or introduce a direct-boot/background service.
 
 Production addresses require HTTPS with platform certificate verification. Credentials,
-queries and fragments in an instance address are rejected. `/api` suffixes and default
+queries and fragments in an instance address are rejected. An address typed without a scheme
+(the login page's default `orbitd.io`) is HTTPS. `/api` suffixes and default
 ports normalize to the same instance. A reverse-proxy path remains part of identity.
 Debug alone permits HTTP on exact loopback hosts for fixtures; subdomains are excluded.
 Remote cleartext HTTP and trust-all certificate managers are not supported.
@@ -125,8 +140,8 @@ Primary implementation references:
 ## Google sign-in (D1)
 
 The contract is `docs/google-sign-in-design.md` (§3.2, §4, §8.3); the server runs the whole OAuth
-flow. The login page asks the typed instance `GET /api/auth/methods` (the remembered instance at
-once, a typed one when typing pauses) and offers **Continue with Google** only when `google` is
+flow. The login page asks its server `GET /api/auth/methods` when the page appears and again when
+the Server dialog changes the server, and offers **Continue with Google** only when `google` is
 true, with the sign-up hint when `googleSignup` is also true. An older server's 404, an unreachable
 instance or an address the app would refuse leaves the password form exactly as before. The lookup
 is sent up to three times through network failures: the transport never retries, and a pooled
@@ -150,9 +165,35 @@ different state uses nothing and leaves the sign-in waiting. When the process wa
 browser was open, the answer finds no verifier and the page asks to try again; the ticket is never
 exchanged and expires unused.
 
+One Google sign-in at a time (iOS `fbe1c83af`): while one is open in the browser or its ticket is
+being exchanged, Continue with Google shows a spinner and takes no press — a press that reaches the
+page before it redraws is ignored too — and Sign In waits for it. Back in the app without an answer
+(the tab was closed, as closing iOS's sheet ends its sign-in), Google can start again; the closed
+tab's answer, should it still come, belongs to a sign-in that is no longer waiting.
+
 Messages read a server `code` before the HTTP status, so `ACCOUNT_DISABLED` or a Google refusal is
 never shown as a wrong password; a Google exchange never blames the password at all (429 without a
-code is the exchange's rate limit).
+code is the exchange's rate limit). Every code's sentence is iOS `LoginFailure`'s, including /start's
+`GOOGLE_SIGN_IN_BUSY` and `GOOGLE_BAD_REQUEST` (`56a2c8024`).
+
+## Login page (A03c)
+
+The page follows iOS `LoginView` (`fdeb033ad`): the app icon, "Welcome back" / "Sign in to continue to
+Orbit", Email and Password with standing labels (the password can be shown and hidden again), one
+full-width Sign In capsule that fades while it cannot be pressed, and Continue with Google under
+it. While a field has focus with the keyboard up, the brand folds into one row so the keyboard
+never covers the form. The server is off the page: `orbitd.io` until a sign-in elsewhere is
+remembered; three taps on the logo, or its "Change server" accessibility action, open the Server
+dialog, which keeps only an address the app would sign in to and offers "Reset to orbitd.io".
+Android differences, on purpose: the Server sheet is an Android dialog; Sign In keeps Material's
+ripple; "Cancel sign in" stays while a sign-in is under way; the Build information link (A02)
+stays under the form; the password field is emptied when it is sent; and an address without a
+scheme is HTTPS only (iOS takes `http://` for a bare `localhost`).
+
+Password sign-in failures read as iOS `LoginFailure` says them (`40a70be24`): 400, 401, 403 and 422
+without a code the app knows are a wrong email or password; an unreachable server, a 5xx and an
+answer that is no Orbit sign-in each have their own sentence. `LoginCopyParityTest` reads the
+Swift sources, so the two clients' words cannot drift apart silently.
 
 ## Fixtures and automated checks
 
@@ -200,13 +241,28 @@ and synthetic accounts. It does not uninstall or clear a user's existing app. Th
 refuses to run over an authenticated account; APK signature mismatches fail instead of
 uninstalling. The loopback MockWebServer never sends credentials to a real deployment.
 
-Eight device checks execute: actual AES-GCM/Keystore read/write, random IV and deletion;
-tamper/key-loss cleanup; four server/user namespaces; four separate process phases
-(seed, restart/rotate, restart/logout, restart/assert cleared); and actual login UI → HTTP
-401/rotation → activity recreation → logout. The four process IDs must differ. The driver
+Eleven device checks execute: actual AES-GCM/Keystore read/write, random IV and deletion;
+tamper/key-loss cleanup; four server/user namespaces; the encrypted per-server email record,
+which outlives cleared credentials; four separate process phases
+(seed, restart/rotate, restart/logout, restart/assert cleared); actual login UI → HTTP
+401/rotation → activity recreation → logout; and the A03c login page once with the system light
+and once dark (the Server dialog through three real taps, a refused password that records
+nothing, a sign-in that records the server and its email, sign-out back to them; the dark process
+first finds the light one's email remembered). The script sets and restores the emulator's night
+mode around those two runs. The four persistence process IDs must differ. The driver
 requires positive test counts and rejects skips/failures, scans captured output/logcat for
 fixture credentials, and exports APK hashes, signature, device build, key security level,
-source SHA, phase records and signed-in/signed-out screenshots.
+source SHA, phase records, signed-in/signed-out screenshots and twelve login page screenshots
+(`login-screenshots/`: server, server-invalid, login, typing, refused, remembered × light, dark).
+
+`LoginRealStackDeviceTest` runs the same page against a real server, the A11 isolated stack
+(`scripts/a11-stack`, a bootstrapped admin, Google sign-in on with a placeholder client), through
+`tasks-projects-stack-device-test.sh` with `A11_TEST=io.orbitd.android.auth.LoginRealStackDeviceTest`
+and an args file of base64 `server`, `ownerEmail`, `ownerPassword`: the stack's `auth/methods`, its
+400 for an email it cannot read, an unreachable server, its 401, its `/start` refusal
+(`GOOGLE_BAD_REQUEST`, handed to `MainActivity.onNewIntent` as the redirect activity hands it on: a
+compose test loses its page once the activity pauses) with a second press ignored, and
+a sign-in that is remembered through sign-out.
 
 API29/API36 runs are emulator evidence until an actual phone serial/device record says
 otherwise. No simulated result establishes the D09 R-min/R-ref/R-oem physical requirement.
