@@ -67,6 +67,7 @@ class AuthSession(
     private val allowLoopbackHttp: Boolean = false,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val eventTransport: EventTransport = OkHttpEventTransport(),
+    private val emails: EmailStore? = null,
 ) : OrbitApi {
     private class Epoch(val server: ServerAddress, dispatcher: CoroutineDispatcher) {
         val job = SupervisorJob()
@@ -137,9 +138,13 @@ class AuthSession(
         }
     }
 
+    /** The email the last successful password sign-in on [server] used, for its login page; null when there is none. */
+    suspend fun rememberedEmail(server: ServerAddress): String? =
+        try { emails?.load(server.value) } catch (_: SecureStorageException) { null }
+
     /** Also switches accounts: old requests/data are invalidated before the login leaves the device. */
     suspend fun login(server: ServerAddress, email: String, password: String): SessionHandle =
-        signIn(server, listOf("login"), Wire.json.encodeToString(LoginRequest(email, password)))
+        signIn(server, listOf("login"), Wire.json.encodeToString(LoginRequest(email, password)), email)
 
     /**
      * The last step of a Google sign-in (§4.3): its callback's one-time ticket and the verifier only
@@ -148,12 +153,11 @@ class AuthSession(
     suspend fun loginWithGoogleTicket(server: ServerAddress, ticket: String, codeVerifier: String): SessionHandle =
         signIn(server, listOf("google", "exchange"), Wire.json.encodeToString(GoogleExchangeRequest(ticket, codeVerifier)))
 
-    private suspend fun signIn(server: ServerAddress, operation: List<String>, body: String): SessionHandle {
+    private suspend fun signIn(server: ServerAddress, operation: List<String>, body: String, email: String? = null): SessionHandle {
         val next = withContext(NonCancellable) {
             lock.withLock {
                 initialized = true
                 retireLocked(server, SignOutReason.SWITCHED)
-                instances.save(server.value)
                 Epoch(server, dispatcher).also {
                     epoch = it
                     mutableState.value = AuthState.SigningIn(server)
@@ -166,7 +170,11 @@ class AuthSession(
                 val tokens = Wire.decode(response.requireSuccess().body, LoginResponse.serializer())
                 lock.withLock {
                     requireCurrent(next)
+                    // Only what signed in is remembered, so a mistyped server or email never sticks (iOS fdeb033ad).
+                    instances.save(server.value)
                     credentials.save(StoredSession(server.value, tokens))
+                    // The prefill is a convenience: a store that fails costs it, never the sign-in.
+                    if (email != null) try { emails?.save(server.value, email) } catch (_: SecureStorageException) {}
                     activateLocked(next, tokens)
                 }
             }

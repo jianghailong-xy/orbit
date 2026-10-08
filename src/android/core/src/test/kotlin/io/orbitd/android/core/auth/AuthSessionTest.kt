@@ -336,6 +336,51 @@ class AuthSessionTest {
         }
     }
 
+    /** iOS fdeb033ad: only what signed in is remembered, so a mistyped server or email never sticks; the coordinator's A03c decision
+     * keeps each server's email, encrypted, through sign-out, as iOS keeps its one. */
+    @Test fun onlyASuccessfulPasswordLoginRemembersItsServerAndEmail() = runTest {
+        val h = Harness(this)
+        h.instances.value = serverA.value
+        h.client.restore()
+        // Turned down, or out of reach: nothing is remembered, but the page keeps the server it tried.
+        h.handler = { unauthorized() }
+        assertTrue(runCatching { h.client.login(serverB, "bob@example.test", "wrong-password") }.isFailure)
+        h.handler = { throw NetworkException() }
+        assertTrue(runCatching { h.client.login(serverB, "bob@example.test", "fixture-password") }.isFailure)
+        assertEquals(serverA.value, h.instances.value)
+        assertNull(h.client.rememberedEmail(serverB))
+        assertEquals(serverB, (h.client.state.value as AuthState.SignedOut).server)
+
+        h.handler = { response(tokens("bob")) }
+        h.client.login(serverB, "bob@example.test", "fixture-password")
+        assertEquals(serverB.value, h.instances.value)
+        assertEquals("bob@example.test", h.client.rememberedEmail(serverB))
+        assertNull("each server has its own", h.client.rememberedEmail(serverA))
+        // Signing out keeps the server and its email for the login page.
+        h.client.logout()
+        assertEquals(serverB.value, h.instances.value)
+        assertEquals("bob@example.test", h.client.rememberedEmail(serverB))
+
+        // Google remembers its server and no email: none was typed.
+        h.handler = { response(tokens("carol")) }
+        h.client.loginWithGoogleTicket(serverA, "fixture-ticket", "fixture-verifier")
+        assertEquals(serverA.value, h.instances.value)
+        assertNull(h.client.rememberedEmail(serverA))
+        assertEquals("bob@example.test", h.client.rememberedEmail(serverB))
+
+        // The next sign-in on a server replaces its email; a store that fails costs only the prefill, never the sign-in.
+        h.handler = { response(tokens("dave")) }
+        h.client.login(serverB, "dave@example.test", "fixture-password")
+        assertEquals("dave@example.test", h.client.rememberedEmail(serverB))
+        h.emails.fail = true
+        h.client.login(serverB, "erin@example.test", "fixture-password")
+        assertTrue(h.client.state.value is AuthState.SignedIn)
+        assertNull(h.client.rememberedEmail(serverB))
+        h.emails.fail = false
+        assertEquals("dave@example.test", h.client.rememberedEmail(serverB))
+        assertEquals(mapOf(serverB.value to "dave@example.test"), h.emails.values)
+    }
+
     @Test fun signInMethodsAsksTheInstanceWithoutTouchingTheSession() = runTest {
         val h = Harness(this)
         h.seed()

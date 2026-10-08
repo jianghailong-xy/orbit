@@ -16,6 +16,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.orbitd.android.auth.chooseServer
 import io.orbitd.android.*
 import io.orbitd.android.attachments.importAttachment
 import io.orbitd.android.attachments.decodeAttachmentImage
@@ -338,11 +339,11 @@ class ComposerDeviceTest {
     private fun login() {
         compose.waitUntil(10000) { app.session.state.value !is AuthState.Restoring }
         runBlocking { app.session.logout() }; control("""{"reset":true}""")
-        awaitText("Instance address")
-        compose.onNodeWithText("Instance address").performTextReplacement(server)
-        compose.onNodeWithText("Email").performTextInput("a07@example.test")
-        compose.onNodeWithText("Password").performTextInput("a07-fixture-password")
-        compose.onAllNodesWithText("Sign in")[1].performScrollTo().performClick()
+        awaitText("Welcome back")
+        compose.chooseServer(server)
+        compose.onNodeWithText("Email").performTextReplacement("a07@example.test")
+        compose.onNodeWithText("Password").performTextReplacement("a07-fixture-password")
+        compose.onNodeWithText("Sign In").performScrollTo().performClick()
         compose.waitUntil(15000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
         compose.onNodeWithTag("workspace:$workspace").performClick()
         awaitText("Composer conversation")

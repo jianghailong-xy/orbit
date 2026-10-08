@@ -7,6 +7,7 @@ import android.util.AtomicFile
 import io.orbitd.android.core.auth.AccountKey
 import io.orbitd.android.core.auth.CredentialStore
 import io.orbitd.android.core.auth.DataKind
+import io.orbitd.android.core.auth.EmailStore
 import io.orbitd.android.core.auth.InstanceStore
 import io.orbitd.android.core.auth.SecureStorageException
 import io.orbitd.android.core.auth.SessionDataStore
@@ -22,14 +23,14 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.encodeToString
 
 /** CE private storage; excluded from both backup and device transfer. No plaintext credential file. */
 class AndroidCredentialStore(context: Context, name: String = "credentials") : CredentialStore {
     init { require(name.matches(Regex("[a-z0-9-]+"))) }
-    private val file = AtomicFile(File(context.noBackupFilesDir, "orbit/$name.bin"))
-    private val alias = "${context.packageName}.orbit.$name.v1"
-    private val aad = alias.encodeToByteArray()
+    private val record = EncryptedRecord(context, name)
 
     override suspend fun load(): StoredSession? = storageIO {
         synchronized(credentialLock) { read() }
@@ -37,26 +38,68 @@ class AndroidCredentialStore(context: Context, name: String = "credentials") : C
 
     override suspend fun save(session: StoredSession) = storageIO {
         synchronized(credentialLock) {
-            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.ENCRYPT_MODE, keyStore().getKey(alias, null) as? SecretKey ?: generateKey())
-            cipher.updateAAD(aad)
-            val plaintext = Wire.json.encodeToString(session).encodeToByteArray()
-            val encrypted = try { cipher.doFinal(plaintext) } finally { plaintext.fill(0) }
-            check(cipher.iv.size == 12)
-            atomicWrite(file, byteArrayOf(1) + cipher.iv + encrypted)
+            record.write(Wire.json.encodeToString(session).encodeToByteArray())
             if (read() != session) throw SecureStorageException()
         }
     }
 
     override suspend fun clear() = storageIO {
-        synchronized(credentialLock) {
-            // Delete the key even if a filesystem failure leaves an encrypted file behind.
-            try { keyStore().deleteEntry(alias) } finally { file.delete() }
-            if (file.baseFile.exists()) throw SecureStorageException()
+        synchronized(credentialLock) { record.delete() }
+    }
+
+    private fun read(): StoredSession? = record.read { Wire.decode(it, StoredSession.serializer()) }
+
+    companion object { private val credentialLock = Any() }
+}
+
+/**
+ * Each server's last signed-in email, for its login page (A03c, following iOS fdeb033ad): a deliberate change to A03's "no
+ * email on disk", decided by the coordinator. One encrypted record like the credentials', under a key of its own, in the same
+ * backup- and transfer-excluded storage. Sign-out and expiry leave it, as iOS keeps its email; it goes with the app's data.
+ */
+class AndroidEmailStore(context: Context, name: String = "emails") : EmailStore {
+    init { require(name.matches(Regex("[a-z0-9-]+"))) }
+    private val record = EncryptedRecord(context, name)
+    private val serializer = MapSerializer(String.serializer(), String.serializer())
+
+    override suspend fun load(server: String): String? = storageIO {
+        synchronized(emailLock) { read()[server] }
+    }
+
+    override suspend fun save(server: String, email: String) = storageIO {
+        synchronized(emailLock) {
+            // An unreadable record (a lost key, tampering) is started again rather than blocking every later sign-in's email.
+            val emails = (try { read() } catch (_: Exception) { emptyMap() }) + (server to email)
+            record.write(Wire.json.encodeToString(serializer, emails).encodeToByteArray())
         }
     }
 
-    private fun read(): StoredSession? {
+    private fun read(): Map<String, String> = record.read { Wire.decode(it, serializer) } ?: emptyMap()
+
+    companion object { private val emailLock = Any() }
+}
+
+/**
+ * One AES-256-GCM record under an AndroidKeyStore key of its own, in CE `noBackupFilesDir/orbit`: a format byte, the random
+ * 96-bit IV, then ciphertext and 128-bit tag, with the key alias (which carries the package) as associated data.
+ */
+private class EncryptedRecord(context: Context, name: String) {
+    private val file = AtomicFile(File(context.noBackupFilesDir, "orbit/$name.bin"))
+    private val alias = "${context.packageName}.orbit.$name.v1"
+    private val aad = alias.encodeToByteArray()
+
+    /** Encrypts and commits [plaintext], then wipes it. */
+    fun write(plaintext: ByteArray) {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, keyStore().getKey(alias, null) as? SecretKey ?: generateKey())
+        cipher.updateAAD(aad)
+        val encrypted = try { cipher.doFinal(plaintext) } finally { plaintext.fill(0) }
+        check(cipher.iv.size == 12)
+        atomicWrite(file, byteArrayOf(1) + cipher.iv + encrypted)
+    }
+
+    /** The decrypted record handed to [decode] and wiped after; null when there is none. Fails closed on anything else. */
+    fun <T> read(decode: (ByteArray) -> T): T? {
         val bytes = readOrNull(file) ?: return null
         if (bytes.size < 29 || bytes[0] != 1.toByte()) throw SecureStorageException()
         val key = keyStore().getKey(alias, null) as? SecretKey ?: throw SecureStorageException()
@@ -64,7 +107,13 @@ class AndroidCredentialStore(context: Context, name: String = "credentials") : C
         cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, bytes.copyOfRange(1, 13)))
         cipher.updateAAD(aad)
         val plaintext = cipher.doFinal(bytes.copyOfRange(13, bytes.size))
-        return try { Wire.decode(plaintext, StoredSession.serializer()) } finally { plaintext.fill(0) }
+        return try { decode(plaintext) } finally { plaintext.fill(0) }
+    }
+
+    fun delete() {
+        // Delete the key even if a filesystem failure leaves an encrypted file behind.
+        try { keyStore().deleteEntry(alias) } finally { file.delete() }
+        if (file.baseFile.exists()) throw SecureStorageException()
     }
 
     private fun keyStore() = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
@@ -78,8 +127,6 @@ class AndroidCredentialStore(context: Context, name: String = "credentials") : C
             .build())
         generateKey()
     }
-
-    companion object { private val credentialLock = Any() }
 }
 
 class AndroidInstanceStore(context: Context, name: String = "instance") : InstanceStore {
