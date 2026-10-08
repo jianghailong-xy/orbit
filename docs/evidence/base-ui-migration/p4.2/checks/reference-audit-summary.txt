@@ -1,0 +1,50 @@
+{
+  "baseline": {
+    "commit": "9317b2712fba68964fbdb1bdd0cc57634b819935",
+    "scopeHash": "dee5a3a40936ac0c0fdda936cc37cc8367673eb7b9203615ea0ca77e1caa004c"
+  },
+  "counts": {
+    "scannedFiles": 742,
+    "productionFiles": 371,
+    "testFiles": 369,
+    "antdProductionFiles": 96,
+    "antdTestFiles": 80,
+    "antSelectorTestFiles": 61,
+    "antClassTestFiles": 66,
+    "iconProductionFiles": 110,
+    "iconTestFiles": 0,
+    "relevantSourceFiles": 297,
+    "hitLines": {
+      "ant-class": 443,
+      "ant-design-support": 19,
+      "ant-selector": 417,
+      "antd-reference": 351,
+      "icon-class": 80,
+      "icon-reference": 121,
+      "imperative-confirm": 22,
+      "imperative-feedback": 222,
+      "internal-ref": 6,
+      "provider": 92,
+      "rc-support": 231,
+      "ref-focus": 28,
+      "theme": 2,
+      "use-app": 16,
+      "use-token": 1
+    },
+    "retirementBlockingFiles": 237
+  },
+  "declaredDependencies": [
+    {
+      "section": "dependencies",
+      "name": "@ant-design/icons",
+      "version": "^6.3.4",
+      "family": "icons"
+    },
+    {
+      "section": "dependencies",
+      "name": "antd",
+      "version": "^6.6.5",
+      "family": "antd"
+    }
+  ]
+}

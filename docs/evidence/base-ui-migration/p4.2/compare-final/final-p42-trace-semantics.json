@@ -1,0 +1,59 @@
+{
+ "tests": 180,
+ "steps": 912,
+ "semantic": [],
+ "presentation": {
+  "focus": 5,
+  "dialogs": 0
+ },
+ "examples": {
+  "focus": [
+   {
+    "test": "webkit-dark-desktop :: P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway",
+    "step": "saved anyway",
+    "ref": {
+     "role": "button",
+     "name": "Save anyway"
+    },
+    "del": "body"
+   },
+   {
+    "test": "webkit-dark-phone :: P4.2 connecting a provider › editing: the stored key shown, the switch, and Save",
+    "step": "saved",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "Save"
+    }
+   },
+   {
+    "test": "webkit-light-desktop :: P4.2 a pool on its own page › a pool somebody added the reader to: leaving it",
+    "step": "left",
+    "ref": {
+     "role": "button",
+     "name": "Leave pool"
+    },
+    "del": "body"
+   },
+   {
+    "test": "webkit-light-desktop :: P4.2 users › the table: loading, reset password, a one-time password and delete",
+    "step": "password dismissed",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "Reset password"
+    }
+   },
+   {
+    "test": "webkit-light-phone :: P4.2 users › the table: loading, reset password, a one-time password and delete",
+    "step": "password dismissed",
+    "ref": {
+     "role": "button",
+     "name": "Reset password"
+    },
+    "del": "body"
+   }
+  ],
+  "dialogs": []
+ }
+}

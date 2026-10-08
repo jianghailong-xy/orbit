@@ -129,7 +129,7 @@ describe('a runner with more than one Codex account', () => {
     }
     expect(planUsageReported(usage, 'codex', 'default')).toBe(true);
     // An engine that keeps one login for the machine has no accounts: its question is answered as before.
-    expect(planUsageReported({ provider: 'kimi', primary: { utilization: 1 } }, 'kimi', null)).toBe(true);
+    expect(planUsageReported({ provider: 'opencode', primary: { utilization: 1 } }, 'opencode', null)).toBe(true);
   });
 
   it("does not call Default reported when the snapshot holds only other accounts", () => {
@@ -228,8 +228,8 @@ describe('accountOfEnv', () => {
     expect(accountOfEnv('claude', { ANTHROPIC_AUTH_TOKEN: 'tok' }, claudeAccounts)).toBeNull();
     expect(accountOfEnv('claude', { ANTHROPIC_BASE_URL: 'https://x.invalid' }, claudeAccounts)).toBeNull();
     expect(accountOfEnv('claude', { CLAUDE_CONFIG_DIR: '/srv/claude' }, claudeAccounts)).toBeNull();
-    // Kimi keeps one login for the whole machine: nothing to name.
-    expect(accountOfEnv('kimi', { KIMI_CODE_HOME: '/root/.kimi-code' }, claudeAccounts)).toBeNull();
+    // OpenCode keeps one login for the whole machine: nothing to name.
+    expect(accountOfEnv('opencode', { HOME: '/root' }, claudeAccounts)).toBeNull();
   });
 });
 
@@ -520,5 +520,103 @@ describe('a runner with more than one Antigravity Google account', () => {
     expect(accountOfEnv('antigravity', { ORBIT_ANTIGRAVITY_GOOGLE_DIR: '/elsewhere' }, accounts)).toBeNull();
     // A Gemini key of the session's own spends no account's subscription.
     expect(accountOfEnv('antigravity', { GEMINI_API_KEY: 'key' }, accounts)).toBeNull();
+  });
+});
+
+describe('a runner with more than one Kimi Code account', () => {
+  const WORK = 'c41e0b7a';
+  const SPARE = '9d20f6e1';
+  const accounts: RunnerEngineAccount[] = [
+    { id: 'default', home: '/root/.kimi-code', auth: 'yes', kimiRegion: 'mainland-cn' },
+    { id: WORK, home: `/root/.orbit/kimi-accounts/${WORK}`, auth: 'yes', kimiRegion: 'global' },
+    { id: SPARE, home: `/root/.orbit/kimi-accounts/${SPARE}`, auth: 'no' },
+  ];
+  const FIVE_HOURS_END = '2026-08-03T16:00:00Z';
+  const WEEK_END = '2026-08-07T00:00:00Z';
+  const MONTH_END = '2026-09-01T00:00:00Z';
+  const EARLY_MONTH_END = '2026-08-15T00:00:00Z';
+  /** Kimi's four `usages` limits as the runner reports them (PlanUsageSnapshot): limit_5h, limit_7d,
+   *  limit_month_total and limit_month_code, each used_ratio × 100 with its reset_time. */
+  const windows = (fiveHour: number, sevenDay: number, month: number, monthCode: number, monthEnd = MONTH_END) => ({
+    fiveHour: { utilization: fiveHour, resetsAt: FIVE_HOURS_END },
+    sevenDay: { utilization: sevenDay, resetsAt: WEEK_END },
+    month: { utilization: month, resetsAt: monthEnd },
+    monthCode: { utilization: monthCode, resetsAt: monthEnd },
+  });
+  /** Default's windows as the Kimi snapshot's own, Work's under its id — beside a spent Codex window
+   *  that is never Kimi's to count. */
+  const usage = (own: ReturnType<typeof windows>, work?: ReturnType<typeof windows>): PlanUsage => ({
+    codex: { primary: { utilization: 100, resetsAt: LATER } },
+    kimi: { provider: 'kimi', ...own, ...(work ? { accounts: { [WORK]: { provider: 'kimi', ...work } } } : {}) },
+  });
+
+  it('holds an account back on any of its four windows spent, until that one resets', () => {
+    expect(planUsageBlockedUntil(usage(windows(100, 10, 10, 10)), 'kimi', NOW, 'default')).toEqual(new Date(FIVE_HOURS_END));
+    expect(planUsageBlockedUntil(usage(windows(10, 100, 10, 10)), 'kimi', NOW, 'default')).toEqual(new Date(WEEK_END));
+    expect(planUsageBlockedUntil(usage(windows(10, 10, 100, 10)), 'kimi', NOW, 'default')).toEqual(new Date(MONTH_END));
+    expect(planUsageBlockedUntil(usage(windows(10, 10, 10, 100, EARLY_MONTH_END)), 'kimi', NOW, 'default')).toEqual(new Date(EARLY_MONTH_END));
+    // Every window has room: the Codex window beside it is not Kimi's.
+    expect(planUsageBlockedUntil(usage(windows(99, 99, 99, 99)), 'kimi', NOW, 'default')).toBeNull();
+  });
+
+  it("goes to waste at its month's end, and is nearly spent at 80% of its 5 hours or 90% of a month", () => {
+    expect(quotaExpiresAt({ provider: 'kimi', ...windows(40, 40, 40, 40) }, NOW)).toBe(Date.parse(MONTH_END));
+    expect(quotaNearLimit({ provider: 'kimi', ...windows(80, 0, 0, 0) }, NOW)).toBe(true);
+    expect(quotaNearLimit({ provider: 'kimi', ...windows(79, 89, 89, 89) }, NOW)).toBe(false);
+    expect(quotaNearLimit({ provider: 'kimi', ...windows(0, 0, 90, 0) }, NOW)).toBe(true);
+    expect(quotaNearLimit({ provider: 'kimi', ...windows(0, 0, 0, 90) }, NOW)).toBe(true);
+  });
+
+  it("judges the account a run spends: Default's windows for Default, every other account's under accounts", () => {
+    const defaultSpent = usage(windows(100, 10, 10, 10), windows(10, 10, 10, 10));
+    expect(planUsageBlockedUntil(defaultSpent, 'kimi', NOW, 'default')).toEqual(new Date(FIVE_HOURS_END));
+    expect(planUsageBlockedUntil(defaultSpent, 'kimi', NOW)).toEqual(new Date(FIVE_HOURS_END));
+    expect(planUsageBlockedUntil(defaultSpent, 'kimi', NOW, WORK)).toBeNull();
+
+    const workSpent = usage(windows(10, 10, 10, 10), windows(10, 10, 10, 100));
+    expect(planUsageBlockedUntil(workSpent, 'kimi', NOW, WORK)).toEqual(new Date(MONTH_END));
+    expect(planUsageBlockedUntil(workSpent, 'kimi', NOW, 'default')).toBeNull();
+    expect(codexAccountSnapshot(workSpent.kimi!, WORK)?.monthCode?.utilization).toBe(100);
+    expect(codexAccountSnapshot(workSpent.kimi!, 'default')?.accounts).toBeUndefined();
+    // An account nothing was read for, and a run on a model of its own, are nothing this runner reports.
+    expect(planUsageReported(workSpent, 'kimi', WORK)).toBe(true);
+    expect(planUsageReported(workSpent, 'kimi', SPARE)).toBe(false);
+    expect(planUsageReported(workSpent, 'kimi', null)).toBe(false);
+  });
+
+  it('starts a session on the account whose month ends first, passing over a spent, nearly spent or signed-out one', () => {
+    expect(accountToStartOn('kimi', accounts, usage(windows(5, 5, 5, 5), windows(40, 40, 40, 40, EARLY_MONTH_END)), NOW)).toBe(WORK);
+    expect(accountToStartOn('kimi', accounts, usage(windows(5, 5, 5, 5, EARLY_MONTH_END), windows(40, 40, 40, 40)), NOW)).toBe('default');
+    // Work's month ends first, but its coding month is spent.
+    expect(accountToStartOn('kimi', accounts, usage(windows(5, 5, 5, 5), windows(0, 0, 0, 100, EARLY_MONTH_END)), NOW)).toBe('default');
+    // ...or its 5-hour window has passed 80%: the sessions already on it spend what is left.
+    expect(accountToStartOn('kimi', accounts, usage(windows(5, 5, 5, 5), windows(80, 0, 0, 0, EARLY_MONTH_END)), NOW)).toBe('default');
+    // Both spent: the one that frees up first, never the signed-out one nothing was read for.
+    expect(accountToStartOn('kimi', accounts, usage(windows(100, 5, 5, 5), windows(5, 5, 100, 5, EARLY_MONTH_END)), NOW)).toBe('default');
+  });
+
+  it('moves a session off a spent account onto one with room, and nowhere when every other is spent', () => {
+    expect(accountToMoveTo('kimi', accounts, usage(windows(100, 5, 5, 5), windows(5, 5, 5, 5)), NOW, 'default')).toBe(WORK);
+    expect(accountToMoveTo('kimi', accounts, usage(windows(100, 5, 5, 5), windows(5, 5, 5, 100)), NOW, 'default')).toBeNull();
+  });
+
+  it("names the account a session's KIMI_CODE_HOME selects, and none for a model of the session's own", () => {
+    expect(ACCOUNT_DIR_VAR.kimi).toBe('KIMI_CODE_HOME');
+    expect(accountOfEnv('kimi', {}, accounts)).toBe('default');
+    expect(accountOfEnv('kimi', { HOME: '/root' }, accounts)).toBe('default');
+    expect(accountOfEnv('kimi', { KIMI_CODE_HOME: '/root/.kimi-code' }, accounts)).toBe('default');
+    expect(accountOfEnv('kimi', { KIMI_CODE_HOME: `/root/.orbit/kimi-accounts/${WORK}/` }, accounts)).toBe(WORK);
+    expect(accountOfEnv('kimi', { HOME: '/home/ada' }, accounts)).toBeNull();
+    expect(accountOfEnv('kimi', { KIMI_CODE_HOME: '/srv/kimi' }, accounts)).toBeNull();
+    // Kimi runs on a model of the session's own only when the session names both the model and its key
+    // (runner kimiUsesEnvModel): then it spends no account. Either alone still runs on the account.
+    expect(accountOfEnv('kimi', { KIMI_MODEL_NAME: 'kimi-for-coding', KIMI_MODEL_API_KEY: 'sk-test' }, accounts)).toBeNull();
+    expect(accountOfEnv('kimi', { KIMI_MODEL_API_KEY: 'sk-test' }, accounts)).toBe('default');
+    expect(accountOfEnv('kimi', { KIMI_MODEL_NAME: 'kimi-for-coding' }, accounts)).toBe('default');
+    expect(
+      accountOfEnv('kimi', { KIMI_MODEL_NAME: 'kimi-for-coding', KIMI_MODEL_API_KEY: ' ', KIMI_CODE_HOME: `/root/.orbit/kimi-accounts/${WORK}` }, accounts),
+    ).toBe(WORK);
+    // KIMI_API_KEY is read from Kimi's config file alone: in the environment it changes nothing.
+    expect(accountOfEnv('kimi', { KIMI_API_KEY: 'sk-test' }, accounts)).toBe('default');
   });
 });

@@ -25,22 +25,7 @@ import {
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { RunnerRepoHealth } from '@orbit/shared';
-import {
-  App as AntdApp,
-  Button,
-  Checkbox,
-  Dropdown,
-  Input,
-  InputNumber,
-  Modal,
-  Select,
-  Spin,
-  Switch,
-  Tag,
-  type MenuProps,
-  type RefSelectProps,
-} from 'antd';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   api,
@@ -71,6 +56,19 @@ import {
 } from '../components/RunnerEnginesSection';
 import { useRunnerTokenRotation } from '../components/RunnerTokenRotation';
 import type { Runner } from '../components/TasksSidePanel';
+import { Badge } from '../components/ui/Badge';
+import { Button } from '../components/ui/Button';
+import { Checkbox } from '../components/ui/Checkbox';
+import { useConfirm } from '../components/ui/ConfirmDialog';
+import { Dialog } from '../components/ui/Dialog';
+import { Input } from '../components/ui/Input';
+import { Menu, type MenuItem } from '../components/ui/Menu';
+import { NumberInput } from '../components/ui/NumberInput';
+import { PasswordInput } from '../components/ui/PasswordInput';
+import { Select } from '../components/ui/Select';
+import { Spinner } from '../components/ui/Spinner';
+import { Switch } from '../components/ui/Switch';
+import { Textarea } from '../components/ui/Textarea';
 import { copyText } from '../lib/clipboard';
 import { REPO_CLEANUP_QUEUED, repoCleanupConfirm } from '../lib/repoCleanup';
 import {
@@ -236,7 +234,7 @@ export function RunnerDetailPage() {
   // /runners/<base62> — decode the route param to the runner's UUID.
   const runnerId = routeId(useParams().id);
   const navigate = useNavigate();
-  const { modal } = AntdApp.useApp();
+  const [confirm, confirmation] = useConfirm();
   const message = useToast();
   const qc = useQueryClient();
 
@@ -265,6 +263,10 @@ export function RunnerDetailPage() {
   // Rename / delete the runner — same API the Runners grid uses.
   const [renaming, setRenaming] = useState(false);
   const [renameVal, setRenameVal] = useState('');
+  // The Actions button, when the rename was asked from its menu: where focus returns.
+  const [renameFrom, setRenameFrom] = useState<RefObject<HTMLButtonElement | null> | undefined>();
+  const renameInput = useRef<HTMLInputElement>(null);
+  const actionsButton = useRef<HTMLButtonElement>(null);
   const renameMut = useMutation({
     mutationFn: (displayName: string) =>
       api(`/runners/${runnerId}`, { method: 'PATCH', body: { displayName } }),
@@ -276,7 +278,7 @@ export function RunnerDetailPage() {
   });
 
   // What is typed into Max Concurrent, shown until its save settles. The ref is what a save reads:
-  // it is written the moment antd reports a value — including the in-range one it corrects an
+  // it is written the moment the field reports a value — including the in-range one it corrects an
   // out-of-range entry to as focus leaves — which the state would only have by the next render.
   const [maxDraft, setMaxDraft] = useState<number | null>(null);
   const maxTyped = useRef<number | null>(null);
@@ -308,7 +310,11 @@ export function RunnerDetailPage() {
   });
   // Where the disk card's "Set a Reserve…" lands.
   const capacityRef = useRef<HTMLElement>(null);
-  const keepFreeRef = useRef<RefSelectProps>(null);
+  const keepFreeRef = useRef<HTMLButtonElement>(null);
+  // The workspace whose Configure (or Close editor) waits for its row's menu to hand focus back to the
+  // row's button: the editor's Name field opened any sooner can mount in the same commit that removes
+  // the menu, whose focus return then still lands on the button.
+  const configureOnFocus = useRef<string | null>(null);
   const engineUpdate = useEngineUpdate(runnerId ?? '');
   // Update Runner Now: the runner checks for its release at once rather than at its next 10-minute
   // check, by the same rules — a turn in flight still holds the install. Nothing answers but the
@@ -341,7 +347,7 @@ export function RunnerDetailPage() {
   });
 
   // Add / edit a workspace bound to this runner (controlled inputs, like the
-  // rename modal — avoids antd Form instance pitfalls with pre-filled edits).
+  // rename dialog — a pre-filled edit is just the fields' initial state).
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Workspace | null>(null);
   const [fName, setFName] = useState('');
@@ -598,27 +604,25 @@ export function RunnerDetailPage() {
   // Closing over unsaved edits asks first; an untouched form closes straight away.
   const closeForm = () => {
     if (!dirty) return discard();
-    modal.confirm({
+    void confirm({
       title: 'Discard unsaved changes?',
-      content: "This workspace's edits haven't been saved yet.",
-      okText: 'Discard',
-      okButtonProps: { danger: true },
+      description: "This workspace's edits haven't been saved yet.",
+      confirmText: 'Discard',
+      danger: true,
       cancelText: 'Keep editing',
-      autoFocusButton: 'cancel',
-      onOk: discard,
+      onConfirm: discard,
     });
   };
   // Switching to another workspace (or to the create form) goes through the same guard.
   const switchTo = (open: () => void) => {
     if (!dirty) return open();
-    modal.confirm({
+    void confirm({
       title: 'Discard unsaved changes?',
-      content: "This workspace's edits haven't been saved yet.",
-      okText: 'Discard',
-      okButtonProps: { danger: true },
+      description: "This workspace's edits haven't been saved yet.",
+      confirmText: 'Discard',
+      danger: true,
       cancelText: 'Keep editing',
-      autoFocusButton: 'cancel',
-      onOk: open,
+      onConfirm: open,
     });
   };
 
@@ -683,7 +687,9 @@ export function RunnerDetailPage() {
               setFName(e.target.value);
               setDirty(true);
             }}
-            onPressEnter={submitWorkspace}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) submitWorkspace();
+            }}
             placeholder="e.g. tea-cli builder"
             maxLength={60}
             autoFocus
@@ -809,7 +815,9 @@ export function RunnerDetailPage() {
               <Input
                 value={importId}
                 onChange={(e) => setImportId(e.target.value)}
-                onPressEnter={() => importMut.mutate()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) importMut.mutate();
+                }}
                 placeholder="4e453ab7-f37c-494d-8017-bb4e9beffeef"
                 disabled={importMut.isPending}
               />
@@ -840,14 +848,13 @@ export function RunnerDetailPage() {
                   danger
                   loading={removeImportedMut.isPending}
                   onClick={() =>
-                    modal.confirm({
+                    void confirm({
                       title: 'Remove imported conversations?',
-                      content: `The ${importedQ.data?.count} imported sessions of ${editing.name} move to Trash. The transcripts on the runner are left alone.`,
-                      okText: 'Remove',
-                      okButtonProps: { danger: true },
+                      description: `The ${importedQ.data?.count} imported sessions of ${editing.name} move to Trash. The transcripts on the runner are left alone.`,
+                      confirmText: 'Remove',
+                      danger: true,
                       cancelText: 'Keep',
-                      autoFocusButton: 'cancel',
-                      onOk: () => removeImportedMut.mutate(),
+                      onConfirm: () => removeImportedMut.mutate(),
                     })
                   }
                 >
@@ -923,7 +930,7 @@ export function RunnerDetailPage() {
                   placeholder="KEY"
                 />
                 {/* These commonly hold tokens, so the value is masked until asked for. */}
-                <Input.Password
+                <PasswordInput
                   value={row.value}
                   onChange={(e) => {
                     setFEnv(fEnv.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)));
@@ -932,8 +939,9 @@ export function RunnerDetailPage() {
                   placeholder="value"
                 />
                 <Button
-                  type="text"
+                  variant="text"
                   title="Remove"
+                  aria-label="Remove"
                   icon={<DeleteOutlined />}
                   onClick={() => {
                     setFEnv(fEnv.filter((_, j) => j !== i));
@@ -943,20 +951,20 @@ export function RunnerDetailPage() {
               </div>
             ))}
             <Button
-              type="dashed"
+              variant="dashed"
               icon={<PlusOutlined />}
               onClick={() => {
                 setFEnv([...fEnv, { key: '', value: '' }]);
                 setDirty(true);
               }}
-              block
+              style={{ width: '100%' }}
             >
               Add variable
             </Button>
           </div>
           <div className="rd-form-field">
             <div className="rd-form-label">Instructions</div>
-            <Input.TextArea
+            <Textarea
               value={fAppend}
               onChange={(e) => {
                 setFAppend(e.target.value);
@@ -974,7 +982,7 @@ export function RunnerDetailPage() {
       <div className="rd-form-actions">
         {mode === 'edit' && editing && (
           <Button
-            type="text"
+            variant="text"
             className="rd-quiet-btn"
             icon={editing.enabled === false ? <PlayCircleOutlined /> : <MinusCircleOutlined />}
             loading={setEnabledMut.isPending}
@@ -989,7 +997,7 @@ export function RunnerDetailPage() {
         {dirty && <span className="rd-dirty-note">Unsaved changes</span>}
         <Button onClick={closeForm}>Cancel</Button>
         <Button
-          type="primary"
+          variant="primary"
           onClick={submitWorkspace}
           loading={saveMut.isPending}
           disabled={!fName.trim()}
@@ -1031,7 +1039,7 @@ export function RunnerDetailPage() {
       <div className="rd-workspace-main">
         <div className="rd-workspace-name">
           {a.name}
-          {a.enabled === false && <Tag style={{ marginLeft: 8 }}>disabled</Tag>}
+          {a.enabled === false && <Badge style={{ marginLeft: 8 }}>disabled</Badge>}
         </div>
         <div className="rd-workspace-meta">
           {providerLabelFor(lastProvider)} · {effectiveModel}
@@ -1040,64 +1048,65 @@ export function RunnerDetailPage() {
         </div>
       </div>
       {running > 0 && <span className="rd-workspace-running">{runnerWorkspaceRunning(running)}</span>}
-      <Dropdown
-        trigger={['click']}
-        placement="bottomRight"
-        menu={{
-          items: [
-            {
-              key: 'edit',
-              icon: <EditOutlined />,
-              label: isOpen ? 'Close editor' : 'Configure',
-              onClick: () => (isOpen ? closeForm() : switchTo(() => openEdit(a))),
+      <Menu
+        align="end"
+        items={[
+          {
+            key: 'edit',
+            icon: <EditOutlined />,
+            label: isOpen ? 'Close editor' : 'Configure',
+            onSelect: () => {
+              configureOnFocus.current = a.id;
+              // Chosen before focus entered the menu: the button still has it, so its return is made a
+              // real move.
+              const active = document.activeElement;
+              if (active instanceof HTMLElement && !active.closest('[role="menu"]')) active.blur();
             },
-            {
-              key: 'console',
-              icon: <MessageOutlined />,
-              label: 'Open console',
-              onClick: () => navigate(`/workspaces/${encodeId(a.id)}`),
-            },
-            {
-              key: 'enabled',
-              icon: a.enabled === false ? <PlayCircleOutlined /> : <MinusCircleOutlined />,
-              label: a.enabled === false ? 'Enable' : 'Disable',
-              onClick: () => setEnabledMut.mutate({ id: a.id, enabled: a.enabled === false }),
-            },
-            {
-              key: 'duplicate',
-              icon: <CopyOutlined />,
-              label: 'Duplicate',
-              onClick: () => duplicateMut.mutate(a),
-            },
-            { type: 'divider' },
-            {
-              key: 'delete',
-              icon: <DeleteOutlined />,
-              label: 'Delete',
-              danger: true,
-              onClick: () =>
-                modal.confirm({
-                  title: `Delete workspace “${a.name}”?`,
-                  content:
-                    'The workspace leaves your list but is not erased — its sessions and tasks are kept and stay linked to it. To park one you still use, disable it instead.',
-                  okText: 'Delete',
-                  okButtonProps: { danger: true },
-                  cancelText: 'Cancel',
-                  autoFocusButton: 'cancel',
-                  onOk: () => removeWorkspaceMut.mutateAsync(a.id),
-                }),
-            },
-          ],
-        }}
-      >
-        <Button
-          size="small"
-          type="text"
-          icon={<MoreOutlined />}
-          title="Actions"
-          onClick={(e) => e.stopPropagation()}
-        />
-      </Dropdown>
+          },
+          {
+            key: 'console',
+            icon: <MessageOutlined />,
+            label: 'Open console',
+            onSelect: () => navigate(`/workspaces/${encodeId(a.id)}`),
+          },
+          {
+            key: 'enabled',
+            icon: a.enabled === false ? <PlayCircleOutlined /> : <MinusCircleOutlined />,
+            label: a.enabled === false ? 'Enable' : 'Disable',
+            onSelect: () => setEnabledMut.mutate({ id: a.id, enabled: a.enabled === false }),
+          },
+          {
+            key: 'duplicate',
+            icon: <CopyOutlined />,
+            label: 'Duplicate',
+            onSelect: () => duplicateMut.mutate(a),
+          },
+          { type: 'separator', key: 'divider' },
+          {
+            key: 'delete',
+            icon: <DeleteOutlined />,
+            label: 'Delete',
+            danger: true,
+            onSelect: () =>
+              void confirm({
+                title: `Delete workspace “${a.name}”?`,
+                description:
+                  'The workspace leaves your list but is not erased — its sessions and tasks are kept and stay linked to it. To park one you still use, disable it instead.',
+                confirmText: 'Delete',
+                danger: true,
+                cancelText: 'Cancel',
+                onConfirm: () => removeWorkspaceMut.mutateAsync(a.id),
+              }),
+          },
+        ]}
+        trigger={<Button size="small" variant="text" icon={<MoreOutlined />} title="Actions" aria-label="Actions"
+          onFocus={() => {
+            if (configureOnFocus.current !== a.id) return;
+            configureOnFocus.current = null;
+            if (isOpen) closeForm();
+            else switchTo(() => openEdit(a));
+          }} />}
+      />
       {/* A quiet affordance: it only shows on hover, or while this row's editor is open. */}
       <DownOutlined className="rd-row-caret" />
     </div>
@@ -1107,7 +1116,7 @@ export function RunnerDetailPage() {
   if (runners.isLoading) {
     return (
       <div style={{ padding: 48, textAlign: 'center' }}>
-        <Spin />
+        <Spinner />
       </div>
     );
   }
@@ -1177,8 +1186,10 @@ export function RunnerDetailPage() {
   })();
   const canUpdateNow = runnerCanUpdateNow(runner, nowMs);
 
-  const openRename = () => {
+  /** `from`: the menu's button the rename was asked from, where focus returns. */
+  const openRename = (from?: RefObject<HTMLButtonElement | null>) => {
     setRenameVal(shownName);
+    setRenameFrom(from);
     setRenaming(true);
   };
   const focusKeepFree = () => {
@@ -1209,12 +1220,15 @@ export function RunnerDetailPage() {
           <Button
             size="small"
             loading={repairMut.isPending}
-            onClick={() =>
-              modal.confirm({
-                ...repoCleanupConfirm(root),
-                onOk: () => repairMut.mutateAsync(workspaceId).catch(() => {}),
-              })
-            }
+            onClick={() => {
+              const cleanup = repoCleanupConfirm(root);
+              void confirm({
+                title: cleanup.title,
+                description: cleanup.content,
+                confirmText: cleanup.okText,
+                onConfirm: () => repairMut.mutateAsync(workspaceId).catch(() => {}),
+              });
+            }}
           >
             {RUNNER_REPAIR}
           </Button>
@@ -1261,34 +1275,35 @@ export function RunnerDetailPage() {
 
   // Rename, Rotate token, Delete. Max Concurrent is no longer here: it lives in Capacity, where it
   // saves as it changes.
-  const kebab: MenuProps['items'] = [
+  const kebab: MenuItem[] = [
     {
       key: 'rename',
       icon: <EditOutlined />,
       label: 'Rename',
-      onClick: openRename,
+      onSelect: () => openRename(actionsButton),
     },
     {
       key: 'rotate',
       icon: <KeyOutlined />,
       label: 'Rotate token',
-      onClick: () => rotation.confirmRotate(runner),
+      onSelect: () => rotation.confirmRotate(runner, actionsButton),
     },
-    { type: 'divider' },
+    { type: 'separator', key: 'divider' },
     {
       key: 'delete',
       icon: <DeleteOutlined />,
       label: 'Delete',
       danger: true,
-      onClick: () =>
-        modal.confirm({
+      onSelect: () =>
+        void confirm({
           title: `Delete “${shownName}”?`,
-          content:
+          description:
             'This removes the runner and its workspaces from your account. Re-register the machine to add it back.',
-          okText: 'Delete',
-          okButtonProps: { danger: true },
+          confirmText: 'Delete',
+          danger: true,
           cancelText: 'Cancel',
-          onOk: () => deleteMut.mutateAsync(),
+          onConfirm: () => deleteMut.mutateAsync(),
+          returnFocus: actionsButton,
         }),
     },
   ];
@@ -1319,9 +1334,7 @@ export function RunnerDetailPage() {
           {shownName}
         </h1>
         <div style={{ flex: 1 }} />
-        <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: kebab }}>
-          <Button icon={<MoreOutlined />}>Actions</Button>
-        </Dropdown>
+        <Menu align="end" items={kebab} trigger={<Button ref={actionsButton} icon={<MoreOutlined />}>Actions</Button>} />
       </div>
 
       {/* Who it is at a glance, on one line under the name; the facts behind it are in About. */}
@@ -1375,7 +1388,7 @@ export function RunnerDetailPage() {
               {/* Kept in place while the create form is open — disabled rather than removed, so the
                   header doesn't reflow out from under the pointer. */}
               <Button
-                type="primary"
+                variant="primary"
                 icon={<PlusOutlined />}
                 disabled={formOpen && !editing}
                 onClick={() => switchTo(openCreate)}
@@ -1385,7 +1398,7 @@ export function RunnerDetailPage() {
             </div>
             {workspacesQ.isLoading ? (
               <div style={{ padding: 24, textAlign: 'center' }}>
-                <Spin />
+                <Spinner />
               </div>
             ) : workspaces.length === 0 && !(formOpen && !editing) ? (
               <div className="rd-empty">
@@ -1419,17 +1432,18 @@ export function RunnerDetailPage() {
             <div className="rd-box">
               <div className="rd-kv">
                 <span className="rd-kv-label">{RUNNER_MAX_CONCURRENT}</span>
-                {/* Saved on blur from around the field, so it runs after antd has settled what was
-                    typed (1–64, whole) — and on Enter, which antd settles first as well. */}
+                {/* Saved on blur from around the field, so it runs after the field has settled what
+                    was typed (1–64, whole) — and on Enter, which the field settles first as well. */}
                 <span onBlur={commitMaxConcurrent}>
-                  <InputNumber
+                  <NumberInput
                     className="rd-max-concurrent"
+                    aria-label={RUNNER_MAX_CONCURRENT}
                     size="small"
                     min={1}
                     max={64}
                     precision={0}
                     value={maxDraft ?? runner.maxConcurrent ?? null}
-                    onChange={(v) => {
+                    onValueChange={(v) => {
                       maxTyped.current = v;
                       setMaxDraft(v);
                     }}
@@ -1460,11 +1474,16 @@ export function RunnerDetailPage() {
                 <Select
                   ref={keepFreeRef}
                   className="rd-keep-free"
+                  aria-label={RUNNER_KEEP_FREE}
                   size="small"
-                  value={reserveMb ?? 0}
-                  options={keepFreeOptions}
-                  onChange={(mb: number) => capacityMut.mutate({ minFreeDiskMb: mb === 0 ? null : mb })}
-                  popupMatchSelectWidth={false}
+                  value={String(reserveMb ?? 0)}
+                  options={keepFreeOptions.map((option) => ({ value: String(option.value), label: option.label }))}
+                  onValueChange={(value) => {
+                    if (value === null) return;
+                    const mb = Number(value);
+                    capacityMut.mutate({ minFreeDiskMb: mb === 0 ? null : mb });
+                  }}
+                  matchTriggerWidth={false}
                 />
               </div>
             </div>
@@ -1485,7 +1504,7 @@ export function RunnerDetailPage() {
             <div className="rd-box">
               <AboutRow label={RUNNER_ABOUT_NAME}>
                 {shownName}
-                <button type="button" className="rd-inline-link" onClick={openRename}>
+                <button type="button" className="rd-inline-link" onClick={() => openRename()}>
                   Rename
                 </button>
               </AboutRow>
@@ -1512,30 +1531,39 @@ export function RunnerDetailPage() {
       </div>
       </div>
 
-      <Modal
+      <Dialog
+        className="runner-dialog"
         title="Rename runner"
         open={renaming}
-        okText="Save"
-        cancelText="Cancel"
-        confirmLoading={renameMut.isPending}
-        onOk={() => renameMut.mutate(renameVal.trim())}
-        onCancel={() => setRenaming(false)}
-        destroyOnClose
+        onClose={() => setRenaming(false)}
+        initialFocus={renameInput}
+        returnFocus={renameFrom}
+        footer={
+          <>
+            <Button onClick={() => setRenaming(false)}>Cancel</Button>
+            <Button variant="primary" loading={renameMut.isPending} onClick={() => renameMut.mutate(renameVal.trim())}>
+              Save
+            </Button>
+          </>
+        }
       >
         <Input
+          ref={renameInput}
           value={renameVal}
           onChange={(e) => setRenameVal(e.target.value)}
-          onPressEnter={() => renameMut.mutate(renameVal.trim())}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.nativeEvent.isComposing) renameMut.mutate(renameVal.trim());
+          }}
           placeholder={runner.name}
           maxLength={60}
-          autoFocus
         />
         <div style={{ marginTop: 8, color: 'var(--text-3)', fontSize: 12 }}>
           Leave empty to use the machine name ({runner.name}).
         </div>
-      </Modal>
+      </Dialog>
 
-      {rotation.tokenModal}
+      {confirmation}
+      {rotation.dialogs}
     </>
   );
 }
@@ -1576,7 +1604,7 @@ function WorkspacePermissionRules({ workspaceId }: { workspaceId: string }) {
     <div className="rd-form-field">
       <div className="rd-form-label">Always allowed</div>
       {rules.isLoading ? (
-        <Spin size="small" />
+        <Spinner size="small" />
       ) : rows.length === 0 ? (
         <div className="rd-rule-empty">
           Nothing yet. Answering an approval with “always allow” records it here, and this
@@ -1590,8 +1618,9 @@ function WorkspacePermissionRules({ workspaceId }: { workspaceId: string }) {
                 {rule.ruleContent ? `${rule.toolName}(${rule.ruleContent})` : rule.toolName}
               </code>
               <Button
-                type="text"
+                variant="text"
                 title="Ask about this again"
+                aria-label="Ask about this again"
                 icon={<DeleteOutlined />}
                 loading={revokeMut.isPending && revokeMut.variables === rule.id}
                 onClick={() => revokeMut.mutate(rule.id)}
@@ -1635,7 +1664,7 @@ function SettingRow({
         <div className="rd-set-desc">{desc}</div>
         {children}
       </div>
-      <Switch checked={checked} onChange={onChange} />
+      <Switch checked={checked} onCheckedChange={onChange} aria-label={label} />
     </div>
   );
 }
@@ -1671,8 +1700,8 @@ function RoutingEngines({
               className={on ? 'is-on' : undefined}
               checked={on}
               disabled={engine === own}
-              onChange={(e) =>
-                onChange(e.target.checked ? [...value, engine] : value.filter((v) => v !== engine))
+              onCheckedChange={(checked) =>
+                onChange(checked ? [...value, engine] : value.filter((v) => v !== engine))
               }
             >
               {engine}

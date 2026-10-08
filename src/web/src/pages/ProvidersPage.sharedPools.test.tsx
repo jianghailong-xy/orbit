@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
@@ -159,13 +158,11 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
       root.render(
         <QueryClientProvider client={client}>
           <MemoryRouter initialEntries={[at]}>
-            <AntApp>
-              <Probe />
-              <Routes>
-                <Route path="/providers" element={<ProvidersPage />} />
-                <Route path="/providers/pools/:id" element={<ProviderPoolPage />} />
-              </Routes>
-            </AntApp>
+            <Probe />
+            <Routes>
+              <Route path="/providers" element={<ProvidersPage />} />
+              <Route path="/providers/pools/:id" element={<ProviderPoolPage />} />
+            </Routes>
           </MemoryRouter>
         </QueryClientProvider>,
       );
@@ -194,15 +191,23 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
   const labelled = (label: string, scope: ParentNode = document.body) =>
     Array.from(scope.querySelectorAll<HTMLElement>('[aria-label]')).filter((el) => el.getAttribute('aria-label') === label);
   const dialog = () => {
-    const dialogs = document.body.querySelectorAll<HTMLElement>('.ant-modal');
+    const dialogs = document.body.querySelectorAll<HTMLElement>('[role="dialog"]');
     return dialogs[dialogs.length - 1] ?? null;
   };
+  /** A dialog's name, as assistive technology reads it. */
+  const nameOf = (el: Element | null | undefined) =>
+    el ? document.getElementById(el.getAttribute('aria-labelledby') ?? '')?.textContent : undefined;
+  /** The radio in `scope` whose label begins with `words`. */
+  const radio = (words: string, scope: ParentNode) =>
+    Array.from(scope.querySelectorAll<HTMLElement>('label'))
+      .find((label) => label.textContent?.startsWith(words))
+      ?.querySelector<HTMLElement>('[role="radio"]');
   /** "Add account", then the key kind on the choice it opens: how a key goes in on a pool whose people
    *  may sign accounts of their own in too (migration 0371). */
   const addKeyPress = async () => {
     await click(button('Add account'));
     const choose = dialog()!;
-    await click(choose.querySelector('input[type="radio"][value="key"]'));
+    await click(radio('Paste an OpenAI API key', choose));
     await click(button('Continue', choose));
   };
 
@@ -385,7 +390,7 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
   it('replaces a refused key from its card with a working one, sending it once', async () => {
     await mount('/providers');
     await click(button('Replace key', rowOf('wikova-backup')));
-    expect(dialog()?.querySelector('.ant-modal-title')?.textContent).toBe('Replace wikova-backup');
+    expect(nameOf(dialog())).toBe('Replace wikova-backup');
     await type(dialog()!.querySelector<HTMLInputElement>('input[aria-label="Key"]'), NEW_KEY);
     await click(button('Replace key', dialog()!));
     expect(sent).toEqual([
@@ -397,15 +402,15 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
     await mount('/providers');
     await click(button('New pool'));
     const modal = dialog()!;
-    expect(modal.querySelector('.ant-modal-title')?.textContent).toBe('New account pool');
-    expect(modal.querySelector('.ant-segmented-item-selected')?.textContent?.trim()).toBe('Codex');
+    expect(nameOf(modal)).toBe('New account pool');
+    expect(modal.querySelector('[role="radiogroup"][aria-label="Engine"] [role="radio"][aria-checked="true"]')?.textContent?.trim()).toBe('Codex');
     // "Just me" is a pool of one's own ChatGPT account (ProvidersPage.codexLogin.test.tsx); shared, a
     // Codex pool holds the people's OpenAI API keys.
-    await click(modal.querySelector('input[type="radio"][value="people"]'));
+    await click(radio('Me and people I add', modal));
     await type(fieldInput('Name', modal), 'Team Codex');
     // An address typed and not yet a tag still counts.
     await type(modal.querySelector<HTMLInputElement>('.np-people input'), 'zhang@example.com');
-    await click(modal.querySelector('.np-can-add input'));
+    await click(modal.querySelector('.np-can-add [role="checkbox"]'));
     await click(button('Create pool', modal));
     expect(sent).toEqual([
       { method: 'POST', path: ROOT, body: { label: 'Team Codex' } },
@@ -448,8 +453,8 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
     expect(who.querySelector('.who-foot')).toBeNull();
 
     // The one rule is its maker's to change.
-    const [membersCanAdd] = who.querySelectorAll<HTMLButtonElement>('button.ant-switch');
-    expect(membersCanAdd.disabled).toBe(false);
+    const [membersCanAdd] = who.querySelectorAll<HTMLElement>('[role="switch"]');
+    expect(membersCanAdd.getAttribute('aria-disabled')).not.toBe('true');
     await click(membersCanAdd);
     await click(labelled('Disable orbit-org-1')[0]);
     expect(sent).toEqual([
@@ -460,7 +465,7 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
     // Taking somebody else's key out asks first.
     sent = [];
     await click(labelled('Remove zhang-old from this pool')[0]);
-    await click(button('Remove', document.body.querySelector('.ant-popconfirm')!));
+    await click(button('Remove', document.body.querySelector('[role="dialog"]')!));
     expect(sent).toEqual([{ method: 'DELETE', path: `${AT}/keys/${id(15)}` }]);
 
     expect(button('Delete pool')).not.toBeNull();
@@ -488,15 +493,15 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
     // Who can use it is its maker's to say, and reads that way.
     const who = container.querySelector<HTMLElement>('.who-card')!;
     expect(who.querySelector('.pool-head-note')?.textContent).toBe('Set by Wikova · share of this month’s API key use');
-    expect(who.querySelector('.ant-segmented')).toBeNull();
-    expect(who.querySelectorAll('button.ant-switch')).toHaveLength(0);
+    expect(who.querySelector('[role="radiogroup"]')).toBeNull();
+    expect(who.querySelectorAll('[role="switch"]')).toHaveLength(0);
 
     // Members may add while the pool's rules let them — the same press, and accounts too since 0371.
     expect(button('Add account')).not.toBeNull();
     expect(button('Delete pool')).toBeNull();
     expect(container.querySelector('.pool-danger-note')?.textContent).toBe('Your keys leave with you.');
     await click(button('Leave pool'));
-    await click(button('Leave', document.body.querySelector('.ant-popconfirm')!));
+    await click(button('Leave', document.body.querySelector('[role="dialog"]')!));
     expect(sent).toEqual([{ method: 'POST', path: `${AT}/leave` }]);
     expect(path).toBe('/providers');
   });
@@ -534,7 +539,7 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
     await mount(`/providers/pools/${POOL_ID}`);
     await addKeyPress();
     let modal = dialog()!;
-    expect(modal.querySelector('.ant-modal-title')?.textContent).toBe('Add a key to Team Codex');
+    expect(nameOf(modal)).toBe('Add a key to Team Codex');
     expect(modal.textContent).toContain('Paste an OpenAI API key to put in this pool.');
     expect(modal.querySelector('.pa-facts')?.textContent).toContain(
       'Everyone in Team Codex can run sessions on it — 4 people. Their sessions spend this key’s budget.',

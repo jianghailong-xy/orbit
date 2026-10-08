@@ -1,0 +1,96 @@
+diff --git a/src/web/src/components/RunnerEngines.tsx b/src/web/src/components/RunnerEngines.tsx
+index db235c634..a21ae1c65 100644
+--- a/src/web/src/components/RunnerEngines.tsx
++++ b/src/web/src/components/RunnerEngines.tsx
+@@ -315,18 +315,9 @@ function RunnerAccountMenu({ onRename, onSignIn, onRemove, offline, removing, pa
+   pause?: { name: string; until?: string | null; endpoint: string };
+   moreRef?: RefObject<HTMLButtonElement | null>;
+ }) {
+-  // Rename opens the name's editor once the closing menu has handed focus back to More. Opened any
+-  // sooner, the editor can mount in the same commit that removes the menu, whose focus return then
+-  // still lands on More, blurring (and so closing) the editor.
+-  const renameOnFocus = useRef(false);
+-  const rename = () => {
+-    renameOnFocus.current = true;
+-    // Chosen before focus entered the menu: More still has it, so its return is made a real move.
+-    if (moreRef?.current && document.activeElement === moreRef.current) moreRef.current.blur();
+-  };
+   const menu = (controls?: AccountPauseControls) => {
+     const items: MenuItem[] = [
+-      ...(onRename ? [{ key: 'rename', icon: <EditOutlined aria-hidden />, label: 'Rename', onSelect: rename }] : []),
++      ...(onRename ? [{ key: 'rename', icon: <EditOutlined aria-hidden />, label: 'Rename', onSelect: onRename }] : []),
+       ...(onSignIn ? [{ key: 'login', icon: <LoginOutlined aria-hidden />, label: 'Re-sign in', disabled: offline, onSelect: onSignIn }] : []),
+       ...(controls ? controls.paused ? [
+         { key: 'resume', icon: <PlayCircleOutlined aria-hidden />, label: 'Resume now', disabled: controls.pending, onSelect: controls.resume },
+@@ -345,12 +336,7 @@ function RunnerAccountMenu({ onRename, onSignIn, onRemove, offline, removing, pa
+         align="end"
+         popupClassName="re-account-menu"
+         items={items}
+-        trigger={<Button ref={moreRef} size="small" variant="text" className="re-action re-more" icon={<EllipsisOutlined />} aria-label="More actions" title="More actions"
+-          onFocus={() => {
+-            if (!renameOnFocus.current) return;
+-            renameOnFocus.current = false;
+-            onRename?.();
+-          }} />}
++        trigger={<Button ref={moreRef} size="small" variant="text" className="re-action re-more" icon={<EllipsisOutlined />} aria-label="More actions" title="More actions" />}
+       />
+     );
+   };
+@@ -932,7 +918,9 @@ function AccountRow({
+       offline={!runner.online}
+       removing={removing}
+       moreRef={more}
+-      onRename={() => setEditing(true)}
++      // After the menu has closed and handed focus back to More, so the name's editor then takes it
++      // (focus returning to More would blur, and so close, an editor opened any sooner).
++      onRename={() => setTimeout(() => setEditing(true))}
+       onSignIn={kind === 'in' && !envKey ? toggle : undefined}
+       onRemove={isDefault ? undefined : () => setConfirmingRemove(true)}
+       pause={(kind === 'in' && !envKey) || accountIsPaused(account.pausedUntil, now) ? {
+diff --git a/src/web/src/pages/RunnerDetailPage.tsx b/src/web/src/pages/RunnerDetailPage.tsx
+index 8c7079600..dd814147d 100644
+--- a/src/web/src/pages/RunnerDetailPage.tsx
++++ b/src/web/src/pages/RunnerDetailPage.tsx
+@@ -311,10 +311,6 @@ export function RunnerDetailPage() {
+   // Where the disk card's "Set a Reserve…" lands.
+   const capacityRef = useRef<HTMLElement>(null);
+   const keepFreeRef = useRef<HTMLButtonElement>(null);
+-  // The workspace whose Configure (or Close editor) waits for its row's menu to hand focus back to the
+-  // row's button: the editor's Name field opened any sooner can mount in the same commit that removes
+-  // the menu, whose focus return then still lands on the button.
+-  const configureOnFocus = useRef<string | null>(null);
+   const engineUpdate = useEngineUpdate(runnerId ?? '');
+   // Update Runner Now: the runner checks for its release at once rather than at its next 10-minute
+   // check, by the same rules — a turn in flight still holds the install. Nothing answers but the
+@@ -1055,13 +1051,9 @@ export function RunnerDetailPage() {
+             key: 'edit',
+             icon: <EditOutlined />,
+             label: isOpen ? 'Close editor' : 'Configure',
+-            onSelect: () => {
+-              configureOnFocus.current = a.id;
+-              // Chosen before focus entered the menu: the button still has it, so its return is made a
+-              // real move.
+-              const active = document.activeElement;
+-              if (active instanceof HTMLElement && !active.closest('[role="menu"]')) active.blur();
+-            },
++            // After the menu has closed and handed focus back to this row's button, so the editor's
++            // Name field then takes it, as it does when the row itself is pressed.
++            onSelect: () => setTimeout(() => (isOpen ? closeForm() : switchTo(() => openEdit(a)))),
+           },
+           {
+             key: 'console',
+@@ -1099,13 +1091,7 @@ export function RunnerDetailPage() {
+               }),
+           },
+         ]}
+-        trigger={<Button size="small" variant="text" icon={<MoreOutlined />} title="Actions" aria-label="Actions"
+-          onFocus={() => {
+-            if (configureOnFocus.current !== a.id) return;
+-            configureOnFocus.current = null;
+-            if (isOpen) closeForm();
+-            else switchTo(() => openEdit(a));
+-          }} />}
++        trigger={<Button size="small" variant="text" icon={<MoreOutlined />} title="Actions" aria-label="Actions" />}
+       />
+       {/* A quiet affordance: it only shows on hover, or while this row's editor is open. */}
+       <DownOutlined className="rd-row-caret" />

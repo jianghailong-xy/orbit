@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import { ExclamationCircleFilled, ExportOutlined, ReloadOutlined, WarningFilled } from '@ant-design/icons';
-import { Button } from 'antd';
 import type { ProviderBalanceAmount } from '@orbit/shared';
 import {
   balanceAgo,
@@ -14,6 +13,7 @@ import {
 import type { ProviderRow } from '../lib/providerAdmin';
 import { useToast } from '../lib/toast';
 import { useNow } from './WatchParts';
+import { Button, LinkButton } from './ui/Button';
 import './DeepSeekBalance.css';
 
 // The DeepSeek account balance behind a DeepSeek key, on the Providers list (one line under the row)
@@ -214,9 +214,9 @@ function BalanceCard({ view, ask, asking, now }: { view: BalanceView; ask: () =>
           </div>
           {currencies}
           <div className="dsb-actions">
-            <Button type="primary" size="small" icon={<ExportOutlined />} href={DEEPSEEK_TOP_UP_URL} target="_blank" rel="noreferrer">
+            <LinkButton variant="primary" size="small" icon={<ExportOutlined />} href={DEEPSEEK_TOP_UP_URL} target="_blank" rel="noreferrer">
               Top up on DeepSeek
-            </Button>
+            </LinkButton>
             <span className="dsb-hint">Opens platform.deepseek.com — refresh here when you're done.</span>
           </div>
         </div>
