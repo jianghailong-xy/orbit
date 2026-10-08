@@ -63,6 +63,19 @@ function planFixture(): { versions: { v1: WikiPlanVersion; v2: WikiPlanVersion }
 }
 
 const PLAN = planFixture();
+
+/** The server-execution fixture (P9): the Plan card's line while the server executes this account's wiki. */
+function serverFixture(): { plan: { note: string } } {
+  const candidates = [
+    resolve(process.cwd(), '../shared/src/wiki-server-execution.fixture.json'),
+    resolve(process.cwd(), 'src/shared/src/wiki-server-execution.fixture.json'),
+  ];
+  const path = candidates.find((candidate) => existsSync(candidate));
+  if (!path) throw new Error(`wiki-server-execution.fixture.json not found from ${process.cwd()}`);
+  return JSON.parse(readFileSync(path, 'utf8'));
+}
+
+const SERVER = serverFixture();
 const ORBIT = '0196e100-0000-7000-8000-000000000001';
 const WIKOVA = '0196e100-0000-7000-8000-000000000002';
 const WIKIDS = '0196e100-0000-7000-8000-000000000003';
@@ -321,6 +334,26 @@ describe('Activity', () => {
     expect(html).toContain('<b>Done</b> · 4 calls · 6,120 tokens · took 48s');
     // Under runner: no card at all.
     expect(wiki('/wiki/orbit/activity')).not.toContain('wk-jobs-card');
+  });
+
+  it('names the System model under Draft plan while the server runs the wiki, and the provider under runner (mock 35’s Plan card)', () => {
+    const spaces = [row(ORBIT, 'github.com/jianghailong-xy/orbit', 0, 0, 0)];
+    spaces[0].settings = { ...spaces[0].settings, maintenance: { provider: 'local-vllm', workspaceId: null } };
+    const cache = client(spaces);
+    cache.setQueryData(['wiki', 'space', ORBIT, 'plan'], { spaceId: ORBIT, confirmed: null, draft: null, proposals: [], job: null } satisfies WikiPlanState);
+    const note = (html: string): string => card(html, 'wk-plan-card').match(/<span class="hint">([^<]*)<\/span>/)![1];
+    // Under runner the line is the provider maintenance is pinned to, word for word as before.
+    expect(note(wiki('/wiki/orbit/activity', cache))).toBe('local-vllm · about 1–2 hours');
+    // The server drafts with the System model (`health.executor.serverExecutes`): the shared fixture's line.
+    cache.setQueryData(['wiki', 'space', ORBIT, 'health'], {
+      spaceId: ORBIT, entries: 0,
+      maintenance: {
+        look: 'off', enabled: false, lastOkAt: null, lastRunAt: null, consecutiveFailures: 0, backlog: 0, oldestPendingAt: null,
+        lagSeconds: 0, dailyLimitReached: false, held: null, running: null, lastRun: null, lastFailure: null,
+      },
+      executor: { mode: 'canary', serverExecutes: true },
+    });
+    expect(note(wiki('/wiki/orbit/activity', cache))).toBe(SERVER.plan.note);
   });
 
   it('stands under the home’s head on a desktop: the title, the line saying what the space holds, the search (mock 33 ④)', () => {

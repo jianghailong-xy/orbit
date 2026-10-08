@@ -58,11 +58,14 @@ export interface WikiMaintenanceHealth {
  * run on the server, which holds no repository, so they ask the machine the space's workspace runs on — and
  * this is whether that machine can be asked. `look` is the one word the status line needs:
  *
- *   ready            the workspace's runner is there, beating, and has declared `wiki-repo-op/v1`;
+ *   ready            the workspace's runner is there, beating, and reads whole files (`wiki-repo-op-read/v1`);
  *   no_workspace     the space names no workspace, or the one it names is gone or has no working directory;
  *   runner_missing   the workspace is not bound to a machine;
  *   runner_offline   the machine is not beating;
- *   runner_upgrade   the machine is beating but is too old to be given repository work — upgrade it.
+ *   runner_upgrade   the machine is beating but has to be upgraded: without `wiki-repo-op/v1` it cannot be
+ *                    handed repository work at all, and with only that (no `wiki-repo-op-read/v1`) it reads the
+ *                    old bounded window instead of whole files — the steps still run, cut short. The wire
+ *                    carries the one word; which of the two it is, the server reads for itself.
  */
 export interface WikiSpaceRepoHealth {
   look: WikiRepoLook;

@@ -76,14 +76,9 @@ class WikiHealthTest {
         assertEquals("View run", WikiModeCopy.viewRun)
     }
 
-    /** A control plane older than P9 sends no executor and none of the new fields, which reads as runner (OrbitKit
-     * `WikiServerExecutionCopyParityTests`); and with maintenance off, a read of the repository that waits still says the runner. */
-    @Test fun aReadOneReleaseApartReadsAsRunnerAndAWaitingReadSaysTheRunner() {
-        val older = WikiSpaceHealth.decode(Wire.json.parseToJsonElement("""{"spaceId":"s","entries":3,"maintenance":{"look":"ok","enabled":true}}"""))
-        assertFalse(older.serverExecutes)
-        assertNull(older.systemModel)
-        assertNull(older.repo)
-        assertNull(WikiHealthLogic.serverReason(older))
+    /** With maintenance off, a read of the repository that waits still says the runner: the case the fixture's
+     * "nothing waits on the offline runner" leaves out. A read one release apart is `WikiServerExecutionFixtureTest`'s. */
+    @Test fun aWaitingReadSaysTheRunnerWithMaintenanceOff() {
         val waiting = WikiSpaceHealth.decode(Wire.json.parseToJsonElement("""{"spaceId":"s","entries":3,"maintenance":{"look":"off","enabled":false},
             "repo":{"look":"runner_offline","pending":1},"executor":{"mode":"server","serverExecutes":true},"systemModel":{"state":"up"}}"""))
         assertEquals("Maintenance off · ● Waiting for the runner to come online · Set up", WikiHealthLogic.text(WikiHealthLogic.parts(waiting, now)))

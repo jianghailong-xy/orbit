@@ -177,7 +177,7 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
   - README 首段
 
   快照按 sha 缓存，同一个 sha 只传一次。
-- 需要原文时按需读取：读指定 sha 上指定路径的片段，单个文件和单次请求都有上限。上限沿用现值：文档一节 4,200 字、合同 2,500 字、每节最多 22,000 字。
+- 需要原文时按需读取：读指定 sha 上指定路径的**整个文件**（owner 2026-10-08 定，见 §7）。以前这里是"片段"，单个文件和单次请求都有上限；那些上限（文档一节 4,200 字、合同 2,500 字、每节最多 22,000 字）现在只是服务端切取材料时的规则，不再限制读取。读到的原文按 `(space, sha, path)` 缓存，同一份不重复读。
 - 为什么不直接上传原文：
   - plan 起草要读本仓库约 27 MB 原文（113 篇文档、1,374 个源文件），远超 API 10 MB 的请求体上限（`src/apiserver/src/main.ts`）；
   - 真正写进 prompt 的只有几万字的摘要。
@@ -317,12 +317,19 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
 - **执行**：runner 在会话池之外的 goroutine 里执行，不占槽位。结果提交到 `POST /runner/wiki/repo-ops/:id/result`，按租约持有者加代数做校验，过期的回写返回 409 STALE_CLAIM。worker 通过 `pg_notify` 得知结果已到。
 - **种类**：
   - `snapshot`：fetch 后得到 sha，生成索引：路径和大小、文档标题、符号、可达提交集合、README 首段。超过 10 MB 的请求体上限时分片上传。
-  - `read`：给定 sha 和路径列表，返回有上限的文本片段，也包括脚注核对要用的整个文件；单个文件有上限。
+  - `read`：给定 sha 和路径列表，返回**指定 sha 上的整个文件**（owner 2026-10-08 定）。
+    - **单个文件的上限是 2 MB**（`repoOps.read.wholeFileBytes`）。更大的文件不是截断，而是"缺失并注明原因"：item 以 `found: false`、`reason: "too_large"` 和它的大小作答，服务端照缺失处理（文档构建与 plan 都把这一项记为 missing，原因写明）。
+    - **大文件像快照一样分片上传**：一次 read 的回答超过 `repoOps.fragments.inlineBytes`（4 MB）时，runner 把整个回答按 `repoOps.fragments.fragmentBytes` 分片，走 `POST /runner/wiki/repo-ops/:id/fragments` 暂存在 `wiki_repo_op_fragment` 上（与快照的索引同一套机制），结果里只写 sha、字节数、摘要和分片数；服务端按摘要和字节数拼回，拼不回就拒绝这次回写，什么都不落库。
+    - **服务端按 `(space, sha, path)` 缓存原文**（`wiki_repo_file`）：同一份原文只从 runner 读一次；命中缓存就不再下发 read。缓存只对 owner 可见，随空间删除；新的快照落地时，这个空间只保留它那个 sha 的条目。旧 runner 截断的回答单独记为 `cut`，只够旧 runner 那条路用，runner 升级后按未命中重新读。
+    - **每节材料的切取上限**（文档一节 `read.docSectionChars` 4,200 字、合同 `read.contractChars` 2,500 字、一节材料 `read.sectionChars` 22,000 字）仍然是**服务端切取材料时**的规则：P6 的 plan 和 P7 的文档构建照旧按这些数字给模型材料，它们不再是读取的上限。
+    - 服务端只为声明了 `wiki-repo-op-read/v1` 的 runner 下发整文件读取；这些 runner 的 read 回答也是整份文件。一次 read 装多少文件由服务端按快照给出的大小打包（`read.operationBytes`）。
   - `diff`：两个 sha 之间的 `--name-status -M`，以及新增的设计文档（`--diff-filter=AR -- docs/`）。
   - `anchors`：现有的锚点检查（`wiki_anchors.go`），直接复用。
 - **安全检查**：沿用现有检查：origin URL 要和空间的 `repo.urlNorm` 一致，根提交要匹配，否则报错。
-- **服务端缓存**：每个空间只保留最近一份快照及其片段，只对 owner 可见；空间删除时一起清理。
-- **旧 runner**：没声明这个能力的 runner，需要仓库的步骤会挂起，健康行提示升级 runner。
+- **服务端缓存**：每个空间只保留最近一份快照及其片段，只对 owner 可见；空间删除时一起清理。读到的原文同样只对 owner 可见，随空间删除，并跟着快照换代清理。
+- **旧 runner**：
+  - 没声明 `wiki-repo-op/v1` 的 runner，需要仓库的步骤会挂起，健康行提示升级 runner。
+  - 声明了 `wiki-repo-op/v1` 但没声明 `wiki-repo-op-read/v1` 的 runner 照旧只能读到每个文件的前 `read.boundedChars`（22,000）字：服务端照旧处理（截断的文本按今天的方式当作缺失并写明），健康行给出同一个原因 "Upgrade the runner to read the repository"。
 
 ## 8. 各流水线怎么搬
 

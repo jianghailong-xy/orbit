@@ -33,16 +33,20 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { runnerActiveTurns } from '../common/session-tree-sql';
-import { WIKI_REPO_OP_CAPABILITY } from '@orbit/shared';
+import { WIKI_REPO_OPS, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY } from '@orbit/shared';
 import { enqueueWikiJob } from './wiki-jobs';
 import { WikiRepoOpChannel } from './wiki-repo-op-notify';
 import {
   WikiRepoOps,
   WIKI_REPO_OP_REFUSAL_STATUS,
   WikiRepoOpRefused,
+  readCachedWikiRepoFiles,
   readWikiRepoReadiness,
   readWikiRepoSnapshot,
+  readWikiRepoFiles,
   waitForWikiRepoOpAsJob,
+  wikiRepoFileText,
+  wikiRepoStepsCanRun,
 } from './wiki-repo-ops';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
@@ -100,8 +104,8 @@ async function fixture(prisma: PrismaClient): Promise<Fixture> {
     id, name: `repo-ops-${id.slice(0, 8)}`, ownerId, tokenHash: `hash-${id}`,
     capabilities, capabilitiesReportedAt: new Date(), lastHeartbeatAt: new Date(),
   });
-  await prisma.runner.create({ data: runner(runnerId, [WIKI_REPO_OP_CAPABILITY]) });
-  await prisma.runner.create({ data: runner(otherRunnerId, [WIKI_REPO_OP_CAPABILITY]) });
+  await prisma.runner.create({ data: runner(runnerId, [WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY]) });
+  await prisma.runner.create({ data: runner(otherRunnerId, [WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY]) });
   const workspaceId = randomUUID();
   await prisma.workspace.create({
     data: { id: workspaceId, ownerId, name: 'repo ops checkout', runnerId, workDir: '/tmp/repo-ops-spec' },
@@ -141,7 +145,7 @@ function beat(h: Harness, over: Partial<Parameters<WikiRepoOps['dispatch']>[0]> 
     runnerId: h.owner.runnerId,
     leaseOwner: randomUUID(),
     draining: false,
-    capabilities: [WIKI_REPO_OP_CAPABILITY],
+    capabilities: [WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY],
     ...over,
   });
 }
@@ -155,7 +159,7 @@ async function claim(
 ): Promise<number> {
   // The claim takes the oldest queued row of this machine; the spec asks for its own by taking one at a
   // time and checking it is the one it wanted.
-  const claimed = await h.ops.dispatch({ runnerId, leaseOwner, draining: false, capabilities: [WIKI_REPO_OP_CAPABILITY] });
+  const claimed = await h.ops.dispatch({ runnerId, leaseOwner, draining: false, capabilities: [WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY] });
   const row = claimed.find((candidate) => candidate.id === opId);
   assert.ok(row, `the heartbeat did not claim ${opId}: ${claimed.map((candidate) => candidate.id).join(', ')}`);
   return row.claimGeneration;
@@ -227,7 +231,7 @@ test('a result, a progress and a fragment under a taken-over claim are refused S
 
   const stale = { claimGeneration: firstGeneration, leaseOwner: first };
   await assert.rejects(
-    () => h.ops.applyWikiRepoOpResult({ id: opId, runnerId: h.owner.runnerId, ...{ body: { ...stale, state: 'succeeded', result: { ok: true } } } }),
+    () => h.ops.applyWikiRepoOpResult({ id: opId, runnerId: h.owner.runnerId, ...{ body: { ...stale, state: 'succeeded', result: { read: { sha: 'b'.repeat(40), items: [] } } } } }),
     (error: unknown) => error instanceof WikiRepoOpRefused && error.refusal === 'STALE_CLAIM',
   );
   await assert.rejects(
@@ -248,13 +252,13 @@ test('a result, a progress and a fragment under a taken-over claim are refused S
   assert.equal(await h.prisma.wikiRepoOpFragment.count({ where: { opId } }), 0);
   // The claim that holds it can still settle it.
   const answer = await h.ops.applyWikiRepoOpResult({
-    id: opId, runnerId: h.owner.runnerId, body: { claimGeneration: secondGeneration, leaseOwner: second, state: 'succeeded', result: { items: [] } },
+    id: opId, runnerId: h.owner.runnerId, body: { claimGeneration: secondGeneration, leaseOwner: second, state: 'succeeded', result: { read: { sha: 'b'.repeat(40), items: [] } } },
   });
   assert.deepEqual(answer, { accepted: true, state: 'succeeded' });
   // And a second copy of the same result — a response that was lost — is answered with what the row says
   // rather than refused.
   const again = await h.ops.applyWikiRepoOpResult({
-    id: opId, runnerId: h.owner.runnerId, body: { claimGeneration: secondGeneration, leaseOwner: second, state: 'succeeded', result: { items: [] } },
+    id: opId, runnerId: h.owner.runnerId, body: { claimGeneration: secondGeneration, leaseOwner: second, state: 'succeeded', result: { read: { sha: 'b'.repeat(40), items: [] } } },
   });
   assert.equal(again.accepted, false);
   assert.equal(again.state, 'succeeded');
@@ -382,11 +386,11 @@ test('a job parked on an operation is woken by the NOTIFY, and is back in the qu
     await h.ops.applyWikiRepoOpResult({
       id: opId,
       runnerId: h.owner.runnerId,
-      body: { claimGeneration: generation, leaseOwner, state: 'succeeded', result: { items: [{ path: 'a.md', found: true }] } },
+      body: { claimGeneration: generation, leaseOwner, state: 'succeeded', result: { read: { sha: 'b'.repeat(40), items: [{ path: 'a.md', found: false }] } } },
     });
     const answer = await waiting;
     assert.equal(answer.state, 'succeeded');
-    assert.deepEqual(answer.result, { items: [{ path: 'a.md', found: true }] });
+    assert.deepEqual(answer.result, { read: { sha: 'b'.repeat(40), items: [{ path: 'a.md', state: 'missing', chars: 0 }] } });
     assert.ok(Date.now() - started < 10_000, 'the wait ended on the notification, not on its 30-second poll');
   } finally {
     channel.onModuleDestroy();
@@ -439,10 +443,23 @@ test('the health line: what the repository steps depend on, and which word says 
   assert.equal(ready.look, 'ready');
   assert.equal(ready.pending, before + 1, 'the queued operation is what a reader is waiting on');
   assert.equal(ready.runner?.capability, true);
+  assert.equal(ready.runner?.wholeFile, true);
   assert.equal(ready.runner?.online, true);
 
+  // A runner with the repository capability but not the whole-file one: it is still handed operations (the
+  // steps run, cut short), and the line still says to upgrade it — the same word as a machine that declared
+  // nothing, which is the one that cannot be handed anything at all.
+  await h.prisma.runner.update({ where: { id: h.owner.runnerId }, data: { capabilities: [WIKI_REPO_OP_CAPABILITY] } });
+  const bounded = await read();
+  assert.equal(bounded.look, 'runner_upgrade', 'a runner that reads only the old window is upgraded');
+  assert.equal(bounded.runner?.capability, true);
+  assert.equal(bounded.runner?.wholeFile, false);
+  assert.equal(wikiRepoStepsCanRun(bounded), true, 'and it is still handed the operations it can do');
+
   await h.prisma.runner.update({ where: { id: h.owner.runnerId }, data: { capabilities: ['integration-job/v1'] } });
-  assert.equal((await read()).look, 'runner_upgrade', 'a runner that never declared the capability is upgraded');
+  const none = await read();
+  assert.equal(none.look, 'runner_upgrade', 'a runner that never declared the capability is upgraded');
+  assert.equal(wikiRepoStepsCanRun(none), false, 'and it is handed nothing at all');
 
   await h.prisma.runner.update({
     where: { id: h.owner.runnerId },
@@ -453,6 +470,218 @@ test('the health line: what the repository steps depend on, and which word says 
   await h.prisma.runner.update({ where: { id: h.owner.runnerId }, data: { lastHeartbeatAt: new Date() } });
   await h.prisma.workspace.update({ where: { id: h.owner.workspaceId }, data: { workDir: null } });
   assert.equal((await read()).look, 'no_workspace');
+  // The checkout is this spec's one workspace, so the cases after this one get it back.
+  await h.prisma.workspace.update({ where: { id: h.owner.workspaceId }, data: { workDir: h.owner.workDir } });
+
+  await h.prisma.wikiJob.deleteMany({ where: { id: jobId } });
+});
+
+/** One read operation of a job, claimed and settled with what the spec's runner answers. */
+async function answerNextRead(
+  h: Harness,
+  jobId: string,
+  answerOf: (items: Array<{ path: string; maxChars?: number }>) => Array<Record<string, unknown>>,
+): Promise<{ items: Array<{ path: string; maxChars?: number }>; opId: string }> {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const row = await h.prisma.wikiRepoOp.findFirst({
+      where: { jobId, kind: 'read', state: 'queued' },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, input: true },
+    });
+    if (row) {
+      const leaseOwner = randomUUID();
+      const generation = await claim(h, row.id, leaseOwner);
+      const input = row.input as { sha: string; items: Array<{ path: string; maxChars?: number }> };
+      await h.ops.applyWikiRepoOpResult({
+        id: row.id,
+        runnerId: h.owner.runnerId,
+        body: {
+          claimGeneration: generation,
+          leaseOwner,
+          state: 'succeeded',
+          result: { read: { sha: input.sha, items: answerOf(input.items ?? []) } },
+        },
+      });
+      return { items: input.items ?? [], opId: row.id };
+    }
+    await delay(25);
+  }
+  throw new Error(`no queued read operation appeared for job ${jobId}`);
+}
+
+test('a read\'s files are cached by (space, sha, path), and a cache hit dispatches nothing', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  const service = h.prisma as unknown as PrismaService;
+  const sha = 'b'.repeat(40);
+  const { jobId, opId } = await queued(h, 'read', { sha, items: [{ path: 'docs/a.md' }, { path: 'docs/gone.md' }] });
+  const leaseOwner = randomUUID();
+  const generation = await claim(h, opId, leaseOwner);
+  const text = 'hello 中文\n';
+  const answer = await h.ops.applyWikiRepoOpResult({
+    id: opId,
+    runnerId: h.owner.runnerId,
+    body: {
+      claimGeneration: generation,
+      leaseOwner,
+      state: 'succeeded',
+      result: {
+        read: {
+          sha,
+          items: [
+            { path: 'docs/a.md', found: true, size: Buffer.byteLength(text, 'utf8'), text, chars: [...text].length },
+            { path: 'docs/gone.md', found: false, chars: 0 },
+          ],
+        },
+      },
+    },
+  });
+  assert.deepEqual(answer, { accepted: true, state: 'succeeded' });
+  // The row's own result names what became of each item, never the text: the text is the cache's.
+  const row = await h.prisma.wikiRepoOp.findUnique({ where: { id: opId }, select: { result: true } });
+  assert.deepEqual(row?.result, { read: { sha, items: [
+    { path: 'docs/a.md', state: 'found', chars: [...text].length },
+    { path: 'docs/gone.md', state: 'missing', chars: 0 },
+  ] } });
+  const held = await h.prisma.wikiRepoFile.findMany({
+    where: { spaceId: h.owner.spaceId, sha, path: { in: ['docs/a.md', 'docs/gone.md'] } },
+    orderBy: { path: 'asc' },
+  });
+  assert.deepEqual(held.map((file) => [file.path, file.state, file.content]), [
+    ['docs/a.md', 'found', text],
+    ['docs/gone.md', 'missing', ''],
+  ], 'one row per (space, sha, path), the text and the reason with it');
+
+  // The same files again: the cache answers, and no second operation is written.
+  const opsBefore = await h.prisma.wikiRepoOp.count({ where: { jobId } });
+  const files = await readWikiRepoFiles({
+    prisma: service, repoOps: h.ops, jobId, ownerId: h.owner.ownerId, spaceId: h.owner.spaceId,
+    sha, paths: ['docs/a.md', 'docs/gone.md'], wholeFile: true, waitMs: 5_000,
+  });
+  assert.equal(wikiRepoFileText(files.get('docs/a.md')), text);
+  assert.equal(files.get('docs/gone.md')?.state, 'missing');
+  assert.equal(await h.prisma.wikiRepoOp.count({ where: { jobId } }), opsBefore, 'a hit dispatches nothing');
+
+  // A file the commit does not have is an answer, and one over the cap is missing with its reason.
+  const over = await queued(h, 'read', { sha, items: [{ path: 'docs/huge.md' }] });
+  const overLease = randomUUID();
+  const overGeneration = await claim(h, over.opId, overLease);
+  await h.ops.applyWikiRepoOpResult({
+    id: over.opId,
+    runnerId: h.owner.runnerId,
+    body: {
+      claimGeneration: overGeneration,
+      leaseOwner: overLease,
+      state: 'succeeded',
+      result: { read: { sha, items: [{ path: 'docs/huge.md', found: false, reason: 'too_large', size: WIKI_REPO_OPS.wholeFileBytes + 1, chars: 0 }] } },
+    },
+  });
+  const cache = await readCachedWikiRepoFiles(service, { ownerId: h.owner.ownerId, spaceId: h.owner.spaceId, sha, paths: ['docs/huge.md'], wholeFile: true });
+  assert.deepEqual(cache.get('docs/huge.md'), { path: 'docs/huge.md', state: 'too_large', text: '', sizeBytes: WIKI_REPO_OPS.wholeFileBytes + 1 });
+  assert.equal(wikiRepoFileText(cache.get('docs/huge.md')), '', 'a file over the cap reads as missing');
+
+  await h.prisma.wikiJob.deleteMany({ where: { id: { in: [jobId, over.jobId] } } });
+});
+
+test('a read whose answer is too large for one request body is reassembled into the cache, to the byte', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  const service = h.prisma as unknown as PrismaService;
+  const sha = 'c'.repeat(40);
+  const big = `${'文'.repeat(30_000)}\n${'a'.repeat(30_000)}\n`;
+  const payload = JSON.stringify({
+    sha,
+    items: [{ path: 'docs/big.md', found: true, size: Buffer.byteLength(big, 'utf8'), text: big, chars: [...big].length }],
+    chars: [...big].length,
+  });
+  const third = Math.ceil(payload.length / 3);
+  const pieces = [payload.slice(0, third), payload.slice(third, 2 * third), payload.slice(2 * third)];
+  const { jobId, opId } = await queued(h, 'read', { sha, items: [{ path: 'docs/big.md' }] });
+  const leaseOwner = randomUUID();
+  const generation = await claim(h, opId, leaseOwner);
+  for (const [index, content] of pieces.entries()) {
+    const stored = await h.ops.storeWikiRepoOpFragment({
+      id: opId, runnerId: h.owner.runnerId, claimGeneration: generation, leaseOwner,
+      index, total: pieces.length, sha, content,
+    });
+    assert.equal(stored.received, index + 1);
+  }
+  const bytes = Buffer.byteLength(payload, 'utf8');
+  const digest = createHash('sha256').update(payload, 'utf8').digest('hex');
+  const answer = await h.ops.applyWikiRepoOpResult({
+    id: opId,
+    runnerId: h.owner.runnerId,
+    body: { claimGeneration: generation, leaseOwner, state: 'succeeded', result: { read: { sha, bytes, digest, fragments: pieces.length } } },
+  });
+  assert.deepEqual(answer, { accepted: true, state: 'succeeded' });
+  const cache = await readCachedWikiRepoFiles(service, { ownerId: h.owner.ownerId, spaceId: h.owner.spaceId, sha, paths: ['docs/big.md'], wholeFile: true });
+  assert.equal(cache.get('docs/big.md')?.text, big, 'the fragments reassemble to exactly the bytes that were sent');
+  assert.equal(await h.prisma.wikiRepoOpFragment.count({ where: { opId } }), 0, 'the staging is dropped with the settle');
+
+  // A digest that does not match what was staged is refused, and nothing is cached from it.
+  const second = await queued(h, 'read', { sha, items: [{ path: 'docs/other.md' }] });
+  const secondLease = randomUUID();
+  const secondGeneration = await claim(h, second.opId, secondLease);
+  await h.ops.storeWikiRepoOpFragment({
+    id: second.opId, runnerId: h.owner.runnerId, claimGeneration: secondGeneration, leaseOwner: secondLease,
+    index: 0, total: 1, sha, content: payload,
+  });
+  await assert.rejects(
+    () => h.ops.applyWikiRepoOpResult({
+      id: second.opId, runnerId: h.owner.runnerId,
+      body: { claimGeneration: secondGeneration, leaseOwner: secondLease, state: 'succeeded', result: { read: { sha, bytes, digest: 'f'.repeat(64), fragments: 1 } } },
+    }),
+    (error: unknown) => error instanceof WikiRepoOpRefused && error.refusal === 'INVALID_RESULT',
+  );
+  assert.equal(await h.prisma.wikiRepoFile.count({ where: { spaceId: h.owner.spaceId, path: 'docs/other.md' } }), 0);
+
+  await h.prisma.wikiJob.deleteMany({ where: { id: { in: [jobId, second.jobId] } } });
+});
+
+test('an old runner is asked for the bounded window, and what it answers is kept as cut', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  const service = h.prisma as unknown as PrismaService;
+  const sha = 'd'.repeat(40);
+  const window = 'x'.repeat(WIKI_REPO_OPS.boundedChars);
+  // A job of this spec's account, with no operation of its own: what `readWikiRepoFiles` enqueues is what the
+  // runner is handed, bounded window and all.
+  const jobId = randomUUID();
+  await enqueueWikiJob(h.prisma as unknown as PrismaService, { id: jobId, ownerId: h.owner.ownerId, spaceId: h.owner.spaceId, kind: 'maintain' });
+
+  // A runner that declared only the repository capability is asked with the old limits, and its answer is
+  // the cut one.
+  const reading = readWikiRepoFiles({
+    prisma: service, repoOps: h.ops, jobId, ownerId: h.owner.ownerId, spaceId: h.owner.spaceId,
+    sha, paths: ['docs/long.md'], wholeFile: false, sizeOf: () => 90_000, waitMs: 20_000,
+  });
+  const asked = await answerNextRead(h, jobId, (items) => {
+    assert.deepEqual(items, [{ path: 'docs/long.md', maxChars: WIKI_REPO_OPS.boundedChars }], 'a bounded runner is asked within the old window');
+    return [{ path: 'docs/long.md', found: true, size: 90_000, truncated: true, text: `${window}\n…（后略）\n`, chars: WIKI_REPO_OPS.boundedChars }];
+  });
+  const files = await reading;
+  assert.equal(files.get('docs/long.md')?.state, 'cut');
+  const held = await readCachedWikiRepoFiles(service, { ownerId: h.owner.ownerId, spaceId: h.owner.spaceId, sha, paths: ['docs/long.md'], wholeFile: false });
+  assert.equal(held.get('docs/long.md')?.state, 'cut', 'a bounded reader is served the cut text');
+
+  // The same bounded reader asks again: the cut row is a hit for it.
+  await readWikiRepoFiles({
+    prisma: service, repoOps: h.ops, jobId, ownerId: h.owner.ownerId, spaceId: h.owner.spaceId,
+    sha, paths: ['docs/long.md'], wholeFile: false, sizeOf: () => 90_000, waitMs: 2_000,
+  });
+  assert.equal(await h.prisma.wikiRepoOp.count({ where: { jobId } }), 1, 'the cut row is a hit for a bounded reader');
+
+  // A whole-file reader treats it as a miss: the file is read again, and the row is replaced with the whole one.
+  const wholeReading = readWikiRepoFiles({
+    prisma: service, repoOps: h.ops, jobId, ownerId: h.owner.ownerId, spaceId: h.owner.spaceId,
+    sha, paths: ['docs/long.md'], wholeFile: true, sizeOf: () => 90_000, waitMs: 20_000,
+  });
+  await answerNextRead(h, jobId, (items) => {
+    assert.deepEqual(items, [{ path: 'docs/long.md' }], 'a whole-file read asks for the file, not a window of it');
+    return [{ path: 'docs/long.md', found: true, size: 90_000, text: `${window}tail\n`, chars: WIKI_REPO_OPS.boundedChars + 5 }];
+  });
+  const whole = await wholeReading;
+  assert.equal(whole.get('docs/long.md')?.state, 'found');
+  const reread = await readCachedWikiRepoFiles(service, { ownerId: h.owner.ownerId, spaceId: h.owner.spaceId, sha, paths: ['docs/long.md'], wholeFile: true });
+  assert.equal(reread.get('docs/long.md')?.text.endsWith('tail\n'), true, 'the whole answer replaced the cut one');
+  assert.equal(asked.opId !== '', true);
 
   await h.prisma.wikiJob.deleteMany({ where: { id: jobId } });
 });
