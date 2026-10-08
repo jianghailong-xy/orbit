@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import type { PlanUsage, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
 import { formatResetTime } from '../lib/providerPools';
 import { RunnerEngines, summaryOf } from './RunnerEngines';
-import { clickRunnerMenuItem, openRunnerCards, openRunnerMenu } from './RunnerEngines.test-helpers';
+import { clickRunnerMenuItem, dialogName, openRunnerCards, openRunnerMenu } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -76,7 +76,7 @@ let host: HTMLDivElement | null = null;
 
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  // Remove asks in an antd popup, which measures itself with a ResizeObserver jsdom does not have.
+  // The account menu measures its button with a ResizeObserver, which jsdom does not have.
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
 });
 afterAll(() => {
@@ -118,7 +118,8 @@ function mount(runners: Runner[]) {
 }
 
 const rows = (el: ParentNode, selector: string) => [...el.querySelectorAll<HTMLElement>(selector)];
-const tags = (row: Element) => rows(row, '.ant-tag').map((tag) => tag.textContent?.trim());
+/** What a row says of its state: the words in its status slot (a status label is text, with no role). */
+const tags = (row: Element) => rows(row, '.re-status').map((status) => status.textContent?.trim()).filter(Boolean);
 /** A button's words, or the name of a mark that has none (Re-sign in, Remove). */
 const labelOf = (b: Element) => b.textContent?.trim() || b.getAttribute('aria-label');
 const button = (el: ParentNode, label: string) => {
@@ -131,13 +132,14 @@ const click = async (el: HTMLElement) => {
     el.click();
   });
 };
-/** The confirmation's own Remove, once its popup is drawn (a portal, a few frames late on a slow host). */
+/** The confirmation's own Remove, once its popup — a dialog named by its question — is drawn (a portal,
+ *  a few frames late on a slow host). */
 const confirmation = async () => {
   let ok: HTMLButtonElement | undefined;
   await act(async () => {
     await vi.waitFor(
       () => {
-        ok = [...document.querySelectorAll<HTMLButtonElement>('.ant-popconfirm button')].find(
+        ok = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
           (b) => b.textContent?.trim() === 'Remove',
         );
         expect(ok).toBeDefined();
@@ -217,7 +219,7 @@ describe('a runner with two Claude accounts', () => {
     // the question is answered.
     await clickRunnerMenuItem(workRow, 'Remove account');
     const ok = await confirmation();
-    expect(document.querySelector('.ant-popconfirm')?.textContent).toContain('Remove Work?');
+    expect(dialogName(ok.closest('[role="dialog"]')!)).toBe('Remove Work?');
     expect(deleteCalls()).toEqual([]);
 
     await click(ok);

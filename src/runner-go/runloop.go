@@ -1014,6 +1014,11 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	codexActive := func() int { return activeProviderCount(providerCodex) }
 	codexIdle := func() bool { return providerConfigured(providerCodex) }
 	go codexUsage.run(loopCtx, codexActive, codexIdle)
+	// Kimi Code keeps one snapshot per account as Claude does: Default's and every added account's own.
+	kimiUsage := newKimiAccountUsage()
+	kimiActive := func() int { return activeProviderCount(providerKimi) }
+	kimiIdle := func() bool { return providerConfigured(providerKimi) }
+	go kimiUsage.run(loopCtx, kimiActive, kimiIdle)
 
 	// Runtime model catalogs and effective defaults, reported by the runtimes themselves. Catalogs
 	// change rarely and are expensive to discover; defaults are cheap config reads that users may
@@ -1200,7 +1205,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				Status: "ONLINE", Version: version,
 				LeaseOwner: t.leaseOwner, Draining: draining,
 				Commands: cmds, Skills: skills,
-				PlanUsage:            combinePlanUsage(claudeUsage.snapshot(), codexUsage.snapshot()),
+				PlanUsage:            combinePlanUsage(claudeUsage.snapshot(), codexUsage.snapshot(), kimiUsage.snapshot()),
 				ModelCatalog:         modelCatalog,
 				RuntimeDefaultModels: runtimeDefaultModels,
 				Engines:              withCodexAccountFingerprints(engineHealth.snapshotNow(), codexUsage),
@@ -1612,7 +1617,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					logln("account-remove: unknown engine", rr.Engine)
 				} else {
 					res := AccountRemoveResultRequest{Engine: rr.Engine, Account: rr.Account, Attempt: rr.Attempt, Status: "done"}
-					if err := removeAccount(kind, claudeUsage, codexUsage, rr.Account, kind.liveDirs(pool.sessionIDs())); err != nil {
+					if err := removeAccount(kind, claudeUsage, codexUsage, kimiUsage, rr.Account, kind.liveDirs(pool.sessionIDs())); err != nil {
 						res.Status, res.Message = "failed", firstLine(err.Error())
 					} else {
 						// Re-probe this engine and beat at once, so the account leaves the page's list
@@ -1628,7 +1633,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				}
 			} else if rr := resp.CodexAccountRemoveRequest; rr != nil {
 				res := AccountRemoveResultRequest{Engine: providerCodex, Account: rr.Account, Attempt: rr.Attempt, Status: "done"}
-				if err := removeAccount(codexAccountKind, claudeUsage, codexUsage, rr.Account, codexSessionAccountHomes(pool.sessionIDs())); err != nil {
+				if err := removeAccount(codexAccountKind, claudeUsage, codexUsage, kimiUsage, rr.Account, codexSessionAccountHomes(pool.sessionIDs())); err != nil {
 					res.Status, res.Message = "failed", firstLine(err.Error())
 				} else {
 					go func() {

@@ -193,7 +193,7 @@ func TestAntigravityAccountRemovalWaitsForItsSessions(t *testing.T) {
 	if live := antigravityAccountKind.liveDirs([]string{job.SessionID}); len(live) != 0 {
 		t.Fatalf("a session back on Default still holds Work: %v", live)
 	}
-	if err := removeAccount(antigravityAccountKind, nil, nil, work.ID, nil); err != nil {
+	if err := removeAccount(antigravityAccountKind, nil, nil, nil, work.ID, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(work.Dir); !os.IsNotExist(err) {

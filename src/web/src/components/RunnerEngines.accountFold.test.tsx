@@ -135,7 +135,10 @@ function mount(runners: Runner[], { path = '/providers', cards = true } = {}) {
 const head = (engine = 'claude') => host!.querySelector<HTMLElement>(`.re-row[data-engine="${engine}"]`)!;
 const toggle = () => head().querySelector<HTMLButtonElement>('button.re-grp-toggle')!;
 const accountNames = () => [...host!.querySelectorAll('.re-acct .re-name-text')].map((name) => name.textContent);
-const tags = (el: Element) => [...el.querySelectorAll('.ant-tag')].map((tag) => tag.textContent?.trim());
+/** What a row says of its state: the words in its status slot. A status label is text with no role of
+ *  its own, so it is read where the row puts it, as it reads. */
+const tags = (el: Element) =>
+  [...el.querySelectorAll('.re-status')].map((status) => status.textContent?.trim()).filter(Boolean);
 const opened = (): unknown => JSON.parse(localStorage.getItem(OPEN_KEY) ?? '[]');
 const button = (el: ParentNode, label: string) => {
   const found = [...el.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === label);

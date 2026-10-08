@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
@@ -121,14 +120,12 @@ describe('Account pools on /providers', { timeout: 30_000 }, () => {
       root.render(
         <QueryClientProvider client={client}>
           <MemoryRouter initialEntries={[at]}>
-            <AntApp>
-              <Probe />
-              <Routes>
-                <Route path="/providers" element={<ProvidersPage />} />
-                <Route path="/providers/pools/:id" element={<ProviderPoolPage />} />
-                <Route path="/providers/:id" element={<div>provider page</div>} />
-              </Routes>
-            </AntApp>
+            <Probe />
+            <Routes>
+              <Route path="/providers" element={<ProvidersPage />} />
+              <Route path="/providers/pools/:id" element={<ProviderPoolPage />} />
+              <Route path="/providers/:id" element={<div>provider page</div>} />
+            </Routes>
           </MemoryRouter>
         </QueryClientProvider>,
       );
@@ -286,7 +283,7 @@ describe('Account pools on /providers', { timeout: 30_000 }, () => {
       ]),
     ];
     await mount('/providers');
-    const tag = (label: string) => rowOf(label)?.querySelector('.ant-tag')?.textContent;
+    const tag = (label: string) => rowOf(label)?.querySelector('.pool-status')?.textContent;
     expect(tag('Work')).toBe('Running now');
     expect(tag('Home')).toBe('Available');
     expect(tag('Spare')).toBe(`Spent · resets ${formatResetTime(resets)}`);
@@ -325,7 +322,7 @@ describe('Account pools on /providers', { timeout: 30_000 }, () => {
     ];
     await mount('/providers');
     expect(section()!.querySelector('.re-head')?.textContent).toContain('2 of 4 accounts available');
-    const tag = (label: string) => rowOf(label)?.querySelector('.ant-tag')?.textContent;
+    const tag = (label: string) => rowOf(label)?.querySelector('.pool-status')?.textContent;
     const why = (label: string) => rowOf(label)?.querySelector('.pool-why')?.textContent ?? null;
     // In the words joining the pool is refused with.
     expect(tag('Team API key')).toBe('Unavailable');
@@ -352,7 +349,7 @@ describe('Account pools on /providers', { timeout: 30_000 }, () => {
     expect(stuck.querySelector('.re-head')?.textContent).toContain('0 of 2 accounts available');
     expect(stuck.querySelector('.pool-gauge')?.textContent).toBe('No account can run');
     // Switched off reads as that, not as the admission it would fail once back on.
-    expect(rowOf('Weekend')?.querySelector('.ant-tag')?.textContent).toBe('Disabled');
+    expect(rowOf('Weekend')?.querySelector('.pool-status')?.textContent).toBe('Disabled');
     expect(rowOf('Weekend')?.querySelector('.pool-why')).toBeNull();
 
     expect(empty.querySelector('.re-head')?.textContent).toContain('0 of 0 accounts available');
@@ -539,7 +536,7 @@ describe('Account pools on /providers', { timeout: 30_000 }, () => {
     ];
     await mount(`/providers/pools/${POOL_ID}`);
     expect(text()).toContain('Account pool · 2 of 3 accounts available');
-    expect(rowOf('Team API key')?.querySelector('.ant-tag')?.textContent).toBe('Unavailable');
+    expect(rowOf('Team API key')?.querySelector('.pool-status')?.textContent).toBe('Unavailable');
     expect(rowOf('Team API key')?.querySelector('.pool-why')?.textContent).toBe('Metered API key — no 5-hour window');
     await click(rowOf('Team API key')!.querySelector('button[aria-label="Remove Team API key from this pool"]'));
     expect(posted).toEqual([

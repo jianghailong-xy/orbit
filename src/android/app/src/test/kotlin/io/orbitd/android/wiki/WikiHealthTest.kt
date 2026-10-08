@@ -75,4 +75,12 @@ class WikiHealthTest {
         assertEquals("Maintenance failed 3 times", WikiHealthCopy.failed(3))
         assertEquals("View run", WikiModeCopy.viewRun)
     }
+
+    /** With maintenance off, a read of the repository that waits still says the runner: the case the fixture's
+     * "nothing waits on the offline runner" leaves out. A read one release apart is `WikiServerExecutionFixtureTest`'s. */
+    @Test fun aWaitingReadSaysTheRunnerWithMaintenanceOff() {
+        val waiting = WikiSpaceHealth.decode(Wire.json.parseToJsonElement("""{"spaceId":"s","entries":3,"maintenance":{"look":"off","enabled":false},
+            "repo":{"look":"runner_offline","pending":1},"executor":{"mode":"server","serverExecutes":true},"systemModel":{"state":"up"}}"""))
+        assertEquals("Maintenance off · ● Waiting for the runner to come online · Set up", WikiHealthLogic.text(WikiHealthLogic.parts(waiting, now)))
+    }
 }

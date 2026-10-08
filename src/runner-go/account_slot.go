@@ -266,15 +266,17 @@ func (kind accountSlotKind) create(name string) (accountSlot, error) {
 // removeAccount carries out one removal for whichever engine asked: the slot's directory and record
 // go, and so does everything this runner reads for that account — its usage probe is stopped with
 // the directory it reads, which is the one part of a removal that has to know the engine.
-func removeAccount(kind accountSlotKind, claudeUsage *claudeAccountUsage, codexUsage *codexAccountUsage, id string, liveDirs map[string]bool) error {
+func removeAccount(kind accountSlotKind, claudeUsage *claudeAccountUsage, codexUsage *codexAccountUsage, kimiUsage *kimiAccountUsage, id string, liveDirs map[string]bool) error {
 	switch kind.engine {
 	case providerClaude:
 		return removeClaudeAccount(claudeUsage, id, liveDirs)
 	case providerCodex:
 		return removeCodexAccount(codexUsage, id, liveDirs)
+	case providerKimi:
+		return removeKimiAccount(kimiUsage, id, liveDirs)
 	}
-	// Antigravity reads an account's quota with its status probe (usageStatus), and Kimi keeps no
-	// probe of an account's own, so nothing outlives the directory here.
+	// Antigravity reads an account's quota with its status probe (usageStatus), so nothing outlives the
+	// directory here.
 	return kind.remove(id, liveDirs)
 }
 

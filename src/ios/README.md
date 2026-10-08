@@ -83,10 +83,11 @@ with the macOS DMG job), using an App Store Connect API key for both signing
 
 **Cut a build**
 ```sh
-.claude/skills/release/release.sh 0.1.2   # pushes v0.1.2 → macOS DMG + iOS TestFlight
+.claude/skills/release/release.sh 0.1.2   # pushes v0.1.2 → macOS DMG + iOS TestFlight + Android APK
 ```
-iOS and macOS **share one `v*` tag** and one workflow (`release.yml`): pushing `vX.Y.Z` runs both its
-`dmg` and `testflight` jobs. The tag sets the marketing version — any `-beta.N` suffix is stripped
+iOS, macOS and Android **share one `v*` tag** and one workflow (`release.yml`): pushing `vX.Y.Z` runs
+its `dmg` and `testflight` jobs and the two Android jobs, which attach the signed APK to the same GitHub
+Release (`src/android/docs/release.md`). The tag sets the marketing version — any `-beta.N` suffix is stripped
 for iOS (`v0.1.2-beta.3` → TestFlight `0.1.2`, since `CFBundleShortVersionString` must be numeric);
 the build number is the commit count. To build iOS **only**, skip the tag and dispatch with the
 platform input: `gh workflow run release.yml --ref main -f platform=ios` (builds `0.1.0`).

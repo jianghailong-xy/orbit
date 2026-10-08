@@ -84,9 +84,9 @@ export interface ProviderChoice {
    *  since the pool beside it already runs on it. */
   inPool?: boolean;
   /** The runner's own accounts of this engine, when it has signed in more than one: offered under
-   *  its row, so a session can start on another account than its workspace's. Codex, Claude and
-   *  Antigravity — the engines whose CLI keeps a login per directory (Session.codexAccount,
-   *  Session.claudeAccount, Session.antigravityAccount). */
+   *  its row, so a session can start on another account than its workspace's. Codex, Claude,
+   *  Antigravity and Kimi — the engines whose CLI keeps a login per directory (Session.codexAccount,
+   *  Session.claudeAccount, Session.antigravityAccount, Session.kimiAccount). */
   accounts?: AccountChoice[];
   /** Not a provider at all: the offer to connect one (DeepSeek Harness with no key yet). Always
    *  `unavailable`, never a session's provider, so no runtime's menu lists it. */
@@ -261,8 +261,9 @@ function antigravityBlocker(state?: RunnerAntigravityState, health?: RunnerEngin
  * away. `configured` is expected to carry the pools too (poolsAsProviders), since that is where a
  * pool's models and runtime are resolved from; `pools` says which of its entries are pools.
  *
- * `planUsage` is the runner's quota report, read for each of its Codex and Claude accounts' own windows;
- * its Antigravity accounts' travel with `engineHealth` and are read from there (withEnginePlanUsage).
+ * `planUsage` is the runner's quota report, read for each of its Codex, Claude and Kimi accounts' own
+ * windows; its Antigravity accounts' travel with `engineHealth` and are read from there
+ * (withEnginePlanUsage).
  */
 export function providerChoices(
   configured: ConfiguredProvider[],

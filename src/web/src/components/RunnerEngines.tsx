@@ -1,7 +1,6 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Dropdown, Popconfirm, Tag, type MenuProps } from 'antd';
 import { DeleteOutlined, DownloadOutlined, EditOutlined, EllipsisOutlined, LoadingOutlined, LoginOutlined, PauseOutlined, PlayCircleOutlined, PlusOutlined, WarningOutlined } from '@ant-design/icons';
 import {
   accountToStartOn,
@@ -19,6 +18,10 @@ import {
 import { api } from '../api';
 import { accountIsPaused, usePauseClock } from '../lib/accountPause';
 import { AccountPauseActions, AccountPauseStatus, type AccountPauseControls } from './AccountPause';
+import { Badge } from './ui/Badge';
+import { Button } from './ui/Button';
+import { Menu, type MenuItem } from './ui/Menu';
+import { Popconfirm } from './ui/Popconfirm';
 import { routeId, encodeId } from '../lib/idCodec';
 import {
   accountDir,
@@ -328,35 +331,53 @@ function QuotaCell({ kind, quota, next }: { kind: RowKind; quota: Quota; next?: 
 }
 
 /** Routine account maintenance stays in one menu. The pause dialog lives outside the dropdown
- *  so closing the menu does not unmount the operation it just opened. */
-function RunnerAccountMenu({ onRename, onSignIn, onRemove, offline, removing, pause }: {
+ *  so closing the menu does not unmount the operation it just opened. `moreRef` is its button. */
+function RunnerAccountMenu({ onRename, onSignIn, onRemove, offline, removing, pause, moreRef }: {
   onRename?: () => void;
   onSignIn?: () => void;
   onRemove?: () => void;
   offline: boolean;
   removing?: boolean;
   pause?: { name: string; until?: string | null; endpoint: string };
+  moreRef?: RefObject<HTMLButtonElement | null>;
 }) {
+  // Rename opens the name's editor once the closing menu has handed focus back to More. Opened any
+  // sooner, the editor can mount in the same commit that removes the menu, whose focus return then
+  // still lands on More, blurring (and so closing) the editor.
+  const renameOnFocus = useRef(false);
+  const rename = () => {
+    renameOnFocus.current = true;
+    // Chosen before focus entered the menu: More still has it, so its return is made a real move.
+    if (moreRef?.current && document.activeElement === moreRef.current) moreRef.current.blur();
+  };
   const menu = (controls?: AccountPauseControls) => {
-    const items: MenuProps['items'] = [
-      ...(onRename ? [{ key: 'rename', icon: <EditOutlined aria-hidden />, label: 'Rename', onClick: onRename }] : []),
-      ...(onSignIn ? [{ key: 'login', icon: <LoginOutlined aria-hidden />, label: 'Re-sign in', disabled: offline, onClick: onSignIn }] : []),
+    const items: MenuItem[] = [
+      ...(onRename ? [{ key: 'rename', icon: <EditOutlined aria-hidden />, label: 'Rename', onSelect: rename }] : []),
+      ...(onSignIn ? [{ key: 'login', icon: <LoginOutlined aria-hidden />, label: 'Re-sign in', disabled: offline, onSelect: onSignIn }] : []),
       ...(controls ? controls.paused ? [
-        { key: 'resume', icon: <PlayCircleOutlined aria-hidden />, label: 'Resume now', disabled: controls.pending, onClick: controls.resume },
-        { key: 'duration', icon: <PauseOutlined aria-hidden />, label: 'Change pause duration…', disabled: controls.pending, onClick: controls.choose },
+        { key: 'resume', icon: <PlayCircleOutlined aria-hidden />, label: 'Resume now', disabled: controls.pending, onSelect: controls.resume },
+        { key: 'duration', icon: <PauseOutlined aria-hidden />, label: 'Change pause duration…', disabled: controls.pending, onSelect: controls.choose },
       ] : [
-        { key: 'pause', icon: <PauseOutlined aria-hidden />, label: 'Pause account…', disabled: controls.pending, onClick: controls.choose },
+        { key: 'pause', icon: <PauseOutlined aria-hidden />, label: 'Pause account…', disabled: controls.pending, onSelect: controls.choose },
       ] : []),
       ...(onRemove ? [
-        { type: 'divider' as const },
-        { key: 'remove', icon: <DeleteOutlined aria-hidden />, label: 'Remove account', danger: true, disabled: offline || removing, onClick: onRemove },
+        { type: 'separator' as const, key: 'divider' },
+        { key: 'remove', icon: <DeleteOutlined aria-hidden />, label: 'Remove account', danger: true, disabled: offline || removing, onSelect: onRemove },
       ] : []),
     ];
     if (items.length === 0) return null;
     return (
-      <Dropdown trigger={['click']} placement="bottomRight" menu={{ items }} classNames={{ root: 're-account-menu' }}>
-        <Button size="small" type="text" className="re-action re-more" icon={<EllipsisOutlined />} aria-label="More actions" title="More actions" />
-      </Dropdown>
+      <Menu
+        align="end"
+        popupClassName="re-account-menu"
+        items={items}
+        trigger={<Button ref={moreRef} size="small" variant="text" className="re-action re-more" icon={<EllipsisOutlined />} aria-label="More actions" title="More actions"
+          onFocus={() => {
+            if (!renameOnFocus.current) return;
+            renameOnFocus.current = false;
+            onRename?.();
+          }} />}
+      />
     );
   };
   return pause ? <AccountPauseActions {...pause}>{menu}</AccountPauseActions> : menu();
@@ -397,7 +418,7 @@ function FoldedAccounts({
     <>
       {signedOut > 0 ? (
         <div className="re-status">
-          <Tag color="orange">{signedOut} signed out</Tag>
+          <Badge tone="orange">{signedOut} signed out</Badge>
         </div>
       ) : account ? (
         <AccountPauseStatus until={account.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={statusOf(kind, quota, now)} />
@@ -530,7 +551,7 @@ function EngineRow({
     if (engine === 'antigravity' && kind !== 'missing' && kind !== 'installing' && kind !== 'install-failed') {
       if (googleLogin !== 'available') return null;
       if (kind === 'in' && !envKey) return null;
-      return <Button size="small" type="primary" disabled={offline} onClick={() => onSignIn(signIn === engine ? null : engine)}>Sign in with Google</Button>;
+      return <Button size="small" variant="primary" className="re-action" disabled={offline} onClick={() => onSignIn(signIn === engine ? null : engine)}>Sign in with Google</Button>;
     }
     if (offline) {
       // Nothing on an offline machine can be pressed. An engine with a sign-in still shows where
@@ -546,7 +567,7 @@ function EngineRow({
         );
       case 'installing':
         return (
-          <Button size="small" type="text" className="re-action" onClick={() => dismissInstall.mutate()}>
+          <Button size="small" variant="text" className="re-action" onClick={() => dismissInstall.mutate()}>
             Cancel
           </Button>
         );
@@ -568,7 +589,7 @@ function EngineRow({
         return loginEngine === null ? null : (
           <Button
             size="small"
-            type="primary"
+            variant="primary"
             className="re-action"
             onClick={() => onSignIn(signIn === engine ? null : engine)}
           >
@@ -968,28 +989,27 @@ function AccountRow({
   const toggle = () => onSignIn(signIn === panel ? null : panel);
   const expiring = envKey ? null : loginExpiresLine(account, now);
   // Removing deletes the slot's sign-in from the machine, and only signing in again brings it back:
-  // asked first, wherever it is offered.
-  const confirmRemove = (trigger: ReactNode, open?: boolean) => (
-    <Popconfirm
-      open={open}
-      trigger={open === undefined ? ['click'] : []}
-      onOpenChange={open === undefined ? undefined : setConfirmingRemove}
-      title={`Remove ${accountNameOf(account)}?`}
-      description={
-        `Its sign-in is deleted from ${runner.displayName || runner.name}. ` +
-        `Workspaces set to this account run on ${defaultName}.`
-      }
-      okText="Remove"
-      okButtonProps={{ danger: true }}
-      onConfirm={() => { remove.mutate(); setConfirmingRemove(false); }}
-    >
-      {trigger}
-    </Popconfirm>
-  );
+  // asked first, wherever it is offered — anchored to More once its menu has closed, or to the
+  // duplicate panel's own Remove.
+  const removeQuestion = {
+    title: `Remove ${accountNameOf(account)}?`,
+    description:
+      `Its sign-in is deleted from ${runner.displayName || runner.name}. ` +
+      `Workspaces set to this account run on ${defaultName}.`,
+    confirmText: 'Remove',
+    danger: true,
+    onConfirm: () => {
+      remove.mutate();
+      setConfirmingRemove(false);
+    },
+  };
+  const menuAnchor = useRef<HTMLSpanElement>(null);
+  const more = useRef<HTMLButtonElement>(null);
   const menu = (
     <RunnerAccountMenu
       offline={!runner.online}
       removing={removing}
+      moreRef={more}
       onRename={() => setEditing(true)}
       onSignIn={kind === 'in' && !envKey ? toggle : undefined}
       onRemove={isDefault ? undefined : () => setConfirmingRemove(true)}
@@ -1007,8 +1027,10 @@ function AccountRow({
         <div className="re-id-main" style={{ minWidth: 0 }}>
           <AccountName runner={runner} engine={engine} account={account} next={next} editing={editing} setEditing={setEditing} />
           {/* Where the account lives and which one it is — never who: the account's email and id
-              stay on the machine, and the fingerprint is a prefix of a non-reversible one. */}
+              stay on the machine, and the fingerprint is a prefix of a non-reversible one. A Kimi
+              account says its site first, which is each account's own (kimi.com or kimi.ai). */}
           <div className="re-meta" title={accountDir(account)}>
+            {engine === 'kimi' && account.kimiRegion && `${KIMI_SITE[account.kimiRegion].domain} · `}
             {tildePath(accountDir(account))}
             {account.fingerprintPrefix && ` · account ${account.fingerprintPrefix}…`}
           </div>
@@ -1016,7 +1038,7 @@ function AccountRow({
       </div>
       {removing ? (
         <div className="re-status">
-          <Tag color="processing" icon={<LoadingOutlined />}>Removing…</Tag>
+          <Badge tone="info" icon={<LoadingOutlined />}>Removing…</Badge>
         </div>
       ) : (
         <AccountPauseStatus until={account.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={statusOf(kind, quota, now)} />
@@ -1025,13 +1047,25 @@ function AccountRow({
       {envKey ? <div className="re-quota re-meta">env key · runs on your Gemini key</div> : <QuotaCell kind={kind} quota={quota} />}
       <div className="re-act">
         {kind !== 'in' && (
-          <Button size="small" className="re-action" type={runner.online ? 'primary' : 'default'} disabled={!runner.online || removing} onClick={toggle}>
+          <Button size="small" className="re-action" variant={runner.online ? 'primary' : 'default'} disabled={!runner.online || removing} onClick={toggle}>
             Sign in
           </Button>
         )}
         {/* Default is the machine's own login and cannot be removed. The confirmation for an
             added account stays anchored to More after its menu closes. */}
-        {isDefault ? menu : confirmRemove(<span className="re-menu-anchor">{menu}</span>, confirmingRemove)}
+        {isDefault ? menu : (
+          <>
+            <span ref={menuAnchor} className="re-menu-anchor">{menu}</span>
+            <Popconfirm
+              {...removeQuestion}
+              anchor={menuAnchor}
+              open={confirmingRemove}
+              onOpenChange={(open) => { if (!open) setConfirmingRemove(false); }}
+              onCancel={() => setConfirmingRemove(false)}
+              returnFocus={more}
+            />
+          </>
+        )}
       </div>
       {/* The same account, signed in twice. Two rows of quota for one account read as two quotas,
           so the repeat is named on the row that made it — with the one way out right there: this
@@ -1042,11 +1076,14 @@ function AccountRow({
             This is the same account as <b>{accountNameOf(duplicateOf)}</b> — signing in twice does
             not double the quota.
           </span>
-          {confirmRemove(
-            <button className="re-link" type="button" disabled={!runner.online || removing}>
-              Remove
-            </button>,
-          )}
+          <Popconfirm
+            {...removeQuestion}
+            trigger={
+              <button className="re-link" type="button" disabled={!runner.online || removing}>
+                Remove
+              </button>
+            }
+          />
         </div>
       )}
       {/* A login about to lapse, said before it does the way Claude Code says it, with the way to
@@ -1087,7 +1124,8 @@ function AccountRow({
 /**
  * "Add account": the same sign-in flow as every other here, started the moment the panel opens, under
  * a name the page picks (defaultAccountName). The runner gives the account a config directory of its
- * own, so Default — and the CLI in a terminal — is untouched.
+ * own, so Default — and the CLI in a terminal — is untouched. Kimi's waits for its site instead: the
+ * press on kimi.com or kimi.ai is what starts it, as on every Kimi sign-in card.
  *
  * The name stays editable throughout, and Enter or a click elsewhere saves it the way a row's rename
  * does (AccountName). That rename can only name an account the runner reports, which a new one is
@@ -1184,7 +1222,7 @@ function AddEngineAccount({
           spellCheck={false}
         />
       </label>
-      <RunnerSignIn runnerId={runnerId} engine={engine} accountName={name} autoStart onCancel={onClose} />
+      <RunnerSignIn runnerId={runnerId} engine={engine} accountName={name} autoStart={engine !== 'kimi'} onCancel={onClose} />
     </>
   );
 }
@@ -1276,7 +1314,7 @@ function RunnerEngineCard({
         </button>
         {(!runner.online || collapsed) && (
           <div className="re-runner-status">
-            {!runner.online && <Tag>Offline</Tag>}
+            {!runner.online && <Badge>Offline</Badge>}
             {collapsed && (
               <span className={`re-summary${failed ? ' warn' : ''}`}>
                 {failed && <WarningOutlined aria-hidden />}{summaryOf(runner)}
@@ -1351,7 +1389,7 @@ function RunnerEngineCard({
             This runner hasn&apos;t reported its engines yet. Update it to the latest version — an
             older runner can&apos;t be signed in or installed from here.
           </div>
-          <div className="re-row" data-engine="antigravity"><div className="re-id"><ProviderTile slug="antigravity" label="Antigravity" size={28} /><div className="re-name">Antigravity</div></div><Tag>Update runner</Tag><div className="re-login-note">Update this runner to sign in with Google.</div></div>
+          <div className="re-row" data-engine="antigravity"><div className="re-id"><ProviderTile slug="antigravity" label="Antigravity" size={28} /><div className="re-name">Antigravity</div></div><Badge>Update runner</Badge><div className="re-login-note">Update this runner to sign in with Google.</div></div>
         </>
       )}
     </div>
