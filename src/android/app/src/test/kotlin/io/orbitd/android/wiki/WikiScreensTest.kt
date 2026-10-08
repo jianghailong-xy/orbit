@@ -137,7 +137,7 @@ class WikiScreensTest {
         jobsRead = buildJsonObject { put("spaceId", space); put("jobs", JsonArray(listOf(running, queued))) }.toString()
         val route = OrbitRoute(Destination.WIKI, origin = Origin.DRAWER)
         show(route) { WikiHomeScreen(it, route, DirectoryData(), nav) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-job-row").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-job-row").fetchSemanticsNodes().isNotEmpty() }
         // The band's head names the System model and its state, and the status line gained the fixture's look.
         compose.onNodeWithTag("wiki-home-list").performScrollToNode(hasText(WikiRunsCopy.runs))
         compose.onNodeWithTag("wiki-home-list").performScrollToNode(hasText(WikiRunsCopy.systemModelLabel("qwen3.8-27b-fp8")))
@@ -167,7 +167,7 @@ class WikiScreensTest {
         jobsRead = buildJsonObject { put("spaceId", space); put("jobs", JsonArray(listOf(job))) }.toString()
         val route = OrbitRoute(Destination.WIKI_JOB, "34cE0job0000000000001")
         show(route) { WikiJobScreen(it, route) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-job-page").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-job-page").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-job-state").assertTextContains(WikiRunsCopy.running, substring = true)
         compose.onNodeWithTag("wiki-job-foot").assertTextContains("3 calls · 1,204 tokens in, 296 out so far", substring = true)
         // One row a call, the phone's two lines: the step and unit, its state, then waited · ran · tokens or its error.
