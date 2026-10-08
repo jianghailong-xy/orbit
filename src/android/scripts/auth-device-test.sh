@@ -55,7 +55,7 @@ if [[ -z "$serial" ]]; then
     emulator_pid=$!
   fi
 fi
-timeout 300 adb -s "$serial" wait-for-device
+timeout 300 "$adb_bin" -s "$serial" wait-for-device 9>&-
 deadline=$((SECONDS + 300))
 until [[ "$(adb -s "$serial" shell getprop sys.boot_completed | tr -d '\r')" == 1 ]]; do
   (( SECONDS < deadline )) || { echo 'Boot timed out' >&2; exit 1; }
