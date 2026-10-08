@@ -114,8 +114,12 @@ public enum WikiPlanCopy {
             + "and where each section’s material comes from. \(provider ?? WikiCopy.historyMaintenance) drafts it; nothing is written until you confirm it."
     }
 
-    /// Where a draft runs and how long it takes, under Draft plan (`wikiPlanEmptyNote`).
-    public static func emptyNote(where place: String?, provider: String?) -> String {
+    /// Where a draft runs and how long it takes, under Draft plan (`wikiPlanEmptyNote`), and the same line
+    /// while the server executes the account (`WIKI_PLAN_NOTE_SERVER`, owner's call 2026-10-08, mock 35's
+    /// Plan card): the wiki-worker drafts with the System model and the duration is not touched until P10.
+    public static let noteServer = "System model · about 1–2 hours"         // WIKI_PLAN_NOTE_SERVER
+    public static func emptyNote(where place: String?, provider: String?, serverExecutes: Bool) -> String {
+        if serverExecutes { return noteServer }
         let on = place.map { ", on \($0)" } ?? ""
         let with = provider.map { " with \($0)" } ?? ""
         return "Runs as a task in the Wiki maintenance list\(on)\(with) — usually 1–2 hours. Until you confirm a plan, the Wiki shows its topic articles."

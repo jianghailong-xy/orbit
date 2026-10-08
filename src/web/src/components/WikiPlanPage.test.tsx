@@ -51,6 +51,17 @@ function shared(): Shared {
 }
 
 const SHARED = shared();
+
+/** The server-execution fixture (P9): the empty page's line under Draft plan while the server drafts it. */
+function serverShared(): { plan: { note: string } } {
+  const path = [
+    resolve(process.cwd(), '../shared/src/wiki-server-execution.fixture.json'),
+    resolve(process.cwd(), 'src/shared/src/wiki-server-execution.fixture.json'),
+  ].find((candidate) => existsSync(candidate))!;
+  return JSON.parse(readFileSync(path, 'utf8')) as { plan: { note: string } };
+}
+
+const SERVER = serverShared();
 const SPACE_ID = '0196f000-0000-7000-8000-000000000001';
 const WORKSPACE_ID = '0196f000-0000-7000-8000-00000000000a';
 const RUNNER_ID = '0196f000-0000-7000-8000-00000000000b';
@@ -121,7 +132,18 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
   if (path === `${space}/articles`) return reply(200, { spaceId: SPACE_ID, categories: [], uncategorized: [] });
   if (path === `${space}/entries`) return reply(200, []);
   if (path === `${space}/timeline`) return reply(200, { items: [] });
-  if (path === `${space}/health`) return reply(404, {});
+  if (path === `${space}/health`) {
+    return serverExecutes
+      ? reply(200, {
+          spaceId: SPACE_ID, entries: 0,
+          maintenance: {
+            look: 'off', enabled: false, lastOkAt: null, lastRunAt: null, consecutiveFailures: 0, backlog: 0, oldestPendingAt: null,
+            lagSeconds: 0, dailyLimitReached: false, held: null, running: null, lastRun: null, lastFailure: null,
+          },
+          executor: { mode: 'canary', serverExecutes: true },
+        })
+      : reply(404, {});
+  }
   if (path.startsWith('/api/wiki/review')) {
     return reply(200, [
       {
@@ -137,6 +159,7 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
 }
 
 let phone = false;
+let serverExecutes = false;
 let container: HTMLDivElement;
 let root: Root;
 
@@ -146,6 +169,7 @@ beforeEach(() => {
   phone = false;
   plan = stateOf('none');
   runnerOnline = true;
+  serverExecutes = false;
   answers = {};
   writes.length = 0;
   mounted = false;
@@ -252,6 +276,13 @@ describe('the plan page, by what its job is doing', () => {
     // The owner's door only: nothing here speaks for a session.
     expect(Object.keys(writes[0].headers).filter((name) => /session/i.test(name))).toEqual([]);
     await vi.waitFor(() => expect(document.body.textContent).toContain('Redraft asked for — it runs as a Wiki maintenance task'));
+  });
+
+  it('with no plan while the server drafts it, names the System model under Draft plan (owner’s call 2026-10-08)', async () => {
+    serverExecutes = true;
+    await open('/wiki/orbit/plan');
+    await vi.waitFor(() => expect(planPage()?.querySelector('.wk-pl-empty')).toBeTruthy());
+    expect(text('.note', planPage().querySelector('.wk-pl-empty')!)).toEqual([SERVER.plan.note]);
   });
 
   it('says what a draft on its way is doing: queued, drafting, held — for the server’s reasons or the runner offline', async () => {

@@ -148,6 +148,7 @@ struct WikiPlanScreen: View {
                 .task {
                     await wiki.loadPlan()
                     await wiki.loadDocsDirectory()
+                    await wiki.loadSystemModel()
                     if let version = address.version { await wiki.loadPlanVersion(version) }
                 }
                 .refreshable { await wiki.loadPlan() }
@@ -220,7 +221,8 @@ struct WikiPlanScreen: View {
         })
         return WikiPlanPage(state: state, shown: shown, base: shown.flatMap { WikiPlanLogic.base(of: $0, in: state) }, versions: rows,
                             jobCard: card, written: written(wiki), whereItRuns: model.wikiMaintenanceWhere,
-                            provider: model.wikiMaintenanceProvider, busy: wiki.busy, refused: refused, actions: actions(wiki))
+                            provider: model.wikiMaintenanceProvider, serverExecutes: wiki.serverExecutes,
+                            busy: wiki.busy, refused: refused, actions: actions(wiki))
     }
 
     /// The version asked for, as the web's page reads it: none is the one shown first; a failed draft's

@@ -3,13 +3,13 @@ import XCTest
 @testable import OrbitKit
 
 /// The wiki under server execution says the web's words on the native pages (design §2.2, mock 35, P9): Activity's
-/// Runs — each run's row and each call's row of its log — the System model's five states, and the settings page and
-/// Set up while the server runs the account's wiki.
+/// Runs — each run's row and each call's row of its log — the System model's five states, the settings page and
+/// Set up while the server runs the account's wiki, and the plan's line under Draft plan (owner's call 2026-10-08).
 ///
 /// Three halves, each a failure — never an `XCTSkip` — when its counterpart goes missing:
 /// - the cases in `src/shared/src/wiki-server-execution.fixture.json`, which the web's `lib/wikiRuns.test.ts` reads too;
 /// - every word looked up as a declaration in the web file it mirrors (`lib/wikiRuns.ts`, `lib/wikiReviewMode.ts`,
-///   `lib/wikiHealth.ts`);
+///   `lib/wikiHealth.ts`, `lib/wikiPlan.ts`);
 /// - the read's limits and fields held to `contracts/wiki.contract.json` `jobs.read`, `jobs.executor.read` and
 ///   `systemModel.read`, and the models round-tripping every field the contract names.
 final class WikiServerExecutionCopyParityTests: XCTestCase {
@@ -17,6 +17,7 @@ final class WikiServerExecutionCopyParityTests: XCTestCase {
     private static let runsLib = "src/web/src/lib/wikiRuns.ts"
     private static let modeLib = "src/web/src/lib/wikiReviewMode.ts"
     private static let healthLib = "src/web/src/lib/wikiHealth.ts"
+    private static let planLib = "src/web/src/lib/wikiPlan.ts"
     private static let fixturePath = "src/shared/src/wiki-server-execution.fixture.json"
     private static let contractPath = "contracts/wiki.contract.json"
 
@@ -115,8 +116,13 @@ final class WikiServerExecutionCopyParityTests: XCTestCase {
             let cases: [Case]
             let calls: [Call]
         }
+        /// The plan's line under Draft plan while the server drafts it (owner's call 2026-10-08, mock 35's Plan card).
+        struct Plan: Decodable {
+            let note: String
+        }
         let now: String
         let settings: Settings
+        let plan: Plan
         let runs: Runs
     }
 
@@ -207,6 +213,26 @@ final class WikiServerExecutionCopyParityTests: XCTestCase {
             XCTAssertEqual(WikiModeCopy.modeNote(mode, server: false), WikiModeCopy.modeNote(mode))
         }
         XCTAssertEqual(WikiModeCopy.modeNote(.tiered, server: true), WikiModeCopy.modeNote(.tiered))
+    }
+
+    /// The plan's line under Draft plan: the System model's while the server drafts it, and the runner's own
+    /// word for word when it does not — the same line the web's Plan card and empty plan draw.
+    func testThePlanSaysTheFixturesLineUnderDraftPlan() throws {
+        let shared = try fixture()
+        XCTAssertEqual(WikiPlanCopy.noteServer, shared.plan.note)
+        XCTAssertEqual(WikiPlanCopy.emptyNote(where: "orbit · wikova", provider: "local-vllm", serverExecutes: true), shared.plan.note)
+        XCTAssertEqual(WikiPlanCopy.emptyNote(where: nil, provider: nil, serverExecutes: true), shared.plan.note)
+        // Under runner nothing moved: the provider, the place and the usual hours, as `wiki-docs.fixture.json` holds.
+        XCTAssertEqual(WikiPlanCopy.emptyNote(where: "orbit · wikova", provider: "local-vllm", serverExecutes: false),
+                       "Runs as a task in the Wiki maintenance list, on orbit · wikova with local-vllm — usually 1–2 hours."
+                           + " Until you confirm a plan, the Wiki shows its topic articles.")
+        // The web says the same line, from the same fixture: the constant, the card's choice and the empty page's.
+        let lib = try web(Self.planLib)
+        assertDeclared(lib, Self.planLib, [("WIKI_PLAN_NOTE_SERVER", WikiPlanCopy.noteServer)])
+        XCTAssertTrue(lib.contains("context.serverExecutes ? WIKI_PLAN_NOTE_SERVER : `${context.provider ?? WIKI_HISTORY_MAINTENANCE} · about 1–2 hours`"),
+                      "the web's Plan card no longer takes the server's line under server execution")
+        XCTAssertTrue(lib.contains("if (serverExecutes) return WIKI_PLAN_NOTE_SERVER;"),
+                      "the web's empty plan no longer takes the server's line under server execution")
     }
 
     // MARK: the web's declarations

@@ -8,6 +8,11 @@
     "`WikiServerExecutionCopyParityTests` (`WikiRunsCopy`, `WikiRunsLogic`, `WikiModeCopy`), so the two ends cannot drift into",
     "two sentences. The status line's server reasons are cases of `wiki-health.fixture.json`, the line's own fixture.",
     "",
+    "`plan.note` is the line beside Draft plan while the server executes the account — on Activity's Plan card and on the",
+    "plan's empty card, which the web reads in `lib/wikiPlan.ts` (`wikiPlanCard`, `wikiPlanEmptyNote`) and OrbitKit in",
+    "`WikiPlanCopy` (`noteServer`, `emptyNote`). Under runner both keep the line they always had, `<provider> · about",
+    "1–2 hours`, which is not this file's.",
+    "",
     "Times are read at `now`. A run case is a `GET /api/wiki/spaces/:id/jobs` job and the row the Runs card draws for it:",
     "`kind`, `state` and `text` (what follows the state, ` · ` between its parts), `mark`, `tone` and `when`. A call case is",
     "one of its `requests` and the log's row: `call`, `state`, `retries`, `tone`, `waited`, `ran`, `tokens`, the phone's",
@@ -94,6 +99,9 @@
         "tone": "error"
       }
     ]
+  },
+  "plan": {
+    "note": "System model · about 1–2 hours"
   },
   "runs": {
     "title": "Runs",

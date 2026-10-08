@@ -28,6 +28,7 @@ import { WikiSourceCard } from './WikiSources';
 import {
   wikiDocsQuery,
   wikiEntriesQuery,
+  wikiHealthQuery,
   wikiPlanQuery,
   wikiPlanVersionQuery,
   wikiPlanVersionsQuery,
@@ -213,6 +214,9 @@ function usePlanPage(spaceId: string) {
   const directory = useQuery(wikiDocsQuery(spaceId));
   const space = useQuery(wikiSpaceQuery(spaceId));
   const maintenance = useWikiMaintenanceWhere(space.data);
+  // Whether the server drafts the plan instead of a session on the maintenance provider (`health.executor`,
+  // P9): the empty page's line under Draft plan names the System model while it does (owner's call 2026-10-08).
+  const health = useQuery(wikiHealthQuery(spaceId));
   const plan = state.data;
   const failed = plan ? wikiPlanFailedJob(plan) : null;
   const failedNumber = plan && failed ? wikiPlanNextVersion(plan) : null;
@@ -240,7 +244,8 @@ function usePlanPage(spaceId: string) {
   }, [plan, shown]);
 
   const docs = directory.data?.plan ? directory.data.docs : null;
-  return { asked, state, plan, versions, directory, docs, space, maintenance, failed, failedNumber, shown, base, loading: state.isPending || (stored !== null && other.isPending) };
+  const serverExecutes = health.data?.executor?.serverExecutes === true;
+  return { asked, state, plan, versions, directory, docs, space, maintenance, serverExecutes, failed, failedNumber, shown, base, loading: state.isPending || (stored !== null && other.isPending) };
 }
 
 export function WikiPlanRoute({
@@ -389,7 +394,7 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
 
       {card && <PlanJobCard card={card} spaceSlug={spaceSlug} solo={!!shown && card.look === 'failed'} />}
       {!shown && !open && (
-        <PlanEmpty where={page.maintenance.where} provider={page.maintenance.provider} busy={draft.isPending} onDraft={onDraft} />
+        <PlanEmpty where={page.maintenance.where} provider={page.maintenance.provider} serverExecutes={page.serverExecutes} busy={draft.isPending} onDraft={onDraft} />
       )}
 
       {shown && (shown.status === 'draft' || shown.status === 'failed') && (
@@ -509,7 +514,19 @@ function PlanJobCard({ card, spaceSlug, solo }: { card: WikiPlanJobCard; spaceSl
 }
 
 /** No plan yet (mock 21 ⑨ A, 22 ①): what a plan is, Draft plan, and where and how long it runs. */
-function PlanEmpty({ where, provider, busy, onDraft }: { where: string | null; provider: string | null; busy: boolean; onDraft: () => void }) {
+function PlanEmpty({
+  where,
+  provider,
+  serverExecutes,
+  busy,
+  onDraft,
+}: {
+  where: string | null;
+  provider: string | null;
+  serverExecutes: boolean;
+  busy: boolean;
+  onDraft: () => void;
+}) {
   return (
     <div className="wk-pl-empty">
       <ProfileOutlined className="ic" />
@@ -518,7 +535,7 @@ function PlanEmpty({ where, provider, busy, onDraft }: { where: string | null; p
       <Button type="primary" loading={busy} onClick={onDraft}>
         {WIKI_PLAN_DRAFT}
       </Button>
-      <div className="note">{wikiPlanEmptyNote(where, provider)}</div>
+      <div className="note">{wikiPlanEmptyNote(where, provider, serverExecutes)}</div>
     </div>
   );
 }
