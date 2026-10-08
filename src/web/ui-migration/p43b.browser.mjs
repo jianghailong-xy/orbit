@@ -154,9 +154,12 @@ test.describe('P4.3b dependency graphs', () => {
     await capture('p43b-graph-settled-open', { strip });
 
     // A task opened from the full screen opens over the project page, and the full screen gets out of its way.
+    // The canvas re-opens centred on the last mark toggled, which can leave this one outside it: the whole
+    // project is fitted first, on every environment and on both trees.
     await maximize.click();
     await expect(full).toBeVisible();
-    await fitOnPhone(page, full, testInfo);
+    await full.getByRole('button', { name: 'Fit whole project in view' }).click();
+    await frames(page);
     await full.getByRole('link', { name: /^Capture browser baselines,/ }).click();
     await expect(full).toHaveCount(0);
     await expect(page.locator('.task-detail-panel')).toBeVisible();
