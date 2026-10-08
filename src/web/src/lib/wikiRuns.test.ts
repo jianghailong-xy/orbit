@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { WIKI_JOB_KINDS, WIKI_SYSTEM_MODEL_READ_STATES, type WikiJobCallView, type WikiJobView, type WikiSystemModelReadState } from '@orbit/shared';
 import {
   WIKI_CALL,
+  WIKI_CALLS,
   WIKI_CALL_RAN,
   WIKI_CALL_STATE,
   WIKI_CALL_TOKENS,
@@ -59,6 +60,7 @@ interface Fixture {
     title: string;
     none: string;
     kinds: Record<string, string>;
+    callsTitle: string;
     columns: string[];
     durations: Array<{ seconds: number; says: string }>;
     cases: Array<{ name: string; job: WikiJobView; kind: string; mark: string; tone: string; state: string; text: string; when: string; foot: string }>;
@@ -113,6 +115,7 @@ describe('a call\'s row says the fixture\'s words', () => {
 
   it('heads its columns as the fixture does', () => {
     expect([WIKI_CALL, WIKI_CALL_STATE, WIKI_CALL_WAITED, WIKI_CALL_RAN, WIKI_CALL_TOKENS]).toEqual(shared.runs.columns);
+    expect(WIKI_CALLS).toBe(shared.runs.callsTitle);
   });
 });
 

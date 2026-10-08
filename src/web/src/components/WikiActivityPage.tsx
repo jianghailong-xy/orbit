@@ -8,6 +8,7 @@ import { RECENT_DECISIONS, ReviewCard, TimelineRow, UsageCard, WikiDecisionRows,
 import { WikiDot } from './WikiMarks';
 import { WikiPlanBanners, WikiPlanCard } from './WikiPlanCard';
 import { WikiRunTimelineRow } from './WikiRunPage';
+import { WikiRunsCard } from './WikiRunsCard';
 import {
   wikiEntriesOfKindQuery,
   wikiEntriesQuery,
@@ -59,6 +60,9 @@ import { wikiProposalsBanner, wikiProposalsElsewhere, wikiProposalsWaiting, wiki
  *
  * WHAT IS NEW is what came after the reader last looked at this space (`wikiSeenKey(space, 'home')`, the
  * stamp the home keeps): those rows of Recently changed wear a blue dot and are counted beside its title.
+ *
+ * THE SERVER'S RUNS come after Review and Plan (mock 35 ④, P9): `WikiRunsCard`, drawn only while the server
+ * executes the account's wiki or has run something for the space — a run's detail is its call log there.
  */
 export function WikiActivityPage({
   space,
@@ -132,6 +136,7 @@ export function WikiActivityPage({
       <div className="wk-act-cards">
         <ReviewCard space={space} pending={pending} changesets={review.data ?? []} elsewhere={reviewElsewhere} />
         <WikiPlanCard space={space} />
+        <WikiRunsCard space={space} />
         <WikiCard
           title={WIKI_RECENT_DECISIONS}
           hint={WIKI_RECENT_DECISIONS_HINT}

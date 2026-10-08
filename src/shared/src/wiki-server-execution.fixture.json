@@ -107,6 +107,7 @@
       "maintain": "Maintenance",
       "smoke": "Model check"
     },
+    "callsTitle": "Calls",
     "columns": [
       "Call",
       "State",

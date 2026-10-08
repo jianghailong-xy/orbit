@@ -1,4 +1,5 @@
 import type { WikiJobCallView, WikiJobKind, WikiJobView, WikiSystemModelReadState } from '@orbit/shared';
+import { wikiActivityPath } from './wiki';
 import { wikiCount } from './wikiArticles';
 import { wikiAgo } from './wikiHealth';
 
@@ -46,7 +47,8 @@ export const wikiTokens = (count: number): string => `${wikiCount(count)} tokens
 export const wikiTook = (duration: string): string => `took ${duration}`;
 export const wikiStarted = (ago: string): string => `started ${ago}`;
 
-/** The call log's columns, and the words of a call's state. */
+/** The call log's columns, and the words of a call's state. `Calls` names the log itself (iOS heads its run page's section with it). */
+export const WIKI_CALLS = 'Calls';
 export const WIKI_CALL = 'Call';
 export const WIKI_CALL_STATE = 'State';
 export const WIKI_CALL_WAITED = 'Waited';
@@ -259,6 +261,10 @@ function firstLine(text: string | null | undefined): string | null {
   const line = (text ?? '').split('\n')[0]?.trim() ?? '';
   return line === '' ? null : line;
 }
+
+/** Activity with one run's call log open: where View run goes for a run the server's job made (it has no session). */
+export const wikiActivityRunPath = (spaceSlug: string, jobId: string): string =>
+  `${wikiActivityPath(spaceSlug)}?run=${encodeURIComponent(jobId)}`;
 
 /** Whether Activity draws the Runs card: the server runs this account's wiki, or ran something for the space. */
 export const wikiRunsShown = (serverExecutes: boolean, jobs: readonly WikiJobView[] | null | undefined): boolean =>
