@@ -12,6 +12,7 @@ import { WikiRepoOps } from './wiki-repo-ops';
 import { WikiModelRequestQueue } from './wiki-model-queue.service';
 import { WIKI_SYSTEM_MODEL_CONFIG, WikiModelStatusProbe } from './wiki-model-status';
 import { currentWikiSystemModel, type WikiSystemModelConfig } from './wiki-system-model';
+import { wikiVerifyJobRunner } from './wiki-verify-job';
 
 /**
  * Everything the wiki-worker process runs (contract `systemModel.service`, `jobs` and `modelQueue`): the
@@ -35,11 +36,13 @@ import { currentWikiSystemModel, type WikiSystemModelConfig } from './wiki-syste
  * THE PIPELINES WRITE THROUGH THE WIKI'S OWN SERVICES, not through their own queries (design §4.2): an import
  * proposes through WikiService, the same one writer the runner door's `imports` route calls, with origin
  * import; the `articles` job reads the plan and a topic's input and writes its articles through WikiArticles,
- * exactly as the runner door does, and asks for the space's snapshot through WikiRepoOps. The worker holds no
- * realtime hub and no push service — the services' own defaults are none — so what a job records is not
- * announced to a connected client by this process; realtime is an accelerant and never the truth (contract
- * `realtime.correctness`). What the pipelines' own kinds are is decided here too: the job kind map the
- * executor claims by is built with those services and the System model's name in it.
+ * exactly as the runner door does, and asks for the space's snapshot through WikiRepoOps; a verify job reads
+ * the verification list and records verdicts through WikiService, exactly as the runner door does, against the
+ * same evidence reader and the same one writer of a verdict. The worker holds no realtime hub and no push
+ * service — the services' own defaults are none — so what a job records is not announced to a connected client
+ * by this process; realtime is an accelerant and never the truth (contract `realtime.correctness`). What the
+ * pipelines' own kinds are is decided here too: the job kind map the executor claims by is built with those
+ * services and the System model's name in it.
  */
 @Module({
   imports: [PrismaModule],
@@ -61,6 +64,7 @@ import { currentWikiSystemModel, type WikiSystemModelConfig } from './wiki-syste
         ...WIKI_JOB_RUNNERS,
         import: wikiImportJobRunner({ prisma, wiki, repoOps, model: model.model, repoWake }),
         articles: wikiArticlesJobRunner({ prisma, articles, repoOps, repoWake, model: model.model ?? '' }),
+        verify: wikiVerifyJobRunner(wiki, model.model),
       }),
       inject: [PrismaService, WikiService, WikiRepoOps, WIKI_SYSTEM_MODEL_CONFIG, WikiRepoOpChannel, WikiArticles],
     },
