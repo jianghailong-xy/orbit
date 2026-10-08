@@ -309,6 +309,30 @@ describe('Settings → Shared links', { timeout: 60_000 }, () => {
     expect(shareDialogName()).toBe('Share project');
   });
 
+  it('a wiki row is the space by name, says Wiki and what it includes, and its Settings opens the Share dialog on that space', async () => {
+    const WIKI: ShareLink = {
+      ...sessionLink('orbit'),
+      kind: 'WIKI',
+      include: { footnotes: true },
+      root: { id: 'W1', title: 'orbit', slug: 'orbit' },
+    };
+    serve([WIKI]);
+    vi.mocked(getShareLink).mockResolvedValue({ link: WIKI, counts: { documents: 12, footnotes: 486 } });
+    await open();
+
+    const [row] = rows();
+    expect(row).toMatchObject({ title: 'orbit', where: 'Wiki', chips: ['Documents', 'Footnotes'], actions: ['Copy', 'Settings', 'Turn off'] });
+    const wiki = page().querySelector<HTMLElement>('.shared-link-row[data-kind="WIKI"]')!;
+    expect(wiki.querySelector('.shared-link-kind')?.textContent).toBe('W');
+    // Footnotes can carry command output and file contents: its chip is the one to notice.
+    expect(wiki.querySelector('.shared-link-chip.is-warn')?.textContent).toBe('Footnotes');
+    await click([...wiki.querySelectorAll('.ant-btn')].find((b) => b.textContent?.trim() === 'Settings'), 'Settings');
+
+    await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"].share-dialog')).not.toBeNull());
+    expect(getShareLink).toHaveBeenCalledWith('WIKI', 'W1');
+    expect(shareDialogName()).toBe('Share wiki');
+  });
+
   it('Settings opens the Share dialog on that link’s session', async () => {
     serve(LINKS);
     vi.mocked(getShareLink).mockResolvedValue({ link: RECENT, counts: { messages: 12, toolCalls: 40 } });

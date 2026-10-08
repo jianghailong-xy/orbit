@@ -291,7 +291,7 @@ const HTTP_RUNNER = { id: AT_BUCKET[50], ownerId: randomUUID() };
       useValue: {
         runner: {
           findFirst: async ({ where }: { where: { tokenHash: string } }) =>
-            where.tokenHash === sha256(HTTP_TOKEN) ? HTTP_RUNNER : null,
+            where.tokenHash === sha256(HTTP_TOKEN) ? { ...HTTP_RUNNER, owner: { disabledAt: null } } : null,
         },
       },
     },

@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import { request as httpRequest, type IncomingHttpHeaders, type IncomingMessage, type OutgoingHttpHeaders } from 'node:http';
 import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
 import { AgentProvider } from '@orbit/shared';
+import { ACCOUNT_DISABLED } from '../auth/disabled-accounts';
 import { sha256 } from '../common/crypto.util';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { PrismaService } from '../prisma/prisma.service';
@@ -166,8 +167,9 @@ export interface Answer {
  * What it decides, and nothing more:
  * - WHO (`caller`, for a person's token, `orbit-gw-`): the token's hash names one (pool, person,
  *   session); a token revoked or expired, a session no longer open, a session moved to another provider,
- *   a person gone from the pool or a pool deleted — the last two delete the token row itself — is 401. The
- *   pool may be a shared one or one of somebody's own its owner added the person to (migration 0358).
+ *   a person gone from the pool or a pool deleted — the last two delete the token row itself — is 401. A
+ *   good token of an account an administrator disabled is 403 ACCOUNT_DISABLED, as its runner credential
+ *   is. The pool may be a shared one or one of somebody's own its owner added the person to (migration 0358).
  * - WHAT: only the ALLOWED paths; anything else is 403 (gatewayAllows, asked by the controller).
  * - WHICH KEY (`forward`): `session.pool_key_id`, as the claim chose it (QueueService.resolveSharedPool,
  *   and resolveLoginPool for an owner's session none of whose pool's accounts can run). The gateway
@@ -270,10 +272,12 @@ export class PoolGatewayService {
 
   /**
    * A person's token's (pool, person, session) and what the session runs on, when the token may still be
-   * used; null for every way it may not. The pool is a Codex pool the person is one of the people of — the
-   * token's own key says so — whether a shared one or one of somebody's own (migration 0358).
+   * used; ACCOUNT_DISABLED when it may but for its person's account, which an administrator disabled
+   * (docs/google-sign-in-design.md §5.5); null for every other way it may not. The pool is a Codex pool the
+   * person is one of the people of — the token's own key says so — whether a shared one or one of somebody's
+   * own (migration 0358).
    */
-  async caller(token: string | undefined): Promise<GatewayCaller | null> {
+  async caller(token: string | undefined): Promise<GatewayCaller | typeof ACCOUNT_DISABLED | null> {
     if (!token || !token.startsWith('orbit-gw-')) return null;
     const row = await this.prisma.poolGatewayToken.findUnique({
       where: { tokenHash: sha256(token) },
@@ -287,7 +291,7 @@ export class PoolGatewayService {
         session: {
           select: {
             status: true, ownerId: true, provider: true, poolKeyId: true, poolCodexAccountId: true,
-            completedAt: true, deletedAt: true,
+            completedAt: true, deletedAt: true, owner: { select: { disabledAt: true } },
           },
         },
       },
@@ -303,18 +307,20 @@ export class PoolGatewayService {
       session.ownerId === row.userId &&
       // A session moved onto another provider since: its old tokens name a pool it no longer runs on.
       session.provider === pool.slug;
-    return current
-      ? {
-          poolId: row.poolId,
-          poolLabel: pool.label,
-          poolOwnerId: pool.ownerId,
-          userId: row.userId,
-          sessionId: row.sessionId,
-          sessionOwnerId: session.ownerId,
-          accountId: session.poolCodexAccountId,
-          keyId: session.poolKeyId,
-        }
-      : null;
+    if (!current) return null;
+    // The session's owner is the token's person (above). Asked last, as the runner credential asks it:
+    // the token itself is good, and works again once the account is enabled.
+    if (session.owner.disabledAt) return ACCOUNT_DISABLED;
+    return {
+      poolId: row.poolId,
+      poolLabel: pool.label,
+      poolOwnerId: pool.ownerId,
+      userId: row.userId,
+      sessionId: row.sessionId,
+      sessionOwnerId: session.ownerId,
+      accountId: session.poolCodexAccountId,
+      keyId: session.poolKeyId,
+    };
   }
 
   private keyOf(poolId: string, keyId: string): Promise<GatewayKey | null> {

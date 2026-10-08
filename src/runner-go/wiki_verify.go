@@ -75,6 +75,11 @@ var wikiVerifyVerdicts = []string{"supported", "partial", "unsupported", "duplic
 const (
 	wikiVerifyReasonMaxChars = 500
 	wikiVerifyPageSize       = 20
+	// How often a run waiting on the server's own verification re-reads the list, and how long it waits
+	// in all: as long as one verifier call was allowed, which is what a session running its own verifier
+	// would have spent before reporting an op without a verdict.
+	wikiVerifyServerPollInterval = 5 * time.Second
+	wikiVerifyServerWait         = wikiVerifyCallTimeout
 	// A verdict from a local model is slow: decoding runs at tens of tokens a second, three times
 	// slower when the GPU is shared. One op may take this long before it counts as a failure.
 	wikiVerifyCallTimeout = 15 * time.Minute
@@ -100,6 +105,13 @@ var wikiVerifyEfforts = []string{"low", "medium", "high", "xhigh", "max"}
 // wikiVerifyClaudeBinary is the Claude Code a test drives instead of the one this machine runs.
 // Empty in the product.
 var wikiVerifyClaudeBinary = ""
+
+// What a run waiting on the server's own verification waits in all and how often it looks: the numbers
+// above in the product, and a test's own where one drives the wait rather than the clock.
+var (
+	wikiVerifyServerWaitFor = wikiVerifyServerWait
+	wikiVerifyServerPollFor = wikiVerifyServerPollInterval
+)
 
 // wikiVerifyConfig is the model a run verifies with, as the session's provider named it, and the
 // effort it was asked to think with: none unless --effort names one.
@@ -140,6 +152,12 @@ type wikiVerificationPage struct {
 	Mode    string                 `json:"mode"`
 	Items   []wikiVerificationItem `json:"items"`
 	Next    string                 `json:"next"`
+	// ServedBy is "server" where this deployment's own worker verifies the ops that wait (contract
+	// `reviewModes.verification.servedBy`): the list carries no items then — the material is not this
+	// session's to read and no model of its provider is to be asked — and Waiting says how many of its ops
+	// are waiting, so this command can wait for them to clear instead of running a verifier.
+	ServedBy string `json:"servedBy"`
+	Waiting  int    `json:"waiting"`
 }
 
 // wikiVerificationItem is one op that waits for its verdict, as the server hands it to a verifier.
@@ -190,6 +208,10 @@ type wikiVerifySummary struct {
 	Failed      int                 `json:"failed"`
 	Failures    []wikiVerifyFailure `json:"failures"`
 	Stopped     string              `json:"stopped,omitempty"`
+	// ServedBy is "server" when this run waited for the deployment's own worker to verify instead of asking
+	// a model (contract `reviewModes.verification.servedBy`): the verdicts are the server's, and Looked and
+	// Verified count the ops it was waiting on.
+	ServedBy string `json:"servedBy,omitempty"`
 	// What the verdicts cost, as Claude Code reported it: a maintenance run adds it to its own spend.
 	Usage wikiModelUsage `json:"usage"`
 }
@@ -224,20 +246,52 @@ var (
 	wikiAdoptedVerifications = wikiVerifyDoor{route: "maintenance/verifications", command: "orbit wiki maintain"}
 )
 
+// wikiVerifyServedByServer reads one page of the list to learn who verifies for this session (contract
+// `reviewModes.verification.servedBy`): a page that says `servedBy: server` means this run waits for the
+// deployment's own worker and asks no model — the same page runWikiVerify reads again, one GET spent so
+// that nothing of the session's provider is touched before that is known.
+func wikiVerifyServedByServer(t *Transport, sessionID, spaceID string) (bool, error) {
+	raw, err := t.listWikiVerifications(wikiOwnVerifications.route, sessionID, spaceID, "", 1)
+	if err != nil {
+		return false, wikiCallError(wikiOwnVerifications.command, err)
+	}
+	var page wikiVerificationPage
+	if err := json.Unmarshal(raw, &page); err != nil {
+		return false, fmt.Errorf("%s: the server's list is not the shape this build reads: %w", wikiOwnVerifications.command, err)
+	}
+	return page.ServedBy != "", nil
+}
+
 // runWikiVerify verifies the ops the calling session proposed into spaceID, one at a time, and
 // reports each verdict as soon as it is read. refused says, by op id, why the model's answer in an
 // earlier pass was not a verdict (nil on a first pass). Progress lines go to progress as they happen.
 func runWikiVerify(t *Transport, sessionID, spaceID string, cfg wikiVerifyConfig, max int, refused map[string]string, progress io.Writer) (wikiVerifySummary, error) {
 	summary := wikiVerifySummary{SpaceID: spaceID, Model: cfg.model, Failures: []wikiVerifyFailure{}}
-	claude, err := wikiVerifyClaudePath()
-	if err != nil {
+	// WHOSE VERIFIER THIS IS, ASKED ONLY WHERE IT CAN BE THE SERVER'S. A caller that has a provider to
+	// hand (`cfg.baseURL` set: a maintenance run, or the CLI in runner mode) is the verifier, and nothing of
+	// this is asked of the door before the list is read. A caller with none — the CLI, which reads the
+	// provider lazily because where the server verifies it needs none — asks who verifies first, so that a
+	// server-served run touches nothing of the session's: no Claude Code located, no endpoint probed.
+	served := false
+	var err error
+	if cfg.baseURL == "" {
+		if served, err = wikiVerifyServedByServer(t, sessionID, spaceID); err != nil {
+			return summary, err
+		}
+	}
+	claude := ""
+	if !served {
+		if claude, err = wikiVerifyClaudePath(); err != nil {
+			return summary, err
+		}
+		if err = wikiVerifyEndpointUp(cfg.baseURL); err != nil {
+			return summary, err
+		}
+	}
+	if err = verifyWikiOps(t, wikiOwnVerifications, sessionID, spaceID, cfg, claude, max, refused, &summary, progress); err != nil {
 		return summary, err
 	}
-	if err := wikiVerifyEndpointUp(cfg.baseURL); err != nil {
-		return summary, err
-	}
-	err = verifyWikiOps(t, wikiOwnVerifications, sessionID, spaceID, cfg, claude, max, refused, &summary, progress)
-	return summary, err
+	return summary, nil
 }
 
 // verifyWikiOps verifies the ops door lists, page by page, at most max of them (0: every one), and
@@ -256,6 +310,9 @@ func verifyWikiOps(t *Transport, door wikiVerifyDoor, sessionID, spaceID string,
 			return fmt.Errorf("%s: the server's list is not the shape this build reads: %w", door.command, err)
 		}
 		summary.Mode = page.Mode
+		if page.ServedBy != "" {
+			return waitForServerVerification(t, door, sessionID, spaceID, page, summary, progress)
+		}
 		if page.Mode != "automatic" {
 			if len(page.Items) > 0 {
 				summary.Stopped = fmt.Sprintf("the space is %s now, not automatic: its ops keep waiting for their verification "+
@@ -280,6 +337,58 @@ func verifyWikiOps(t *Transport, door wikiVerifyDoor, sessionID, spaceID string,
 			return nil
 		}
 		after = page.Next
+	}
+}
+
+// waitForServerVerification waits for this deployment's own worker to verify the ops this session
+// proposed, instead of asking a model (contract `reviewModes.verification.servedBy`): what `orbit wiki
+// verify` does where the list answered `servedBy: server` — the ops are the wiki worker's to verify with
+// the System model, and no model of the session's provider is asked about them.
+//
+// IT ASKS ONCE FIRST (routes.request): one queued job per session and space, so this is a no-op where the
+// submission's own trigger already made one, and the request the only way back for ops whose job was lost
+// (a space verified while the worker was down, a job swept after too many infra failures). Then it reads the
+// list until nothing of the session's waits (waiting reaches zero) or the wait runs out: what is still
+// waiting then is reported as an op left without a verdict, exactly as a run that could not read one is, and
+// the command exits non-zero so whatever asked for it tries again.
+func waitForServerVerification(t *Transport, door wikiVerifyDoor, sessionID, spaceID string, page wikiVerificationPage, summary *wikiVerifySummary, progress io.Writer) error {
+	summary.ServedBy = "server"
+	summary.Looked = page.Waiting
+	fmt.Fprintf(progress, "The server verifies the ops this session proposed in space %s: waiting for %s to be verified "+
+		"(no model is asked here).\n", spaceID, wikiCount(summary.Looked, "op", "ops"))
+	if _, err := t.requestWikiVerification(sessionID, spaceID); err != nil {
+		return wikiCallError(door.command, err)
+	}
+	deadline := time.Now().Add(wikiVerifyServerWaitFor)
+	for {
+		raw, err := t.listWikiVerifications(door.route, sessionID, spaceID, "", wikiVerifyPageSize)
+		if err != nil {
+			return wikiCallError(door.command, err)
+		}
+		var now wikiVerificationPage
+		if err := json.Unmarshal(raw, &now); err != nil {
+			return fmt.Errorf("%s: the server's list is not the shape this build reads: %w", door.command, err)
+		}
+		if now.ServedBy == "" {
+			// The switch moved while this ran: the session is its own verifier again, and this run says so
+			// rather than reporting verdicts it never waited for.
+			return fmt.Errorf("%s: this deployment no longer verifies on the server for this account: run it again "+
+				"and it verifies with this session's own model", door.command)
+		}
+		summary.Mode = now.Mode
+		if now.Waiting == 0 {
+			summary.Verified = summary.Looked
+			fmt.Fprintf(progress, "The server verified %s in space %s.\n", wikiCount(summary.Verified, "op", "ops"), spaceID)
+			return nil
+		}
+		if time.Now().After(deadline) {
+			summary.Failed = now.Waiting
+			summary.Failures = append(summary.Failures, wikiVerifyFailure{OpID: "", Why: fmt.Sprintf(
+				"still waiting for the server's verdict after %s, so nothing was reported for it", wikiVerifyServerWaitFor)})
+			return fmt.Errorf("%s left without a verdict after %s: the server is still verifying them, and the next run "+
+				"tries them again", wikiCount(now.Waiting, "op was", "ops were"), wikiVerifyServerWaitFor)
+		}
+		time.Sleep(wikiVerifyServerPollFor)
 	}
 }
 
@@ -882,11 +991,6 @@ func cliWikiVerify(args []string, out io.Writer, ctx cliOrchestrationContext) er
 	if level != "" && !slices.Contains(wikiVerifyEfforts, level) {
 		return fmt.Errorf("--effort must be one of %s; leave it out and the model does not think", strings.Join(wikiVerifyEfforts, ", "))
 	}
-	cfg, err := wikiVerifyConfigFromEnv(*model)
-	if err != nil {
-		return err
-	}
-	cfg.effort = level
 	t, err := cliTransport()
 	if err != nil {
 		return err
@@ -894,6 +998,21 @@ func cliWikiVerify(args []string, out io.Writer, ctx cliOrchestrationContext) er
 	progress := out
 	if *jsonOut {
 		progress = io.Discard
+	}
+	// THE PROVIDER IS READ ONLY WHERE THIS SESSION IS THE VERIFIER. Where the deployment verifies on the
+	// server for this account (contract `reviewModes.verification.servedBy`), this command asks and waits
+	// and asks no model of its own — so a session on a provider that names no endpoint, token or model can
+	// still let the server verify what it proposed, which is exactly what that mode is for.
+	served, err := wikiVerifyServedByServer(t, ctx.sessionID, spaceID)
+	if err != nil {
+		return err
+	}
+	cfg := wikiVerifyConfig{}
+	if !served {
+		if cfg, err = wikiVerifyConfigFromEnv(*model); err != nil {
+			return err
+		}
+		cfg.effort = level
 	}
 	summary, runErr := runWikiVerify(t, ctx.sessionID, spaceID, cfg, *max, nil, progress)
 	if *jsonOut {
@@ -921,8 +1040,19 @@ func cliWikiVerify(args []string, out io.Writer, ctx cliOrchestrationContext) er
 }
 
 func describeWikiVerifySummary(s wikiVerifySummary) string {
-	if s.Looked == 0 && s.Stopped == "" {
+	if s.Looked == 0 && s.Stopped == "" && s.ServedBy == "" {
 		return fmt.Sprintf("Nothing this session proposed waits for its verification in space %s.", s.SpaceID)
+	}
+	if s.ServedBy == "server" {
+		line := fmt.Sprintf("Verified %d of %d by the server's own worker in space %s", s.Verified, s.Looked, s.SpaceID)
+		if s.Failed > 0 {
+			line += fmt.Sprintf("; %d still waiting for its verdict", s.Failed)
+		}
+		line += ". No model of this session's was asked."
+		if s.Stopped != "" {
+			line += " Stopped: " + s.Stopped + "."
+		}
+		return line
 	}
 	line := fmt.Sprintf("Verified %d of %d with %s in space %s: %d supported, %d partial, %d unsupported, %d duplicate",
 		s.Verified, s.Looked, s.Model, s.SpaceID, s.Supported, s.Partial, s.Unsupported, s.Duplicate)

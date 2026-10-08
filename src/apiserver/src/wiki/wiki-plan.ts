@@ -202,7 +202,7 @@ const UNSEEN = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Zs}]/gu;
  * principle, convention, decision, …» read as decision refused for not being decision, three rounds
  * running. The runner's gate writes the same (wiki_verify.go `wikiQuote`).
  */
-function quoted(value: string): string {
+export function quoted(value: string): string {
   return JSON.stringify(value).replace(UNSEEN, (c) =>
     c === ' ' ? c : Array.from({ length: c.length }, (_, i) => `\\u${c.charCodeAt(i).toString(16).padStart(4, '0')}`).join(''));
 }
@@ -217,7 +217,7 @@ const WRAPPERS: ReadonlyArray<readonly [string, string]> = [['`', '`'], ['"', '"
  * is no wrapped value, and a value that is not in the set is still refused. The runner's gate reads the
  * same (wiki_verify.go `wikiUnwrap`).
  */
-function unwrapped(value: string): string {
+export function unwrapped(value: string): string {
   let text = value.trim();
   for (;;) {
     const pair = WRAPPERS.find(([open, close]) => {

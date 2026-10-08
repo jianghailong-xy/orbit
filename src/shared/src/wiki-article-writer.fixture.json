@@ -1,0 +1,3035 @@
+{
+  "about": [
+    "One topic the runner and the server write the same way (contracts/wiki.contract.json `articles`, `jobs.kindRuns.articles`).",
+    "The runner's `orbit wiki articles` (src/runner-go/wiki_articles_test.go, TestWikiArticleAsksWhatTheServerAsks) and the",
+    "server's `articles` job (src/apiserver/src/wiki-worker/wiki-articles-job.spec.ts, wiki-articles-writer.spec.ts) are each run",
+    "on `topics` with the model answering as `model` says, and each must ask exactly `calls` — every prompt, word for word,",
+    "by the unit the server files it under — and group the big topic exactly as `groups` says, entry for entry.",
+    "",
+    "`model`: the nth prompt that asks for a group's name is answered `names[n]` wrapped as a model wraps a short answer",
+    "(`好的，这组的小标题是：\\n「…」`); a prompt that asks for an article again (`A previous draft kept only`) is answered",
+    "`article`; any other prompt for an article titled `shortFor` is answered `short` (so that topic is asked twice), and every",
+    "other article `article`, which keeps more than rules.minChars.",
+    "",
+    "`calls` and `groups` are written by the runner: `go test -run TestWikiArticleAsksWhatTheServerAsks",
+    "-update-wiki-article-writer-fixture` from src/runner-go. Change a prompt on one side and the other side's test says so."
+  ],
+  "calls": {
+    "database": {
+      "part-0": "Write a wiki article titled \"数据库与 Prisma\", using ONLY the numbered knowledge entries below.\n\nFormat (Markdown, in Chinese; keep code identifiers, paths and commands verbatim in backticks):\n- first line: \"# \" + a concise article title\n- a lead paragraph of 2-3 sentences: what this area is about and its most important rules and traps\n- then 2-4 sections \"## heading\" of 2-3 sentences each that group the knowledge (for example 约定 / 决策 / 常见的坑 / 做法 / 概念 — choose what fits)\nRules:\n- EVERY sentence must end with one or more footnote markers such as [3] or [3][7], the numbers of the entries it is based on. A sentence without a marker will be deleted.\n- State only what the entries say; do not invent facts, versions, dates, numbers or paths. If entries disagree, say so and cite both.\n- Prefer the most important and most corroborated entries (more sources = more corroborated); you need not cite every entry.\n- Mark a trap that an entry says is fixed as 已修.\n- LENGTH: 450-800 Chinese characters in total, 8-11 sentences, one point per sentence. Anything past 900 characters is cut off.\nOutput only the Markdown article.\n\nENTRIES:\n[1] (pitfall, 20 sources) 归主题先看路径 第 1 条 —— 归主题先看路径：FOR NO KEY UPDATE，要先读再改。 | symptom: 归主题先看路径 第 1 条时出错。 | cause: 顺序不对。 | fix: 按顺序来。\n[2] (convention, 20 sources) entrySetSha256 第 2 条 —— entrySetSha256：WIKI_ARTICLE_STALE，看清楚再提交。 | rule: entrySetSha256 第 2 条。 | exceptions: 迁移脚本除外。\n[3] (decision, 20 sources) FOR NO KEY UPDATE 第 3 条 —— FOR NO KEY UPDATE：WIKI_ARTICLE_STALE，要先读再改。 | decision: FOR NO KEY UPDATE 第 3 条。 | alternatives: 每个空间各自限流（没有全局上限）; 不限（GPU 会被压满） | consequences: 队列要持久化。\n[4] (recipe, 19 sources) entrySetSha256 第 4 条 —— entrySetSha256：写入前核对指纹，要先读再改。 | steps: bash scripts/worktree-overlay.sh; bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki.service.ts | verify: {\"command\":\"npm test \\u0026\\u0026 echo \\\"\\u003cok\\u003e\\\"\",\"expectedExit\":0}\n[5] (concept, 19 sources) 服务端校验脚注 第 5 条 —— 服务端校验脚注：写入前核对指纹，看清楚再提交。 | definition: 服务端校验脚注 第 5 条。 | boundaries: 只管文章，不管文档。\n[6] (principle, 19 sources) 写入前核对指纹 第 6 条 —— 写入前核对指纹：一个事务里整体替换，照合同来。 | statement: 写入前核对指纹 第 6 条。 | rationale: 人读得懂，模型才写得对。\n[7] (pitfall, 18 sources) 服务端校验脚注 第 7 条 —— 服务端校验脚注：WIKI_ARTICLE_STALE，别跳步。 | symptom: 服务端校验脚注 第 7 条时出错。 | cause: 顺序不对。 | fix: 按顺序来。\n[8] (convention, 18 sources) entrySetSha256 第 8 条 —— entrySetSha256：validateArticlePart，要先读再改。 | rule: entrySetSha256 第 8 条。\n[9] (decision, 18 sources) entrySetSha256 第 9 条 —— entrySetSha256：FOR NO KEY UPDATE，别跳步。 | decision: entrySetSha256 第 9 条。 | alternatives: 每个空间各自限流（没有全局上限）; 不限（GPU 会被压满） | consequences: 队列要持久化。\n[10] (recipe, 17 sources) validateArticlePart 第 10 条 —— validateArticlePart：FOR NO KEY UPDATE，照合同来。 | steps: bash scripts/worktree-overlay.sh; bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki.service.ts | verify: {\"command\":\"npm test \\u0026\\u0026 echo \\\"\\u003cok\\u003e\\\"\",\"expectedExit\":0}\n[11] (concept, 17 sources) 服务端校验脚注 第 11 条 —— 服务端校验脚注：FOR NO KEY UPDATE，要先读再改。 | definition: 服务端校验脚注 第 11 条。 | boundaries: 只管文章，不管文档。\n[12] (principle, 17 sources) 归主题先看路径 第 12 条 —— 归主题先看路径：服务端校验脚注，别跳步。 | statement: 归主题先看路径 第 12 条。 | rationale: 人读得懂，模型才写得对。",
+      "part-0/again": "Write a wiki article titled \"数据库与 Prisma\", using ONLY the numbered knowledge entries below.\n\nFormat (Markdown, in Chinese; keep code identifiers, paths and commands verbatim in backticks):\n- first line: \"# \" + a concise article title\n- a lead paragraph of 2-3 sentences: what this area is about and its most important rules and traps\n- then 2-4 sections \"## heading\" of 2-3 sentences each that group the knowledge (for example 约定 / 决策 / 常见的坑 / 做法 / 概念 — choose what fits)\nRules:\n- EVERY sentence must end with one or more footnote markers such as [3] or [3][7], the numbers of the entries it is based on. A sentence without a marker will be deleted.\n- State only what the entries say; do not invent facts, versions, dates, numbers or paths. If entries disagree, say so and cite both.\n- Prefer the most important and most corroborated entries (more sources = more corroborated); you need not cite every entry.\n- Mark a trap that an entry says is fixed as 已修.\n- LENGTH: 450-800 Chinese characters in total, 8-11 sentences, one point per sentence. Anything past 900 characters is cut off.\nOutput only the Markdown article.\n\nENTRIES:\n[1] (pitfall, 20 sources) 归主题先看路径 第 1 条 —— 归主题先看路径：FOR NO KEY UPDATE，要先读再改。 | symptom: 归主题先看路径 第 1 条时出错。 | cause: 顺序不对。 | fix: 按顺序来。\n[2] (convention, 20 sources) entrySetSha256 第 2 条 —— entrySetSha256：WIKI_ARTICLE_STALE，看清楚再提交。 | rule: entrySetSha256 第 2 条。 | exceptions: 迁移脚本除外。\n[3] (decision, 20 sources) FOR NO KEY UPDATE 第 3 条 —— FOR NO KEY UPDATE：WIKI_ARTICLE_STALE，要先读再改。 | decision: FOR NO KEY UPDATE 第 3 条。 | alternatives: 每个空间各自限流（没有全局上限）; 不限（GPU 会被压满） | consequences: 队列要持久化。\n[4] (recipe, 19 sources) entrySetSha256 第 4 条 —— entrySetSha256：写入前核对指纹，要先读再改。 | steps: bash scripts/worktree-overlay.sh; bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki.service.ts | verify: {\"command\":\"npm test \\u0026\\u0026 echo \\\"\\u003cok\\u003e\\\"\",\"expectedExit\":0}\n[5] (concept, 19 sources) 服务端校验脚注 第 5 条 —— 服务端校验脚注：写入前核对指纹，看清楚再提交。 | definition: 服务端校验脚注 第 5 条。 | boundaries: 只管文章，不管文档。\n[6] (principle, 19 sources) 写入前核对指纹 第 6 条 —— 写入前核对指纹：一个事务里整体替换，照合同来。 | statement: 写入前核对指纹 第 6 条。 | rationale: 人读得懂，模型才写得对。\n[7] (pitfall, 18 sources) 服务端校验脚注 第 7 条 —— 服务端校验脚注：WIKI_ARTICLE_STALE，别跳步。 | symptom: 服务端校验脚注 第 7 条时出错。 | cause: 顺序不对。 | fix: 按顺序来。\n[8] (convention, 18 sources) entrySetSha256 第 8 条 —— entrySetSha256：validateArticlePart，要先读再改。 | rule: entrySetSha256 第 8 条。\n[9] (decision, 18 sources) entrySetSha256 第 9 条 —— entrySetSha256：FOR NO KEY UPDATE，别跳步。 | decision: entrySetSha256 第 9 条。 | alternatives: 每个空间各自限流（没有全局上限）; 不限（GPU 会被压满） | consequences: 队列要持久化。\n[10] (recipe, 17 sources) validateArticlePart 第 10 条 —— validateArticlePart：FOR NO KEY UPDATE，照合同来。 | steps: bash scripts/worktree-overlay.sh; bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki.service.ts | verify: {\"command\":\"npm test \\u0026\\u0026 echo \\\"\\u003cok\\u003e\\\"\",\"expectedExit\":0}\n[11] (concept, 17 sources) 服务端校验脚注 第 11 条 —— 服务端校验脚注：FOR NO KEY UPDATE，要先读再改。 | definition: 服务端校验脚注 第 11 条。 | boundaries: 只管文章，不管文档。\n[12] (principle, 17 sources) 归主题先看路径 第 12 条 —— 归主题先看路径：服务端校验脚注，别跳步。 | statement: 归主题先看路径 第 12 条。 | rationale: 人读得懂，模型才写得对。\n\nA previous draft kept only 5 characters with footnotes: write the whole length asked for, every sentence with its markers."
+    },
+    "wiki": {
+      "name-1": "下面是 wiki 里「Wiki」主题下归在同一组的条目标题：\n- entrySetSha256 第 1 条\n- 环境白名单 第 5 条\n- 服务端校验脚注 第 7 条\n- 一个事务里整体替换 第 10 条\n- CLAUDE_CODE_EFFORT_LEVEL=unset 第 11 条\n- 一个事务里整体替换 第 13 条\n- apiKeyHelper 第 14 条\n- FOR NO KEY UPDATE 第 19 条\n- entrySetSha256 第 22 条\n- MAX_THINKING_TOKENS=0 第 23 条\n- 服务端校验脚注 第 25 条\n- 思考关掉 第 26 条\n- 字段闭集 第 28 条\n- 服务端校验脚注 第 31 条\n\n给这组起一个简短的中文小标题（不超过 14 个字，可保留代码名），概括它们共同讲的事。只输出这个小标题。",
+      "name-2": "下面是 wiki 里「Wiki」主题下归在同一组的条目标题：\n- CLAUDE_CODE_EFFORT_LEVEL=unset 第 2 条\n- 手机抽屉 第 3 条\n- vitest 里的假数据 第 9 条\n- 首页先给内容 第 15 条\n- --bare 第 17 条\n- 手机抽屉 第 21 条\n- vitest 里的假数据 第 27 条\n- vitest 里的假数据 第 30 条\n- 手机抽屉 第 33 条\n- 遇到 401 就停 第 35 条\n- wikiReadsByDocs 第 39 条\n- 手机抽屉 第 42 条\n- 手机抽屉 第 45 条\n- 按大类列主题 第 51 条\n\n给这组起一个简短的中文小标题（不超过 14 个字，可保留代码名），概括它们共同讲的事。\n同一主题的其他组已经叫：服务端写入与校验。起一个和它们都不同的名字，说出这组独有的内容，不要只换个说法。只输出这个小标题。",
+      "name-3": "下面是 wiki 里「Wiki」主题下归在同一组的条目标题：\n- 判据修订 第 4 条\n- WikiArticleLogic 第 6 条\n- 合同先行 第 8 条\n- 先改文档再动代码 第 12 条\n- 判据修订 第 16 条\n- SwiftUI 读法 第 18 条\n- 合同先行 第 20 条\n- 合同先行 第 24 条\n- WikiArticleLogic 第 29 条\n- 判据修订 第 32 条\n- wikiContract.spec.ts 第 36 条\n- 判据修订 第 40 条\n- SwiftUI 读法 第 41 条\n- wikiContract.spec.ts 第 44 条\n\n给这组起一个简短的中文小标题（不超过 14 个字，可保留代码名），概括它们共同讲的事。\n同一主题的其他组已经叫：服务端写入与校验、runner 侧的文章命令。起一个和它们都不同的名字，说出这组独有的内容，不要只换个说法。只输出这个小标题。",
+      "part-0": "Write the overview of the wiki topic \"Wiki\". The topic is split into these sub-articles:\n- 服务端写入与校验（49 条）\n- runner 侧的文章命令（34 条）\n- Web 上的读法（35 条）\n\nUsing ONLY the numbered entries below (the most important ones of each sub-article), write in Chinese:\n- first line: \"# \" + the topic title\n- two or three short paragraphs that tell a reader what this topic covers and point out its most important rules and traps.\nRules:\n- EVERY sentence must end with one or more footnote markers such as [2] or [2][5], the numbers of the entries it is based on. A sentence without a marker will be deleted.\n- State only what the entries say; do not invent facts, versions, dates, numbers or paths.\n- LENGTH: 450-750 Chinese characters in total, 6-9 sentences. Anything past 900 characters is cut off.\nOutput only the Markdown.\n\nENTRIES:\n[1] (pitfall, 64 sources) entrySetSha256 第 1 条 —— entrySetSha256：FOR NO KEY UPDATE，照合同来。 | symptom: entrySetSha256 第 1 条时出错。 | cause: 顺序不对。 | fix: 按顺序来。\n[2] (concept, 63 sources) 环境白名单 第 5 条 —— 环境白名单：--bare，照合同来。 | definition: 环境白名单 第 5 条。 | boundaries: 只管文章，不管文档。\n[3] (convention, 64 sources) CLAUDE_CODE_EFFORT_LEVEL=unset 第 2 条 —— CLAUDE_CODE_EFFORT_LEVEL=unset：干净的 Claude Code，看清楚再提交。 | rule: CLAUDE_CODE_EFFORT_LEVEL=unset 第 2 条。\n[4] (decision, 64 sources) 手机抽屉 第 3 条 —— 手机抽屉：wikiReadsByDocs，要先读再改。 | decision: 手机抽屉 第 3 条。 | alternatives: 每个空间各自限流（没有全局上限）; 不限（GPU 会被压满） | consequences: 队列要持久化。\n[5] (recipe, 63 sources) 判据修订 第 4 条 —— 判据修订：wikiContract.spec.ts，别跳步。 | steps: bash scripts/worktree-overlay.sh; bash scripts/run-pg-spec.sh docs/wiki-design.md | verify: {\"command\":\"npm test \\u0026\\u0026 echo \\\"\\u003cok\\u003e\\\"\",\"expectedExit\":0}\n[6] (principle, 63 sources) WikiArticleLogic 第 6 条 —— WikiArticleLogic：WikiArticleLogic，要先读再改。 | statement: WikiArticleLogic 第 6 条。 | rationale: 人读得懂，模型才写得对。",
+      "part-1": "Write a wiki article titled \"服务端写入与校验\" (a part of the topic \"Wiki\"), using ONLY the numbered knowledge entries below.\n\nFormat (Markdown, in Chinese; keep code identifiers, paths and commands verbatim in backticks):\n- first line: \"# \" + a concise article title\n- a lead paragraph of 2-3 sentences: what this area is about and its most important rules and traps\n- then 2-4 sections \"## heading\" of 2-3 sentences each that group the knowledge (for example 约定 / 决策 / 常见的坑 / 做法 / 概念 — choose what fits)\nRules:\n- EVERY sentence must end with one or more footnote markers such as [3] or [3][7], the numbers of the entries it is based on. A sentence without a marker will be deleted.\n- State only what the entries say; do not invent facts, versions, dates, numbers or paths. If entries disagree, say so and cite both.\n- Prefer the most important and most corroborated entries (more sources = more corroborated); you need not cite every entry.\n- Mark a trap that an entry says is fixed as 已修.\n- LENGTH: 450-800 Chinese characters in total, 8-11 sentences, one point per sentence. Anything past 900 characters is cut off.\nOutput only the Markdown article.\n\nENTRIES:\n[1] (pitfall, 64 sources) entrySetSha256 第 1 条 —— entrySetSha256：FOR NO KEY UPDATE，照合同来。 | symptom: entrySetSha256 第 1 条时出错。 | cause: 顺序不对。 | fix: 按顺序来。\n[2] (concept, 63 sources) 环境白名单 第 5 条 —— 环境白名单：--bare，照合同来。 | definition: 环境白名单 第 5 条。 | boundaries: 只管文章，不管文档。\n[3] (pitfall, 62 sources) 服务端校验脚注 第 7 条 —— 服务端校验脚注：entrySetSha256，照合同来。 | symptom: 服务端校验脚注 第 7 条时出错。 | cause: 顺序不对。 | fix: 按顺序来。\n[4] (recipe, 61 sources) 一个事务里整体替换 第 10 条 —— 一个事务里整体替换：validateArticlePart，看清楚再提交。 | steps: bash scripts/worktree-overlay.sh; bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-plan.ts | verify: {\"command\":\"npm test \\u0026\\u0026 echo \\\"\\u003cok\\u003e\\\"\",\"expectedExit\":0}\n[5] (concept, 61 sources) CLAUDE_CODE_EFFORT_LEVEL=unset 第 11 条 —— CLAUDE_CODE_EFFORT_LEVEL=unset：环境白名单，照合同来。 | definition: CLAUDE_CODE_EFFORT_LEVEL=unset 第 11 条。 | boundaries: 只管文章，不管文档。\n[6] (pitfall, 60 sources) 一个事务里整体替换 第 13 条 —— 一个事务里整体替换：validateArticlePart，看清楚再提交。 | symptom: 一个事务里整体替换 第 13 条时出错。 | cause: 顺序不对。 | fix: 按顺序来。\n[7] (convention, 60 sources) apiKeyHelper 第 14 条 —— apiKeyHelper：环境白名单，照合同来。 | rule: apiKeyHelper 第 14 条。\n[8] (pitfall, 58 sources) FOR NO KEY UPDATE 第 19 条 —— FOR NO KEY UPDATE：服务端校验脚注，照合同来。 | symptom: FOR NO KEY UPDATE 第 19 条时出错。 | cause: 顺序不对。 | fix: 按顺序来。\n[9] (recipe, 57 sources) entrySetSha256 第 22 条 —— entrySetSha256：WIKI_ARTICLE_STALE，别跳步。 | steps: bash scripts/worktree-overlay.sh; bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki.service.ts | verify: {\"command\":\"npm test \\u0026\\u0026 echo \\\"\\u003cok\\u003e\\\"\",\"expectedExit\":0}\n[10] (concept, 57 sources) MAX_THINKING_TOKENS=0 第 23 条 —— MAX_THINKING_TOKENS=0：--bare，照合同来。 | definition: MAX_THINKING_TOKENS=0 第 23 条。 | boundaries: 只管文章，不管文档。\n[11] (pitfall, 56 sources) 服务端校验脚注 第 25 条 —— 服务端校验脚注：WIKI_ARTICLE_STALE，别跳步。 | symptom: 服务端校验脚注 第 25 条时出错。 | cause: 顺序不对。 | fix: 按顺序来。\n[12] (convention, 56 sources) 思考关掉 第 26 条 —— 思考关掉：环境白名单，要先读再改。 | rule: 思考关掉 第 26 条。\n[13] (recipe, 55 sources) 字段闭集 第 28 条 —— 字段闭集：wikiContract.spec.ts，照合同来。 | steps: bash scripts/worktree-overlay.sh; bash scripts/run-pg-spec.sh docs/wiki-contract.md | verify: {\"command\":\"npm test \\u0026\\u0026 echo \\\"\\u003cok\\u003e\\\"\",\"expectedExit\":0}\n[14] (pitfall, 54 sources) 服务端校验脚注 第 31 条 —— 服务端校验脚注：validateArticlePart，要先读再改。 | symptom: 服务端校验脚注 第 31 条时出错。 | cause: 顺序不对。 | fix: 按顺序来。\n[15] (recipe, 53 sources) validateArticlePart 第 34 条 —— validateArticlePart：FOR NO KEY UPDATE，看清楚再提交。 | steps: bash scripts/worktree-overlay.sh; bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-maintenance-run.ts | verify: {\"command\":\"npm test \\u0026\\u0026 echo \\\"\\u003cok\\u003e\\\"\",\"expectedExit\":0}\n[16] (pitfall, 52 sources) 归主题先看路径 第 37 条 —— 归主题先看路径：写入前核对指纹，看清楚再提交。 | symptom: 归主题先看路径 第 37 条时出错。 | cause: 顺序不对。 | fix: 按顺序来。\n[17] (convention, 52 sources) MAX_THINKING_TOKENS=0 第 38 条 —— MAX_THINKING_TOKENS=0：apiKeyHelper，别跳步。 | rule: MAX_THINKING_TOKENS=0 第 38 条。 | exceptions: 迁移脚本除外。\n[18] (pitfall, 50 sources) 写入前核对指纹 第 43 条 —— 写入前核对指纹：WIKI_ARTICLE_STALE，别跳步。 | symptom: 写入前核对指纹 第 43 条时出错。 | cause: 顺序不对。 | fix: 按顺序来。\n[19] (recipe, 49 sources) 归主题先看路径 第 46 条 —— 归主题先看路径：服务端校验脚注，照合同来。 | steps: bash scripts/worktree-overlay.sh; bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki.service.ts | verify: {\"command\":\"npm test \\u0026\\u0026 echo \\\"\\u003cok\\u003e\\\"\",\"expectedExit\":0}\n[20] (concept, 49 sources) 干净的 Claude Code 第 47 条 —— 干净的 Claude Code：MAX_THINKING_TOKENS=0，看清楚再提交。 | definition: 干净的 Claude Code 第 47 条。 | boundaries: 只管文章，不管文档。\n[21] (pitfall, 48 sources) FOR NO KEY UPDATE 第 49 条 —— FOR NO KEY UPDATE：一个事务里整体替换，照合同来。 | symptom: FOR NO KEY UPDATE 第 49 条时出错。 | cause: 顺序不对。 | fix: 按顺序来。\n[22] (convention, 48 sources) 干净的 Claude Code 第 50 条 —— 干净的 Claude Code：思考关掉，看清楚再提交。 | rule: 干净的 Claude Code 第 50 条。\n[23] (pitfall, 46 sources) 写入前核对指纹 第 55 条 —— 写入前核对指纹：归主题先看路径，要先读再改。 | symptom: 写入前核对指纹 第 55 条时出错。 | cause: 顺序不对。 | fix: 按顺序来。\n[24] (recipe, 45 sources) 服务端校验脚注 第 58 条 —— 服务端校验脚注：归主题先看路径，别跳步。 | steps: bash scripts/worktree-overlay.sh; bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki.service.ts | verify: {\"command\":\"npm test \\u0026\\u0026 echo \\\"\\u003cok\\u003e\\\"\",\"expectedExit\":0}\n[25] (concept, 45 sources) CLAUDE_CODE_EFFORT_LEVEL=unset 第 59 条 —— CLAUDE_CODE_EFFORT_LEVEL=unset：--bare，看清楚再提交。 | definition: CLAUDE_CODE_EFFORT_LEVEL=unset 第 59 条。 | boundaries: 只管文章，不管文档。\n[26] (pitfall, 44 sources) 归主题先看路径 第 61 条 —— 归主题先看路径：归主题先看路径，看清楚再提交。 | symptom: 归主题先看路径 第 61 条时出错。 | cause: 顺序不对。 | fix: 按顺序来。\n[27] (convention, 44 sources) 思考关掉 第 62 条 —— 思考关掉：MAX_THINKING_TOKENS=0，看清楚再提交。 | rule: 思考关掉 第 62 条。\n[28] (concept, 43 sources) 环境白名单 第 65 条 —— 环境白名单：遇到 401 就停，要先读再改。 | definition: 环境白名单 第 65 条。 | boundaries: 只管文章，不管文档。\n[29] (pitfall, 42 sources) FOR NO KEY UPDATE 第 67 条 —— FOR NO KEY UPDATE：FOR NO KEY UPDATE，别跳步。 | symptom: FOR NO KEY UPDATE 第 67 条时出错。 | cause: 顺序不对。 | fix: 按顺序来。\n[30] (recipe, 41 sources) validateArticlePart 第 70 条 —— validateArticlePart：WIKI_ARTICLE_STALE，别跳步。 | steps: bash scripts/worktree-overlay.sh; bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-maintenance-run.ts | verify: {\"command\":\"npm test \\u0026\\u0026 echo \\\"\\u003cok\\u003e\\\"\",\"expectedExit\":0}",
+      "part-2": "Write a wiki article titled \"runner 侧的文章命令\" (a part of the topic \"Wiki\"), using ONLY the numbered knowledge entries below.\n\nFormat (Markdown, in Chinese; keep code identifiers, paths and commands verbatim in backticks):\n- first line: \"# \" + a concise article title\n- a lead paragraph of 2-3 sentences: what this area is about and its most important rules and traps\n- then 2-4 sections \"## heading\" of 2-3 sentences each that group the knowledge (for example 约定 / 决策 / 常见的坑 / 做法 / 概念 — choose what fits)\nRules:\n- EVERY sentence must end with one or more footnote markers such as [3] or [3][7], the numbers of the entries it is based on. A sentence without a marker will be deleted.\n- State only what the entries say; do not invent facts, versions, dates, numbers or paths. If entries disagree, say so and cite both.\n- Prefer the most important and most corroborated entries (more sources = more corroborated); you need not cite every entry.\n- Mark a trap that an entry says is fixed as 已修.\n- LENGTH: 450-800 Chinese characters in total, 8-11 sentences, one point per sentence. Anything past 900 characters is cut off.\nOutput only the Markdown article.\n\nENTRIES:\n[1] (convention, 64 sources) CLAUDE_CODE_EFFORT_LEVEL=unset 第 2 条 —— CLAUDE_CODE_EFFORT_LEVEL=unset：干净的 Claude Code，看清楚再提交。 | rule: CLAUDE_CODE_EFFORT_LEVEL=unset 第 2 条。\n[2] (decision, 64 sources) 手机抽屉 第 3 条 —— 手机抽屉：wikiReadsByDocs，要先读再改。 | decision: 手机抽屉 第 3 条。 | alternatives: 每个空间各自限流（没有全局上限）; 不限（GPU 会被压满） | consequences: 队列要持久化。\n[3] (decision, 62 sources) vitest 里的假数据 第 9 条 —— vitest 里的假数据：vitest 里的假数据，要先读再改。 | decision: vitest 里的假数据 第 9 条。 | alternatives: 每个空间各自限流（没有全局上限）; 不限（GPU 会被压满） | consequences: 队列要持久化。\n[4] (decision, 60 sources) 首页先给内容 第 15 条 —— 首页先给内容：首页先给内容，看清楚再提交。 | decision: 首页先给内容 第 15 条。 | alternatives: 每个空间各自限流（没有全局上限）; 不限（GPU 会被压满） | consequences: 队列要持久化。\n[5] (concept, 59 sources) --bare 第 17 条 —— --bare：遇到 401 就停，看清楚再提交。 | definition: --bare 第 17 条。 | boundaries: 只管文章，不管文档。\n[6] (decision, 58 sources) 手机抽屉 第 21 条 —— 手机抽屉：vitest 里的假数据，要先读再改。 | decision: 手机抽屉 第 21 条。 | alternatives: 每个空间各自限流（没有全局上限）; 不限（GPU 会被压满） | consequences: 队列要持久化。\n[7] (decision, 56 sources) vitest 里的假数据 第 27 条 —— vitest 里的假数据：按大类列主题，别跳步。 | decision: vitest 里的假数据 第 27 条。 | alternatives: 每个空间各自限流（没有全局上限）; 不限（GPU 会被压满） | consequences: 队列要持久化。\n[8] (principle, 55 sources) vitest 里的假数据 第 30 条 —— vitest 里的假数据：vitest 里的假数据，照合同来。 | statement: vitest 里的假数据 第 30 条。 | rationale: 人读得懂，模型才写得对。\n[9] (decision, 54 sources) 手机抽屉 第 33 条 —— 手机抽屉：首页先给内容，照合同来。 | decision: 手机抽屉 第 33 条。 | alternatives: 每个空间各自限流（没有全局上限）; 不限（GPU 会被压满） | consequences: 队列要持久化。\n[10] (concept, 53 sources) 遇到 401 就停 第 35 条 —— 遇到 401 就停：CLAUDE_CODE_EFFORT_LEVEL=unset，照合同来。 | definition: 遇到 401 就停 第 35 条。 | boundaries: 只管文章，不管文档。\n[11] (decision, 52 sources) wikiReadsByDocs 第 39 条 —— wikiReadsByDocs：按大类列主题，看清楚再提交。 | decision: wikiReadsByDocs 第 39 条。 | alternatives: 每个空间各自限流（没有全局上限）; 不限（GPU 会被压满） | consequences: 队列要持久化。\n[12] (principle, 51 sources) 手机抽屉 第 42 条 —— 手机抽屉：vitest 里的假数据，看清楚再提交。 | statement: 手机抽屉 第 42 条。 | rationale: 人读得懂，模型才写得对。\n[13] (decision, 50 sources) 手机抽屉 第 45 条 —— 手机抽屉：vitest 里的假数据，照合同来。 | decision: 手机抽屉 第 45 条。 | alternatives: 每个空间各自限流（没有全局上限）; 不限（GPU 会被压满） | consequences: 队列要持久化。\n[14] (decision, 48 sources) 按大类列主题 第 51 条 —— 按大类列主题：脚注悬停看条目，别跳步。 | decision: 按大类列主题 第 51 条。 | alternatives: 每个空间各自限流（没有全局上限）; 不限（GPU 会被压满） | consequences: 队列要持久化。\n[15] (concept, 47 sources) CLAUDE_CODE_EFFORT_LEVEL=unset 第 53 条 —— CLAUDE_CODE_EFFORT_LEVEL=unset：思考关掉，要先读再改。 | definition: CLAUDE_CODE_EFFORT_LEVEL=unset 第 53 条。 | boundaries: 只管文章，不管文档。\n[16] (principle, 47 sources) A–Z 索引 第 54 条 —— A–Z 索引：A–Z 索引，别跳步。 | statement: A–Z 索引 第 54 条。 | rationale: 人读得懂，模型才写得对。\n[17] (decision, 46 sources) 首页先给内容 第 57 条 —— 首页先给内容：按大类列主题，别跳步。 | decision: 首页先给内容 第 57 条。 | alternatives: 每个空间各自限流（没有全局上限）; 不限（GPU 会被压满） | consequences: 队列要持久化。\n[18] (decision, 44 sources) vitest 里的假数据 第 63 条 —— vitest 里的假数据：A–Z 索引，要先读再改。 | decision: vitest 里的假数据 第 63 条。 | alternatives: 每个空间各自限流（没有全局上限）; 不限（GPU 会被压满） | consequences: 队列要持久化。\n[19] (principle, 43 sources) A–Z 索引 第 66 条 —— A–Z 索引：按大类列主题，看清楚再提交。 | statement: A–Z 索引 第 66 条。 | rationale: 人读得懂，模型才写得对。\n[20] (decision, 42 sources) 手机抽屉 第 69 条 —— 手机抽屉：按大类列主题，要先读再改。 | decision: 手机抽屉 第 69 条。 | alternatives: 每个空间各自限流（没有全局上限）; 不限（GPU 会被压满） | consequences: 队列要持久化。\n[21] (convention, 40 sources) 思考关掉 第 74 条 —— 思考关掉：环境白名单，照合同来。 | rule: 思考关掉 第 74 条。 | exceptions: 迁移脚本除外。\n[22] (principle, 39 sources) wikiReadsByDocs 第 78 条 —— wikiReadsByDocs：A–Z 索引，别跳步。 | statement: wikiReadsByDocs 第 78 条。 | rationale: 人读得懂，模型才写得对。\n[23] (decision, 38 sources) 脚注悬停看条目 第 81 条 —— 脚注悬停看条目：首页先给内容，照合同来。 | decision: 脚注悬停看条目 第 81 条。 | alternatives: 每个空间各自限流（没有全局上限）; 不限（GPU 会被压满） | consequences: 队列要持久化。\n[24] (concept, 37 sources) 遇到 401 就停 第 83 条 —— 遇到 401 就停：MAX_THINKING_TOKENS=0，看清楚再提交。 | definition: 遇到 401 就停 第 83 条。 | boundaries: 只管文章，不管文档。\n[25] (convention, 36 sources) --bare 第 86 条 —— --bare：遇到 401 就停，看清楚再提交。 | rule: --bare 第 86 条。\n[26] (principle, 35 sources) vitest 里的假数据 第 90 条 —— vitest 里的假数据：vitest 里的假数据，照合同来。 | statement: vitest 里的假数据 第 90 条。 | rationale: 人读得懂，模型才写得对。\n[27] (decision, 34 sources) 按大类列主题 第 93 条 —— 按大类列主题：按大类列主题，看清楚再提交。 | decision: 按大类列主题 第 93 条。 | alternatives: 每个空间各自限流（没有全局上限）; 不限（GPU 会被压满） | consequences: 队列要持久化。\n[28] (decision, 32 sources) 手机抽屉 第 99 条 —— 手机抽屉：A–Z 索引，别跳步。 | decision: 手机抽屉 第 99 条。 | alternatives: 每个空间各自限流（没有全局上限）; 不限（GPU 会被压满） | consequences: 队列要持久化。\n[29] (principle, 31 sources) 按大类列主题 第 102 条 —— 按大类列主题：首页先给内容，要先读再改。 | statement: 按大类列主题 第 102 条。 | rationale: 人读得懂，模型才写得对。\n[30] (decision, 30 sources) 手机抽屉 第 105 条 —— 手机抽屉：脚注悬停看条目，别跳步。 | decision: 手机抽屉 第 105 条。 | alternatives: 每个空间各自限流（没有全局上限）; 不限（GPU 会被压满） | consequences: 队列要持久化。",
+      "part-3": "Write a wiki article titled \"Web 上的读法\" (a part of the topic \"Wiki\"), using ONLY the numbered knowledge entries below.\n\nFormat (Markdown, in Chinese; keep code identifiers, paths and commands verbatim in backticks):\n- first line: \"# \" + a concise article title\n- a lead paragraph of 2-3 sentences: what this area is about and its most important rules and traps\n- then 2-4 sections \"## heading\" of 2-3 sentences each that group the knowledge (for example 约定 / 决策 / 常见的坑 / 做法 / 概念 — choose what fits)\nRules:\n- EVERY sentence must end with one or more footnote markers such as [3] or [3][7], the numbers of the entries it is based on. A sentence without a marker will be deleted.\n- State only what the entries say; do not invent facts, versions, dates, numbers or paths. If entries disagree, say so and cite both.\n- Prefer the most important and most corroborated entries (more sources = more corroborated); you need not cite every entry.\n- Mark a trap that an entry says is fixed as 已修.\n- LENGTH: 450-800 Chinese characters in total, 8-11 sentences, one point per sentence. Anything past 900 characters is cut off.\nOutput only the Markdown article.\n\nENTRIES:\n[1] (recipe, 63 sources) 判据修订 第 4 条 —— 判据修订：wikiContract.spec.ts，别跳步。 | steps: bash scripts/worktree-overlay.sh; bash scripts/run-pg-spec.sh docs/wiki-design.md | verify: {\"command\":\"npm test \\u0026\\u0026 echo \\\"\\u003cok\\u003e\\\"\",\"expectedExit\":0}\n[2] (principle, 63 sources) WikiArticleLogic 第 6 条 —— WikiArticleLogic：WikiArticleLogic，要先读再改。 | statement: WikiArticleLogic 第 6 条。 | rationale: 人读得懂，模型才写得对。\n[3] (convention, 62 sources) 合同先行 第 8 条 —— 合同先行：判据修订，照合同来。 | rule: 合同先行 第 8 条。\n[4] (principle, 61 sources) 先改文档再动代码 第 12 条 —— 先改文档再动代码：先改文档再动代码，看清楚再提交。 | statement: 先改文档再动代码 第 12 条。 | rationale: 人读得懂，模型才写得对。\n[5] (recipe, 59 sources) 判据修订 第 16 条 —— 判据修订：判据修订，照合同来。 | steps: bash scripts/worktree-overlay.sh; bash scripts/run-pg-spec.sh docs/wiki-contract.md | verify: {\"command\":\"npm test \\u0026\\u0026 echo \\\"\\u003cok\\u003e\\\"\",\"expectedExit\":0}\n[6] (principle, 59 sources) SwiftUI 读法 第 18 条 —— SwiftUI 读法：SwiftUI 读法，照合同来。 | statement: SwiftUI 读法 第 18 条。 | rationale: 人读得懂，模型才写得对。\n[7] (convention, 58 sources) 合同先行 第 20 条 —— 合同先行：判据修订，照合同来。 | rule: 合同先行 第 20 条。\n[8] (principle, 57 sources) 合同先行 第 24 条 —— 合同先行：字段闭集，别跳步。 | statement: 合同先行 第 24 条。 | rationale: 人读得懂，模型才写得对。\n[9] (concept, 55 sources) WikiArticleLogic 第 29 条 —— WikiArticleLogic：OrbitKit 对照测试，别跳步。 | definition: WikiArticleLogic 第 29 条。 | boundaries: 只管文章，不管文档。\n[10] (convention, 54 sources) 判据修订 第 32 条 —— 判据修订：合同先行，看清楚再提交。 | rule: 判据修订 第 32 条。 | exceptions: 迁移脚本除外。\n[11] (principle, 53 sources) wikiContract.spec.ts 第 36 条 —— wikiContract.spec.ts：先改文档再动代码，照合同来。 | statement: wikiContract.spec.ts 第 36 条。 | rationale: 人读得懂，模型才写得对。\n[12] (recipe, 51 sources) 判据修订 第 40 条 —— 判据修订：wikiContract.spec.ts，照合同来。 | steps: bash scripts/worktree-overlay.sh; bash scripts/run-pg-spec.sh docs/wiki-contract.md | verify: {\"command\":\"npm test \\u0026\\u0026 echo \\\"\\u003cok\\u003e\\\"\",\"expectedExit\":0}\n[13] (concept, 51 sources) SwiftUI 读法 第 41 条 —— SwiftUI 读法：SwiftUI 读法，要先读再改。 | definition: SwiftUI 读法 第 41 条。 | boundaries: 只管文章，不管文档。\n[14] (convention, 50 sources) wikiContract.spec.ts 第 44 条 —— wikiContract.spec.ts：判据修订，要先读再改。 | rule: wikiContract.spec.ts 第 44 条。\n[15] (principle, 49 sources) 合同先行 第 48 条 —— 合同先行：中文说明，看清楚再提交。 | statement: 合同先行 第 48 条。 | rationale: 人读得懂，模型才写得对。\n[16] (recipe, 47 sources) WikiArticleLogic 第 52 条 —— WikiArticleLogic：SwiftUI 读法，要先读再改。 | steps: bash scripts/worktree-overlay.sh; bash scripts/run-pg-spec.sh src/macos/OrbitKit/Sources/OrbitKit/Models/WikiArticles.swift | verify: {\"command\":\"npm test \\u0026\\u0026 echo \\\"\\u003cok\\u003e\\\"\",\"expectedExit\":0}\n[17] (convention, 46 sources) 合同先行 第 56 条 —— 合同先行：字段闭集，看清楚再提交。 | rule: 合同先行 第 56 条。 | exceptions: 迁移脚本除外。\n[18] (principle, 45 sources) 中文说明 第 60 条 —— 中文说明：判据修订，照合同来。 | statement: 中文说明 第 60 条。 | rationale: 人读得懂，模型才写得对。\n[19] (recipe, 43 sources) OrbitKit 对照测试 第 64 条 —— OrbitKit 对照测试：WikiArticleLogic，别跳步。 | steps: bash scripts/worktree-overlay.sh; bash scripts/run-pg-spec.sh src/macos/OrbitKit/Sources/OrbitKit/Models/WikiArticles.swift | verify: {\"command\":\"npm test \\u0026\\u0026 echo \\\"\\u003cok\\u003e\\\"\",\"expectedExit\":0}\n[20] (convention, 42 sources) 字段闭集 第 68 条 —— 字段闭集：wikiContract.spec.ts，要先读再改。 | rule: 字段闭集 第 68 条。 | exceptions: 迁移脚本除外。\n[21] (principle, 41 sources) 先改文档再动代码 第 72 条 —— 先改文档再动代码：字段闭集，照合同来。 | statement: 先改文档再动代码 第 72 条。 | rationale: 人读得懂，模型才写得对。\n[22] (decision, 40 sources) WikiArticleLogic 第 75 条 —— WikiArticleLogic：SwiftUI 读法，别跳步。 | decision: WikiArticleLogic 第 75 条。 | alternatives: 每个空间各自限流（没有全局上限）; 不限（GPU 会被压满） | consequences: 队列要持久化。\n[23] (recipe, 39 sources) 中文说明 第 76 条 —— 中文说明：中文说明，别跳步。 | steps: bash scripts/worktree-overlay.sh; bash scripts/run-pg-spec.sh docs/wiki-contract.md | verify: {\"command\":\"npm test \\u0026\\u0026 echo \\\"\\u003cok\\u003e\\\"\",\"expectedExit\":0}\n[24] (convention, 38 sources) wikiContract.spec.ts 第 80 条 —— wikiContract.spec.ts：wikiContract.spec.ts，别跳步。 | rule: wikiContract.spec.ts 第 80 条。\n[25] (principle, 37 sources) 先改文档再动代码 第 84 条 —— 先改文档再动代码：字段闭集，别跳步。 | statement: 先改文档再动代码 第 84 条。 | rationale: 人读得懂，模型才写得对。\n[26] (decision, 36 sources) OrbitKit 对照测试 第 87 条 —— OrbitKit 对照测试：WikiArticleLogic，看清楚再提交。 | decision: OrbitKit 对照测试 第 87 条。 | alternatives: 每个空间各自限流（没有全局上限）; 不限（GPU 会被压满） | consequences: 队列要持久化。\n[27] (recipe, 35 sources) wikiContract.spec.ts 第 88 条 —— wikiContract.spec.ts：先改文档再动代码，看清楚再提交。 | steps: bash scripts/worktree-overlay.sh; bash scripts/run-pg-spec.sh docs/wiki-design.md | verify: {\"command\":\"npm test \\u0026\\u0026 echo \\\"\\u003cok\\u003e\\\"\",\"expectedExit\":0}\n[28] (convention, 34 sources) 中文说明 第 92 条 —— 中文说明：wikiContract.spec.ts，别跳步。 | rule: 中文说明 第 92 条。\n[29] (principle, 33 sources) 先改文档再动代码 第 96 条 —— 先改文档再动代码：字段闭集，要先读再改。 | statement: 先改文档再动代码 第 96 条。 | rationale: 人读得懂，模型才写得对。\n[30] (convention, 32 sources) OrbitKit 对照测试 第 98 条 —— OrbitKit 对照测试：SwiftUI 读法，别跳步。 | rule: OrbitKit 对照测试 第 98 条。"
+    }
+  },
+  "groups": {
+    "wiki": [
+      [
+        "wiki-001",
+        "wiki-005",
+        "wiki-007",
+        "wiki-010",
+        "wiki-011",
+        "wiki-013",
+        "wiki-014",
+        "wiki-019",
+        "wiki-022",
+        "wiki-023",
+        "wiki-025",
+        "wiki-026",
+        "wiki-028",
+        "wiki-031",
+        "wiki-034",
+        "wiki-037",
+        "wiki-038",
+        "wiki-043",
+        "wiki-046",
+        "wiki-047",
+        "wiki-049",
+        "wiki-050",
+        "wiki-055",
+        "wiki-058",
+        "wiki-059",
+        "wiki-061",
+        "wiki-062",
+        "wiki-065",
+        "wiki-067",
+        "wiki-070",
+        "wiki-071",
+        "wiki-073",
+        "wiki-077",
+        "wiki-079",
+        "wiki-082",
+        "wiki-085",
+        "wiki-089",
+        "wiki-091",
+        "wiki-094",
+        "wiki-095",
+        "wiki-097",
+        "wiki-101",
+        "wiki-103",
+        "wiki-106",
+        "wiki-107",
+        "wiki-109",
+        "wiki-112",
+        "wiki-115",
+        "wiki-118"
+      ],
+      [
+        "wiki-002",
+        "wiki-003",
+        "wiki-009",
+        "wiki-015",
+        "wiki-017",
+        "wiki-021",
+        "wiki-027",
+        "wiki-030",
+        "wiki-033",
+        "wiki-035",
+        "wiki-039",
+        "wiki-042",
+        "wiki-045",
+        "wiki-051",
+        "wiki-053",
+        "wiki-054",
+        "wiki-057",
+        "wiki-063",
+        "wiki-066",
+        "wiki-069",
+        "wiki-074",
+        "wiki-078",
+        "wiki-081",
+        "wiki-083",
+        "wiki-086",
+        "wiki-090",
+        "wiki-093",
+        "wiki-099",
+        "wiki-102",
+        "wiki-105",
+        "wiki-111",
+        "wiki-113",
+        "wiki-114",
+        "wiki-117"
+      ],
+      [
+        "wiki-004",
+        "wiki-006",
+        "wiki-008",
+        "wiki-012",
+        "wiki-016",
+        "wiki-018",
+        "wiki-020",
+        "wiki-024",
+        "wiki-029",
+        "wiki-032",
+        "wiki-036",
+        "wiki-040",
+        "wiki-041",
+        "wiki-044",
+        "wiki-048",
+        "wiki-052",
+        "wiki-056",
+        "wiki-060",
+        "wiki-064",
+        "wiki-068",
+        "wiki-072",
+        "wiki-075",
+        "wiki-076",
+        "wiki-080",
+        "wiki-084",
+        "wiki-087",
+        "wiki-088",
+        "wiki-092",
+        "wiki-096",
+        "wiki-098",
+        "wiki-100",
+        "wiki-104",
+        "wiki-108",
+        "wiki-110",
+        "wiki-116"
+      ]
+    ]
+  },
+  "model": {
+    "names": [
+      "服务端写入与校验",
+      "runner 侧的文章命令",
+      "Web 上的读法",
+      "合同与文档",
+      "客户端模型",
+      "其余"
+    ],
+    "article": "# 文章写作规则\n\n文章只由服务端校验之后的句子组成，每句都要有脚注[1]。指纹不变的主题不会重写[2]。\n\n## 约定\n\n写入前先核对条目集合的指纹，不一致就整次不写[1][3]。分组先看锚点路径，再看标题和摘要里的词[2]。\n每组最多写三十条出处最多的条目，超出的部分不进提示[3]。超过九百字的部分由服务端从最长的一段末尾删掉[1]。\n\n## 常见的坑\n\n模型在写作期间条目变了，写入会被拒绝，下一次运行再按新条目重写[2]。没有脚注的句子会被删掉，所以每句都要带上编号[3]。\n同一主题的组名要彼此不同，否则读者分不清各篇文章讲的是什么[1]。代码要放在反引号里，比如 `arr[0]`，里面的方括号不算脚注[2]。\n\n## 做法\n\n先读主题的计划，只挑条目集合变了的主题来写，没有变化的主题一个字也不动[1]。大主题先按锚点路径分组，再给每组起一个和别组都不同的名字[2]。\n每组写一篇子主题文章，最后写总览，总览只从每组出处最多的两条条目写起[3]。写完交给服务端校验，服务端只留下脚注指向本主题条目的句子[1][2]。\n\n## 决策\n\n模型调用全部经过持久化的请求队列，所以重启之后已经答过的调用不会再问一次[3]。文章记下写作时仓库快照的提交，读者能看出它是按哪一版代码写的[1]。",
+    "short": "# 太短\n只有一句[1]。另一句没有脚注。",
+    "shortFor": "数据库与 Prisma"
+  },
+  "system": "You write concise encyclopedia-style wiki articles from given knowledge entries. You output only what is asked.",
+  "topics": [
+    {
+      "slug": "database",
+      "title": "数据库与 Prisma",
+      "entrySetSha256": "daaabaaedaaabaaedaaabaaedaaabaaedaaabaaedaaabaaedaaabaaedaaabaae",
+      "entries": [
+        {
+          "id": "database-001",
+          "revision": 1,
+          "kind": "pitfall",
+          "title": "归主题先看路径 第 1 条",
+          "summary": "归主题先看路径：FOR NO KEY UPDATE，要先读再改。",
+          "fields": {
+            "trigger": {
+              "paths": [
+                "src/apiserver/src/wiki/wiki-plan.ts"
+              ],
+              "commands": []
+            },
+            "symptom": "归主题先看路径 第 1 条时出错。",
+            "cause": "顺序不对。",
+            "fix": "按顺序来。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-plan.ts"
+          ],
+          "sources": 20,
+          "trust": "auto",
+          "recordedAt": "2026-10-01T00:00:00.000Z"
+        },
+        {
+          "id": "database-002",
+          "revision": 2,
+          "kind": "convention",
+          "title": "entrySetSha256 第 2 条",
+          "summary": "entrySetSha256：WIKI_ARTICLE_STALE，看清楚再提交。",
+          "fields": {
+            "rule": "entrySetSha256 第 2 条。",
+            "scope": [
+              "src/apiserver/src/wiki/wiki-articles.ts"
+            ],
+            "exceptions": "迁移脚本除外。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-articles.ts"
+          ],
+          "sources": 20,
+          "trust": "auto",
+          "recordedAt": "2026-10-02T01:00:00.000Z"
+        },
+        {
+          "id": "database-003",
+          "revision": 3,
+          "kind": "decision",
+          "title": "FOR NO KEY UPDATE 第 3 条",
+          "summary": "FOR NO KEY UPDATE：WIKI_ARTICLE_STALE，要先读再改。",
+          "fields": {
+            "context": "背景。",
+            "decision": "FOR NO KEY UPDATE 第 3 条。",
+            "alternatives": [
+              {
+                "option": "每个空间各自限流",
+                "whyRejected": "没有全局上限"
+              },
+              {
+                "option": "不限",
+                "whyRejected": "GPU 会被压满"
+              }
+            ],
+            "consequences": "队列要持久化。",
+            "decidedAt": "2026-10-07"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-articles.ts"
+          ],
+          "sources": 20,
+          "trust": "auto",
+          "recordedAt": "2026-10-03T02:00:00.000Z"
+        },
+        {
+          "id": "database-004",
+          "revision": 1,
+          "kind": "recipe",
+          "title": "entrySetSha256 第 4 条",
+          "summary": "entrySetSha256：写入前核对指纹，要先读再改。",
+          "fields": {
+            "steps": [
+              "bash scripts/worktree-overlay.sh",
+              "bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki.service.ts"
+            ],
+            "verify": {
+              "command": "npm test && echo \"<ok>\"",
+              "expectedExit": 0
+            }
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki.service.ts",
+            "src/runner-go/wiki_articles.go"
+          ],
+          "sources": 19,
+          "trust": "auto",
+          "recordedAt": "2026-10-04T03:00:00.000Z"
+        },
+        {
+          "id": "database-005",
+          "revision": 2,
+          "kind": "concept",
+          "title": "服务端校验脚注 第 5 条",
+          "summary": "服务端校验脚注：写入前核对指纹，看清楚再提交。",
+          "fields": {
+            "definition": "服务端校验脚注 第 5 条。",
+            "boundaries": "只管文章，不管文档。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-maintenance-run.ts"
+          ],
+          "sources": 19,
+          "trust": "auto",
+          "recordedAt": "2026-10-05T04:00:00.000Z"
+        },
+        {
+          "id": "database-006",
+          "revision": 3,
+          "kind": "principle",
+          "title": "写入前核对指纹 第 6 条",
+          "summary": "写入前核对指纹：一个事务里整体替换，照合同来。",
+          "fields": {
+            "statement": "写入前核对指纹 第 6 条。",
+            "rationale": "人读得懂，模型才写得对。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-plan.ts"
+          ],
+          "sources": 19,
+          "trust": "auto",
+          "recordedAt": "2026-10-06T05:00:00.000Z"
+        },
+        {
+          "id": "database-007",
+          "revision": 1,
+          "kind": "pitfall",
+          "title": "服务端校验脚注 第 7 条",
+          "summary": "服务端校验脚注：WIKI_ARTICLE_STALE，别跳步。",
+          "fields": {
+            "trigger": {
+              "paths": [
+                "src/apiserver/src/wiki/wiki.service.ts"
+              ],
+              "commands": []
+            },
+            "symptom": "服务端校验脚注 第 7 条时出错。",
+            "cause": "顺序不对。",
+            "fix": "按顺序来。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki.service.ts",
+            "src/runner-go/wiki_maintain.go"
+          ],
+          "sources": 18,
+          "trust": "auto",
+          "recordedAt": "2026-10-07T06:00:00.000Z"
+        },
+        {
+          "id": "database-008",
+          "revision": 2,
+          "kind": "convention",
+          "title": "entrySetSha256 第 8 条",
+          "summary": "entrySetSha256：validateArticlePart，要先读再改。",
+          "fields": {
+            "rule": "entrySetSha256 第 8 条。",
+            "scope": [
+              "src/apiserver/src/wiki/wiki-articles.ts"
+            ],
+            "exceptions": ""
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-articles.ts",
+            "src/runner-go/wiki_articles.go"
+          ],
+          "sources": 18,
+          "trust": "auto",
+          "recordedAt": "2026-10-01T07:00:00.000Z"
+        },
+        {
+          "id": "database-009",
+          "revision": 3,
+          "kind": "decision",
+          "title": "entrySetSha256 第 9 条",
+          "summary": "entrySetSha256：FOR NO KEY UPDATE，别跳步。",
+          "fields": {
+            "context": "背景。",
+            "decision": "entrySetSha256 第 9 条。",
+            "alternatives": [
+              {
+                "option": "每个空间各自限流",
+                "whyRejected": "没有全局上限"
+              },
+              {
+                "option": "不限",
+                "whyRejected": "GPU 会被压满"
+              }
+            ],
+            "consequences": "队列要持久化。",
+            "decidedAt": "2026-10-07"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki.service.ts"
+          ],
+          "sources": 18,
+          "trust": "auto",
+          "recordedAt": "2026-10-02T08:00:00.000Z"
+        },
+        {
+          "id": "database-010",
+          "revision": 1,
+          "kind": "recipe",
+          "title": "validateArticlePart 第 10 条",
+          "summary": "validateArticlePart：FOR NO KEY UPDATE，照合同来。",
+          "fields": {
+            "steps": [
+              "bash scripts/worktree-overlay.sh",
+              "bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki.service.ts"
+            ],
+            "verify": {
+              "command": "npm test && echo \"<ok>\"",
+              "expectedExit": 0
+            }
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki.service.ts"
+          ],
+          "sources": 17,
+          "trust": "auto",
+          "recordedAt": "2026-10-03T09:00:00.000Z"
+        },
+        {
+          "id": "database-011",
+          "revision": 2,
+          "kind": "concept",
+          "title": "服务端校验脚注 第 11 条",
+          "summary": "服务端校验脚注：FOR NO KEY UPDATE，要先读再改。",
+          "fields": {
+            "definition": "服务端校验脚注 第 11 条。",
+            "boundaries": "只管文章，不管文档。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki.service.ts",
+            "src/runner-go/wiki_cli.go"
+          ],
+          "sources": 17,
+          "trust": "auto",
+          "recordedAt": "2026-10-04T00:00:00.000Z"
+        },
+        {
+          "id": "database-012",
+          "revision": 3,
+          "kind": "principle",
+          "title": "归主题先看路径 第 12 条",
+          "summary": "归主题先看路径：服务端校验脚注，别跳步。",
+          "fields": {
+            "statement": "归主题先看路径 第 12 条。",
+            "rationale": "人读得懂，模型才写得对。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-plan.ts"
+          ],
+          "sources": 17,
+          "trust": "auto",
+          "recordedAt": "2026-10-05T01:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "slug": "wiki",
+      "title": "Wiki",
+      "entrySetSha256": "aaaa0000aaaa0000aaaa0000aaaa0000aaaa0000aaaa0000aaaa0000aaaa0000",
+      "entries": [
+        {
+          "id": "wiki-001",
+          "revision": 1,
+          "kind": "pitfall",
+          "title": "entrySetSha256 第 1 条",
+          "summary": "entrySetSha256：FOR NO KEY UPDATE，照合同来。",
+          "fields": {
+            "trigger": {
+              "paths": [
+                "src/apiserver/src/wiki/wiki-articles.ts"
+              ],
+              "commands": []
+            },
+            "symptom": "entrySetSha256 第 1 条时出错。",
+            "cause": "顺序不对。",
+            "fix": "按顺序来。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-articles.ts",
+            "src/runner-go/wiki_articles.go"
+          ],
+          "sources": 64,
+          "trust": "auto",
+          "recordedAt": "2026-10-01T00:00:00.000Z"
+        },
+        {
+          "id": "wiki-002",
+          "revision": 2,
+          "kind": "convention",
+          "title": "CLAUDE_CODE_EFFORT_LEVEL=unset 第 2 条",
+          "summary": "CLAUDE_CODE_EFFORT_LEVEL=unset：干净的 Claude Code，看清楚再提交。",
+          "fields": {
+            "rule": "CLAUDE_CODE_EFFORT_LEVEL=unset 第 2 条。",
+            "scope": [
+              "src/runner-go/wiki_articles.go"
+            ],
+            "exceptions": ""
+          },
+          "paths": [
+            "src/runner-go/wiki_articles.go",
+            "src/web/src/components/WikiArticlePage.tsx"
+          ],
+          "sources": 64,
+          "trust": "auto",
+          "recordedAt": "2026-10-02T01:00:00.000Z"
+        },
+        {
+          "id": "wiki-003",
+          "revision": 3,
+          "kind": "decision",
+          "title": "手机抽屉 第 3 条",
+          "summary": "手机抽屉：wikiReadsByDocs，要先读再改。",
+          "fields": {
+            "context": "背景。",
+            "decision": "手机抽屉 第 3 条。",
+            "alternatives": [
+              {
+                "option": "每个空间各自限流",
+                "whyRejected": "没有全局上限"
+              },
+              {
+                "option": "不限",
+                "whyRejected": "GPU 会被压满"
+              }
+            ],
+            "consequences": "队列要持久化。",
+            "decidedAt": "2026-10-07"
+          },
+          "paths": [
+            "src/web/src/components/WikiHome.tsx"
+          ],
+          "sources": 64,
+          "trust": "auto",
+          "recordedAt": "2026-10-03T02:00:00.000Z"
+        },
+        {
+          "id": "wiki-004",
+          "revision": 1,
+          "kind": "recipe",
+          "title": "判据修订 第 4 条",
+          "summary": "判据修订：wikiContract.spec.ts，别跳步。",
+          "fields": {
+            "steps": [
+              "bash scripts/worktree-overlay.sh",
+              "bash scripts/run-pg-spec.sh docs/wiki-design.md"
+            ],
+            "verify": {
+              "command": "npm test && echo \"<ok>\"",
+              "expectedExit": 0
+            }
+          },
+          "paths": [
+            "docs/wiki-design.md"
+          ],
+          "sources": 63,
+          "trust": "auto",
+          "recordedAt": "2026-10-04T03:00:00.000Z"
+        },
+        {
+          "id": "wiki-005",
+          "revision": 2,
+          "kind": "concept",
+          "title": "环境白名单 第 5 条",
+          "summary": "环境白名单：--bare，照合同来。",
+          "fields": {
+            "definition": "环境白名单 第 5 条。",
+            "boundaries": "只管文章，不管文档。"
+          },
+          "paths": [
+            "src/runner-go/wiki_verify.go"
+          ],
+          "sources": 63,
+          "trust": "auto",
+          "recordedAt": "2026-10-05T04:00:00.000Z"
+        },
+        {
+          "id": "wiki-006",
+          "revision": 3,
+          "kind": "principle",
+          "title": "WikiArticleLogic 第 6 条",
+          "summary": "WikiArticleLogic：WikiArticleLogic，要先读再改。",
+          "fields": {
+            "statement": "WikiArticleLogic 第 6 条。",
+            "rationale": "人读得懂，模型才写得对。"
+          },
+          "paths": [
+            "src/macos/OrbitKit/Sources/OrbitKit/Models/WikiArticles.swift"
+          ],
+          "sources": 63,
+          "trust": "auto",
+          "recordedAt": "2026-10-06T05:00:00.000Z"
+        },
+        {
+          "id": "wiki-007",
+          "revision": 1,
+          "kind": "pitfall",
+          "title": "服务端校验脚注 第 7 条",
+          "summary": "服务端校验脚注：entrySetSha256，照合同来。",
+          "fields": {
+            "trigger": {
+              "paths": [
+                "src/apiserver/src/wiki/wiki-maintenance-run.ts"
+              ],
+              "commands": []
+            },
+            "symptom": "服务端校验脚注 第 7 条时出错。",
+            "cause": "顺序不对。",
+            "fix": "按顺序来。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-maintenance-run.ts"
+          ],
+          "sources": 62,
+          "trust": "auto",
+          "recordedAt": "2026-10-07T06:00:00.000Z"
+        },
+        {
+          "id": "wiki-008",
+          "revision": 2,
+          "kind": "convention",
+          "title": "合同先行 第 8 条",
+          "summary": "合同先行：判据修订，照合同来。",
+          "fields": {
+            "rule": "合同先行 第 8 条。",
+            "scope": [
+              "docs/wiki-contract.md"
+            ],
+            "exceptions": ""
+          },
+          "paths": [
+            "docs/wiki-contract.md",
+            "src/apiserver/src/wiki/wiki-plan.ts"
+          ],
+          "sources": 62,
+          "trust": "auto",
+          "recordedAt": "2026-10-01T07:00:00.000Z"
+        },
+        {
+          "id": "wiki-009",
+          "revision": 3,
+          "kind": "decision",
+          "title": "vitest 里的假数据 第 9 条",
+          "summary": "vitest 里的假数据：vitest 里的假数据，要先读再改。",
+          "fields": {
+            "context": "背景。",
+            "decision": "vitest 里的假数据 第 9 条。",
+            "alternatives": [
+              {
+                "option": "每个空间各自限流",
+                "whyRejected": "没有全局上限"
+              },
+              {
+                "option": "不限",
+                "whyRejected": "GPU 会被压满"
+              }
+            ],
+            "consequences": "队列要持久化。",
+            "decidedAt": "2026-10-07"
+          },
+          "paths": [
+            "src/web/src/components/WikiHome.tsx"
+          ],
+          "sources": 62,
+          "trust": "auto",
+          "recordedAt": "2026-10-02T08:00:00.000Z"
+        },
+        {
+          "id": "wiki-010",
+          "revision": 1,
+          "kind": "recipe",
+          "title": "一个事务里整体替换 第 10 条",
+          "summary": "一个事务里整体替换：validateArticlePart，看清楚再提交。",
+          "fields": {
+            "steps": [
+              "bash scripts/worktree-overlay.sh",
+              "bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-plan.ts"
+            ],
+            "verify": {
+              "command": "npm test && echo \"<ok>\"",
+              "expectedExit": 0
+            }
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-plan.ts"
+          ],
+          "sources": 61,
+          "trust": "auto",
+          "recordedAt": "2026-10-03T09:00:00.000Z"
+        },
+        {
+          "id": "wiki-011",
+          "revision": 2,
+          "kind": "concept",
+          "title": "CLAUDE_CODE_EFFORT_LEVEL=unset 第 11 条",
+          "summary": "CLAUDE_CODE_EFFORT_LEVEL=unset：环境白名单，照合同来。",
+          "fields": {
+            "definition": "CLAUDE_CODE_EFFORT_LEVEL=unset 第 11 条。",
+            "boundaries": "只管文章，不管文档。"
+          },
+          "paths": [
+            "src/runner-go/wiki_maintain.go"
+          ],
+          "sources": 61,
+          "trust": "auto",
+          "recordedAt": "2026-10-04T00:00:00.000Z"
+        },
+        {
+          "id": "wiki-012",
+          "revision": 3,
+          "kind": "principle",
+          "title": "先改文档再动代码 第 12 条",
+          "summary": "先改文档再动代码：先改文档再动代码，看清楚再提交。",
+          "fields": {
+            "statement": "先改文档再动代码 第 12 条。",
+            "rationale": "人读得懂，模型才写得对。"
+          },
+          "paths": [
+            "contracts/wiki.contract.json",
+            "src/apiserver/src/wiki/wiki-articles.ts"
+          ],
+          "sources": 61,
+          "trust": "auto",
+          "recordedAt": "2026-10-05T01:00:00.000Z"
+        },
+        {
+          "id": "wiki-013",
+          "revision": 1,
+          "kind": "pitfall",
+          "title": "一个事务里整体替换 第 13 条",
+          "summary": "一个事务里整体替换：validateArticlePart，看清楚再提交。",
+          "fields": {
+            "trigger": {
+              "paths": [
+                "src/apiserver/src/wiki/wiki-articles.ts"
+              ],
+              "commands": []
+            },
+            "symptom": "一个事务里整体替换 第 13 条时出错。",
+            "cause": "顺序不对。",
+            "fix": "按顺序来。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-articles.ts"
+          ],
+          "sources": 60,
+          "trust": "auto",
+          "recordedAt": "2026-10-06T02:00:00.000Z"
+        },
+        {
+          "id": "wiki-014",
+          "revision": 2,
+          "kind": "convention",
+          "title": "apiKeyHelper 第 14 条",
+          "summary": "apiKeyHelper：环境白名单，照合同来。",
+          "fields": {
+            "rule": "apiKeyHelper 第 14 条。",
+            "scope": [
+              "src/runner-go/wiki_verify.go"
+            ],
+            "exceptions": ""
+          },
+          "paths": [
+            "src/runner-go/wiki_verify.go"
+          ],
+          "sources": 60,
+          "trust": "auto",
+          "recordedAt": "2026-10-07T03:00:00.000Z"
+        },
+        {
+          "id": "wiki-015",
+          "revision": 3,
+          "kind": "decision",
+          "title": "首页先给内容 第 15 条",
+          "summary": "首页先给内容：首页先给内容，看清楚再提交。",
+          "fields": {
+            "context": "背景。",
+            "decision": "首页先给内容 第 15 条。",
+            "alternatives": [
+              {
+                "option": "每个空间各自限流",
+                "whyRejected": "没有全局上限"
+              },
+              {
+                "option": "不限",
+                "whyRejected": "GPU 会被压满"
+              }
+            ],
+            "consequences": "队列要持久化。",
+            "decidedAt": "2026-10-07"
+          },
+          "paths": [
+            "src/web/src/components/WikiArticlePage.tsx"
+          ],
+          "sources": 60,
+          "trust": "auto",
+          "recordedAt": "2026-10-01T04:00:00.000Z"
+        },
+        {
+          "id": "wiki-016",
+          "revision": 1,
+          "kind": "recipe",
+          "title": "判据修订 第 16 条",
+          "summary": "判据修订：判据修订，照合同来。",
+          "fields": {
+            "steps": [
+              "bash scripts/worktree-overlay.sh",
+              "bash scripts/run-pg-spec.sh docs/wiki-contract.md"
+            ],
+            "verify": {
+              "command": "npm test && echo \"<ok>\"",
+              "expectedExit": 0
+            }
+          },
+          "paths": [
+            "docs/wiki-contract.md"
+          ],
+          "sources": 59,
+          "trust": "auto",
+          "recordedAt": "2026-10-02T05:00:00.000Z"
+        },
+        {
+          "id": "wiki-017",
+          "revision": 2,
+          "kind": "concept",
+          "title": "--bare 第 17 条",
+          "summary": "--bare：遇到 401 就停，看清楚再提交。",
+          "fields": {
+            "definition": "--bare 第 17 条。",
+            "boundaries": "只管文章，不管文档。"
+          },
+          "paths": [
+            "src/runner-go/wiki_cli.go",
+            "src/web/src/lib/wikiArticles.ts"
+          ],
+          "sources": 59,
+          "trust": "auto",
+          "recordedAt": "2026-10-03T06:00:00.000Z"
+        },
+        {
+          "id": "wiki-018",
+          "revision": 3,
+          "kind": "principle",
+          "title": "SwiftUI 读法 第 18 条",
+          "summary": "SwiftUI 读法：SwiftUI 读法，照合同来。",
+          "fields": {
+            "statement": "SwiftUI 读法 第 18 条。",
+            "rationale": "人读得懂，模型才写得对。"
+          },
+          "paths": [
+            "src/macos/OrbitKit/Sources/OrbitKit/Models/WikiArticles.swift"
+          ],
+          "sources": 59,
+          "trust": "auto",
+          "recordedAt": "2026-10-04T07:00:00.000Z"
+        },
+        {
+          "id": "wiki-019",
+          "revision": 1,
+          "kind": "pitfall",
+          "title": "FOR NO KEY UPDATE 第 19 条",
+          "summary": "FOR NO KEY UPDATE：服务端校验脚注，照合同来。",
+          "fields": {
+            "trigger": {
+              "paths": [
+                "src/apiserver/src/wiki/wiki-plan.ts"
+              ],
+              "commands": []
+            },
+            "symptom": "FOR NO KEY UPDATE 第 19 条时出错。",
+            "cause": "顺序不对。",
+            "fix": "按顺序来。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-plan.ts"
+          ],
+          "sources": 58,
+          "trust": "auto",
+          "recordedAt": "2026-10-05T08:00:00.000Z"
+        },
+        {
+          "id": "wiki-020",
+          "revision": 2,
+          "kind": "convention",
+          "title": "合同先行 第 20 条",
+          "summary": "合同先行：判据修订，照合同来。",
+          "fields": {
+            "rule": "合同先行 第 20 条。",
+            "scope": [
+              "docs/wiki-contract.md"
+            ],
+            "exceptions": ""
+          },
+          "paths": [],
+          "sources": 58,
+          "trust": "auto",
+          "recordedAt": "2026-10-06T09:00:00.000Z"
+        },
+        {
+          "id": "wiki-021",
+          "revision": 3,
+          "kind": "decision",
+          "title": "手机抽屉 第 21 条",
+          "summary": "手机抽屉：vitest 里的假数据，要先读再改。",
+          "fields": {
+            "context": "背景。",
+            "decision": "手机抽屉 第 21 条。",
+            "alternatives": [
+              {
+                "option": "每个空间各自限流",
+                "whyRejected": "没有全局上限"
+              },
+              {
+                "option": "不限",
+                "whyRejected": "GPU 会被压满"
+              }
+            ],
+            "consequences": "队列要持久化。",
+            "decidedAt": "2026-10-07"
+          },
+          "paths": [
+            "src/web/src/components/WikiArticlePage.tsx"
+          ],
+          "sources": 58,
+          "trust": "auto",
+          "recordedAt": "2026-10-07T00:00:00.000Z"
+        },
+        {
+          "id": "wiki-022",
+          "revision": 1,
+          "kind": "recipe",
+          "title": "entrySetSha256 第 22 条",
+          "summary": "entrySetSha256：WIKI_ARTICLE_STALE，别跳步。",
+          "fields": {
+            "steps": [
+              "bash scripts/worktree-overlay.sh",
+              "bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki.service.ts"
+            ],
+            "verify": {
+              "command": "npm test && echo \"<ok>\"",
+              "expectedExit": 0
+            }
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki.service.ts",
+            "src/runner-go/wiki_articles.go"
+          ],
+          "sources": 57,
+          "trust": "auto",
+          "recordedAt": "2026-10-01T01:00:00.000Z"
+        },
+        {
+          "id": "wiki-023",
+          "revision": 2,
+          "kind": "concept",
+          "title": "MAX_THINKING_TOKENS=0 第 23 条",
+          "summary": "MAX_THINKING_TOKENS=0：--bare，照合同来。",
+          "fields": {
+            "definition": "MAX_THINKING_TOKENS=0 第 23 条。",
+            "boundaries": "只管文章，不管文档。"
+          },
+          "paths": [
+            "src/runner-go/wiki_verify.go"
+          ],
+          "sources": 57,
+          "trust": "auto",
+          "recordedAt": "2026-10-02T02:00:00.000Z"
+        },
+        {
+          "id": "wiki-024",
+          "revision": 3,
+          "kind": "principle",
+          "title": "合同先行 第 24 条",
+          "summary": "合同先行：字段闭集，别跳步。",
+          "fields": {
+            "statement": "合同先行 第 24 条。",
+            "rationale": "人读得懂，模型才写得对。"
+          },
+          "paths": [
+            "docs/wiki-contract.md"
+          ],
+          "sources": 57,
+          "trust": "auto",
+          "recordedAt": "2026-10-03T03:00:00.000Z"
+        },
+        {
+          "id": "wiki-025",
+          "revision": 1,
+          "kind": "pitfall",
+          "title": "服务端校验脚注 第 25 条",
+          "summary": "服务端校验脚注：WIKI_ARTICLE_STALE，别跳步。",
+          "fields": {
+            "trigger": {
+              "paths": [
+                "src/apiserver/src/wiki/wiki-maintenance-run.ts"
+              ],
+              "commands": []
+            },
+            "symptom": "服务端校验脚注 第 25 条时出错。",
+            "cause": "顺序不对。",
+            "fix": "按顺序来。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-maintenance-run.ts"
+          ],
+          "sources": 56,
+          "trust": "auto",
+          "recordedAt": "2026-10-04T04:00:00.000Z"
+        },
+        {
+          "id": "wiki-026",
+          "revision": 2,
+          "kind": "convention",
+          "title": "思考关掉 第 26 条",
+          "summary": "思考关掉：环境白名单，要先读再改。",
+          "fields": {
+            "rule": "思考关掉 第 26 条。",
+            "scope": [
+              "src/runner-go/wiki_maintain.go"
+            ],
+            "exceptions": ""
+          },
+          "paths": [
+            "src/runner-go/wiki_maintain.go"
+          ],
+          "sources": 56,
+          "trust": "auto",
+          "recordedAt": "2026-10-05T05:00:00.000Z"
+        },
+        {
+          "id": "wiki-027",
+          "revision": 3,
+          "kind": "decision",
+          "title": "vitest 里的假数据 第 27 条",
+          "summary": "vitest 里的假数据：按大类列主题，别跳步。",
+          "fields": {
+            "context": "背景。",
+            "decision": "vitest 里的假数据 第 27 条。",
+            "alternatives": [
+              {
+                "option": "每个空间各自限流",
+                "whyRejected": "没有全局上限"
+              },
+              {
+                "option": "不限",
+                "whyRejected": "GPU 会被压满"
+              }
+            ],
+            "consequences": "队列要持久化。",
+            "decidedAt": "2026-10-07"
+          },
+          "paths": [
+            "src/web/src/components/WikiHome.tsx"
+          ],
+          "sources": 56,
+          "trust": "auto",
+          "recordedAt": "2026-10-06T06:00:00.000Z"
+        },
+        {
+          "id": "wiki-028",
+          "revision": 1,
+          "kind": "recipe",
+          "title": "字段闭集 第 28 条",
+          "summary": "字段闭集：wikiContract.spec.ts，照合同来。",
+          "fields": {
+            "steps": [
+              "bash scripts/worktree-overlay.sh",
+              "bash scripts/run-pg-spec.sh docs/wiki-contract.md"
+            ],
+            "verify": {
+              "command": "npm test && echo \"<ok>\"",
+              "expectedExit": 0
+            }
+          },
+          "paths": [
+            "docs/wiki-contract.md",
+            "src/apiserver/src/wiki/wiki-plan.ts"
+          ],
+          "sources": 55,
+          "trust": "auto",
+          "recordedAt": "2026-10-07T07:00:00.000Z"
+        },
+        {
+          "id": "wiki-029",
+          "revision": 2,
+          "kind": "concept",
+          "title": "WikiArticleLogic 第 29 条",
+          "summary": "WikiArticleLogic：OrbitKit 对照测试，别跳步。",
+          "fields": {
+            "definition": "WikiArticleLogic 第 29 条。",
+            "boundaries": "只管文章，不管文档。"
+          },
+          "paths": [
+            "src/macos/OrbitKit/Sources/OrbitKit/Models/WikiArticles.swift",
+            "src/apiserver/src/wiki/wiki-maintenance-run.ts"
+          ],
+          "sources": 55,
+          "trust": "auto",
+          "recordedAt": "2026-10-01T08:00:00.000Z"
+        },
+        {
+          "id": "wiki-030",
+          "revision": 3,
+          "kind": "principle",
+          "title": "vitest 里的假数据 第 30 条",
+          "summary": "vitest 里的假数据：vitest 里的假数据，照合同来。",
+          "fields": {
+            "statement": "vitest 里的假数据 第 30 条。",
+            "rationale": "人读得懂，模型才写得对。"
+          },
+          "paths": [
+            "src/web/src/components/WikiHome.tsx"
+          ],
+          "sources": 55,
+          "trust": "auto",
+          "recordedAt": "2026-10-02T09:00:00.000Z"
+        },
+        {
+          "id": "wiki-031",
+          "revision": 1,
+          "kind": "pitfall",
+          "title": "服务端校验脚注 第 31 条",
+          "summary": "服务端校验脚注：validateArticlePart，要先读再改。",
+          "fields": {
+            "trigger": {
+              "paths": [
+                "src/apiserver/src/wiki/wiki.service.ts"
+              ],
+              "commands": []
+            },
+            "symptom": "服务端校验脚注 第 31 条时出错。",
+            "cause": "顺序不对。",
+            "fix": "按顺序来。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki.service.ts"
+          ],
+          "sources": 54,
+          "trust": "auto",
+          "recordedAt": "2026-10-03T00:00:00.000Z"
+        },
+        {
+          "id": "wiki-032",
+          "revision": 2,
+          "kind": "convention",
+          "title": "判据修订 第 32 条",
+          "summary": "判据修订：合同先行，看清楚再提交。",
+          "fields": {
+            "rule": "判据修订 第 32 条。",
+            "scope": [
+              "contracts/wiki.contract.json"
+            ],
+            "exceptions": "迁移脚本除外。"
+          },
+          "paths": [
+            "contracts/wiki.contract.json"
+          ],
+          "sources": 54,
+          "trust": "auto",
+          "recordedAt": "2026-10-04T01:00:00.000Z"
+        },
+        {
+          "id": "wiki-033",
+          "revision": 3,
+          "kind": "decision",
+          "title": "手机抽屉 第 33 条",
+          "summary": "手机抽屉：首页先给内容，照合同来。",
+          "fields": {
+            "context": "背景。",
+            "decision": "手机抽屉 第 33 条。",
+            "alternatives": [
+              {
+                "option": "每个空间各自限流",
+                "whyRejected": "没有全局上限"
+              },
+              {
+                "option": "不限",
+                "whyRejected": "GPU 会被压满"
+              }
+            ],
+            "consequences": "队列要持久化。",
+            "decidedAt": "2026-10-07"
+          },
+          "paths": [
+            "src/web/src/lib/wikiArticles.ts"
+          ],
+          "sources": 54,
+          "trust": "auto",
+          "recordedAt": "2026-10-05T02:00:00.000Z"
+        },
+        {
+          "id": "wiki-034",
+          "revision": 1,
+          "kind": "recipe",
+          "title": "validateArticlePart 第 34 条",
+          "summary": "validateArticlePart：FOR NO KEY UPDATE，看清楚再提交。",
+          "fields": {
+            "steps": [
+              "bash scripts/worktree-overlay.sh",
+              "bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-maintenance-run.ts"
+            ],
+            "verify": {
+              "command": "npm test && echo \"<ok>\"",
+              "expectedExit": 0
+            }
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-maintenance-run.ts"
+          ],
+          "sources": 53,
+          "trust": "auto",
+          "recordedAt": "2026-10-06T03:00:00.000Z"
+        },
+        {
+          "id": "wiki-035",
+          "revision": 2,
+          "kind": "concept",
+          "title": "遇到 401 就停 第 35 条",
+          "summary": "遇到 401 就停：CLAUDE_CODE_EFFORT_LEVEL=unset，照合同来。",
+          "fields": {
+            "definition": "遇到 401 就停 第 35 条。",
+            "boundaries": "只管文章，不管文档。"
+          },
+          "paths": [
+            "src/runner-go/wiki_articles.go",
+            "src/web/src/components/WikiArticlePage.tsx"
+          ],
+          "sources": 53,
+          "trust": "auto",
+          "recordedAt": "2026-10-07T04:00:00.000Z"
+        },
+        {
+          "id": "wiki-036",
+          "revision": 3,
+          "kind": "principle",
+          "title": "wikiContract.spec.ts 第 36 条",
+          "summary": "wikiContract.spec.ts：先改文档再动代码，照合同来。",
+          "fields": {
+            "statement": "wikiContract.spec.ts 第 36 条。",
+            "rationale": "人读得懂，模型才写得对。"
+          },
+          "paths": [
+            "contracts/wiki.contract.json"
+          ],
+          "sources": 53,
+          "trust": "auto",
+          "recordedAt": "2026-10-01T05:00:00.000Z"
+        },
+        {
+          "id": "wiki-037",
+          "revision": 1,
+          "kind": "pitfall",
+          "title": "归主题先看路径 第 37 条",
+          "summary": "归主题先看路径：写入前核对指纹，看清楚再提交。",
+          "fields": {
+            "trigger": {
+              "paths": [
+                "src/apiserver/src/wiki/wiki-maintenance-run.ts"
+              ],
+              "commands": []
+            },
+            "symptom": "归主题先看路径 第 37 条时出错。",
+            "cause": "顺序不对。",
+            "fix": "按顺序来。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-maintenance-run.ts"
+          ],
+          "sources": 52,
+          "trust": "auto",
+          "recordedAt": "2026-10-02T06:00:00.000Z"
+        },
+        {
+          "id": "wiki-038",
+          "revision": 2,
+          "kind": "convention",
+          "title": "MAX_THINKING_TOKENS=0 第 38 条",
+          "summary": "MAX_THINKING_TOKENS=0：apiKeyHelper，别跳步。",
+          "fields": {
+            "rule": "MAX_THINKING_TOKENS=0 第 38 条。",
+            "scope": [
+              "src/runner-go/wiki_maintain.go"
+            ],
+            "exceptions": "迁移脚本除外。"
+          },
+          "paths": [
+            "src/runner-go/wiki_maintain.go"
+          ],
+          "sources": 52,
+          "trust": "auto",
+          "recordedAt": "2026-10-03T07:00:00.000Z"
+        },
+        {
+          "id": "wiki-039",
+          "revision": 3,
+          "kind": "decision",
+          "title": "wikiReadsByDocs 第 39 条",
+          "summary": "wikiReadsByDocs：按大类列主题，看清楚再提交。",
+          "fields": {
+            "context": "背景。",
+            "decision": "wikiReadsByDocs 第 39 条。",
+            "alternatives": [
+              {
+                "option": "每个空间各自限流",
+                "whyRejected": "没有全局上限"
+              },
+              {
+                "option": "不限",
+                "whyRejected": "GPU 会被压满"
+              }
+            ],
+            "consequences": "队列要持久化。",
+            "decidedAt": "2026-10-07"
+          },
+          "paths": [
+            "src/web/src/components/WikiArticlePage.tsx",
+            "docs/wiki-design.md"
+          ],
+          "sources": 52,
+          "trust": "auto",
+          "recordedAt": "2026-10-04T08:00:00.000Z"
+        },
+        {
+          "id": "wiki-040",
+          "revision": 1,
+          "kind": "recipe",
+          "title": "判据修订 第 40 条",
+          "summary": "判据修订：wikiContract.spec.ts，照合同来。",
+          "fields": {
+            "steps": [
+              "bash scripts/worktree-overlay.sh",
+              "bash scripts/run-pg-spec.sh docs/wiki-contract.md"
+            ],
+            "verify": {
+              "command": "npm test && echo \"<ok>\"",
+              "expectedExit": 0
+            }
+          },
+          "paths": [
+            "docs/wiki-contract.md"
+          ],
+          "sources": 51,
+          "trust": "auto",
+          "recordedAt": "2026-10-05T09:00:00.000Z"
+        },
+        {
+          "id": "wiki-041",
+          "revision": 2,
+          "kind": "concept",
+          "title": "SwiftUI 读法 第 41 条",
+          "summary": "SwiftUI 读法：SwiftUI 读法，要先读再改。",
+          "fields": {
+            "definition": "SwiftUI 读法 第 41 条。",
+            "boundaries": "只管文章，不管文档。"
+          },
+          "paths": [
+            "src/macos/OrbitKit/Sources/OrbitKit/Models/WikiArticles.swift"
+          ],
+          "sources": 51,
+          "trust": "auto",
+          "recordedAt": "2026-10-06T00:00:00.000Z"
+        },
+        {
+          "id": "wiki-042",
+          "revision": 3,
+          "kind": "principle",
+          "title": "手机抽屉 第 42 条",
+          "summary": "手机抽屉：vitest 里的假数据，看清楚再提交。",
+          "fields": {
+            "statement": "手机抽屉 第 42 条。",
+            "rationale": "人读得懂，模型才写得对。"
+          },
+          "paths": [
+            "src/web/src/components/WikiArticlePage.tsx"
+          ],
+          "sources": 51,
+          "trust": "auto",
+          "recordedAt": "2026-10-07T01:00:00.000Z"
+        },
+        {
+          "id": "wiki-043",
+          "revision": 1,
+          "kind": "pitfall",
+          "title": "写入前核对指纹 第 43 条",
+          "summary": "写入前核对指纹：WIKI_ARTICLE_STALE，别跳步。",
+          "fields": {
+            "trigger": {
+              "paths": [
+                "src/apiserver/src/wiki/wiki-plan.ts"
+              ],
+              "commands": []
+            },
+            "symptom": "写入前核对指纹 第 43 条时出错。",
+            "cause": "顺序不对。",
+            "fix": "按顺序来。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-plan.ts"
+          ],
+          "sources": 50,
+          "trust": "auto",
+          "recordedAt": "2026-10-01T02:00:00.000Z"
+        },
+        {
+          "id": "wiki-044",
+          "revision": 2,
+          "kind": "convention",
+          "title": "wikiContract.spec.ts 第 44 条",
+          "summary": "wikiContract.spec.ts：判据修订，要先读再改。",
+          "fields": {
+            "rule": "wikiContract.spec.ts 第 44 条。",
+            "scope": [
+              "docs/wiki-contract.md"
+            ],
+            "exceptions": ""
+          },
+          "paths": [
+            "docs/wiki-contract.md"
+          ],
+          "sources": 50,
+          "trust": "auto",
+          "recordedAt": "2026-10-02T03:00:00.000Z"
+        },
+        {
+          "id": "wiki-045",
+          "revision": 3,
+          "kind": "decision",
+          "title": "手机抽屉 第 45 条",
+          "summary": "手机抽屉：vitest 里的假数据，照合同来。",
+          "fields": {
+            "context": "背景。",
+            "decision": "手机抽屉 第 45 条。",
+            "alternatives": [
+              {
+                "option": "每个空间各自限流",
+                "whyRejected": "没有全局上限"
+              },
+              {
+                "option": "不限",
+                "whyRejected": "GPU 会被压满"
+              }
+            ],
+            "consequences": "队列要持久化。",
+            "decidedAt": "2026-10-07"
+          },
+          "paths": [
+            "src/web/src/components/WikiHome.tsx",
+            "contracts/wiki.contract.json"
+          ],
+          "sources": 50,
+          "trust": "auto",
+          "recordedAt": "2026-10-03T04:00:00.000Z"
+        },
+        {
+          "id": "wiki-046",
+          "revision": 1,
+          "kind": "recipe",
+          "title": "归主题先看路径 第 46 条",
+          "summary": "归主题先看路径：服务端校验脚注，照合同来。",
+          "fields": {
+            "steps": [
+              "bash scripts/worktree-overlay.sh",
+              "bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki.service.ts"
+            ],
+            "verify": {
+              "command": "npm test && echo \"<ok>\"",
+              "expectedExit": 0
+            }
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki.service.ts"
+          ],
+          "sources": 49,
+          "trust": "auto",
+          "recordedAt": "2026-10-04T05:00:00.000Z"
+        },
+        {
+          "id": "wiki-047",
+          "revision": 2,
+          "kind": "concept",
+          "title": "干净的 Claude Code 第 47 条",
+          "summary": "干净的 Claude Code：MAX_THINKING_TOKENS=0，看清楚再提交。",
+          "fields": {
+            "definition": "干净的 Claude Code 第 47 条。",
+            "boundaries": "只管文章，不管文档。"
+          },
+          "paths": [
+            "src/runner-go/wiki_verify.go"
+          ],
+          "sources": 49,
+          "trust": "auto",
+          "recordedAt": "2026-10-05T06:00:00.000Z"
+        },
+        {
+          "id": "wiki-048",
+          "revision": 3,
+          "kind": "principle",
+          "title": "合同先行 第 48 条",
+          "summary": "合同先行：中文说明，看清楚再提交。",
+          "fields": {
+            "statement": "合同先行 第 48 条。",
+            "rationale": "人读得懂，模型才写得对。"
+          },
+          "paths": [
+            "docs/wiki-contract.md"
+          ],
+          "sources": 49,
+          "trust": "auto",
+          "recordedAt": "2026-10-06T07:00:00.000Z"
+        },
+        {
+          "id": "wiki-049",
+          "revision": 1,
+          "kind": "pitfall",
+          "title": "FOR NO KEY UPDATE 第 49 条",
+          "summary": "FOR NO KEY UPDATE：一个事务里整体替换，照合同来。",
+          "fields": {
+            "trigger": {
+              "paths": [
+                "src/apiserver/src/wiki/wiki-articles.ts"
+              ],
+              "commands": []
+            },
+            "symptom": "FOR NO KEY UPDATE 第 49 条时出错。",
+            "cause": "顺序不对。",
+            "fix": "按顺序来。"
+          },
+          "paths": [],
+          "sources": 48,
+          "trust": "auto",
+          "recordedAt": "2026-10-07T08:00:00.000Z"
+        },
+        {
+          "id": "wiki-050",
+          "revision": 2,
+          "kind": "convention",
+          "title": "干净的 Claude Code 第 50 条",
+          "summary": "干净的 Claude Code：思考关掉，看清楚再提交。",
+          "fields": {
+            "rule": "干净的 Claude Code 第 50 条。",
+            "scope": [
+              "src/runner-go/wiki_articles.go"
+            ],
+            "exceptions": ""
+          },
+          "paths": [
+            "src/runner-go/wiki_articles.go"
+          ],
+          "sources": 48,
+          "trust": "auto",
+          "recordedAt": "2026-10-01T09:00:00.000Z"
+        },
+        {
+          "id": "wiki-051",
+          "revision": 3,
+          "kind": "decision",
+          "title": "按大类列主题 第 51 条",
+          "summary": "按大类列主题：脚注悬停看条目，别跳步。",
+          "fields": {
+            "context": "背景。",
+            "decision": "按大类列主题 第 51 条。",
+            "alternatives": [
+              {
+                "option": "每个空间各自限流",
+                "whyRejected": "没有全局上限"
+              },
+              {
+                "option": "不限",
+                "whyRejected": "GPU 会被压满"
+              }
+            ],
+            "consequences": "队列要持久化。",
+            "decidedAt": "2026-10-07"
+          },
+          "paths": [
+            "src/web/src/components/WikiArticlePage.tsx"
+          ],
+          "sources": 48,
+          "trust": "auto",
+          "recordedAt": "2026-10-02T00:00:00.000Z"
+        },
+        {
+          "id": "wiki-052",
+          "revision": 1,
+          "kind": "recipe",
+          "title": "WikiArticleLogic 第 52 条",
+          "summary": "WikiArticleLogic：SwiftUI 读法，要先读再改。",
+          "fields": {
+            "steps": [
+              "bash scripts/worktree-overlay.sh",
+              "bash scripts/run-pg-spec.sh src/macos/OrbitKit/Sources/OrbitKit/Models/WikiArticles.swift"
+            ],
+            "verify": {
+              "command": "npm test && echo \"<ok>\"",
+              "expectedExit": 0
+            }
+          },
+          "paths": [
+            "src/macos/OrbitKit/Sources/OrbitKit/Models/WikiArticles.swift"
+          ],
+          "sources": 47,
+          "trust": "auto",
+          "recordedAt": "2026-10-03T01:00:00.000Z"
+        },
+        {
+          "id": "wiki-053",
+          "revision": 2,
+          "kind": "concept",
+          "title": "CLAUDE_CODE_EFFORT_LEVEL=unset 第 53 条",
+          "summary": "CLAUDE_CODE_EFFORT_LEVEL=unset：思考关掉，要先读再改。",
+          "fields": {
+            "definition": "CLAUDE_CODE_EFFORT_LEVEL=unset 第 53 条。",
+            "boundaries": "只管文章，不管文档。"
+          },
+          "paths": [
+            "src/runner-go/wiki_articles.go",
+            "src/web/src/components/WikiHome.tsx"
+          ],
+          "sources": 47,
+          "trust": "auto",
+          "recordedAt": "2026-10-04T02:00:00.000Z"
+        },
+        {
+          "id": "wiki-054",
+          "revision": 3,
+          "kind": "principle",
+          "title": "A–Z 索引 第 54 条",
+          "summary": "A–Z 索引：A–Z 索引，别跳步。",
+          "fields": {
+            "statement": "A–Z 索引 第 54 条。",
+            "rationale": "人读得懂，模型才写得对。"
+          },
+          "paths": [
+            "src/web/src/components/WikiArticlePage.tsx"
+          ],
+          "sources": 47,
+          "trust": "auto",
+          "recordedAt": "2026-10-05T03:00:00.000Z"
+        },
+        {
+          "id": "wiki-055",
+          "revision": 1,
+          "kind": "pitfall",
+          "title": "写入前核对指纹 第 55 条",
+          "summary": "写入前核对指纹：归主题先看路径，要先读再改。",
+          "fields": {
+            "trigger": {
+              "paths": [
+                "src/apiserver/src/wiki/wiki-plan.ts"
+              ],
+              "commands": []
+            },
+            "symptom": "写入前核对指纹 第 55 条时出错。",
+            "cause": "顺序不对。",
+            "fix": "按顺序来。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-plan.ts"
+          ],
+          "sources": 46,
+          "trust": "auto",
+          "recordedAt": "2026-10-06T04:00:00.000Z"
+        },
+        {
+          "id": "wiki-056",
+          "revision": 2,
+          "kind": "convention",
+          "title": "合同先行 第 56 条",
+          "summary": "合同先行：字段闭集，看清楚再提交。",
+          "fields": {
+            "rule": "合同先行 第 56 条。",
+            "scope": [
+              "docs/wiki-design.md"
+            ],
+            "exceptions": "迁移脚本除外。"
+          },
+          "paths": [
+            "docs/wiki-design.md"
+          ],
+          "sources": 46,
+          "trust": "auto",
+          "recordedAt": "2026-10-07T05:00:00.000Z"
+        },
+        {
+          "id": "wiki-057",
+          "revision": 3,
+          "kind": "decision",
+          "title": "首页先给内容 第 57 条",
+          "summary": "首页先给内容：按大类列主题，别跳步。",
+          "fields": {
+            "context": "背景。",
+            "decision": "首页先给内容 第 57 条。",
+            "alternatives": [
+              {
+                "option": "每个空间各自限流",
+                "whyRejected": "没有全局上限"
+              },
+              {
+                "option": "不限",
+                "whyRejected": "GPU 会被压满"
+              }
+            ],
+            "consequences": "队列要持久化。",
+            "decidedAt": "2026-10-07"
+          },
+          "paths": [],
+          "sources": 46,
+          "trust": "auto",
+          "recordedAt": "2026-10-01T06:00:00.000Z"
+        },
+        {
+          "id": "wiki-058",
+          "revision": 1,
+          "kind": "recipe",
+          "title": "服务端校验脚注 第 58 条",
+          "summary": "服务端校验脚注：归主题先看路径，别跳步。",
+          "fields": {
+            "steps": [
+              "bash scripts/worktree-overlay.sh",
+              "bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki.service.ts"
+            ],
+            "verify": {
+              "command": "npm test && echo \"<ok>\"",
+              "expectedExit": 0
+            }
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki.service.ts"
+          ],
+          "sources": 45,
+          "trust": "auto",
+          "recordedAt": "2026-10-02T07:00:00.000Z"
+        },
+        {
+          "id": "wiki-059",
+          "revision": 2,
+          "kind": "concept",
+          "title": "CLAUDE_CODE_EFFORT_LEVEL=unset 第 59 条",
+          "summary": "CLAUDE_CODE_EFFORT_LEVEL=unset：--bare，看清楚再提交。",
+          "fields": {
+            "definition": "CLAUDE_CODE_EFFORT_LEVEL=unset 第 59 条。",
+            "boundaries": "只管文章，不管文档。"
+          },
+          "paths": [
+            "src/runner-go/wiki_articles.go"
+          ],
+          "sources": 45,
+          "trust": "auto",
+          "recordedAt": "2026-10-03T08:00:00.000Z"
+        },
+        {
+          "id": "wiki-060",
+          "revision": 3,
+          "kind": "principle",
+          "title": "中文说明 第 60 条",
+          "summary": "中文说明：判据修订，照合同来。",
+          "fields": {
+            "statement": "中文说明 第 60 条。",
+            "rationale": "人读得懂，模型才写得对。"
+          },
+          "paths": [
+            "docs/wiki-design.md"
+          ],
+          "sources": 45,
+          "trust": "auto",
+          "recordedAt": "2026-10-04T09:00:00.000Z"
+        },
+        {
+          "id": "wiki-061",
+          "revision": 1,
+          "kind": "pitfall",
+          "title": "归主题先看路径 第 61 条",
+          "summary": "归主题先看路径：归主题先看路径，看清楚再提交。",
+          "fields": {
+            "trigger": {
+              "paths": [
+                "src/apiserver/src/wiki/wiki-articles.ts"
+              ],
+              "commands": []
+            },
+            "symptom": "归主题先看路径 第 61 条时出错。",
+            "cause": "顺序不对。",
+            "fix": "按顺序来。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-articles.ts",
+            "src/runner-go/wiki_verify.go"
+          ],
+          "sources": 44,
+          "trust": "auto",
+          "recordedAt": "2026-10-05T00:00:00.000Z"
+        },
+        {
+          "id": "wiki-062",
+          "revision": 2,
+          "kind": "convention",
+          "title": "思考关掉 第 62 条",
+          "summary": "思考关掉：MAX_THINKING_TOKENS=0，看清楚再提交。",
+          "fields": {
+            "rule": "思考关掉 第 62 条。",
+            "scope": [
+              "src/runner-go/wiki_verify.go"
+            ],
+            "exceptions": ""
+          },
+          "paths": [
+            "src/runner-go/wiki_verify.go"
+          ],
+          "sources": 44,
+          "trust": "auto",
+          "recordedAt": "2026-10-06T01:00:00.000Z"
+        },
+        {
+          "id": "wiki-063",
+          "revision": 3,
+          "kind": "decision",
+          "title": "vitest 里的假数据 第 63 条",
+          "summary": "vitest 里的假数据：A–Z 索引，要先读再改。",
+          "fields": {
+            "context": "背景。",
+            "decision": "vitest 里的假数据 第 63 条。",
+            "alternatives": [
+              {
+                "option": "每个空间各自限流",
+                "whyRejected": "没有全局上限"
+              },
+              {
+                "option": "不限",
+                "whyRejected": "GPU 会被压满"
+              }
+            ],
+            "consequences": "队列要持久化。",
+            "decidedAt": "2026-10-07"
+          },
+          "paths": [
+            "src/web/src/components/WikiArticlePage.tsx"
+          ],
+          "sources": 44,
+          "trust": "auto",
+          "recordedAt": "2026-10-07T02:00:00.000Z"
+        },
+        {
+          "id": "wiki-064",
+          "revision": 1,
+          "kind": "recipe",
+          "title": "OrbitKit 对照测试 第 64 条",
+          "summary": "OrbitKit 对照测试：WikiArticleLogic，别跳步。",
+          "fields": {
+            "steps": [
+              "bash scripts/worktree-overlay.sh",
+              "bash scripts/run-pg-spec.sh src/macos/OrbitKit/Sources/OrbitKit/Models/WikiArticles.swift"
+            ],
+            "verify": {
+              "command": "npm test && echo \"<ok>\"",
+              "expectedExit": 0
+            }
+          },
+          "paths": [
+            "src/macos/OrbitKit/Sources/OrbitKit/Models/WikiArticles.swift"
+          ],
+          "sources": 43,
+          "trust": "auto",
+          "recordedAt": "2026-10-01T03:00:00.000Z"
+        },
+        {
+          "id": "wiki-065",
+          "revision": 2,
+          "kind": "concept",
+          "title": "环境白名单 第 65 条",
+          "summary": "环境白名单：遇到 401 就停，要先读再改。",
+          "fields": {
+            "definition": "环境白名单 第 65 条。",
+            "boundaries": "只管文章，不管文档。"
+          },
+          "paths": [
+            "src/runner-go/wiki_articles.go"
+          ],
+          "sources": 43,
+          "trust": "auto",
+          "recordedAt": "2026-10-02T04:00:00.000Z"
+        },
+        {
+          "id": "wiki-066",
+          "revision": 3,
+          "kind": "principle",
+          "title": "A–Z 索引 第 66 条",
+          "summary": "A–Z 索引：按大类列主题，看清楚再提交。",
+          "fields": {
+            "statement": "A–Z 索引 第 66 条。",
+            "rationale": "人读得懂，模型才写得对。"
+          },
+          "paths": [
+            "src/web/src/components/WikiHome.tsx",
+            "docs/wiki-contract.md"
+          ],
+          "sources": 43,
+          "trust": "auto",
+          "recordedAt": "2026-10-03T05:00:00.000Z"
+        },
+        {
+          "id": "wiki-067",
+          "revision": 1,
+          "kind": "pitfall",
+          "title": "FOR NO KEY UPDATE 第 67 条",
+          "summary": "FOR NO KEY UPDATE：FOR NO KEY UPDATE，别跳步。",
+          "fields": {
+            "trigger": {
+              "paths": [
+                "src/apiserver/src/wiki/wiki-maintenance-run.ts"
+              ],
+              "commands": []
+            },
+            "symptom": "FOR NO KEY UPDATE 第 67 条时出错。",
+            "cause": "顺序不对。",
+            "fix": "按顺序来。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-maintenance-run.ts"
+          ],
+          "sources": 42,
+          "trust": "auto",
+          "recordedAt": "2026-10-04T06:00:00.000Z"
+        },
+        {
+          "id": "wiki-068",
+          "revision": 2,
+          "kind": "convention",
+          "title": "字段闭集 第 68 条",
+          "summary": "字段闭集：wikiContract.spec.ts，要先读再改。",
+          "fields": {
+            "rule": "字段闭集 第 68 条。",
+            "scope": [
+              "docs/wiki-design.md"
+            ],
+            "exceptions": "迁移脚本除外。"
+          },
+          "paths": [
+            "docs/wiki-design.md"
+          ],
+          "sources": 42,
+          "trust": "auto",
+          "recordedAt": "2026-10-05T07:00:00.000Z"
+        },
+        {
+          "id": "wiki-069",
+          "revision": 3,
+          "kind": "decision",
+          "title": "手机抽屉 第 69 条",
+          "summary": "手机抽屉：按大类列主题，要先读再改。",
+          "fields": {
+            "context": "背景。",
+            "decision": "手机抽屉 第 69 条。",
+            "alternatives": [
+              {
+                "option": "每个空间各自限流",
+                "whyRejected": "没有全局上限"
+              },
+              {
+                "option": "不限",
+                "whyRejected": "GPU 会被压满"
+              }
+            ],
+            "consequences": "队列要持久化。",
+            "decidedAt": "2026-10-07"
+          },
+          "paths": [
+            "src/web/src/lib/wikiArticles.ts",
+            "docs/wiki-contract.md"
+          ],
+          "sources": 42,
+          "trust": "auto",
+          "recordedAt": "2026-10-06T08:00:00.000Z"
+        },
+        {
+          "id": "wiki-070",
+          "revision": 1,
+          "kind": "recipe",
+          "title": "validateArticlePart 第 70 条",
+          "summary": "validateArticlePart：WIKI_ARTICLE_STALE，别跳步。",
+          "fields": {
+            "steps": [
+              "bash scripts/worktree-overlay.sh",
+              "bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-maintenance-run.ts"
+            ],
+            "verify": {
+              "command": "npm test && echo \"<ok>\"",
+              "expectedExit": 0
+            }
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-maintenance-run.ts"
+          ],
+          "sources": 41,
+          "trust": "auto",
+          "recordedAt": "2026-10-07T09:00:00.000Z"
+        },
+        {
+          "id": "wiki-071",
+          "revision": 2,
+          "kind": "concept",
+          "title": "干净的 Claude Code 第 71 条",
+          "summary": "干净的 Claude Code：MAX_THINKING_TOKENS=0，照合同来。",
+          "fields": {
+            "definition": "干净的 Claude Code 第 71 条。",
+            "boundaries": "只管文章，不管文档。"
+          },
+          "paths": [
+            "src/runner-go/wiki_verify.go"
+          ],
+          "sources": 41,
+          "trust": "auto",
+          "recordedAt": "2026-10-01T00:00:00.000Z"
+        },
+        {
+          "id": "wiki-072",
+          "revision": 3,
+          "kind": "principle",
+          "title": "先改文档再动代码 第 72 条",
+          "summary": "先改文档再动代码：字段闭集，照合同来。",
+          "fields": {
+            "statement": "先改文档再动代码 第 72 条。",
+            "rationale": "人读得懂，模型才写得对。"
+          },
+          "paths": [
+            "contracts/wiki.contract.json"
+          ],
+          "sources": 41,
+          "trust": "auto",
+          "recordedAt": "2026-10-02T01:00:00.000Z"
+        },
+        {
+          "id": "wiki-073",
+          "revision": 1,
+          "kind": "pitfall",
+          "title": "服务端校验脚注 第 73 条",
+          "summary": "服务端校验脚注：写入前核对指纹，照合同来。",
+          "fields": {
+            "trigger": {
+              "paths": [
+                "src/apiserver/src/wiki/wiki-articles.ts"
+              ],
+              "commands": []
+            },
+            "symptom": "服务端校验脚注 第 73 条时出错。",
+            "cause": "顺序不对。",
+            "fix": "按顺序来。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-articles.ts"
+          ],
+          "sources": 40,
+          "trust": "auto",
+          "recordedAt": "2026-10-03T02:00:00.000Z"
+        },
+        {
+          "id": "wiki-074",
+          "revision": 2,
+          "kind": "convention",
+          "title": "思考关掉 第 74 条",
+          "summary": "思考关掉：环境白名单，照合同来。",
+          "fields": {
+            "rule": "思考关掉 第 74 条。",
+            "scope": [
+              "src/runner-go/wiki_cli.go"
+            ],
+            "exceptions": "迁移脚本除外。"
+          },
+          "paths": [
+            "src/runner-go/wiki_cli.go",
+            "src/web/src/lib/wikiArticles.ts"
+          ],
+          "sources": 40,
+          "trust": "auto",
+          "recordedAt": "2026-10-04T03:00:00.000Z"
+        },
+        {
+          "id": "wiki-075",
+          "revision": 3,
+          "kind": "decision",
+          "title": "WikiArticleLogic 第 75 条",
+          "summary": "WikiArticleLogic：SwiftUI 读法，别跳步。",
+          "fields": {
+            "context": "背景。",
+            "decision": "WikiArticleLogic 第 75 条。",
+            "alternatives": [
+              {
+                "option": "每个空间各自限流",
+                "whyRejected": "没有全局上限"
+              },
+              {
+                "option": "不限",
+                "whyRejected": "GPU 会被压满"
+              }
+            ],
+            "consequences": "队列要持久化。",
+            "decidedAt": "2026-10-07"
+          },
+          "paths": [
+            "src/macos/OrbitKit/Sources/OrbitKit/Models/WikiArticles.swift"
+          ],
+          "sources": 40,
+          "trust": "auto",
+          "recordedAt": "2026-10-05T04:00:00.000Z"
+        },
+        {
+          "id": "wiki-076",
+          "revision": 1,
+          "kind": "recipe",
+          "title": "中文说明 第 76 条",
+          "summary": "中文说明：中文说明，别跳步。",
+          "fields": {
+            "steps": [
+              "bash scripts/worktree-overlay.sh",
+              "bash scripts/run-pg-spec.sh docs/wiki-contract.md"
+            ],
+            "verify": {
+              "command": "npm test && echo \"<ok>\"",
+              "expectedExit": 0
+            }
+          },
+          "paths": [
+            "docs/wiki-contract.md"
+          ],
+          "sources": 39,
+          "trust": "auto",
+          "recordedAt": "2026-10-06T05:00:00.000Z"
+        },
+        {
+          "id": "wiki-077",
+          "revision": 2,
+          "kind": "concept",
+          "title": "MAX_THINKING_TOKENS=0 第 77 条",
+          "summary": "MAX_THINKING_TOKENS=0：思考关掉，看清楚再提交。",
+          "fields": {
+            "definition": "MAX_THINKING_TOKENS=0 第 77 条。",
+            "boundaries": "只管文章，不管文档。"
+          },
+          "paths": [
+            "src/runner-go/wiki_verify.go"
+          ],
+          "sources": 39,
+          "trust": "auto",
+          "recordedAt": "2026-10-07T06:00:00.000Z"
+        },
+        {
+          "id": "wiki-078",
+          "revision": 3,
+          "kind": "principle",
+          "title": "wikiReadsByDocs 第 78 条",
+          "summary": "wikiReadsByDocs：A–Z 索引，别跳步。",
+          "fields": {
+            "statement": "wikiReadsByDocs 第 78 条。",
+            "rationale": "人读得懂，模型才写得对。"
+          },
+          "paths": [
+            "src/web/src/components/WikiHome.tsx"
+          ],
+          "sources": 39,
+          "trust": "auto",
+          "recordedAt": "2026-10-01T07:00:00.000Z"
+        },
+        {
+          "id": "wiki-079",
+          "revision": 1,
+          "kind": "pitfall",
+          "title": "entrySetSha256 第 79 条",
+          "summary": "entrySetSha256：一个事务里整体替换，看清楚再提交。",
+          "fields": {
+            "trigger": {
+              "paths": [
+                "src/apiserver/src/wiki/wiki.service.ts"
+              ],
+              "commands": []
+            },
+            "symptom": "entrySetSha256 第 79 条时出错。",
+            "cause": "顺序不对。",
+            "fix": "按顺序来。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki.service.ts"
+          ],
+          "sources": 38,
+          "trust": "auto",
+          "recordedAt": "2026-10-02T08:00:00.000Z"
+        },
+        {
+          "id": "wiki-080",
+          "revision": 2,
+          "kind": "convention",
+          "title": "wikiContract.spec.ts 第 80 条",
+          "summary": "wikiContract.spec.ts：wikiContract.spec.ts，别跳步。",
+          "fields": {
+            "rule": "wikiContract.spec.ts 第 80 条。",
+            "scope": [
+              "contracts/wiki.contract.json"
+            ],
+            "exceptions": ""
+          },
+          "paths": [
+            "contracts/wiki.contract.json"
+          ],
+          "sources": 38,
+          "trust": "auto",
+          "recordedAt": "2026-10-03T09:00:00.000Z"
+        },
+        {
+          "id": "wiki-081",
+          "revision": 3,
+          "kind": "decision",
+          "title": "脚注悬停看条目 第 81 条",
+          "summary": "脚注悬停看条目：首页先给内容，照合同来。",
+          "fields": {
+            "context": "背景。",
+            "decision": "脚注悬停看条目 第 81 条。",
+            "alternatives": [
+              {
+                "option": "每个空间各自限流",
+                "whyRejected": "没有全局上限"
+              },
+              {
+                "option": "不限",
+                "whyRejected": "GPU 会被压满"
+              }
+            ],
+            "consequences": "队列要持久化。",
+            "decidedAt": "2026-10-07"
+          },
+          "paths": [
+            "src/web/src/components/WikiHome.tsx"
+          ],
+          "sources": 38,
+          "trust": "auto",
+          "recordedAt": "2026-10-04T00:00:00.000Z"
+        },
+        {
+          "id": "wiki-082",
+          "revision": 1,
+          "kind": "recipe",
+          "title": "归主题先看路径 第 82 条",
+          "summary": "归主题先看路径：服务端校验脚注，别跳步。",
+          "fields": {
+            "steps": [
+              "bash scripts/worktree-overlay.sh",
+              "bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-articles.ts"
+            ],
+            "verify": {
+              "command": "npm test && echo \"<ok>\"",
+              "expectedExit": 0
+            }
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-articles.ts"
+          ],
+          "sources": 37,
+          "trust": "auto",
+          "recordedAt": "2026-10-05T01:00:00.000Z"
+        },
+        {
+          "id": "wiki-083",
+          "revision": 2,
+          "kind": "concept",
+          "title": "遇到 401 就停 第 83 条",
+          "summary": "遇到 401 就停：MAX_THINKING_TOKENS=0，看清楚再提交。",
+          "fields": {
+            "definition": "遇到 401 就停 第 83 条。",
+            "boundaries": "只管文章，不管文档。"
+          },
+          "paths": [
+            "src/runner-go/wiki_cli.go",
+            "src/web/src/lib/wikiArticles.ts"
+          ],
+          "sources": 37,
+          "trust": "auto",
+          "recordedAt": "2026-10-06T02:00:00.000Z"
+        },
+        {
+          "id": "wiki-084",
+          "revision": 3,
+          "kind": "principle",
+          "title": "先改文档再动代码 第 84 条",
+          "summary": "先改文档再动代码：字段闭集，别跳步。",
+          "fields": {
+            "statement": "先改文档再动代码 第 84 条。",
+            "rationale": "人读得懂，模型才写得对。"
+          },
+          "paths": [
+            "docs/wiki-contract.md"
+          ],
+          "sources": 37,
+          "trust": "auto",
+          "recordedAt": "2026-10-07T03:00:00.000Z"
+        },
+        {
+          "id": "wiki-085",
+          "revision": 1,
+          "kind": "pitfall",
+          "title": "写入前核对指纹 第 85 条",
+          "summary": "写入前核对指纹：一个事务里整体替换，要先读再改。",
+          "fields": {
+            "trigger": {
+              "paths": [
+                "src/apiserver/src/wiki/wiki-articles.ts"
+              ],
+              "commands": []
+            },
+            "symptom": "写入前核对指纹 第 85 条时出错。",
+            "cause": "顺序不对。",
+            "fix": "按顺序来。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-articles.ts",
+            "src/runner-go/wiki_verify.go"
+          ],
+          "sources": 36,
+          "trust": "auto",
+          "recordedAt": "2026-10-01T04:00:00.000Z"
+        },
+        {
+          "id": "wiki-086",
+          "revision": 2,
+          "kind": "convention",
+          "title": "--bare 第 86 条",
+          "summary": "--bare：遇到 401 就停，看清楚再提交。",
+          "fields": {
+            "rule": "--bare 第 86 条。",
+            "scope": [
+              "src/runner-go/wiki_maintain.go"
+            ],
+            "exceptions": ""
+          },
+          "paths": [
+            "src/runner-go/wiki_maintain.go",
+            "src/web/src/components/WikiArticlePage.tsx"
+          ],
+          "sources": 36,
+          "trust": "auto",
+          "recordedAt": "2026-10-02T05:00:00.000Z"
+        },
+        {
+          "id": "wiki-087",
+          "revision": 3,
+          "kind": "decision",
+          "title": "OrbitKit 对照测试 第 87 条",
+          "summary": "OrbitKit 对照测试：WikiArticleLogic，看清楚再提交。",
+          "fields": {
+            "context": "背景。",
+            "decision": "OrbitKit 对照测试 第 87 条。",
+            "alternatives": [
+              {
+                "option": "每个空间各自限流",
+                "whyRejected": "没有全局上限"
+              },
+              {
+                "option": "不限",
+                "whyRejected": "GPU 会被压满"
+              }
+            ],
+            "consequences": "队列要持久化。",
+            "decidedAt": "2026-10-07"
+          },
+          "paths": [
+            "src/macos/OrbitKit/Sources/OrbitKit/Models/WikiArticles.swift",
+            "src/apiserver/src/wiki/wiki-articles.ts"
+          ],
+          "sources": 36,
+          "trust": "auto",
+          "recordedAt": "2026-10-03T06:00:00.000Z"
+        },
+        {
+          "id": "wiki-088",
+          "revision": 1,
+          "kind": "recipe",
+          "title": "wikiContract.spec.ts 第 88 条",
+          "summary": "wikiContract.spec.ts：先改文档再动代码，看清楚再提交。",
+          "fields": {
+            "steps": [
+              "bash scripts/worktree-overlay.sh",
+              "bash scripts/run-pg-spec.sh docs/wiki-design.md"
+            ],
+            "verify": {
+              "command": "npm test && echo \"<ok>\"",
+              "expectedExit": 0
+            }
+          },
+          "paths": [
+            "docs/wiki-design.md",
+            "src/apiserver/src/wiki/wiki-articles.ts"
+          ],
+          "sources": 35,
+          "trust": "auto",
+          "recordedAt": "2026-10-04T07:00:00.000Z"
+        },
+        {
+          "id": "wiki-089",
+          "revision": 2,
+          "kind": "concept",
+          "title": "思考关掉 第 89 条",
+          "summary": "思考关掉：apiKeyHelper，要先读再改。",
+          "fields": {
+            "definition": "思考关掉 第 89 条。",
+            "boundaries": "只管文章，不管文档。"
+          },
+          "paths": [
+            "src/runner-go/wiki_articles.go"
+          ],
+          "sources": 35,
+          "trust": "auto",
+          "recordedAt": "2026-10-05T08:00:00.000Z"
+        },
+        {
+          "id": "wiki-090",
+          "revision": 3,
+          "kind": "principle",
+          "title": "vitest 里的假数据 第 90 条",
+          "summary": "vitest 里的假数据：vitest 里的假数据，照合同来。",
+          "fields": {
+            "statement": "vitest 里的假数据 第 90 条。",
+            "rationale": "人读得懂，模型才写得对。"
+          },
+          "paths": [
+            "src/web/src/components/WikiHome.tsx"
+          ],
+          "sources": 35,
+          "trust": "auto",
+          "recordedAt": "2026-10-06T09:00:00.000Z"
+        },
+        {
+          "id": "wiki-091",
+          "revision": 1,
+          "kind": "pitfall",
+          "title": "WIKI_ARTICLE_STALE 第 91 条",
+          "summary": "WIKI_ARTICLE_STALE：FOR NO KEY UPDATE，别跳步。",
+          "fields": {
+            "trigger": {
+              "paths": [
+                "src/apiserver/src/wiki/wiki-maintenance-run.ts"
+              ],
+              "commands": []
+            },
+            "symptom": "WIKI_ARTICLE_STALE 第 91 条时出错。",
+            "cause": "顺序不对。",
+            "fix": "按顺序来。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-maintenance-run.ts"
+          ],
+          "sources": 34,
+          "trust": "auto",
+          "recordedAt": "2026-10-07T00:00:00.000Z"
+        },
+        {
+          "id": "wiki-092",
+          "revision": 2,
+          "kind": "convention",
+          "title": "中文说明 第 92 条",
+          "summary": "中文说明：wikiContract.spec.ts，别跳步。",
+          "fields": {
+            "rule": "中文说明 第 92 条。",
+            "scope": [
+              "contracts/wiki.contract.json"
+            ],
+            "exceptions": ""
+          },
+          "paths": [
+            "contracts/wiki.contract.json"
+          ],
+          "sources": 34,
+          "trust": "auto",
+          "recordedAt": "2026-10-01T01:00:00.000Z"
+        },
+        {
+          "id": "wiki-093",
+          "revision": 3,
+          "kind": "decision",
+          "title": "按大类列主题 第 93 条",
+          "summary": "按大类列主题：按大类列主题，看清楚再提交。",
+          "fields": {
+            "context": "背景。",
+            "decision": "按大类列主题 第 93 条。",
+            "alternatives": [
+              {
+                "option": "每个空间各自限流",
+                "whyRejected": "没有全局上限"
+              },
+              {
+                "option": "不限",
+                "whyRejected": "GPU 会被压满"
+              }
+            ],
+            "consequences": "队列要持久化。",
+            "decidedAt": "2026-10-07"
+          },
+          "paths": [
+            "src/web/src/components/WikiHome.tsx"
+          ],
+          "sources": 34,
+          "trust": "auto",
+          "recordedAt": "2026-10-02T02:00:00.000Z"
+        },
+        {
+          "id": "wiki-094",
+          "revision": 1,
+          "kind": "recipe",
+          "title": "归主题先看路径 第 94 条",
+          "summary": "归主题先看路径：服务端校验脚注，看清楚再提交。",
+          "fields": {
+            "steps": [
+              "bash scripts/worktree-overlay.sh",
+              "bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-maintenance-run.ts"
+            ],
+            "verify": {
+              "command": "npm test && echo \"<ok>\"",
+              "expectedExit": 0
+            }
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-maintenance-run.ts"
+          ],
+          "sources": 33,
+          "trust": "auto",
+          "recordedAt": "2026-10-03T03:00:00.000Z"
+        },
+        {
+          "id": "wiki-095",
+          "revision": 2,
+          "kind": "concept",
+          "title": "MAX_THINKING_TOKENS=0 第 95 条",
+          "summary": "MAX_THINKING_TOKENS=0：MAX_THINKING_TOKENS=0，别跳步。",
+          "fields": {
+            "definition": "MAX_THINKING_TOKENS=0 第 95 条。",
+            "boundaries": "只管文章，不管文档。"
+          },
+          "paths": [
+            "src/runner-go/wiki_maintain.go"
+          ],
+          "sources": 33,
+          "trust": "auto",
+          "recordedAt": "2026-10-04T04:00:00.000Z"
+        },
+        {
+          "id": "wiki-096",
+          "revision": 3,
+          "kind": "principle",
+          "title": "先改文档再动代码 第 96 条",
+          "summary": "先改文档再动代码：字段闭集，要先读再改。",
+          "fields": {
+            "statement": "先改文档再动代码 第 96 条。",
+            "rationale": "人读得懂，模型才写得对。"
+          },
+          "paths": [
+            "docs/wiki-design.md"
+          ],
+          "sources": 33,
+          "trust": "auto",
+          "recordedAt": "2026-10-05T05:00:00.000Z"
+        },
+        {
+          "id": "wiki-097",
+          "revision": 1,
+          "kind": "pitfall",
+          "title": "写入前核对指纹 第 97 条",
+          "summary": "写入前核对指纹：归主题先看路径，看清楚再提交。",
+          "fields": {
+            "trigger": {
+              "paths": [
+                "src/apiserver/src/wiki/wiki-maintenance-run.ts"
+              ],
+              "commands": []
+            },
+            "symptom": "写入前核对指纹 第 97 条时出错。",
+            "cause": "顺序不对。",
+            "fix": "按顺序来。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-maintenance-run.ts"
+          ],
+          "sources": 32,
+          "trust": "auto",
+          "recordedAt": "2026-10-06T06:00:00.000Z"
+        },
+        {
+          "id": "wiki-098",
+          "revision": 2,
+          "kind": "convention",
+          "title": "OrbitKit 对照测试 第 98 条",
+          "summary": "OrbitKit 对照测试：SwiftUI 读法，别跳步。",
+          "fields": {
+            "rule": "OrbitKit 对照测试 第 98 条。",
+            "scope": [
+              "src/macos/OrbitKit/Sources/OrbitKit/Models/WikiArticles.swift"
+            ],
+            "exceptions": ""
+          },
+          "paths": [
+            "src/macos/OrbitKit/Sources/OrbitKit/Models/WikiArticles.swift"
+          ],
+          "sources": 32,
+          "trust": "auto",
+          "recordedAt": "2026-10-07T07:00:00.000Z"
+        },
+        {
+          "id": "wiki-099",
+          "revision": 3,
+          "kind": "decision",
+          "title": "手机抽屉 第 99 条",
+          "summary": "手机抽屉：A–Z 索引，别跳步。",
+          "fields": {
+            "context": "背景。",
+            "decision": "手机抽屉 第 99 条。",
+            "alternatives": [
+              {
+                "option": "每个空间各自限流",
+                "whyRejected": "没有全局上限"
+              },
+              {
+                "option": "不限",
+                "whyRejected": "GPU 会被压满"
+              }
+            ],
+            "consequences": "队列要持久化。",
+            "decidedAt": "2026-10-07"
+          },
+          "paths": [
+            "src/web/src/lib/wikiArticles.ts"
+          ],
+          "sources": 32,
+          "trust": "auto",
+          "recordedAt": "2026-10-01T08:00:00.000Z"
+        },
+        {
+          "id": "wiki-100",
+          "revision": 1,
+          "kind": "recipe",
+          "title": "字段闭集 第 100 条",
+          "summary": "字段闭集：中文说明，别跳步。",
+          "fields": {
+            "steps": [
+              "bash scripts/worktree-overlay.sh",
+              "bash scripts/run-pg-spec.sh docs/wiki-design.md"
+            ],
+            "verify": {
+              "command": "npm test && echo \"<ok>\"",
+              "expectedExit": 0
+            }
+          },
+          "paths": [
+            "docs/wiki-design.md",
+            "src/apiserver/src/wiki/wiki.service.ts"
+          ],
+          "sources": 31,
+          "trust": "auto",
+          "recordedAt": "2026-10-02T09:00:00.000Z"
+        },
+        {
+          "id": "wiki-101",
+          "revision": 2,
+          "kind": "concept",
+          "title": "思考关掉 第 101 条",
+          "summary": "思考关掉：环境白名单，看清楚再提交。",
+          "fields": {
+            "definition": "思考关掉 第 101 条。",
+            "boundaries": "只管文章，不管文档。"
+          },
+          "paths": [
+            "src/runner-go/wiki_articles.go"
+          ],
+          "sources": 31,
+          "trust": "auto",
+          "recordedAt": "2026-10-03T00:00:00.000Z"
+        },
+        {
+          "id": "wiki-102",
+          "revision": 3,
+          "kind": "principle",
+          "title": "按大类列主题 第 102 条",
+          "summary": "按大类列主题：首页先给内容，要先读再改。",
+          "fields": {
+            "statement": "按大类列主题 第 102 条。",
+            "rationale": "人读得懂，模型才写得对。"
+          },
+          "paths": [
+            "src/web/src/lib/wikiArticles.ts"
+          ],
+          "sources": 31,
+          "trust": "auto",
+          "recordedAt": "2026-10-04T01:00:00.000Z"
+        },
+        {
+          "id": "wiki-103",
+          "revision": 1,
+          "kind": "pitfall",
+          "title": "服务端校验脚注 第 103 条",
+          "summary": "服务端校验脚注：FOR NO KEY UPDATE，照合同来。",
+          "fields": {
+            "trigger": {
+              "paths": [
+                "src/apiserver/src/wiki/wiki-maintenance-run.ts"
+              ],
+              "commands": []
+            },
+            "symptom": "服务端校验脚注 第 103 条时出错。",
+            "cause": "顺序不对。",
+            "fix": "按顺序来。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-maintenance-run.ts"
+          ],
+          "sources": 30,
+          "trust": "auto",
+          "recordedAt": "2026-10-05T02:00:00.000Z"
+        },
+        {
+          "id": "wiki-104",
+          "revision": 2,
+          "kind": "convention",
+          "title": "wikiContract.spec.ts 第 104 条",
+          "summary": "wikiContract.spec.ts：wikiContract.spec.ts，要先读再改。",
+          "fields": {
+            "rule": "wikiContract.spec.ts 第 104 条。",
+            "scope": [
+              "contracts/wiki.contract.json"
+            ],
+            "exceptions": ""
+          },
+          "paths": [
+            "contracts/wiki.contract.json"
+          ],
+          "sources": 30,
+          "trust": "auto",
+          "recordedAt": "2026-10-06T03:00:00.000Z"
+        },
+        {
+          "id": "wiki-105",
+          "revision": 3,
+          "kind": "decision",
+          "title": "手机抽屉 第 105 条",
+          "summary": "手机抽屉：脚注悬停看条目，别跳步。",
+          "fields": {
+            "context": "背景。",
+            "decision": "手机抽屉 第 105 条。",
+            "alternatives": [
+              {
+                "option": "每个空间各自限流",
+                "whyRejected": "没有全局上限"
+              },
+              {
+                "option": "不限",
+                "whyRejected": "GPU 会被压满"
+              }
+            ],
+            "consequences": "队列要持久化。",
+            "decidedAt": "2026-10-07"
+          },
+          "paths": [
+            "src/web/src/lib/wikiArticles.ts",
+            "docs/wiki-design.md"
+          ],
+          "sources": 30,
+          "trust": "auto",
+          "recordedAt": "2026-10-07T04:00:00.000Z"
+        },
+        {
+          "id": "wiki-106",
+          "revision": 1,
+          "kind": "recipe",
+          "title": "服务端校验脚注 第 106 条",
+          "summary": "服务端校验脚注：写入前核对指纹，看清楚再提交。",
+          "fields": {
+            "steps": [
+              "bash scripts/worktree-overlay.sh",
+              "bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-articles.ts"
+            ],
+            "verify": {
+              "command": "npm test && echo \"<ok>\"",
+              "expectedExit": 0
+            }
+          },
+          "paths": [],
+          "sources": 29,
+          "trust": "auto",
+          "recordedAt": "2026-10-01T05:00:00.000Z"
+        },
+        {
+          "id": "wiki-107",
+          "revision": 2,
+          "kind": "concept",
+          "title": "思考关掉 第 107 条",
+          "summary": "思考关掉：环境白名单，看清楚再提交。",
+          "fields": {
+            "definition": "思考关掉 第 107 条。",
+            "boundaries": "只管文章，不管文档。"
+          },
+          "paths": [
+            "src/runner-go/wiki_maintain.go"
+          ],
+          "sources": 29,
+          "trust": "auto",
+          "recordedAt": "2026-10-02T06:00:00.000Z"
+        },
+        {
+          "id": "wiki-108",
+          "revision": 3,
+          "kind": "principle",
+          "title": "合同先行 第 108 条",
+          "summary": "合同先行：合同先行，看清楚再提交。",
+          "fields": {
+            "statement": "合同先行 第 108 条。",
+            "rationale": "人读得懂，模型才写得对。"
+          },
+          "paths": [
+            "docs/wiki-design.md"
+          ],
+          "sources": 29,
+          "trust": "auto",
+          "recordedAt": "2026-10-03T07:00:00.000Z"
+        },
+        {
+          "id": "wiki-109",
+          "revision": 1,
+          "kind": "pitfall",
+          "title": "validateArticlePart 第 109 条",
+          "summary": "validateArticlePart：validateArticlePart，看清楚再提交。",
+          "fields": {
+            "trigger": {
+              "paths": [
+                "src/apiserver/src/wiki/wiki-plan.ts"
+              ],
+              "commands": []
+            },
+            "symptom": "validateArticlePart 第 109 条时出错。",
+            "cause": "顺序不对。",
+            "fix": "按顺序来。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-plan.ts"
+          ],
+          "sources": 28,
+          "trust": "auto",
+          "recordedAt": "2026-10-04T08:00:00.000Z"
+        },
+        {
+          "id": "wiki-110",
+          "revision": 2,
+          "kind": "convention",
+          "title": "OrbitKit 对照测试 第 110 条",
+          "summary": "OrbitKit 对照测试：OrbitKit 对照测试，看清楚再提交。",
+          "fields": {
+            "rule": "OrbitKit 对照测试 第 110 条。",
+            "scope": [
+              "src/macos/OrbitKit/Sources/OrbitKit/Models/WikiArticles.swift"
+            ],
+            "exceptions": ""
+          },
+          "paths": [
+            "src/macos/OrbitKit/Sources/OrbitKit/Models/WikiArticles.swift"
+          ],
+          "sources": 28,
+          "trust": "auto",
+          "recordedAt": "2026-10-05T09:00:00.000Z"
+        },
+        {
+          "id": "wiki-111",
+          "revision": 3,
+          "kind": "decision",
+          "title": "vitest 里的假数据 第 111 条",
+          "summary": "vitest 里的假数据：脚注悬停看条目，要先读再改。",
+          "fields": {
+            "context": "背景。",
+            "decision": "vitest 里的假数据 第 111 条。",
+            "alternatives": [
+              {
+                "option": "每个空间各自限流",
+                "whyRejected": "没有全局上限"
+              },
+              {
+                "option": "不限",
+                "whyRejected": "GPU 会被压满"
+              }
+            ],
+            "consequences": "队列要持久化。",
+            "decidedAt": "2026-10-07"
+          },
+          "paths": [
+            "src/web/src/components/WikiHome.tsx"
+          ],
+          "sources": 28,
+          "trust": "auto",
+          "recordedAt": "2026-10-06T00:00:00.000Z"
+        },
+        {
+          "id": "wiki-112",
+          "revision": 1,
+          "kind": "recipe",
+          "title": "中文说明 第 112 条",
+          "summary": "中文说明：中文说明，照合同来。",
+          "fields": {
+            "steps": [
+              "bash scripts/worktree-overlay.sh",
+              "bash scripts/run-pg-spec.sh docs/wiki-contract.md"
+            ],
+            "verify": {
+              "command": "npm test && echo \"<ok>\"",
+              "expectedExit": 0
+            }
+          },
+          "paths": [
+            "docs/wiki-contract.md",
+            "src/apiserver/src/wiki/wiki-maintenance-run.ts"
+          ],
+          "sources": 27,
+          "trust": "auto",
+          "recordedAt": "2026-10-07T01:00:00.000Z"
+        },
+        {
+          "id": "wiki-113",
+          "revision": 2,
+          "kind": "concept",
+          "title": "干净的 Claude Code 第 113 条",
+          "summary": "干净的 Claude Code：--bare，照合同来。",
+          "fields": {
+            "definition": "干净的 Claude Code 第 113 条。",
+            "boundaries": "只管文章，不管文档。"
+          },
+          "paths": [
+            "src/runner-go/wiki_cli.go",
+            "src/web/src/components/WikiArticlePage.tsx"
+          ],
+          "sources": 27,
+          "trust": "auto",
+          "recordedAt": "2026-10-01T02:00:00.000Z"
+        },
+        {
+          "id": "wiki-114",
+          "revision": 3,
+          "kind": "principle",
+          "title": "手机抽屉 第 114 条",
+          "summary": "手机抽屉：wikiReadsByDocs，别跳步。",
+          "fields": {
+            "statement": "手机抽屉 第 114 条。",
+            "rationale": "人读得懂，模型才写得对。"
+          },
+          "paths": [],
+          "sources": 27,
+          "trust": "auto",
+          "recordedAt": "2026-10-02T03:00:00.000Z"
+        },
+        {
+          "id": "wiki-115",
+          "revision": 1,
+          "kind": "pitfall",
+          "title": "WIKI_ARTICLE_STALE 第 115 条",
+          "summary": "WIKI_ARTICLE_STALE：一个事务里整体替换，别跳步。",
+          "fields": {
+            "trigger": {
+              "paths": [
+                "src/apiserver/src/wiki/wiki-plan.ts"
+              ],
+              "commands": []
+            },
+            "symptom": "WIKI_ARTICLE_STALE 第 115 条时出错。",
+            "cause": "顺序不对。",
+            "fix": "按顺序来。"
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-plan.ts"
+          ],
+          "sources": 26,
+          "trust": "auto",
+          "recordedAt": "2026-10-03T04:00:00.000Z"
+        },
+        {
+          "id": "wiki-116",
+          "revision": 2,
+          "kind": "convention",
+          "title": "中文说明 第 116 条",
+          "summary": "中文说明：先改文档再动代码，照合同来。",
+          "fields": {
+            "rule": "中文说明 第 116 条。",
+            "scope": [
+              "docs/wiki-design.md"
+            ],
+            "exceptions": ""
+          },
+          "paths": [
+            "docs/wiki-design.md"
+          ],
+          "sources": 26,
+          "trust": "auto",
+          "recordedAt": "2026-10-04T05:00:00.000Z"
+        },
+        {
+          "id": "wiki-117",
+          "revision": 3,
+          "kind": "decision",
+          "title": "按大类列主题 第 117 条",
+          "summary": "按大类列主题：首页先给内容，照合同来。",
+          "fields": {
+            "context": "背景。",
+            "decision": "按大类列主题 第 117 条。",
+            "alternatives": [
+              {
+                "option": "每个空间各自限流",
+                "whyRejected": "没有全局上限"
+              },
+              {
+                "option": "不限",
+                "whyRejected": "GPU 会被压满"
+              }
+            ],
+            "consequences": "队列要持久化。",
+            "decidedAt": "2026-10-07"
+          },
+          "paths": [
+            "src/web/src/components/WikiArticlePage.tsx"
+          ],
+          "sources": 26,
+          "trust": "auto",
+          "recordedAt": "2026-10-05T06:00:00.000Z"
+        },
+        {
+          "id": "wiki-118",
+          "revision": 1,
+          "kind": "recipe",
+          "title": "写入前核对指纹 第 118 条",
+          "summary": "写入前核对指纹：服务端校验脚注，要先读再改。",
+          "fields": {
+            "steps": [
+              "bash scripts/worktree-overlay.sh",
+              "bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-articles.ts"
+            ],
+            "verify": {
+              "command": "npm test && echo \"<ok>\"",
+              "expectedExit": 0
+            }
+          },
+          "paths": [
+            "src/apiserver/src/wiki/wiki-articles.ts"
+          ],
+          "sources": 25,
+          "trust": "auto",
+          "recordedAt": "2026-10-06T07:00:00.000Z"
+        }
+      ]
+    }
+  ]
+}

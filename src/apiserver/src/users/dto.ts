@@ -128,3 +128,9 @@ export class UpdateRoleDto {
   @IsIn(['MEMBER', 'ADMIN'])
   role!: 'MEMBER' | 'ADMIN';
 }
+
+/** Disable an account, or enable it again (admin area, docs/google-sign-in-design.md §5.5). */
+export class SetDisabledDto {
+  @IsBoolean()
+  disabled!: boolean;
+}

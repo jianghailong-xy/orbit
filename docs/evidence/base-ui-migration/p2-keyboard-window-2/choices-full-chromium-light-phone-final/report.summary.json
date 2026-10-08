@@ -1,0 +1,2036 @@
+{
+ "stats": {
+  "startTime": "2026-10-07T23:45:07.489Z",
+  "duration": 179971.48400000003,
+  "expected": 65,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ },
+ "errors": [],
+ "tests": [
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3296,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "ee84a0cbc73140bbec98a0ca1aca0fe7dec276ab9ada6679e3711313b4cd8c3e"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ec42adbe9a7ea410ea3c2feb4c11eeeea951a77df8ae0033ea488ca7186dff51"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9849a754c973a6c57510a6a657914bca7711ddc47302939a31e2a5e25bf0e3cc"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d190027ea3dac095b82c806a7709488a63a49e1db69a7ea4c6adffd8212153f0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1415,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "55296e9c95852270eeb8baaaf321e2c31ceb315106cf7232f8e37961e9f05be6"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9fb1c0879a140420be8461e5c91b208de224ab3c080655adb0688577a07161b6"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6985401276dc0f2dd1757bed7b192df7fceea69039b3c86a00f3a86a02d14e26"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "467812cee8c5e335416d9b860891957e26f0eaafab0eeda3c9df7b7f4091b71f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduced motion attachment has no transition and dismisses cleanly",
+   "location": "choices-lifecycle.browser.mjs:115",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 923,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reduced-motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2ed078e263df459b0bbd47800d66637274da0cf2b565527752fc0f84eaee4aad"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduced motion expiry has no transition and dismisses cleanly",
+   "location": "choices-lifecycle.browser.mjs:115",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 933,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reduced-motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3ac55c530665855870a62e3ba73223bff9e071b816ecf6d857187142cd439214"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduced motion search has no transition and dismisses cleanly",
+   "location": "choices-lifecycle.browser.mjs:115",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1175,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reduced-motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7dd87db6f44689c4cfbd1a4e6f9417a499f2ae4af188476d791c911ef2337f99"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduced motion multiple has no transition and dismisses cleanly",
+   "location": "choices-lifecycle.browser.mjs:115",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1176,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reduced-motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f7305d38793c55724fb5f37d6730ac2315c2099de948b6b2f4f045ae8ce71e9a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduced motion popover has no transition and dismisses cleanly",
+   "location": "choices-lifecycle.browser.mjs:115",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1039,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reduced-motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0deab6f87166bc8e7100acbd10d07fded4c2b7d3911b1f0d4f66b4c96f68b53f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduced motion tooltip has no transition and dismisses cleanly",
+   "location": "choices-lifecycle.browser.mjs:115",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 842,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reduced-motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f7a8c6fa875ca868b582f1cf266d402b49217453763be64a299a13a55f655555"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal attachment can reopen during exit without stale unmount",
+   "location": "choices-lifecycle.browser.mjs:132",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1789,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reopen",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7e85045c8a342acd66796f0d59a4e81aaf509a4ab5c4631dba053c28a832d392"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal expiry can reopen during exit without stale unmount",
+   "location": "choices-lifecycle.browser.mjs:132",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1826,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reopen",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7ac9465fbc1388b78f1791f20607e05d2afbf8d44f0abec3df23ad1672b4f666"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal search can reopen during exit without stale unmount",
+   "location": "choices-lifecycle.browser.mjs:132",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1865,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reopen",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "25b5fb59ad7981b52747fa8f3c62ba2544debc3c70a8e3b91c49da02d4deecdf"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal popover can reopen during exit without stale unmount",
+   "location": "choices-lifecycle.browser.mjs:132",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1571,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reopen",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f9d91fc8e54e096992d6b79ec4aa469110eddd93a40530baf04100487f53bf78"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal bottom entrance and exit motion matches attachment",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2665,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "569ee2d11030c5069147041ff7d8ecfab0dcca33b789140e75a7fafa859576fa"
+      },
+      {
+       "name": "antd-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "df1beea3ec7b8855b065bf38cece1a83d23d2224b247f27656c66df589ce3f9b"
+      },
+      {
+       "name": "orbit-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "c975adce35a5f1e034cc7f4eeedf318f94ce95b13b1f482cfabb653f2b946b3a"
+      },
+      {
+       "name": "orbit-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "991a6b1af784d1626dfe1ebb25b270a27c48adbb882edcd931f2fd8e6907ef04"
+      },
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "017cd7d135b630b5b8625197092f1f1956ffc24b2cbca28d9f5e9701bd7de2ba"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal top entrance and exit motion matches attachment",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2748,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "533493c6da572fdae290402e6e7fad53ca3e3a66df31ccc1b024855ab2c00cb1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal flipped entrance and exit motion matches attachment",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2756,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "8d2c76daa01ecce30bf1af36cf5df63f410cdcd750273774b2fc7a8730a52065"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal bottom entrance and exit motion matches expiry",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2503,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "02ba6d7e9ef8d921c3290723406182313aa9ebf31ccf531d7cf46a2d612418a7"
+      },
+      {
+       "name": "antd-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "41aef4ab312041e5cfc2218fa6278d9c13d8a517a671f33f4a756f4688d8a7e6"
+      },
+      {
+       "name": "orbit-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "73035f73ab8b158032282e042a7027cb10e2b86d2d0828dcb9c984722b44a50a"
+      },
+      {
+       "name": "orbit-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "0f1e6b06da26b869136cd07218fc4cf2958d20e3bef71aff09dbe93d595ac348"
+      },
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "27881cec535f073378548d87b9c1882a436a69a2c3483a03d7bf115e453725e0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal top entrance and exit motion matches expiry",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2737,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7d41fcb6543ec08189320f9d8247e7902fddbef64bfb7e6aa37eed4ebdddfa34"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal flipped entrance and exit motion matches expiry",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2816,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "336a2f978b8752ca6818ce1d6b8792df7dddbf69db7bd49e811a8b3efa541309"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal bottom entrance and exit motion matches search",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2437,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "abd69e0c7d05481882e84d13007e29567016c73e5699a8bd656e67a84d2a6992"
+      },
+      {
+       "name": "antd-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "d9e9d6473e0c95cb506addabded7e1dff915e0c40915f7271efa63e7608e9b69"
+      },
+      {
+       "name": "orbit-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "7cc418b32ad7a04b2a76c64caab931fa7a3e776a7e6aad82c0a964bcf8dc2604"
+      },
+      {
+       "name": "orbit-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "d778f0f532bcf0ee3be4bd4b743c7cc38e41f2e0b65489715f05b2569121884a"
+      },
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "932590d3f739824e47266d52ee8a144456a83ff9c6090f638076b54417c2f514"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal top entrance and exit motion matches search",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2677,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d46bd7a0e62b71e61b2f3ccd37ea3a0467b07573151ef193a748ba392a96c81c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal flipped entrance and exit motion matches search",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2750,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "602e94835692424a6d9df2eba8b33dbe41d362a5b21e98aaafe707138a2450cb"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal bottom entrance and exit motion matches multiple",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2399,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "ace639dcb99d8777b964ef0134c0085d4be0b1a06f3dba518b49262c87f9b762"
+      },
+      {
+       "name": "antd-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "d0c9d85576277a97ddac67ccbdc073d5bf6ade1aabee495565c62dc5e41b7130"
+      },
+      {
+       "name": "orbit-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "ba189e7c3b072b7f7deb62da2d7d903dd74c33f1a80300e1cb80ae08c9931c82"
+      },
+      {
+       "name": "orbit-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "5c8693d82dc93688ff709e3f40afc5f3a60cdea35fe62b9d3811d7e81d24a42b"
+      },
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4298eb2bf1017c4a4d846d60a6fb6440bdf693236fcacc949cddb0ebc498c581"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal top entrance and exit motion matches multiple",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2750,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e5ba40e60f2277ea3fea096902171405b8ece871b8dd5f119c3dfdc1bc253fb0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal flipped entrance and exit motion matches multiple",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2711,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9763a8fe4ec34e482cefde76f42eb9ccb71f095570ce03b64c8554cb2009711c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal bottom entrance and exit motion matches popover",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2486,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "9390f86c55c9e57164cb23717d07811aca4141b397196ec15e49240a4674b7d7"
+      },
+      {
+       "name": "antd-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "51f3d22da4481ba7e4027e49f4386a32a1074cfb87411569b02b72d5fb785226"
+      },
+      {
+       "name": "orbit-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "79ae4dbd14ce76a170cf8bdb7d8b95c7b45cad59bc81c3e1eed0e7f6b6735906"
+      },
+      {
+       "name": "orbit-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "fd4dba050542d3ec1189bd2ae35320bdbfdf837173ae406a843ac13e0e038719"
+      },
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9bf359056b710c2f2fa88f5c7e7236573b9fc02fbdd45ff3751bce8eac73906b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal top entrance and exit motion matches popover",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2713,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "99e95edbd71cda37ed55061e07232f9bd9406de3e0c1e93ae9740caaf716af68"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal flipped entrance and exit motion matches popover",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2660,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9313466e89d0e19634e72185b84e7633e2526621dd8e8d430ead812aa0451acc"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal bottom entrance and exit motion matches tooltip",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2626,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b911044d5efcf5b1814354339de8274c890d2ed7c1c4e5adcb1d0b2e67e46e70"
+      },
+      {
+       "name": "antd-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "bfaf20448423062f3701685e40c368ae05cd0f2a4b5ca76949df0da0cd2d6df0"
+      },
+      {
+       "name": "orbit-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b911044d5efcf5b1814354339de8274c890d2ed7c1c4e5adcb1d0b2e67e46e70"
+      },
+      {
+       "name": "orbit-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "2a8cdf71d7c2344819351d71926da265255acac13c00a38dc377c7609f5122a0"
+      },
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "aef2209012ec406e75d15f2f52d3dcaf203cc687e9024658371940c45aa5a06c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal top entrance and exit motion matches tooltip",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2577,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0b4bd8770b685034cd2fe52a708af2000f9809acee38992f3a03f45b65309620"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal flipped entrance and exit motion matches tooltip",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2676,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "1533add340b51c7e4fef3b363940933a03bd2de2ea7d34e975ae19105641b71d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "popover center zoom origin matches",
+   "location": "choices-motion.browser.mjs:141",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2706,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "bd350ed0e8b6dd1591139e82fbd215ce45ad620b4c93e6743700033e74b17d53"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "popover end zoom origin matches",
+   "location": "choices-motion.browser.mjs:141",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2698,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e16abbec05130ebc591c20379a8071f32254bde1faa1b3b0b0b72eec51635bfe"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "tooltip center zoom origin matches",
+   "location": "choices-motion.browser.mjs:141",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2774,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7bdd53c512f8c273b24279c1e6f3ba1108335f749e7d7e834f9d9e51d657e63e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "tooltip end zoom origin matches",
+   "location": "choices-motion.browser.mjs:141",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2562,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0f343d2b26fa73dfc961f67e021469ff2af2a2df6bef00393988a32867b359d8"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "submenu left edge zoom matches and stays in view",
+   "location": "choices-motion.browser.mjs:160",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3581,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9fe119bbca3b5d86f6ee73686619a0b661ada99f930b636a1666d93baf45ac09"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "submenu right edge zoom matches and stays in view",
+   "location": "choices-motion.browser.mjs:160",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3579,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f443d88a27d60c686beeace8a29bd56b6433483d468f679f05696a406dbd3014"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "expiry dims the current value while open and restores it on Escape",
+   "location": "choices-open-value.browser.mjs:31",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2736,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-expiry-open-value",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "98667cb62c646a3000e1630b941ecc5a531e08d0016651b0301f335f7d186116"
+      },
+      {
+       "name": "orbit-expiry-open-value",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "98667cb62c646a3000e1630b941ecc5a531e08d0016651b0301f335f7d186116"
+      },
+      {
+       "name": "open-value",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4da7dacae2c87b570071c7045c0aea14516f592fce94827640efe3cae1eff966"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "account dims the current value while open and restores it on Escape",
+   "location": "choices-open-value.browser.mjs:31",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2692,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-account-open-value",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "18b62519c4fc7dbd0a0b085039d16f864c3b49ceb9b73615cc788a6bc631bd29"
+      },
+      {
+       "name": "orbit-account-open-value",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "d3ccc63b235bdc3b01e1cdf01455ad3fee4965e0212137a8ff376415cb1e04ed"
+      },
+      {
+       "name": "open-value",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e02cc3ed7eef4e9f69dccb348f8c3bc5ed35d3cba8bcc5d1787087313d21e55f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "search dims the current value while open and restores it on Escape",
+   "location": "choices-open-value.browser.mjs:31",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2466,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-search-open-value",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "3ab27de33aadf220ecb87d3176e0c23cd4d2f1721956282c03143690f09edbc1"
+      },
+      {
+       "name": "orbit-search-open-value",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "25c5ce6fc83f8a5f70e1c7c47eadf62f3caceff6a3809c911df9cb5275c88f30"
+      },
+      {
+       "name": "open-value",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4da7dacae2c87b570071c7045c0aea14516f592fce94827640efe3cae1eff966"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment matches the current surface, density and option states",
+   "location": "choices.browser.mjs:83",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3294,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-attachment-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "52fe84ea5fbbb1a8c4b6f931c7245ca2001cc703721630180d07785b4aa7442e"
+      },
+      {
+       "name": "orbit-attachment-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "989da4747cee6d859a75703872e4080b278124a9162e5ea6cb03d006c6db08d7"
+      },
+      {
+       "name": "appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e07f8b95fad9c075023efa6b66d7cf6734bbea21b93f2d5769ed61a3aa494ab9"
+      },
+      {
+       "name": "menu-glyphs",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2498400dc08a98e1872a9326a02bd6fd7ea1e276ba11365a15827483910c459b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "access matches the current surface, density and option states",
+   "location": "choices.browser.mjs:83",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3906,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-access-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "52d0718d77046614acff7717df061610b4f0a9960e644d884fe80ff7d707f682"
+      },
+      {
+       "name": "orbit-access-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "3008a190bb90fbba3b34c3f452ecc46f81dc8e41e40c79717ef2a91c3eee4bf6"
+      },
+      {
+       "name": "appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "03f938eb0360ad7375573d0a15346cac123d027925408809069193f414acc02f"
+      },
+      {
+       "name": "menu-glyphs",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "010a2cdf961ab7db4bf8b51908f7592aa8f3aeca704b0f1085637ba8a6f6c137"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "expiry matches the current surface, density and option states",
+   "location": "choices.browser.mjs:83",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 4125,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-expiry-closed",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "fb6e9c2f5b0ffb843328eaf0630b20ee4d2fee85593b44700c81164118903da5"
+      },
+      {
+       "name": "antd-expiry-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "bd7a16c47af5c7aee73ed8abe600900b6f19a0008ba05332e51d4a12355ae7d2"
+      },
+      {
+       "name": "orbit-expiry-closed",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "fb6e9c2f5b0ffb843328eaf0630b20ee4d2fee85593b44700c81164118903da5"
+      },
+      {
+       "name": "orbit-expiry-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "bd7a16c47af5c7aee73ed8abe600900b6f19a0008ba05332e51d4a12355ae7d2"
+      },
+      {
+       "name": "appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2fec49c1a33adf58aacfcc2ee4f1ffc9103dd51ea82908709ed64c057e1af5aa"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "account matches the current surface, density and option states",
+   "location": "choices.browser.mjs:83",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 6235,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-account-closed",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "a26d9542e65529a267f661dbabf4c7f27d6da5ffbf0ef163851756a001759273"
+      },
+      {
+       "name": "antd-account-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "de45f0c3a0db3275cfad2b7f80be82e44742b45d1ee69a7814c619e34aef29b4"
+      },
+      {
+       "name": "orbit-account-closed",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "a26d9542e65529a267f661dbabf4c7f27d6da5ffbf0ef163851756a001759273"
+      },
+      {
+       "name": "orbit-account-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "1c9e756ef2ca14957d516f2f7b6398a9164650fc3155aad6bfa5e8ecd4ee5c3c"
+      },
+      {
+       "name": "appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b25cac7f7f37d8f18d9715b477ea7136f2a2a1c1707a0bcf2a40f48e1674d9e2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "search matches the current surface, density and option states",
+   "location": "choices.browser.mjs:83",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 5340,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-search-closed",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "9648b902e29077e4dc15462bd16625ffa27c03203db2b2313deac836950425c0"
+      },
+      {
+       "name": "antd-search-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "685bc0603233982c28276fd9e0120e93f88e76b7ba17f0485461daf72c0ab2f5"
+      },
+      {
+       "name": "orbit-search-closed",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "ea8d344dc9954b434fd480e16e1df58e5d2a04979ddb1cc5d74b3330a98fd12b"
+      },
+      {
+       "name": "orbit-search-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "685bc0603233982c28276fd9e0120e93f88e76b7ba17f0485461daf72c0ab2f5"
+      },
+      {
+       "name": "appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "93d19dec74febe91294795f00abeeb0fe04d4879823abe643e6de6911c3109d4"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "popover matches the current surface, density and option states",
+   "location": "choices.browser.mjs:83",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3882,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-popover-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "0d779bdba1d21e1935cfc63729910e8f72617cea743a5d7c3437d114eb13bf22"
+      },
+      {
+       "name": "antd-popover-context",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "a43c49974f9362b5d985cfe463a2b9d29b4c2a8ffe9a10772615988c39fe1ef9"
+      },
+      {
+       "name": "orbit-popover-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "0d779bdba1d21e1935cfc63729910e8f72617cea743a5d7c3437d114eb13bf22"
+      },
+      {
+       "name": "orbit-popover-context",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "4ef0bf816ff054ec3fa8490857a2b4fafe767d104265c978994a37a8cc57c061"
+      },
+      {
+       "name": "appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "be79aa554288aa873963d84a2acc654b3f238704e06f4a3d7688f5122be42b65"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "tooltip matches the current surface, density and option states",
+   "location": "choices.browser.mjs:83",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3262,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-tooltip-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "3a3a8d1633ff4c04fb56b400cd9efd96ec288bb268984cbe6cccd7aa49cfe58a"
+      },
+      {
+       "name": "antd-tooltip-context",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "e8e44c6bc8e9aa419dd87c05767c329ccadf82b87ad4dd3e581c5902a32e160a"
+      },
+      {
+       "name": "orbit-tooltip-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "3a3a8d1633ff4c04fb56b400cd9efd96ec288bb268984cbe6cccd7aa49cfe58a"
+      },
+      {
+       "name": "orbit-tooltip-context",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "e8e44c6bc8e9aa419dd87c05767c329ccadf82b87ad4dd3e581c5902a32e160a"
+      },
+      {
+       "name": "appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3d67fd9c890bb4e503d56e5e71533aaf008e856434fb42d40a3ad733b774af4a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "empty, disabled, hover and focus choice surfaces match the existing states",
+   "location": "choices.browser.mjs:158",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 18414,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-expiry-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "6cbfba5a842cb2cada7e987c06bf39c51eeba36a1b7a0ce64f9c65e9247e5759"
+      },
+      {
+       "name": "orbit-expiry-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "6cbfba5a842cb2cada7e987c06bf39c51eeba36a1b7a0ce64f9c65e9247e5759"
+      },
+      {
+       "name": "antd-expiry-empty",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "fe466481123df4b376d70c3a0cecee0d77df9c48b062959d0c41986a9010b74e"
+      },
+      {
+       "name": "orbit-expiry-empty",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "56de062560e013813f1090c93e4816bbe00e6c94f9f05efb8f608be7ba23761b"
+      },
+      {
+       "name": "antd-expiry-focus",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "fbfa91c3379623d977cd0838dcabf9e1a6a4fcc8bf0259152e9d15985fe77153"
+      },
+      {
+       "name": "orbit-expiry-focus",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "fbfa91c3379623d977cd0838dcabf9e1a6a4fcc8bf0259152e9d15985fe77153"
+      },
+      {
+       "name": "antd-search-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "5065991d516c2d4cf7dc0ede9d974357d7cdf5e552355027a8881468366900e0"
+      },
+      {
+       "name": "orbit-search-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "5065991d516c2d4cf7dc0ede9d974357d7cdf5e552355027a8881468366900e0"
+      },
+      {
+       "name": "antd-search-empty",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "1187bc3ec5c95305ab31d0569ab9f94c4924130d44187e20c51fed2b27004cb9"
+      },
+      {
+       "name": "orbit-search-empty",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "2c1b4c022f31914b3b10aae11e8de56135fef1f20ed7145dd9ca1fa693e11717"
+      },
+      {
+       "name": "antd-search-focus",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "d5637ce534db867856d00a29045b2fad118690fd6b573ed1cfb4a499fa86e7ed"
+      },
+      {
+       "name": "orbit-search-focus",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b385e37c57361e1c8a0d4e7d0582f9cd68d0c0c522687d766b49d239ba41cf7c"
+      },
+      {
+       "name": "choice-states",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "12caa16dd64c00ed6410e1434f1c10a5a4e7e79ea7066e370904695a211df624"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu arrows, disabled items, submenu, checkbox and focus return work",
+   "location": "choices.browser.mjs:198",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1464,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-menu",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "723692d528c63ed61fd07e5a0001f78b5ce8cd61c7bb4f8a6883bed78f758d02"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus",
+   "location": "choices.browser.mjs:231",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1585,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "pointer-menu",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "10e6cfdc125bd8058e5e2f09d25dafd905a1c574fa3271763e4f3bcccd56a0c0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "select supports arrows, Enter, clear, empty, disabled and empty-string account values",
+   "location": "choices.browser.mjs:263",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1364,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "search preserves selection, filters groups, handles no results, composition and explicit clear",
+   "location": "choices.browser.mjs:292",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1607,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "search",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "97a3ed479253a2ded3663964de1f9db68ef65e914f479514801c98b3e36ae8c1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "remote search accepts server labels and resets an action picker without local filtering",
+   "location": "choices.browser.mjs:323",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2170,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "remote-search",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d1e0607554d9e46087eee9b61968b116e9b8be9eaacdb5f895cce41a8a6a550e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Dialog owns choices, top-layer Escape, Tab and theme",
+   "location": "choices.browser.mjs:343",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2312,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "choices-in-dialog",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "aa72f6c54a2a60dc4a69b1fa92cdc6ce1747c61000651561f95c0566924e4a17"
+      },
+      {
+       "name": "nested-choices",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "legacy Modal owns choices, top-layer Escape, Tab and theme",
+   "location": "choices.browser.mjs:343",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2588,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "choices-in-dialog",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "77903fcdd506411d0732e15e0ceac48f504c75118be7d21d05ab4892881af29d"
+      },
+      {
+       "name": "nested-choices",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "961974b994e72e1b26f3107443ebf99d2e0704f1167f4a724dc930ccecd2b679"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary",
+   "location": "choices.browser.mjs:381",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3544,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "legacy-tab-baseline",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "8a4a69f32fc6b2705fcf6c39247da0a82ddbe2da309d44c3e0cf8602372c7ffc"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover",
+   "location": "choices.browser.mjs:400",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1836,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "popover-tooltip",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e0b29a3a60e5f2ef0a20587c4f5c79f92a76c58e1fbbb403a6f189e5a2b954f1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "open choices follow the live system theme without losing selection",
+   "location": "choices.browser.mjs:435",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1130,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "live-theme",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2681bb725781285931f30e0ee0bbdff2c83faa9f85ddf2e95c806e888c731751"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner",
+   "location": "choices.browser.mjs:453",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1624,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "dialog-boundaries",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "multiple chip appearance matches current labels and email fields",
+   "location": "choices.browser.mjs:486",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 4989,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-multiple-default",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "efd4ec140a02831e6c0db1f1c745e1aaaff05e796d7efeac7977f96f1b52eab5"
+      },
+      {
+       "name": "antd-multiple-options",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "eb74dbf9b4b51ffd8c20fe3ec509711c05832f901b8e896404dae98884a21335"
+      },
+      {
+       "name": "orbit-multiple-default",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "de7791487f1913673f4cd44968beeaed59223a9c015cdd3689bae34c34e798ff"
+      },
+      {
+       "name": "orbit-multiple-options",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "db65f175fd8ed32bc450a16d09d0c1479aa9e02d9062773d6154f6fb8f2de853"
+      },
+      {
+       "name": "antd-multiple-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "6963021bd469cc8c0feccf0c308aab9287760f428d5f9999e973f855af26e2dd"
+      },
+      {
+       "name": "orbit-multiple-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "6963021bd469cc8c0feccf0c308aab9287760f428d5f9999e973f855af26e2dd"
+      },
+      {
+       "name": "multi-appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e382fac5c390517efea75495cdae84c00f7bb04f093ee20b49bced4dcfaf6461"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "tags chip appearance matches current labels and email fields",
+   "location": "choices.browser.mjs:486",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 4346,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-tags-default",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "4decef041b673046abab1ddac9590d8d73d3ee4c1a77257d2f3cf17b939bc2ea"
+      },
+      {
+       "name": "orbit-tags-default",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "05eca28820c74e8725639d701564531a9576d89ac63f5d0ffa0565db6dbc1cf4"
+      },
+      {
+       "name": "antd-tags-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "d8c099752e9042b628bf3dad6bbc14edf00983a42a611d6f00b0a534236dd010"
+      },
+      {
+       "name": "orbit-tags-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "d8c099752e9042b628bf3dad6bbc14edf00983a42a611d6f00b0a534236dd010"
+      },
+      {
+       "name": "multi-appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0a26c6a5d6847ba8216e91000d56ff6cc2ebfd178a7e78cfcf4b5a8dd22acd4d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+   "location": "choices.browser.mjs:515",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1509,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "multiple-labels",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "12aa37d5e9012d39fd4cd07e9f8bdf46633e20b758109e6c45e307c202995340"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion",
+   "location": "choices.browser.mjs:552",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2103,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "email-tags",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "bca4a211111d6395b7e9300f7d3398adc7958a2f273e587b049a3cc4c7dd39ba"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+   "location": "choices.browser.mjs:592",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1838,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "multi-dialog-and-row",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "search option touch selects once and preserves input focus",
+   "location": "choices.browser.mjs:631",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1083,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "search-touch",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "8875e66cc7e25382b8a78362911cbef87be8cec83502e7db6437e286662069f9"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen",
+   "location": "choices.browser.mjs:642",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1492,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "long-tooltip",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "27074c27d18988aa057b0b0b634353c30db7624d3608f7ea85f0fbbbffa9de3b"
+      },
+      {
+       "name": "plan-usage-sized-popover",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "356ac107e2c0b911bd5e953c369f881b7f9386c0c980218224ad071193822f12"
+      },
+      {
+       "name": "tooltip-and-popover-edges",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d994710fe50a39b6e914ba2ce4c72f09bd61eb0b0dd700d80a732ba037eb9f30"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

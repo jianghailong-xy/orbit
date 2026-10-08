@@ -44,6 +44,18 @@ export class WikiJobInfraError extends Error {
   }
 }
 
+/**
+ * Not a failure: the job parked itself on a repository operation (contract `repoOps.waiting`) —
+ * `waitForWikiRepoOpAsJob` gave its lease up, waited, and put the row back in the queue — so this run of it
+ * is over and there is nothing left to settle. The next claim replays it, the operation's answer in hand.
+ */
+export class WikiJobParked extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'WikiJobParked';
+  }
+}
+
 /** What running one job is handed: its own row, its cancel, and the queue. */
 export interface WikiJobContext {
   job: ClaimedWikiJob;
@@ -202,7 +214,11 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
       void renewWikiJobLease(this.prisma, {
         id: job.id, generation: job.leaseGeneration, leaseMs: this.options.leaseMs ?? WIKI_JOB.leaseSeconds * 1000,
       }).then((held) => {
-        if (!held) this.log.warn(`job ${job.id} lost its lease while running: another worker has it`);
+        if (held) return;
+        // Gone for good: another worker took the job over, or its runner parked it on a repository
+        // operation (WikiJobParked). Either way there is nothing left of this lease to renew.
+        clearInterval(renew);
+        this.log.warn(`job ${job.id} is no longer running under this worker's lease: it was taken over or parked`);
       }).catch((error: unknown) => this.log.warn(`the lease renewal failed: ${this.message(error)}`));
     }, renewMs);
     renew.unref();
@@ -222,6 +238,11 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
 
   /** What a failed job leaves: a requeue (the platform's), an end (the work's), or a lease out to now. */
   private async settleFailure(job: ClaimedWikiJob, error: unknown): Promise<void> {
+    if (error instanceof WikiJobParked) {
+      // Its row already says where it is (waiting, or queued again): this run settles nothing.
+      this.log.log(`job ${job.id} (${job.kind}): ${error.message}`);
+      return;
+    }
     if (error instanceof WikiModelWaitCancelled || error instanceof WikiRepoOpWaitCancelled) {
       // SIGTERM: the job was cancelled with us. Let its lease out to now so the next process takes it over
       // at once (design §5.4); its requests were let go the same way by the queue's own shutdown.

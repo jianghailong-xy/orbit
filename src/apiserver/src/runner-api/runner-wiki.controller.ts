@@ -10,6 +10,7 @@ import { createWikiImportJob, readWikiImportJob, wikiImportExecutor, WikiImportJ
 import { currentWikiExecutorSwitch, wikiExecutorServes } from '../wiki/wiki-executor-switch';
 import { flagParam, listParam, WikiRetrieval } from '../wiki/wiki-retrieval';
 import { WikiRolloutGuard } from '../wiki/wiki-rollout';
+import { enqueueWikiVerifyJob } from '../wiki/wiki-verify-jobs';
 import { answerFor, answerForVerifications, WikiService, WikiRefusalError, type WikiPrincipal } from '../wiki/wiki.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
@@ -140,10 +141,58 @@ export class RunnerWikiController {
     @Query('limit') limit?: string,
   ) {
     const principal = await this.proposer(runner, callingSessionId);
+    // THE SERVER'S OWN VERIFICATION (contract `reviewModes.verification.servedBy`, P3): where the
+    // executor switch says the server runs for this account, the ops this session proposed are verified
+    // by the server's worker (`jobs.kindRuns.verify`), and this list is EMPTY — `servedBy` says who
+    // verifies. So a runner's verifier asks a model of the session's provider about nothing, which is
+    // what the mode exists for (`jobs.executor.rules`); the CLI and the runner that ship next wait for
+    // the verdict instead, and one that predates this reads the empty list and stops.
+    // A maintenance run of the space is exempt twice over: it is not this account's pipeline to move
+    // until P8, and it verifies its own ops in its own process (`reviewModes.verification.cli`).
+    if (await this.wiki.serverVerifiesOps(principal, id)) {
+      const space = await this.wiki.requireSpace(runner.ownerId, id);
+      return {
+        spaceId: space.id, mode: space.settings.reviewMode, items: [], next: null, servedBy: 'server',
+        // How many of the session's ops are waiting, so a caller that waits for the verdict — the command
+        // the next runner release ships — knows what it is waiting for and is done when it reaches zero.
+        waiting: await this.wiki.countWaitingVerifications(principal, space.id),
+      };
+    }
     return this.wiki.listVerifications(principal, id, {
       after: after?.trim() || null,
       limit: limit === undefined ? undefined : Number(limit),
     });
+  }
+
+  /**
+   * Ask the server to verify the ops this session proposed, and answer which job is doing it (contract
+   * `reviewModes.verification.routes.request`, P3): what `orbit wiki verify` calls when the list answered
+   * `servedBy: "server"` — the command waits for the verdict rather than asking a model itself
+   * (`agentSurface.verify.serverExecution`).
+   *
+   * ONE JOB PER SESSION AND SPACE, the same identity a submission's own trigger makes, so asking twice
+   * while one is queued is one job; and where the server does not serve this account — the default
+   * `runner` mode, an account no canary list names — nothing is queued and the answer says `runner`, so
+   * a caller that raced a switch change falls back to being its own verifier.
+   */
+  @Post('spaces/:id/verifications/request')
+  @HttpCode(HttpStatus.OK)
+  async requestVerification(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+  ) {
+    const principal = await this.proposer(runner, callingSessionId);
+    // The space is the caller's own, first: another owner's is the same 404 as one that does not exist, and
+    // nothing of it is written (the job's foreign key names both the space and the account).
+    const space = await this.wiki.requireSpace(runner.ownerId, id);
+    if (principal.sessionId === null || !(await this.wiki.serverVerifiesOps(principal, space.id))) {
+      return { spaceId: space.id, servedBy: 'runner', jobId: null };
+    }
+    const jobId = await enqueueWikiVerifyJob(this.prisma, {
+      ownerId: runner.ownerId, spaceId: space.id, sessionId: principal.sessionId,
+    });
+    return { spaceId: space.id, servedBy: 'server', jobId };
   }
 
   /**
@@ -161,6 +210,21 @@ export class RunnerWikiController {
     @Body() dto: WikiVerificationReportDto,
   ) {
     const principal = await this.proposer(runner, callingSessionId);
+    // NO VERDICTS FOR WHAT THE SERVER VERIFIES (`WIKI_SERVER_EXECUTES`, contract
+    // `reviewModes.verification.servedBy`): this door accepts no verdicts for an account the server runs
+    // for. The list above is empty for such a session, so a runner that reads it has nothing to report;
+    // one that reports anyway — a stale client, a hand-made call — is answered the refusal rather than
+    // racing the server's own job for the op, and its verdict would be the session's provider's, which is
+    // what the mode exists to stop spending. A maintenance run of the space and the default runner mode
+    // are untouched.
+    if (await this.wiki.serverVerifiesOps(principal, id)) {
+      throw new WikiRefusalError({
+        code: 'WIKI_SERVER_EXECUTES',
+        message: 'this space\'s verification is run by the server for this account (ORBIT_WIKI_EXECUTOR), '
+          + 'so no verdict is accepted here: the verdicts come from the server\'s own job, and the verification '
+          + 'list answers empty for this session',
+      });
+    }
     return answerForVerifications(await this.wiki.recordVerifications(principal, id, dto.verdicts));
   }
 

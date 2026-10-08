@@ -1192,11 +1192,11 @@ function RunnerEngineCard({
           {/* Leads the row, in the column the engine rows below put their icon in: one place
               holds it folded or open, and no row's summary can move it. */}
           <span className={`re-chev${collapsed ? '' : ' open'}`} aria-hidden="true">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
               <path
                 d="m9 5 7 7-7 7"
                 stroke="currentColor"
-                strokeWidth="2"
+                strokeWidth="2.2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />

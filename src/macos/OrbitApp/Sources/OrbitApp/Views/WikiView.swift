@@ -30,6 +30,8 @@ struct WikiHomeActions {
     var openContents: () -> Void = {}
     /// Activity, from the bar's history mark (design §12.3.2).
     var openActivity: () -> Void = {}
+    /// The space's public link (share-links §10): the Share panel, from the bar's globe.
+    var openShare: () -> Void = {}
     /// A document's page (mock 24), from its row, or from a folded row's titles.
     var openDoc: (String) -> Void = { _ in }
     /// A topic's article, before a plan is confirmed.
@@ -68,6 +70,8 @@ struct WikiHomePage: View {
     var failed = false
     /// What waits on the owner across every space — the drawer's number — on the bar's Activity button.
     var waiting = 0
+    /// The space has a public link open: the bar's globe is green.
+    var shareLive = false
     /// Drawn beside the directory column: no head, no Contents in the bar, no foot.
     var besideContents = false
     var actions = WikiHomeActions()
@@ -118,9 +122,9 @@ struct WikiHomePage: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
-            // The bar's actions, in the web head's order — Contents, Activity, Settings; icons all
-            // (design §12.3.1). Activity wears the drawer's orange number: what waits on the owner. Beside the
-            // directory column there is no Contents to open.
+            // The bar's actions, in the web head's order — Contents, Activity, Share, Settings; icons all
+            // (design §12.3.1, share-links mock 08 ⑥). Activity wears the drawer's orange number: what waits
+            // on the owner. Beside the directory column there is no Contents to open.
             ToolbarItemGroup(placement: .primaryAction) {
                 if !besideContents {
                     Button(action: actions.openContents) {
@@ -133,6 +137,11 @@ struct WikiHomePage: View {
                 }
                 .accessibilityLabel(WikiCopy.activity)
                 .accessibilityValue(waiting > 0 ? WikiCopy.waitingOnYou(waiting) : "")
+                Button(action: actions.openShare) {
+                    WikiShareGlyph(live: shareLive)
+                }
+                .accessibilityLabel(SharePanelCopy.share)
+                .accessibilityValue(shareLive ? SharePanelCopy.liveLink : "")
                 Button(action: actions.openSettings) {
                     Image(systemName: "gearshape")
                 }
@@ -1716,6 +1725,20 @@ struct WikiActivityGlyph: View {
                         .offset(x: 8, y: -7)
                 }
             }
+    }
+}
+
+/// The bar's way to the space's public link (share-links §10): a globe, green while the space has a
+/// link open — the colour the web head's `Shared · Live` pill and a task's or project's menu wear.
+struct WikiShareGlyph: View {
+    let live: Bool
+
+    var body: some View {
+        if live {
+            Image(systemName: "globe").foregroundStyle(Color.green)
+        } else {
+            Image(systemName: "globe")
+        }
     }
 }
 

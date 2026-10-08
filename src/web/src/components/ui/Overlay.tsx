@@ -110,7 +110,16 @@ export function OverlaySurface({
       <BaseDialog.Portal container={parent?.container} keepMounted={keepMounted}>
         <BaseDialog.Backdrop forceRender className="orbit-overlay-backdrop" style={{ zIndex }} />
         <BaseDialog.Viewport className={`orbit-overlay-viewport orbit-${kind}-viewport`} style={{ zIndex }}>
-          <BaseDialog.Popup ref={setPopup} initialFocus={initialFocus ?? popup} finalFocus={returnFocus}
+          <BaseDialog.Popup ref={setPopup} initialFocus={() => {
+            // Base UI moves focus in on the next animation frame. Until then keys reach the page behind
+            // the dialog (Enter re-presses its opener, Tab moves along the page), where the replaced modal
+            // already had focus inside; so focus now, as Base UI would, and leave it nothing to do.
+            const target = initialFocus ? initialFocus.current : popup.current;
+            // An empty initialFocus ref falls back to Base UI's default, as it did.
+            if (!target) return true;
+            if (!popup.current?.contains(document.activeElement)) target.focus({ preventScroll: target === popup.current });
+            return false;
+          }} finalFocus={returnFocus}
             className={`orbit-overlay orbit-${kind}${className ? ` ${className}` : ''}`}
             data-placement={kind === 'drawer' ? placement : undefined} aria-busy={busy || undefined}
             style={{ width: kind === 'drawer' && placement === 'bottom' ? '100%' : width,
