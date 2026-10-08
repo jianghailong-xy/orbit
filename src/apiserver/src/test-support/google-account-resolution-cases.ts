@@ -1,10 +1,10 @@
 import type { SignupPolicy } from '../auth/sign-in-providers.service';
 
 /**
- * docs/google-sign-in-design.md §5.2 as a table: every row of its two tables except an account that is
- * disabled (ACCOUNT_DISABLED, X1's to add), each with what the exchange answers under both sign-up
- * policies. `google-account-resolution.http.spec.ts` runs it against the exchange over in-memory
- * tables, and `google-account-resolution.pg.spec.ts` over PostgreSQL, through the fake Google.
+ * docs/google-sign-in-design.md §5.2 as a table: every row of its two tables, each with what the
+ * exchange answers under both sign-up policies. `google-account-resolution.http.spec.ts` runs it
+ * against the exchange over in-memory tables, and `google-account-resolution.pg.spec.ts` over
+ * PostgreSQL, through the fake Google.
  *
  * Emails and names are templates: `{tag}` is replaced by a lowercase tag of the run, the case and the
  * policy, so that on one database no case meets another's accounts.
@@ -15,6 +15,8 @@ export interface SeedAccount {
   email: string;
   /** The Google account linked to it: the one that signs in (ME), another one (OTHER), or none. */
   linkedTo?: 'ME' | 'OTHER';
+  /** An administrator disabled it (§5.5). */
+  disabled?: true;
 }
 
 /** The Google account that signs in, as its verified ID token describes it. */
@@ -25,6 +27,7 @@ export interface SigningIn {
 }
 
 export type ResolutionRefusal =
+  | 'ACCOUNT_DISABLED'
   | 'SETUP_REQUIRED'
   | 'GOOGLE_EMAIL_AMBIGUOUS'
   | 'GOOGLE_ACCOUNT_MISMATCH'
@@ -74,11 +77,39 @@ export const RESOLUTION_CASES: readonly ResolutionCase[] = [
     expect: both({ signsInAs: 0, links: false }),
   },
   {
+    row: '1',
+    what: 'the Google account is linked to an account an administrator disabled',
+    accounts: [{ email: 'babbage.{tag}@example.com', linkedTo: 'ME', disabled: true }],
+    signingIn: { email: 'babbage.{tag}@gmail.com', name: 'Charles Babbage' },
+    expect: both({ refused: 'ACCOUNT_DISABLED' }),
+  },
+  {
     row: '2',
     what: 'the deployment has no account yet',
     accounts: [],
     signingIn: { email: 'first.{tag}@gmail.com', name: 'First' },
     expect: both({ refused: 'SETUP_REQUIRED' }),
+  },
+  {
+    row: '3: disabled',
+    what: 'the one account with this email, a gmail.com address an administrator disabled: refused, not linked',
+    accounts: [{ email: 'lamarr.{tag}@gmail.com', disabled: true }],
+    signingIn: { email: 'lamarr.{tag}@gmail.com' },
+    expect: both({ refused: 'ACCOUNT_DISABLED' }),
+  },
+  {
+    row: '3: disabled',
+    what: 'the one account with this email is disabled and linked to another Google account: disabled is the first answer',
+    accounts: [{ email: 'hamilton.{tag}@gmail.com', linkedTo: 'OTHER', disabled: true }],
+    signingIn: { email: 'hamilton.{tag}@gmail.com' },
+    expect: both({ refused: 'ACCOUNT_DISABLED' }),
+  },
+  {
+    row: '3: disabled',
+    what: 'the one account with this email is disabled, and Google is not authoritative for it: disabled is the first answer',
+    accounts: [{ email: 'goldberg.{tag}@corp.example', disabled: true }],
+    signingIn: { email: 'goldberg.{tag}@corp.example' },
+    expect: both({ refused: 'ACCOUNT_DISABLED' }),
   },
   {
     row: '3: linked to another Google account',

@@ -7,6 +7,7 @@ import { AccessTokensController, PatSelfController } from './access-tokens.contr
 import { AdminSignInController } from './admin-sign-in.controller';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { DisabledAccounts } from './disabled-accounts';
 import { GoogleAuthController } from './google-auth.controller';
 import { GoogleLoginService } from './google-login.service';
 import { GoogleOAuthClient } from './google-oauth.client';
@@ -50,6 +51,8 @@ import { SignInProvidersService } from './sign-in-providers.service';
   providers: [
     AuthService,
     JwtAuthGuard,
+    // One per process, so every JwtAuthGuard reads the same accounts and one timer reads them again.
+    DisabledAccounts,
     PatService,
     PatDeviceLoginService,
     PatRequestAudit,
@@ -64,9 +67,9 @@ import { SignInProvidersService } from './sign-in-providers.service';
     // and the request audit records that refusal as it records the guard's.
     { provide: APP_INTERCEPTOR, useClass: PatRefusalInterceptor },
   ],
-  // PatService and PatRequestAudit are exported because JwtAuthGuard is instantiated in every module that uses it,
-  // PatService also because admin/* lists and revokes a user's tokens, and GoogleLoginService because
-  // admin/* unlinks a user's Google account.
-  exports: [JwtAuthGuard, JwtModule, PatService, PatRequestAudit, GoogleLoginService],
+  // PatService, PatRequestAudit and DisabledAccounts are exported because JwtAuthGuard is instantiated in every
+  // module that uses it, PatService also because admin/* lists and revokes a user's tokens, GoogleLoginService
+  // because admin/* unlinks a user's Google account, and DisabledAccounts also because admin/* disables one.
+  exports: [JwtAuthGuard, JwtModule, PatService, PatRequestAudit, GoogleLoginService, DisabledAccounts],
 })
 export class AuthModule {}

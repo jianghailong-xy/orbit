@@ -116,8 +116,8 @@ final class SettingsCopyParityTests: XCTestCase {
         for label in [SettingsCopy.currentPassword, SettingsCopy.newPassword, SettingsCopy.confirmPassword] {
             assertSays(page, "label=\"\(label)\"", in: Self.profile)
         }
-        assertSays(page, "message: '\(SettingsCopy.passwordRule)'", in: Self.profile)
-        assertSays(page, "new Error('\(SettingsCopy.passwordsDoNotMatch)')", in: Self.profile)
+        assertSays(page, "? null : '\(SettingsCopy.passwordRule)'", in: Self.profile)
+        assertSays(page, "? null : '\(SettingsCopy.passwordsDoNotMatch)'", in: Self.profile)
         assertSays(page, "message.success('\(SettingsCopy.passwordChanged)')", in: Self.profile)
         assertSays(page, "> \(SettingsCopy.changePassword) </Button>", in: Self.profile)
     }
@@ -170,7 +170,7 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(table, "title={`\(AccessTokensList.revokeTitle(token).replacingOccurrences(of: "NAME", with: "${token.name}"))`}",
                    in: Self.accessTokenTable)
         assertSays(table, "description=\"\(AccessTokensList.revokeDetail)\"", in: Self.accessTokenTable)
-        assertSays(table, "okText=\"\(AccessTokensList.revoke)\"", in: Self.accessTokenTable)
+        assertSays(table, "confirmText=\"\(AccessTokensList.revoke)\"", in: Self.accessTokenTable)
         assertSays(table, AccessTokensList.hint(token).replacingOccurrences(of: "HINT", with: "{token.tokenHint}"),
                    in: Self.accessTokenTable)
         assertSays(table, "return '\(AccessTokensList.workspacesLine(token))'", in: Self.accessTokenTable)
