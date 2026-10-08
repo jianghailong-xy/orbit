@@ -20,7 +20,9 @@
  *   5. the anchors step: a page of two entries whose anchors collide on the per-entry index is checked as
  *      one repository operation, and each entry records only its own checks — a symbol without a baseline
  *      adopts its own region, never a page-mate's (the canary incident: per-entry indexes mapped back
- *      through one Map overwrote each other, and entries took the last entry's verdict for their index).
+ *      through one Map overwrote each other, and entries took the last entry's verdict for their index);
+ *   6. an anchor verdict whose echo names another anchor than the one at its index fails the run as
+ *      content: the run refuses to lay a verdict on a guess.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-maintain-job.pg.spec.ts
  *
