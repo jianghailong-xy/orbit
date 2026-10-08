@@ -67,6 +67,7 @@ class LoginRealStackDeviceTest {
         compose.waitUntil(10_000) { app.session.state.value is AuthState.SignedOut }
         val canonical = ServerAddress.parse(server, allowLoopbackHttp = true).value
         val context = compose.activity
+        val launchIntent = compose.activity.intent
 
         // The stack's own auth/methods: Google on, and open to new accounts.
         compose.chooseServer(server)
@@ -110,6 +111,8 @@ class LoginRealStackDeviceTest {
         assertEquals(1, opened)
         awaitText(text(R.string.auth_google_bad_request))
         assertEquals(false, auth.googleBusy.value)
+        // MainActivity keeps the newest intent; ActivityScenario follows its activity by the launch intent.
+        instrumentation.runOnMainSync { compose.activity.intent = launchIntent }
         capture("stack-google-bad-request")
 
         // A03-1. The right password signs in; the stack's address and this email are remembered, and signing out comes back
