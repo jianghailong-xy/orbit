@@ -35,6 +35,11 @@ final class ProjectMergeCopyParityTests: XCTestCase {
             XCTAssertTrue(web.contains("export const \(name) = '\(copy)';"),
                           "\(name): the web's words drifted from \(copy.debugDescription)")
         }
+        // Who is in front of a blocked merge, in the same words on both ends.
+        XCTAssertTrue(web.contains("export const BLOCKED_BY = '\(PromotionCards.blockedByLabel)';"),
+                      "BLOCKED_BY drifted from \(PromotionCards.blockedByLabel.debugDescription)")
+        XCTAssertTrue(web.contains("`“${holding.taskTitle}” is landing on the project line`"),
+                      "the sentence that names the landing holding the branch drifted")
         XCTAssertTrue(web.contains("export const MERGE_JOB_KINDS: readonly string[] = ['CHECK_PROMOTION', 'LAND_PROMOTION'];"))
         XCTAssertEqual(ProjectMergeCard.mergeJobKinds, ["CHECK_PROMOTION", "LAND_PROMOTION"])
     }

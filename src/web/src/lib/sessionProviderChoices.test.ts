@@ -59,9 +59,9 @@ const catalog = {
 } as never;
 
 describe('providerChoices', () => {
-  it('offers login engines and hides Antigravity without a server-confirmed environment key', () => {
+  it('offers the engines and hides Antigravity without a server-confirmed environment key', () => {
     const choices = providerChoices([], catalog);
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi']);
+    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'opencode']);
     expect(choices.every((c) => c.kind === 'engine')).toBe(true);
   });
 
@@ -73,12 +73,23 @@ describe('providerChoices', () => {
       'kimi',
       'deepseek',
       'my-endpoint',
+      'opencode',
     ]);
-    expect(choices.slice(3).every((c) => c.kind === 'byok')).toBe(true);
+    expect(choices.filter((c) => c.kind === 'byok').map((c) => c.slug)).toEqual(['deepseek', 'my-endpoint']);
   });
 
-  it('never offers opencode as a choice — it is not a login engine', () => {
-    expect(providerChoices([], catalog).some((c) => c.slug === 'opencode')).toBe(false);
+  it('keeps opencode listed, with its reason, until the runner reports it installed', () => {
+    // Orbit installs it, so a machine without it is a row the picker can send somewhere — the same
+    // rule DSH and the login engines are listed under. It has no sign-in to relay, so the row is
+    // never a pick before the CLI is there, and it must not read as one.
+    for (const engines of [null, [{ engine: 'opencode' as const, installed: false, auth: 'unknown' as const }]]) {
+      const choices = providerChoices([], catalog, undefined, engines);
+      const row = choices.find((c) => c.slug === 'opencode');
+      expect(row).toMatchObject({ kind: 'engine', label: 'OpenCode', unavailable: 'Not installed', fixEngine: 'opencode' });
+      // An engine board row for it too, landing on that choice.
+      const board = engineChoices(choices, []).find((e) => e.slug === 'opencode');
+      expect(board).toMatchObject({ label: 'OpenCode', unavailable: 'Not installed', fixEngine: 'opencode' });
+    }
   });
 
   it('offers Antigravity as an engine, with the model the runner reports first', () => {
@@ -90,7 +101,7 @@ describe('providerChoices', () => {
       ],
     } as never;
     const choices = providerChoices([], withAgy, undefined, undefined, [], undefined, undefined, true);
-    expect(choices.map((choice) => choice.slug)).toEqual(['claude', 'codex', 'antigravity', 'kimi']);
+    expect(choices.map((choice) => choice.slug)).toEqual(['claude', 'codex', 'antigravity', 'kimi', 'opencode']);
     const row = choices.find((c) => c.slug === 'antigravity');
     expect(row).toMatchObject({ kind: 'engine', label: 'Antigravity', labelDetail: 'env key', glyphKey: 'antigravity' });
     expect(row?.modelLabel).toBe('Gemini 3.8 Flash');
@@ -101,7 +112,7 @@ describe('providerChoices', () => {
   it('uses the server key boolean instead of inferring availability from runner auth', () => {
     const ready = { supported: true, installed: true, version: 'agy 1.2.16', envKeyAvailable: true };
     const health = [{ engine: 'antigravity' as const, installed: true, auth: 'yes' as const }];
-    expect(providerChoices([gemini], catalog, undefined, health).map((c) => c.slug)).toEqual(['claude', 'codex', 'gemini', 'kimi']);
+    expect(providerChoices([gemini], catalog, undefined, health).map((c) => c.slug)).toEqual(['claude', 'codex', 'gemini', 'kimi', 'opencode']);
     expect(providerChoices([gemini], catalog, undefined, health, [], undefined, ready, false).some((c) => c.slug === 'antigravity')).toBe(false);
     expect(providerChoices([gemini], catalog, undefined, undefined, [], undefined, ready, true).find((c) => c.slug === 'antigravity')).toMatchObject({ labelDetail: 'env key' });
     expect(providerChoices([gemini], catalog).find((c) => c.slug === 'gemini')).toMatchObject({
@@ -159,7 +170,7 @@ describe('providerChoices', () => {
       { engine: 'codex', installed: false, auth: 'unknown' },
       { engine: 'kimi', installed: false, auth: 'unknown' },
     ]);
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'deepseek']);
+    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'deepseek', 'opencode']);
     // Hiding it would leave "why is Kimi missing?" with no answer anywhere in the product.
     expect(choices.find((c) => c.slug === 'kimi')?.unavailable).toBe('Not installed');
     expect(choices.find((c) => c.slug === 'codex')?.unavailable).toBe('Not installed');
@@ -182,7 +193,7 @@ describe('providerChoices', () => {
       { engine: 'codex', installed: true, auth: 'no' },
       { engine: 'kimi', installed: true, auth: 'unknown' },
     ]);
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi']);
+    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'opencode']);
     expect(choices.find((c) => c.slug === 'codex')?.unavailable).toBe('Not signed in');
     // `unknown` is a CLI that wouldn't answer, not a "no" — it stays pickable.
     expect(choices.find((c) => c.slug === 'kimi')?.unavailable).toBeUndefined();
@@ -225,18 +236,20 @@ describe('providerChoices', () => {
 
   it('offers every engine a runner has claimed nothing about', () => {
     // Never reported (older runner / first heartbeat still pending), and a partial report.
+    // OpenCode is the one exception: Orbit installs it, so a runner that has said nothing about it
+    // is a runner that hasn't got it, and the row says so.
     expect(providerChoices([], catalog, undefined, null).map((c) => c.slug)).toEqual([
       'claude',
       'codex',
       'kimi',
+      'opencode',
     ]);
     const partial = providerChoices([], catalog, undefined, [
       { engine: 'claude', installed: false, auth: 'no' },
     ]);
-    expect(partial.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi']);
-    // Only the engine the runner actually spoke about carries a reason.
-    expect(partial.find((c) => c.slug === 'claude')?.unavailable).toBe('Not installed');
-    expect(partial.filter((c) => c.unavailable)).toHaveLength(1);
+    expect(partial.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'opencode']);
+    // The engine the runner actually spoke about, and OpenCode, which it didn't and hasn't got.
+    expect(partial.filter((c) => c.unavailable).map((c) => c.slug)).toEqual(['claude', 'opencode']);
   });
 });
 
@@ -627,6 +640,7 @@ describe('account pools among the choices', () => {
       'anthropic',
       'anthropic-2',
       'deepseek',
+      'opencode',
     ]);
     const tile = choices.find((c) => c.slug === 'claude-accounts')!;
     expect(tile).toMatchObject({ kind: 'pool', label: 'Claude accounts', poolSize: 2, glyphKey: 'anthropic' });
@@ -670,7 +684,7 @@ describe('shared pools among the choices', () => {
 
   it('offers one after the engines, wearing the Codex mark and counting its keys', () => {
     const choices = providerChoices(configured, catalog, undefined, undefined, [team]);
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'team-codex', 'deepseek']);
+    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'team-codex', 'deepseek', 'opencode']);
     const tile = choices.find((c) => c.slug === 'team-codex')!;
     expect(tile).toMatchObject({ kind: 'pool', label: 'Team Codex', poolSize: 3, poolUnit: 'key', glyphKey: 'openai' });
     // Its model is the Codex CLI's own.
@@ -839,15 +853,15 @@ describe('engineChoices', () => {
   const all = providerChoices(configured, catalog, undefined, undefined, [], undefined, undefined, true);
 
   it('lists each engine once, its keys folded into the engine that runs them', () => {
-    expect(engineChoices(all, configured).map((engine) => engine.slug)).toEqual(['claude', 'codex', 'antigravity', 'kimi']);
+    expect(engineChoices(all, configured).map((engine) => engine.slug)).toEqual(['claude', 'codex', 'antigravity', 'kimi', 'opencode']);
   });
 
   it("lands on the engine's own sign-in, unless a preferred provider of it can run", () => {
     const landing = (preferred: string[]) =>
       engineChoices(all, configured, preferred).map((engine) => engine.provider.slug);
-    expect(landing([])).toEqual(['claude', 'codex', 'antigravity', 'kimi']);
+    expect(landing([])).toEqual(['claude', 'codex', 'antigravity', 'kimi', 'opencode']);
     // The draft's pick first, then what the workspace last ran: each only where it runs.
-    expect(landing(['deepseek', 'moonshot'])).toEqual(['deepseek', 'codex', 'antigravity', 'moonshot']);
+    expect(landing(['deepseek', 'moonshot'])).toEqual(['deepseek', 'codex', 'antigravity', 'moonshot', 'opencode']);
   });
 
   it('skips a preferred provider that cannot run, and a signed-out engine, for one that can', () => {
@@ -887,12 +901,15 @@ describe('OpenCode and the keys it may spend', () => {
   ];
   const installed = [{ engine: 'opencode' as const, installed: true, auth: 'unknown' as const }];
 
-  it('offers nothing for OpenCode until the runner reports it installed', () => {
-    expect(providerChoices(configured, catalog).some((c) => runtimeForProvider(c.slug, configured) === 'opencode')).toBe(false);
-    expect(
-      providerChoices(configured, catalog, undefined, [{ engine: 'opencode', installed: false, auth: 'unknown' }])
-        .some((c) => c.slug === 'opencode'),
-    ).toBe(false);
+  it('offers its own row without the keys until the runner reports it installed', () => {
+    // The engine row is there either way — Orbit installs it — while the keys it would spend are
+    // each a session that would run on a CLI this machine hasn't got.
+    for (const engines of [null, [{ engine: 'opencode' as const, installed: false, auth: 'unknown' as const }]]) {
+      const rows = providerChoices(configured, catalog, undefined, engines)
+        .filter((c) => runtimeForProvider(c.slug, configured) === 'opencode');
+      expect(rows.map((c) => c.slug)).toEqual(['opencode']);
+      expect(rows[0]).toMatchObject({ unavailable: 'Not installed', fixEngine: 'opencode' });
+    }
   });
 
   it('lists its own config, then every key it may spend — each key under its own engine as well', () => {
