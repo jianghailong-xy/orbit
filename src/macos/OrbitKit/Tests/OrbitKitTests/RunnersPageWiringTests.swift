@@ -472,8 +472,12 @@ final class RunnersPageWiringTests: XCTestCase {
                                 "if let subtitle = line.subtitle {", ".lineLimit(1)", ".truncationMode(.middle)"],
                           "NEXT beside the name, then the line under it")
         XCTAssertTrue(page.contains("RunnerSectionHeader(RunnerPageFormat.accountsTitle(runner, engine: engine))"))
-        let pools = code(try appSource("Views/ProviderPoolViews.swift"))
-        XCTAssertTrue(pools.contains("\nstruct PoolChip: View {"), "the pools' chip is the page's to wear too")
+        // The pools' chip is the page's to wear too — on the Mac as well, so not in the pool pages'
+        // iOS-only file.
+        let chip = code(try appSource("Views/PoolChip.swift"))
+        XCTAssertTrue(chip.contains("struct PoolChip: View {"))
+        XCTAssertFalse(chip.contains("#if os(iOS)"), "PoolChip is iOS-only")
+        XCTAssertFalse(code(try appSource("Views/ProviderPoolViews.swift")).contains("struct PoolChip"))
     }
 
     /// Kimi's Add Account names the account first and the site second: neither site can be pressed

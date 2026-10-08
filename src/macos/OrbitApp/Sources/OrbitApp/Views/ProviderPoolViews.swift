@@ -2144,23 +2144,6 @@ private struct PoolSectionHeader: View {
     }
 }
 
-/// A small capitalised tag: NEXT, ADMIN — and SHARED, in the brand colour. An engine page's account
-/// rows wear its NEXT too (RunnerEnginePage).
-struct PoolChip: View {
-    let text: String
-    var brand = false
-
-    var body: some View {
-        Text(text)
-            .font(.orbitMeta.weight(.bold))
-            .foregroundStyle(brand ? Color.accentColor : Color.secondary)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(brand ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.065),
-                        in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-    }
-}
-
 /// A person: their initial on the colour they wear across the pool.
 private struct PoolAvatar: View {
     let name: String
