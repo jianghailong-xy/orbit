@@ -331,8 +331,10 @@ internal object ProviderPools {
     // ProvidersOverview
     fun runnerSummary(runner: JsonObject): String {
         val engines = runner["engines"] as? JsonArray ?: return "Engines not reported"
-        val ready = RunnerPage.loginEngines.count { engine -> engines.filterIsInstance<JsonObject>().any { it.str("engine") == engine && it.str("auth") == "yes" } }
-        val line = if (ready == RunnerPage.loginEngines.size) "All signed in" else "$ready of ${RunnerPage.loginEngines.size} signed in"
+        // Antigravity counts only where the runner can sign it in with Google.
+        val all = RunnerPage.loginEngines.filter { it != "antigravity" || runner.obj("antigravity")?.str("googleLogin") == "available" }
+        val ready = all.count { engine -> engines.filterIsInstance<JsonObject>().any { it.str("engine") == engine && it.str("auth") == "yes" } }
+        val line = if (ready == all.size) "All signed in" else "$ready of ${all.size} signed in"
         return if (runner.bool("online") == true) line else "Offline · $line"
     }
     fun poolSummary(pool: Pool, nowMs: Long) = pool.unavailable ?: "${readyCount(pool, nowMs)} of ${pool.members.size} available"

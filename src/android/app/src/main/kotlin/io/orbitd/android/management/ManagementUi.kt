@@ -37,10 +37,10 @@ internal object Ink {
     @Composable fun tone(tone: String?) = when (tone) { "ok" -> green; "warn" -> amber; "bad" -> red; else -> muted }
 }
 
-/** A grouped form section: header (and its trailing note), the card, and the footer under it. */
+/** A grouped form section: header (and its trailing note), the card, and the footer under it — words, or [footerContent]. */
 @Composable
 internal fun FormSection(header: String? = null, trailing: String? = null, footer: String? = null,
-                         content: @Composable ColumnScope.() -> Unit) {
+                         footerContent: (@Composable ColumnScope.() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     if (header != null) Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 6.dp),
         verticalAlignment = Alignment.Bottom) {
         Text(header, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
@@ -52,6 +52,7 @@ internal fun FormSection(header: String? = null, trailing: String? = null, foote
     }
     footer?.let { Text(it, Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp), style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    footerContent?.let { Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp), content = it) }
 }
 
 /** RunnerGauge: a capsule track filled to `fraction`. */
@@ -64,13 +65,15 @@ internal fun Gauge(fraction: Float, tint: Color, modifier: Modifier = Modifier, 
     }
 }
 
-/** One quota window: its label and percent, the gauge (amber from 90%), and when it resets. */
+/** One quota window: its label and percent — what is left of an Antigravity bucket, said so — the gauge (amber from 90%
+ * used), and when it resets. A runner page's row ([withGroup]) names the window's group above it (RunnerWindowRow). */
 @Composable
-internal fun UsageWindowRow(row: UsageRow, resets: String?) {
+internal fun UsageWindowRow(row: UsageRow, resets: String?, withGroup: Boolean = false) {
     Column(Modifier.padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (withGroup) row.groupLabel?.let { Text(it, style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)) }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(row.label, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold))
-            Text("${row.percent}%", style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+            Text("${row.percent}%${if (row.remaining) " remaining" else ""}", style = MaterialTheme.typography.labelMedium, color = Ink.muted)
         }
         Gauge(row.percent / 100f, if (row.nearLimit) Ink.amber else MaterialTheme.colorScheme.primary)
         resets?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = if (row.nearLimit) Ink.amber else Ink.muted) }

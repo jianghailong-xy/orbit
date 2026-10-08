@@ -583,12 +583,15 @@ private fun RunnerCapacity(runner: JsonObject, workspaces: List<JsonObject>, mod
     }
 }
 
+/** RunnerEngineRow: its version and where its sign-ins stand, a failed update that has become its problem, Sign In when a
+ * login it needs is out (or, for an Antigravity that can't sign in with Google here, why not), and its quota windows. */
 @Composable
 private fun EngineRow(runner: JsonObject, health: JsonObject, offline: Boolean, now: Long, open: () -> Unit) {
     val engine = health.text("engine")
     val installed = health.bool("installed") == true
-    val status = RunnerPage.engineStatus(health)
+    val status = RunnerPage.engineStatus(health, runner)
     val version = if (installed) RunnerPage.engineVersion(health.str("version")) else null
+    val hint = RunnerPage.signInHint(runner, engine)
     Row(Modifier.fillMaxWidth().clickable(enabled = installed, role = Role.Button, onClick = open).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -601,11 +604,12 @@ private fun EngineRow(runner: JsonObject, health: JsonObject, offline: Boolean, 
                 }
             }, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
             RunnerPage.updateFailedLine(health, now)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.amber) }
-            if (RunnerPage.needsSignIn(health)) Text(RunnerCopy.SIGN_IN, Modifier.padding(top = 4.dp).clip(RoundedCornerShape(50))
+            if (hint != null) Text(hint, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+            else if (RunnerPage.needsSignIn(health)) Text(RunnerCopy.SIGN_IN, Modifier.padding(top = 4.dp).clip(RoundedCornerShape(50))
                 .background(if (offline) Ink.muted.copy(alpha = .1f) else MaterialTheme.colorScheme.primary.copy(alpha = .12f)).padding(horizontal = 14.dp, vertical = 6.dp),
                 color = if (offline) Ink.muted else MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
             val windows = RunnerPage.engineWindows(runner, engine)
-            if (windows.isNotEmpty()) Column(Modifier.padding(top = 8.dp)) { windows.forEach { UsageWindowRow(it, RunnerPage.resetsLine(it, now)) } }
+            if (windows.isNotEmpty()) Column(Modifier.padding(top = 8.dp)) { windows.forEach { UsageWindowRow(it, RunnerPage.resetsLine(it, now), withGroup = true) } }
         }
         if (installed) Chevron()
     }
@@ -695,21 +699,28 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                 health?.let { RunnerPage.updateFailedLine(it, now) }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.amber) }
             }
             if (health != null && health.bool("installed") == true && RunnerPage.isLoginEngine(engine)) {
-                FormSection(if (RunnerPage.keepsAccounts(engine)) "Accounts" else "Sign-In", footer = if (offline) RunnerCopy.ENGINES_OFFLINE_FOOTER else null) {
+                // Every Google sign-in on the page starts above this footer, so Google's terms are said here, once.
+                val terms = engine == "antigravity" && RunnerPage.antigravityCanSignIn(runner)
+                FormSection(if (RunnerPage.keepsAccounts(engine)) "Accounts" else "Sign-In", footer = if (offline && !terms) RunnerCopy.ENGINES_OFFLINE_FOOTER else null,
+                    footerContent = if (terms) { { GoogleSignInTerms(); if (offline) FooterText(RunnerCopy.ENGINES_OFFLINE_FOOTER) } } else null) {
+                    val alone = health.list("accounts").size < 2
                     RunnerPage.accountLines(health).forEachIndexed { index, line ->
                         if (index > 0) HorizontalDivider()
                         AccountRow(api, runner, engine, line, offline, now, signingIn == line.id,
-                            canPause = RunnerPage.keepsAccounts(engine) && health.list("accounts").any { it.str("id") == line.id },
+                            canPause = RunnerPage.keepsAccounts(engine) && health.list("accounts").any { it.str("id") == line.id }, alone = alone,
                             signIn = { signingIn = line.id }, close = { signingIn = null; scope.launch { model.load() } },
                             rename = { renaming = line }, remove = { removing = line }) { minutes ->
                             model.press { api.post("runners/$id/accounts/$engine/${line.id}/pause", buildJsonObject {
                                 put("durationMinutes", minutes?.let(::JsonPrimitive) ?: JsonNull) }) }
                         }
                     }
-                    if (RunnerPage.keepsAccounts(engine)) {
+                    if (RunnerPage.canAddAccount(runner, engine)) {
                         HorizontalDivider()
                         AddAccountRow(api, model, runner, engine, health, offline, adding = signingIn == "+", start = { signingIn = "+" },
                             close = { signingIn = null; scope.launch { model.load() } }, show = ::show)
+                    } else RunnerPage.signInHint(runner, engine)?.let { hint ->
+                        HorizontalDivider()
+                        Text(hint, Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.labelMedium, color = Ink.muted)
                     }
                 }
             }
@@ -750,12 +761,14 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
     }
 }
 
+/** One account: its name and where it lives, where it stands, its windows, and its way (back) in. */
 @Composable
 private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, line: RunnerPage.AccountLine, offline: Boolean, now: Long,
-                       signingIn: Boolean, canPause: Boolean, signIn: () -> Unit, close: () -> Unit, rename: () -> Unit, remove: () -> Unit,
-                       pause: suspend (Int?) -> String?) {
+                       signingIn: Boolean, canPause: Boolean, alone: Boolean, signIn: () -> Unit, close: () -> Unit, rename: () -> Unit,
+                       remove: () -> Unit, pause: suspend (Int?) -> String?) {
     val windows = RunnerPage.accountWindows(runner, engine, line.id)
     val removal = RunnerPage.removal(runner.obj("accountRemove"), engine, line.id)
+    val canSignIn = RunnerPage.canSignIn(runner, engine)
     var menu by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -773,8 +786,10 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
                 }
             }
         }
-        if (windows.isNotEmpty()) windows.forEach { UsageWindowRow(it, RunnerPage.resetsLine(it, now)) }
-        else if (line.auth == "yes" && RunnerPage.isLoginEngine(engine)) Text(RunnerCopy.NO_QUOTA, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+        if (windows.isNotEmpty()) windows.forEach { UsageWindowRow(it, RunnerPage.resetsLine(it, now), withGroup = true) }
+        // A Default on the machine's Gemini key runs on the key: neither signed in nor out, with no quota of its own.
+        else if (line.envKey) Text(AccountCopy.ENV_KEY_LINE, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+        else if (line.auth == "yes" && RunnerPage.reportsQuota(engine)) Text(RunnerCopy.NO_QUOTA, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
         removal?.second?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.red) }
         when {
             signingIn -> {
@@ -783,13 +798,26 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
             }
             canPause && (line.auth == "yes" || RunnerPage.isPaused(line.pausedUntil, now)) -> AccountPauseControls(line.name, line.pausedUntil,
                 "Personal account · This runner. Paused sessions wait until it resumes or you switch accounts.",
-                signInAgain = signIn, signInDisabled = offline || removal?.first == true, save = pause)
-            else -> OutlinedButton(onClick = signIn, enabled = !offline && removal?.first != true) {
-                Text(if (line.auth == "yes") "Sign In Again" else RunnerCopy.SIGN_IN)
+                signInAgain = if (canSignIn) signIn else null, signInDisabled = offline || removal?.first == true, save = pause)
+            // Alone, a Default on the machine's Gemini key offers Google's sign-in; beside Google accounts, Add Account does.
+            canSignIn && (!line.envKey || alone) -> OutlinedButton(onClick = signIn, enabled = !offline && removal?.first != true) {
+                Text(when { line.envKey -> AccountCopy.SIGN_IN_WITH_GOOGLE; line.auth == "yes" -> AccountCopy.SIGN_IN_AGAIN; else -> RunnerCopy.SIGN_IN })
             }
         }
     }
 }
+
+/** GoogleSignInTermsView: Google's terms, with the way to read them. */
+@Composable
+private fun GoogleSignInTerms() {
+    val uri = LocalUriHandler.current
+    FooterText(AccountCopy.GOOGLE_TERMS_WARNING)
+    Text(AccountCopy.GOOGLE_TERMS, Modifier.clickable(role = Role.Button) { runCatching { uri.openUri(AccountCopy.GOOGLE_TERMS_URL) } }
+        .padding(vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+}
+
+@Composable
+private fun FooterText(text: String) = Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
 /**
  * Add Account: the same sign-in, started by the press under a name the page picks; the name stays editable and is
@@ -838,7 +866,7 @@ private fun AddAccountRow(api: ManagementApi, model: RunnersModel, runner: JsonO
         picked = RunnerPage.defaultAccountName(accounts); name = picked
         before = accounts.map { it.text("id") }.toSet(); waiting = null
         start()
-    }) { Text("Add Account") }
+    }) { Text(AccountCopy.ADD_ACCOUNT) }
 }
 
 /** RunnerSignInModel: one engine/account's sign-in relay on a runner, read every 2s while it is in flight. */
@@ -964,9 +992,13 @@ private fun RunnerSignInCard(api: ManagementApi, runnerId: String, engine: Strin
                 cancel()
             }
             else -> {
+                if (engine == "antigravity") GoogleSignInTerms()
                 if (relay.status == "failed") relay.message?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.amber) }
                 Button(onClick = { scope.launch { relay.begin(accountName, scope) } }, enabled = !relay.busy && (accountName == null || accountName.isNotBlank())) {
-                    Text(when { relay.busy -> "Starting…"; relay.status == "failed" -> "Try signing in to $cli again"; else -> "Sign in to $cli" })
+                    Text(when {
+                        relay.busy -> "Starting…"; relay.status == "failed" -> "Try signing in to $cli again"
+                        engine == "antigravity" -> AccountCopy.SIGN_IN_WITH_GOOGLE; else -> "Sign in to $cli"
+                    })
                 }
             }
         }
