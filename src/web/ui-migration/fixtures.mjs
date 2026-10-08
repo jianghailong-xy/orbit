@@ -190,6 +190,11 @@ export async function installFixtures(page, { theme = 'light', scenario = 'defau
     if (method === 'GET' && path === '/api/wiki/review') return json([]);
     if (method === 'GET' && path === `/api/wiki/spaces/${space.id}/articles`) return json({ spaceId: space.id, categories: [{ key: 'clients', title: 'Clients & UI', topics: [{ slug: 'ui-migration', title: 'UI migration', description: null, category: 'clients', article: null, parts: [] }] }], uncategorized: [] });
     if (method === 'GET' && path === `/api/wiki/spaces/${space.id}/docs`) return json({ spaceId: space.id, plan: null, docs: { total: 0, written: 0 }, categories: [] });
+    // main 2ba6765d9 (docs(mocks): add wiki share mock for share-links, which also adds WikiShareButton to the
+    // Wiki head) made every Wiki page read GET /wiki/spaces/:id/share. The server's answer for a space nobody
+    // has shared (ShareLinksService.current): no link, and wikiShareCounts over the /docs directory above —
+    // no written documents, so no footnotes.
+    if (method === 'GET' && path === `/api/wiki/spaces/${space.id}/share`) return json({ link: null, counts: { documents: 0, footnotes: 0 } });
     if (method === 'GET' && path === `/api/wiki/spaces/${space.id}/plan`) return json({ spaceId: space.id, confirmed: null, draft: null, proposals: [], job: null });
     if (method === 'GET' && path === `/api/wiki/entries/${entries[0].id}`) return json({ ...entries[0], sources: [], history: [], exposure: [] });
     unhandled.push(`${method} ${path}${searchParams.size ? `?${searchParams}` : ''}`);
