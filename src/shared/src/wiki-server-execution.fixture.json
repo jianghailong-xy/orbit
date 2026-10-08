@@ -11,7 +11,8 @@
     "Times are read at `now`. A run case is a `GET /api/wiki/spaces/:id/jobs` job and the row the Runs card draws for it:",
     "`kind`, `state` and `text` (what follows the state, ` · ` between its parts), `mark`, `tone` and `when`. A call case is",
     "one of its `requests` and the log's row: `call`, `state`, `retries`, `tone`, `waited`, `ran`, `tokens`, the phone's",
-    "`line` and `error`."
+    "`line` and `error`. Its uuid units are time-ordered (v7), as the database makes op ids: they share their first eight",
+    "characters with every id made the same minute, so a row names a unit by its last eight."
   ],
   "now": "2026-10-08T06:30:00.000Z",
   "settings": {
@@ -1472,7 +1473,7 @@
         "call": {
           "id": "34cE0call000000000001",
           "step": "verify",
-          "unit": "3f2a9c1e-5b7d-4c21-9a0e-1f2b3c4d5e6f",
+          "unit": "01a11a88-de31-74bb-a86c-84793f2a9c1e",
           "attempt": 1,
           "attempts": 0,
           "state": "succeeded",
@@ -1503,7 +1504,7 @@
         "call": {
           "id": "34cE0call000000000001",
           "step": "verify",
-          "unit": "77b0e1d2-0000-4000-8000-000000000002",
+          "unit": "01a11a88-de31-7a02-9d1e-5c0277b0e1d2",
           "attempt": 1,
           "attempts": 1,
           "state": "succeeded",
@@ -1534,7 +1535,7 @@
         "call": {
           "id": "34cE0call000000000001",
           "step": "verify",
-          "unit": "a1c3e9f0-0000-4000-8000-000000000003",
+          "unit": "01a11a88-de32-7c4b-8f31-0e6aa1c3e9f0",
           "attempt": 1,
           "attempts": 0,
           "state": "failed",
@@ -1565,7 +1566,7 @@
         "call": {
           "id": "34cE0call000000000001",
           "step": "verify",
-          "unit": "0d93bb12-0000-4000-8000-000000000004",
+          "unit": "01a11a88-de32-7e19-b7a0-13c50d93bb12",
           "attempt": 1,
           "attempts": 0,
           "state": "running",
@@ -1596,7 +1597,7 @@
         "call": {
           "id": "34cE0call000000000001",
           "step": "verify",
-          "unit": "9b1f0c44-0000-4000-8000-000000000005",
+          "unit": "01a11a88-de33-70d8-a2b4-7f1e9b1f0c44",
           "attempt": 1,
           "attempts": 0,
           "state": "queued",
@@ -1627,7 +1628,7 @@
         "call": {
           "id": "34cE0call000000000001",
           "step": "verify",
-          "unit": "c8d27e13-0000-4000-8000-000000000006",
+          "unit": "01a11a88-de33-72aa-95c7-d40bc8d27e13",
           "attempt": 1,
           "attempts": 2,
           "state": "queued",
@@ -1658,7 +1659,7 @@
         "call": {
           "id": "34cE0call000000000001",
           "step": "verify",
-          "unit": "e5a1b2c3-0000-4000-8000-000000000007",
+          "unit": "01a11a88-de34-7b65-8e09-a6f3e5a1b2c3",
           "attempt": 1,
           "attempts": 0,
           "state": "cancelled",

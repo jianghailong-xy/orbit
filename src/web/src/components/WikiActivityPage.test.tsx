@@ -315,12 +315,12 @@ describe('Activity', () => {
       }],
     });
     const html = wiki('/wiki/orbit/activity', cache);
-    const order = ['wk-review-card', 'wk-plan-card', 'wk-runs-card', '>Runs<', '>Verification<', '>Recent decisions<', '>Recently changed<']
+    const order = ['wk-review-card', 'wk-plan-card', 'wk-jobs-card', '>Runs<', '>Verification<', '>Recent decisions<', '>Recently changed<']
       .map((needle) => at(html, needle));
     expect(order).toEqual([...order].sort((a, b) => a - b));
     expect(html).toContain('<b>Done</b> · 4 calls · 6,120 tokens · took 48s');
     // Under runner: no card at all.
-    expect(wiki('/wiki/orbit/activity')).not.toContain('wk-runs-card');
+    expect(wiki('/wiki/orbit/activity')).not.toContain('wk-jobs-card');
   });
 
   it('stands under the home’s head on a desktop: the title, the line saying what the space holds, the search (mock 33 ④)', () => {

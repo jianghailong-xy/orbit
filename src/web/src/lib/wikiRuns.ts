@@ -196,7 +196,7 @@ export function wikiRunFootText(job: WikiJobView): string {
 
 /** One row of a run's call log: what it was, where it stands, how long it waited and ran, what it spent, how it failed. */
 export interface WikiCallRow {
-  /** `verify · 3f2a9c1e`: the step and the unit, a uuid cut to its first eight. */
+  /** `verify · 3f2a9c1e`: the step and the unit, a uuid cut to its last eight. */
   call: string;
   state: string;
   /** `1 retry`, beside the state, when the call was tried again. */
@@ -214,8 +214,11 @@ export interface WikiCallRow {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
-/** A unit as the log names it: a uuid cut to its first eight characters, anything else as the pipeline wrote it. */
-export const wikiCallUnit = (unit: string): string => (UUID.test(unit) ? unit.slice(0, 8) : unit);
+/**
+ * A unit as the log names it: a uuid cut to its last eight characters, anything else as the pipeline wrote it. The
+ * end, not the start: op ids are time-ordered (v7), so every id made the same minute shares its first eight.
+ */
+export const wikiCallUnit = (unit: string): string => (UUID.test(unit) ? unit.slice(-8) : unit);
 
 export function wikiCallRow(call: WikiJobCallView, now: number): WikiCallRow {
   const waitedFor = call.state === 'queued' ? between(call.enqueuedAt, now) : between(call.enqueuedAt, call.startedAt);

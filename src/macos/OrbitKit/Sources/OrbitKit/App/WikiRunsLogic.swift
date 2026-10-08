@@ -259,10 +259,11 @@ public enum WikiRunsLogic {
         return text
     }
 
-    /// A unit as the log names it: a uuid cut to its first eight characters (`wikiCallUnit`).
+    /// A unit as the log names it: a uuid cut to its last eight characters (`wikiCallUnit`) — the end, not the start:
+    /// op ids are time-ordered (v7), so every id made the same minute shares its first eight.
     public static func unit(_ unit: String) -> String {
         let uuid = #"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"#
-        return unit.range(of: uuid, options: .regularExpression) != nil ? String(unit.prefix(8)) : unit
+        return unit.range(of: uuid, options: .regularExpression) != nil ? String(unit.suffix(8)) : unit
     }
 
     /// One row of a run's call log — the web's `wikiCallRow`.

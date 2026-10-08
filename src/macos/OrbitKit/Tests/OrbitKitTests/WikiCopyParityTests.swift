@@ -406,7 +406,7 @@ final class WikiCopyParityTests: XCTestCase {
             assertSays(css, rule, in: Self.css)
         }
         // The Runs card is no desktop card: a phone draws it as the native band is drawn.
-        XCTAssertFalse(css.contains(".wk-runs-card { display: none; }"), "a phone keeps the Runs card")
+        XCTAssertFalse(css.contains(".wk-jobs-card { display: none; }"), "a phone keeps the Runs card")
         // The first banner: every space's proposals, the others' shares on its line; the other spaces' plans
         // that wait come after the space's own.
         assertSays(page, "const proposals = wikiProposalsBanner(spaces, space.id, names);", in: Self.activity)

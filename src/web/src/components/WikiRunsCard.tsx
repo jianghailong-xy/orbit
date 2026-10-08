@@ -54,11 +54,11 @@ export function WikiRunsCard({ space }: { space: WikiSpaceRow }) {
   const model = health.data?.systemModel ?? null;
   const now = Date.now();
   return (
-    <WikiCard title={WIKI_RUNS} hint={model ? <WikiModelLine model={model} /> : undefined} className="wk-runs-card">
+    <WikiCard title={WIKI_RUNS} hint={model ? <WikiModelLine model={model} /> : undefined} className="wk-jobs-card">
       {rows.length === 0 ? (
         <WikiEmpty>{WIKI_RUNS_NONE}</WikiEmpty>
       ) : (
-        <ol className="wk-runs">
+        <ol className="wk-jobs">
           {rows.map((job) => (
             <WikiRunItem
               key={job.id}
@@ -74,16 +74,16 @@ export function WikiRunsCard({ space }: { space: WikiSpaceRow }) {
   );
 }
 
-const runAnchor = (jobId: string): string => `wk-run-${jobId}`;
+const runAnchor = (jobId: string): string => `wk-job-${jobId}`;
 
 /** One run: its row, a button that opens and closes its call log. */
 function WikiRunItem({ job, now, open, onToggle }: { job: WikiJobView; now: number; open: boolean; onToggle: () => void }) {
   const log = useId();
   const row = wikiRunRow(job, now);
   return (
-    <li className={`wk-run${open ? ' open' : ''}`} id={runAnchor(job.id)}>
-      <button type="button" className="wk-run-row" aria-expanded={open} aria-controls={log} onClick={onToggle}>
-        <span className={`wk-run-mark ${row.mark}`} aria-hidden="true" />
+    <li className={`wk-job${open ? ' open' : ''}`} id={runAnchor(job.id)}>
+      <button type="button" className="wk-job-row" aria-expanded={open} aria-controls={log} onClick={onToggle}>
+        <span className={`wk-job-mark ${row.mark}`} aria-hidden="true" />
         <span className="k">{row.kind}</span>
         <span className={`s ${row.tone}`}>
           <b>{row.state}</b>
@@ -103,7 +103,7 @@ function WikiRunItem({ job, now, open, onToggle }: { job: WikiJobView; now: numb
  */
 function WikiCallLog({ id, job, now }: { id: string; job: WikiJobView; now: number }) {
   return (
-    <div className="wk-run-calls" id={id}>
+    <div className="wk-job-calls" id={id}>
       {job.requests.length > 0 && (
         <table className="wk-calls" aria-label={WIKI_CALLS}>
           <thead>
@@ -126,7 +126,13 @@ function WikiCallLog({ id, job, now }: { id: string; job: WikiJobView; now: numb
                     </td>
                     <td className="st">
                       <span className={one.tone}>{one.state}</span>
-                      {one.retries && <span className="dim"> · {one.retries}</span>}
+                      {/* The space between is where a narrow log breaks the state from its retries. */}
+                      {one.retries && (
+                        <>
+                          {' '}
+                          <span className="dim">· {one.retries}</span>
+                        </>
+                      )}
                     </td>
                     <td className="n">{one.waited}</td>
                     <td className="n">{one.ran}</td>
@@ -144,7 +150,7 @@ function WikiCallLog({ id, job, now }: { id: string; job: WikiJobView; now: numb
           </tbody>
         </table>
       )}
-      <div className="wk-run-foot">{wikiRunFootText(job)}</div>
+      <div className="wk-job-foot">{wikiRunFootText(job)}</div>
     </div>
   );
 }

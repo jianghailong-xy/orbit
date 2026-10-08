@@ -103,9 +103,9 @@ const words = (node: Element | null | undefined): string => (node?.textContent ?
 describe('the Runs card', () => {
   it('draws a row a run in the fixture’s words, newest first as the read gives them', async () => {
     await mount(health(true), shared.runs.cases.map((one) => one.job));
-    const card = container.querySelector('.wk-runs-card')!;
+    const card = container.querySelector('.wk-jobs-card')!;
     expect(words(card.querySelector('.project-open-items-title'))).toBe(shared.runs.title);
-    const rows = [...card.querySelectorAll('.wk-run-row')];
+    const rows = [...card.querySelectorAll('.wk-job-row')];
     expect(rows).toHaveLength(shared.runs.cases.length);
     shared.runs.cases.forEach((one, i) => {
       expect(words(rows[i].querySelector('.k')), one.name).toBe(one.kind);
@@ -120,10 +120,10 @@ describe('the Runs card', () => {
   it('opens a run’s call log: each call’s state, waits, run time, tokens and error, and the line under it', async () => {
     const run = logged();
     await mount(health(true), [run]);
-    expect(container.querySelector('.wk-run-calls')).toBeNull();
-    await act(async () => (container.querySelector('.wk-run-row') as HTMLButtonElement).click());
-    const log = container.querySelector('.wk-run.open .wk-run-calls')!;
-    expect(container.querySelector('.wk-run-row')?.getAttribute('aria-expanded')).toBe('true');
+    expect(container.querySelector('.wk-job-calls')).toBeNull();
+    await act(async () => (container.querySelector('.wk-job-row') as HTMLButtonElement).click());
+    const log = container.querySelector('.wk-job.open .wk-job-calls')!;
+    expect(container.querySelector('.wk-job-row')?.getAttribute('aria-expanded')).toBe('true');
     expect([...log.querySelectorAll('thead th')].map((th) => th.textContent)).toEqual(shared.runs.columns);
     const rows = [...log.querySelectorAll('tbody tr:not(.why)')];
     expect(rows).toHaveLength(shared.runs.calls.length);
@@ -137,44 +137,44 @@ describe('the Runs card', () => {
       const why = rows[i].nextElementSibling?.classList.contains('why') ? rows[i].nextElementSibling : null;
       expect(why ? words(why) : null, one.name).toBe(one.row.error);
     });
-    expect(words(log.querySelector('.wk-run-foot'))).toBe(`${run.calls.total} calls · 2,592 tokens in, 607 out so far`);
+    expect(words(log.querySelector('.wk-job-foot'))).toBe(`${run.calls.total} calls · 2,592 tokens in, 607 out so far`);
     // Pressed again, the log folds.
-    await act(async () => (container.querySelector('.wk-run-row') as HTMLButtonElement).click());
-    expect(container.querySelector('.wk-run-calls')).toBeNull();
+    await act(async () => (container.querySelector('.wk-job-row') as HTMLButtonElement).click());
+    expect(container.querySelector('.wk-job-calls')).toBeNull();
   });
 
   it('opens the run View run names, and links to no task and no session', async () => {
     const run = logged();
     const other = { ...shared.runs.cases[10].job, id: 'another-run' };
     await mount(health(true), [other, run], `/wiki/orbit/activity?run=${run.id}`);
-    const open = container.querySelectorAll('.wk-run.open');
+    const open = container.querySelectorAll('.wk-job.open');
     expect(open).toHaveLength(1);
-    expect(open[0].id).toBe(`wk-run-${run.id}`);
-    expect(container.querySelector('.wk-runs-card a[href*="/sessions/"], .wk-runs-card a[href*="/tasks/"]')).toBeNull();
+    expect(open[0].id).toBe(`wk-job-${run.id}`);
+    expect(container.querySelector('.wk-jobs-card a[href*="/sessions/"], .wk-jobs-card a[href*="/tasks/"]')).toBeNull();
   });
 
   it('is drawn while the server executes the wiki, with nothing yet — and not under runner', async () => {
     await mount(health(true), []);
-    expect(words(container.querySelector('.wk-runs-card .wk-empty'))).toBe(shared.runs.none);
+    expect(words(container.querySelector('.wk-jobs-card .wk-empty'))).toBe(shared.runs.none);
     act(() => root.unmount());
     root = createRoot(container);
     await mount(health(false), []);
-    expect(container.querySelector('.wk-runs-card')).toBeNull();
+    expect(container.querySelector('.wk-jobs-card')).toBeNull();
     act(() => root.unmount());
     root = createRoot(container);
     // A control plane from before the read answers null, and an account the server never ran anything for draws nothing.
     await mount(health(false), null);
-    expect(container.querySelector('.wk-runs-card')).toBeNull();
+    expect(container.querySelector('.wk-jobs-card')).toBeNull();
     act(() => root.unmount());
     root = createRoot(container);
     // Runs the server made before the switch went back to runner are still the space's to see.
     await mount(health(false), [shared.runs.cases[10].job]);
-    expect(container.querySelectorAll('.wk-runs-card .wk-run-row')).toHaveLength(1);
+    expect(container.querySelectorAll('.wk-jobs-card .wk-job-row')).toHaveLength(1);
   });
 
   it('says the model’s state on its head as the settings page does', async () => {
     await mount(health(true, { ...MODEL, state: 'auth_failed' }), [shared.runs.cases[0].job]);
-    const head = container.querySelector('.wk-runs-card .project-open-items-hint .wk-model-state');
+    const head = container.querySelector('.wk-jobs-card .project-open-items-hint .wk-model-state');
     expect(words(head)).toBe('Key refused');
     expect(head?.className).toBe('wk-model-state error');
   });
