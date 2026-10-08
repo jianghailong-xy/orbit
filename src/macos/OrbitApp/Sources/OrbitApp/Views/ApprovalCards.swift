@@ -3204,8 +3204,9 @@ private struct CoordinatorQuestionCardView: View {
     /// The question, its options, the row that means "none of these", and a box to answer it in.
     private func asked(_ row: ProjectOpenItemRow, _ question: CoordinatorQuestion) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(question.question)
-                .font(.orbitProse)
+            // The question as the coordinator wrote it — Markdown, as the browser's card renders
+            // it (`CoordinatorQuestionCard`), so bullets and emphasis do not arrive raw.
+            MarkdownView(source: question.question).font(.orbitProse)
                 .frame(maxWidth: .infinity, alignment: .leading)
             ForEach(Array(question.options.enumerated()), id: \.offset) { index, option in
                 optionRow(index: index, option: option,

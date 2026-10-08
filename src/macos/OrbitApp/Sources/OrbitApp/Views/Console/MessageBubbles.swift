@@ -352,40 +352,67 @@ struct ThinkingView: View {
     @State private var pinnedOpen: Bool?
     private static let tailAnchor = "thinking-tail"
 
+    private var expanded: Bool { pinnedOpen ?? !block.isFinalized }
+
     var body: some View {
-        DisclosureGroup(isExpanded: Binding(get: { pinnedOpen ?? !block.isFinalized },
-                                            set: { pinnedOpen = $0 })) {
-            // Same progressive streaming as AssistantBubbleView: completed blocks render as Markdown
-            // while the block grows, the trailing partial stays plain (this body only runs while
-            // expanded). aside/secondary so the iOS selectable leaves read as the muted "thinking"
-            // aside, not the assistant reply; macOS ignores these and keeps the inherited font/colour.
-            Group {
-                if block.isFinalized {
-                    MarkdownView(source: block.displayText, base: .aside, ink: .secondary)
-                } else {
-                    // While it streams, the reasoning is held to about ten lines that keep
-                    // themselves at the newest one. Unbounded it pushed the answer — and the tool
-                    // calls on the way to it — out of a transcript pinned to the tail: DeepSeek
-                    // writes 23k characters of reasoning per turn at the median, 122k at p90.
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            StreamingProse(text: block.displayText, base: .aside, ink: .secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .id(Self.tailAnchor)
-                        }
-                        .frame(maxHeight: 160)
-                        .onChange(of: block.displayText, initial: true) { _, _ in
-                            proxy.scrollTo(Self.tailAnchor, anchor: .bottom)
-                        }
+        VStack(alignment: .leading, spacing: 6) {
+            row
+            if expanded { content }
+        }
+        // ToolGroupCardView's List rule, same row: animating the fold has SwiftUI interpolating
+        // the contents while the UICollectionView behind the List re-measures and animates the
+        // same cell — both driving one height, which is the flicker. The fold is instant instead.
+        .animation(nil, value: expanded)
+    }
+
+    /// The tap row. The fold is driven by hand — chevron, contentShape, onTapGesture — the way
+    /// every other foldable row in this List does it (ToolCardView, ToolGroupCardView): the
+    /// `DisclosureGroup` this row was before would not collapse on tap on iOS (reported on a
+    /// streaming Kimi turn, 2026-10-09).
+    private var row: some View {
+        HStack(spacing: 7) {
+            // Turned, not swapped — see ToolCardView: the two chevron symbols are different sizes.
+            Image(systemName: "chevron.right")
+                .font(.orbitMeta.weight(.semibold)).foregroundStyle(.tertiary)
+                .rotationEffect(.degrees(expanded ? 90 : 0))
+            Label(rowLabel, systemImage: "brain")
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { pinnedOpen = !expanded }
+    }
+
+    private var content: some View {
+        // Same progressive streaming as AssistantBubbleView: completed blocks render as Markdown
+        // while the block grows, the trailing partial stays plain (this body only runs while
+        // expanded). aside/secondary so the iOS selectable leaves read as the muted "thinking"
+        // aside, not the assistant reply; macOS ignores these and keeps the inherited font/colour.
+        Group {
+            if block.isFinalized {
+                MarkdownView(source: block.displayText, base: .aside, ink: .secondary)
+            } else {
+                // While it streams, the reasoning is held to about ten lines that keep
+                // themselves at the newest one. Unbounded it pushed the answer — and the tool
+                // calls on the way to it — out of a transcript pinned to the tail: DeepSeek
+                // writes 23k characters of reasoning per turn at the median, 122k at p90.
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        StreamingProse(text: block.displayText, base: .aside, ink: .secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .id(Self.tailAnchor)
+                    }
+                    .frame(maxHeight: 160)
+                    .onChange(of: block.displayText, initial: true) { _, _ in
+                        proxy.scrollTo(Self.tailAnchor, anchor: .bottom)
                     }
                 }
             }
-            .font(.orbitProseAside).foregroundStyle(.secondary)
-            .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
-            .environment(\.previewOwnerID, block.id)
-        } label: {
-            Label(rowLabel, systemImage: "brain").font(.orbitLabel).foregroundStyle(.secondary)
         }
+        .font(.orbitProseAside).foregroundStyle(.secondary)
+        .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+        .environment(\.previewOwnerID, block.id)
     }
 
     /// What the row says while it is shut. A bare "Thinking" told a reader nothing about whether
