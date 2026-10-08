@@ -270,9 +270,8 @@ class ManagementDeviceTest {
                 click(hasText("Runners") and hasClickAction()); await("Controlled remote")
                 click(hasText("Controlled remote") and hasClickAction()); await("Max Concurrent")
                 // One window per Engines row; Antigravity's names the account a new session starts on above its own.
-                await("Next: Default")
-                compose.onAllNodesWithText("Next: Default", substring = true).onFirst().performScrollTo()
-                await("2 accounts signed in"); await("98% remaining")
+                await("Next: Default"); await("2 accounts signed in"); await("98% remaining")
+                compose.onAllNodesWithText("98% remaining", substring = true).onFirst().performScrollTo()
                 capture("agy-runner-engines")
                 click(hasText("Antigravity") and hasClickAction()); await("Accounts"); await("4% remaining")
                 capture("agy-engine")
@@ -299,8 +298,22 @@ class ManagementDeviceTest {
                     (app.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager)
                         .setPrimaryClip(android.content.ClipData.newPlainText("code", "a13c-pasted-code"))
                 }
-                click(hasText("Paste") and hasClickAction())
-                compose.waitUntil(10_000) { calls.contains("POST /api/runners/$runnerId/login/code") }
+                // Only the focused app reads the clipboard. Android 13+ answers this test's own copy with its clipboard bubble,
+                // which can hold the focus for a moment; a user taps Paste back in the app, which has it. So the tap waits for
+                // the focus, and is tried again if a read was refused meanwhile. The attempts are kept with the requests.
+                var pasteAttempts = 0
+                while (!calls.contains("POST /api/runners/$runnerId/login/code") && pasteAttempts < 3) {
+                    val focusBy = SystemClock.uptimeMillis() + 10_000
+                    while (!compose.activity.hasWindowFocus() && SystemClock.uptimeMillis() < focusBy) SystemClock.sleep(250)
+                    pasteAttempts++
+                    click(hasText("Paste") and hasClickAction())
+                    val sentBy = SystemClock.uptimeMillis() + 5_000
+                    while (!calls.contains("POST /api/runners/$runnerId/login/code") && SystemClock.uptimeMillis() < sentBy) {
+                        compose.waitForIdle(); SystemClock.sleep(250)
+                    }
+                }
+                calls += "paste attempts=$pasteAttempts"
+                assertTrue("Paste sent the code", calls.contains("POST /api/runners/$runnerId/login/code"))
                 await("Signed in — this runner is ready.")
                 capture("sign-in-pasted")
                 // The runner reports Default signed in again, its login a month off: the card folds back into the row.

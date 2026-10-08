@@ -89,7 +89,7 @@ class RunnerStackDeviceTest {
         // Google sign-in relayed, two Google accounts: one window on the row, the account a new session starts on named above it.
         click(hasText("a13c-agy") and hasClickAction()); await("Max Concurrent")
         await("2 accounts signed in"); await("Next: Default"); await("3p-weekly"); await("98% remaining")
-        compose.onAllNodesWithText("Next: Default", substring = true).onFirst().performScrollTo()
+        compose.onAllNodesWithText("98% remaining", substring = true).onFirst().performScrollTo()
         capture("stack-agy-runner")
         click(hasText("Antigravity") and hasClickAction()); await("Accounts")
         await("Work"); await("~/.orbit/antigravity-accounts/5c2e91a0"); await("gemini-5h"); await("4% remaining")
