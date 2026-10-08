@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntdApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { Runner } from '../components/TasksSidePanel';
@@ -102,13 +101,11 @@ async function mount(machines: Array<ReturnType<typeof machine>>) {
   root = createRoot(host);
   act(() =>
     root!.render(
-      <AntdApp>
-        <QueryClientProvider client={qc}>
-          <MemoryRouter initialEntries={['/runners']}>
-            <RunnersPage />
-          </MemoryRouter>
-        </QueryClientProvider>
-      </AntdApp>,
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/runners']}>
+          <RunnersPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
     ),
   );
   // The runners, their workspaces and the published release each arrive on their own.

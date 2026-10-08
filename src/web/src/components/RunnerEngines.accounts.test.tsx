@@ -115,7 +115,8 @@ function mount(runners: Runner[]) {
 }
 
 const rows = (el: ParentNode, selector: string) => [...el.querySelectorAll<HTMLElement>(selector)];
-const tags = (row: Element) => rows(row, '.ant-tag').map((tag) => tag.textContent?.trim());
+/** What a row says of its state: the words in its status slot (a status label is text, with no role). */
+const tags = (row: Element) => rows(row, '.re-status').map((status) => status.textContent?.trim()).filter(Boolean);
 /** A button's words, or the name of a mark that has none (Re-sign in, Remove). */
 const labelOf = (b: Element) => b.textContent?.trim() || b.getAttribute('aria-label');
 const button = (el: ParentNode, label: string) => {

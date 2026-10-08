@@ -26,13 +26,18 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App as AntdApp, Button, Dropdown, Input, Modal, Spin, type MenuProps } from 'antd';
-import { useState, type CSSProperties } from 'react';
+import { useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
 import type { Runner } from '../components/TasksSidePanel';
 import { useRunnerTokenRotation } from '../components/RunnerTokenRotation';
+import { Button } from '../components/ui/Button';
+import { useConfirm } from '../components/ui/ConfirmDialog';
+import { Dialog } from '../components/ui/Dialog';
+import { Input } from '../components/ui/Input';
+import { Menu, type MenuItem } from '../components/ui/Menu';
+import { Spinner } from '../components/ui/Spinner';
 import {
   latestRunnerVersion,
   listAttentionLine,
@@ -63,7 +68,7 @@ const fmtAgo = (d?: string | null): string => {
 // manage the workspaces that run under it.
 export function RunnersPage() {
   const navigate = useNavigate();
-  const { modal } = AntdApp.useApp();
+  const [confirm, confirmation] = useConfirm();
   const message = useToast();
   const qc = useQueryClient();
   const sensors = useSensors(
@@ -87,6 +92,9 @@ export function RunnersPage() {
 
   const [renaming, setRenaming] = useState<Runner | null>(null);
   const [renameVal, setRenameVal] = useState('');
+  // The ⋯ button the rename was asked from, where focus returns once the dialog closes.
+  const [renameFrom, setRenameFrom] = useState<RefObject<HTMLButtonElement | null> | undefined>();
+  const renameInput = useRef<HTMLInputElement>(null);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const rotation = useRunnerTokenRotation();
 
@@ -149,14 +157,15 @@ export function RunnersPage() {
     reorderMut.mutate(arrayMove(list, oldIndex, newIndex).map((runner) => runner.id));
   };
 
-  const menu = (r: Runner): MenuProps['items'] => [
+  // `trigger` is the card's ⋯ button: what a dialog opened from the menu gives focus back to.
+  const menu = (r: Runner, trigger: RefObject<HTMLButtonElement | null>): MenuItem[] => [
     {
       key: 'rename',
       icon: <EditOutlined />,
       label: 'Rename',
-      onClick: ({ domEvent }) => {
-        domEvent.stopPropagation();
+      onSelect: () => {
         setRenameVal(r.displayName || r.name);
+        setRenameFrom(trigger);
         setRenaming(r);
       },
     },
@@ -164,34 +173,30 @@ export function RunnersPage() {
       key: 'rotate',
       icon: <KeyOutlined />,
       label: 'Rotate token',
-      onClick: ({ domEvent }) => {
-        domEvent.stopPropagation();
-        rotation.confirmRotate(r);
-      },
+      onSelect: () => rotation.confirmRotate(r, trigger),
     },
-    { type: 'divider' },
+    { type: 'separator', key: 'divider' },
     {
       key: 'delete',
       icon: <DeleteOutlined />,
       label: 'Delete',
       danger: true,
-      onClick: ({ domEvent }) => {
-        domEvent.stopPropagation();
-        modal.confirm({
+      onSelect: () =>
+        void confirm({
           title: `Delete “${r.displayName || r.name}”?`,
-          content:
+          description:
             'This removes the runner from your account. Re-register the machine to add it back.',
-          okText: 'Delete',
-          okButtonProps: { danger: true },
+          confirmText: 'Delete',
+          danger: true,
           cancelText: 'Cancel',
-          onOk: () => deleteMut.mutateAsync(r.id),
-        });
-      },
+          onConfirm: () => deleteMut.mutateAsync(r.id),
+          returnFocus: trigger,
+        }),
     },
   ];
 
   const registerBtn = (
-    <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/runners/register')}>
+    <Button variant="primary" icon={<PlusOutlined />} onClick={() => navigate('/runners/register')}>
       Register Runner
     </Button>
   );
@@ -205,7 +210,7 @@ export function RunnersPage() {
 
       {runners.isLoading ? (
         <div style={{ padding: 48, textAlign: 'center' }}>
-          <Spin />
+          <Spinner />
         </div>
       ) : list.length === 0 ? (
         <div className="runners-empty">
@@ -229,7 +234,7 @@ export function RunnersPage() {
                     nowMs,
                     latestVersion,
                   })}
-                  menuItems={menu(runner)}
+                  menuItems={(trigger) => menu(runner, trigger)}
                   menuOpen={menuOpenId === runner.id}
                   dragDisabled={reorderMut.isPending}
                   onOpen={() => open(runner)}
@@ -241,30 +246,39 @@ export function RunnersPage() {
         </DndContext>
       )}
 
-      <Modal
+      <Dialog
+        className="runner-dialog"
         title="Rename runner"
         open={renaming !== null}
-        okText="Save"
-        cancelText="Cancel"
-        confirmLoading={renameMut.isPending}
-        onOk={submitRename}
-        onCancel={() => setRenaming(null)}
-        destroyOnClose
+        onClose={() => setRenaming(null)}
+        initialFocus={renameInput}
+        returnFocus={renameFrom}
+        footer={
+          <>
+            <Button onClick={() => setRenaming(null)}>Cancel</Button>
+            <Button variant="primary" loading={renameMut.isPending} onClick={submitRename}>
+              Save
+            </Button>
+          </>
+        }
       >
         <Input
+          ref={renameInput}
           value={renameVal}
           onChange={(e) => setRenameVal(e.target.value)}
-          onPressEnter={submitRename}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.nativeEvent.isComposing) submitRename();
+          }}
           placeholder={renaming?.name}
           maxLength={60}
-          autoFocus
         />
         <div style={{ marginTop: 8, color: 'var(--text-3)', fontSize: 12 }}>
           Leave empty to use the machine name{renaming ? ` (${renaming.name})` : ''}.
         </div>
-      </Modal>
+      </Dialog>
 
-      {rotation.tokenModal}
+      {confirmation}
+      {rotation.dialogs}
     </>
   );
 }
@@ -280,7 +294,8 @@ function SortableRunnerCard({
 }: {
   runner: Runner;
   attention: AttentionItem[];
-  menuItems: MenuProps['items'];
+  /** The card's menu, given the ⋯ button it opens from. */
+  menuItems: (trigger: RefObject<HTMLButtonElement | null>) => MenuItem[];
   menuOpen: boolean;
   dragDisabled: boolean;
   onOpen: () => void;
@@ -295,6 +310,7 @@ function SortableRunnerCard({
     transition,
     isDragging,
   } = useSortable({ id: runner.id, disabled: dragDisabled });
+  const kebab = useRef<HTMLButtonElement>(null);
   const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -373,17 +389,17 @@ function SortableRunnerCard({
         )}
       </div>
       {runner.version && <span className="runner-version">{runner.version}</span>}
-      <Dropdown
-        trigger={['click']}
-        placement="bottomRight"
+      <Menu
+        align="end"
         open={menuOpen}
         onOpenChange={onMenuOpenChange}
-        menu={{ items: menuItems }}
-      >
-        <span className="runner-kebab" title="More actions" onClick={(e) => e.stopPropagation()}>
-          <MoreOutlined />
-        </span>
-      </Dropdown>
+        items={menuItems(kebab)}
+        trigger={
+          <button ref={kebab} type="button" className="runner-kebab" title="More actions" aria-label="More actions">
+            <MoreOutlined />
+          </button>
+        }
+      />
       <RightOutlined className="runner-chevron" />
     </div>
   );

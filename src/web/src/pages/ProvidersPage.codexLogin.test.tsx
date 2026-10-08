@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
@@ -180,13 +179,11 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
       root.render(
         <QueryClientProvider client={client}>
           <MemoryRouter initialEntries={[at]}>
-            <AntApp>
-              <Probe />
-              <Routes>
-                <Route path="/providers" element={<ProvidersPage />} />
-                <Route path="/providers/pools/:id" element={<ProviderPoolPage />} />
-              </Routes>
-            </AntApp>
+            <Probe />
+            <Routes>
+              <Route path="/providers" element={<ProvidersPage />} />
+              <Route path="/providers/pools/:id" element={<ProviderPoolPage />} />
+            </Routes>
           </MemoryRouter>
         </QueryClientProvider>,
       );
@@ -201,16 +198,20 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     return found;
   };
   const button = (words: string, scope: ParentNode = document.body) =>
-    Array.from(scope.querySelectorAll<HTMLButtonElement | HTMLAnchorElement>('button, a.ant-btn')).find(
+    Array.from(scope.querySelectorAll<HTMLButtonElement | HTMLAnchorElement>('button, a')).find(
       (el) => el.textContent?.trim() === words,
     ) ?? null;
   const labelled = (label: string, scope: ParentNode = document.body) =>
     Array.from(scope.querySelectorAll<HTMLElement>('[aria-label]')).filter((el) => el.getAttribute('aria-label') === label);
   const dialog = () => {
-    const dialogs = document.body.querySelectorAll<HTMLElement>('.ant-modal');
+    const dialogs = document.body.querySelectorAll<HTMLElement>('[role="dialog"]');
     return dialogs[dialogs.length - 1] ?? null;
   };
-  const dialogText = () => dialog()?.querySelector('.ant-modal-body')?.textContent ?? '';
+  const dialogText = () => dialog()?.querySelector('.orbit-overlay-body')?.textContent ?? '';
+  /** A dialog's name and description — a confirmation's popup is a dialog named by its question. */
+  const nameOf = (el: Element | null | undefined) =>
+    el ? document.getElementById(el.getAttribute('aria-labelledby') ?? '')?.textContent : undefined;
+  const descriptionOf = (el: Element) => document.getElementById(el.getAttribute('aria-describedby') ?? '')?.textContent;
   const click = async (el: Element | null | undefined) => {
     if (!el) throw new Error('nothing to click');
     await act(async () => {
@@ -419,7 +420,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     expect(container.querySelector('.pool-gauge')?.textContent).toBe('Signed out');
 
     await click(button('Sign in again', row()));
-    expect(dialog()?.querySelector('.ant-modal-title')?.textContent).toBe('Sign in with ChatGPT');
+    expect(nameOf(dialog())).toBe('Sign in with ChatGPT');
     expect(dialog()?.querySelector('.pa-lead')?.textContent).toBe(
       'OpenAI signed lin@example.com out. Sign in with it again to put it back in My Codex.',
     );
@@ -450,9 +451,9 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     // says what it costs. The pool's only account: nothing keeps running without it.
     expect(labelled('Sign out lin@example.com')[0].classList.contains('pool-signout')).toBe(true);
     await click(labelled('Sign out lin@example.com')[0]);
-    const confirm = document.body.querySelector<HTMLElement>('.ant-popover:not(.ant-popover-hidden)')!;
-    expect(confirm.querySelector('.ant-popconfirm-title')?.textContent).toBe('Sign out lin@example.com?');
-    expect(confirm.querySelector('.ant-popconfirm-description')?.textContent).toBe(
+    const confirm = document.body.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(nameOf(confirm)).toBe('Sign out lin@example.com?');
+    expect(descriptionOf(confirm)).toBe(
       'Its sign-in is deleted from the Orbit server, and no session runs on this pool until you sign in again.',
     );
     await click(button('Sign out', confirm));
@@ -461,8 +462,8 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     ]);
 
     await click(button('Delete pool'));
-    const del = Array.from(document.body.querySelectorAll<HTMLElement>('.ant-popover:not(.ant-popover-hidden)')).pop()!;
-    expect(del.querySelector('.ant-popconfirm-title')?.textContent).toBe('Delete My Codex?');
+    const del = Array.from(document.body.querySelectorAll<HTMLElement>('[role="dialog"]')).pop()!;
+    expect(nameOf(del)).toBe('Delete My Codex?');
     await click(button('Delete', del));
     expect(sent[1]).toEqual({ method: 'DELETE', path: AT, body: undefined });
     expect(path).toBe('/providers');
@@ -680,9 +681,9 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     pools = [codexPool(account(), hl())];
     await mount(AT);
     await click(labelled('Sign out lin@example.com')[0]);
-    const confirm = document.body.querySelector<HTMLElement>('.ant-popover:not(.ant-popover-hidden)')!;
-    expect(confirm.querySelector('.ant-popconfirm-title')?.textContent).toBe('Sign out lin@example.com?');
-    expect(confirm.querySelector('.ant-popconfirm-description')?.textContent).toBe(
+    const confirm = document.body.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(nameOf(confirm)).toBe('Sign out lin@example.com?');
+    expect(descriptionOf(confirm)).toBe(
       'Its sign-in is deleted from the Orbit server, and no session runs on it until you sign in again — My Codex keeps running on its other account.',
     );
     await click(button('Sign out', confirm));
@@ -696,8 +697,8 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     pools = [codexPool(account(), hl(), account({ email: 'third@example.com', fingerprint: '…CC34' }))];
     await mount(AT);
     await click(labelled('Sign out lin@example.com')[0]);
-    const again = document.body.querySelector<HTMLElement>('.ant-popover:not(.ant-popover-hidden)')!;
-    expect(again.querySelector('.ant-popconfirm-description')?.textContent).toBe(
+    const again = document.body.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(descriptionOf(again)).toBe(
       'Its sign-in is deleted from the Orbit server, and no session runs on it until you sign in again — My Codex keeps running on its other accounts.',
     );
   });
@@ -736,7 +737,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     await mount('/providers');
     await click(button('New pool'));
     const modal = dialog()!;
-    expect(modal.querySelector('.ant-segmented-item-selected')?.textContent?.trim()).toBe('Codex');
+    expect(modal.querySelector('[role="radiogroup"][aria-label="Engine"] [role="radio"][aria-checked="true"]')?.textContent?.trim()).toBe('Codex');
     expect(modal.querySelector<HTMLInputElement>('input[type="radio"][value="me"]')?.checked).toBe(true);
     expect(modal.textContent).toContain(
       'Sessions run on your own ChatGPT account — sign in with ChatGPT once the pool exists. Nobody else sees it.',
@@ -748,7 +749,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     expect(sent).toEqual([{ method: 'POST', path: '/providers/pools', body: { label: 'Codex', engine: 'codex' } }]);
     expect(path).toBe(AT);
     expect(state).toEqual({ signIn: true });
-    await until(() => dialog()?.querySelector('.ant-modal-title')?.textContent === 'Sign in with ChatGPT');
+    await until(() => nameOf(dialog()) === 'Sign in with ChatGPT');
     expect(dialog()?.querySelector('.pa-lead')?.textContent).toBe(
       'Sign in with your own ChatGPT account to run My Codex on it.',
     );

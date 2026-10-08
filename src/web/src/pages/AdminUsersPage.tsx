@@ -1,25 +1,17 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  App as AntdApp,
-  Button,
-  Input,
-  Modal,
-  Popconfirm,
-  Space,
-  Spin,
-  Table,
-  Tag,
-  type TableColumnsType,
-} from 'antd';
 import { api, listUserAccessTokens, revokeUserAccessToken, type AccessToken } from '../api';
 import { AccessTokenTable } from '../components/AccessTokenTable';
 import { AdminNav } from '../components/AdminNav';
 import { Badge } from '../components/ui/Badge';
-import { Button as OrbitButton } from '../components/ui/Button';
+import { Button } from '../components/ui/Button';
 import { Checkbox } from '../components/ui/Checkbox';
 import { useConfirm } from '../components/ui/ConfirmDialog';
-import { OverlayScope } from '../components/ui/Overlay';
+import { Dialog } from '../components/ui/Dialog';
+import { Input } from '../components/ui/Input';
+import { Popconfirm } from '../components/ui/Popconfirm';
+import { Spinner } from '../components/ui/Spinner';
+import { TableEmptyRow, TableFrame } from '../components/ui/Table';
 import { fullDate } from '../lib/accessTokens';
 import { authMethodsQuery } from '../lib/googleLink';
 import { meQuery, type SignInMethods } from '../lib/queries';
@@ -83,7 +75,6 @@ function SignInBadges({ methods }: { methods?: SignInMethods }) {
 // Admin-only account management (gated by role on both the account-menu entry and every
 // endpoint). Create/reset return a one-time password shown once in a dialog.
 export function AdminUsersPage() {
-  const { modal } = AntdApp.useApp();
   const message = useToast();
   const qc = useQueryClient();
   const users = useQuery({
@@ -105,15 +96,17 @@ export function AdminUsersPage() {
   const invalidate = () => void qc.invalidateQueries({ queryKey: ['admin', 'users'] });
   const announce = (label: string, pwd?: string) => {
     if (pwd) {
-      modal.success({
+      void confirm({
+        kind: 'success',
         title: label,
-        content: (
+        description: (
           <div>
             Share this one-time password:
             <br />
             <code style={{ fontSize: 14 }}>{pwd}</code>
           </div>
         ),
+        onConfirm: () => undefined,
       });
     } else {
       message.success(label);
@@ -200,21 +193,14 @@ export function AdminUsersPage() {
       { onError: (e: Error) => message.error("Couldn't enable the account", e.message) },
     );
 
-  const columns: TableColumnsType<AdminUser> = [
-    { title: 'Email', dataIndex: 'email', key: 'email' },
-    { title: 'Name', dataIndex: 'name', key: 'name' },
+  const columns: { key: string; title: string; end?: boolean; cell: (u: AdminUser) => ReactNode }[] = [
+    { key: 'email', title: 'Email', cell: (u) => u.email },
+    { key: 'name', title: 'Name', cell: (u) => u.name },
+    { key: 'role', title: 'Role', cell: (u) => <Badge tone={u.role === 'ADMIN' ? 'gold' : 'default'}>{u.role}</Badge> },
     {
-      title: 'Role',
-      dataIndex: 'role',
-      key: 'role',
-      render: (role: AdminUser['role']) => (
-        <Tag color={role === 'ADMIN' ? 'gold' : 'default'}>{role}</Tag>
-      ),
-    },
-    {
-      title: 'Status',
       key: 'status',
-      render: (_, u) =>
+      title: 'Status',
+      cell: (u) =>
         u.disabledAt ? (
           <Badge tone="error" title={`Disabled on ${fullDate(u.disabledAt)}`}>
             Disabled
@@ -223,33 +209,27 @@ export function AdminUsersPage() {
           <Badge>Active</Badge>
         ),
     },
-    { title: 'Sign-in', key: 'signIn', render: (_, u) => <SignInBadges methods={u.signInMethods} /> },
+    { key: 'signIn', title: 'Sign-in', cell: (u) => <SignInBadges methods={u.signInMethods} /> },
+    { key: 'createdAt', title: 'Created', cell: (u) => <span className="admin-users-created">{fullDate(u.createdAt)}</span> },
     {
-      title: 'Created',
-      dataIndex: 'createdAt',
-      key: 'createdAt',
-      render: (createdAt: string) => <span className="admin-users-created">{fullDate(createdAt)}</span>,
-    },
-    {
-      title: '',
       key: 'actions',
-      align: 'right',
+      title: '',
+      end: true,
       // A row of actions that wraps rather than widening the table past the page.
-      render: (_, u) => (
+      cell: (u) => (
         <div className="admin-user-actions">
           <Popconfirm
             title={`Reset ${u.email}'s password?`}
             onConfirm={() => createMut.mutate({ email: u.email, force: true })}
-          >
-            <Button size="small">Reset password</Button>
-          </Popconfirm>
+            trigger={<Button size="small">Reset password</Button>}
+          />
           <Button size="small" onClick={() => setTokensOf(u)}>
             Access tokens
           </Button>
           {u.signInMethods?.google && (
-            <OrbitButton size="small" onClick={() => askUnlink(u)}>
+            <Button size="small" onClick={() => askUnlink(u)}>
               {UNLINK_GOOGLE}
-            </OrbitButton>
+            </Button>
           )}
           <Button
             size="small"
@@ -259,64 +239,97 @@ export function AdminUsersPage() {
             {u.role === 'ADMIN' ? 'Make member' : 'Make admin'}
           </Button>
           {u.disabledAt ? (
-            <OrbitButton
+            <Button
               size="small"
               loading={disabledMut.isPending && disabledMut.variables?.user.id === u.id}
               onClick={() => enable(u)}
             >
               {ENABLE_USER}
-            </OrbitButton>
+            </Button>
           ) : (
             u.id !== meId && (
-              <OrbitButton size="small" danger onClick={() => askDisable(u)}>
+              <Button size="small" danger onClick={() => askDisable(u)}>
                 {DISABLE_USER}
-              </OrbitButton>
+              </Button>
             )
           )}
-          <Popconfirm title={`Delete ${u.email}?`} onConfirm={() => deleteMut.mutate(u.id)}>
-            <Button size="small" danger>
-              Delete
-            </Button>
-          </Popconfirm>
+          <Popconfirm
+            title={`Delete ${u.email}?`}
+            onConfirm={() => deleteMut.mutate(u.id)}
+            trigger={
+              <Button size="small" danger>
+                Delete
+              </Button>
+            }
+          />
         </div>
       ),
     },
   ];
+  const end = { textAlign: 'right' } as const;
+  const rows = users.data ?? [];
+  const create = () =>
+    email.trim() &&
+    createMut.mutate({
+      email: email.trim(),
+      name: name.trim() || undefined,
+      ...(googleOn && googleOnly ? { passwordless: true } : {}),
+    });
 
   return (
     <div className="admin-page">
       <AdminNav />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1 className="page-title">Users</h1>
-        <Button type="primary" onClick={() => setCreateOpen(true)}>
+        <Button variant="primary" onClick={() => setCreateOpen(true)}>
           Add user
         </Button>
       </div>
 
-      <Table
-        rowKey="id"
-        loading={users.isLoading}
-        dataSource={users.data ?? []}
-        columns={columns}
-        pagination={false}
-      />
+      <TableFrame loading={users.isLoading}>
+        <table className="orbit-table">
+          <thead>
+            <tr>
+              {columns.map((column) => (
+                <th key={column.key} scope="col" style={column.end ? end : undefined}>
+                  {column.title}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <TableEmptyRow colSpan={columns.length} />
+            ) : (
+              rows.map((user) => (
+                <tr key={user.id}>
+                  {columns.map((column) => (
+                    <td key={column.key} style={column.end ? end : undefined}>
+                      {column.cell(user)}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </TableFrame>
 
-      <Modal
+      <Dialog
+        className="admin-user-dialog"
         title="Add user"
         open={createOpen}
-        onCancel={() => setCreateOpen(false)}
-        onOk={() =>
-          email.trim() &&
-          createMut.mutate({
-            email: email.trim(),
-            name: name.trim() || undefined,
-            ...(googleOn && googleOnly ? { passwordless: true } : {}),
-          })
+        onClose={() => setCreateOpen(false)}
+        footer={
+          <>
+            <Button onClick={() => setCreateOpen(false)}>Cancel</Button>
+            <Button variant="primary" loading={createMut.isPending} onClick={create}>
+              Create
+            </Button>
+          </>
         }
-        confirmLoading={createMut.isPending}
-        okText="Create"
       >
-        <Space direction="vertical" style={{ width: '100%' }}>
+        <div className="admin-user-form">
           <Input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
           <Input placeholder="Name (optional)" value={name} onChange={(e) => setName(e.target.value)} />
           {googleOn && (
@@ -329,25 +342,19 @@ export function AdminUsersPage() {
               ? GOOGLE_SIGN_IN_ONLY_HINT
               : 'A one-time password is generated and shown once after creating.'}
           </div>
-        </Space>
-      </Modal>
+        </div>
+      </Dialog>
       {confirmation}
 
-      <Modal
+      <Dialog
+        className="admin-user-dialog"
         title={tokensOf ? `Access tokens — ${tokensOf.email}` : 'Access tokens'}
         open={tokensOf !== null}
-        onCancel={() => setTokensOf(null)}
-        footer={null}
+        onClose={() => setTokensOf(null)}
         width={1120}
-        destroyOnHidden
       >
-        {/* The table's revoke question is an Orbit popover: it stays inside this dialog's focus and layer. */}
-        {tokensOf && (
-          <OverlayScope>
-            <UserAccessTokens user={tokensOf} />
-          </OverlayScope>
-        )}
-      </Modal>
+        {tokensOf && <UserAccessTokens user={tokensOf} />}
+      </Dialog>
     </div>
   );
 }
@@ -370,7 +377,7 @@ function UserAccessTokens({ user }: { user: AdminUser }) {
     },
     onError: (e: Error) => message.error("Couldn't revoke the token", e.message),
   });
-  if (tokensQ.isPending) return <Spin />;
+  if (tokensQ.isPending) return <Spinner />;
   if (tokensQ.isError) return <div>Couldn’t load the tokens: {tokensQ.error.message}</div>;
   return (
     <>
