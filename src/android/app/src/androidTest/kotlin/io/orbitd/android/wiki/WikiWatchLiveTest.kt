@@ -593,7 +593,8 @@ class WikiWatchLiveTest {
     /** Activity is what waits on the owner and what changed, as the server says (A12-2, iOS 42d12db2b): the bar's Activity
      * and the drawer's Wiki row say the server's number — every space's pendingOps and planWaiting — "N waiting on you";
      * Activity's first banner is the server's proposals; the status line counts the health read's entries; Recent decisions
-     * are the server's newest decisions by kind; Recently changed holds the timeline's newest rows. */
+     * are the server's newest decisions by kind; Recently changed holds the timeline's newest rows, a run's items folded
+     * into one row. */
     @Test fun j9bOwnerActivityIsWhatTheServerSays() {
         val space = arg("a12Space")
         journey("j9b-activity", owner, "orbit://wiki/$space") { _ ->
@@ -623,9 +624,22 @@ class WikiWatchLiveTest {
                 ok("the decision \"${decision.s("title")}\" is in Recent decisions", true)
             }
             capture("j9b-activity")
-            timeline.firstOrNull()?.let { newest ->
-                pressIn("wiki-activity-list", hasText(newest.s("title") ?: "", substring = true), pressIt = false)
-                ok("Recently changed's newest row is the timeline's newest: \"${newest.s("title")}\"", true)
+            // Recently changed is the timeline's newest rows as Activity folds them (`WikiModeLogic.recentRows`): a run's
+            // items are one row, by the changeset they name; any other item is its own row.
+            val rows = WikiModeLogic.recentRows(timeline.map { Wire.json.decodeFromJsonElement(WikiTimelineItem.serializer(), it) }).take(5)
+            note("server: the timeline's ${timeline.size} items fold into ${rows.size} rows")
+            rows.forEach { row ->
+                when (row) {
+                    is WikiModeLogic.RecentRow.Run -> {
+                        pressIn("wiki-activity-list", tagFor("wiki-run:", row.changesetId), pressIt = false)
+                        ok("Recently changed folds the run ${row.changesetId} (${row.items.size} items) into one row", true)
+                    }
+                    is WikiModeLogic.RecentRow.Op -> {
+                        pressIn("wiki-activity-list", tagFor("wiki-change:", row.item.opId), pressIt = false)
+                        ok("Recently changed has \"${row.item.title}\"",
+                            reads(tagFor("wiki-change:", row.item.opId) and hasText(row.item.title ?: "—", substring = true)))
+                    }
+                }
             }
             capture("j9b-activity-changes")
             compose.onNodeWithContentDescription("Open navigation").performClick()
