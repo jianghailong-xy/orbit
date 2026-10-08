@@ -277,7 +277,7 @@ func checkEngine(spec engineSpec, servicePath string) engineHealth {
 		h.auth = probeAuth(spec.bin, abs)
 	}
 	if spec.bin == providerKimi {
-		h.kimiRegion = probeKimiLoginRegion(abs)
+		h.kimiRegion = probeKimiLoginRegion(abs, nil)
 	}
 	return h
 }
@@ -394,7 +394,9 @@ func probeAuthIn(ctx context.Context, bin, binPath string, env []string) authSta
 		// directory arrives as a CODEX_HOME in env (codexSlotLoginStatus).
 		return codexLoginStatus(ctx, binPath, env)
 	case providerKimi:
-		return probeKimiACPAuth(ctx, binPath)
+		// Like Codex's: nil is this process's own home, Default; an account's arrives as a
+		// KIMI_CODE_HOME in env (kimiSlotLoginStatus).
+		return probeKimiACPAuth(ctx, binPath, env)
 	case providerOpenCode:
 		out, err := exec.CommandContext(ctx, binPath, "auth", "list").CombinedOutput()
 		if err != nil {
@@ -464,9 +466,11 @@ func readKimiACPResponse(dec *json.Decoder, wantID int) (kimiACPResponse, error)
 // validate the login already stored on disk. The initialize/authenticate pair is
 // the ACP-supported status check: authenticate returns -32000 only when login is
 // required. Protocol, process, and other errors stay authUnknown so doctor never
-// reports a false signed-out state.
-func probeKimiACPAuth(ctx context.Context, binPath string) authState {
+// reports a false signed-out state. env is the CLI's environment (nil: this process's
+// own), so one account's KIMI_CODE_HOME can be asked instead of the runner's.
+func probeKimiACPAuth(ctx context.Context, binPath string, env []string) authState {
 	cmd := exec.CommandContext(ctx, binPath, "acp")
+	cmd.Env = env
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return authUnknown
