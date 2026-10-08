@@ -7171,7 +7171,8 @@ model WikiPlanJob {
   /// The task it made. A history reference with no foreign key, as a maintenance run's is.
   taskId       String?   @unique(map: "wiki_plan_job_task_id_key") @map("task_id") @db.Uuid
   /// The wiki_job that ran it on the server (0401), as a maintenance run's job_id is. Exactly one of the two
-  /// makers is set once it is past 'queued'/'held' (`wiki_plan_job_maker_chk`).
+  /// makers is set once it is past 'queued'/'held' (`wiki_plan_job_maker_chk`), and a made or ended job names one
+  /// (`wiki_plan_job_made_chk`, restated over both makers in 0405).
   jobId        String?   @map("job_id") @db.Uuid
   madeAt       DateTime? @map("made_at") @db.Timestamptz(3)
   /// The session that runs it, when it started, and the gate round it is on.

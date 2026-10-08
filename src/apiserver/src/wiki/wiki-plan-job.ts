@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import {
   RunEventType,
   uuidToBase62,
+  WIKI_DOCS_BUILD_JOB,
   WIKI_PLAN_JOB_RULES,
   WIKI_PLAN_SERVER_JOB,
   wikiMaintenanceSettings,
@@ -326,12 +327,15 @@ export interface WikiPlanServerJob {
 
 /**
  * The wiki_job a plan job runs as when the server executes the account's wiki (contract `plan.jobs.server`): a draft
- * as `plan_draft`, a revision as `plan_revise`, both at the owner's priority. Null for a kind the server does not
- * run yet, which keeps the runner's path.
+ * as `plan_draft`, a revision as `plan_revise`, a build as `docs_build` (P7, `docs.build.server`), all at the owner's
+ * priority. Null for a kind the server does not run, which keeps the runner's path.
  */
 function wikiPlanServerJobOf(job: Pick<WikiPlanJobRow, 'id' | 'kind'>): WikiPlanServerJob | null {
   if (job.kind === 'draft' || job.kind === 'revise') {
     return { kind: WIKI_PLAN_SERVER_JOB.kinds[job.kind], priority: WIKI_PLAN_SERVER_JOB.priority, input: { planJobId: job.id } };
+  }
+  if (job.kind === 'build') {
+    return { kind: WIKI_DOCS_BUILD_JOB.kind, priority: WIKI_DOCS_BUILD_JOB.priority, input: { planJobId: job.id } };
   }
   return null;
 }
@@ -999,6 +1003,25 @@ export async function progressWikiPlanBuild(
     UPDATE "wiki_plan_job"
        SET "progress" = ${value}::jsonb, "session_id" = ${sessionId}::uuid, "started_at" = coalesce("started_at", ${now}), "updated_at" = now()
      WHERE "id" = ${jobId}::uuid AND "state" = 'made' AND "kind" = 'build'`;
+  return moved > 0;
+}
+
+/**
+ * How far a build the wiki worker runs has got (contract `plan.jobs.progress`): `progressWikiPlanBuild` for a run
+ * with no session, on its plan job while it is made and still the worker's job's. Answers whether it was.
+ */
+export async function progressWikiPlanBuildOfJob(
+  prisma: Db,
+  planJobId: string,
+  wikiJobId: string,
+  progress: WikiPlanBuildProgress,
+  now: Date = new Date(),
+): Promise<boolean> {
+  const value = JSON.stringify(progress);
+  const moved = await prisma.$executeRaw`
+    UPDATE "wiki_plan_job"
+       SET "progress" = ${value}::jsonb, "started_at" = coalesce("started_at", ${now}), "updated_at" = now()
+     WHERE "id" = ${planJobId}::uuid AND "state" = 'made' AND "kind" = 'build' AND "job_id" = ${wikiJobId}::uuid`;
   return moved > 0;
 }
 
