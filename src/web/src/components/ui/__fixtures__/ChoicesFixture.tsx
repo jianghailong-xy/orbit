@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { App as AntApp, Button as AntButton, ConfigProvider, Dropdown, Modal, Popconfirm as AntPopconfirm, Popover as AntPopover, Select as AntSelect, Tooltip as AntTooltip } from 'antd';
+import { useRef, useState, type ReactNode } from 'react';
+import { App as AntApp, Button as AntButton, ConfigProvider, Drawer as AntDrawer, Dropdown, Modal, Popconfirm as AntPopconfirm, Popover as AntPopover, Select as AntSelect, Tooltip as AntTooltip } from 'antd';
 import { CodeOutlined, GlobalOutlined, LockOutlined, PaperClipOutlined, PictureOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider, useThemeMode } from '../../../lib/theme';
@@ -7,6 +7,7 @@ import { darkTheme, lightTheme } from '../../../theme';
 import { Button } from '../Button';
 import { Input } from '../Input';
 import { Dialog } from '../Dialog';
+import { Drawer } from '../Drawer';
 import { OverlayScope } from '../Overlay';
 import { Menu, type MenuItem } from '../Menu';
 import { Popconfirm } from '../Popconfirm';
@@ -57,7 +58,7 @@ function Samples() {
   const items = kind === 'access' ? accessItems : kind === 'submenu' ? submenuItems : attachmentItems;
   const menuClass = kind === 'access' ? 'fixture-access-menu share-access-menu' : kind === 'attachment' ? 'composer-attach-menu' : '';
   const trigger = <Button disabled={disabled}>{kind === 'access' ? 'Access' : 'Add attachment'}</Button>;
-  return <section className="choices-sample" aria-label="Appearance sample" style={anchor ? { position: 'fixed', padding: 0,
+  return <SampleOwner legacy={legacy}><section className="choices-sample" aria-label="Appearance sample" style={anchor ? { position: 'fixed', padding: 0,
     top: anchor !== 'bottom' ? 12 : undefined, bottom: anchor === 'bottom' ? 12 : undefined,
     left: anchor === 'right' ? undefined : anchor === 'center' ? '45%' : 24, right: anchor === 'right' ? 12 : undefined } : undefined}>
     <div tabIndex={-1} data-testid="neutral">{['attachment', 'access', 'submenu'].includes(kind) ? legacy
@@ -77,9 +78,9 @@ function Samples() {
       // The task panel's delete question, on the same trigger for both systems.
       : kind === 'popconfirm' ? <>{legacy
         ? <AntPopconfirm title="Delete this task?" description="A run still in flight is stopped. This action cannot be undone." okText="Delete" cancelText="Cancel"
-          okButtonProps={{ danger: true }} onConfirm={() => setAnswer('confirmed')} onCancel={() => setAnswer('cancelled')}><Button>Delete task</Button></AntPopconfirm>
+          okButtonProps={{ danger: true }} classNames={{ container: 'sample-surface' }} onConfirm={() => setAnswer('confirmed')} onCancel={() => setAnswer('cancelled')}><Button>Delete task</Button></AntPopconfirm>
         : <Popconfirm trigger={<Button>Delete task</Button>} title="Delete this task?" description="A run still in flight is stopped. This action cannot be undone."
-          confirmText="Delete" cancelText="Cancel" danger onConfirm={() => setAnswer('confirmed')} onCancel={() => setAnswer('cancelled')} />}
+          confirmText="Delete" cancelText="Cancel" danger popupClassName="sample-surface" onConfirm={() => setAnswer('confirmed')} onCancel={() => setAnswer('cancelled')} />}
         <output aria-label="Answer">{answer}</output></>
       : kind === 'popover' ? legacy
         ? <AntPopover title="Context" content={<div>12,800 of 128,000 tokens</div>} trigger="click" placement={calloutPlacement} classNames={{ root: 'sample-floating-root', arrow: 'sample-arrow', container: 'sample-surface', title: 'sample-title' }}><Button>Context</Button></AntPopover>
@@ -106,7 +107,28 @@ function Samples() {
           : <Select side={side} aria-label="Sample choice" options={state === 'empty' ? [] : kind === 'account' ? accounts : expiry} value={value} onValueChange={setValue}
             size={kind === 'expiry' ? 'small' : 'middle'} className="sample-choice" popupClassName="sample-surface" disabled={disabled} renderOption={kind === 'account' ? accountDetail : undefined} />}
     </div>
-  </section>;
+  </section></SampleOwner>;
+}
+
+/**
+ * Where a sample is mounted, for the first-frame checks: on the page (default), or in an open dialog
+ * or drawer (owner=dialog/drawer: Orbit's for Orbit samples, the replaced one for legacy samples, at
+ * the same place). scroll puts a screen of content before and after the sample, in a scrolling box
+ * on the page or in the owner; transform moves the owner (a box around the sample on the page).
+ */
+function SampleOwner({ legacy, children }: { legacy: boolean; children: ReactNode }) {
+  const params = new URLSearchParams(location.search);
+  const owner = params.get('owner');
+  const moved = params.has('transform') ? { transform: 'translate(16px, 8px)' } : undefined;
+  const content = params.has('scroll') ? <><div className="fixture-scroll-spacer" />{children}<div className="fixture-scroll-spacer" /></> : children;
+  if (owner === 'dialog') return legacy
+    ? <Modal open title="Sample owner" footer={null} closable={false} keyboard={false} maskClosable={false} style={moved}>{content}</Modal>
+    : <Dialog open onClose={() => {}} title="Sample owner" closable={false} closeOnEscape={false} closeOnOutsideClick={false} style={moved}>{content}</Dialog>;
+  if (owner === 'drawer') return legacy
+    ? <AntDrawer open title="Sample owner" closable={false} keyboard={false} maskClosable={false} style={moved}>{content}</AntDrawer>
+    : <Drawer open onClose={() => {}} title="Sample owner" closable={false} closeOnEscape={false} closeOnOutsideClick={false} style={moved}>{content}</Drawer>;
+  if (params.has('scroll')) return <div className="fixture-scroll-owner">{content}</div>;
+  return moved ? <div style={moved}>{content}</div> : content;
 }
 
 function ChoiceFields() {
