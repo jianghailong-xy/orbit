@@ -350,12 +350,13 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         assignedRunner: {
           select: { planUsage: true, engines: true, status: true, lastHeartbeatAt: true },
         },
-        // Which of the runner's Codex, Claude or Antigravity accounts the run spends, whose quota alone
-        // can hold it back: the one picked for the session, else its workspace's.
+        // Which of the runner's Codex, Claude, Antigravity or Kimi accounts the run spends, whose quota
+        // alone can hold it back: the one picked for the session, else its workspace's.
         codexAccount: true,
         claudeAccount: true,
         antigravityAccount: true,
-        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true } },
+        kimiAccount: true,
+        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
       },
     });
     if (due.length === 0) return;
@@ -502,6 +503,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
                   codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
                   claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
                   antigravityAccount: session.antigravityAccount ?? session.workspace?.antigravityAccount,
+                  kimiAccount: session.kimiAccount ?? session.workspace?.kimiAccount,
                 },
                 session.assignedRunner?.engines,
               ),
