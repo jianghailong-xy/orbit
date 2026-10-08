@@ -18,9 +18,30 @@ require(sourceSha.matches(Regex("[0-9a-f]{40}"))) { "orbitSourceSha must be a fu
 val sourceDirty = providers.gradleProperty("orbitSourceDirty").map { it.toBooleanStrict() }.orElse(
     providers.exec {
         workingDir(rootDir.resolve("../.."))
-        commandLine("git", "status", "--porcelain", "--", "src/android", ".github/workflows/android.yml")
+        commandLine("git", "status", "--porcelain", "--", "src/android", ".github/workflows/android.yml", ".github/workflows/android-release.yml")
     }.standardOutput.asText.map { it.isNotBlank() },
 ).get()
+
+val releaseVersionName = providers.environmentVariable("ORBIT_ANDROID_VERSION_NAME")
+    .orElse(providers.gradleProperty("orbitVersionName")).get()
+require(releaseVersionName.length <= 32 && releaseVersionName.matches(Regex("[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?"))) {
+    "Version must be X.Y.Z or X.Y.Z-suffix, at most 32 characters (client telemetry limit)"
+}
+val releaseVersionCode = providers.environmentVariable("ORBIT_ANDROID_VERSION_CODE")
+    .orElse(providers.gradleProperty("orbitVersionCode")).get().toInt()
+require(releaseVersionCode in 1..2100000000) { "Version code must be between 1 and 2100000000" }
+val packageId = providers.environmentVariable("ORBIT_ANDROID_APPLICATION_ID").orElse("io.orbitd.android").get()
+require(packageId.matches(Regex("[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+"))) { "Invalid Android application ID" }
+// The in-app updater reads android-v* releases of this GitHub repository.
+val updateRepository = providers.gradleProperty("orbitUpdateRepository").orElse("jianghailong-xy/orbit").get()
+require(updateRepository.matches(Regex("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+"))) { "orbitUpdateRepository must be owner/name" }
+
+// Environment only: no credential files or passwords in Gradle properties or source control.
+val signingValues = listOf("KEYSTORE_PATH", "STORE_PASSWORD", "KEY_ALIAS", "KEY_PASSWORD").associateWith {
+    providers.environmentVariable("ORBIT_ANDROID_$it").orNull
+}
+val hasSigning = signingValues.values.any { it != null }
+require(!hasSigning || signingValues.values.all { !it.isNullOrBlank() }) { "All four Android signing environment values are required" }
 
 android {
     namespace = "io.orbitd.android"
@@ -28,16 +49,17 @@ android {
     buildToolsVersion = "36.0.0"
 
     defaultConfig {
-        applicationId = "io.orbitd.android"
+        applicationId = packageId
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0-a06"
+        versionCode = releaseVersionCode
+        versionName = releaseVersionName
         testInstrumentationRunner = providers.gradleProperty("orbitTestRunner")
             .orElse("androidx.test.runner.AndroidJUnitRunner").get()
 
         buildConfigField("String", "SOURCE_SHA", "\"$sourceSha\"")
         buildConfigField("boolean", "SOURCE_DIRTY", sourceDirty.toString())
+        buildConfigField("String", "UPDATE_REPOSITORY", "\"$updateRepository\"")
         // Firebase client values are supplied per build, independently of signing/release settings.
         // An empty or mismatched configuration keeps push disabled; no credential is required by CI.
         mapOf("APP_ID" to "AppId", "API_KEY" to "ApiKey", "PROJECT_ID" to "ProjectId",
@@ -49,11 +71,28 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasSigning) {
+            create("internalRelease") {
+                storeFile = file(signingValues.getValue("KEYSTORE_PATH")!!)
+                storePassword = signingValues.getValue("STORE_PASSWORD")
+                keyAlias = signingValues.getValue("KEY_ALIAS")
+                keyPassword = signingValues.getValue("KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
         }
+        release {
+            if (hasSigning) signingConfig = signingConfigs.getByName("internalRelease")
+        }
     }
+
+    // Opt-in for upgrade verification against a non-debuggable, test-signed release APK.
+    testBuildType = providers.gradleProperty("orbitTestBuildType").orElse("debug").get()
 
     buildFeatures {
         compose = true

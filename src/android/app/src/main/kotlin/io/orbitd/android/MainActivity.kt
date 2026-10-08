@@ -49,6 +49,7 @@ import io.orbitd.android.management.*
 import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.push.PushNoticeHost
 import io.orbitd.android.push.NotificationSettings
+import io.orbitd.android.update.UpdatePromptHost
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 
@@ -64,9 +65,11 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) acceptIntent(intent)
         setContent {
             AccountAppearance(application as OrbitApplication) {
-                PushNoticeHost((application as OrbitApplication).push) {
-                    OrbitShell(auth, application as OrbitApplication, incoming) { address ->
-                        auth.continueWithGoogle(address) { url -> openInSignInBrowser(this@MainActivity, url) }
+                UpdatePromptHost((application as OrbitApplication).updates) {
+                    PushNoticeHost((application as OrbitApplication).push) {
+                        OrbitShell(auth, application as OrbitApplication, incoming) { address ->
+                            auth.continueWithGoogle(address) { url -> openInSignInBrowser(this@MainActivity, url) }
+                        }
                     }
                 }
             }

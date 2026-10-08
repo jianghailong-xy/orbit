@@ -1,0 +1,148 @@
+# Android internal release: pushing an android-v<versionName> tag publishes the signed APK as a
+# GitHub pre-release, with its .sha256 and the android-update.json manifest the app's updater reads.
+# The tag never matches release.yml's v* filter and nothing here builds, signs or uploads an Apple
+# client. Ordinary PRs and branch pushes never reach this workflow or its signing environment.
+#
+# Signing comes only from the android-internal environment (owner-configured; android-v* tags only):
+#   secrets   ANDROID_KEYSTORE_BASE64, ANDROID_STORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+#   variables ANDROID_APPLICATION_ID, ANDROID_CERT_SHA256
+#   optional  ANDROID_FIREBASE_{APP_ID,API_KEY,PROJECT_ID,SENDER_ID,ANDROID_PACKAGE}: non-secret Firebase
+#             client values, all or none; unset keeps push notifications off. No service account here.
+# The tag must equal android-v + orbitVersionName from src/android/gradle.properties at the tagged
+# commit, and orbitVersionCode must exceed every published android-v* release of that package.
+name: Android internal release
+
+on:
+  push:
+    tags: ["android-v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-internal-release
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    name: Android · signed release APK
+    if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/android-v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    environment: android-internal
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21.0.9+10.0.LTS'
+      - name: Verify release trigger isolation
+        run: node --test scripts/ci/release-workflows.test.mjs
+      - name: Check tag, version and release history
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          ORBIT_ANDROID_APPLICATION_ID: ${{ vars.ANDROID_APPLICATION_ID }}
+        run: |
+          set -euo pipefail
+          python3 src/android/scripts/github-release.py validate --tag "$RELEASE_TAG" \
+            --version-name "$(sed -n 's/^orbitVersionName=//p' src/android/gradle.properties)" \
+            --version-code "$(sed -n 's/^orbitVersionCode=//p' src/android/gradle.properties)" \
+            --application-id "$ORBIT_ANDROID_APPLICATION_ID" --repository "$GITHUB_REPOSITORY" --output "$GITHUB_OUTPUT"
+      - name: Install Android SDK packages
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'cmdline-tools;22.0'
+          "$ANDROID_HOME/cmdline-tools/22.0/bin/sdkmanager" 'platforms;android-36' 'build-tools;36.0.0'
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+      - name: Verify Android
+        run: bash src/android/scripts/verify.sh "$RUNNER_TEMP/android-verification"
+      - name: Build and verify signed APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ORBIT_ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ORBIT_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ORBIT_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ORBIT_ANDROID_APPLICATION_ID: ${{ vars.ANDROID_APPLICATION_ID }}
+          ORBIT_ANDROID_CERT_SHA256: ${{ vars.ANDROID_CERT_SHA256 }}
+          ORBIT_ANDROID_VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          ORBIT_ANDROID_VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          ORBIT_ANDROID_SIGNING_PURPOSE: release
+          ORBIT_ANDROID_FIREBASE_APP_ID: ${{ vars.ANDROID_FIREBASE_APP_ID }}
+          ORBIT_ANDROID_FIREBASE_API_KEY: ${{ vars.ANDROID_FIREBASE_API_KEY }}
+          ORBIT_ANDROID_FIREBASE_PROJECT_ID: ${{ vars.ANDROID_FIREBASE_PROJECT_ID }}
+          ORBIT_ANDROID_FIREBASE_SENDER_ID: ${{ vars.ANDROID_FIREBASE_SENDER_ID }}
+          ORBIT_ANDROID_FIREBASE_ANDROID_PACKAGE: ${{ vars.ANDROID_FIREBASE_ANDROID_PACKAGE }}
+        run: |
+          set -euo pipefail
+          umask 077
+          : "${ANDROID_KEYSTORE_BASE64:?Configure signing in the protected android-internal environment}"
+          export ORBIT_ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/android-internal-signing.jks"
+          trap 'rm -f "$ORBIT_ANDROID_KEYSTORE_PATH"' EXIT
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ORBIT_ANDROID_KEYSTORE_PATH"
+          bash src/android/scripts/build-release.sh "$RUNNER_TEMP/android-internal-apk"
+      - name: Remove signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/android-internal-signing.jks"
+      - name: Keep signed APK and identity
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: android-release-${{ github.run_id }}
+          path: ${{ runner.temp }}/android-internal-apk
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 30
+
+  # Publishing holds the write token but never the signing environment or its secrets.
+  publish:
+    name: Android · GitHub pre-release
+    needs: apk
+    if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/android-v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: android-release-${{ github.run_id }}
+          path: ${{ runner.temp }}/android-release
+      - name: Write update manifest and release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # An annotated tag's message becomes the release notes the app shows with the update.
+          git fetch --no-tags --force origin "+refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          if [ "$(git cat-file -t "refs/tags/$RELEASE_TAG")" = tag ]; then
+            git tag -l --format='%(contents:subject)%0a%0a%(contents:body)' "$RELEASE_TAG" > "$RUNNER_TEMP/notes.txt"
+          else
+            printf 'Orbit Android %s internal build.\n' "${RELEASE_TAG#android-v}" > "$RUNNER_TEMP/notes.txt"
+          fi
+          python3 src/android/scripts/github-release.py manifest --tag "$RELEASE_TAG" --repository "$GITHUB_REPOSITORY" \
+            --identity "$RUNNER_TEMP/android-release/identity.json" --apk "$RUNNER_TEMP/android-release/app-release.apk" \
+            --notes-file "$RUNNER_TEMP/notes.txt" --output "$RUNNER_TEMP/publish" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+      - name: Create GitHub pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          name="${RELEASE_TAG#android-v}"
+          out="$RUNNER_TEMP/publish"
+          # Pre-release and never "latest": releases/latest stays the macOS release.
+          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --prerelease --latest=false \
+            --title "Orbit Android $name" --notes-file "$out/release-notes.md" \
+            "$out/orbit-android-$name.apk" "$out/orbit-android-$name.apk.sha256" "$out/android-update.json"
+      - name: Verify published assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 src/android/scripts/github-release.py verify-published --repository "$GITHUB_REPOSITORY" --tag "$RELEASE_TAG" --dir "$RUNNER_TEMP/publish"
