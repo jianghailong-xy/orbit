@@ -155,7 +155,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         SectionHeading("Workspaces")
                         DirectoryStatus(data) { app.realtime.refreshDirectory() }
                         if (data.ready && data.workspaces.isEmpty()) Text("Add a workspace to start a session.", Modifier.padding(16.dp))
-                        data.workspaces.sortedWith(compareBy<DirectoryWorkspace> { it.runnerId == null }.thenBy { it.position }.thenBy { it.createdAt }).forEach { workspace ->
+                        val workspaces = orderedWorkspaces(data.workspaces)
+                        workspaces.forEach { workspace ->
                             val runner = data.runners.firstOrNull { ObjectId.same(it.id, workspace.runnerId) }
                             val sessions = data.sessions["open"].orEmpty().filter { ObjectId.same(it.workspace, workspace.id) }
                             NavigationDrawerItem(selected = navigation.section == workspace.id,
@@ -168,7 +169,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         }
                         DrawerProjects(api, revision) { next -> scope.launch { drawer.close() }; open(next) }
                         Spacer(Modifier.height(24.dp))
-                        val workspace = route.workspaceId ?: data.workspaces.firstOrNull()?.id
+                        val workspace = route.workspaceId ?: workspaces.firstOrNull()?.id
                         Button(onClick = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.DRAFT, workspaceId = workspace, origin = Origin.DRAWER)) },
                             enabled = workspace != null && data.fresh) { Text("New session") }
                         TextButton(onClick = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.SETTINGS, origin = Origin.DRAWER)) }) {
@@ -231,8 +232,9 @@ private fun WorkspaceHome(data: DirectoryData, open: (DirectoryWorkspace) -> Uni
     androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize()) {
         item { DirectoryStatus(data, refresh) }
         if (data.ready && data.workspaces.isEmpty()) item { StatusMessage("No workspaces", "Add a workspace to start a session.") }
-        items(data.workspaces.size) { index ->
-            val w = data.workspaces[index]
+        val workspaces = orderedWorkspaces(data.workspaces)
+        items(workspaces.size) { index ->
+            val w = workspaces[index]
             TextButton(onClick = { open(w) }, modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).testTag("workspace:${w.id}")) { Text(w.name) }
         }
     }

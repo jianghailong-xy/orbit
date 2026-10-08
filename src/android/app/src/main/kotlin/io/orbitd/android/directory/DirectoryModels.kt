@@ -8,9 +8,10 @@ import java.time.temporal.ChronoUnit
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 
+/** [position] is null until the workspace is first dragged into place (schema.prisma Workspace.position Int?). */
 @Serializable
 data class DirectoryWorkspace(val id: String, val name: String, val runnerId: String? = null,
-    val enabled: Boolean = true, val position: Int = 0, val createdAt: String? = null)
+    val enabled: Boolean = true, val position: Int? = null, val createdAt: String? = null)
 @Serializable
 data class DirectoryRunner(val id: String, val name: String, val status: String? = null, val online: Boolean? = null)
 @Serializable
@@ -58,6 +59,11 @@ data class MoveTargets(val workspaceId: String? = null, val folderId: String? = 
     val folders: List<MoveFolder> = emptyList(), val reason: String? = null,
     val needsEnd: Boolean = false, val branch: String? = null, val changedFiles: Int = 0,
     val targets: List<MoveTarget> = emptyList())
+
+/** iOS's order (AgentListLogic.ordered): the server's — placed workspaces by position, then never-placed ones
+ * (position null) oldest first — with the workspaces that have no runner moved to the bottom. */
+fun orderedWorkspaces(workspaces: List<DirectoryWorkspace>): List<DirectoryWorkspace> = workspaces.sortedWith(
+    compareBy<DirectoryWorkspace> { it.runnerId == null }.thenBy(nullsLast()) { it.position }.thenBy { it.createdAt })
 
 enum class SessionView(val query: String, val label: String) { OPEN("open", "Open"), COMPLETED("completed", "Completed"), TRASH("trash", "Trash") }
 enum class Grouping { RECENCY, TAG }
