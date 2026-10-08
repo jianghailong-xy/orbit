@@ -17,6 +17,9 @@ export const DISABLED_ACCOUNTS_RELOAD_MS = 25_000;
 /** The code a disabled account is refused with, at every door but an access token's. */
 export const ACCOUNT_DISABLED = 'ACCOUNT_DISABLED';
 
+/** What a disabled account is told at those doors — the pool gateway's included, in its own error shape. */
+export const ACCOUNT_DISABLED_MESSAGE = 'This Orbit account is disabled. Ask an administrator to enable it again.';
+
 /**
  * A disabled account at a door that answers it 403 (§5.5): the password login, the Google exchange,
  * the refresh, a personal access token, a runner credential and a service token. Never a 401: a
@@ -26,7 +29,7 @@ export const ACCOUNT_DISABLED = 'ACCOUNT_DISABLED';
 export const accountDisabled = () =>
   new ForbiddenException({
     code: ACCOUNT_DISABLED,
-    message: 'This Orbit account is disabled. Ask an administrator to enable it again.',
+    message: ACCOUNT_DISABLED_MESSAGE,
   });
 
 /**
