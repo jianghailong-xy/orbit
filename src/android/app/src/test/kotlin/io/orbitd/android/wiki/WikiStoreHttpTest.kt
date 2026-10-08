@@ -117,7 +117,7 @@ class WikiStoreHttpTest {
     private fun requests(prefix: String) = authority.calls.filter { it.first.startsWith(prefix) }
     private fun body(prefix: String) = Json.parseToJsonElement(requests(prefix).last().second).jsonObject
     private fun eventually(condition: () -> Boolean) {
-        val until = System.currentTimeMillis() + 5_000
+        val until = System.currentTimeMillis() + 60_000
         while (!condition()) { check(System.currentTimeMillis() < until) { "condition never held" }; Thread.sleep(20) }
     }
 

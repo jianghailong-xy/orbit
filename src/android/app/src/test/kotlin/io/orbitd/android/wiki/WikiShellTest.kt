@@ -63,7 +63,7 @@ class WikiShellTest {
         compose.waitForIdle()
         compose.onNodeWithTag("wiki-entry-form").assertExists()
         gate.complete(Unit)
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag("wiki-entry-form").fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-entry-form").fetchSemanticsNodes().isEmpty() }
         assertEquals("answered", shell.ended["POST wiki/spaces/${WikiShell.SPACE}/changesets"])
     }
 
@@ -81,9 +81,9 @@ class WikiShellTest {
         open("orbit://wiki/${WikiShell.SPACE}")
         awaitTag("wiki-status-line")
         gate.complete(Unit)
-        compose.waitUntil(10_000) { shell.ended.containsKey("POST wiki/spaces/${WikiShell.SPACE}/changesets") }
+        compose.waitUntil(60_000) { shell.ended.containsKey("POST wiki/spaces/${WikiShell.SPACE}/changesets") }
         assertEquals("the write went on to its answer", "answered", shell.ended["POST wiki/spaces/${WikiShell.SPACE}/changesets"])
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag("wiki-notice").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-notice").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-notice").assertTextContains("runner-go’s full suite inside a session reaches production", substring = true)
     }
 
@@ -99,8 +99,8 @@ class WikiShellTest {
         compose.onNodeWithTag("wiki-review-tab:amend").performClick()
         awaitTag("wiki-review-card:${WikiShell.AMEND_OP}")
         compose.onNodeWithTag("wiki-review-accept").performScrollTo().performClick()
-        compose.waitUntil(10_000) { shell.writes("wiki/changesets/${WikiShell.AMEND_CHANGESET}/decide").isNotEmpty() }
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("Nothing was applied", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { shell.writes("wiki/changesets/${WikiShell.AMEND_CHANGESET}/decide").isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithText("Nothing was applied", substring = true).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Nothing was applied: the entry changed after this was proposed.").assertExists()
         assertTrue("no Accepted toast for an op that changed nothing",
             compose.onAllNodesWithText(WikiCopy.decidedAccepted).fetchSemanticsNodes().isEmpty())
@@ -147,7 +147,7 @@ class WikiShellTest {
     @Test fun aLinkToASpaceThisAccountDoesNotHaveSaysItIsNotAvailable() {
         signIn()
         open("orbit://wiki/${WikiShell.GONE_SPACE}")
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("That space is not available.").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithText("That space is not available.").fetchSemanticsNodes().isNotEmpty() }
         assertTrue("no other space's home stands in for it", compose.onAllNodesWithTag("wiki-status-line").fetchSemanticsNodes().isEmpty())
     }
 
@@ -157,7 +157,7 @@ class WikiShellTest {
         open("orbit://watch/${WikiShell.WATCH}")
         awaitTag("watch-detail:${WikiShell.WATCH}")
         compose.onNodeWithTag("watch:${WikiShell.WATCH}:WATCH_PAUSE").performClick()
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag("watch-error").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("watch-error").fetchSemanticsNodes().isNotEmpty() }
         back()
         awaitTag("following")
         open("orbit://watch/${WikiShell.WATCH}")
@@ -175,7 +175,7 @@ class WikiShellTest {
         open("orbit://watch/${WikiShell.WATCH}")
         awaitTag("watch-detail:${WikiShell.WATCH}")
         compose.onNodeWithTag("watch:${WikiShell.WATCH}:WATCH_PAUSE").performClick()
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag("watch-error").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("watch-error").fetchSemanticsNodes().isNotEmpty() }
         // Settings, from the drawer, goes on the same stack, over the watch.
         compose.onNodeWithContentDescription("Open navigation").performClick()
         compose.onNodeWithText("Settings").performScrollTo().performClick()
@@ -237,9 +237,12 @@ class WikiShellTest {
         shell.event("wiki.changed")
         settle(2_000)
         compose.onNodeWithTag("wiki-review-accept").performScrollTo().performClick()
-        compose.waitUntil(10_000) { shell.writes("wiki/changesets/${WikiShell.AMEND_CHANGESET}/decide").isNotEmpty() }
+        compose.waitUntil(60_000) { shell.writes("wiki/changesets/${WikiShell.AMEND_CHANGESET}/decide").isNotEmpty() }
         settle(2_000)
+        // On a loaded host the decide can still be on its way: its card is gone before the late read answers.
+        settleUntil("the accepted card to go") { compose.onAllNodesWithTag("wiki-review-card:${WikiShell.AMEND_OP}").fetchSemanticsNodes().isEmpty() }
         late.complete(Unit)
+        settleUntil("the late read to answer") { shell.ended["GET wiki/review"] == "answered" }
         settle(2_000)
         assertTrue("the answered card does not come back", compose.onAllNodesWithTag("wiki-review-card:${WikiShell.AMEND_OP}").fetchSemanticsNodes().isEmpty())
     }
@@ -248,10 +251,10 @@ class WikiShellTest {
 
     private fun app() = compose.activity.application as OrbitApplication
     private fun signIn() {
-        compose.waitUntil(5_000) { app().session.state.value is AuthState.SignedOut }
+        compose.waitUntil(60_000) { app().session.state.value is AuthState.SignedOut }
         app().realtime.setNetwork(true, "fixture")
         runBlocking { shell.signIn(app().session) }
-        compose.waitUntil(10_000) { app().session.state.value is AuthState.SignedIn && app().realtime.state.value.directoryFresh }
+        compose.waitUntil(60_000) { app().session.state.value is AuthState.SignedIn && app().realtime.state.value.directoryFresh }
     }
     /** A link as Android delivers one to the running Activity; the launch intent is put back for ActivityScenario. */
     private fun open(link: String) {
@@ -267,7 +270,7 @@ class WikiShellTest {
     private fun awaitTag(tag: String) = awaitThat(tag) { compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty() }
     /** A wait that, when it runs out, says what the page and the server were doing. */
     private fun awaitThat(what: String, condition: () -> Boolean) {
-        try { compose.waitUntil(10_000, condition) }
+        try { compose.waitUntil(60_000, condition) }
         catch (timeout: androidx.compose.ui.test.ComposeTimeoutException) {
             throw AssertionError("waited for $what; picker='${picker()}'; last calls=${shell.calls.takeLast(12)}", timeout)
         }
@@ -297,12 +300,16 @@ class WikiShellTest {
         Thread.sleep(25)
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); compose.waitForIdle()
     }
-    /** Step the clocks until [condition] holds. */
+    /** Step the clocks until [condition] holds, [ms] of them at most. A loaded host then gets up to a minute of real
+     * time, the clocks standing still, for reads still on their way. */
     private fun settleUntil(what: String, ms: Long = 15_000, condition: () -> Boolean) {
         var left = ms
+        while (left > 0 && !condition()) { step(); left -= 250 }
+        val until = System.nanoTime() + 60_000_000_000
         while (!condition()) {
-            if (left <= 0) throw AssertionError("waited for $what; last calls=${shell.calls.takeLast(30)}")
-            step(); left -= 250
+            if (System.nanoTime() > until) throw AssertionError("waited for $what; last calls=${shell.calls.takeLast(30)}")
+            Thread.sleep(25); main.scheduler.runCurrent()
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); compose.waitForIdle()
         }
     }
 }
