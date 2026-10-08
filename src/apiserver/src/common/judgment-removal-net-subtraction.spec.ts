@@ -114,7 +114,10 @@ test('(z) no compose service or resident process is added', () => {
   const withoutExtensions = compose.replace(/^x-[^\n]*\n(?:[ \t][^\n]*\n|\n)*/gm, '');
   const services = withoutExtensions.slice(0, withoutExtensions.indexOf('\nvolumes:'));
   const names = [...services.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gmu)].map((match) => match[1]);
-  assert.deepEqual(names, ['postgres', 'pgbackup', 'apiserver', 'web', 'gateway'],
+  // wiki-worker is the wiki's server-side executor, which the account owner added on 2026-10-07
+  // (docs/wiki-server-execution-design.md §4.1), not this removal; test/compose-topology.test.mjs (l)
+  // pins its whole definition.
+  assert.deepEqual(names, ['postgres', 'pgbackup', 'apiserver', 'wiki-worker', 'web', 'gateway'],
     `compose declares ${names.length} services: ${names.join(', ')}`);
   assert.equal(/judgment|judgement/i.test(compose), false,
     'the removal must add no judgment compose service');

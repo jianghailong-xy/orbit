@@ -26,6 +26,7 @@ import {
 import { ModelUsage, NormalizedRunEvent, TokenUsage } from './events';
 import { SessionSourceSnapshot } from './source';
 import type { WikiMaintenanceRun } from './wiki';
+import type { WikiRepoOpCommand } from './wikiRepoOps';
 
 /** Why an ended session cannot currently be resumed on its original runner. */
 export type SessionResumeBlockedReason =
@@ -456,6 +457,53 @@ export interface PlanUsage extends PlanUsageSnapshot {
   antigravity?: PlanUsageSnapshot;
 }
 
+/** Why the DeepSeek account balance behind a key could not be read: DeepSeek refused the key
+ *  (401/403), the server never reached DeepSeek, or DeepSeek answered with an error or with
+ *  something that is not a balance. */
+export type ProviderBalanceFailure = 'KEY_REJECTED' | 'NETWORK' | 'UPSTREAM_ERROR';
+
+/** One currency of a DeepSeek account's balance. The amounts are the decimal strings DeepSeek
+ *  sends (`balance_infos[]`), never computed here; DeepSeek spends granted before topped-up. */
+export interface ProviderBalanceAmount {
+  currency: string;
+  totalBalance: string;
+  grantedBalance: string;
+  toppedUpBalance: string;
+}
+
+/** Another of the owner's DeepSeek providers holding the very same key — so the same account, and
+ *  the same balance. */
+export interface ProviderBalanceSibling {
+  id: string;
+  label: string;
+}
+
+/** One read of a DeepSeek account's balance, as the server keeps it for a key. A failure carries why
+ *  and when it was tried, and no amount at all — a balance that could not be read is never a 0. */
+export type ProviderBalanceRead =
+  | {
+      ok: true;
+      balances: ProviderBalanceAmount[];
+      /** DeepSeek's `is_available`: false when the account can't pay for more requests. */
+      isAvailable: boolean;
+      /** When the server asked DeepSeek (ISO-8601). Providers sharing a key share this read. */
+      fetchedAt: string;
+    }
+  | {
+      ok: false;
+      reason: ProviderBalanceFailure;
+      /** What happened, in a sentence; the clients add what to do about it where they are. */
+      message: string;
+      fetchedAt: string;
+    };
+
+/**
+ * GET /providers/mine/:id/balance: the balance of the whole DeepSeek account a provider's stored
+ * key belongs to (DeepSeek's `GET /user/balance`, asked by the server — the key never leaves it).
+ * It is not what any session spent: DeepSeek has no per-request or per-day spend API.
+ */
+export type ProviderBalance = ProviderBalanceRead & { sharedWith: ProviderBalanceSibling[] };
+
 export interface RunnerHeartbeatRequest {
   status: RunnerStatus;
   /** How many more active turns the runner can accept right now. Warm idle
@@ -818,6 +866,13 @@ export interface RunnerHeartbeatResponse {
    *  named here is already RUNNING in the database and is nobody else's to take. Answered via
    *  POST /runner/integration-jobs/:jobId/{progress,result}. Absent on older control planes. */
   integrationJobs?: IntegrationJobCommand[];
+  /** Repository operations this runner has just claimed (contract `repoOps`, design §7): the wiki's
+   *  pipelines run on the server, which holds no repository, so a step that needs to know what the
+   *  repository says asks the machine its space's workspace runs on. Sent only to a process that
+   *  declared `wiki-repo-op/v1`, heartbeats with a leaseOwner and is not draining; at most two per
+   *  beat, and a row named here is already RUNNING in the database. Answered via
+   *  POST /runner/wiki/repo-ops/:id/{progress,fragments,result}. Absent on older control planes. */
+  wikiRepoOps?: WikiRepoOpCommand[];
 }
 
 /** `account/rateLimitResetCredit/consume` outcomes, spelled as the provider spells them. */

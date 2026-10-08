@@ -1189,11 +1189,8 @@ function RunnerEngineCard({
           aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${name}`}
           onClick={onToggle}
         >
-          <span className={`re-dot${runner.online ? ' on' : ''}`} />
-          <span className="re-runner-copy">
-            <span className="re-runner">{name}</span>
-            {meta && <span className="re-runner-meta">{meta}</span>}
-          </span>
+          {/* Leads the row, in the column the engine rows below put their icon in: one place
+              holds it folded or open, and no row's summary can move it. */}
           <span className={`re-chev${collapsed ? '' : ' open'}`} aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
               <path
@@ -1204,6 +1201,11 @@ function RunnerEngineCard({
                 strokeLinejoin="round"
               />
             </svg>
+          </span>
+          <span className={`re-dot${runner.online ? ' on' : ''}`} />
+          <span className="re-runner-copy">
+            <span className="re-runner">{name}</span>
+            {meta && <span className="re-runner-meta">{meta}</span>}
           </span>
         </button>
         {(!runner.online || collapsed) && (

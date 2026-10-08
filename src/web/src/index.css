@@ -15095,6 +15095,8 @@ button.chat-jump-start:hover {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* The column the engine rows put their icon in: the header and the rows under it then share one
+     grid, and the chevron never moves again with whatever a row's summary happens to say. */
   width: 28px;
   height: 24px;
   color: var(--text-2);
@@ -15172,6 +15174,11 @@ button.chat-jump-start:hover {
   }
   .re-runner-card .re-toggle > .re-dot {
     margin-top: 8px;
+  }
+  /* Under 600px the chevron stays where it has always been: the top-right of the row, beside
+     the name. Only the wide card leads with it. */
+  .re-runner-card .re-chev {
+    order: 2;
   }
   .re-runner-status {
     margin-left: 17px;
