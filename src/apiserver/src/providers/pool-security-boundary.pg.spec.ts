@@ -86,6 +86,8 @@ import { TasksService } from '../tasks/tasks.service';
 import { AdminRoleGuard } from '../users/admin-role.guard';
 import { AdminProvidersController } from './admin-providers.controller';
 import { accountPoolRuntime } from './custom-provider';
+import { DEEPSEEK_BALANCE_URL } from './deepseek-balance';
+import { DeepSeekBalanceService } from './deepseek-balance.service';
 import { OAUTH_USAGE_URL } from './plan-usage';
 import { ProviderPlanUsageService } from './plan-usage.service';
 import { outsideThePoolGateway, PoolGatewayController } from './pool-gateway.controller';
@@ -120,10 +122,17 @@ function fiveHour(utilization: number) {
   return { five_hour: { utilization, resets_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() } };
 }
 
-/** The network the server calls out on: the usage endpoint, and nothing else that answers. */
+/** What DeepSeek's balance endpoint answers, for any key. */
+const DEEPSEEK_BALANCE = {
+  is_available: true,
+  balance_infos: [{ currency: 'CNY', total_balance: '110.00', granted_balance: '10.00', topped_up_balance: '100.00' }],
+};
+
+/** The network the server calls out on: the usage endpoint and DeepSeek's balance, and nothing else that answers. */
 const serverNetwork = (async (input: unknown, init?: { headers?: Record<string, string> }) => {
   const key = String(init?.headers?.authorization ?? '').replace(/^Bearer /, '');
-  const body = String(input) === OAUTH_USAGE_URL ? usageAnswers.get(key) : undefined;
+  const body =
+    String(input) === OAUTH_USAGE_URL ? usageAnswers.get(key) : String(input) === DEEPSEEK_BALANCE_URL ? DEEPSEEK_BALANCE : undefined;
   return body === undefined
     ? new Response('unavailable', { status: 500 })
     : new Response(JSON.stringify(body), { status: 200 });
@@ -318,11 +327,13 @@ const doorsOver: {
   providers: ProvidersService | null;
   login: CodexLoginService | null;
   pools: SharedPoolsService | null;
+  balances: DeepSeekBalanceService | null;
   prisma: unknown;
 } = {
   providers: null,
   login: null,
   pools: null,
+  balances: null,
   prisma: null,
 };
 
@@ -337,6 +348,8 @@ const doorsOver: {
     // The pool page's doors (migrations 0321, 0358), which the people an owner adds to a pool read it
     // through — the REAL service, for the same reason.
     { provide: SharedPoolsService, useFactory: () => doorsOver.pools },
+    // A DeepSeek key's account balance, read with the stored key — the REAL service, for the same reason.
+    { provide: DeepSeekBalanceService, useFactory: () => doorsOver.balances },
     { provide: PrismaService, useFactory: () => doorsOver.prisma },
     JwtAuthGuard,
     AdminRoleGuard,
@@ -490,6 +503,7 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
   doorsOver.providers = providers;
   doorsOver.login = new CodexLoginService(prisma, realtime);
   doorsOver.pools = new SharedPoolsService(prisma, realtime, providers);
+  doorsOver.balances = new DeepSeekBalanceService(prisma);
   doorsOver.prisma = db;
   const doors = await openDoors();
   t.after(async () => {
@@ -972,6 +986,27 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     await ask(bob, 'GET', 'providers/mine/:id/key', { id: pub(personal) }, undefined, 404);
     await ask(alice, 'GET', 'providers/mine/:id/key', { id: uuidToBase62(alicePool.id) }, undefined, 404);
     await ask(alice, 'GET', 'providers/mine/:id/key', { id: sharedId }, undefined, 404);
+    // A DeepSeek key's account balance: the server asks DeepSeek with the key, and answers with the
+    // balance alone — to her, about her own DeepSeek key; nobody else's, and no other kind of key.
+    const deepseek = await ask(
+      alice,
+      'POST',
+      'providers/mine',
+      {},
+      { label: 'DeepSeek', presetSlug: 'deepseek', baseUrl: 'https://api.deepseek.com/anthropic', apiKey: subscription() },
+      201,
+    );
+    const deepseekId = String(deepseek.json.id);
+    const balance = await ask(alice, 'GET', 'providers/mine/:id/balance', { id: deepseekId }, undefined, 200);
+    await ask(bob, 'GET', 'providers/mine/:id/balance', { id: deepseekId }, undefined, 404);
+    await ask(alice, 'GET', 'providers/mine/:id/balance', { id: pub(personal) }, undefined, 400);
+    await ask(alice, 'GET', 'providers/mine/:id/balance', { id: sharedId }, undefined, 404);
+    assert.deepEqual(
+      { ok: balance.json.ok, total: balance.json.balances?.[0]?.totalBalance },
+      { ok: true, total: '110.00' },
+      'the balance body checked below carries a balance',
+    );
+    await ask(alice, 'DELETE', 'providers/mine/:id', { id: deepseekId }, undefined, 200);
     // A key typed into the connect form is probed with, not echoed.
     await ask(alice, 'POST', 'providers/test', {}, { baseUrl: ANTHROPIC, apiKey: subscription(), model: 'claude-opus-5', runtime: 'claude' }, 201);
     // One of her own connected, its key rotated, then deleted.
@@ -1226,6 +1261,7 @@ exec sleep 300
       // Her pool where a provider's id or slug goes — a pool is no provider, to either of them — and its
       // members, which a Codex pool has none of.
       await ask(bearer, 'GET', 'providers/mine/:id/key', at, undefined, 404);
+      await ask(bearer, 'GET', 'providers/mine/:id/balance', at, undefined, 404);
       await ask(bearer, 'PATCH', 'providers/mine/:id', at, { label: 'Renamed' }, 404);
       await ask(bearer, 'DELETE', 'providers/mine/:id', at, undefined, 404);
       await ask(bearer, 'POST', 'providers/pools/:id/members', at, { providerId: at.id }, 404);

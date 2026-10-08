@@ -153,43 +153,6 @@ export async function postWorkNotOnBranchComment(
 }
 
 /**
- * Durable evidence for the one EXECUTABLE command a Task declared. `rawOutput` is appended last and
- * unchanged, so everything after the labelled boundary is exactly the runner's combined
- * stdout/stderr (including an empty string or a missing trailing newline). The status is a
- * server-side comparison result, never prose supplied by the executing session.
- */
-export async function postExecutableAcceptanceComment(
-  tx: Prisma.TransactionClient,
-  taskId: string,
-  command: string,
-  expectedExitCode: number,
-  actualExitCode: number,
-  rawOutput: string,
-  status: TaskStatus,
-): Promise<void> {
-  const task = await tx.task.findUnique({
-    where: { id: taskId },
-    select: { assigneeId: true, creatorType: true, creatorId: true },
-  });
-  if (!task) return;
-  await tx.taskComment.create({
-    data: {
-      taskId,
-      authorType: task.assigneeId ? CreatorType.AGENT : task.creatorType,
-      authorId: task.assigneeId ?? task.creatorId,
-      body:
-        `**EXECUTABLE 验收命令（系统自动执行）**\n\n` +
-        `命令：${command}\n\n` +
-        `期望退出码：${expectedExitCode}\n` +
-        `实际退出码：${actualExitCode}\n` +
-        `推导状态：${status}\n\n` +
-        `原始输出（stdout/stderr 合并，未裁剪；PostgreSQL 不可存储的 NUL 除外）：\n` +
-        rawOutput,
-    },
-  });
-}
-
-/**
  * A reserved EXECUTABLE turn is a mechanical evaluator, so a transport/declaration mismatch is
  * not a failing criterion result and must not be turned into TaskStatus.FAILED. It still needs a
  * durable, human-readable exit: this append-only signal records the command that was owed, the
