@@ -1,0 +1,35 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window-2/prior-select-keys.config.mjs --project chromium-dark-desktop'",
+ "env": {},
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "runner": "run-chunks.py (inside one mcp__orbit__bg_run job)",
+ "commit": "069601b675c735a69263f4a75f8d4349c0877c77",
+ "webTree": "34ebe07972ab9680cad0775ad5f4169c39b5f98b",
+ "dirtyWeb": "",
+ "startedAt": "2026-10-07T15:16:50.268018+00:00",
+ "endedAt": "2026-10-07T15:26:42.547828+00:00",
+ "loadAverage": {
+  "start": [
+   18.40771484375,
+   25.7138671875,
+   22.685546875
+  ],
+  "end": [
+   48.65380859375,
+   36.9833984375,
+   28.9072265625
+  ]
+ },
+ "exitCode": 0,
+ "outputSha256": "2d2024ca0fa89f01d982c166916fd88bcacf7ddc2e2adafee050e39a0cfa997f",
+ "outputBytes": 49086,
+ "raw": "/var/tmp/kw2-246921c8/runs/prior-select-keys-after",
+ "stats": {
+  "expected": 276,
+  "unexpected": 0,
+  "skipped": 0,
+  "flaky": 0,
+  "duration": 591927.9330000001,
+  "samples": 276
+ }
+}

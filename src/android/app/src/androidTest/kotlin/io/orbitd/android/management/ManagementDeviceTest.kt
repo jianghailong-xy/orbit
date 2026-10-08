@@ -65,6 +65,12 @@ class ManagementDeviceTest {
     @Volatile private var runnerSelfUpdate: String? = null
     /** Runners served instead of the one controlled remote, for the Edit case; DELETE and reorder change it. */
     @Volatile private var fleet: List<String>? = null
+    /** The remote reports Antigravity's Google accounts and more accounts of Claude Code (A13c). */
+    @Volatile private var accountsPass = false
+    /** Default's Claude login lapses in two days until it is signed in again, then in a month. */
+    @Volatile private var claudeRenewed = false
+    /** The sign-in relay as GET runners/:id/login reads it; POST login and POST login/code move it on. */
+    @Volatile private var loginRelay = """{"status":null,"engine":null,"userCode":null,"url":null,"message":null,"account":null}"""
     @Volatile private var workspaceName = "Fixture workspace"
     @Volatile private var sharingActive = true
     @Volatile private var shareTools = false
@@ -245,6 +251,94 @@ class ManagementDeviceTest {
             } finally {
                 runBlocking { app.session.logout() }
                 File(app.filesDir, "a13-management").apply { mkdirs() }.resolve("runner-requests.txt").writeText(calls.joinToString("\n"))
+            }
+        }
+    }
+
+    /**
+     * A13c: Antigravity's Google sign-in and accounts, one quota window per Engines row, an account's row and menu, and the
+     * sign-in card (A13-3/4/5/9), through the real shell over controlled HTTP. The card's Paste reads the clipboard, which
+     * Android says it did ("pasted from your clipboard"): the platform's own notice, kept.
+     */
+    @Test fun antigravityAccountsOneWindowAndTheSignInCard() {
+        start()
+        MockWebServer().use { server ->
+            server.dispatcher = dispatcher()
+            try {
+                role = "ADMIN"; runnerOnline = true; accountsPass = true; claudeRenewed = false
+                signIn(server); settings()
+                click(hasText("Runners") and hasClickAction()); await("Controlled remote")
+                click(hasText("Controlled remote") and hasClickAction()); await("Max Concurrent")
+                // One window per Engines row; Antigravity's names the account a new session starts on above its own.
+                await("Next: Default"); await("2 accounts signed in"); await("98% remaining")
+                compose.onAllNodesWithText("98% remaining", substring = true).onFirst().performScrollTo()
+                capture("agy-runner-engines")
+                click(hasText("Antigravity") and hasClickAction()); await("Accounts"); await("4% remaining")
+                capture("agy-engine")
+                compose.onAllNodesWithText("Google terms", substring = true).onLast().performScrollTo()
+                compose.onNode(hasText("Add Account") and hasClickAction()).assertExists()
+                capture("agy-engine-terms")
+                back()
+                click(hasText("Claude Code") and hasClickAction()); await("Login expires in 2 days")
+                await("Sessions can’t use this account until you sign in again.")
+                capture("accounts-state")
+                compose.onNodeWithContentDescription("More for Work").performScrollTo().performClick()
+                await("Resume Now"); await("Change Duration…")
+                capture("account-menu")
+                click(hasText("Resume Now"), scroll = false)
+                compose.waitUntil(10_000) { calls.contains("POST /api/runners/$runnerId/accounts/claude/1fda3f43/pause") }
+                // Sign In Again from Default's menu starts at once; the card offers one way out, and Paste sends the code.
+                compose.onNodeWithContentDescription("More for Default").performScrollTo().performClick()
+                click(hasText("Sign In Again"), scroll = false)
+                await("Approve it there, then paste the code the page gives you:")
+                assertTrue("one way out while it runs", compose.onAllNodes(hasText("Close") and hasClickAction()).fetchSemanticsNodes().isEmpty())
+                compose.onNode(hasText("Paste") and hasClickAction()).performScrollTo()
+                capture("sign-in-paste")
+                compose.runOnUiThread {
+                    (app.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager)
+                        .setPrimaryClip(android.content.ClipData.newPlainText("code", "a13c-pasted-code"))
+                }
+                // Only the focused app reads the clipboard. Android 13+ answers this test's own copy with its clipboard bubble,
+                // which can hold the focus for a moment; a user taps Paste back in the app, which has it. So the tap waits for
+                // the focus, and is tried again if a read was refused meanwhile. The attempts are kept with the requests.
+                var pasteAttempts = 0
+                while (!calls.contains("POST /api/runners/$runnerId/login/code") && pasteAttempts < 3) {
+                    val focusBy = SystemClock.uptimeMillis() + 10_000
+                    while (!compose.activity.hasWindowFocus() && SystemClock.uptimeMillis() < focusBy) SystemClock.sleep(250)
+                    pasteAttempts++
+                    click(hasText("Paste") and hasClickAction())
+                    val sentBy = SystemClock.uptimeMillis() + 5_000
+                    while (!calls.contains("POST /api/runners/$runnerId/login/code") && SystemClock.uptimeMillis() < sentBy) {
+                        compose.waitForIdle(); SystemClock.sleep(250)
+                    }
+                }
+                calls += "paste attempts=$pasteAttempts"
+                assertTrue("Paste sent the code", calls.contains("POST /api/runners/$runnerId/login/code"))
+                await("Signed in — this runner is ready.")
+                capture("sign-in-pasted")
+                // The runner reports Default signed in again, its login a month off: the card folds back into the row.
+                // The page's timers run on the test's clock, which a plain sleep never moves: move it with real time.
+                val foldBy = System.currentTimeMillis() + 30_000
+                while (compose.onAllNodesWithText("Signed in — this runner is ready.", substring = true).fetchSemanticsNodes().isNotEmpty() ||
+                    compose.onAllNodesWithText("Login expires", substring = true).fetchSemanticsNodes().isNotEmpty()) {
+                    assertTrue("the card folds back once the runner reports the account", System.currentTimeMillis() < foldBy)
+                    compose.mainClock.advanceTimeBy(500); compose.waitForIdle(); SystemClock.sleep(200)
+                }
+                capture("sign-in-folded")
+                back()
+                // A device code comes first, under one press that copies it and opens its page.
+                click(hasText("Codex") and hasClickAction()); await("Sessions on this runner can’t use Codex until you sign in again.")
+                click(hasText("Sign In") and hasClickAction())
+                await("Enter this one-time code on the sign-in page:"); await("WXYZ-1234"); await("Copy Code & Open Sign-In Page")
+                capture("sign-in-device-code")
+                click(hasText("Cancel") and hasClickAction())
+                compose.waitUntil(10_000) { calls.contains("DELETE /api/runners/$runnerId/login") }
+                back()
+                assertTrue(calls.contains("POST /api/runners/$runnerId/login"))
+            } finally {
+                accountsPass = false
+                runBlocking { app.session.logout() }
+                File(app.filesDir, "a13-management").apply { mkdirs() }.resolve("accounts-requests.txt").writeText(calls.joinToString("\n"))
             }
         }
     }
@@ -689,7 +783,30 @@ class ManagementDeviceTest {
         "version":"0.1.200","online":true,"status":"ONLINE","lastHeartbeatAt":"$now","maxConcurrent":2,"activeSessions":0,"runsAsRoot":false,
         "minFreeDiskMb":null,"engines":[],"enrolledAt":"2026-09-01T00:00:00Z"}"""
     }
-    private fun runner() = """{"id":"$runnerId","name":"controlled-remote","displayName":"Controlled remote","hostname":"ci-runner-01","version":"0.1.199",
+    private fun at(seconds: Long) = now.plusSeconds(seconds).toString()
+    private fun buckets(vararg left: Double) = listOf("gemini-weekly", "gemini-5h", "3p-weekly", "3p-5h").zip(left.toList()).joinToString(",", "[", "]") { (id, rest) ->
+        """{"id":"$id","window":"${if (id.endsWith("5h")) "5h" else "weekly"}","remainingFraction":$rest,"resetTime":"${at(if (id.endsWith("5h")) 3 * 3600 else 4 * 86400)}"}"""
+    }
+    /** The remote in the A13c pass: Claude Code with three accounts (a login about to lapse, one paused, one signed out),
+     * Codex signed out, and Antigravity signed in to two Google accounts, each with its own buckets. */
+    private fun accountsRunner() = """{"id":"$runnerId","name":"controlled-remote","displayName":"Controlled remote","hostname":"ci-runner-01","version":"0.1.199",
+        "online":true,"status":"ONLINE","lastHeartbeatAt":"${heartbeat()}","maxConcurrent":4,"activeSessions":1,"runsAsRoot":false,"selfUpdate":null,
+        "minFreeDiskMb":null,"reposRoot":"/home/ci/orbit-repos","enrolledAt":"2026-09-01T10:00:00Z",
+        "capabilities":["claude-account-remove/v1","antigravity-google-login/v1","antigravity-account-login/v1","antigravity-account-remove/v1","os:linux"],
+        "antigravity":{"supported":true,"installed":true,"version":"1.3.0","envKeyAvailable":true,"authSource":"google","googleLogin":"available"},
+        "engines":[{"engine":"claude","installed":true,"version":"2.1.284 (Claude Code)","auth":"yes",
+            "accounts":[{"id":"default","home":"/home/ci/.claude","auth":"yes","loginExpiresAt":"${at(if (claudeRenewed) 30 * 86400 else 47 * 3600)}"},
+              {"id":"1fda3f43","name":"Work","home":"/home/ci/.orbit/claude-accounts/1fda3f43","auth":"yes","pausedUntil":"${at(2 * 3600)}"},
+              {"id":"7d3e0c11","name":"Old","home":"/home/ci/.orbit/claude-accounts/7d3e0c11","auth":"no"}]},
+          {"engine":"codex","installed":true,"version":"codex-cli 0.158.0","auth":"no"},{"engine":"kimi","installed":false},
+          {"engine":"antigravity","installed":true,"version":"1.3.0","auth":"yes","authSource":"google",
+            "accounts":[{"id":"default","home":"/home/ci/.orbit/antigravity/google","auth":"yes"},
+              {"id":"5c2e91a0","name":"Work","home":"/home/ci/.orbit/antigravity-accounts/5c2e91a0","auth":"yes"}],
+            "planUsage":{"provider":"antigravity","buckets":${buckets(1.0, 1.0, 0.98, 1.0)},
+              "accounts":{"5c2e91a0":{"provider":"antigravity","buckets":${buckets(0.61, 0.04, 1.0, 1.0)}}}}}],
+        "planUsage":{"claude":{"fiveHour":{"utilization":42,"resetsAt":"${at(7200)}"},"sevenDay":{"utilization":61,"resetsAt":"${at(3 * 86400)}"},
+          "accounts":{"1fda3f43":{"fiveHour":{"utilization":12,"resetsAt":"${at(3600)}"},"sevenDay":{"utilization":30,"resetsAt":"${at(5 * 86400)}"}}}}},"install":null}"""
+    private fun runner() = if (accountsPass) accountsRunner() else """{"id":"$runnerId","name":"controlled-remote","displayName":"Controlled remote","hostname":"ci-runner-01","version":"0.1.199",
         "online":$runnerOnline,"status":"${if (runnerOnline) "ONLINE" else "OFFLINE"}","lastHeartbeatAt":"${heartbeat()}","maxConcurrent":4,"activeSessions":1,
         "runsAsRoot":false,"selfUpdate":${runnerSelfUpdate ?: "null"},"minFreeDiskMb":null,"reposRoot":"/home/ci/orbit-repos","enrolledAt":"2026-09-01T10:00:00Z","capabilities":["claude-account-remove/v1"],
         "engines":[{"engine":"claude","installed":true,"version":"2.1.284 (Claude Code)","auth":"yes","update":{"status":"checked","at":"${now.minusSeconds(360)}","okAt":"${now.minusSeconds(360)}","latest":"2.1.284"},
@@ -764,7 +881,22 @@ class ManagementDeviceTest {
                 "/api/workspaces" -> "[${workspace()}]"
                 "/api/workspaces/$workspaceId" -> { if (request.method == "PATCH") workspaceName = bodyOf()["name"]!!.jsonPrimitive.content; workspace() }
                 "/api/runners" -> "[${runner()}]"
-                "/api/runners/$runnerId/login" -> """{"status":null,"engine":null,"userCode":null,"url":null,"message":null,"account":null}"""
+                "/api/runners/$runnerId/login" -> when (request.method) {
+                    "POST" -> {
+                        val start = bodyOf()
+                        loginRelay = if (start["engine"]?.jsonPrimitive?.content == "codex")
+                            """{"status":"awaiting_approval","engine":"codex","userCode":"WXYZ-1234","url":"https://auth.openai.com/codex/device","message":null,"account":null}"""
+                        else """{"status":"awaiting_code","engine":"claude","userCode":null,"url":"https://claude.ai/oauth/authorize?code=true","message":null,"account":"default"}"""
+                        loginRelay
+                    }
+                    "DELETE" -> { loginRelay = """{"status":"cancelled","engine":null,"userCode":null,"url":null,"message":null,"account":null}"""; loginRelay }
+                    else -> loginRelay
+                }
+                "/api/runners/$runnerId/login/code" -> {
+                    claudeRenewed = true
+                    loginRelay = """{"status":"done","engine":"claude","userCode":null,"url":null,"message":null,"account":"default"}"""
+                    loginRelay
+                }
                 "/api/sessions" -> if (request.requestUrl!!.queryParameter("view") == "open") "[${session()}]" else "[]"
                 "/api/sessions/counts" -> """[{"workspaceId":"$workspaceId","active":1,"running":1,"jobs":0,"needsYou":0}]"""
                 "/api/providers" -> """[{"slug":"openai-work","label":"OpenAI (work)","defaultModel":"gpt-5"}]"""

@@ -6,6 +6,23 @@ import org.junit.Test
 import java.io.File
 import java.time.ZoneId
 
+/** HPC, 2026-10-07 (OrbitKit RunnerPageFormatTests.hpcJSON): a heartbeat carrying one provider alone, so Claude comes flat,
+ * every added account's own snapshot at the payload's top level beside Default's windows. */
+internal val hpcRunner: JsonObject = Json.parseToJsonElement("""
+    {"id":"0199a0c4-7a1e-7c3e-9d4f-2a6b8c0d1e31","name":"workstation-gpu","displayName":"HPC","hostname":"workstation","status":"ONLINE",
+     "online":true,"version":"0.1.219","lastHeartbeatAt":"2026-10-07T05:50:00Z","enrolledAt":"2026-06-18T02:00:00Z","maxConcurrent":16,
+     "activeSessions":7,"runsAsRoot":true,"minFreeDiskMb":null,
+     "engines":[{"engine":"claude","installed":true,"version":"2.1.292 (Claude Code)","auth":"yes",
+       "accounts":[{"id":"default","name":"jianghailong.wikova@gmail.com","home":"/root/.claude","auth":"yes"},
+                   {"id":"1e84046c","name":"jianghailong.rd@gmail.com","home":"/root/.orbit/claude-accounts/1e84046c","auth":"yes"},
+                   {"id":"44bf2acd","name":"jianghailong.orbit@gmail.com","home":"/root/.orbit/claude-accounts/44bf2acd","auth":"yes"}]}],
+     "planUsage":{"provider":"claude","fiveHour":{"utilization":84,"resetsAt":"2026-10-06T22:50:00.392895+00:00"},
+       "sevenDay":{"utilization":77,"resetsAt":"2026-10-09T04:00:00.392921+00:00"},
+       "accounts":{"1e84046c":{"provider":"claude","fiveHour":{"utilization":0,"resetsAt":"2026-10-07T03:09:59.561135+00:00"},
+                               "sevenDay":{"utilization":41,"resetsAt":"2026-10-12T10:59:59.561155+00:00"}},
+                   "44bf2acd":{"provider":"claude","fiveHour":{"utilization":0},"sevenDay":{"utilization":0,"resetsAt":"2026-10-13T22:00:00+00:00"}}},
+       "fetchedAt":"2026-10-06T22:18:26Z"}}""").jsonObject
+
 /**
  * The web's runner-attention rule (src/web/src/lib/runnerAttention.cases.json), run case by case on the
  * Android port, as OrbitKit's RunnerAttentionCasesTests runs it on iOS's. Missing file is a failure.
@@ -189,6 +206,33 @@ class RunnerPageTest {
         assertEquals(40, accountSnapshot(planUsageSnapshot(nested, "claude"), "1fda3f43")!!.let(::usageRows).single().percent)
         assertNull(planUsageSnapshot(nested, "kimi"))
         assertNull(planUsageSnapshot(nested, "opencode"))
+    }
+
+    /** A13-6: rebuilding the flat snapshot without `accounts` left every added account "No quota reported" while Default read. */
+    @Test fun aFlatPayloadKeepsEveryAddedAccountsOwnQuota() {
+        assertEquals(listOf(0, 41), RunnerPage.accountWindows(hpcRunner, "claude", "1e84046c").map { it.percent })
+        assertEquals(listOf(0, 0), RunnerPage.accountWindows(hpcRunner, "claude", "44bf2acd").map { it.percent })
+        assertEquals("Default's are the flat payload's own windows, not an added account's", listOf(84, 77),
+            RunnerPage.accountWindows(hpcRunner, "claude", "default").map { it.percent })
+        assertEquals("a flat Claude payload is no Codex snapshot", emptyList<UsageRow>(), RunnerPage.accountWindows(hpcRunner, "codex", "1e84046c"))
+    }
+
+    /** A13-5: one window per Engines row — the one that stops that login first — and every window on the engine page; with two
+     * accounts, the window of the one a new session starts on. Times are the clock's, as the page's are. */
+    @Test fun anEngineRowCarriesOneWindowEvenWithSeveralAccounts() {
+        val now = java.time.Instant.now()
+        fun at(hours: Long) = now.plusSeconds(hours * 3600).toString()
+        val runner = Json.parseToJsonElement("""{"id":"r","name":"wikova","online":true,"lastHeartbeatAt":"$now",
+            "engines":[{"engine":"claude","installed":true,"auth":"yes"},
+              {"engine":"codex","installed":true,"auth":"yes","accounts":[{"id":"default","auth":"yes"},{"id":"1fda3f43","name":"Work","auth":"yes"}]}],
+            "planUsage":{"claude":{"fiveHour":{"utilization":14,"resetsAt":"${at(2)}"},"sevenDay":{"utilization":98,"resetsAt":"${at(50)}"}},
+              "codex":{"provider":"codex","primary":{"utilization":20,"windowDurationMins":300,"resetsAt":"${at(3)}"},
+                "accounts":{"1fda3f43":{"provider":"codex","primary":{"utilization":91,"windowDurationMins":300,"resetsAt":"${at(1)}"}}}}}}""").jsonObject
+        assertEquals(listOf("Weekly · all models" to 98), RunnerPage.engineWindows(runner, "claude").map { it.label to it.percent })
+        assertEquals(listOf("5-hour limit", "Weekly · all models"), RunnerPage.accountWindows(runner, "claude", "default").map { it.label })
+        // Work's 5 hours are nearly spent (91%): a new session starts on Default, whose window the row carries.
+        assertEquals(listOf(20), RunnerPage.engineWindows(runner, "codex").map { it.percent })
+        assertEquals(listOf(91), RunnerPage.accountWindows(runner, "codex", "1fda3f43").map { it.percent })
     }
 
     @Test fun aDraggedRowTakesTheNextPlaceOncePastHalfOfIt() {

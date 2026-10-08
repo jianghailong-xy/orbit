@@ -88,7 +88,7 @@ final class SharePanelTests: XCTestCase {
 
     func testEachKindHasItsOwnTitle() {
         XCTAssertEqual(ShareRootKind.allCases.map { SharePanel(kind: $0).title },
-                       ["Share session", "Share task", "Share project"])
+                       ["Share session", "Share task", "Share project", "Share wiki"])
     }
 
     // MARK: Includes
@@ -102,6 +102,30 @@ final class SharePanelTests: XCTestCase {
         XCTAssertEqual(rows.map(\.isOn), [true, false])
         XCTAssertEqual(rows.map(\.isEditable), [false, true], "Messages is always included")
         XCTAssertEqual(rows[1].detail, "Commands, file reads and what they returned. Off shows only which tools ran.")
+    }
+
+    /// A wiki (share-links §10): its documents, always, and Footnotes — off until it is turned on, and
+    /// its risk said in amber only then.
+    func testAWikiOffersItsDocumentsAndFootnotesAndWarnsOnlyOnceFootnotesIsOn() {
+        let counts = ShareCounts(documents: 12, footnotes: 486)
+        var panel = panel(.wiki, link(.wiki, include: ShareInclude(footnotes: false)), counts: counts)
+        var rows = panel.layers
+        XCTAssertEqual(rows.map(\.name), ["Documents", "Footnotes"])
+        XCTAssertEqual(rows.map(\.count), ["12 documents", "486 footnotes"])
+        XCTAssertEqual(rows.map(\.layer), [nil, .footnotes])
+        XCTAssertEqual(rows.map(\.isOn), [true, false])
+        XCTAssertEqual(rows.map(\.isEditable), [false, true], "Documents is always included")
+        XCTAssertEqual(rows.map(\.warns), [false, false])
+        XCTAssertEqual(rows[0].detail, "The wiki’s home and every document written so far")
+        XCTAssertEqual(rows[1].detail,
+                       "The quotes and code each sentence cites, with file paths and lines. Can include command output and file contents.")
+        XCTAssertEqual(panel.title, "Share wiki")
+
+        let request = panel.toggle(.footnotes, on: true)
+        XCTAssertEqual(request, PutShareLinkRequest(include: ShareInclude(footnotes: true)))
+        rows = panel.layers
+        XCTAssertEqual(rows.map(\.isOn), [true, true])
+        XCTAssertEqual(rows.map(\.warns), [false, true])
     }
 
     func testATaskOffersOverviewCommentsAndConversationsAndWarnsOnlyOnceConversationsIsOn() {

@@ -89,6 +89,138 @@ internal object RunnerCopy {
         "on a Mac, opening the latest Orbit app does this."
 }
 
+/** An engine's accounts and Antigravity's Google sign-in in iOS's words (RunnerPageCopy, EngineAuth, RunnerEnginePage,
+ * RunnerSignInView); AccountCopyParityTest finds each one in those Swift sources. */
+internal object AccountCopy {
+    const val SIGN_IN_AGAIN = "Sign In Again"
+    const val SIGN_IN_WITH_GOOGLE = "Sign in with Google"
+    const val RENEW = "Renew"
+    const val ACCOUNT_SIGNED_OUT_NOTE = "Sessions can’t use this account until you sign in again."
+    const val UNIT_DAY = "day"
+    const val UNIT_DAYS = "days"
+    const val ENV_KEY = "env key"
+    const val ENV_KEY_LINE = "env key · runs on your Gemini key"
+    const val NOT_SUPPORTED_YET = "Not supported yet"
+    const val UPDATE_RUNNER = "Update runner"
+    const val HINT_UNSUPPORTED = "Google sign-in is not supported on macOS runners yet. Use a Gemini API key."
+    const val HINT_UPDATE = "Update this runner to sign in with Google."
+    const val GOOGLE_TERMS_WARNING = "Google terms restrict personal account sign-in through third-party tools; your account may be suspended."
+    const val GOOGLE_TERMS = "Google terms"
+    const val GOOGLE_TERMS_URL = "https://antigravity.google/terms"
+    const val RENAME = "Rename…"
+    const val PAUSE = "Pause…"
+    const val RESUME_NOW = "Resume Now"
+    const val CHANGE_DURATION = "Change Duration…"
+    const val REMOVE = "Remove…"
+    const val ADD_ACCOUNT = "Add Account"
+    const val CANCEL = "Cancel"
+    const val CLOSE = "Close"
+    const val ENTER_CODE = "Enter this one-time code on the sign-in page:"
+    const val COPY_CODE_AND_OPEN = "Copy Code & Open Sign-In Page"
+    const val OPEN_PAGE = "Open the sign-in page"
+    const val PASTE_THE_CODE = "Paste the code"
+    const val APPROVE_THEN_PASTE = "Approve it there, then paste the code the page gives you:"
+    const val SUBMIT = "Submit"
+    const val WAITING_FOR_APPROVAL = "Waiting for you to approve it…"
+    fun loginExpires(count: Int, unit: String) = "Login expires in $count $unit"
+    fun signedOutAlone(engine: String) = "Sessions on this runner can’t use $engine until you sign in again."
+    fun next(account: String) = "Next: $account"
+}
+
+/**
+ * CodexAccounts: a runner's accounts of an engine that keeps several (Claude Code, Codex, Antigravity) — whose quota each
+ * one reads, which one a new session starts on, and what moves a session between them. Shared by the runner pages and
+ * the composer's account rows.
+ */
+internal object EngineAccounts {
+    const val DEFAULT = "default"
+    const val AUTOMATIC = "automatic"
+    /** What a runner declares once it signs an Antigravity account Orbit names into that account's own Gemini directory. */
+    const val ANTIGRAVITY_ACCOUNT_LOGIN = "antigravity-account-login/v1"
+    private const val NEAR_LIMIT = 90.0
+    private const val SHORT_WINDOW_NEAR_LIMIT = 80.0
+    private const val SHORT_WINDOW_MINS = 5 * 60
+    private const val WEEK_MINS = 7 * 24 * 60
+    /** How long an Antigravity bucket's window is, from agy's own name for it (shared BUCKET_WINDOW_MINS). */
+    private val bucketWindowMins = mapOf("5h" to 5 * 60, "weekly" to WEEK_MINS)
+
+    /** The snapshot an engine's accounts read their quota from: the runner's own report, but Antigravity's, which travels
+     * with its engine health (Default's buckets beside every other account's under `accounts`). */
+    fun usage(engine: String, runner: JsonObject): JsonObject? = if (engine == "antigravity")
+        runner.list("engines").firstOrNull { it.str("engine") == engine }?.obj("planUsage")
+        else planUsageSnapshot(runner.obj("planUsage"), engine)
+
+    /** What a runner declares when a session there can move to another of its accounts of [engine]: Antigravity's
+     * conversation lives in the session's own directory, so a runner that keeps its accounts at all moves one. */
+    fun moveCapability(engine: String) = when (engine) {
+        "claude" -> "claude-account-move/v1"; "antigravity" -> ANTIGRAVITY_ACCOUNT_LOGIN; else -> "codex-account-move/v1"
+    }
+
+    /** One Antigravity bucket as the window it names, for weighing quota against quota: what agy says is left, as the
+     * share used every other window speaks in. What a page shows stays agy's remaining fraction (usageRows). */
+    fun bucketWindow(bucket: JsonObject): JsonObject = buildJsonObject {
+        put("utilization", (1 - (bucket.dbl("remainingFraction") ?: 0.0)) * 100)
+        bucket.str("resetTime")?.let { put("resetsAt", it) }
+        bucketWindowMins[bucket.str("window")]?.let { put("windowDurationMins", it) }
+    }
+
+    /** Every window of one snapshot with its length in minutes: Claude's named ones by their names, Codex's as reported,
+     * Antigravity's buckets as the windows they are. */
+    fun withLength(snapshot: JsonObject): List<Pair<JsonObject, Int?>> {
+        val named = listOf("fiveHour" to 5 * 60, "sevenDay" to WEEK_MINS, "sevenDayOpus" to WEEK_MINS, "sevenDaySonnet" to WEEK_MINS)
+            .mapNotNull { (key, mins) -> snapshot.obj(key)?.let { it to (it.int("windowDurationMins") ?: mins) } }
+        val reported = listOfNotNull(snapshot.obj("primary"), snapshot.obj("secondary")) +
+            snapshot.list("rateLimits").flatMap { listOfNotNull(it.obj("primary"), it.obj("secondary")) } +
+            snapshot.list("buckets").map(::bucketWindow)
+        return named + reported.map { it to it.int("windowDurationMins") }
+    }
+
+    fun windows(snapshot: JsonObject): List<JsonObject> = withLength(snapshot).map { it.first }
+
+    private fun resetMs(window: JsonObject) = isoMs(window.str("resetsAt"))
+    private fun used(window: JsonObject) = window.dbl("utilization") ?: 0.0
+
+    /** Any window nearly spent and not past its reset: 80% of one of five hours or less, 90% of a longer one. */
+    fun nearlySpent(snapshot: JsonObject, nowMs: Long) = withLength(snapshot).any { (window, mins) ->
+        val open = resetMs(window)?.let { it <= nowMs } != true
+        open && used(window) >= (if (mins != null && mins <= SHORT_WINDOW_MINS) SHORT_WINDOW_NEAR_LIMIT else NEAR_LIMIT)
+    }
+
+    /** When what an account has left goes to waste: the reset of its longest window — or, when none says how long it
+     * is, the latest reset. Infinity when no window names a reset ahead. */
+    fun expiresAt(snapshot: JsonObject, nowMs: Long): Double {
+        val ahead = withLength(snapshot).mapNotNull { (window, mins) -> resetMs(window)?.takeIf { it > nowMs }?.let { mins to it } }
+        val longest = ahead.maxOfOrNull { it.first ?: -1 } ?: return Double.POSITIVE_INFINITY
+        val pick = if (longest >= 0) ahead.filter { (it.first ?: -1) == longest } else ahead
+        return pick.maxOfOrNull { it.second.toDouble() } ?: Double.POSITIVE_INFINITY
+    }
+
+    /**
+     * CodexAccounts.toStartOn: which account a new session with none picked starts on — the one whose quota would go to
+     * waste first. Signed-out accounts are no candidates; one with a spent window, or paused by hand, waits until it frees
+     * up; one nearly spent comes after the rest; then the soonest-expiring, then the roomiest by its tightest window; ties
+     * go to Default, then the lower id. Every candidate held: the one that frees up first. Null with fewer than two.
+     */
+    fun toStartOn(accounts: List<JsonObject>, usage: JsonObject?, nowMs: Long): String? {
+        if (accounts.size < 2) return null
+        class Candidate(val id: String, val nearLimit: Boolean, val expiresAt: Double, val tightest: Double, val spentUntil: Double?)
+        val candidates = accounts.filter { it.str("auth") != "no" }.map { account ->
+            val own = accountSnapshot(usage, account.text("id"))
+            val windows = own?.let(::windows).orEmpty()
+            val spent = windows.filter { window -> resetMs(window)?.let { it <= nowMs } != true && used(window) >= 100 }
+            var spentUntil = spent.maxOfOrNull { resetMs(it)?.toDouble() ?: Double.POSITIVE_INFINITY }
+            isoMs(account.str("pausedUntil"))?.takeIf { it > nowMs }?.let { pause -> spentUntil = maxOf(pause.toDouble(), spentUntil ?: 0.0) }
+            Candidate(account.text("id"), own?.let { nearlySpent(it, nowMs) } ?: false, own?.let { expiresAt(it, nowMs) } ?: Double.POSITIVE_INFINITY,
+                windows.maxOfOrNull(::used) ?: Double.POSITIVE_INFINITY, spentUntil)
+        }
+        val byId = compareBy<Candidate> { it.id != DEFAULT }.thenBy { it.id }
+        val usable = candidates.filter { it.spentUntil == null }
+        if (usable.isNotEmpty()) return usable.sortedWith(compareBy<Candidate> { it.nearLimit }.thenBy { it.expiresAt }.thenBy { it.tightest }
+            .then(byId)).first().id
+        return candidates.sortedWith(compareBy<Candidate> { it.spentUntil ?: 0.0 }.then(byId)).firstOrNull()?.id
+    }
+}
+
 internal data class AttentionAction(val kind: String, val engine: String? = null, val workspaceId: String? = null, val command: String? = null)
 
 /** One RunnerAttentionItem: kind/tone are the case file's raw values; resetsAt and names feed the page's formatting. */
@@ -97,9 +229,11 @@ internal data class AttentionItem(val kind: String, val tone: String, val short:
 
 internal data class RunnerDisk(val freeBytes: Long, val totalBytes: Long, val usedPercent: Int)
 
-internal data class UsageRow(val key: String, val label: String, val groupLabel: String?, val window: JsonObject) {
+/** One quota window. [remaining]: an Antigravity bucket, whose percent says what is left, as agy says it; `utilization`
+ * stays the share used every other window speaks in. */
+internal data class UsageRow(val key: String, val label: String, val groupLabel: String?, val window: JsonObject, val remaining: Boolean = false) {
     val utilization get() = window.dbl("utilization") ?: 0.0
-    val percent get() = Math.round(utilization).toInt().coerceIn(0, 100)
+    val percent get() = Math.round(if (remaining) 100 - utilization else utilization).toInt().coerceIn(0, 100)
     /** At or past 90% used, judged on the reading rather than its rounding. */
     val nearLimit get() = utilization >= 90
 }
@@ -110,6 +244,7 @@ internal fun JsonObject.long(name: String): Long? = (this[name] as? JsonPrimitiv
 internal fun JsonObject.dbl(name: String): Double? = (this[name] as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()
 internal fun JsonObject.bool(name: String): Boolean? = (this[name] as? JsonPrimitive)?.booleanOrNull
 internal fun JsonObject.obj(name: String): JsonObject? = this[name] as? JsonObject
+internal fun JsonObject.strings(name: String): List<String> = (this[name] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.orEmpty()
 
 /** An ISO time as epoch milliseconds, as Date.parse reads the server's timestamps. */
 internal fun isoMs(iso: String?): Long? {
@@ -131,8 +266,10 @@ internal object RunnerPage {
     /** The engines a runner reports on, in the page's order, with each CLI's own name. */
     val engineOrder = listOf("claude", "codex", "kimi", "opencode", "antigravity")
     /** The engines Orbit signs in on a runner (LoginEngine), in the Engines list's order. */
-    val loginEngines = listOf("claude", "codex", "kimi")
-    private val loginNames = mapOf("claude" to "Claude", "codex" to "Codex", "kimi" to "Kimi")
+    val loginEngines = listOf("claude", "codex", "kimi", "antigravity")
+    private val loginNames = mapOf("claude" to "Claude", "codex" to "Codex", "kimi" to "Kimi", "antigravity" to "Antigravity")
+    /** Antigravity's buckets by the label usageRows gives the window agy names for each. */
+    private val antigravityWindows = mapOf("5-hour" to "5-hour limit", "Weekly" to "weekly limit")
     private val stuckIn = mapOf("unmerged" to "a conflict", "merge" to "a merge", "rebase" to "a rebase",
         "cherry-pick" to "a cherry-pick", "revert" to "a revert")
     private val claudeWindows = mapOf("fiveHour" to "5-hour limit", "sevenDay" to "weekly limit",
@@ -142,9 +279,13 @@ internal object RunnerPage {
 
     fun engineName(engine: String) = when (engine) {
         "claude" -> "Claude Code"; "codex" -> "Codex"; "kimi" -> "Kimi Code"
-        "opencode" -> "OpenCode"; "antigravity" -> "Antigravity CLI"; else -> engine
+        "opencode" -> "OpenCode"; "antigravity" -> "Antigravity"; else -> engine
     }
-    fun keepsAccounts(engine: String) = engine == "claude" || engine == "codex"
+    /** The CLI's name where an update of it is named (runnerEngines.ts ENGINE_CLI_NAME): Antigravity's is still its CLI's. */
+    private fun cliName(engine: String) = if (engine == "antigravity") "Antigravity CLI" else engineName(engine)
+    /** The engines whose CLI keeps a login per directory, so one machine holds several accounts of them (shared
+     * ACCOUNT_ENGINES): an Antigravity account is a Google sign-in in a Gemini directory of its own. */
+    fun keepsAccounts(engine: String) = engine == "claude" || engine == "codex" || engine == "antigravity"
     fun isLoginEngine(engine: String) = engine in loginEngines
 
     // version
@@ -315,26 +456,37 @@ internal object RunnerPage {
     }
 
     private fun quotaWindow(row: UsageRow) = claudeWindows[row.key]
+        // An Antigravity bucket, by the window agy names for it.
+        ?: (if (row.remaining) antigravityWindows[row.label] ?: "usage limit" else null)
         ?: codexWindows.firstOrNull { row.label.endsWith(it.first) }?.second ?: "usage limit"
 
-    /** Warn only when every candidate account is near its limit; name the fullest window of the roomiest. */
+    /** How much of a window is used, whichever way its row counts it: an Antigravity bucket's says what is left. */
+    private fun usedPercent(row: UsageRow) = if (row.remaining) 100 - row.percent else row.percent
+
+    /** Warn only when every candidate account is near its limit; name the fullest window of the roomiest. An Antigravity
+     * Default that runs on the machine's Gemini key (runsOnEnvKey) has no quota to run out of. */
     private fun quotaItems(runner: JsonObject, workspaces: List<JsonObject>, nowMs: Long) = loginEngines.mapNotNull { engine ->
         val users = workspacesOn(workspaces, engine).takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-        val usage = planUsageSnapshot(runner.obj("planUsage"), engine)
-        val accounts = engineHealth(runner, engine)?.list("accounts").orEmpty()
-        val snapshots = if (keepsAccounts(engine) && accounts.isNotEmpty())
-            accounts.filter { it.str("auth") != "no" }.map { accountSnapshot(usage, it.text("id")) } else listOf(usage)
+        // Antigravity's quota travels with its engine's health, not in the runner's plan usage.
+        val usage = EngineAccounts.usage(engine, runner)
+        val health = engineHealth(runner, engine)
+        val accounts = health?.list("accounts").orEmpty()
+        val snapshots = if (keepsAccounts(engine) && health != null && accounts.isNotEmpty()) {
+            fun onKey(account: JsonObject) = runsOnEnvKey(health, account.text("id"), account.str("auth"))
+            accounts.filter { it.str("auth") != "no" || onKey(it) }.map { if (onKey(it)) null else accountSnapshot(usage, it.text("id")) }
+        } else listOf(usage)
         var fullest: UsageRow? = null
         for (snapshot in snapshots) {
             val near = snapshot?.let(::usageRows).orEmpty().filter { row -> row.nearLimit && isoMs(row.window.str("resetsAt"))?.let { it <= nowMs } != true }
             var accountFullest = near.firstOrNull() ?: return@mapNotNull null
-            for (row in near.drop(1)) if (row.percent > accountFullest.percent) accountFullest = row
-            if (fullest == null || accountFullest.percent < fullest.percent) fullest = accountFullest
+            for (row in near.drop(1)) if (usedPercent(row) > usedPercent(accountFullest)) accountFullest = row
+            if (fullest == null || usedPercent(accountFullest) < usedPercent(fullest)) fullest = accountFullest
         }
         val row = fullest ?: return@mapNotNull null
         val name = loginNames.getValue(engine)
         val window = quotaWindow(row)
-        AttentionItem("quotaNearLimit", "warn", "$name $window ${row.percent}%", "$name $window at ${row.percent}%",
+        val percent = usedPercent(row)
+        AttentionItem("quotaNearLimit", "warn", "$name $window $percent%", "$name $window at $percent%",
             if (users.size == 1) "${users[0]} runs on this machine’s $name login — its sessions pause if the limit runs out."
             else "${namesPhrase(users)} run on this machine’s $name login — their sessions pause if the limit runs out.",
             resetsAt = row.window.str("resetsAt"), names = users)
@@ -406,7 +558,7 @@ internal object RunnerPage {
     private fun engineUpdateItems(runner: JsonObject, nowMs: Long) = engineOrder.mapNotNull { engine ->
         val health = engineHealth(runner, engine)?.takeIf { it.bool("installed") == true } ?: return@mapNotNull null
         val note = updateNoteOf(health.obj("update"), nowMs)?.takeIf { it.first == "warn" } ?: return@mapNotNull null
-        val summary = "${engineName(engine)} update failed"
+        val summary = "${cliName(engine)} update failed"
         AttentionItem("engineNotUpdating", "warn", summary, summary,
             "${note.second.replaceFirstChar { it.uppercase() }}. Orbit retries every 30 min — Update Engines Now tries again right away.",
             AttentionAction("updateEngines", engine = engine))
@@ -482,11 +634,40 @@ internal object RunnerPage {
     }
 
     // engines
+    /** The engines a runner reports on, in the page's order. A runner predating Antigravity keeps its row too, from what
+     * the server says of it (`runner.antigravity`), so the page can say it needs an update. */
     fun engines(runner: JsonObject): List<JsonObject> {
-        val reported = runner.list("engines")
+        var reported = runner.list("engines")
+        if (reported.none { it.str("engine") == "antigravity" }) reported = reported + buildJsonObject {
+            put("engine", "antigravity")
+            runner.obj("antigravity")?.let { state -> state.bool("installed")?.let { put("installed", it) }; state.str("version")?.let { put("version", it) } }
+        }
         return engineOrder.mapNotNull { engine -> reported.firstOrNull { it.str("engine") == engine } } +
             reported.filter { it.str("engine") !in engineOrder }
     }
+
+    /** Antigravity's Default on a runner that runs agy on its own GEMINI_API_KEY (web runsOnEnvKey): the engine answers yes —
+     * on the key, authSource not google — while Default, the runner's Google sign-in alone, does not. Neither signed out nor
+     * short of quota. [auth] is Default's own answer, null where the runner lists no accounts. */
+    fun runsOnEnvKey(health: JsonObject, account: String, auth: String?) = health.str("engine") == "antigravity" &&
+        account == EngineAccounts.DEFAULT && auth != "yes" && health.str("auth") == "yes" && health.str("authSource") != "google"
+
+    /** EngineAuth.antigravityLoginHint: why Google sign-in can't be started on this runner, or null where it can. */
+    fun antigravityLoginHint(googleLogin: String?): String? = when (googleLogin) {
+        "available" -> null; "unsupported_platform" -> AccountCopy.HINT_UNSUPPORTED; else -> AccountCopy.HINT_UPDATE
+    }
+    /** Why the engine page cannot sign [engine] in here, where a sentence says it: only Antigravity's Google sign-in. */
+    fun signInHint(runner: JsonObject, engine: String) = if (engine == "antigravity") antigravityLoginHint(runner.obj("antigravity")?.str("googleLogin")) else null
+    fun antigravityCanSignIn(runner: JsonObject) = runner.obj("antigravity")?.str("googleLogin") == "available" &&
+        engineHealth(runner, "antigravity")?.bool("installed") == true
+    /** Every engine Orbit signs in, and Antigravity only where the runner offers its Google sign-in. */
+    fun canSignIn(runner: JsonObject, engine: String) = engine != "antigravity" || antigravityCanSignIn(runner)
+    /** Add Account: an engine that keeps accounts — Antigravity's only on a runner that keeps an added Google account apart
+     * from Default's (antigravity-account-login/v1); an older one would sign Default in again in its place. */
+    fun canAddAccount(runner: JsonObject, engine: String) = keepsAccounts(engine) &&
+        (engine != "antigravity" || (antigravityCanSignIn(runner) && EngineAccounts.ANTIGRAVITY_ACCOUNT_LOGIN in runner.strings("capabilities")))
+    /** The engines whose quota a runner reads: the ones Orbit signs in. */
+    fun reportsQuota(engine: String) = isLoginEngine(engine)
 
     /** The version a CLI reported without what it printed around it: `2.1.284 (Claude Code)` is `2.1.284`. */
     fun engineVersion(reported: String?): String? {
@@ -504,18 +685,31 @@ internal object RunnerPage {
         "yes" -> RunnerCopy.SIGNED_IN to "ok"; "no" -> RunnerCopy.SIGNED_OUT to "warn"; else -> null
     }
 
-    /** With several accounts the engine is signed in only when every one of them is. */
-    fun engineStatus(health: JsonObject): Pair<String, String>? {
+    /** With several accounts the engine is signed in only when every one of them is. An Antigravity that can't sign in with
+     * Google here says why (given its [runner]); one on the machine's Gemini key says "env key", whose Default counts as in. */
+    fun engineStatus(health: JsonObject, runner: JsonObject? = null): Pair<String, String>? {
+        if (health.text("engine") == "antigravity" && runner != null && health.bool("installed") != false && health.str("auth") != "yes") {
+            when (runner.obj("antigravity")?.str("googleLogin")) {
+                "unsupported_platform" -> return AccountCopy.NOT_SUPPORTED_YET to "muted"
+                "available" -> Unit
+                else -> return AccountCopy.UPDATE_RUNNER to "muted"
+            }
+        }
         if (health.bool("installed") != true) return RunnerCopy.NOT_INSTALLED to "muted"
         if (!isLoginEngine(health.text("engine"))) return null
         val accounts = health.list("accounts")
-        if (accounts.size < 2) return authStatus(health.str("auth"))
-        if (accounts.all { it.str("auth") == "yes" }) return RunnerCopy.accountsSignedIn(accounts.size) to "ok"
-        return if (accounts.any { it.str("auth") == "no" }) authStatus("no") else null
+        if (accounts.size < 2) {
+            if (runsOnEnvKey(health, EngineAccounts.DEFAULT, accounts.firstOrNull()?.str("auth"))) return AccountCopy.ENV_KEY to "ok"
+            return authStatus(health.str("auth"))
+        }
+        val auths = accounts.map { if (runsOnEnvKey(health, it.text("id"), it.str("auth"))) "yes" else it.str("auth") }
+        if (auths.all { it == "yes" }) return RunnerCopy.accountsSignedIn(accounts.size) to "ok"
+        return if (auths.any { it == "no" }) authStatus("no") else null
     }
 
+    /** The Engines row's Sign In: a login it needs is out — never an Antigravity Default on the machine's Gemini key. */
     fun needsSignIn(health: JsonObject): Boolean = health.bool("installed") == true && isLoginEngine(health.text("engine")) &&
-        (health.str("auth") == "no" || health.list("accounts").any { it.str("auth") == "no" })
+        (health.str("auth") == "no" || health.list("accounts").any { it.str("auth") == "no" && !runsOnEnvKey(health, it.text("id"), it.str("auth")) })
 
     fun updateFailedLine(health: JsonObject, nowMs: Long, zone: ZoneId = ZoneId.systemDefault()): String? {
         if (health.bool("installed") != true) return null
@@ -534,38 +728,81 @@ internal object RunnerPage {
         return checked?.let { RunnerCopy.enginesChecked(ago(it.first, nowMs)) }
     }
 
-    /** The windows an Engines row shows: Default's, while it is signed in and keeps one account. */
-    fun engineWindows(runner: JsonObject, engine: String): List<UsageRow> {
-        val health = engineHealth(runner, engine) ?: return emptyList()
-        if (health.bool("installed") != true || health.str("auth") != "yes" || health.list("accounts").size >= 2) return emptyList()
-        return accountWindows(runner, engine, "default")
+    /** The one quota window an Engines row shows: the binding one (bindingRow, the composer gauge's) — Default's while the
+     * engine is signed in with one account; with several, that of the account a new session starts on, which the row names
+     * above it (engineNextAccount). Every window, and every account's, is the engine page's to list. */
+    fun engineWindows(runner: JsonObject, engine: String, nowMs: Long = System.currentTimeMillis()): List<UsageRow> {
+        val health = engineHealth(runner, engine)?.takeIf { it.bool("installed") == true } ?: return emptyList()
+        val account = when {
+            health.list("accounts").size >= 2 -> nextAccount(runner, health, nowMs) ?: return emptyList()
+            health.str("auth") == "yes" -> EngineAccounts.DEFAULT
+            else -> return emptyList()
+        }
+        return accountSnapshot(EngineAccounts.usage(engine, runner), account)?.let { bindingRow(it, nowMs) }?.let(::listOf).orEmpty()
     }
 
+    /** The account an Engines row names above its window while the engine has several: the one a new session starts on.
+     * Null with one account, none signed in, or no window to show for it. */
+    fun engineNextAccount(runner: JsonObject, engine: String, nowMs: Long = System.currentTimeMillis()): String? {
+        val health = engineHealth(runner, engine)?.takeIf { it.bool("installed") == true } ?: return null
+        val next = nextAccount(runner, health, nowMs) ?: return null
+        if (engineWindows(runner, engine, nowMs).isEmpty()) return null
+        return accountLabel(next, health.list("accounts"))
+    }
+
+    private fun nextAccount(runner: JsonObject, health: JsonObject, nowMs: Long) =
+        EngineAccounts.toStartOn(health.list("accounts"), EngineAccounts.usage(health.text("engine"), runner), nowMs)
+
+    /** One account's own windows, all of them: Default's are the engine snapshot's, another's its entry under `accounts`. */
     fun accountWindows(runner: JsonObject, engine: String, account: String): List<UsageRow> =
-        accountSnapshot(planUsageSnapshot(runner.obj("planUsage"), engine), account)?.let(::usageRows).orEmpty()
+        accountSnapshot(EngineAccounts.usage(engine, runner), account)?.let(::usageRows).orEmpty()
 
     /** CodexAccounts.label: what the user called it, else Default, or `Account <id>`. */
     fun accountLabel(id: String, accounts: List<JsonObject>): String =
         accounts.firstOrNull { it.str("id") == id }?.str("name")?.takeIf { it.isNotEmpty() } ?: if (id == "default") "Default" else "Account $id"
 
+    /** One sign-in on the engine page. [auth] is none for an Antigravity Default on the machine's Gemini key ([envKey]),
+     * which has nothing to sign in or pause; its line says what it runs on. */
     data class AccountLine(val id: String, val name: String, val home: String?, val auth: String?,
-                           val signInAccount: String?, val pausedUntil: String?) {
+                           val signInAccount: String?, val pausedUntil: String?, val envKey: Boolean = false, val loginExpiresAt: String? = null) {
         val isDefault get() = id == "default"
         val subtitle get() = if (!isDefault || name == "Default") home else listOfNotNull(home, "Default").joinToString(" · ")
     }
 
-    /** Every account an engine is signed into, Default first; one line when it keeps no others. */
+    /** Every account an engine is signed into, Default first; one line when it keeps no others, whose answer is the
+     * engine's unless that is a Gemini key's rather than Default's Google sign-in (runsOnEnvKey). */
     fun accountLines(health: JsonObject): List<AccountLine> {
         val accounts = health.list("accounts")
         if (accounts.size < 2) {
             val own = accounts.firstOrNull()
+            val envKey = runsOnEnvKey(health, EngineAccounts.DEFAULT, own?.str("auth"))
             return listOf(AccountLine("default", accountLabel("default", accounts), (own?.str("home") ?: own?.str("codexHome"))?.let(::tildePath),
-                health.str("auth"), null, own?.str("pausedUntil")))
+                if (envKey) null else health.str("auth"), null, own?.str("pausedUntil"), envKey, own?.str("loginExpiresAt")))
         }
         return accounts.map { account ->
+            val envKey = runsOnEnvKey(health, account.text("id"), account.str("auth"))
             AccountLine(account.text("id"), accountLabel(account.text("id"), accounts), (account.str("home") ?: account.str("codexHome"))?.let(::tildePath),
-                account.str("auth"), account.text("id"), account.str("pausedUntil"))
+                if (envKey) null else account.str("auth"), account.text("id"), account.str("pausedUntil"), envKey, account.str("loginExpiresAt"))
         }
+    }
+
+    /** How far ahead of a login lapsing its line warns: Claude Code's own lead. */
+    private const val LOGIN_WARNING_LEAD = 3 * DAY
+
+    /** The warning under a signed-in account whose login lapses within three days, in whole days rounded up the way Claude
+     * Code counts them. None further off, past it (the runner reports that signed out), not signed in, or with no time read. */
+    fun loginExpiresLine(line: AccountLine, nowMs: Long): String? {
+        if (line.auth != "yes") return null
+        val left = (isoMs(line.loginExpiresAt) ?: return null) - nowMs
+        if (left <= 0 || left > LOGIN_WARNING_LEAD) return null
+        val days = kotlin.math.ceil(left.toDouble() / DAY).toInt()
+        return AccountCopy.loginExpires(days, if (days == 1) AccountCopy.UNIT_DAY else AccountCopy.UNIT_DAYS)
+    }
+
+    /** What a signed-out account costs: nothing runs on it — or, the engine's only account there, on the engine at all. */
+    fun signedOutNote(line: AccountLine, alone: Boolean, engine: String): String? {
+        if (line.auth != "no") return null
+        return if (alone) AccountCopy.signedOutAlone(engineName(engine)) else AccountCopy.ACCOUNT_SIGNED_OUT_NOTE
     }
 
     /** What Add Account calls a new account until the user names it. */
@@ -697,10 +934,11 @@ internal object RunnerPage {
     fun isPaused(until: String?, nowMs: Long) = isoMs(until)?.let { it > nowMs } == true
 }
 
-/** PlanUsage.snapshot(for:): an engine's own quota, nested or a legacy flat one; never another engine's. */
+/** PlanUsage.snapshot(for:): an engine's own quota, nested or a legacy flat one; never another engine's. A flat payload keeps
+ * its `accounts`: its own windows are Default's, every other account's snapshot sits beside them (web planUsageSnapshotForProvider). */
 internal fun planUsageSnapshot(usage: JsonObject?, provider: String): JsonObject? {
     usage ?: return null
-    val flat = JsonObject(usage.filterKeys { it !in setOf("claude", "codex", "kimi", "accounts") })
+    val flat = JsonObject(usage.filterKeys { it !in setOf("claude", "codex", "kimi") })
     return when (provider) {
         "codex" -> usage.obj("codex") ?: flat.takeIf { it.str("provider") == "codex" || it.obj("primary") != null || it.obj("secondary") != null || it.list("rateLimits").isNotEmpty() }
         "kimi" -> usage.obj("kimi") ?: flat.takeIf { it.str("provider") == "kimi" }
@@ -709,17 +947,34 @@ internal fun planUsageSnapshot(usage: JsonObject?, provider: String): JsonObject
     }
 }
 
-private fun usageWindows(snapshot: JsonObject): List<JsonObject> =
-    listOf("fiveHour", "sevenDay", "sevenDayOpus", "sevenDaySonnet", "primary", "secondary").mapNotNull { snapshot.obj(it) } +
-        snapshot.list("rateLimits").flatMap { listOfNotNull(it.obj("primary"), it.obj("secondary")) }
-
 /** CodexAccounts.snapshot: Default's windows are the snapshot's own, another account's its entry under `accounts`. */
 internal fun accountSnapshot(usage: JsonObject?, account: String): JsonObject? {
     usage ?: return null
     if (account != "default") return usage.obj("accounts")?.obj(account)
     if (usage["accounts"] == null) return usage
     val own = JsonObject(usage - "accounts")
-    return own.takeIf { usageWindows(it).isNotEmpty() }
+    return own.takeIf { EngineAccounts.windows(it).isNotEmpty() }
+}
+
+/** `usageRows` as they stand at [nowMs]: a window whose reset has passed reads as the fresh window it now is — nothing used,
+ * no reset to name. An Antigravity bucket stays as agy read it. */
+internal fun currentUsageRows(snapshot: JsonObject, nowMs: Long): List<UsageRow> = usageRows(snapshot).map { row ->
+    val resets = isoMs(row.window.str("resetsAt"))
+    if (row.remaining || resets == null || resets > nowMs) row
+    else row.copy(window = buildJsonObject {
+        put("utilization", 0); row.window.str("label")?.let { put("label", it) }; row.window.int("windowDurationMins")?.let { put("windowDurationMins", it) }
+    })
+}
+
+/** PlanUsageSnapshot.bindingRow: the window that stops this login, or will stop it first — a spent one before any other (of
+ * several, the one that resets last), else the one closest to its limit, a tie going to the first. */
+internal fun bindingRow(snapshot: JsonObject, nowMs: Long): UsageRow? {
+    val current = currentUsageRows(snapshot, nowMs)
+    val spent = current.filter { it.utilization >= 100 }
+    // A spent window with no reset named holds the login for as long as anyone can tell.
+    fun reset(row: UsageRow) = isoMs(row.window.str("resetsAt")) ?: Long.MAX_VALUE
+    if (spent.isNotEmpty()) return spent.drop(1).fold(spent.first()) { latest, row -> if (reset(row) > reset(latest)) row else latest }
+    return current.drop(1).fold(current.firstOrNull()) { tightest, row -> if (tightest == null || row.utilization > tightest.utilization) row else tightest }
 }
 
 private fun codexWindowLabel(window: JsonObject, secondary: Boolean): String {
@@ -737,8 +992,16 @@ private fun codexWindowLabel(window: JsonObject, secondary: Boolean): String {
     return window.str("label") ?: if (secondary) "Secondary usage limit" else "Usage limit"
 }
 
-/** PlanUsageSnapshot.rows: present windows in provider order, every Codex rate-limit bucket kept. */
+/** PlanUsageSnapshot.rows: present windows in provider order, every Codex rate-limit bucket kept, and each Antigravity bucket
+ * by what it has left ("Weekly" / "5-hour", grouped by the bucket's id). */
 internal fun usageRows(snapshot: JsonObject): List<UsageRow> {
+    if (snapshot.str("provider") == "antigravity") return snapshot.list("buckets").map { bucket ->
+        val window = bucket.text("window")
+        val label = when (window) { "weekly" -> "Weekly"; "5h" -> "5-hour"; else -> window }
+        UsageRow(bucket.text("id"), label, bucket.text("id"), buildJsonObject {
+            put("utilization", (1 - (bucket.dbl("remainingFraction") ?: 0.0)) * 100); bucket.str("resetTime")?.let { put("resetsAt", it) }
+        }, remaining = true)
+    }
     val limits = snapshot.list("rateLimits")
     val codex = snapshot.str("provider") == "codex" || snapshot.obj("primary") != null || snapshot.obj("secondary") != null || limits.isNotEmpty()
     if (codex) {

@@ -4,6 +4,7 @@ import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.net.*
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.directory.directoryError
+import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -147,7 +148,8 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                         put("prompt", content); put("shell", shell)
                         draft.resumeConfig.text("account")?.let { account ->
                             val provider = draft.resumeConfig.text("provider") ?: detail.text("provider")
-                            if (provider in setOf("codex", "claude") && account != "automatic") put("${provider}Account", account)
+                            // codexAccount, claudeAccount or antigravityAccount: the engines that keep several accounts.
+                            if (provider != null && RunnerPage.keepsAccounts(provider) && account != "automatic") put("${provider}Account", account)
                         }
                     } else {
                         if (endpoint == "resume") draft.resumeConfig["account"]?.let { put("account", it) }

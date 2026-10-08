@@ -3,7 +3,7 @@
 Kotlin + Compose on Android 10–16 (minSdk 29). Android is a remote client: every page here reads and
 writes the existing Orbit API with the signed-in account's own handle (A03 `AuthSession`); the phone
 never hosts a Runner. Directory display and routing stay A05's; in-session model/account choice stays
-A07's (`ComposerModel` / `ComposerData` are untouched); notification permission and delivery stay A10's.
+A07's (A13c adds only its account rows' data model, see A13c below); notification permission and delivery stay A10's.
 
 ## Identity
 
@@ -293,6 +293,35 @@ Settings column's “Signed in” (now: the account's email on Settings, and Sig
 | `scripts/verify.sh` on `b871adf8e` | `bgj_0321268d0a66` | 635 local tests (core 103, app debug 266, release 266), 0 failures, 0 skips; lint 0 errors |
 | API 36 on `b871adf8e` | `bgj_976a08c16053` | red: `ManagementDeviceTest` crashed on `auth/methods`; `AuthFlowDeviceTest` “Signed in”; share 2/2 |
 | API 36 on `02f2bbe2d`, one hold of the UI lock | `bgj_b075922f3123` | A13 settings and workspace/runner/providers/session-share journeys 2/2 (with the self-update card and Update Runner Now); task and project share entry and A11's N3 share case 2/2; A03 auth: secure store 3, persistence 4 phases, login UI with D1's methods 404 1; A11 real stack `s01`/`s06`/`s11` 3/3 (stack at its fixed server `d621e29aa`). Font, night mode and accessibility restored, no `adb reverse` left |
+
+## A13c: Antigravity's Google sign-in and accounts, one window per row (A01b A13-3/4/5/6/9)
+
+Follows main's iOS commits 10e687dc5/597b5c1cf and cd8e8a41a (A13-3), 712d324a8 (A13-4), df3e91c19 and 6c6528dbb
+(A13-5), 8627d8d50 (A13-6) and 93fd35e09 (A13-9). Every server field read here is on main
+(`common/antigravity-readiness.ts`, `common/runner-engines.ts`, `providers/account-move-capability.ts`).
+
+| Item | iOS | Android |
+| --- | --- | --- |
+| A13-6 flat plan usage | `PlanUsage.flatSnapshot` keeps `accounts` | `planUsageSnapshot` no longer drops `accounts` from a flat payload, so added accounts read their own quota |
+| A13-3 Google sign-in | `RunnerPageFormat.engineStatus/signInHint/canSignIn`, `EngineAuth`, `GoogleSignInTermsView`, `PlanUsageSnapshot.rows` (buckets, `remaining`), `RunnerAttention` | `RunnerPage`: engine "Antigravity" (its update item keeps "Antigravity CLI", as web's `ENGINE_CLI_NAME`), a row even when the runner reports none, "Update runner" / "Not supported yet" with the hint, "env key"; buckets as "Weekly"/"5-hour" grouped by id, "N% remaining"; Needs Attention for Antigravity signed out and near its limit (by the share used); Providers counts it only where `googleLogin` is available. Google's terms with a "Google terms" link in the Accounts footer and on an idle Antigravity card ("Sign in with Google") |
+| A13-4 accounts | `keepsAccounts` + `canAddAccount` (`antigravity-account-login/v1`), `runsOnEnvKey`, `CodexAccounts.usage/moveCapability`, composer `accountChoices` | `EngineAccounts` (engine-health quota, move capability), Add Account gated as on iOS, Default on the runner's Gemini key reads "env key · runs on your Gemini key"; the composer's account rows include Antigravity with each account's quota ("gemini-5h 4% left"), move only where the runner declares the capability, and a new session carries `antigravityAccount` |
+| A13-5 one window | `PlanUsageSnapshot.bindingRow`, `engineWindows/engineNextAccount`, `CodexAccounts.toStartOn` (paused accounts wait) | `bindingRow`/`currentUsageRows`, `EngineAccounts.toStartOn`; an Engines row draws one window, and with several accounts "Next: <account>" above that account's window; the engine page keeps every window |
+| A13-9 account rows | `RunnerEnginePage` phone rows, `loginExpiresLine`, `signedOutNote`, `RunnerSignInView` | Rows say only where they stand (Paused · Until, "Login expires in N days" + Renew, what signed out costs); Rename…, Sign In Again, Pause…/Resume Now + Change Duration…, Remove… are the ⋯ menu's; the sign-in card starts on the press that raised it, offers Cancel while it runs and Close otherwise, shows a device code first under "Copy Code & Open Sign-In Page", pastes a code with one Paste, and folds once the runner reports the account signed in |
+
+Differences from iOS, intended:
+- iOS's left swipe and long-press menu are the row's ⋯ menu here, as A13 already decided for removal.
+- Paste reads the clipboard with the platform API, so Android 12+ shows its own "pasted from your clipboard" notice
+  (coordinator's decision: accepted, not worked around). iOS's `PasteButton` asks nothing.
+- Kimi's card still starts from its own button: choosing kimi.com or kimi.ai first (A13-8) is A13d's.
+- Composer: A07c owns the provider chooser and the repair card (A07-4, A13-3's composer part); A13c added only the
+  account data model it reuses — `ComposerCatalog.accounts/accountChoices/movesAccounts/usage`, `AccountChoice`,
+  `EngineAccounts`, `RunnerPage.keepsAccounts/runsOnEnvKey/antigravityCanSignIn/signInHint`, `usageRows`/`bindingRow`.
+
+Tests: `AntigravityAccountsTest` (iOS AntigravityGoogleClientTests and AntigravityAccountsTests, on the shared
+`docs/evidence/antigravity-google-login/clients/fixtures.json`), `RunnerAccountsTest`, `RunnerPageTest`
+(flat HPC payload, one window), `RunnerEnginePageTest` (Robolectric: rows, engine page, menu, sign-in card),
+`ComposerAccountsTest`, `ComposerModelTest`, `AccountCopyParityTest` (the words are the Swift sources'). Device:
+`ManagementDeviceTest.antigravityAccountsOneWindowAndTheSignInCard`, run by `scripts/management-device-test.sh`.
 
 ## Remaining evidence (gaps)
 

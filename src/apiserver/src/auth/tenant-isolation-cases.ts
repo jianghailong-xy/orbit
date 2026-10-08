@@ -214,6 +214,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   },
   'DELETE /admin/users/:id': { request: (of) => ({ params: { id: of.spare.adminSubjectId } }) },
   'PATCH /admin/users/:id/role': { request: (of) => ({ params: { id: of.adminSubjectId }, body: { role: 'ADMIN' } }) },
+  // The subject is enabled, and an administrator besides it is too: the administrator disables it.
+  'PATCH /admin/users/:id/disabled': { request: (of) => ({ params: { id: of.adminSubjectId }, body: { disabled: true } }) },
   // The subject has no Google account linked: the administrator is answered its sign-in methods as they are.
   'DELETE /admin/users/:id/identities/google': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
   'PATCH /admin/providers/:id': { request: (of) => ({ params: { id: of.adminProviderId }, body: { label: 'renamed by the census' } }) },
@@ -641,6 +643,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /wiki/spaces/:id/docs': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'GET /wiki/spaces/:id/doc-index': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'GET /wiki/spaces/:id/docs/:slug': { request: (of) => ({ params: { id: of.wikiSpaceId, slug: of.wikiDocSlug } }) },
+  'GET /wiki/spaces/:id/share': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
+  'PUT /wiki/spaces/:id/share': { request: (of) => ({ params: { id: of.wikiSpaceId }, body: {} }) },
+  'DELETE /wiki/spaces/:id/share': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'GET /wiki/spaces/:id/plan': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'GET /wiki/spaces/:id/plan/versions': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'GET /wiki/spaces/:id/plan/versions/:version': {

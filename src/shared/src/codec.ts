@@ -312,6 +312,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // The public links a caller turns off in one request (`POST /share-links/turn-off`, 0306): each
   // is a `share_link` row's own id, the one its list hands out and `DELETE /share-links/:id` takes.
   'shareLinkIds',
+  // The wiki space a public link is rooted at (`share_link.wiki_space_id`, 0403): the space's own id,
+  // the one `/wiki/spaces/:id/share` takes. An address, never a fence.
+  'wikiSpaceId',
   // Owner Ratification's durable decision, reusable authority and two-phase action ledgers. These
   // all name rows a caller can inspect or hand back; whether the named authority is still valid is
   // decided by the database from its immutable scope, not by preserving UUID spelling.

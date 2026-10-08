@@ -19,6 +19,7 @@ import { WikiPlanRoute } from '../components/WikiPlanPage';
 import { WikiReviewPage } from '../components/WikiReviewPage';
 import { WikiRunDrawer } from '../components/WikiRunPage';
 import { WikiSettingsButton } from '../components/WikiSettingsButton';
+import { WikiShareButton } from '../components/WikiShareButton';
 import { WikiSettingsPage } from '../components/WikiSettingsPage';
 import { openSessionSearch } from '../components/SessionSearch';
 import { wikiLinkHost } from '../components/WikiSources';
@@ -277,7 +278,7 @@ function RunRoute({ space, runParam }: { space: SpaceRow; runParam: string }) {
 }
 
 /**
- * The chrome every Wiki view wears: the title row (the space, Contents, Activity, Settings, New entry),
+ * The chrome every Wiki view wears: the title row (the space, Contents, Activity, Settings, Share, New entry),
  * the search line and the status row. It is the project page's own title row and toolbar, which is
  * what the design's mock links and draws — the counts are the page's counts, not a new row of numbers.
  *
@@ -317,6 +318,7 @@ function WikiFrame({
           {space && at && <WikiContentsButton />}
           {space && <WikiActivityButton spaceSlug={space.slug} waiting={wikiWaiting(rows)} on={activity} />}
           {space && <WikiSettingsButton spaceSlug={space.slug} />}
+          {space && <WikiShareButton spaceId={space.id} spaceSlug={space.slug} />}
           {space && <WikiNewEntryButton spaceId={space.id} />}
         </div>
       </div>
