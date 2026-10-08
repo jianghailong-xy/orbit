@@ -1,0 +1,150 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<link rel="stylesheet" href="web.css">
+<script src="kit.js"></script>
+<script src="web.js"></script>
+<body>
+<h1>⑥ 会话列表、协调会话、任务页和写代码的会话（v3 · 2026-10-08）</h1>
+<p class="lede" style="max-width:2380px">落地会话<b>不进平铺的会话列表</b>：一个项目在列表里仍然只占一行，第二行按现有优先级写落地状态，读法换成 V6，健康的长检查不再变灰，超时照 main 写 <i>Timed out</i>。其余入口都链到落地会话：协调会话里的转录卡在 <i>Open the task ↗</i>、<i>Open the failed session ↗</i> 之后多一个 <b>Open the landing ↗</b>（OPEN_LANDING）；<b>Chat about this</b> 留在 main 放它的地方：待办卡上按钮的后面（web 是按钮下面单独一行）和 BLOCKED 的合入卡，不进转录卡的链接行。合入 main 在协调会话里每个时刻只留一行，用词照 <code>projectMerge.ts</code> 的 <code>promotionPageTitle</code>。任务页的落地徽标照 <code>LandTaskStatus.tsx</code>。</p>
+<div id="board"></div>
+<script>
+const navList = () => `<div class="nav"><div class="circ">${ic('ham', 21, '#000', 2.1)}</div><div class="circ">${ic('plus', 21, '#000', 2.2)}</div></div>`;
+const meter = (d, t) => `<span class="pchip"><span class="mini"><i style="width:${d / t * 100}%;background:var(--green)"></i></span>${d}/${t}</span>`;
+const prow = ({ t, tm, d, tt, sub, cls = 'mut', run }) => `<div class="prow2"><div class="a"><span class="t">${t}</span>${run ? spinner(run) : ''}<span class="tm">${tm}</span></div><div class="b">${meter(d, tt)}<span class="sub ${cls}">${sub}</span></div></div>`;
+const srow = ({ t, tm, sub }) => `<div class="prow2"><div class="a"><span class="t">${t}</span><span class="tm">${tm}</span></div><div class="b"><span class="sub">${sub}</span></div></div>`;
+const markR = (html, k) => mk(html, k, 'margin:0 -6px;padding:0 6px;border-radius:10px');
+const listPage = (rows) => phone(`${statusBar('11:31', 32)}${navList()}<div class="big">orbit-develop</div><div class="wl">${sh('Today')}${rows}
+${srow({ t: '修复 iOS 菜单字幕被截断', tm: '3m ago', sub: 'You: 再看一下 macOS 菜单里的换行' })}
+${srow({ t: 'Antigravity Google 登录', tm: '18m ago', sub: 'Running Bash…' })}
+${sh('Yesterday')}${srow({ t: 'Toast 系统重做', tm: 'yesterday', sub: 'Levels and the iPhone board are in docs/mocks…' })}</div>`);
+
+// a1 · 现在（main）：心跳过 10 分钟就变灰，健康的长检查和卡住的推送看起来一样
+const a1 = listPage(markR(prow({ t: PROJECT, tm: 'just now', d: 15, tt: 20, sub: 'Merge check · checking · 29m', cls: 'mut' }), 1)
+  + prow({ t: '落地会话：每次落地都有自己的会话…', tm: '2m', d: 3, tt: 21, sub: 'Landing · checking · 4m · D3：DeepSeek Harness…', cls: 'ink' })
+  + markR(prow({ t: '项目收尾重做：协调者请求收尾…', tm: '12m', d: 23, tt: 24, sub: 'Merge to main · pushing · 31m', cls: 'mut' }), 2));
+// a2 · 改后：V6 的读法
+const a2 = listPage(markR(prow({ t: PROJECT, tm: 'just now', d: 15, tt: 20, sub: 'Merge check · checking · 29m · output 3s ago', cls: 'ink' }), 1)
+  + prow({ t: '落地会话：每次落地都有自己的会话…', tm: '2m', d: 3, tt: 21, sub: 'Landing · checking · 4m · D3：DeepSeek Harness…', cls: 'ink' })
+  + markR(prow({ t: '项目收尾重做：协调者请求收尾…', tm: '12m', d: 23, tt: 24, sub: 'Merge to main · Timed out · no report for 23m', cls: 'warnt' }), 2));
+
+// b · 协调会话：转录卡（OpenItemDelivery）多一个 Open the landing ↗；合入那一行照 main 的用词
+const delivery = `<div class="oic"><div class="oh">${ic('warn', 14, 'var(--amber-ink)', 2.1)}Exception item<span class="kind">Checks failed</span></div>
+<div class="ot">Checks failed on the combined tree: ${DSH}</div>
+<div class="ow">Task <a>${DSH}</a></div>
+<div class="oy">Check TASK_ACCEPTANCE exited 1 where 0 was declared; the target branch did not move.</div>
+<div class="oc">The coordinator can:<span class="c">Retry the task</span><span class="c">Cancel the task</span></div>
+${mk(`<div class="ol" style="margin-top:0"><span>Open the task ↗</span><span>Open the failed session ↗</span><span style="background:rgba(62,105,246,.1);border-radius:5px;padding:0 4px">Open the landing ↗</span></div>`, 1, 'margin-top:8px;border-radius:6px')}
+<div class="om">Item 34c7Hn2kYq0F · a notification, not an interruption · 18m ago</div></div>`;
+const bBody = stamp('11:07') + delivery
+  + abub('dsh 的验收没过：未装固定版本时仍然声明了 provider:dsh。检查输出说明是交付本身的问题、不是环境问题，所以不重跑，用 <code>task_reopen</code> 退回返工；返工后的下一代还记在同一个落地会话里。')
+  + stamp('11:34') + mk(`<div class="evl">${ic('ring', 14, 'var(--tint)', 2.3)}Re-checking before merging into main…${ic('chevr', 11, 'var(--tint)', 2.8)}</div>`, 2, 'align-self:center;border-radius:999px;margin:6px 16px')
+  + abub('合入在重查：main 在你确认之后又被推进了 2 个提交。');
+const b = chatPage({ at: '11:38', sub: 'Working · Open · now', body: bBody });
+
+// c · 协调会话里的 owner 卡：X-E5（租约过期满 15 分钟）
+const xe5 = `<div class="xcard"><div class="xh">No word from the runner: ${DSH}</div>
+<div class="prov">FROM ORBIT</div>
+<div class="kv"><span class="k">Landing</span><span>Generation 2 · stopped at rebasing</span></div>
+<div class="kv"><span class="k">Runner</span><span>${RUNNER} · last report 14:35 · lease expired 14:45</span></div>
+<div class="kv"><span class="k">Push</span><span><b>Nothing was pushed</b></span></div>
+<div class="kv" style="color:var(--l2)"><span class="k"></span><span>The runner stopped reporting; abandon this landing, or wait for the runner to come back.</span></div>
+${mk(`<div class="xa" style="margin-top:0"><span class="btn redfill">Abandon</span><span class="btn bord" style="font-size:14px">Open the landing</span><span class="btn sec">Chat about this</span></div>`, 1, 'margin-top:10px;border-radius:12px;outline-offset:3px')}
+<div class="xf">Owner: you · 1m · opened 15 minutes after the lease expired</div></div>`;
+const cBody = stamp('14:20') + abub('dsh 返工完成，任务再次标记完成，第 2 代已排上落地。')
+  + stamp('15:00') + mk(xe5, 2, 'border-radius:20px;margin:0')
+  + abub('（协调会话也能放弃：<code>integration_abandon</code>，门槛同样是租约已过期。）');
+const c = chatPage({ at: '15:01', sub: 'Watching · Open · 20m', body: cBody });
+
+// d · 任务页：徽标照 LandTaskStatus，Landing 段带 Open landing ›
+const navTask = `<div class="nav"><div class="circ">${ic('chevl', 21, '#000', 2.4)}</div><div class="ttl"><b>Task</b></div><div class="circ">${ic('dots', 25, '#000', 1.7)}</div></div>`;
+const d = phone(`${statusBar('11:25')}${navTask}<div style="padding:4px 20px 10px"><div style="font-size:21px;font-weight:700;line-height:1.3">${DSH}</div>
+${mk(`<div style="display:flex;gap:7px;align-items:center"><span class="tbadge green">Done</span><span class="tbadge red">Landing checks failed</span></div>`, 1, 'margin-top:9px;border-radius:8px;display:inline-block;padding:2px')}</div>
+<div style="background:#F2F2F7;position:absolute;top:226px;left:0;right:0;bottom:0;padding:12px 16px">
+${mk(`<div style="background:#fff;border-radius:16px;padding:12px 14px"><div style="display:flex;align-items:baseline;gap:8px"><b style="font-size:17px">Landing</b><span style="font-size:13px;color:var(--l2)">onto project/34Zur…UGnx</span></div>
+<div class="gen" style="border-top:none;padding-top:8px"><div class="gh"><span>Task DONE</span><span class="tbadge red">Landing checks failed</span><span>generation 1</span><span>stopped while checking</span></div>
+<div class="gr">Checks failed on the combined tree: the task’s acceptance command exited 1 (expected 0)</div>
+<div class="gf"><span>Target</span><b class="mono" style="font-size:12px">project/34Zur…UGnx</b><span>Queue wait</span><b>48s</b><span>Queued</span><b>Oct 8, 11:02:12</b><span>Started</span><b>Oct 8, 11:03:00</b><span>Heartbeat</span><b>Oct 8, 11:07:02</b><span>Finished</span><b>Oct 8, 11:07:02</b></div>
+${mk(`<span class="go">Open landing ${ic('chevr', 11, 'var(--tint)', 2.8)}</span>`, 2, 'display:inline-block;border-radius:6px;outline-offset:2px;margin-top:4px')}</div></div>`, 0, 'border-radius:16px;outline:none')}
+<div style="background:#fff;border-radius:16px;padding:12px 14px;margin-top:12px"><div style="display:flex"><b style="font-size:17px">Runs</b><span style="margin-left:auto;color:var(--l2)">1</span></div>
+<div style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:15px"><span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">执行任务：${DSH}</span><span class="tbadge green">Completed</span>${chev()}</div></div>
+</div>`);
+
+// e · 写代码的会话：派生的落地标签
+const e = chatPage({ at: '11:25', sub: 'Completed · 23m ago', body:
+  ubub('未装固定版本时不要声明 provider:dsh；装了再声明。')
+  + abub('改好了：<code>advertiseDsh</code> 先检查固定版本是否已安装，没有就不声明。补了单测，已提交 <code>4c0f2e1</code>，任务标记完成。')
+  + stamp('Completed 11:02 · task marked Done')
+  + mk(`<div style="align-self:center;margin:22px 0 4px;display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:15px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.08),inset 0 0 0 .5px rgba(0,0,0,.06);font-size:13.5px;font-weight:600;color:var(--red-ink)">${ic('x', 12, 'var(--red-ink)', 2.6)}Landing · checks failed ${ic('chevr', 11, 'var(--red-ink)', 2.8)}</div>`, 1, 'align-self:center;border-radius:16px') })
+  .replace('Message the coordinator…', 'Message…')
+  .replace(navChat('Completed · 23m ago'), `<div class="nav"><div class="circ">${ic('chevl', 21, '#000', 2.4)}</div><div class="ttl"><b>执行任务：${DSH}</b><span>Completed · 23m ago</span></div><div class="circ">${ic('dots', 25, '#000', 1.7)}</div></div>`);
+
+// web · 任务页
+const wTask = `<div class="mhd"><div class="t"><b style="font-size:15px;color:#646a73;font-weight:500">Task</b><span class="more">${ic('dots', 18, '#646a73', 1.6)}</span></div></div>
+<div class="wtask"><div class="tt">${DSH}</div>
+<div class="bd"><span class="tdb green">Done</span>${mk('<span class="tdb red">Landing checks failed</span>', 1, 'border-radius:6px;display:inline-block')}</div>
+<div class="wsect"><div class="st">Landing</div>
+<div class="lts"><div class="hd"><span class="tk">Task DONE</span><span class="tdb red">Landing checks failed</span><span>generation 1</span><span>stopped while checking</span></div>
+<div class="rs">Checks failed on the combined tree: the task’s acceptance command exited 1 (expected 0)</div>
+<dl><div><dt>Target</dt><dd class="mono" style="font-size:11.5px">project/34ZurCP3bv9yLXGVyUGnx</dd></div><div><dt>Queue wait</dt><dd>48s</dd></div><div><dt>Queued</dt><dd>Oct 8, 11:02:12</dd></div><div><dt>Started</dt><dd>Oct 8, 11:03:00</dd></div><div><dt>Heartbeat</dt><dd>Oct 8, 11:07:02</dd></div><div><dt>Finished</dt><dd>Oct 8, 11:07:02</dd></div></dl>
+${mk('<div class="go">Open landing ›</div>', 2, 'display:inline-block;border-radius:6px;outline-offset:2px')}</div></div>
+<div class="wsect"><div class="st">Details</div><div style="font-size:13px;color:#646a73">Project · DeepSeek Harness 原生接入（核心首版） · Assignee · claude-opus-5-5</div></div>
+<div class="wsect"><div class="st">Runs (1)</div><div style="display:flex;align-items:center;gap:8px;font-size:13.5px"><span>执行任务：${DSH}</span><span class="tdb green">Completed</span></div></div></div>`;
+const wColTask = `${wcolHead(33)}<div class="body">${wcard({ done: 16, total: 20, run: 1 })}${wsec('Coordinator')}${wrow({ t: PROJECT, tm: 'now', chip: 'co', sub: 'Watching P6：验收端到端行为、故障语义与旧版本兼容' })}
+${wsec('Landings')}${wrow({ t: `Land · ${DSH}`, tm: '18m', chip: 'ld', sub: 'Checks failed · with the coordinator', cls: 'red', sel: true })}${wfold('Earlier · 14 landed · 1 nothing to land')}
+${wsec('Today')}${wrow({ t: `执行任务：${DSH}`, tm: '23m', sub: '已提交：未装固定版本时不再声明能力。' })}</div>`;
+const W1 = webFrame({ w: 1180, h: 680, col: wColTask, main: wTask });
+
+// web · 协调会话：转录卡 + 待办卡（Chat about this 在按钮下面单独一行）
+const wDelivery = `<div class="woic"><div class="h">${ic('warn', 14, '#c2710c', 2.1)}Exception item<span class="kind">Checks failed</span></div>
+<div class="t">Checks failed on the combined tree: ${DSH}</div><div class="w">Task <a>${DSH}</a></div>
+<div class="y">Check TASK_ACCEPTANCE exited 1 where 0 was declared; the target branch did not move.</div>
+<div class="c">The coordinator can:<span class="ch">Retry the task</span><span class="ch">Cancel the task</span></div>
+${mk('<div class="l" style="margin-top:0"><span>Open the task ↗</span><span>Open the failed session ↗</span><span>Open the landing ↗</span></div>', 1, 'margin-top:8px;border-radius:6px;display:inline-block;outline-offset:3px')}
+<div class="mt">Item 34c7Hn2kYq0F · a notification, not an interruption · 18m ago</div></div>`;
+const wItem = `<div class="witem"><div class="ih">Checks failed on the combined tree<span class="pv">FROM ORBIT</span></div>
+<div class="ib"><div class="kv"><span class="k">Task</span><span class="v">${DSH}</span><span class="k">Into</span><span class="v"><span class="mono">refs/heads/project/34ZurCP3bv9yLXGVyUGnx</span> at 41ac9e0 · nothing landed</span>
+<span class="k">Check</span><span class="v"><span class="mono">cd src/runner-go &amp;&amp; go test ./...</span> · <span style="color:#cf3b35">exit 1</span> after 3m 52s</span>
+<span class="k">Branch</span><span class="v">unchanged — the task passed on its own branch; it fails only on the combined tree</span></div>
+${mk(`<div class="acts" style="margin-top:0"><span class="wbtn pri">Open task session</span><span class="wbtn">Retry</span><span class="lk">Cancel task</span><span class="lk" style="background:#eef3ff;border-radius:5px;padding:0 4px">Open landing</span></div>`, 2, 'margin-top:10px;border-radius:8px;outline-offset:3px')}
+${mk('<div class="chat" style="margin-top:0"><span class="wbtn sm">Chat about this</span></div>', 3, 'margin-top:8px;border-radius:8px;outline-offset:2px')}</div>
+<div class="if">Owner: coordinator · 18m · goes to the owner in 1h 42m</div></div>`;
+const wConv = `${wConvHead(PROJECT, 'Working · Open · now')}<div class="stamp">11:07</div>${wDelivery}${wItem}
+<div class="msg">dsh 的验收没过：检查输出说明是交付本身的问题，所以不重跑，用 <code>task_reopen</code> 退回返工。</div>
+<div style="text-align:center;margin:6px 0">${mk(`<span class="wbtn pill" style="color:#3370ff;background:#eef3ff;border-color:#d6e2ff;font-weight:600">${ic('ring', 13, '#3370ff', 2.2)}Re-checking before merging into main… ›</span>`, 4, 'display:inline-block;border-radius:999px;outline-offset:3px')}</div>`;
+const wColConv = `${wcolHead(33)}<div class="body">${wcard({ done: 16, total: 20, run: 1 })}${wsec('Coordinator')}${wrow({ t: PROJECT, tm: 'now', chip: 'co', sub: 'Working · 检查输出说明是交付本身的问题', sel: true })}
+${wsec('Landings')}${wrow({ t: `Land · ${DSH}`, tm: '18m', chip: 'ld', sub: 'Checks failed · with the coordinator', cls: 'red' })}${wfold('Earlier · 14 landed · 1 nothing to land')}</div>`;
+const W2 = webFrame({ w: 1180, h: 760, col: wColConv, main: wConv });
+
+document.getElementById('board').innerHTML = [
+  band('iOS', 'n', '会话列表、协调会话、任务页、写代码的会话'),
+  `<div class="rowv3">${[
+    fig('now', 'a1 · 现在 · 会话列表的项目行（main）', a1, `<b>现在：心跳过 10 分钟就变灰</b><ol>
+<li>${n(1)}第二行（19555f614 的优先级）写 <i>Merge check · checking · 29m</i>。runner 只在步骤开始时回报，检查跑过 10 分钟这一行就从蓝变灰，可它其实好好的。</li>
+<li>${n(2)}真卡住的推送也是灰色，写法一样。两件事分不出来，点进去才知道。</li></ol>`),
+    fig('after', 'a2 · 改后 · 会话列表的项目行', a2, `<b>改后：一个项目仍然一行，读法换成 V6</b><ol>
+<li>${n(1)}加一条服务端事实 <i>output 3s ago</i>，健康的长检查保持蓝色。点按目标不变：行进协调会话，进度小标签进项目 sessions 页。</li>
+<li>${n(2)}超时照 main 的词写 <i>Timed out · no report for 23m</i>，琥珀色的字，不亮橙点；橙点只在等你时出现（X-E5 的待办开出后由待办决定）。SILENT（90 秒到 10 分钟）才写 <i>no word from runner · 4m</i>。</li>
+<li>落地会话本身不进平铺列表，也不进搜索结果（LS6）。</li></ol>`),
+    fig('after', 'b · 协调会话', b, `<b>协调会话：转录卡多一个 Open the landing ↗</b><ol>
+<li>${n(1)}转录卡（OpenItemDelivery）的链接行：<i>Open the task ↗</i>、<b>保留</b> <i>Open the failed session ↗</i>（设计 §0.1 第 9 条：所有端都画出 OPEN_LANDING 之前不去掉），后面加 <b>Open the landing ↗</b>。标题照服务端原文 <i>Checks failed on the combined tree: …</i>；投递给协调会话的文本一个字节都不改。</li>
+<li>这张卡上没有 Chat about this，和 main 一样：它在待办卡上（c）和 BLOCKED 的合入卡上。</li>
+<li>${n(2)}合入 main 每个时刻一行（修订 10），用词就是合入卡的标题：<i>Re-checking before merging into main…</i>，点开是合入的审阅，不是落地会话。</li></ol>`),
+    fig('warn', 'c · 协调会话里的 owner 卡（X-E5）', c, `<b>租约过期满 15 分钟：给你一张带 Abandon 的卡</b><ol>
+<li>${n(2)}X-E5 开出的 owner 待办（<i>No word from the runner: …</i>），在协调会话里画在它开出的那一刻，和其他交给你的例外卡一样。它不投递协调会话、不唤醒 agent，也不结束作业。</li>
+<li>${n(1)}按钮：<b>Abandon</b>（ABANDON，J-T10 的 owner 门）、<b>Open the landing</b>（OPEN_LANDING），<b>Chat about this</b> 跟在按钮后面，是 main 放它的地方。推送那一句按 J12。</li>
+<li>runner 回来回报、被接管、交还或作业结束时，卡自己关掉（JOB_MOVED_ON）。</li></ol>`),
+    fig('after', 'd · 任务页的 Landing 段', d, `<b>任务页：徽标照 LandTaskStatus</b><ol>
+<li>${n(1)}状态徽标旁边是落地徽标，词与颜色照 web 的 <code>LANDING_LABELS</code>：<i>Landing checks failed</i>（红）、<i>Waiting to land</i>（琥珀）、<i>Landing</i>（蓝）、<i>Landed</i>（绿）。v2 的 “not landed yet” 不是 main 的词。</li>
+<li>Landing 段：<i>Task DONE</i>、徽标、<i>generation 1</i>、<i>stopped while checking</i>，下面是服务端的 <code>blockingReason</code> 原句与六个时间。${n(2)}<b>Open landing ›</b> 进这个任务段的落地会话；同一段的各代共用一个会话，所以只有一个链接。</li>
+<li>iOS 今天没有这一段（不解码 <code>landTask</code>），这是新加的；Runs 仍只列 agent 干活的会话。</li></ol>`),
+    fig('after', 'e · 写代码的那个会话', e, `<b>写代码的会话：从源头也能找到它</b><ol>
+<li>${n(1)}会话底部按作业推导出一个小标签：<i>Landing · checking</i>、<i>Landing · checks failed</i>，或 <i>On project/34Zur… ✓</i>，点了进落地会话。</li>
+<li>说的是集成线上的落地，和这个会话自己的 session merge 是两回事，用词不混。这个会话不会因为落地被唤醒，也不多出轮次。</li></ol>`),
+  ].join('')}</div>`,
+  band('web', 'web', '任务页与协调会话'),
+  `<div class="rowv3">${[
+    fig('after', 'web · 任务页（TaskDetailPanel）', W1, `<b>web 任务页</b><ol><li>${n(1)}落地徽标与 Landing 段就是 main 的 <code>LandTaskStatus</code>，不改用词。${n(2)} 加 <b>Open landing ›</b>。</li><li>左边项目会话栏的 Landings 组里，这次落地正等协调会话决定，所以在列；选中它也进同一个落地会话。</li></ol>`).replace('<figure>', '<figure style="width:1180px">'),
+    fig('after', 'web · 协调会话', W2, `<b>web 协调会话</b><ol><li>${n(1)}转录卡（<code>OpenItemDeliveryCard</code>）的链接：保留 <i>Open the failed session ↗</i>，后面加 <b>Open the landing ↗</b>。</li><li>${n(2)}待办卡（<code>ItemAsCard</code>）：按钮照 main 的权重，<b>Open landing</b> 是安静的链接，排在最后，不进 primaryAction。${n(3)} <b>Chat about this</b> 在按钮下面单独一行，和 main 一样。</li><li>${n(4)}合入的一行照 <code>promotionPageTitle</code>。</li></ol>`).replace('<figure>', '<figure style="width:1180px">'),
+  ].join('')}</div>`,
+].join('');
+</script></body></html>

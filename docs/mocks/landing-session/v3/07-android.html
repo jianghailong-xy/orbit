@@ -1,0 +1,151 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<link rel="stylesheet" href="android.css">
+<script src="kit.js"></script>
+<script src="android.js"></script>
+<body>
+<h1>⑦ Android：Work overview、作业清单、落地会话页、任务页与待办卡（v3 · 2026-10-08）</h1>
+<p class="lede" style="max-width:2380px">owner 10-08：Android 也在范围内。今天 Android 只有项目页 Work overview 里的一行落地（<code>ProjectsScreen.kt:695-711</code>、<code>ProjectPage.kt:90-112</code>）：不能点，没有作业清单，还在用旧的 10 分钟心跳规则；它只读 <code>inFlight</code>，不读 <code>inFlightJobs</code>、<code>timedOut</code>、<code>retryable</code>，也没有 Retry 门；待办的动作只认五种，<code>OPEN_LANDING</code>、<code>ABANDON</code> 会被丢掉（<code>ProjectPage.kt:251-256</code>）。<br>
+这张图用 Android 自己的样子画（Material 3、Roboto；主色 #0066BE，surfaceVariant #F0F1F4，琥珀 #985900，错误 #B3261E）：行可以点、点开作业清单（ModalBottomSheet，同 Wiki 的目录 sheet），清单每行有 <b>Open landing ›</b>，超时的 LAND_TASK 有 <b>Retry</b>；落地会话页用会话阅读页的外壳，没有输入框；任务页加 Landing 段；待办卡加 <b>Open the landing</b>，X-E5 的卡带 <b>Abandon</b>。</p>
+<div id="board"></div>
+<script>
+const FACTS = '⎇ project/34ZurCP3bv9yLXGVyUGnx · 5 commits ahead of main at last measurement · synced with main 6m ago · Running jobs 1 · Queued 1 · Last landing check ✓ passing';
+const ITEM_DSH = aItem({ title: `Checks failed on the combined tree: ${DSH}`, detail: 'Task acceptance exited 1 on the combined tree; the project branch did not move.', meta: 'Coordinator · 13m · goes to you in 1h 47m', action: 'Open task session' });
+const projPage = (time, landing, extra = '', openItems = null) => aPhone(`${aStatus(time)}${aTab('Project')}<div class="scroll"><div class="body">
+${aHeader({ facts: FACTS })}
+${aShd('Open items', '0 need you · 1 with the coordinator · oldest first')}<div class="glab">With the coordinator</div>${openItems || ITEM_DSH}
+${aShd('Work overview', '20 tasks · 24 dependencies')}
+<div style="display:flex;flex-direction:column;gap:10px">${landing}</div>${aCells(CELLS_1120)}${METER_1120}
+${aShd('Coordinator', 'Watching · 1m')}</div></div>${extra}`);
+
+// a · 现在：不能点；检查过 10 分钟没心跳就写 Update unavailable，秒表停在领取后的第一次回报
+const ROW_OLD = mk(aLand({ tone: 'idle', l1: 'Landing · 2 jobs', l2: 'Update unavailable · Updated 12m ago', cl: 'Elapsed', clk: '0m 20s' }), 1, 'border-radius:10px');
+const a = projPage('11:20', ROW_OLD);
+
+// b · 改后：可以点，V6 的读法
+const ROW_NEW = mk(aLand({ tone: 'run', l1: 'Landing · 2 jobs', l2: 'checking · Output 2s ago · Updated just now', cl: 'Task acceptance', clk: '12m 50s<span class="ls"> / 60m</span>', chevron: true }), 1, 'border-radius:10px');
+const b = projPage('11:20', ROW_NEW);
+
+// c · 改后 · 12:31：超时；行打开清单；清单每行 Open landing ›，超时的 LAND_TASK 有 Retry
+const ROW_TIMED = aLand({ tone: 'warn', l1: 'Landing · 3 jobs · 1 timed out', l2: 'Timed out · limit 70m', cl: 'No report for', clk: '83m', chevron: true });
+const sheetRows = [
+  mki(aJob({ tone: 'warn', l1: 'Landing', what: D3, l2: 'Timed out · limit 70m', cl: 'No report for', clk: '83m',
+    det: `Runner ${RUNNER} took it at 11:07 · stopped at checking · <b>may have been pushed</b>`,
+    acts: `<span class="abtn fill small">Retry</span>${aOpen()}` }), 1, 'border-radius:12px;outline-offset:-3px'),
+  aJob({ tone: 'idle', l1: 'Landing', what: D2, l2: 'queued · Updated just now', cl: 'Queued for', clk: '79m 2s',
+    det: 'Waiting to land: the landing of “修复 D3…” is running on this branch first', acts: aOpen() }),
+  mki(aJob({ tone: 'idle', l1: 'Merge check', l2: 'queued · Updated just now', cl: 'Queued for', clk: '6m 2s', chevron: false,
+    det: `Waiting for ${RUNNER}: it is offline`, acts: aOpen() }), 2, 'border-radius:12px;outline-offset:-3px'),
+];
+const c = projPage('12:31', ROW_TIMED, aSheet({ title: '3 jobs in flight', rows: sheetRows, top: 286 }));
+
+// d · 改后 · 落地会话页（检查中），Session options 打开：Stop landing 只在推送之前
+const tlD = `<div class="tl"><div class="trnd">Generation 1</div>
+${aEv('11:02', ic('task', 14, '#555861', 2), 'Task marked done · queued to land on project/34Zur…UGnx')}
+${aEv('11:03', aSpin('#0066BE', 14), `Claimed by runner ${RUNNER} · claim 1<span class="s">Fetched · synced main · rebased</span>`)}
+${aEv('11:03', aSpin('#0066BE', 14), `Task acceptance · live · 1m 40s<div class="out" style="margin-top:6px"><span class="dim">$ cd src/runner-go &amp;&amp; go test ./...</span>
+<span class="ok">ok</span>   orbit/providers   2.104s
+=== RUN   TestDshCapabilityNeedsPinnedInstall</div>`)}</div>`;
+const statusD = `<div class="acard"><div class="row">${aSpin()}<span class="tm pri">Checking · task acceptance</span></div>
+<div class="bm">Task acceptance <b>1m 40s</b> / 60m</div><div class="lbar" style="margin:0"><i style="width:3%"></i></div>
+<div class="lm" style="display:flex;align-items:center;gap:6px"><span class="live"></span>Output 1s ago · Updated just now</div>
+<div class="ls">claim 1 · round 1 of 3</div></div>`;
+const RO = `<div class="rofoot">Orbit runs this landing — <b>nothing to type here.</b><br>Decisions: coordinator (Automatic on) · <span class="pri" style="font-weight:500">Open coordinator</span></div>`;
+const dlgD = `<div class="scrim"></div><div class="dlg" style="top:250px"><div class="dt2">Session options</div>
+${mki(`<div class="db">Open task</div><div class="db">Open source session</div><div class="db">Open coordinator</div>`, 1, 'border-radius:12px')}
+<div class="dsep"></div>
+${mki(`<div class="db tall red">Stop landing<span class="sm">Before the push only · nothing pushed yet</span></div>`, 2, 'border-radius:12px')}
+<div class="dact"><span class="tbtn">Close</span></div></div>`;
+const d = aPhone(`${aStatus('11:05')}${aTab('Session')}<div class="scroll">${aReaderTop(`Land · ${DSH}`, `Run by Orbit · runner ${RUNNER}`)}
+<div class="body">${statusD}</div>${tlD}</div>${RO}${dlgD}`);
+
+// e · 改后 · 落地会话页（超时，LAND_TASK，v2 领取）：Retry 与 Abandon
+const statusE = mk(`<div class="acard warn"><div class="row">${aTri()}<span class="tm amb" style="flex:1">Timed out</span><span class="lm">limit 10m</span></div>
+<div class="bm">No report for <b>23m</b> · stopped at rebasing</div>
+<div class="ls">claim 1 · round 1 of 3 · first started 14:33</div>
+<div class="bm"><b>Nothing was pushed</b> — the runner reports before it pushes, and it never did.</div>
+<div style="display:flex;gap:8px;margin-top:2px"><span class="abtn fill">Retry</span><span class="abtn outl danger">Abandon</span></div></div>`, 1, 'border-radius:14px');
+const tlE = `<div class="tl"><div class="trnd">Generation 1 · Not landed · CHECK_FAILED</div><div class="trnd">Generation 2</div>
+${aEv('14:20', ic('task', 14, '#555861', 2), 'Task marked done again · queued<span class="s">The coordinator sent it back at 11:34</span>')}
+${aEv('14:33', aSpin('#0066BE', 14), `Claimed by runner ${RUNNER} · claim 1<span class="s">Reports every 30s (v2)</span>`)}
+${aEv('14:34', ic('check', 14, '#247344', 2.6), 'Fetched · synced main')}
+${aEv('14:35', '<span style="color:#555861">◌</span>', 'Rebasing onto project/34Zur…UGnx<span class="s">Last report</span>')}
+<div class="ls" style="text-align:center;background:#eef0f3;border-radius:999px;padding:3px 0;margin-top:4px">No report from workstation-gpu since 14:35</div></div>`;
+const e = aPhone(`${aStatus('14:58')}${aTab('Session')}<div class="scroll">${aReaderTop(`Land · ${DSH}`, `Run by Orbit · runner ${RUNNER}`)}
+<div class="body">${statusE}</div>${tlE}</div>${RO}`);
+
+// f · 改后 · 任务页的 Landing 段
+const f = aPhone(`${aStatus('11:25')}${aTab('Task')}<div class="scroll"><div class="body">
+<div class="lm pri" style="margin-top:4px">▦ ${PROJECT}</div>
+<div class="r1" style="display:flex;align-items:flex-start;gap:6px;margin-top:6px"><span class="hs" style="flex:1">${DSH}</span><span class="tbtn" style="font-size:20px;padding:0 8px">⋯</span></div>
+<div style="display:flex;align-items:center;gap:8px;margin-top:8px"><span class="pill2 ok"><i></i>Done</span><span style="width:20px;height:20px;border-radius:50%;background:rgba(0,102,190,.14);display:inline-block"></span><span class="bs">claude-opus-5-5 · 23m ago</span></div>
+<div style="margin-top:10px"><span class="abtn outl">Reopen task</span></div>
+${mk(`<div class="tsh" style="padding-top:6px"><b>Landing</b><span class="lm">generation 1</span></div>
+<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="pill2 bad"><i></i>Landing checks failed</span><span class="bs mut">stopped while checking</span></div>
+<div class="bm" style="margin-top:6px">Checks failed on the combined tree: the task’s acceptance command exited 1 (expected 0)</div>
+<div class="facts"><span>Target</span><span class="mono" style="font-size:12px">project/34Zur…UGnx</span><span>Queue wait</span><span>48s</span><span>Queued</span><span>Oct 8, 11:02:12</span><span>Started</span><span>Oct 8, 11:03:00</span><span>Finished</span><span>Oct 8, 11:07:02</span></div>
+${mki(`<span class="tbtn" style="padding:0 4px;margin-top:4px">Open landing ›</span>`, 2, 'display:inline-block;border-radius:20px;margin-top:4px')}`, 1, 'border-radius:12px;margin-top:14px;padding:2px 4px')}
+<div class="tsh"><b>Details</b></div><div class="bs mut">Project · ${PROJECT}</div>
+<div class="tsh"><b>Runs</b><span class="lm">1</span></div>
+<div style="display:flex;align-items:center;gap:8px;padding:8px 0"><span class="bm" style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">执行任务：${DSH}</span><span class="pill2 ok"><i></i>Completed</span></div>
+</div></div><div class="composer2" style="padding-bottom:26px"><div class="fld" style="border-radius:22px;height:46px">Comment…</div></div>`);
+
+// g · 改后 · 协调会话里的卡（BusinessCard）：INTEGRATION_* 卡加 Open the landing；X-E5 卡带 Abandon
+const cardInt = `<div class="acard"><div class="tm">Checks failed on the combined tree: ${DSH}</div><div class="ls">Filed by Orbit</div>
+<div style="display:flex;flex-wrap:wrap;margin:0 -12px"><span class="tbtn">Open task session</span><span class="tbtn">Open coordinator</span>${mki('<span class="tbtn">Open the landing</span>', 1, 'border-radius:20px')}</div></div>`;
+const cardXe5 = `<div class="acard"><div class="tm">No word from the runner: ${DSH}</div><div class="ls">Filed by Orbit</div>
+<div class="kv"><div class="k">Detail</div><div class="v">Stopped at rebasing · <b>nothing was pushed</b> · lease expired 14:45</div></div>
+<div style="display:flex;flex-wrap:wrap;margin:0 -12px">${mki('<span class="tbtn">Open the landing</span>', 2, 'border-radius:20px')}</div>
+<div style="margin:0 -12px"><span class="tbtn">Chat about this</span></div>
+${mki('<span class="abtn outl wide">Abandon</span>', 3, 'border-radius:26px')}</div>`;
+const g = aPhone(`${aStatus('15:01')}${aTab('Session', ['ashare', 'amenu', 'arefresh'])}<div class="scroll">${aReaderTop(PROJECT, 'Watching · Open')}
+<div class="body" style="display:flex;flex-direction:column;gap:10px"><div style="display:flex;align-items:center"><span class="tm" style="flex:1">Decisions and requests</span><span class="tbtn" style="padding:0 4px">Check status</span></div>
+${cardInt}${cardXe5}</div></div>
+<div class="composer2"><div class="fld">Message…</div><div class="rw"><span class="tbtn" style="padding:0 8px">+</span><span class="tbtn" style="padding:0 8px">claude-opus-5-5</span><span class="abtn fill small" style="margin-left:auto">Send</span></div></div>`);
+
+const NOTES = `<div class="side" style="width:640px"><div class="panel"><h2>Android 的入口（和 web、iOS 的差别）</h2><ul>
+<li><b>Android 没有项目 sessions 页，也没有修订 10 的合入卡</b>（<code>OrbitRoute.kt</code> 里没有这个目的地；全源码没有 “Can’t merge into main yet”）。所以进度卡里的那一行、合入卡的 Watch、Landings 组、时间线的「已合入」行只在 web 和 iOS。</li>
+<li>Android 的入口：Work overview 的行 → 作业清单 → <b>Open landing ›</b>；任务页的 Landing 段；待办卡的 <b>Open the landing</b>；X-E5 卡的 Abandon。</li>
+<li>落地会话页用会话阅读页的外壳：顶栏不给分享（LS6：LANDING 的 share 回 409），没有输入框；Stop landing 放在 <i>Session options</i> 对话框里，和这个 App 其他会话的菜单一样是对话框，不是下拉菜单。</li>
+<li>作业清单用 ModalBottomSheet，Wiki 的目录 sheet 已经这样用；这是它第一次用在 Wiki 以外。</li></ul></div>
+<div class="panel"><h2>移植要点</h2><ul>
+<li>读 <code>inFlightJobs</code> 及每项的 <code>timedOut</code>、<code>limitSeconds</code>、<code>retryable</code>、<code>landingSessionId</code>，接 <code>POST /projects/:id/integration/jobs/:jobId/retry</code>。</li>
+<li>去掉 <code>ProjectPage.kt:102</code> 的 10 分钟心跳规则：服务端列出作业时由它判超时，<i>Update unavailable</i> 只表示读不到服务端（web、iOS 在 4be4b01fe / 3a5c576fc 已经这样改）。</li>
+<li><code>primaryAction</code> 学会 <code>ABANDON</code>（X-E5 卡的主动作）与 <code>OPEN_LANDING</code>；今天不认识的动作直接丢掉，Open items 里 X-E5 那一行会没有按钮。</li>
+<li>Kotlin 的 <code>ProjectCopyParityTest</code>、<code>TaskCopyParityTest</code> 读的是 Swift 现文，Swift 改文案的同一个提交要把 <code>src/android</code> 一起改了。</li></ul></div>
+<div class="panel tbd"><h2>待定</h2><ol>
+<li><b>Android 协调会话里的旧式合入卡要不要加 Watch。</b>Android 没有项目 sessions 页，但协调会话里还画着一张通用的 “Merge to main” 卡（<code>CardModels.kt:216-225</code>，READY 时 Merge / Not now，CONFIRMED、RECHECKING 时 Cancel merge）。A：在这张卡上加 Watch，进这一轮合入的落地会话；B：不加，等 Android 有项目 sessions 页再说。</li>
+<li><b>清单里 Retry 的按钮样式。</b>本图用实心 Button；这个 App 的卡片动作多用整宽的 OutlinedButton。</li></ol></div></div>`;
+
+document.getElementById('board').innerHTML = [
+  band('Work overview 与作业清单', 'andr', 'Android'),
+  `<div class="rowv3">${[
+    fig('now', 'a · 现在 · Android（main）', a, `<b>现在：一行，点不进去，还会假装停住</b><ol>
+<li>${n(1)}Work overview 的落地行不能点。检查跑过 10 分钟没有心跳，就写 <i>Update unavailable · Updated 12m ago</i>，秒表停在领取后的第一次回报（<i>0m 20s</i>），健康的长检查看起来像刚开始就卡住了。</li>
+<li>没有作业清单，也没有 Retry：Android 不读 <code>inFlightJobs</code>。</li></ol>`).replace('<figure>', '<figure style="width:412px">'),
+    fig('after', 'b · 改后 · Work overview', b, `<b>改后：可以点，读法同 web 和 iOS</b><ol>
+<li>${n(1)}行右边加 <b>›</b>，点开作业清单。第二行是状态与两条服务端事实 <i>Output 2s ago · Updated just now</i>；右边的时钟是当前步骤对比预算 <i>Task acceptance 12m 50s / 60m</i>（V6）。</li>
+<li>仍是 Android 自己的行：surfaceVariant 底、8dp 圆角、16dp 进度圈、右边的时钟；只换词，不换样子。</li></ol>`).replace('<figure>', '<figure style="width:412px">'),
+    fig('after', 'c · 改后 · 12:31 · 作业清单', c, `<b>改后：清单（ModalBottomSheet）</b><ol>
+<li>外面那一行照 main 的词：<i>Timed out · limit 70m</i>，右边 <i>No report for 83m</i>，琥珀色（needsYou #985900），三角代替进度圈。</li>
+<li>${n(1)}每行就是外面那一行，任务的行点进任务页；下面一句写谁拿走、停在哪、推送那一句（按 J12）。超时的 LAND_TASK 有 <b>Retry</b>，每行都有 <b>Open landing ›</b>。</li>
+<li>${n(2)}合入作业的行没有箭头（不进任务页），但有 Open landing ›。Abandon 不在清单上，在落地会话页（e）和 X-E5 的卡（g）。</li></ol>`).replace('<figure>', '<figure style="width:412px">'),
+  ].join('')}${NOTES}</div>`,
+  band('落地会话页、任务页、待办卡', 'andr', 'Android'),
+  `<div class="rowv3">${[
+    fig('after', 'd · 改后 · 落地会话页（检查中）', d, `<b>落地会话页：会话阅读页的外壳</b><ol>
+<li>状态卡是这个 App 的卡（surfaceVariant、12dp 圆角）：当前步骤对比预算、进度条、<i>Output 1s ago · Updated just now</i>、<i>claim 1 · round 1 of 3</i>。时间线里正在跑的检查实时显示输出；底部没有输入框，写明判断在哪里。</li>
+<li>${n(1)}<i>Session options</i> 是对话框：Open task、Open source session、Open coordinator（设计 §3）。${n(2)} <b>Stop landing</b> 只在推送之前出现。</li></ol>`).replace('<figure>', '<figure style="width:412px">'),
+    fig('stall', 'e · 改后 · 落地会话页（超时）', e, `<b>超时：Retry 与 Abandon</b><ol>
+<li>${n(1)}用词同 iOS 与 web：<i>Timed out</i>、<i>No report for 23m</i>、<i>limit 10m</i>。v2 领取、没记下过推送，所以写 <i>Nothing was pushed</i>；旧版 runner 的领取写 <i>may have been pushed</i>（J12）。</li>
+<li><b>Retry</b> 只给超时的 LAND_TASK（J-T9）；<b>Abandon</b> 三种作业都有（J-T10），只结束、不重排，按下前先确认，同 Cancel task 的做法。</li></ol>`).replace('<figure>', '<figure style="width:412px">'),
+    fig('after', 'f · 改后 · 任务页的 Landing 段', f, `<b>任务页：新加 Landing 段</b><ol>
+<li>${n(1)}照 <code>TaskSectionHeader</code> 的样子：粗体标题加灰色的 <i>generation 1</i>；落地状态用任务状态的那种药丸（<i>Landing checks failed</i>，错误红 15% 底），词照 web 的 <code>LandTaskStatus</code>。下面是服务端的原因和几个时间。</li>
+<li>${n(2)}<b>Open landing ›</b> 进这个任务段的落地会话。Android 今天的任务页没有任何落地信息。</li></ol>`).replace('<figure>', '<figure style="width:412px">'),
+    fig('warn', 'g · 改后 · 协调会话里的待办卡', g, `<b>待办卡：Open the landing 与 Abandon</b><ol>
+<li>${n(1)}INTEGRATION_* 的卡在 <i>Open task session</i>、<i>Open coordinator</i> 后面加一个 TextButton <b>Open the landing</b>（服务端给 OPEN_LANDING 时）。</li>
+<li>${n(2)}X-E5 的卡（<i>No word from the runner: …</i>）：<b>Open the landing</b>、<b>Chat about this</b>（这个 App 只给交到你手里的例外卡画它），${n(3)} 动作是整宽的 OutlinedButton <b>Abandon</b>，和其他卡的动作一样。</li>
+<li>项目页 Open items 里这一行的按钮也是 Abandon（今天不认识的动作被丢掉，这一行会没有按钮）。</li></ol>`).replace('<figure>', '<figure style="width:412px">'),
+  ].join('')}</div>`,
+].join('');
+</script></body></html>

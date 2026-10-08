@@ -1,0 +1,238 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<link rel="stylesheet" href="web.css">
+<script src="kit.js"></script>
+<script src="web.js"></script>
+<body>
+<h1>④ 项目 sessions 页上的落地（v3 · 2026-10-08 · 按 main 2ba6765d9 重画）</h1>
+<p class="lede" style="max-width:2480px">main 已经上线了作业清单（4be4b01fe web、3a5c576fc iOS/macOS）：Work overview、项目 sessions 页的进度卡、合入卡三处的落地行都是一个按压，点开是 <b>“N jobs in flight”</b>；超时的作业写 <i>Timed out · No report for Nm · limit Nm</i>，超时的 LAND_TASK 带 <b>Retry</b>；<i>Update unavailable</i> 只表示这台设备读不到服务端。<br>
+<b>owner 10-08 的决定：</b>保留 main 的「一行 + 作业清单」，三处都不改；清单的每一行加 <b>Open landing ›</b>，进这次尝试所属的落地会话（旧服务端没有 <code>landingSessionId</code> 时不可点，并写明原因）；页面上的 <b>Landings</b> 组只列等决定的和最近结案的，<b>从不列在途的</b>。一次在途落地只出现在「领头的那一行 + 清单」，不再出现第三次。契约 V6 的「最多 3 行」让位给 main 的一行加清单。改后列里的计时、活性与推送用词照契约修订 12 的 V6 与 J12。</p>
+<div id="board"></div>
+<script>
+const coordW = coordRow({ eye: true, sub: 'Watching P6：验收端到端行为、故障语义与旧版本兼容' });
+const R = {
+  p6: { t: '执行任务：P6：验收端到端行为、故障语义与旧版本兼容', tm: 'just now', run: true, sub: '正在跑端到端回归：12 个场景已过 7 个…' },
+  d3: { t: `执行任务：${D3}`, tm: '14m ago', sub: 'D3 已提交：dsh 会话里补上 shell 环境，验收命令可执行。' },
+  dsh: { t: `执行任务：${DSH}`, tm: '31m ago', sub: '已提交：未装固定版本时不再声明能力。' },
+  d1: { t: `执行任务：${D1}`, tm: '1h ago', sub: 'D1 已完成并提交（bc89fd5），随后合入了最新 main。' },
+  d2: { t: `执行任务：${D2}`, tm: '1h ago', sub: 'D2/F1 已完成：401 判为无效 Key，未知用量显示为不可用。' },
+};
+const page = ({ at, sessions = 32, top, coord = coordW, mid = '', rows, extra = '' }) =>
+  phone(`${statusBar(at)}${navP(sessions)}<div class="list">${top}${sh('Coordinator')}${coord}${mid}${sh('Today')}${rows.map((r) => (typeof r === 'string' ? r : sessRow(r))).join('')}</div>${extra}`);
+const markRow = (html, n) => mk(html, n, 'border-radius:10px;margin:2px 4px');
+
+// ── 一行 · 在途作业的行与清单 ─────────────────────────────────────────
+// a1 · 现在 · 11:20：D3 在检查（旧版 runner，只在步骤开始时回报），D2/F1 的第 2 代在后面排队
+const NOW_ROW = lr({ tone: 'run', word: 'Landing', state: 'checking', what: '2 jobs', label: 'Elapsed', clock: '12m 50s', right: 'Updated 12m ago' });
+const a1 = page({ at: '11:20', top: pc3({ done: 15, total: 20, run: 1, landing: markRow(NOW_ROW, 1) }), rows: [R.p6, R.d3, R.dsh, R.d1] });
+
+// a2 · 现在 · 12:31：runner 在检查中途掉线；清单里超时的那一行带 Retry
+const OUT_TIMED = lr({ tone: 'warn', word: 'Landing', state: 'Timed out', what: '3 jobs · 1 timed out', label: 'No report for', clock: '83m', right: 'limit 70m' });
+const a2rows = [
+  mki(jrow(lr({ tone: 'warn', word: 'Landing', state: 'Timed out', what: D3, label: 'No report for', clock: '83m', right: 'limit 70m',
+    extra: xline(`Runner ${RUNNER} took it at 11:07 · stopped at checking · no push recorded`) }), mki(retryBtn(), 2, 'border-radius:999px')), 1, 'border-radius:12px;outline-offset:-2px'),
+  jrow(lr({ tone: 'idle', word: 'Landing', state: 'queued', what: D2, label: 'Queued for', clock: '79m 02s', right: 'Updated just now',
+    extra: xline('Generation 2 · retried by the coordinator at 11:12') })),
+  mki(jrow(lr({ tone: 'idle', word: 'Merge check', state: 'queued', label: 'Queued for', clock: '6m 02s', right: 'Updated just now', chevron: 'gap' })), 3, 'border-radius:12px;outline-offset:-2px'),
+];
+const a2 = page({ at: '12:31', top: pc3({ done: 15, total: 20, run: 1, landing: OUT_TIMED }), rows: [R.p6, R.d3, R.dsh, R.d1],
+  extra: jsheet({ title: '3 jobs in flight', rows: a2rows, top: 272 }) });
+
+// b1 · 改后 · 11:20：同一行，V6 的读法；Coordinator 下面的 Landings 组只列等决定的和最近结案的
+const V6_ROW = lr({ tone: 'run', word: 'Landing', state: 'checking', what: '2 jobs',
+  v6: { step: 'Task acceptance', clock: '12m 50s', budget: '60m', bar: 21, live: 'Output 2s ago · Updated just now' } });
+const LANDINGS_1120 = lgroup([
+  lrow({ t: `Land · ${DSH}`, tm: '13m', sub: 'Checks failed · with the coordinator', cls: 'redt' }),
+  lrow({ t: 'Land · P5：接通 Web、macOS 和 iOS 的 DeepSeek Harness 操作链', tm: '1h', sub: 'Landed on project/34Zur…UGnx', cls: 'grn' }),
+], 'Earlier · 12 landed · 1 nothing to land');
+const b1 = page({ at: '11:20', top: pc3({ done: 15, total: 20, run: 1, landing: markRow(V6_ROW, 1) }),
+  mid: mk(LANDINGS_1120, 2, 'margin:4px -6px 0;padding:0 6px;border-radius:12px'), rows: [R.p6, R.d3] });
+
+// b2 · 改后 · 11:20 · 清单：每一行加 Open landing ›
+const b2rows = [
+  jrow(lr({ tone: 'run', word: 'Landing', state: 'checking', what: D3,
+    v6: { step: 'Task acceptance', clock: '12m 50s', budget: '60m', bar: 21, live: 'Output 2s ago · Updated just now', sub: 'claim 1 · first started 11:07' } }),
+    mki(openL(), 1, 'border-radius:8px;outline-offset:2px')),
+  jrow(lr({ tone: 'idle', word: 'Landing', state: 'queued', what: D2, label: 'Queued for', clock: '8m 02s', right: 'Updated just now',
+    extra: mki(xline('Waiting to land: the landing of “修复 D3：DeepSeek Harness 会话上的…” is running on this branch first', 'ink'), 2, 'border-radius:6px;outline-offset:2px')
+      + xline('Generation 2 · retried by the coordinator at 11:12') }), openL()),
+];
+const b2 = page({ at: '11:20', top: pc3({ done: 15, total: 20, run: 1, landing: V6_ROW }), mid: LANDINGS_1120, rows: [R.p6, R.d3],
+  extra: jsheet({ title: '2 jobs in flight', rows: b2rows, top: 322 }) });
+
+// b3 · 改后 · 12:31 · 超时：用词不变，推送那一句按 J12；Retry 照旧只给 LAND_TASK；合入的行也能进落地会话
+const b3rows = [
+  jrow(lr({ tone: 'warn', word: 'Landing', state: 'Timed out', what: D3, label: 'No report for', clock: '83m', right: 'limit 70m',
+    extra: mki(xline(`Runner ${RUNNER} took it at 11:07 · stopped at checking · <b>may have been pushed</b>`), 1, 'border-radius:6px;outline-offset:2px') }),
+    mki(`<div class="orow">${retryBtn()}${openL()}</div>`, 2, 'border-radius:999px;outline-offset:3px')),
+  jrow(lr({ tone: 'idle', word: 'Landing', state: 'queued', what: D2, label: 'Queued for', clock: '79m 02s', right: 'Updated just now',
+    extra: xline('Waiting to land: the landing of “修复 D3…” is running on this branch first') }), openL()),
+  jrow(lr({ tone: 'idle', word: 'Merge check', state: 'queued', label: 'Queued for', clock: '6m 02s', right: 'Updated just now', chevron: 'gap',
+    extra: xline(`Waiting for ${RUNNER}: it is offline`) }), mki(openL(), 3, 'border-radius:8px;outline-offset:2px')),
+];
+const b3 = page({ at: '12:31', top: pc3({ done: 15, total: 20, run: 1, landing: OUT_TIMED }), mid: LANDINGS_1120, rows: [R.p6, R.d3],
+  extra: jsheet({ title: '3 jobs in flight', rows: b3rows, top: 262 }) });
+
+// ── 二行 · 合入卡 ─────────────────────────────────────────────────────
+const LANDINGS_EMPTYISH = (tm) => lgroup([lrow({ t: `Land · ${DSH}`, tm, sub: 'Checks failed · with the coordinator', cls: 'redt' })], 'Earlier · 14 landed · 1 nothing to land');
+// c · 合入检查在跑：合入作业领头，进度卡里没有落地行，合入卡就是那一行；加 Watch
+const MC_CHECK = mcCheck(lr({ tone: 'run', word: 'Merge check', state: 'checking',
+  v6: { step: 'Merge check', clock: '7m 12s', budget: '60m', usual: mki('usually ~18m', 2, 'border-radius:5px;outline-offset:2px;padding:0 2px'), bar: 12, tick: 30, live: 'Output 4s ago · Updated just now' } }),
+  mk(watchRow(''), 1, 'border-radius:8px;outline-offset:2px'));
+const c = page({ at: '11:09', sessions: 33, top: pc3({ done: 16, total: 20, run: 1 }) + MC_CHECK, mid: LANDINGS_EMPTYISH('2m'), rows: [R.p6, R.d3, R.dsh] });
+
+// d · 你按了 Merge to main：排队形态（main 今天就有）；Watch 从这一刻起就在
+const MC_QUEUED = mk(mcMerging({ cls: 'q', title: 'Merge into main queued', status: 'confirmed — queued to merge into main',
+  lrHtml: lr({ tone: 'idle', word: 'Merge to main', state: 'queued', label: 'Queued for', clock: '0m 41s', right: 'Updated just now' }), watch: true }).replace('class="mc q"', 'class="mc q" style="margin-top:0"'), 1, 'margin-top:10px;border-radius:16px');
+const d = page({ at: '11:35', sessions: 33, top: pc3({ done: 16, total: 20, run: 1 }) + MC_QUEUED, mid: LANDINGS_EMPTYISH('28m'), rows: [R.p6, R.d3, R.dsh] });
+
+// e · 按了 Cancel：取消中（M-T10，以事实为准）；仍有 Watch
+const CXL = `<div class="mc cxl" style="margin-top:0"><div class="mh"><span class="tile" style="background:rgba(120,120,128,.16);color:#6b6b70">${ic('merge', 16, '#6b6b70', 2.3)}</span><b>Cancelling the merge…</b>${spinner('rgba(60,60,67,.6)', 15)}</div>
+<div class="st">Orbit stops the re-check at the runner’s next report (within 30s). Nothing has been pushed.</div>
+<div class="note">If the push had already started, the merge is recorded as merged — the card says so instead of “cancelled”.</div>
+<div class="foot" style="margin-top:10px"><span class="lnk">Watch ${ic('chevr', 11, 'var(--tint)', 2.8)}</span><span style="margin-left:auto">Cancelled by you · 11:41</span></div></div>`;
+const e = page({ at: '11:41', sessions: 33, top: pc3({ done: 16, total: 20, run: 1 }) + mk(CXL, 1, 'margin-top:10px;border-radius:16px'), mid: LANDINGS_EMPTYISH('34m'), rows: [R.p6, R.d3, R.dsh] });
+
+// f · 推送被抢，交回：BLOCKED，没有 Watch
+const coordRun = sessRow({ t: PROJECT, tm: 'just now', chip: 'Coordinator', run: true, sub: 'Re-checking the merge after main moved' });
+const BLK = mcBlocked({ status: 'The re-check passed, but main moved before the push. Nothing was pushed.',
+  extra: `<div class="commits2"><code>c41e9a2</code> feat(ios): replace session share button…<span class="oq">outside the queue</span><br><code>8d07b31</code> fix(settings): keep close button visible…<span class="oq">outside the queue</span></div>`,
+  press: 'Coordinator is resolving it · 2m', foot: mk(`<span class="lnk">Open Coordinator ${ic('chevr', 11, 'var(--tint)', 2.8)}</span>`, 1, 'border-radius:8px;outline-offset:3px') }).replace('class="mc blk"', 'class="mc blk" style="margin-top:0"');
+const f = page({ at: '11:56', sessions: 33, top: pc3({ done: 16, total: 20, run: 2 }) + `<div style="margin-top:10px">${BLK}</div>`, coord: coordRun, mid: LANDINGS_EMPTYISH('49m'), rows: [R.p6, R.d3, R.dsh] });
+
+// g · 合入 main 的作业超时：没有 Retry，卡上加 Abandon（16:05，下一轮合入）
+const MC_TIMED = mcMerging({ title: 'Merging into main…', status: 'confirmed — publishing the tested tree to main',
+  lrHtml: lr({ tone: 'warn', word: 'Merge to main', state: 'Timed out', label: 'No report for', clock: '23m', right: 'limit 10m',
+    extra: xline(`Runner ${RUNNER} took it at 15:38 · stopped at pushing · <b>may have been pushed</b>`) }),
+  note: null, cancel: true, cancelOff: true, watch: true,
+  extra: mk(`<div style="display:flex;gap:8px;align-items:center;margin-top:10px"><span class="btn bordred">Abandon</span><span style="font-size:12.5px;color:var(--l2);line-height:1.35">Ends this attempt; the merge goes back to the coordinator.</span></div>`, 1, 'border-radius:12px;outline-offset:3px') }).replace('class="mc run"', 'class="mc run" style="margin-top:0"');
+const coord16 = coordRow({ eye: true, sub: 'Watching P7：发布说明与升级指引' });
+const g = page({ at: '16:05', sessions: 38, top: pc3({ done: 19, total: 20, run: 0 }) + `<div style="margin-top:10px">${MC_TIMED}</div>`, coord: coord16,
+  mid: lgroup([lrow({ t: `Land · ${D3}`, tm: '3h', sub: 'Landed on project/34Zur…UGnx', cls: 'grn' })], 'Earlier · 17 landed · 1 nothing to land'),
+  rows: [{ t: '执行任务：P7：发布说明与升级指引', tm: 'just now', run: true, sub: '正在写 DeepSeek Harness 的升级说明…' }, R.p6] });
+
+// h · 已合入：时间线那一行就是这一轮合入的落地会话
+const coord12 = coordRow({ eye: true, sub: 'Watching D3：DeepSeek Harness 会话上的 EXECUTABLE…' });
+const merged = mk(mergedRow({ tm: '28m ago', sha: '8d5a868', tasks: 2, who: 'by you' }).replace('<div class="ms">', '<div class="ms" style="border-bottom:none">'), 1, 'margin:0 -6px;padding:0 6px;border-radius:10px');
+const h = page({ at: '12:20', sessions: 35, top: pc3({ done: 17, total: 20, run: 1 }), coord: coord12,
+  mid: mk(lgroup([lrow({ t: `Land · ${D1}`, tm: '1h', sub: 'Landed on project/34Zur…UGnx', cls: 'grn' })], 'Earlier · 16 landed · 1 nothing to land'), 2, 'margin:4px -6px 0;padding:0 6px;border-radius:12px'),
+  rows: [R.p6, 'MERGED', R.dsh] }).replace('MERGED', merged);
+
+// ── 三行 · web ────────────────────────────────────────────────────────
+const wcoordConv = `${wConvHead(PROJECT, 'Working · Open · now')}
+<div class="stamp">11:07</div><div class="msg">dsh 的验收没过：未装固定版本时仍然声明了 provider:dsh。检查输出说明是交付本身的问题，不是环境问题，所以不重跑，用 <code>task_reopen</code> 退回返工。</div>
+<div class="stamp">11:12</div><div class="msg">D2/F1 上一次落地是 runner 掉线丢的，按 <code>integration_retry</code> 重排了第 2 代。</div>
+<div class="composer">Message the coordinator…</div>`;
+const wToday = wsec('Today') + [R.p6, R.d3, R.dsh].map((r) => wrow({ t: r.t, tm: r.tm, sub: r.sub })).join('');
+const wcoord = wsec('Coordinator') + wrow({ t: PROJECT, tm: 'now', chip: 'co', sub: 'Watching P6：验收端到端行为、故障语义与旧版本兼容', sel: true });
+const W_OUT = pl({ tone: 'warn', word: 'Landing', state: 'Timed out', what: '3 jobs · 1 timed out', label: 'No report for', clock: '83m', right: 'limit 70m' });
+const wNowRows = [
+  wjr({ plHtml: pl({ tone: 'warn', word: 'Landing', state: 'Timed out', what: D3, label: 'No report for', clock: '83m', right: 'limit 70m' }),
+    detail: `Runner ${RUNNER} took it at 11:07 · stopped at checking · no push recorded`, retry: true }),
+  wjr({ plHtml: pl({ tone: 'idle', word: 'Landing', state: 'queued', what: D2, label: 'Queued for', clock: '79m 2s', right: 'Updated just now' }),
+    detail: 'Generation 2 · retried by the coordinator at 11:12' }),
+  wjr({ plHtml: pl({ tone: 'idle', word: 'Merge check', state: 'queued', label: 'Queued for', clock: '6m 2s', right: 'Updated just now' }), chevron: false }),
+];
+const W1 = webFrame({ col: `${wcolHead(32)}<div class="body">${wcard({ done: 15, total: 20, run: 1, landing: wland(W_OUT) })}${wcoord}${wToday}</div>`,
+  main: wcoordConv, overlay: wdlg({ title: '3 jobs in flight', rows: wNowRows, top: 96, left: 600 }) });
+const wAfterRows = [
+  wjr({ plHtml: pl({ tone: 'warn', word: 'Landing', state: 'Timed out', what: D3, label: 'No report for', clock: '83m', right: 'limit 70m' }),
+    detail: `Runner ${RUNNER} took it at 11:07 · stopped at checking · <b>may have been pushed</b>`, retry: true,
+    open: mk(wOpen(), 1, 'border-radius:6px;outline-offset:3px') }),
+  wjr({ plHtml: pl({ tone: 'idle', word: 'Landing', state: 'queued', what: D2, label: 'Queued for', clock: '79m 2s', right: 'Updated just now' }),
+    detail: 'Waiting to land: the landing of “修复 D3：…” is running on this branch first', open: wOpen() }),
+  wjr({ plHtml: pl({ tone: 'idle', word: 'Merge check', state: 'queued', label: 'Queued for', clock: '6m 2s', right: 'Updated just now' }), chevron: false,
+    detail: `Waiting for ${RUNNER}: it is offline`, open: wOpen() }),
+];
+const wLandings = mk(wsec('Landings') + wrow({ t: `Land · ${DSH}`, tm: '1h', chip: 'ld', sub: 'Checks failed · with the coordinator', cls: 'red' })
+  + wrow({ t: 'Land · P5：接通 Web、macOS 和 iOS 的 DeepSeek Harness 操作链', tm: '2h', chip: 'ld', sub: 'Landed on project/34Zur…UGnx', cls: 'grn' })
+  + wfold('Earlier · 12 landed · 1 nothing to land'), 2, 'border-radius:10px;outline-offset:1px');
+const W2 = webFrame({ col: `${wcolHead(32)}<div class="body">${wcard({ done: 15, total: 20, run: 1, landing: wland(W_OUT) })}${wcoord}${wLandings}${wToday}</div>`,
+  main: wcoordConv, overlay: wdlg({ title: '3 jobs in flight', rows: wAfterRows, top: 70, left: 600 }) });
+
+// ── 四行 · 入口表与待定 ───────────────────────────────────────────────
+const oldServer = lr({ tone: 'run', word: 'Landing', state: 'checking', what: D3, label: 'Elapsed', clock: '12m 50s', right: 'Updated just now' });
+const MAP = `<div class="panel" style="width:1330px;flex:none"><h2>入口表：一次落地在哪儿出现、点了去哪</h2>
+<table class="map"><thead><tr><th>位置</th><th>端</th><th>显示什么</th><th>在途的落地</th><th>点按</th></tr></thead><tbody>
+<tr><td class="k">Work overview 的落地行</td><td>web · iOS · Android（07）</td><td>领头作业的一行（运行中的先），多于 1 个写 “N jobs”</td><td class="ok">✓ 领头那一个</td><td>弹出作业清单（web、iOS 是 main 现状，不改；Android 新加，见 ⑦）</td></tr>
+<tr><td class="k">进度卡的落地行</td><td>web · iOS</td><td>同一行；只在领头的是 LAND_TASK 时画</td><td class="ok">✓ 领头那一个</td><td>弹出作业清单（不改）</td></tr>
+<tr><td class="k">合入卡</td><td>web · iOS</td><td>领头的是合入作业时，卡里就是那一行</td><td class="ok">✓ 领头那一个</td><td>行打开清单；<b>Watch ›</b> 进这一轮合入的落地会话（只在 CHECKING / CONFIRMED / RECHECKING）</td></tr>
+<tr><td class="k">作业清单（上面三处共用）</td><td>web · iOS · Android</td><td>每个在途作业一行</td><td class="ok">✓ 全部</td><td class="new">行照旧进任务页；<b>Open landing ›</b> 进这次尝试的落地会话；超时的 LAND_TASK 带 Retry</td></tr>
+<tr><td class="k">Landings 组</td><td>web · iOS</td><td class="new">等决定的落地、24 小时内结案的任务段；更早的折成一行</td><td class="no">✗ 不列</td><td class="new">行 → 落地会话</td></tr>
+<tr><td class="k">时间线 · Merged into main</td><td>web · iOS</td><td>一轮合入 main 的结案</td><td class="no">✗</td><td class="new">→ 这一轮的落地会话，回执在顶部（⑤-b）</td></tr>
+<tr><td class="k">任务页 Landing 段</td><td>web · iOS · Android</td><td>每一代（只读）</td><td>—</td><td class="new">Open landing ›（⑥-c、⑦）</td></tr>
+<tr><td class="k">写代码的会话</td><td>web · iOS</td><td>派生的落地标签</td><td>—</td><td class="new">→ 落地会话（⑥-d）</td></tr>
+<tr><td class="k">协调会话 / 项目页的待办卡</td><td>web · iOS · Android</td><td>INTEGRATION_* 与 X-E5 的卡</td><td>—</td><td class="new">Open the landing（OPEN_LANDING）；X-E5 另有 Abandon（⑥-b、⑦）</td></tr>
+<tr><td class="k">会话列表的项目行</td><td>web · iOS</td><td>第二行一句落地状态</td><td>一句话，不是入口</td><td>不变：进协调会话（⑥-a）</td></tr>
+</tbody></table>
+<p style="font-size:13px;color:#4a4a52;margin:10px 0 0">一次在途落地最多出现两处：领头的那一行，和点它弹出的清单（第二处是第一处打开的）。它停下等决定、或结案之后，才进 Landings 组。</p></div>`;
+const TBDS = `<div class="side" style="width:900px"><div class="panel tbd"><h2>待定（请 owner 定）</h2><ol>
+<li><b>合入卡 checking 时的两个按压目标。</b>卡就是那一行（点开清单），再加 Watch 就有两个目标；web 入口任务（34bVVGk4）要求只留一个。A：checking 时不画 Watch，清单里那一行有 Open landing ›；B：留 Watch，行不再打开清单（与「三处的行都打开清单」不一致）。本板按契约 LS6 画了 Watch，没有选。</li>
+<li><b>进度卡下面只放一张卡。</b>本板在那个位置放修订 10 的合入卡；项目 <code>34bVlqVqH9cWacqlQpNjy</code> 的 <code>docs/mocks/merge-conflict-landing-card</code> 在同一个位置放停下的落地卡（“P3.2 can’t land yet”，最多 3 张，其余折成 “2 more landings stopped ›”）。两份提案并存时，一个停下的落地会同时是那张卡和本板 Landings 组里的一行，两张卡也会争同一个位置。A：停下的落地只进 Landings 组，进度卡下只留合入卡；B：停下的落地用那张卡，Landings 组只列结案的；C：两张卡上下叠放，并定先后。</li>
+<li><b>「最近结案」的窗口。</b>本板取 24 小时，与 open-items 读口的 <code>settled</code> 一致（24 小时、至多 20 条）。</li>
+<li><b>旧服务端时那一格的原文。</b>本板写 <i>No landing page on this server yet</i>，灰色、不可点；行本身照旧点进任务页。</li>
+</ol></div>
+<div class="panel"><h2>旧服务端：清单行的样子</h2><div class="smp">${jrow(oldServer, openOff('No landing page on this server yet'))}</div>
+<div class="smpcap">服务端不带 <code>landingSessionId</code> 时，Open landing 那一格写明原因，灰色、不可点；行本身照旧点进任务页，合入作业的行照旧不可点。</div></div></div>`;
+
+document.getElementById('board').innerHTML = [
+  band('在途作业', 'n', '一行 + 作业清单：现在（main）与改后'),
+  `<div class="rowv3">${[
+    fig('now', '现在 · main · 11:20', a1, `<b>现在：一行，点开是作业清单</b><ol>
+<li>${n(1)}进度卡里的落地行画的是领头的作业（运行中的先，再按队列）。多于 1 个时名字位写 <i>2 jobs</i>。点按弹出 “2 jobs in flight”；服务端不列清单时（旧版）才进项目页。合入作业领头时这一行不画，它在合入卡里（见 c）。</li>
+<li>旧版 runner 只在步骤开始时回报，长检查期间 <i>Updated 12m ago</i> 一直变大，行照样是蓝色在转：超时由服务端判（检查中是预算 60m 加 10m），不再在 10 分钟时变灰。但看不出输出动没动。</li>
+<li><i>Update unavailable</i> 现在只表示这台设备读不到服务端（读失败，或读数超过 90 秒）。</li>
+<li>页头右边是 main 的网格按钮（Open Project），进度卡里没有 Project › 链接。这个项目已经启动，所以进度线下面没有启动行（未启动时 main 在那里画 Ready to start / Start…）。</li></ol>`),
+    fig('now', '现在 · main · 12:31 · 清单', a2, `<b>现在：超时写明，LAND_TASK 带 Retry</b><ol>
+<li>${n(1)}清单每行就是外面那一行。超时写 <i>Timed out · No report for 83m · limit 70m</i>，下面一句写谁拿走、几点、停在哪，以及 <i>no push recorded</i>（停在 PUSH / VERIFY 时写 <i>may have been pushed</i>）。</li>
+<li>${n(2)}<b>Retry</b> 只给服务端说 <code>retryable</code> 的作业，也就是超时的 LAND_TASK（J-T9，<code>POST /projects/:id/integration/jobs/:jobId/retry</code>）。</li>
+<li>${n(3)}合入作业（Merge check、Merge to main）的行不能点，超时了也没有门。任务的行点进任务页，不进任何落地记录。</li>
+<li>web 是同一张清单，宽屏是对话框，Retry 是整宽的主按钮（见下面 web 一行）。</li></ol>`),
+    fig('after', '改后 · 11:20', b1, `<b>改后：还是这一行，读法换成 V6</b><ol>
+<li>${n(1)}点按照旧弹出清单。主计时是当前步骤对比预算：<i>Task acceptance 12m 50s / 60m</i>；验收命令因任务而异，不写通常用时。<i>Output 2s ago · Updated just now</i> 是两条服务端事实（v2 runner 每 30 秒回报），长检查不会被画成停住。</li>
+<li>${n(2)}Coordinator 下面多一个 <b>Landings</b> 组：只列等决定的（这里：检查没过，在协调会话手里）和 24 小时内结案的；更早的折成一行。<b>在途的一个都不列</b>，它们在这一行和清单里。</li>
+<li>Landings 的行不计入页头的 <i>32 sessions</i>、running 数和状态点；平铺的会话列表里看不到它们（LS6）。</li></ol>`),
+    fig('after', '改后 · 11:20 · 清单', b2, `<b>改后：清单每行加 Open landing ›</b><ol>
+<li>${n(1)}<b>Open landing ›</b> 进这次尝试所属的落地会话（⑤）。行本身照旧：任务的行点进任务页。次要一行写领取次数和首次开始：<i>claim 1 · first started 11:07</i>。</li>
+<li>${n(2)}排队的行带服务端给的 <code>blockingReason</code>，和任务页同一句：为什么还在等、等的是谁。</li>
+<li>旧服务端不带 <code>landingSessionId</code> 时，这一格不可点并写明原因（见下方样例）。</li></ol>`),
+    fig('after', '改后 · 12:31 · 超时的清单', b3, `<b>改后：超时的用词不变，推送那一句按 J12</b><ol>
+<li>${n(1)}<i>Timed out · No report for 83m · limit 70m</i> 照 main。推送那一句按 J12 的唯一规则：v2 领取、且本作业没记下过 PUSH，才写 <i>nothing was pushed</i>；其余写 <i>may have been pushed</i>。这一次是旧版 runner 的领取，所以写后者。</li>
+<li>${n(2)}<b>Retry</b> 照旧只给超时的 LAND_TASK；就算可能已推送也给，下一代先看目标里有没有这些提交，有就记为 ALREADY_LANDED。<b>Abandon 不在清单上</b>：在途尝试的 owner 门只在落地会话页头、合入卡与 X-E5 待办三处（§2.7a），Open landing › 进去就是。</li>
+<li>${n(3)}合入作业的行以前不能点，现在也有 Open landing ›。</li></ol>`),
+  ].join('')}</div>`,
+  band('合入卡', 'n', 'Watch 只在 CHECKING / CONFIRMED / RECHECKING；排队形态照 main'),
+  `<div class="rowv3">${[
+    fig('after', '改后 · 11:09 · 合入检查在跑', c, `<b>改后：合入作业领头，合入卡就是那一行</b><ol>
+<li>合入作业领头时，进度卡里不画落地行（main 的 <code>isMergeJob</code> 规则），合入卡里画；点行照旧弹出清单。</li>
+<li>${n(1)}加 <b>Watch ›</b>，进这一轮合入的落地会话，看实时检查输出（LS6）。<span class="tbd-i">待定</span>这张卡因此有两个按压目标，见下方待定第 1 条。</li>
+<li>${n(2)}<i>usually ~18m</i> 是方案：V6 的通常用时，只给合入检查（同项目、同检查最近几次通过时长的中位数）。main 今天的合入卡没有这一句。</li></ol>`),
+    fig('after', '改后 · 你按了 Merge to main', d, `<b>改后：排队形态照 main，加 Watch</b><ol>
+<li>${n(1)}按下 Merge to main、作业还没被 runner 领走时，main 画的是 <i>Merge into main queued</i>，里面是那一行 <i>Merge to main · queued</i>。v2 没画这个形态。</li>
+<li>Watch 从这一刻起就有：落地主体在入队时打开，会话行在领取后才插入，插入前经预生成的 id 也能打开（LS1）。</li>
+<li>排队中按 Cancel 直接取消（J-T8：QUEUED → CANCELLED），不经过「取消中」。</li></ol>`),
+    fig('stall', '改后 · 按了 Cancel（重查中）', e, `<b>改后：重查中按 Cancel，以事实为准</b><ol>
+<li>${n(1)}今天按 Cancel，晋升立刻记成 CANCELLED，runner 并不知道，已经开始的推送照样会把合入推进 main。改后卡片先变成灰色的 <b>Cancelling…</b>，runner 下一次回报（不超过 30 秒）真的停下才收起（M-T10）。</li>
+<li>撤销到达时推送已经开始，就如实记成合入，卡片直接变成时间线里的「已合入」行。</li>
+<li>取消中仍是 CONFIRMED / RECHECKING，所以仍有 Watch。</li></ol>`),
+    fig('warn', '改后 · 推送被抢，交回', f, `<b>改后：推送被抢一次就交回（owner 10-04）</b><ol>
+<li>重查通过，但推送前 main 又被推进：作业结束，候选交回协调会话。卡片说清没有推送，并列出推进 main 的提交，标出是否来自队列外。</li>
+<li>${n(1)}<b>没有 Watch</b>：BLOCKED 不在 LS6 的三种状态里。页脚是 main 的 <i>Open Coordinator ›</i>；落地会话从协调会话的待办卡（Open the landing）和时间线进。</li>
+<li>按钮上方那一行是 main 的 <i>Coordinator is resolving it · 2m</i>，归你时是 <i>It is yours · waiting …</i>。</li></ol>`),
+    fig('warn', '改后 · 合入 main 的作业超时（16:05）', g, `<b>改后：合入作业超时，卡上加 Abandon</b><ol>
+<li>超时的合入作业照样写 Timed out，但没有 Retry（J-T9 只给 LAND_TASK）。租约过期后合入卡上加 <b>Abandon</b>（§2.7a、J-T10）：只结束这次尝试，不重排；Cancel 在 PUSH 之后照旧不可按。</li>
+<li>${n(1)}这次领取记下过 PUSH，所以写 <i>may have been pushed</i>；放弃后候选改为 BLOCKED，下一个作业若发现已在 main 上，就补写回执。</li>
+<li>过期满 15 分钟还会给你开一条带 Abandon 的待办（X-E5，见 ⑥-b）。</li></ol>`),
+    fig('after', '改后 · 已合入', h, `<b>改后：「已合入」那一行就是这一轮合入的会话</b><ol>
+<li>${n(1)}时间线里的 <i>Merged into main</i> 点进这一轮合入的落地会话（⑤-b），回执在会话顶部，内容和今天的回执一样。</li>
+<li>${n(2)}Landings 组列 24 小时内结案的任务段；合入 main 的一轮结案后就是时间线上的那一行，不在 Landings 组再列一次。</li></ol>`),
+  ].join('')}</div>`,
+  band('web', 'web', '同一页的 web（宽屏）：清单是对话框'),
+  `<div class="rowv3">${[
+    fig('now', '现在 · web · 12:31', W1, `<b>现在（web）</b><ol><li>项目会话栏的进度卡、项目页 Work overview、合入卡三处的行都打开同一个对话框（<code>LandingJobsSheet</code>，窄屏是底部抽屉）。超时的 LAND_TASK 带整宽的 Retry，合入作业的行没有箭头。</li></ol>`).replace('<figure>', '<figure style="width:1180px">'),
+    fig('after', '改后 · web · 12:31', W2, `<b>改后（web）</b><ol><li>${n(1)}每行加 <b>Open landing ›</b>；推送那一句按 J12。</li><li>${n(2)}项目会话栏的 Coordinator 下面加 Landings 组，规则同 iOS。</li></ol>`).replace('<figure>', '<figure style="width:1180px">'),
+  ].join('')}</div>`,
+  band('入口与待定', 'tbd', ''),
+  `<div class="rowv3">${MAP}${TBDS}</div>`,
+].join('');
+</script></body></html>
