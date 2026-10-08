@@ -25,10 +25,11 @@ export A12_STACK_DIR=$S A12_STACK_API_PORT=$port
 package=io.orbitd.android.debug
 runner=io.orbitd.android.debug.test/androidx.test.runner.AndroidJUnitRunner
 class=io.orbitd.android.wiki.WikiWatchLiveTest
-all=(j1OwnerOpensTheSpaceSearchesAndOpensAnEntry j2OwnerAcceptsTheFreshProposal j3OwnerAcceptsTheStaleProposalAndIsRefused
+# j9a and j9b only read: they run while the seed's two proposals still wait, before j2 and j3 decide them.
+all=(j1OwnerOpensTheSpaceSearchesAndOpensAnEntry j9aOwnerHomeIsTheSpacesContentAsTheServerHoldsIt j9bOwnerActivityIsWhatTheServerSays
+  j2OwnerAcceptsTheFreshProposal j3OwnerAcceptsTheStaleProposalAndIsRefused
   j4OwnerEditsAnEntry j5OwnerChangesTheReviewMode j6OwnerPausesResumesAndStopsTheWatch j7aOtherAccountOpensTheOwnersEntry
-  j7bOtherAccountOpensTheOwnersSpace j7cOtherAccountOpensTheOwnersWatch j8OwnerRevertsARun
-  j9aOwnerHomeIsTheSpacesContentAsTheServerHoldsIt j9bOwnerActivityIsWhatTheServerSays)
+  j7bOtherAccountOpensTheOwnersSpace j7cOtherAccountOpensTheOwnersWatch j8OwnerRevertsARun)
 # shellcheck disable=SC2206
 journeys=(${A12_LIVE_JOURNEYS:-${all[*]}})
 

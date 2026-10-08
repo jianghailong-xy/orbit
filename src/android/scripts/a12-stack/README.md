@@ -110,16 +110,18 @@ evidence.
 
 | journey | account | link | acts, then reads back |
 | --- | --- | --- | --- |
-| `j1OwnerOpensTheSpaceSearchesAndOpensAnEntry` | owner | `orbit://wiki/<space>` | the home shows the space; search `readback` finds the entry; its page opens |
-| `j2OwnerAcceptsTheFreshProposal` | owner | `orbit://wiki/<space>` | Review → the fresh card → Accept: the op `accepted`, the entry active and confirmed, the toast Accepted |
-| `j3OwnerAcceptsTheStaleProposalAndIsRefused` | owner | `orbit://wiki/<space>` | Review → the stale card → Accept: the op `conflict`, the entry's revision and summary unchanged; the app must show *Nothing was applied: the entry changed after this was proposed.* and not Accepted |
+| `j1OwnerOpensTheSpaceSearchesAndOpensAnEntry` | owner | `orbit://wiki/<space>` | the home shows the space by its name; search `readback` finds the entry; its page opens |
+| `j2OwnerAcceptsTheFreshProposal` | owner | `orbit://wiki/<space>` | Activity → Review → the fresh card → Accept: the op `accepted`, the entry active and confirmed, the toast Accepted |
+| `j3OwnerAcceptsTheStaleProposalAndIsRefused` | owner | `orbit://wiki/<space>` | Activity → Review → the stale card → Accept: the op `conflict`, the entry's revision and summary unchanged; the app must show *Nothing was applied: the entry changed after this was proposed.* and not Accepted |
 | `j4OwnerEditsAnEntry` | owner | `orbit-wiki:<entry>` | Edit title and summary → Save: revision + 1 with both |
 | `j5OwnerChangesTheReviewMode` | owner | `orbit://wiki/<space>` | gear → Tiered, then Manual: each read back, the other settings untouched |
 | `j6OwnerPausesResumesAndStopsTheWatch` | owner | `orbit://watch/<watch>` | Pause → PAUSED, Resume → ACTIVE, Stop (nothing sent before the confirmation) → CANCELLED |
 | `j7aOtherAccountOpensTheOwnersEntry` | other | `orbit-wiki:<owner's entry>` | *That entry is no longer in this space.*, none of the owner's titles; the server 404 |
 | `j7bOtherAccountOpensTheOwnersSpace` | other | `orbit://wiki/<owner's space>` | *That space is not available.* (tag `wiki-space-unavailable`), none of the owner's titles; the server 404 |
 | `j7cOtherAccountOpensTheOwnersWatch` | other | `orbit://watch/<owner's watch>` | Watch not found, none of the owner's titles; the server 404 |
-| `j8OwnerRevertsARun` | owner | `orbit://wiki/<space>` | Recently changed → the run → Revert run… (nothing sent before the confirmation): nothing left to revert, the run's entry no longer active |
+| `j8OwnerRevertsARun` | owner | `orbit://wiki/<space>` | Activity's Recently changed → the run → Revert run… (nothing sent before the confirmation): nothing left to revert, the run's entry no longer active |
+| `j9aOwnerHomeIsTheSpacesContentAsTheServerHoldsIt` | owner | `orbit://wiki/<space>` | (A12c, read-only; `live.sh` runs it and `j9b` right after `j1`, while both proposals wait) the home's line and documents band are what the server's `docs` and `articles` reads make them, its principles the server's `?kind=principle` read; this stack's space (no plan, no topic article, maintenance off) shows the new space's card, whose Set up maintenance opens Wiki settings |
+| `j9bOwnerActivityIsWhatTheServerSays` | owner | `orbit://wiki/<space>` | (A12c, read-only) the bar's Activity and the drawer say the spaces' pendingOps + planWaiting "N waiting on you"; Activity's first banner is the server's proposals, its status line the health read's count, Recent decisions the `?kind=decision&limit=4` read, Recently changed the timeline's newest row |
 
 `j3` and `j7b` check what the review-1 fix (`9095a638f`) added: `WikiCopy.conflictRefused` and the
 `wiki-space-unavailable` page. Before it (`1052be908`) both fail: the app says Accepted while the server records
