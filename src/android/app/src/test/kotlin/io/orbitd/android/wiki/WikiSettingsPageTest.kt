@@ -122,9 +122,12 @@ class WikiSettingsPageTest {
 
     private var spaceRead = """{"id":"sp1","slug":"orbit","settings":{"reviewMode":"automatic"}}"""
     private var patchAnswer: Pair<Int, String> = 200 to "{}"
+    /** `GET /wiki/system-model`: the account's executor switch, absent (404) from a control plane before P9. */
+    private var systemModelAnswer: Pair<Int, String>? = null
     private val rig = WikiTestRig { request -> answer(request) }
     private fun answer(request: ApiRequest): Pair<Int, String>? = when {
         request.method == HttpMethod.PATCH -> patchAnswer
+        request.path == listOf("wiki", "system-model") -> systemModelAnswer
         request.path == listOf("wiki", "spaces") -> 200 to "[$spaceRead]"
         request.path == listOf("workspaces") -> 200 to """[{"id":"w2","name":"docs","runnerId":"r2"},{"id":"w1","name":"orbit","runnerId":"r1"}]"""
         request.path == listOf("runners") -> 200 to """[{"id":"r1","name":"host-1","displayName":"Mac mini"},{"id":"r2","name":"wikova","displayName":null}]"""
@@ -192,6 +195,52 @@ class WikiSettingsPageTest {
         compose.waitForIdle()
         assertEquals(listOf(
             """PATCH /api/wiki/spaces/sp1 {"maintenance":{"enabled":true,"workspaceId":"w2","provider":"retired-provider","dailyRunLimit":3,"lookbackDays":null}}"""),
+            patches())
+    }
+
+    /** While the server executes the account's wiki: the provider is not offered, the System model stands read-only
+     * with its state, the workspace reads as where the repository is read from, and one sentence says where the wiki's
+     * material goes — and the write leaves the provider out (mock 35 ①②, P9). */
+    @Test fun theServerExecutesTheWikiAndTheSystemModelStandsWhereTheProviderWas() {
+        spaceRead = """{"id":"sp1","slug":"orbit","settings":{"reviewMode":"automatic","maintenance":{"enabled":true,"workspaceId":"w1","provider":"local-vllm","dailyRunLimit":8,"lookbackDays":0}}}"""
+        systemModelAnswer = 200 to """{"state":"up","model":"qwen3.8-27b-fp8","since":"2026-10-08T06:00:00.000Z","checkedAt":"2026-10-08T06:29:55.000Z","workerSeenAt":"2026-10-08T06:29:55.000Z","executor":{"mode":"server","serverExecutes":true}}"""
+        screen()
+        says("wiki-settings-workspace-row", WikiModeCopy.repoFrom, "orbit · Mac mini")
+        says("wiki-settings-model-row", WikiRunsCopy.systemModelLabel("qwen3.8-27b-fp8"), WikiRunsCopy.modelState("up"))
+        compose.onAllNodesWithTag("wiki-settings-provider-row").assertCountEquals(0)
+        compose.onNodeWithTag("wiki-settings-privacy").assertTextContains(WikiModeCopy.privacyNote)
+        compose.onNodeWithTag("wiki-settings-mode:automatic").assertTextContains(WikiModeCopy.modeNoteAutomaticServer)
+        // The Set up form: the System model in place of the provider, read-only, and the write leaves the provider out.
+        compose.onNodeWithTag("wiki-settings-edit").performClick()
+        says("wiki-settings-form-model", WikiRunsCopy.systemModelLabel("qwen3.8-27b-fp8"), WikiRunsCopy.modelState("up"))
+        compose.onNodeWithText(WikiModeCopy.modelNote).assertExists()
+        compose.onAllNodesWithTag("wiki-settings-provider").assertCountEquals(0)
+        compose.onNodeWithTag("wiki-settings-workspace").assertTextContains(WikiModeCopy.repoFrom, substring = true)
+        compose.onNodeWithTag("wiki-settings-form-privacy").assertTextContains(WikiModeCopy.privacyNote)
+        compose.onNodeWithTag("wiki-settings-form-submit").performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(
+            """PATCH /api/wiki/spaces/sp1 {"maintenance":{"enabled":true,"workspaceId":"w1","dailyRunLimit":8,"lookbackDays":0}}"""),
+            patches())
+    }
+
+    /** Under runner — or from a control plane before the read — the page and the form are word for word what they
+     * always were, and the write still names the provider. */
+    @Test fun underRunnerThePageAndTheFormAreWhatTheyAlwaysWere() {
+        spaceRead = """{"id":"sp1","slug":"orbit","settings":{"reviewMode":"automatic","maintenance":{"enabled":true,"workspaceId":"w1","provider":"local-vllm","dailyRunLimit":8,"lookbackDays":0}}}"""
+        systemModelAnswer = 404 to """{"message":"not found"}"""
+        screen()
+        says("wiki-settings-workspace-row", WikiModeCopy.workspace, "orbit · Mac mini")
+        says("wiki-settings-provider-row", WikiModeCopy.provider, "local-vllm")
+        compose.onAllNodesWithTag("wiki-settings-model-row").assertCountEquals(0)
+        compose.onAllNodesWithTag("wiki-settings-privacy").assertCountEquals(0)
+        compose.onNodeWithTag("wiki-settings-mode:automatic").assertTextContains(WikiModeCopy.modeNote("automatic"))
+        compose.onNodeWithTag("wiki-settings-edit").performClick()
+        compose.onNodeWithTag("wiki-settings-provider").assertTextContains("local-vllm", substring = true)
+        compose.onNodeWithTag("wiki-settings-form-submit").performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(
+            """PATCH /api/wiki/spaces/sp1 {"maintenance":{"enabled":true,"workspaceId":"w1","provider":"local-vllm","dailyRunLimit":8,"lookbackDays":0}}"""),
             patches())
     }
 
