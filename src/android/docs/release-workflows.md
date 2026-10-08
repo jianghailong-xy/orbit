@@ -78,7 +78,9 @@ The workflow keeps its `concurrency: release-${{ github.ref }}` (one run per tag
 - The tag's `release.yml` run shows all four jobs. A failed `dmg` leaves
   `android-publish` skipped: fix the cause and use **Re-run failed jobs**, which
   builds the DMG again and then attaches Android with the APK `android-build`
-  already made. A failed `android-build` can be re-run the same way.
+  already made. A failed `android-build` can be re-run the same way. (`dmg`'s own
+  re-run stops at `gh release create` if the failed attempt had already created the
+  release; that is the macOS job's behavior, unchanged here.)
 - A failed `android-publish` is re-run on its own. If it got as far as attaching
   `android-update.json`, the release is published and the re-run refuses to touch
   it; check the files with `gh release view vX.Y.Z --json assets`.
