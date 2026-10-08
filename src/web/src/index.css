@@ -15113,6 +15113,11 @@ button.chat-jump-start:hover {
   text-align: left;
   cursor: pointer;
 }
+/* A card whose head has the toggle folds from a press anywhere on that head (foldFromAnywhere), so
+   the whole head says so. */
+.re-head:has(> .re-toggle) {
+  cursor: pointer;
+}
 .re-chev {
   flex: none;
   width: 10px;
@@ -15198,8 +15203,9 @@ button.chat-jump-start:hover {
   color: var(--text-2);
   transition: color 0.15s, transform 0.15s;
 }
+/* Lit wherever a press would fold the card — anywhere on its head but Manage. */
 .re-runner-card .re-chev.open,
-.re-runner-card .re-toggle:hover .re-chev {
+.re-runner-card .re-head:hover:not(:has(.re-manage:hover)) .re-chev {
   color: var(--brand);
 }
 .re-runner-copy {
@@ -15599,7 +15605,17 @@ button.chat-jump-start:hover {
 .re-grp-chev.open svg {
   transform: rotate(90deg);
 }
-.re-grp-toggle:hover .re-grp-chev {
+/* The whole of the head's line folds it (foldFromAnywhere), so the whole line says so: the pointer
+   anywhere on it, and the chevron lit as the name lights it — not over Add account, or a panel or
+   note opened under the line. */
+.re-row.re-grp {
+  cursor: pointer;
+}
+.re-grp > .re-panel,
+.re-grp > .re-login-note {
+  cursor: auto;
+}
+.re-grp:hover:not(:has(.re-action:hover, > .re-panel:hover, > .re-login-note:hover)) .re-grp-chev {
   color: var(--brand);
 }
 /* Folded, the identity shares the row with a status and a quota: the version line wraps rather than
