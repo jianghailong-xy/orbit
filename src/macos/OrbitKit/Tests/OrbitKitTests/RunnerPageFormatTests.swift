@@ -319,6 +319,58 @@ final class RunnerPageFormatTests: XCTestCase {
                        "a signed-out engine shows no quota")
     }
 
+    /// A Kimi plan with no quota limit reads as a windowless snapshot — `{"provider": "kimi",
+    /// "fetchedAt": …}` — said on the account's row as "No quota limit", never "No quota reported" (a
+    /// read that failed or never ran; web `kimiNoQuotaLimit`). Only Kimi's windowless read says it, and
+    /// only once read: the month's coding share counts though no row draws it, and a windowless Codex
+    /// or Claude read stays a missing one.
+    func testAWindowlessKimiReadIsNoQuotaLimitNotNoQuotaReported() throws {
+        let kimi: [[String: Any]] = [["engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes",
+                                      "accounts": [["id": "default", "auth": "yes", "home": "/root/.kimi-code"],
+                                                   ["id": "5c2e91a0", "name": "Work", "auth": "yes",
+                                                    "home": "/root/.orbit/kimi-accounts/5c2e91a0"]]]]
+        let windowless: [String: Any] = ["provider": "kimi", "fetchedAt": "2026-10-09T00:00:00Z"]
+        // Read, and the answer held no window — alone, and beside the runner's other accounts, where
+        // `CodexAccounts.snapshot` would collapse Default's windowless read to nil (web's
+        // codexAccountSnapshot keeps it: anything besides `provider` is a read).
+        let single = try runner(Self.wikovaJSON, ["engines": [["engine": "kimi", "installed": true, "auth": "yes"]],
+                                                  "planUsage": ["kimi": windowless]])
+        XCTAssertTrue(RunnerPageFormat.accountNoQuotaLimit(single, engine: "kimi", account: "default"))
+        let machine = try runner(Self.wikovaJSON, ["engines": kimi,
+                                                   "planUsage": ["kimi": ["provider": "kimi",
+                                                                          "fetchedAt": "2026-10-09T00:00:00Z",
+                                                                          "accounts": ["5c2e91a0": ["provider": "kimi",
+                                                                                                    "fiveHour": ["utilization": 40]]]]]])
+        XCTAssertTrue(RunnerPageFormat.accountNoQuotaLimit(machine, engine: "kimi", account: "default"))
+        XCTAssertFalse(RunnerPageFormat.accountNoQuotaLimit(machine, engine: "kimi", account: "5c2e91a0"),
+                       "a window reported is a plan with a limit")
+        // A Default stripped to `provider` alone — not even when it was read — is no read at all.
+        let unread = try runner(Self.wikovaJSON, ["engines": kimi,
+                                                  "planUsage": ["kimi": ["provider": "kimi",
+                                                                         "accounts": ["5c2e91a0": ["provider": "kimi",
+                                                                                                   "fiveHour": ["utilization": 40]]]]]])
+        XCTAssertFalse(RunnerPageFormat.accountNoQuotaLimit(unread, engine: "kimi", account: "default"))
+        // An added account's own windowless read says it too: its entry under `accounts` exists.
+        let workWindowless = try runner(Self.wikovaJSON, ["engines": kimi,
+                                                          "planUsage": ["kimi": ["provider": "kimi",
+                                                                                 "fiveHour": ["utilization": 12],
+                                                                                 "accounts": ["5c2e91a0": windowless]]]])
+        XCTAssertTrue(RunnerPageFormat.accountNoQuotaLimit(workWindowless, engine: "kimi", account: "5c2e91a0"))
+        XCTAssertFalse(RunnerPageFormat.accountNoQuotaLimit(workWindowless, engine: "kimi", account: "default"))
+        // The month's coding share counts though it is never drawn: a plan reporting it has a limit.
+        let monthCode = try runner(Self.wikovaJSON, ["engines": kimi,
+                                                     "planUsage": ["kimi": ["provider": "kimi",
+                                                                            "monthCode": ["utilization": 30]]]])
+        XCTAssertFalse(RunnerPageFormat.accountNoQuotaLimit(monthCode, engine: "kimi", account: "default"))
+        // Never read at all, and a windowless read of another engine's — both "No quota reported".
+        XCTAssertFalse(RunnerPageFormat.accountNoQuotaLimit(try wikova(), engine: "kimi", account: "default"),
+                       "wikova's heartbeat carries no kimi snapshot")
+        let claude = try runner(Self.wikovaJSON, ["planUsage": ["provider": "claude",
+                                                                "fetchedAt": "2026-10-09T00:00:00Z"]])
+        XCTAssertFalse(RunnerPageFormat.accountNoQuotaLimit(claude, engine: "claude", account: "default"))
+        XCTAssertFalse(RunnerPageFormat.accountNoQuotaLimit(claude, engine: "codex", account: "default"))
+    }
+
     /// A machine that reports one provider at a time sends Claude flat, its added accounts' snapshots
     /// at the payload's top level: rebuilding the snapshot without them left every added account
     /// "No quota reported" while Default — whose windows a flat payload's own are — read fine.

@@ -298,7 +298,10 @@ private struct RunnerEngineContent: View {
                     .font(.orbitLabel)
                     .foregroundStyle(Color.secondary)
             } else if line.auth == "yes", RunnerPageFormat.reportsQuota(engine) {
-                Text(RunnerPageCopy.RUNNER_ENGINE_NO_QUOTA)
+                // Kimi only: a read that held no window at all is a plan with no quota limit, said so —
+                // not the failed-or-never-ran read's "No quota reported" (web QuotaCell).
+                Text(RunnerPageFormat.accountNoQuotaLimit(runner, engine: engine, account: line.id)
+                     ? RunnerPageCopy.RUNNER_ENGINE_NO_QUOTA_LIMIT : RunnerPageCopy.RUNNER_ENGINE_NO_QUOTA)
                     .font(.orbitLabel)
                     .foregroundStyle(Color.secondary)
             }

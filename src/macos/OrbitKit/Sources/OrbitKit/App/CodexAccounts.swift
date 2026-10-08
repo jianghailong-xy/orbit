@@ -83,6 +83,31 @@ public enum CodexAccounts {
         return windows(own).isEmpty ? nil : own
     }
 
+    /// One account's quota as reported, windowless or not — web's `codexAccountSnapshot` itself, where
+    /// `snapshot` is the drawing half that collapses a Default with nothing to draw to nil. A Default
+    /// minus its `accounts` counts as reported when it carries anything besides `provider` — a
+    /// `fetchedAt` alone says the runner read it and the answer held no window, as a Kimi plan with no
+    /// quota limit reads — and any other account counts when its entry under `accounts` exists.
+    public static func reportedSnapshot(_ usage: PlanUsageSnapshot?, account: String) -> PlanUsageSnapshot? {
+        guard let usage else { return nil }
+        if account != defaultID { return usage.accounts?[account] }
+        guard usage.accounts != nil else { return usage }
+        var own = usage
+        own.accounts = nil
+        return reported(own) ? own : nil
+    }
+
+    /// Whether anything besides `provider` is set on `s` (web's `Object.keys(own).some(key => key !==
+    /// 'provider')`): the read's own `fetchedAt` is enough — it says the runner asked and this was the
+    /// whole answer.
+    private static func reported(_ s: PlanUsageSnapshot) -> Bool {
+        s.fiveHour != nil || s.sevenDay != nil || s.sevenDayOpus != nil || s.sevenDaySonnet != nil
+            || s.month != nil || s.monthCode != nil || s.primary != nil || s.secondary != nil
+            || s.limitId != nil || s.limitName != nil || s.planType != nil
+            || s.rateLimitReachedType != nil || s.credits != nil || s.rateLimits != nil
+            || s.rateLimitReset != nil || s.fetchedAt != nil || s.buckets != nil
+    }
+
     /// What an account is called where one is named: what the user called it — Default too, once
     /// renamed in Orbit — else "Default", or the slot's own id (web `accountNameOf`).
     public static func label(_ id: String, accounts: [RunnerEngineAccount]?) -> String {

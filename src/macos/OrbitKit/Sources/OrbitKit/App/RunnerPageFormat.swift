@@ -425,6 +425,20 @@ public enum RunnerPageFormat {
         return CodexAccounts.snapshot(usage, account: account)?.rows ?? []
     }
 
+    /// Whether this account's quota was read and its plan carries no quota limit — Kimi only (web's
+    /// `kimiNoQuotaLimit`): a windowless kimi snapshot is a plan with nothing to gauge, said as
+    /// "No quota limit", never as "No quota reported" (a read that failed or never ran). The read must
+    /// have happened (`CodexAccounts.reportedSnapshot` — a Default with `accounts` beside it keeps its
+    /// windowless read, which `snapshot` collapses to nil), and the month's coding share counts though
+    /// no row draws it: a plan that reports it has a limit.
+    public static func accountNoQuotaLimit(_ runner: Runner, engine: String, account: String) -> Bool {
+        guard engine == "kimi" else { return false }
+        let usage = CodexAccounts.usage(engine, planUsage: runner.planUsage, engines: runner.engines)
+        guard let snapshot = CodexAccounts.reportedSnapshot(usage, account: account) else { return false }
+        return snapshot.provider == "kimi" && snapshot.fiveHour == nil && snapshot.sevenDay == nil
+            && snapshot.month == nil && snapshot.monthCode == nil
+    }
+
     /// The engines whose quota a runner reads: the ones Orbit signs in.
     public static func reportsQuota(_ engine: String) -> Bool { loginEngine(engine) != nil }
 
