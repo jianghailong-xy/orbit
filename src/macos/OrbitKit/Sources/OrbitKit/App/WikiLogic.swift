@@ -1033,7 +1033,7 @@ public struct WikiHomeContent: Equatable, Sendable {
         if let sha = space.rootCommitSha, !sha.isEmpty {
             parts.append(WikiStatusPart(WikiCopy.anchorsVerified(ref: String(sha.prefix(7)), ago: "")))
         }
-        if let health { parts += WikiHealthLogic.parts(health.maintenance, now: now) }
+        if let health { parts += WikiHealthLogic.parts(health, now: now) }
         return parts
     }
 

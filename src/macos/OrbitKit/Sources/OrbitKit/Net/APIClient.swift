@@ -1099,6 +1099,16 @@ public final class APIClient: @unchecked Sendable {
     public func wikiHealth(spaceID: String) async throws -> WikiSpaceHealth {
         try await get("wiki/spaces/\(spaceID)/health")
     }
+    /// `GET /wiki/spaces/:id/jobs`: the space's newest server runs with their calls — what Activity's Runs band
+    /// and a run's page draw (contract `jobs.read`, P9).
+    public func wikiJobs(spaceID: String) async throws -> WikiJobsRead {
+        try await get("wiki/spaces/\(spaceID)/jobs")
+    }
+    /// `GET /wiki/system-model`: the deployment's System model — its name and state, never its address or key —
+    /// and whether the server executes this account's wiki (contract `systemModel.read`).
+    public func wikiSystemModel() async throws -> WikiSystemModelStatus {
+        try await get("wiki/system-model")
+    }
     /// `GET /wiki/spaces/:id/articles`: the category directory — categories → topics → each topic's
     /// article and its subtopic parts (contract `articles.reads.directory`).
     public func wikiArticleDirectory(spaceID: String) async throws -> WikiArticleDirectory {

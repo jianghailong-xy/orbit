@@ -115,7 +115,11 @@ final class WikiHealthCopyParityTests: XCTestCase {
         let space = WikiSpace(id: shared.space.id, slug: shared.space.slug, title: shared.space.title,
                               rootCommitSha: shared.space.rootCommitSha, pendingOps: shared.space.pendingOps)
         for one in shared.cases {
-            let parts = WikiHealthLogic.parts(one.health.maintenance, now: now)
+            // The whole maintenance part: the look's parts, and — while the server runs the wiki — its reason (P9).
+            let parts = WikiHealthLogic.parts(one.health, now: now)
+            if !one.health.serverExecutes {
+                XCTAssertEqual(parts, WikiHealthLogic.parts(one.health.maintenance, now: now), "\(one.name): runner says the look alone")
+            }
             XCTAssertEqual(parts.map(\.text), one.parts.map(\.text), one.name)
             XCTAssertEqual(parts.map(\.tone.rawValue), one.parts.map(\.tone), "\(one.name): tones")
             XCTAssertEqual(parts.map(\.mark.rawValue), one.parts.map(\.mark), "\(one.name): marks")
@@ -270,7 +274,7 @@ final class WikiHealthCopyParityTests: XCTestCase {
         let logic = try swift(Self.kit + "App/WikiLogic.swift")
         let parts = try slice(logic, from: "public func statusParts(now: Date) -> [WikiStatusPart] {", to: "return parts")
         assertOrder(parts, ["let count = health?.entries ?? entries.count", "WikiCopy.entryNoun(count)",
-                            "WikiCopy.anchorsVerified(", "WikiHealthLogic.parts(health.maintenance, now: now)"],
+                            "WikiCopy.anchorsVerified(", "WikiHealthLogic.parts(health, now: now)"],
                     "the native line's parts")
 
         // The line is Activity's now (design §12.3.2): the home says what the space holds instead.
