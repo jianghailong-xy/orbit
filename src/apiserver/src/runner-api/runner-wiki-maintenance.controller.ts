@@ -5,6 +5,7 @@ import { PublicIdPipe } from '../common/public-id';
 import { PrismaService } from '../prisma/prisma.service';
 import { WikiCursorAdvanceDto } from '../wiki/dto';
 import { isWikiMaintenanceSession, WikiMaintenance } from '../wiki/wiki-maintenance';
+import { currentWikiExecutorSwitch, wikiExecutorServes } from '../wiki/wiki-executor-switch';
 import { noteWikiMaintenanceRunEnd } from '../wiki/wiki-maintenance-run';
 import { finishWikiPlanJob, wikiPlanJobOfSession } from '../wiki/wiki-plan-job';
 import { WikiRolloutGuard } from '../wiki/wiki-rollout';
@@ -109,8 +110,21 @@ export class RunnerWikiMaintenanceController {
   /**
    * The calling session, when it is a maintenance run of this space; every other caller is refused
    * before anything of the space is read.
+   *
+   * AN ACCOUNT THE SERVER EXECUTES IS REFUSED ITS DOSSIERS AND ITS CURSOR (`WIKI_SERVER_EXECUTES`,
+   * contract `maintenance.job.server.door`, P8): the wiki worker reads the dossiers and moves the cursor as
+   * the run's own writes, so no session is handed the space's conversation text or a way to move its
+   * watermark. Under the default runner this is what it always was.
    */
   private async maintainer(runner: Pick<Runner, 'id' | 'ownerId'>, header: string | undefined, spaceId: string): Promise<string> {
+    if (wikiExecutorServes(currentWikiExecutorSwitch(), runner.ownerId)) {
+      throw new WikiRefusalError({
+        code: 'WIKI_SERVER_EXECUTES',
+        message:
+          `this account's Wiki maintenance run is executed by the Orbit server (ORBIT_WIKI_EXECUTOR): its wiki worker reads `
+            + 'the dossiers and moves the cursor, so this door hands a session neither. Nothing was read.',
+      });
+    }
     const named = header?.trim();
     if (!named) {
       throw new BadRequestException(

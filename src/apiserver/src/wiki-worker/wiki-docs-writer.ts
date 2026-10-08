@@ -344,8 +344,9 @@ export function wikiDocSectionWords(section: Pick<WikiDocsPlanSection, 'covers' 
 export interface WikiDocShown {
   text: string;
   /**
-   * The read stopped at `repoOps.read.wholeFileChars`: `text` is the file's first whole lines, not all of it.
-   * Something past them is not found here, and says so, rather than being taken for something else.
+   * The read stopped at `repoOps.read.boundedChars`, the window a runner without the whole-file capability
+   * gives: `text` is the file's first whole lines, not all of it. Something past them is not found here, and
+   * says so, rather than being taken for something else.
    */
   cut: boolean;
 }
@@ -365,8 +366,8 @@ export function wikiDocCleanPath(path: string): string {
   return trimBackticks(goTrimSpace(path)).replace(/^\.\//u, '');
 }
 
-/** What a piece past the read's end is missing for. */
-const PAST_THE_READ = `(past the first ${WIKI_REPO_OPS.wholeFileChars} characters a read of the file gives)`;
+/** What a piece past the read's end is missing for: the window a runner without the whole-file capability gives. */
+const PAST_THE_READ = `(past the first ${WIKI_REPO_OPS.boundedChars} characters a read of the file gives)`;
 
 /**
  * The repository's half of a section's material at the commit `repo` reads (`wikiDocRepoPieces`): its design

@@ -86,10 +86,24 @@ internal object WikiPlanCopy {
 
     private fun plural(n: Int, one: String, many: String) = "${WikiArticleCopy.count(n)} ${if (n == 1) one else many}"
     fun versionLabel(version: Int) = "v$version"
-    fun emptyText(provider: String?) =
-        "A plan lays out this wiki’s documents: the categories, the documents in each, who each one is for and what it covers, " +
-            "and where each section’s material comes from. ${provider ?: WikiCopy.historyMaintenance} drafts it; nothing is written until you confirm it."
-    fun emptyNote(place: String?, provider: String?): String {
+
+    /** Who drafts the plan while the server executes the account (`WIKI_PLAN_DRAFTER_SERVER`): the wiki-worker's
+     * System model, never the account's provider. Every sentence that names the drafter takes this name then; under
+     * runner each keeps `<provider>`, word for word. */
+    const val drafterServer = "System model"
+
+    fun emptyText(provider: String?, serverExecutes: Boolean = false): String {
+        val drafter = if (serverExecutes) "The $drafterServer" else provider ?: WikiCopy.historyMaintenance
+        return "A plan lays out this wiki’s documents: the categories, the documents in each, who each one is for and what it covers, " +
+            "and where each section’s material comes from. $drafter drafts it; nothing is written until you confirm it."
+    }
+
+    /** Where a draft runs and how long it takes, under Draft plan (`wikiPlanEmptyNote`). While the server executes the
+     * account the wiki-worker drafts it with the System model, so the note is the server's. */
+    const val noteServer = "System model · about 1–2 hours"
+    const val emptyNoteServer = "Runs on the server with the System model — usually 1–2 hours. Until you confirm a plan, the Wiki shows its topic articles."
+    fun emptyNote(place: String?, provider: String?, serverExecutes: Boolean = false): String {
+        if (serverExecutes) return emptyNoteServer
         val on = place?.let { ", on $it" } ?: ""
         val with = provider?.let { " with $it" } ?: ""
         return "Runs as a task in the Wiki maintenance list$on$with — usually 1–2 hours. Until you confirm a plan, the Wiki shows its topic articles."
@@ -113,9 +127,10 @@ internal object WikiPlanCopy {
     const val moveDown = "Move down"
     fun protectedKept(numbers: List<String>) = "Protected, kept as they are: ${numbers.joinToString(" · ")}"
     fun time(since: String?, until: String?) = if (since == null && until == null) "any time" else "${since ?: "the start"} → ${until ?: "now"}"
-    fun redraftNote(provider: String?, from: Pair<Int, Boolean>?): String {
+    fun redraftNote(provider: String?, from: Pair<Int, Boolean>?, serverExecutes: Boolean = false): String {
         val base = from?.let { if (it.second) " from v${it.first}, the plan in force," else " from draft v${it.first}," } ?: ""
-        return "${provider ?: WikiCopy.historyMaintenance} drafts it again$base with what you write here. A draft that doesn’t pass the plan check is " +
+        val drafter = if (serverExecutes) "The $drafterServer" else provider ?: WikiCopy.historyMaintenance
+        return "$drafter drafts it again$base with what you write here. A draft that doesn’t pass the plan check is " +
             "redrafted with its errors, up to 3 times."
     }
     fun lostLabel(base: Int, number: Int, title: String) = "v$base §$number $title"
@@ -334,7 +349,8 @@ internal object WikiPlanLogic {
     fun failedChecks(errors: List<WikiPlanGateError>) = errors.map { it.check.takeIf { c -> c in gateChecks } ?: "unknown" }.toSet().size
     private fun attempts(job: WikiPlanJob) = job.attempt ?: (if (job.kind != "build") job.report?.attempts?.size else null) ?: job.attemptsMax ?: 3
     private fun runLink(sessionId: String?) = sessionId?.let { JobCard.Link(WikiPlanCopy.viewRun, JobCard.LinkTo.RUN, it) }
-    fun jobCard(job: WikiPlanJob?, now: Instant, runnerOnline: Boolean?, failed: WikiPlanJob?, inForce: Boolean, directory: WikiDocsDirectory?): JobCard? {
+    fun jobCard(job: WikiPlanJob?, now: Instant, runnerOnline: Boolean?, failed: WikiPlanJob?, inForce: Boolean, directory: WikiDocsDirectory?,
+        serverExecutes: Boolean = false): JobCard? {
         val draft = job?.takeIf { it.kind != "build" && it.state in openStates }
         val build = if (inForce) job?.takeIf { it.kind == "build" && it.state in openStates } else null
         val going = draft ?: build
@@ -348,7 +364,7 @@ internal object WikiPlanLogic {
             return JobCard(JobLook.QUEUED, WikiPlanCopy.queued, "${WikiPlanCopy.queuedText}$started", runLink(going.waitingFor?.sessionId), null)
         }
         if (draft != null && draft.state == "running") {
-            val who = draft.provider ?: WikiCopy.historyMaintenance
+            val who = if (serverExecutes) WikiPlanCopy.drafterServer else draft.provider ?: WikiCopy.historyMaintenance
             val text = draft.startedAt?.let { "$who · attempt ${draft.attempt ?: 1} of ${draft.attemptsMax ?: 3} · started ${WikiHealthLogic.ago(it, now)}" }
                 ?: "$who · waiting for its run to start"
             return JobCard(JobLook.DRAFTING, WikiPlanCopy.drafting, text, runLink(draft.sessionId), null)

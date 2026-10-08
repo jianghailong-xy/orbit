@@ -12,6 +12,15 @@
 export const WIKI_REPO_OP_CAPABILITY = 'wiki-repo-op/v1';
 
 /**
+ * The capability a runner declares when its `read` answers with whole files (owner 2026-10-08, design §7). Its
+ * Go twin is `wikiRepoOpReadCapabilityV1` in `src/runner-go/wiki_repo_ops.go`. A runner that declares only
+ * `wiki-repo-op/v1` still reads, but with the old window: at most `WIKI_REPO_OPS.boundedChars` characters an
+ * item, its end marked truncated — and the space's health line gives the same runner-upgrade reason it gives a
+ * machine with no repository capability at all.
+ */
+export const WIKI_REPO_OP_READ_CAPABILITY = 'wiki-repo-op-read/v1';
+
+/**
  * What a repository operation asks for (contract `repoOps.kinds`). Four questions, and no fifth: a pipeline
  * that needs more than these changes this list first.
  */
@@ -29,10 +38,13 @@ export type WikiRepoOpResultState = (typeof WIKI_REPO_OP_RESULT_STATES)[number];
 /**
  * The numbers the repository operations are dispatched, read, chunked and cached by (contract `repoOps`).
  *
- * The read limits are the ones the pipelines already read by on the runner side, kept as they are
- * (`src/runner-go/wiki_docs_build.go`): one design-document section is 4,200 characters, one contract file
- * 2,500, and one request — one section's material — is 22,000 in all. A footnote check reads a whole file
- * instead of a section, which is its own case and its own limit: one file may fill the whole 22,000.
+ * WHAT IS A READ LIMIT AND WHAT IS A CUTTING RULE. A read answers with the whole file at the sha (owner
+ * 2026-10-08): one file may be `wholeFileBytes` (2 MB), and anything larger is missing with the reason
+ * `too_large`. The numbers a pipeline gives the model — one design-document section is `docSectionChars`
+ * (4,200), one contract file `contractChars` (2,500), one section's material `sectionChars` (22,000) — are
+ * cutting rules the server applies to the text it holds, not read limits. A runner that has not declared
+ * `wiki-repo-op-read/v1` answers with the old window instead: `boundedChars` (22,000) an item and
+ * `sectionChars` a request.
  */
 export const WIKI_REPO_OPS = {
   /** Operations one heartbeat may claim. Two, for the reason the integration queue takes two per beat. */
@@ -51,17 +63,45 @@ export const WIKI_REPO_OPS = {
   fragmentBytes: 2 * 1024 * 1024,
   /** The most one snapshot may be, fragments and all; larger ones are refused (nothing asks for one). */
   maxSnapshotBytes: 64 * 1024 * 1024,
-  /** A design-document section, as a docs build reads one. */
+  /** A design-document section, as a server-side cut of a whole file gives one to a model. */
   docSectionChars: 4200,
-  /** A contract file, as a docs build reads one. */
+  /** A contract file, as a server-side cut of a whole file gives one to a model. */
   contractChars: 2500,
-  /** One request's whole material — one section — and the most one item may ask for. */
+  /** One section's whole material — what the server cuts, and what one bounded (old-runner) request answers. */
   sectionChars: 22000,
-  /** A whole file, as a footnote check reads one: its own case, its own limit. */
-  wholeFileChars: 22000,
+  /** The most one read item may answer with: the whole file, up to this. Larger is `too_large`. */
+  wholeFileBytes: 2 * 1024 * 1024,
+  /** The window a runner without `wiki-repo-op-read/v1` answers with: the old `wholeFileChars`. */
+  boundedChars: 22000,
+  /** How much material one read operation is packed with, by the sizes the snapshot gives. */
+  operationBytes: 4 * 1024 * 1024,
   /** How often a job waiting on an operation polls, when no announcement reached it. */
   pollSeconds: 2,
 } as const;
+
+/**
+ * What one file's text is, as the server holds it at a (space, sha, path) — the read cache
+ * (`wiki_repo_file`, contract `repoOps.cache`).
+ *
+ *   found      the whole file, as the runner answered it;
+ *   cut        the first whole lines of the old window (`boundedChars`), from a runner without the whole-file
+ *              capability: enough for that path, and a miss for a runner that can read the whole file;
+ *   missing    the commit has no such path;
+ *   too_large  the file is over `wholeFileBytes`: missing, with the reason kept.
+ */
+export const WIKI_REPO_FILE_STATES = ['found', 'cut', 'missing', 'too_large'] as const;
+export type WikiRepoFileState = (typeof WIKI_REPO_FILE_STATES)[number];
+
+/** One cached file, as a pipeline reads it back. */
+export interface WikiRepoFileRead {
+  path: string;
+  state: WikiRepoFileState;
+  /** The text, for `found` and `cut`; empty otherwise. */
+  text: string;
+  /** The file's size in bytes at the sha, as the runner answered it. */
+  sizeBytes: number;
+}
+
 
 /**
  * What the space's repository steps depend on, as the health line reads it (contract `repoOps`,
@@ -72,7 +112,9 @@ export const WIKI_REPO_OPS = {
  *   no_workspace     the space names no workspace, or the one it names is gone or has no working directory;
  *   runner_missing   the workspace is not bound to a machine;
  *   runner_offline   the machine is not beating;
- *   runner_upgrade   the machine is beating but is too old to be given repository work — upgrade it.
+ *   runner_upgrade   the machine is beating but has to be upgraded — it cannot be handed repository work at
+ *                    all without `wiki-repo-op/v1`, and with only that it reads the old bounded window
+ *                    (`WIKI_REPO_OPS.boundedChars`) instead of whole files.
  */
 export const WIKI_REPO_LOOKS = [
   'ready',
@@ -89,15 +131,50 @@ export interface WikiRepoOpReadItem {
   path: string;
   /** One section of it, by heading, as the plan's and the docs' gates name one; absent reads the file. */
   section?: string;
-  /** The most characters of it to answer with; absent gets the path's default. */
+  /**
+   * The most characters of it to answer with. Absent (the whole-file read) answers the whole file, up to
+   * `WIKI_REPO_OPS.wholeFileBytes`; a number is the bounded read an older control plane asks for, and a runner
+   * without the whole-file capability cuts there whatever it is asked (`WIKI_REPO_OPS.boundedChars`).
+   */
   maxChars?: number;
 }
 
-/** The most characters one read item gets when it names no limit: a contract's 2,500, anything else 4,200. */
+/**
+ * The most characters one item of a BOUNDED read gets when it names no limit: a contract's 2,500, anything else
+ * 4,200 — the numbers the runner's own default uses. A whole-file runner ignores the default: with no `maxChars`
+ * its answer is the whole file.
+ */
 export function wikiRepoOpDefaultChars(path: string): number {
   return path.startsWith('contracts/') || path.endsWith('.json')
     ? WIKI_REPO_OPS.contractChars
     : WIKI_REPO_OPS.docSectionChars;
+}
+
+/**
+ * What a read answers with: the commit it read at and what it made of each item. Above `WIKI_REPO_OPS.inlineBytes`
+ * the answer travels in fragments instead, and the result names the payload's shape — `sha`, `bytes`, `digest`
+ * and `fragments` — with the items inside the payload.
+ */
+export interface WikiRepoOpReadAnswer {
+  sha: string;
+  items: WikiRepoOpReadPiece[];
+  chars: number;
+}
+
+/** One item of a read's answer, as the runner wrote it. */
+export interface WikiRepoOpReadPiece {
+  path: string;
+  section?: string;
+  /** The file is at the sha and within `wholeFileBytes` (or cut to the bounded window). */
+  found: boolean;
+  /** Why it is not: `too_large` for a file over `wholeFileBytes`. Absent when there is no reason to give. */
+  reason?: string;
+  /** The file's size in bytes at the sha, as the runner read it. */
+  size?: number;
+  text?: string;
+  /** The answer was cut at the bounded window, so its end is not the file's. */
+  truncated?: boolean;
+  chars: number;
 }
 
 /**
