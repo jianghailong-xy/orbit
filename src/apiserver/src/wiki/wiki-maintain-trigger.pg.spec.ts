@@ -239,3 +239,47 @@ test('the runner door hands a server-executed account neither its run context no
     'a session that is no maintenance run is still WIKI_NOT_MAINTENANCE_SESSION',
   );
 });
+
+test('a server run counts against the day the way a task\'s run does, and a local catch-up run is not counted', { skip }, async () => {
+  const h = await boot();
+  process.env.ORBIT_WIKI_EXECUTOR = 'server';
+  delete process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS;
+  const prisma = h.prisma as unknown as PrismaService;
+  // One run a day, so the second fact of the day is held exactly where the runner path's own spec holds it.
+  const fx = await fixture(h, {
+    settings: { reviewMode: 'manual', maintenance: { enabled: true, workspaceId: 'x', listId: 'x', dailyRunLimit: 1 } },
+  });
+  const space = await h.prisma.wikiSpace.findFirstOrThrow({ where: { id: fx.spaceId } });
+  const settings = (space.settings ?? {}) as Record<string, unknown>;
+  const maintenance = { ...((settings.maintenance ?? {}) as Record<string, unknown>), dailyRunLimit: 1, workspaceId: fx.workspaceId, listId: fx.listId };
+  await h.prisma.wikiSpace.update({ where: { id: fx.spaceId }, data: { settings: { ...settings, maintenance } as never } });
+
+  const hints = { sessionIds: [fx.sessionId], taskIds: [] as string[] };
+  const first = await considerWikiMaintenance(prisma, h.ownerId, fx.spaceId, hints);
+  assert.equal(first.made, true, JSON.stringify(first));
+  if (!first.made) return;
+  assert.ok(first.jobId, 'the server path makes a job, and no task');
+  // The run ended, and the worker settled its job (the executor's own write): from here the day has one run,
+  // exactly as a task's ended run would be counted, and the space is free of an unfinished one.
+  await h.prisma.wikiMaintenanceRun.updateMany({
+    where: { id: first.runId },
+    data: { outcome: 'succeeded', endedAt: new Date(), startedAt: new Date(), report: { ops: { recorded: 1 } } as never },
+  });
+  await h.prisma.wikiJob.updateMany({
+    where: { id: first.jobId! },
+    data: { state: 'succeeded', endedAt: new Date(), report: { kind: 'maintain', outcome: 'succeeded' } as never },
+  });
+  const second = await considerWikiMaintenance(prisma, h.ownerId, fx.spaceId, hints);
+  assert.deepEqual(second, { made: false, spaceId: fx.spaceId, why: 'daily_limit_reached' },
+    'the day\'s run is used up, and the space is held with the reason the runner path writes');
+
+  // A run made in active catch-up on a local endpoint is not counted (contract `maintenance.job.catchUp.dailyLimit`):
+  // the same exemption, read off the run row's own localEndpoint rather than a provider.
+  await h.prisma.wikiMaintenanceRun.updateMany({
+    where: { id: first.runId },
+    data: { catchUp: 'active', localEndpoint: true, createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000) },
+  });
+  const third = await considerWikiMaintenance(prisma, h.ownerId, fx.spaceId, hints);
+  assert.equal(third.made, true, `an uncounted run is no run for the day: ${JSON.stringify(third)}`);
+  delete process.env.ORBIT_WIKI_EXECUTOR;
+});

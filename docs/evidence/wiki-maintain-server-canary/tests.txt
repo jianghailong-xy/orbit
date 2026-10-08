@@ -1,0 +1,33 @@
+The P8 maintenance canary's test record, on the merged tree (bd04eb510 + the P8 commit), 2026-10-08.
+
+## The ported and the surrounding specs
+
+  src/apiserver/src/wiki-worker/wiki-maintain.spec.ts           23 tests, 23 pass, 0 fail
+      (the ported table: each row names the Go case of src/runner-go/wiki_maintain_test.go it ports —
+       extraction checks, lines and spans, quotes and locators, off-topic, foreign anchors, principles,
+       duplicate titles, the batch size by mode, the breaker's page arithmetic, the retry suffix)
+  src/apiserver/src/wiki-worker/wiki-maintain-job.pg.spec.ts      6 tests,  6 pass, 0 fail
+      (the whole pipeline against a real PostgreSQL and a fake System model: extraction checks end to end,
+       batches and the breaker holding a page back, the cursor advance, catch-up skipping the documents,
+       the articles job, infra vs content failure)
+  src/apiserver/src/wiki/wiki-maintain-trigger.pg.spec.ts         5 tests,  5 pass, 0 fail
+      (the trigger makes a maintain job and no task under server execution; the runner mode still makes the
+       task; a providerless account can turn maintenance on; the day's counting off the run rows and the
+       local catch-up exemption; the runner door's 409 WIKI_SERVER_EXECUTES and the runner mode's own refusals)
+  src/apiserver/src/wiki/wiki-maintenance.pg.spec.ts             38 tests, 38 pass, 0 fail
+      (the runner path's own maintenance spec: unchanged, the regression net for "runner 模式下现有测试全部通过")
+  src/apiserver/src/wiki/wiki-health.pg.spec.ts                   5 tests,  5 pass, 0 fail
+
+  bash scripts/run-pg-spec.sh <the four pg specs above>
+  node --test build/wiki-worker/wiki-maintain.spec.js
+
+## The whole suites
+
+  (cd src/apiserver && npm test)                4970 tests, 4970 pass, 0 fail, 0 skipped
+  (cd src/shared && npx vitest run)                24 files,  408 pass
+  (cd src/web && npx vitest run --maxWorkers=2)   368 files, 4758 pass (web.txt)
+  npm run test:compose-topology                   11 tests, 11 pass, 0 fail (topology.txt)
+
+## The canary
+
+  bash docs/evidence/wiki-maintain-server-canary/run.sh     24 checks, 24 pass (evidence.json)

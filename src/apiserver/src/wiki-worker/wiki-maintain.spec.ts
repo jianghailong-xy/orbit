@@ -111,6 +111,112 @@ function pitfall(title: string, over: Record<string, unknown> = {}): Record<stri
   };
 }
 
+
+// ── The ported table: each row is one case of `src/runner-go/wiki_maintain_test.go` ───────────────
+
+/**
+ * The runner's own cases, one row each, on one dossier: the same input, the same deterministic answer the Go
+ * function gives it. Every row names the Go test it is the port of, so a reviewer can read the two side by side;
+ * the checks, the quota (the batch size by mode) and the breaker are the same arithmetic in both.
+ */
+test('the ported table: each row answers what the Go case it ports answers', () => {
+  const dossier = portDossier();
+  const lines = wikiMaintainLines(dossier);
+  const gateOf = (paths: readonly string[]) => gate(paths);
+  const rows: Array<{
+    go: string;
+    what: string;
+    answer: Array<Record<string, unknown>>;
+    /** The model's answer as text, for the one row that is not an array of entries. */
+    answerText?: string;
+    repo: WikiMaintainRepoGate;
+    expect: { ops?: number; dropped?: number; foreign?: number; principles?: number; firstSource?: Record<string, unknown> | null };
+  }> = [
+    {
+      go: 'TestWikiMaintainTakesNothingFromASessionAboutSomethingElse',
+      what: 'the model says the case is about something else',
+      answer: [],
+      answerText: '{"offTopic": true}',
+      repo: gateOf(['src/app.go']),
+      expect: { ops: 0 },
+    },
+    {
+      go: 'TestWikiMaintainQuotesTheRecordsOwnWordsWhereTheLineSaysTheyAre',
+      what: 'a quote one of the line\'s spans holds',
+      answer: [pitfall('PORT 在导入时读取')],
+      repo: gateOf(['src/app.go']),
+      expect: {
+        ops: 1,
+        firstSource: { kind: 'tool_call', ref: 'call-2', quote: 'connect ECONNREFUSED 127.0.0.1:9000', locator: { start: 28, end: 63 } },
+      },
+    },
+    {
+      go: 'TestWikiMaintainCitesTheRecordWithoutTheQuoteTheServerDoesNotFind',
+      what: 'a quote no span of the line holds: the record is cited, the quote left out',
+      answer: [pitfall('PORT 在导入时读取', { sources: [{ ref: 'L2', quote: 'go test ./...' }] })],
+      repo: gateOf(['src/app.go']),
+      expect: { ops: 1, firstSource: { kind: 'tool_call', ref: 'call-2', quote: 'go test ./...', locator: { start: 14, end: 27 } } },
+    },
+    {
+      go: 'TestWikiMaintainRunsThePipelineAndAdvancesTheCursor (the foreign anchor)',
+      what: 'every code anchor points outside the repository',
+      answer: [pitfall('游戏面板渲染慢', { anchors: { paths: ['src/components/GameBoard.tsx'], commits: [] } })],
+      repo: gateOf(['src/app.go']),
+      expect: { ops: 0, foreign: 1, dropped: 0 },
+    },
+    {
+      go: 'TestWikiMaintainRunsThePipelineAndAdvancesTheCursor (the principle)',
+      what: 'a principle: the owner\'s alone, counted and never an op',
+      answer: [{ kind: 'principle', title: '一切从简', summary: '越简单越好。', statement: '从简', rationale: '少出错' }],
+      repo: gateOf(['src/app.go']),
+      expect: { ops: 0, principles: 1, dropped: 0 },
+    },
+    {
+      go: 'TestWikiMaintainRunsThePipelineAndAdvancesTheCursor (the rejected entries)',
+      what: 'an unknown kind and an unquoted source are dropped, and handed back for the retry',
+      answer: [pitfall('bad kind', { kind: 'fact' }), pitfall('bad quote', { sources: [{ ref: 'L2', quote: 'connection refused' }] })],
+      repo: gateOf(['src/app.go']),
+      expect: { ops: 0, dropped: 2 },
+    },
+    {
+      go: 'TestWikiMaintainExtractsAtMostSixEntriesFromOneSession',
+      what: 'two entries of one title are one op',
+      answer: [pitfall('PORT 在导入时读取'), pitfall('port 在导入时读取')],
+      repo: gateOf(['src/app.go']),
+      expect: { ops: 1, dropped: 1 },
+    },
+  ];
+  for (const row of rows) {
+    if (row.answerText !== undefined) {
+      // The one answer that is not an array: the model saying the case is about something else, which the run
+      // reads before any entry is checked (`wikiMaintainOffTopic`).
+      assert.equal(wikiMaintainOffTopic(row.answerText), true, row.go);
+      continue;
+    }
+    const built = buildWikiMaintainOps(row.answer, dossier, lines, row.repo, TOPICS, new Date('2026-09-20T00:00:00Z'));
+    assert.equal(built.ops.length, row.expect.ops ?? 0, `${row.go}: ops — ${row.what}: ${JSON.stringify(built.problems)}`);
+    if (row.expect.dropped !== undefined) assert.equal(built.dropped, row.expect.dropped, `${row.go}: dropped`);
+    if (row.expect.foreign !== undefined) assert.equal(built.foreign, row.expect.foreign, `${row.go}: foreign`);
+    if (row.expect.principles !== undefined) assert.equal(built.principles, row.expect.principles, `${row.go}: principles`);
+    if (row.expect.firstSource !== undefined) {
+      assert.deepEqual((built.ops[0].body.sources as unknown[])[0], row.expect.firstSource, `${row.go}: the source`);
+    }
+  }
+  // The quota: the batch size by mode is the contract's `limits.opsPerChangeset` / `opsPerTurn`, as the Go
+  // `wikiMaintainBatchSize` reads them.
+  assert.equal(wikiMaintainBatchSize('automatic'), 30);
+  assert.equal(wikiMaintainBatchSize('tiered'), 30);
+  assert.equal(wikiMaintainBatchSize('manual'), 5);
+  // The breaker: the same page arithmetic the Go `breaker` makes, and the same arithmetic the pg spec drives
+  // end to end (a hundred live entries, the second page held back, the cursor stopped where it starts).
+  const batch = (session: string): WikiMaintainBatch => ({ topic: 'testing', ops: [{ body: {}, topic: 'testing', session, title: session }], changes: [true] });
+  assert.deepEqual(
+    wikiMaintainBreakerHold([batch('s1'), batch('s2')], new Map([['s1', 0], ['s2', 1]]), 2, 1),
+    { batches: [batch('s1')], heldBack: 1, stop: 1 },
+    'one entry of room: the first page fits, the second is held back and the cursor stops where it starts',
+  );
+});
+
 // ── The prompt and the off-topic answer ─────────────────────────────────────────────────────────
 
 test('the prompt names the repository, what it is, the topics and the dossier, and asks for the flat array', () => {
