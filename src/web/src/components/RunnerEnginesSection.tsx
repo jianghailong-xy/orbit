@@ -52,7 +52,7 @@ export function useEngineUpdate(runnerId: string) {
  * every CLI on it. Providers is a page about identity, where every other control is scoped to a
  * (runner, engine) pair; the one runner-scoped button sat there next to the link that says
  * runner-scoped things are over here. The mismatch was visible in the output: the update summary
- * named OpenCode, which Providers deliberately has no row for.
+ * named every CLI the pass had touched, beside rows that are one engine each.
  *
  * So the split is by what an action changes. What's *available* — Install, Sign in — stays on
  * Providers, one › away on every row. What *version* is installed belongs to the machine, next to

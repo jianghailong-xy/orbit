@@ -149,6 +149,19 @@ describe('NewSessionProviderHero', () => {
     expect(html).not.toContain('engine=moonshot');
   });
 
+  it('offers OpenCode on a runner that has not got it, with the install and never a sign-in', () => {
+    // Orbit installs it, so the row is listed rather than dropped — and it has no sign-in to relay,
+    // so the reason must not promise one (web parity: mirror of AgentIdentity's row).
+    const html = markup('opencode');
+    const engines = engineChoices(providerChoices(configured, catalog), configured, ['opencode']);
+    const row = engines.find((engine) => engine.slug === 'opencode');
+    expect(row).toMatchObject({ label: 'OpenCode', unavailable: 'Not installed', fixEngine: 'opencode' });
+    expect(html).toContain('aria-label="Engine: OpenCode"');
+    expect(html).toContain('Not installed');
+    expect(html).toContain('engine=opencode');
+    expect(html).not.toContain('sign in');
+  });
+
   it('names the engine on the card, and not the provider of it the draft spends', () => {
     const html = markup('deepseek');
     expect(html).toContain('aria-label="Engine: Claude"');

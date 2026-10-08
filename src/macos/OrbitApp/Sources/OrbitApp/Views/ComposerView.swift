@@ -689,7 +689,7 @@ struct ComposerView: View {
                         // that, so it is greyed out with its reason instead.
                         let fixable = blocked && choice.fixEngine != nil
                         let reason = choice.unavailable ?? ""
-                        let fix = fixable ? (["antigravity", "dsh", DshRuntime.connectFix].contains(choice.fixEngine ?? "") ? " →" : ", sign in →") : ""
+                        let fix = fixable ? SessionProviderChoices.fixSuffix(choice.fixEngine) : ""
                         // On iOS the engine names a section of its accounts instead of a row above
                         // them (`accountsUnderHeader`).
                         let headsSection = Self.accountsUnderHeader && listsAccounts

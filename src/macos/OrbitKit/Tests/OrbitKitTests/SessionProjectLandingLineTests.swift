@@ -59,11 +59,21 @@ final class SessionProjectLandingLineTests: XCTestCase {
                        SessionLine(text: "Landing 2 jobs · rebasing · 4m", tone: .running))
     }
 
+    /// A runner that has stopped reporting says exactly that, in the state slot — and never reads
+    /// as a timeout, which is the job's own verdict and lives in the server's `blockingReason`.
     func testAStalledRunnerGoesQuietAndOlderServersFallBackToTheCount() {
         let stalled = ProjectListIntegration(line: .main, ref: "main", activeJobCount: 1, inFlight:
             ProjectIntegrationInFlight(state: "RUNNING", startedAt: ago(30), kind: "CHECK_PROMOTION",
                                        phase: "CHECK", heartbeatAt: ago(11)))
-        XCTAssertEqual(SessionProjectCopy.landingLine(stalled, now: now)?.tone, .queued)
+        XCTAssertEqual(SessionProjectCopy.landingLine(stalled, now: now),
+                       SessionLine(text: "Merge check · no report for 11m · 30m", tone: .queued))
+        XCTAssertFalse(SessionProjectCopy.landingLine(stalled, now: now)!.text.lowercased().contains("timed out"))
+        // A claim whose runner has not reported once says that; one that is reporting keeps its phase.
+        let never = ProjectListIntegration(line: .main, ref: "main", activeJobCount: 1, inFlight:
+            ProjectIntegrationInFlight(taskTitle: "P5", state: "RUNNING", startedAt: ago(4),
+                                       kind: "LAND_TASK", phase: "FETCH"))
+        XCTAssertEqual(SessionProjectCopy.landingLine(never, now: now),
+                       SessionLine(text: "Landing · no report yet · 4m · P5", tone: .queued))
         XCTAssertEqual(SessionProjectCopy.landingLine(ProjectListIntegration(line: .main, ref: "main", activeJobCount: 1), now: now),
                        SessionLine(text: "Landing · 1 job", tone: .queued))
         XCTAssertNil(SessionProjectCopy.landingLine(ProjectListIntegration(line: .main, ref: "main", activeJobCount: 0), now: now))

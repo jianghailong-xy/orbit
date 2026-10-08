@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'antd';
 import type {
   IntegrationCheckResult,
+  ProjectLandTask,
   ProjectOpenItemRow,
   ProjectPromotionView,
 } from '@orbit/shared';
@@ -26,12 +27,15 @@ import {
 } from '../lib/coordinatorChat';
 import { encodeId } from '../lib/idCodec';
 import {
+  projectIntegrationQuery,
   projectOpenItemsQuery,
   projectPromotionQuery,
 } from '../lib/queries';
 import { ago, formatSpan } from '../lib/watches';
 import {
+  BLOCKED_BY,
   REVIEW,
+  promotionBlockedBy,
   promotionEventLine,
   promotionReceiptLine,
 } from '../lib/projectMerge';
@@ -454,12 +458,16 @@ function MergedRows({
 function BlockedRows({
   promotion,
   item,
+  landings,
   now,
 }: {
   promotion: ProjectPromotionView;
   item: ProjectOpenItemRow | null;
+  /** The landings the project's own line has in flight, for WHO is in front of this merge. */
+  landings: readonly ProjectLandTask[] | null;
   now: number;
 }): JSX.Element {
+  const inFront = promotionBlockedBy(promotion, landings);
   const upstream = shortRef(promotion.upstreamRef);
   const failed = promotion.checks.filter((check) => !passed(check));
   const escalatesIn =
@@ -491,6 +499,10 @@ function BlockedRows({
           </span>
         )}
       </Row>
+      {/* Who is in front of it, when the project's own line is busy: the landing holding this
+          branch, and — in that landing's own `blockingReason` — what is holding IT. Absent when
+          the line is doing nothing on these branches. */}
+      {inFront ? <Row k={BLOCKED_BY}>{inFront}</Row> : null}
       <Row k="Then">
         {`checks re-run and this card comes back as “Merge ${shortRef(promotion.sourceRef)} into ${upstream}?”`}
         {escalatesIn != null && escalatesIn > 0
@@ -639,6 +651,7 @@ export function ProjectPromotionCard({
   promotion,
   item,
   project,
+  landings = null,
   now,
   onChat,
   asLine = false,
@@ -648,6 +661,9 @@ export function ProjectPromotionCard({
   promotion: ProjectPromotionView;
   /** The exception item holding a BLOCKED candidate, when one has been filed. */
   item: ProjectOpenItemRow | null;
+  /** The project's current landings, for the row that says what is in front of a blocked candidate
+   *  (`promotionBlockedBy`). Null where the host has not read them. */
+  landings?: readonly ProjectLandTask[] | null;
   /** The project document, for the criteria tally (M8). Null when it has not been read. */
   project: PromotionProjectView | null;
   /** Passed in so a test reads a fixed clock; the hosts give it `Date.now()`. */
@@ -735,7 +751,7 @@ export function ProjectPromotionCard({
         ) : merging ? (
           <MergingRows promotion={promotion} now={now} />
         ) : blocked ? (
-          <BlockedRows promotion={promotion} item={item} now={now} />
+          <BlockedRows promotion={promotion} item={item} landings={landings} now={now} />
         ) : (
           <ReadyRows promotion={promotion} project={project} now={now} />
         )}
@@ -899,6 +915,15 @@ export function ProjectPromotion({
     queryFn: () => api<PromotionProjectView>(`/projects/${encodeURIComponent(projectId!)}`),
     enabled: Boolean(projectId),
   });
+  // What the project's line is landing, read only while that is worth saying: a blocked candidate
+  // names the landing in front of it, and the three states that are not blocked have nothing to
+  // look past.
+  const blocked = promotion.data?.state === 'BLOCKED';
+  const integration = useQuery({
+    ...projectIntegrationQuery(projectId ?? ''),
+    enabled: Boolean(projectId) && blocked,
+    refetchInterval: blocked ? 20_000 : false,
+  });
   const current = promotion.data;
   if (!projectId || !current) return null;
   // A candidate with a moment is drawn by the transcript, and one whose stamp nothing can read
@@ -911,6 +936,7 @@ export function ProjectPromotion({
       promotion={current}
       item={rows.find((row) => row.promotionId === current.promotionId) ?? null}
       project={project.data ?? null}
+      landings={integration.data?.landTasks ?? null}
       now={now}
       onChat={onChat}
       asLine={asLine}
