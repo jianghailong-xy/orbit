@@ -16,7 +16,11 @@
  *      page's ops are held back and the cursor stops where that page starts;
  *   4. failure: a repository operation the runner never answers is the platform's — the job goes back to
  *      queued and nothing is counted against the space. A refusal of the run's own ends it failed, counts it
- *      and fails the job as content.
+ *      and fails the job as content;
+ *   5. the anchors step: a page of two entries whose anchors collide on the per-entry index is checked as
+ *      one repository operation, and each entry records only its own checks — a symbol without a baseline
+ *      adopts its own region, never a page-mate's (the canary incident: per-entry indexes mapped back
+ *      through one Map overwrote each other, and entries took the last entry's verdict for their index).
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-maintain-job.pg.spec.ts
  *
@@ -24,7 +28,7 @@
  * afterwards.
  */
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo, Socket } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -353,7 +357,7 @@ async function clearWork(h: Harness): Promise<void> {
 }
 
 /** The runner this spec plays: every queued repository operation is answered at once, by kind. */
-async function runRepoOps(h: Harness, over: { failSnapshot?: boolean } = {}): Promise<number> {
+async function runRepoOps(h: Harness, over: { failSnapshot?: boolean; checkAnchor?: (anchor: Record<string, unknown>) => Record<string, unknown> } = {}): Promise<number> {
   const rows = await h.sql.query<{ id: string; kind: string; input: Record<string, unknown> }>(
     `SELECT "id", "kind", "input" FROM "wiki_repo_op" WHERE "owner_id" = $1 AND "state" = 'queued' ORDER BY "created_at"`,
     [h.ownerId],
@@ -370,12 +374,19 @@ async function runRepoOps(h: Harness, over: { failSnapshot?: boolean } = {}): Pr
         ? { read: { sha: REPO.sha, items: (Array.isArray(input.items) ? input.items : []).map((item: { path?: unknown; maxChars?: unknown }) => ({ path: String(item.path ?? ''), found: true, text: 'package app\n', chars: 12 })), chars: 12 } }
         : row.kind === 'diff'
           ? { diff: { from: String(input.from ?? ''), to: String(input.to ?? ''), files: [], docs: [] } }
-          : { anchors: { sha: REPO.sha, anchors: (Array.isArray(input.anchors) ? input.anchors : []).map((anchor: Record<string, unknown>) => ({
-            ...anchor,
-            state: 'verified',
-            // A symbol's region hash is required of a symbol that was found and of nothing else.
-            ...(anchor.type === 'symbol' ? { regionSha256: 'd'.repeat(64) } : {}),
-          })) } };
+          : {
+              anchors: {
+                sha: REPO.sha,
+                anchors: (Array.isArray(input.anchors) ? input.anchors : []).map(
+                  (anchor: Record<string, unknown>) => over.checkAnchor?.(anchor) ?? {
+                    ...anchor,
+                    state: 'verified',
+                    // A symbol's region hash is required of a symbol that was found and of nothing else.
+                    ...(anchor.type === 'symbol' ? { regionSha256: 'd'.repeat(64) } : {}),
+                  },
+                ),
+              },
+            };
     await h.sql.query(`UPDATE "wiki_repo_op" SET "state"='succeeded', "result"=$2::jsonb, "ended_at"=now() WHERE "id"=$1`, [row.id, JSON.stringify(result)]);
   }
   return rows.length;
@@ -386,7 +397,7 @@ async function pass(
   h: Harness,
   which: { queue: WikiModelRequestQueue; executor: WikiJobExecutor },
   done: () => Promise<boolean>,
-  over: { failSnapshot?: boolean } = {},
+  over: { failSnapshot?: boolean; checkAnchor?: (anchor: Record<string, unknown>) => Record<string, unknown> } = {},
   rounds = 400,
 ): Promise<void> {
   for (let i = 0; i < rounds; i += 1) {
@@ -592,6 +603,100 @@ test('a server run reads, checks, proposes, advances, verifies and re-checks the
   const articles = jobs.filter((job) => job.kind === 'articles');
   assert.equal(articles.length, 1);
   assert.equal(articles[0]!.state, 'queued');
+});
+
+// ── The anchors of a page: every entry keeps its own checks ─────────────────────────────────────
+
+/**
+ * The fake repository the anchor step is checked against: one file, one reachable commit, and a
+ * region hash derived from the symbol's name — different symbols hash differently, which is what
+ * tells one entry's symbol check from another's.
+ */
+const ANCHOR_REPO = {
+  file: 'src/app.go',
+  commit: createHash('sha1').update('the commit the spec keeps').digest('hex'),
+  regionOf: (symbol: string): string => createHash('sha256').update(`region of ${symbol}`).digest('hex'),
+};
+
+/** What the runner answers for one anchor of the anchors op, checking it against ANCHOR_REPO. */
+function checkAnchorAgainstRepo(anchor: Record<string, unknown>): Record<string, unknown> {
+  if (anchor.type === 'path') {
+    return { ...anchor, state: anchor.path === ANCHOR_REPO.file ? 'verified' : 'missing' };
+  }
+  if (anchor.type === 'commit') {
+    return { ...anchor, state: anchor.sha === ANCHOR_REPO.commit ? 'verified' : 'missing' };
+  }
+  return { ...anchor, state: 'verified', regionSha256: ANCHOR_REPO.regionOf(String(anchor.symbol ?? '')) };
+}
+
+test('the anchors step records each entry\'s checks on its own anchors — a page of entries is never one entry', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  // No dossiers: the run proposes nothing, and the anchors step is what this case is about.
+  h.maintenance.dossierPage = (async () => ({ ...(pageOf(fx) as Record<string, unknown>), facts: 0, dossiers: [] })) as unknown as WikiMaintenance['dossierPage'];
+  // Two live entries whose anchors collide on the per-entry index: each has a path, a symbol and a
+  // commit at indexes 0, 1 and 2. The first entry's symbol names no baseline: its first check adopts
+  // the region the check found, so a verdict laid on the wrong entry's symbol would stick as a
+  // wrong baseline.
+  const serveBaseline = createHash('sha256').update('the baseline the serve anchor names').digest('hex');
+  const goneCommit = createHash('sha1').update('a commit the repository never held').digest('hex');
+  const first = '00000000-0000-4000-8000-000000000001';
+  const second = '00000000-0000-4000-8000-000000000002';
+  await h.prisma.wikiEntry.create({
+    data: {
+      id: first, ownerId: h.ownerId, spaceId: fx.spaceId, kind: 'concept', title: 'the kept entry', summary: 'a live entry',
+      status: 'active', trust: 'auto', currentRevision: 1, fields: { definition: 'x', boundaries: 'y' }, topics: [],
+      anchors: [
+        { type: 'path', path: ANCHOR_REPO.file },
+        { type: 'symbol', path: ANCHOR_REPO.file, symbol: 'main' },
+        { type: 'commit', sha: ANCHOR_REPO.commit },
+      ],
+    },
+  });
+  await h.prisma.wikiEntry.create({
+    data: {
+      id: second, ownerId: h.ownerId, spaceId: fx.spaceId, kind: 'concept', title: 'the broken entry', summary: 'a live entry',
+      status: 'active', trust: 'auto', currentRevision: 1, fields: { definition: 'x', boundaries: 'y' }, topics: [],
+      anchors: [
+        { type: 'path', path: 'src/gone.go' },
+        { type: 'symbol', path: ANCHOR_REPO.file, symbol: 'serve', regionSha256: serveBaseline },
+        { type: 'commit', sha: goneCommit },
+      ],
+    },
+  });
+
+  const which = worker(h);
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded' || (await jobOf(h, fx.jobId)).state === 'failed',
+    { checkAnchor: checkAnchorAgainstRepo });
+
+  // The job succeeds: every reported check names the anchor it belongs to, so nothing is refused.
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', `the anchors step must not fail: ${job.error ?? ''}`);
+
+  const kept = await h.prisma.wikiEntry.findFirstOrThrow({ where: { id: first } });
+  const keptAnchors = kept.anchors as Array<Record<string, unknown> & { check?: Record<string, unknown> }>;
+  assert.equal(keptAnchors[0]!.check?.state, 'verified', 'the kept entry\'s path holds');
+  assert.equal(keptAnchors[1]!.check?.state, 'verified', 'the kept entry\'s symbol is found');
+  assert.equal(keptAnchors[1]!.check?.regionSha256, ANCHOR_REPO.regionOf('main'), 'the kept entry\'s symbol check is its own');
+  assert.equal(keptAnchors[1]!.check?.baselineSha256, ANCHOR_REPO.regionOf('main'), 'the baseline the first check adopts is its own region');
+  assert.equal(keptAnchors[2]!.check?.state, 'verified', 'the kept entry\'s commit is reachable');
+  assert.equal(kept.anchorState, 'verified');
+  assert.equal(kept.challenged, false, 'a fully verified entry draws no challenge');
+
+  const broken = await h.prisma.wikiEntry.findFirstOrThrow({ where: { id: second } });
+  const brokenAnchors = broken.anchors as Array<Record<string, unknown> & { check?: Record<string, unknown> }>;
+  assert.equal(brokenAnchors[0]!.check?.state, 'missing', 'the gone path is missing');
+  assert.equal(brokenAnchors[1]!.check?.state, 'changed', 'the serve symbol\'s region moved against its own baseline');
+  assert.equal(brokenAnchors[1]!.check?.regionSha256, ANCHOR_REPO.regionOf('serve'), 'the changed check carries the region its own symbol holds now');
+  assert.equal(brokenAnchors[1]!.check?.baselineSha256, serveBaseline, 'a changed check keeps the baseline the anchor named');
+  assert.equal(brokenAnchors[2]!.check?.state, 'missing', 'the unheld commit is missing');
+  assert.equal(broken.anchorState, 'missing');
+  assert.equal(broken.challenged, true, 'the broken entry is challenged for the owner');
+
+  const report = (await runRow(h, fx.runId)).report as Record<string, unknown>;
+  const anchors = report.anchors as Record<string, number>;
+  assert.deepEqual(anchors, { entries: 2, changed: 1, missing: 1 });
 });
 
 test('a run made while the space is catching up writes no document and proposes no plan change, and owes no articles job', { skip }, async () => {
