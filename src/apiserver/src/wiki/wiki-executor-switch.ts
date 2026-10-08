@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { toUuid, WIKI_EXECUTOR_ENV, WIKI_EXECUTOR_MODES, type WikiExecutorMode } from '@orbit/shared';
+import { toUuid, WIKI_EXECUTOR_ENV, WIKI_EXECUTOR_MODES, type WikiExecutorMode, type WikiExecutorView } from '@orbit/shared';
 
 /**
  * How far the wiki's server-side execution is switched on (contract `jobs.executor`, design §10): the flag
@@ -62,6 +62,14 @@ export function readWikiExecutorSwitch(env: NodeJS.ProcessEnv = process.env): Wi
 export function wikiExecutorServes(sw: WikiExecutorSwitch, ownerId: string): boolean {
   if (sw.mode === 'server') return true;
   return sw.mode === 'canary' && sw.canaryOwners.has(ownerId.toLowerCase());
+}
+
+/**
+ * What a read tells `ownerId` about the switch (contract `jobs.executor.read`): the mode, and whether the server
+ * executes that account's wiki. The canary list itself stays here: no read names another account on it.
+ */
+export function wikiExecutorView(sw: WikiExecutorSwitch, ownerId: string): WikiExecutorView {
+  return { mode: sw.mode, serverExecutes: wikiExecutorServes(sw, ownerId) };
 }
 
 /**

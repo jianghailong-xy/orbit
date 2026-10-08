@@ -1239,9 +1239,9 @@
         "lagSeconds": "How long ago that fact was, in whole seconds; 0 when there is none.",
         "dailyLimitReached": "The space has made settings.maintenance.dailyRunLimit maintenance tasks since midnight UTC (wikiMaintenanceRunsToday), however they ended — but the runs made in catch-up that are not counted — and the next run would count: no fact makes another today. False while the space catches up on a local endpoint (maintenance.job.catchUp.dailyLimit), whose runs the day does not count.",
         "held": "maintenance.job.held as the cursor row keeps it: {reason, at}, or null.",
-        "running": "The run under way — its row has started and not ended, and its task is OPEN or IN_PROGRESS — as {sessionId, startedAt}, or null; startedAt is when its latest attempt started (maintenance.job.recovery.attempts).",
-        "lastRun": "The run that ended last, as {sessionId, outcome, endedAt}, or null: what View run opens.",
-        "lastFailure": "Of the runs whose latest attempt failed — outcome failed or truncated — the one that ended last, as {kind, reason, at, sessionId}: kind is its failureKind (maintenance.job.recovery.failureKinds), reason its error, at when it ended; null while no run's latest attempt failed. What a client tells the platform failing from the run failing by."
+        "running": "The run under way — its row has started and not ended, and its task is OPEN or IN_PROGRESS — as {sessionId, startedAt}, or null; startedAt is when its latest attempt started (maintenance.job.recovery.attempts). Beside them jobId (P9): the server's job that runs it, null for a maintenance session's run.",
+        "lastRun": "The run that ended last, as {sessionId, outcome, endedAt}, or null: what View run opens. Beside them jobId (P9): the server's job that ran it, which has no session — View run then opens that run's row on Activity (jobs.read) instead of a session.",
+        "lastFailure": "Of the runs whose latest attempt failed — outcome failed or truncated — the one that ended last, as {kind, reason, at, sessionId}: kind is its failureKind (maintenance.job.recovery.failureKinds), reason its error, at when it ended; null while no run's latest attempt failed. What a client tells the platform failing from the run failing by. Beside them jobId (P9), as lastRun's."
       },
       "looks": ["off", "failing", "running", "behind", "ok"],
       "look": "The first that holds, in the order of looks: off — maintenance is off; failing — consecutiveFailures is more than 0; running — running is not null; behind — the oldest fact after the cursor is older than maintenance.rules.maxPendingAgeHours; ok — none of those (wikiMaintenanceLook).",
@@ -1251,7 +1251,9 @@
         "once": "Sent by the one failure report whose increment made consecutive_failures exactly afterFailures. The increment is one UPDATE … RETURNING on the cursor row, so of reports racing only one reads that number back, and the streak's later failures read more. After the statement, outside any transaction, best-effort: the failure is recorded whether or not the phone rang.",
         "reset": "A succeeded run sets consecutive_failures back to 0, so the next streak is told once more, at its own third failure."
       },
-      "client": "The Wiki home's status line, on the web at every width and on iOS: after the entries, the review count (desktop only) and the anchors, the maintenance part in the space's look — the same words and the same parts on both, locked by src/shared/src/wiki-health.fixture.json."
+      "client": "The Wiki home's status line, on the web at every width and on iOS: after the entries, the review count (desktop only) and the anchors, the maintenance part in the space's look — the same words and the same parts on both, locked by src/shared/src/wiki-health.fixture.json.",
+      "executor": "jobs.executor.read for the space's owner (P9): { mode, serverExecutes }. Absent from a control plane that predates it, which a client reads as runner.",
+      "systemModel": "While executor.serverExecutes holds, the System model as systemModel.read answers its state — { state, model, since, checkedAt, workerSeenAt }, never its address or key; null under runner, where the model is none of the account's business and is not read."
     }
   },
 
@@ -1950,8 +1952,9 @@
       "route": "GET /api/wiki/system-model",
       "who": "Any account the wiki is on for (JwtAuthGuard and WikiRolloutGuard; a personal access token needs wiki:read): it is the deployment's model, not a space's. It writes nothing.",
       "states": ["up", "down", "auth_failed", "unconfigured", "worker_not_running"],
-      "fields": ["state", "model", "since", "checkedAt", "workerSeenAt"],
+      "fields": ["state", "model", "since", "checkedAt", "workerSeenAt", "executor"],
       "workerNotRunning": "No row, or a workerSeenAt older than status.workerStaleSeconds, reads as worker_not_running: what the settings page and the health line show as wiki worker not running. since is then the last heartbeat.",
+      "executor": "The executor switch as it stands for the caller (jobs.executor.read, P9): { mode, serverExecutes } — what the wiki settings page reads to draw the System model instead of the provider. The other five fields are the deployment's and read the same for every account.",
       "never": "The System model's address, its key, and last_error: the read says the model's name and its state, and nothing else."
     },
     "metrics": {
@@ -2014,14 +2017,42 @@
         "server": "Every account is. The switch gates execution only: rows written by either path stay where they are, and moving it back to runner stops new jobs being taken without deleting anything."
       },
       "mistyped": "A value that is none of the three is read as runner, with a logged problem: a switch reached for and mistyped must land on the path that already runs, never on one whose worker nobody deployed.",
-      "whoReadsIt": "One pure function (src/apiserver/src/wiki/wiki-executor-switch.ts, shaped after wiki-rollout.ts) is read by the apiserver and by the wiki-worker, so both answer the same about an account. The variables reach a service the way the model's do — compose passes them from the deployment's .env to both the apiserver and the wiki-worker (P3 wired them; test/compose-topology.test.mjs pins the two lines, and src/apiserver/src/wiki/wiki-compose-env.spec.ts holds them to names no agent session carries), and unset everywhere reads as runner. Setting the switch is the account owner's: production stays runner until P10."
+      "whoReadsIt": "One pure function (src/apiserver/src/wiki/wiki-executor-switch.ts, shaped after wiki-rollout.ts) is read by the apiserver and by the wiki-worker, so both answer the same about an account. The variables reach a service the way the model's do — compose passes them from the deployment's .env to both the apiserver and the wiki-worker (P3 wired them; test/compose-topology.test.mjs pins the two lines, and src/apiserver/src/wiki/wiki-compose-env.spec.ts holds them to names no agent session carries), and unset everywhere reads as runner. Setting the switch is the account owner's: production stays runner until P10.",
+      "read": {
+        "phase": "server execution, P9",
+        "fields": ["mode", "serverExecutes"],
+        "rule": "What a read tells the account that asks (wikiExecutorView): mode is the deployment's switch, one of modes, and serverExecutes whether the server executes this account's wiki — mode server, or canary with the account on its list. Never the list itself, nor whether any other account is on it.",
+        "readBy": "systemModel.read (executor) and maintenance.health (executor): the clients draw the server's settings, the Runs card and the status line's server reasons while serverExecutes holds, and under runner — or from a control plane that predates the field — exactly what they drew before."
+      }
     },
     "runRows": {
       "why": "Health and the day's count read runs, not the history of how they were made (design section 5.1).",
       "doctor": "wiki_maintenance_run.job_id and wiki_plan_job.job_id record the job that ran a run; task_id is nullable from 0401 on, and a CHECK requires exactly one maker per started row (a plan job is exempt while it is queued or held — it has made neither yet).",
       "count": "The day's runs (space.settings.maintenance.dailyRunLimit) count the maintenance list's tasks made since midnight UTC, as they always have, and the runs made by a job read off their own rows, which have no task; a run in active catch-up on a local endpoint and one that failed are not counted, whichever path made it. Plan jobs never count."
     },
-    "runnerTurns": "A server run creates no task and no session: it does not touch runnerActiveTurns, and the runner's only part in the server path is the repo operations of P2."
+    "runnerTurns": "A server run creates no task and no session: it does not touch runnerActiveTurns, and the runner's only part in the server path is the repo operations of P2.",
+    "read": {
+      "phase": "server execution, P9",
+      "route": "GET /api/wiki/spaces/:id/jobs",
+      "who": "The space's owner on the user door (JwtAuthGuard and WikiRolloutGuard; a personal access token needs wiki:read): another account's space is the plain 404. It writes nothing.",
+      "why": "A server run has no task and no session to open (design section 2.2): what it is doing — its step, its calls, where they wait — is on Activity, and this read is what the Runs card and a run's page draw.",
+      "limits": { "jobs": 10, "callsPerJob": 40 },
+      "answer": "{ spaceId, jobs }: the space's newest limits.jobs rows of wiki_job, newest first by created_at.",
+      "job": ["id", "kind", "state", "waitingFor", "priority", "attempts", "createdAt", "updatedAt", "startedAt", "endedAt", "nextAttemptAt", "failureKind", "error", "ahead", "progress", "calls", "nextCall", "requests"],
+      "jobRules": {
+        "ahead": "While the job is queued: how many queued jobs of the deployment the claim takes before it (priority DESC, created_at, id — lease.claim's order); null in every other state.",
+        "progress": "The pipeline's own progress (jobs.progress) as { step, done, total }: done and total as the pipeline wrote them, or for the import's shape (import.server.progress) the notes read or failed against the notes it was handed; null when the pipeline wrote none.",
+        "calls": "Its calls counted by state — total, queued, running, succeeded, failed, cancelled — and the input and output tokens they reported, over every one of its rows.",
+        "nextCall": "Of its queued calls, the one the queue reaches first: { ahead, enqueuedAt }, ahead counted as request.ahead is; null while none waits.",
+        "requests": "Its newest limits.callsPerJob calls by enqueued_at, given oldest first; calls.total counts the ones left out."
+      },
+      "request": ["id", "step", "unit", "attempt", "attempts", "state", "enqueuedAt", "startedAt", "endedAt", "inputTokens", "outputTokens", "httpStatus", "error", "errorKind", "ahead"],
+      "requestRules": {
+        "ahead": "While the call is queued: how many queued requests of the deployment the queue takes before it (priority DESC, enqueued_at, id — modelQueue.concurrency.claim's order), whoever they are for; null in every other state.",
+        "times": "How long a call waited is from enqueuedAt to startedAt (or to now while it is queued), and how long it ran from startedAt to endedAt (or to now while it runs); startedAt is its first claim's, so a retry's time is the call's own."
+      },
+      "never": "A call's request (system prompt, prompt, max_tokens), its request_sha256, answer and partial; the lease columns of either table; the job's input and report; whose the runs and calls ahead in a queue are; and the System model's address or key, which no row of either table holds (systemModel.request.errors: the queue's words name neither)."
+    }
   },
 
   "modelQueue": {
@@ -2238,7 +2269,8 @@
           "GET /api/wiki/spaces/:id/docs",
           "GET /api/wiki/spaces/:id/docs/:slug",
           "GET /api/wiki/spaces/:id/doc-index",
-          "GET /api/wiki/system-model"
+          "GET /api/wiki/system-model",
+          "GET /api/wiki/spaces/:id/jobs"
         ]
       },
       "runner": {

@@ -131,7 +131,7 @@ import {
   WIKI_SYSTEM_MODEL_READ_STATES,
   WIKI_SYSTEM_MODEL_STATES,
   wikiWorkerRunning,
-  type WikiSystemModelStatus,
+  type WikiSystemModelRead,
 } from './wikiSystemModel';
 import {
   WIKI_EXECUTOR_ENV,
@@ -142,8 +142,12 @@ import {
   WIKI_JOB_KINDS,
   WIKI_JOB_STATES,
   WIKI_JOB_WAITING_FOR,
+  WIKI_JOBS_READ,
   WIKI_MODEL_QUEUE,
   WIKI_MODEL_REQUEST_STATES,
+  type WikiExecutorView,
+  type WikiJobCallView,
+  type WikiJobView,
   wikiJobRetryDelaySeconds,
   wikiModelCallBudgetSeconds,
   wikiModelRetryDelaySeconds,
@@ -1685,8 +1689,11 @@ describe('wiki contract', () => {
     // The read: on the user door; the stored states and worker_not_running; its fields, and not the address or the key.
     expect(CONTRACT.agentSurface.doors.user.routes).toContain(model.read.route);
     expect(model.read.states).toEqual([...WIKI_SYSTEM_MODEL_READ_STATES]);
-    const status: WikiSystemModelStatus = { state: 'up', model: null, since: null, checkedAt: null, workerSeenAt: null };
+    const status: WikiSystemModelRead = {
+      state: 'up', model: null, since: null, checkedAt: null, workerSeenAt: null, executor: { mode: 'runner', serverExecutes: false },
+    };
     expect(model.read.fields).toEqual(Object.keys(status));
+    expect(model.read.executor).toMatch(/jobs\.executor\.read/u);
     expect(model.read.never).toMatch(/address, its key, and last_error/u);
     // A heartbeat older than workerStaleSeconds, or none, is a worker that is not running.
     const now = new Date('2026-10-07T12:00:00.000Z');
@@ -1733,6 +1740,39 @@ describe('wiki contract', () => {
     expect(jobs.executor.default).toBe('runner');
     expect(keysOf(jobs.executor.rules)).toEqual([...WIKI_EXECUTOR_MODES]);
     expect(jobs.executor.mistyped).toMatch(/read as runner/u);
+    // What a read tells the account that asks: the mode and whether the server executes its wiki, never the list.
+    const view: WikiExecutorView = { mode: 'canary', serverExecutes: true };
+    expect(jobs.executor.read.fields).toEqual(Object.keys(view));
+    expect(jobs.executor.read.rule).toMatch(/Never the list itself/u);
+  });
+
+  it('reads a space\'s server runs and their calls for Activity, their metadata alone (server execution P9)', () => {
+    const read = CONTRACT.jobs.read;
+    expect(CONTRACT.agentSurface.doors.user.routes).toContain(read.route);
+    expect(read.route).toBe('GET /api/wiki/spaces/:id/jobs');
+    expect(read.limits).toEqual({ ...WIKI_JOBS_READ });
+    const job: WikiJobView = {
+      id: '', kind: 'verify', state: 'queued', waitingFor: null, priority: 0, attempts: 0, createdAt: '', updatedAt: '',
+      startedAt: null, endedAt: null, nextAttemptAt: null, failureKind: null, error: null, ahead: null, progress: null,
+      calls: { total: 0, queued: 0, running: 0, succeeded: 0, failed: 0, cancelled: 0, inputTokens: 0, outputTokens: 0 },
+      nextCall: null, requests: [],
+    };
+    expect(read.job).toEqual(Object.keys(job));
+    expect(keysOf(read.jobRules)).toEqual(['ahead', 'progress', 'calls', 'nextCall', 'requests']);
+    const call: WikiJobCallView = {
+      id: '', step: '', unit: '', attempt: 1, attempts: 0, state: 'queued', enqueuedAt: '', startedAt: null, endedAt: null,
+      inputTokens: null, outputTokens: null, httpStatus: null, error: null, errorKind: null, ahead: null,
+    };
+    expect(read.request).toEqual(Object.keys(call));
+    // The call log is metadata: none of the columns that carry the call or its answer is read out.
+    for (const column of ['request', 'request_sha256', 'answer', 'partial', 'lease_owner', 'lease_generation']) {
+      expect(CONTRACT.modelQueue.columns).toContain(column);
+    }
+    for (const field of ['request', 'answer', 'partial', 'system', 'prompt']) expect(read.request).not.toContain(field);
+    expect(read.never).toMatch(/system prompt, prompt, max_tokens\), its request_sha256, answer and partial/u);
+    expect(read.never).toMatch(/address or key/u);
+    expect(read.requestRules.ahead).toMatch(/priority DESC, enqueued_at, id/u);
+    expect(read.jobRules.ahead).toMatch(/priority DESC, created_at, id/u);
   });
 
   it('queues every model call: the identity, the claim, the lease, the retry and the limits (server execution P1b)', () => {
