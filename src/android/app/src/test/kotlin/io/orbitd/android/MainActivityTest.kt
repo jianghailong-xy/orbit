@@ -251,7 +251,10 @@ internal fun AndroidComposeTestRule<*, *>.signIn(server: String, email: String, 
     onNodeWithText("Sign In").performScrollTo().performClick()
 }
 
-class TestOrbitApplication : OrbitApplication() {
+open class TestOrbitApplication : OrbitApplication() {
+    // Release unit tests must not reach GitHub when an Activity starts.
+    override fun createUpdates() = io.orbitd.android.update.AppUpdater(this, processScope,
+        io.orbitd.android.update.UpdateConfig.forBuild().copy(enabled = false))
     /** auth/methods answers 404, as a server from before Google sign-in does, unless a test offers Google. */
     @Volatile var methods: () -> ApiResponse = { ApiResponse(404, """{"statusCode":404}""".encodeToByteArray()) }
     @Volatile var exchange: () -> ApiResponse = { ApiResponse(200, LOGIN.encodeToByteArray()) }
