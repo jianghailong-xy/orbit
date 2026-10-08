@@ -34,6 +34,7 @@ import io.orbitd.android.tasks.TasksScreen
 import io.orbitd.android.projects.ProjectsScreen
 import io.orbitd.android.wiki.PageBar
 import io.orbitd.android.wiki.WikiDrawerCount
+import io.orbitd.android.wiki.WikiDrawerRow
 import io.orbitd.android.wiki.WikiDestination
 import io.orbitd.android.watch.WatchDestination
 import io.orbitd.android.composer.NewSessionComposer
@@ -177,9 +178,12 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         }
                         listOf(Triple("Projects", Destination.PROJECTS, R.drawable.ic_project), Triple("Tasks", Destination.TASKS, R.drawable.ic_task),
                             Triple("Wiki", Destination.WIKI, R.drawable.ic_wiki)).forEach { (name, dest, icon) ->
-                            NavigationDrawerItem(label = { Text(name) }, selected = navigation.section == name,
-                                icon = { Icon(painterResource(icon), null) }, onClick = { select(name, OrbitRoute(dest, origin = Origin.DRAWER)) },
-                                badge = if (dest == Destination.WIKI) ({ WikiDrawerCount(app, signedIn.handle, drawer.isOpen) }) else null)
+                            val row = @Composable {
+                                NavigationDrawerItem(label = { Text(name) }, selected = navigation.section == name,
+                                    icon = { Icon(painterResource(icon), null) }, onClick = { select(name, OrbitRoute(dest, origin = Origin.DRAWER)) },
+                                    badge = if (dest == Destination.WIKI) ({ WikiDrawerCount(app, signedIn.handle) }) else null)
+                            }
+                            if (dest == Destination.WIKI) WikiDrawerRow(app, signedIn.handle, drawer.isOpen, row) else row()
                         }
                         SectionHeading("Workspaces")
                         DirectoryStatus(data) { app.realtime.refreshDirectory() }

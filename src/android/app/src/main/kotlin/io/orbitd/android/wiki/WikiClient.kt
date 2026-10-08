@@ -24,8 +24,11 @@ internal class WikiClient(private val api: OrbitApi, private val handle: Session
 
     suspend fun spaces(): List<WikiSpace> = get(listOf("wiki", "spaces"), ListSerializer(WikiSpace.serializer()))
     suspend fun space(id: String): WikiSpace = get(spacePath(id), WikiSpace.serializer(), listOf("include" to "usage"))
-    suspend fun entries(spaceId: String, limit: Int = 200): List<WikiEntry> =
-        get(spacePath(spaceId, "entries"), ListSerializer(WikiEntry.serializer()), listOf("limit" to limit.toString()))
+    /** A space's entries of every status, newest recorded first — of one kind when [kind] is given. The server answers
+     * 200 at most. */
+    suspend fun entries(spaceId: String, kind: String? = null, limit: Int = 200): List<WikiEntry> =
+        get(spacePath(spaceId, "entries"), ListSerializer(WikiEntry.serializer()),
+            listOfNotNull(kind?.let { "kind" to it }, "limit" to limit.toString()))
     suspend fun timeline(spaceId: String): WikiTimeline = get(spacePath(spaceId, "timeline"), WikiTimeline.serializer())
     suspend fun health(spaceId: String): WikiSpaceHealth = WikiSpaceHealth.decode(json(spacePath(spaceId, "health")))
     suspend fun articleDirectory(spaceId: String) = get(spacePath(spaceId, "articles"), WikiArticleDirectory.serializer())

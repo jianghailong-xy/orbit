@@ -1,5 +1,6 @@
 package io.orbitd.android.wiki
 
+import io.orbitd.android.core.net.ApiError
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -105,6 +106,17 @@ internal data class WikiDiffHunk(val label: String, val lines: List<Line>) {
 
 internal object WikiLogic {
     fun proposalsToReview(spaces: List<WikiSpace>) = spaces.sumOf { maxOf(0, it.pendingOps ?: 0) }
+
+    // MARK: whether the account has the wiki
+
+    /** The refusal every wiki route answers an account the server has not switched the wiki on for (`WIKI_DISABLED`). */
+    const val disabledCode = "WIKI_DISABLED"
+    /** A 404 carrying WIKI_DISABLED: the wiki is off, not a read that failed (`isWikiDisabled`). */
+    fun isDisabled(error: Throwable) = error is ApiError && error.status == 404 && error.code == disabledCode
+    /** Whether the drawer draws the Wiki row (`wikiShown`): once the spaces read has answered anything but WIKI_DISABLED,
+     * and when it failed for any other reason; not while it is on its way, so an account the wiki is off for is never
+     * offered a row to press. */
+    fun shown(spaces: LoadState, disabled: Boolean) = if (spaces.hasLoaded) !disabled else spaces.lastLoadFailed
 
     /** A 40-character sha as its short form; any other ref as it is. */
     fun shortSha(ref: String): String =
@@ -283,9 +295,12 @@ internal object WikiLogic {
         else -> null
     }
     fun cardTitle(card: ReviewCard, entry: WikiEntry?) = knownTitle(card, entry) ?: WikiCopy.entryWord
+    /** The draft's title, else the named entry's — as its own read has it, or until that read lands, as Review's read
+     * carries it (`entryTitle`). Null rather than the placeholder word. */
     fun knownTitle(card: ReviewCard, entry: WikiEntry?): String? {
         card.op.payload["entry"]["title"].text()?.let { return it }
-        return entry?.title?.takeIf { it.isNotEmpty() }
+        entry?.title?.takeIf { it.isNotEmpty() }?.let { return it }
+        return card.op.entryTitle?.takeIf { it.isNotEmpty() }
     }
     fun reviewAnchorLines(draft: JsonElement?, fallback: List<WikiAnchor>?): List<String> {
         fun line(path: String?, symbol: String?, sha: String?, command: String?, ref: String?): String? =
@@ -321,15 +336,20 @@ internal object WikiLogic {
     fun clampedIndex(index: Int, count: Int): Int? = if (count <= 0) null else minOf(maxOf(0, index), count - 1)
 }
 
-/** One space's home page: the reads it is drawn from, and each band's rows as the web derives them. */
+/** One space's home page: the reads it is drawn from, and each band's rows as the web derives them. [entries] is the
+ * newest entries of every kind, as many as one read answers (200) — what the status line counts until the health read is
+ * in; never the bands' rows, which read their own kind: a space holds thousands of entries, and its principles and
+ * decisions are among the oldest of them. */
 internal data class WikiHomeContent(val space: WikiSpace, val spaces: List<WikiSpace>, val entries: List<WikiEntry>,
     val timeline: List<WikiTimelineItem>, val proposals: Int, val runs: List<WikiChangesetView> = emptyList(),
-    val health: WikiSpaceHealth? = null) {
-    /** Every principle, of any status, oldest recorded first. */
-    val principles: List<WikiEntry> get() = entries.filter { it.kind == "principle" }
+    val health: WikiSpaceHealth? = null, val principleEntries: List<WikiEntry> = emptyList(),
+    val decisionEntries: List<WikiEntry> = emptyList()) {
+    /** Every principle, of any status, oldest recorded first — from their own read (`?kind=principle`). */
+    val principles: List<WikiEntry> get() = principleEntries.filter { it.kind == "principle" }
         .sortedBy { RelativeTime.parse(it.recordedAt) ?: Instant.MIN }
     val principlesAllOwner: Boolean get() = principles.let { it.isNotEmpty() && it.all { e -> e.trust == "owner" } }
-    val recentDecisions: List<WikiEntry> get() = WikiLogic.entries(entries, "decision").take(4)
+    /** The four newest decisions, of any status, from their own read (`?kind=decision`). */
+    val recentDecisions: List<WikiEntry> get() = WikiLogic.entries(decisionEntries, "decision").take(RECENT_DECISIONS)
     val recentRows: List<WikiModeLogic.RecentRow> get() = WikiModeLogic.recentRows(timeline).take(5)
     val recentRunIds: List<String> get() = recentRows.mapNotNull { (it as? WikiModeLogic.RecentRow.Run)?.changesetId }
     fun run(id: String) = runs.firstOrNull { sameWikiId(it.id, id) }
@@ -343,6 +363,13 @@ internal data class WikiHomeContent(val space: WikiSpace, val spaces: List<WikiS
         return parts
     }
     fun statusLine(now: Instant) = WikiHealthLogic.text(statusParts(now))
+
+    companion object {
+        /** How many principles the home reads: the most one read answers, far above any space's own rules. */
+        const val PRINCIPLES_READ = 200
+        /** The decision log's rows: the newest four. */
+        const val RECENT_DECISIONS = 4
+    }
 }
 
 internal object WikiModeLogic {

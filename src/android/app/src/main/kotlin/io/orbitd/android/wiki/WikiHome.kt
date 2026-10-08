@@ -83,6 +83,11 @@ internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: Directory
             store.select(linked.slug); store.loadHome(); store.loadPlan(); store.loadDocsDirectory()
         }
     }
+    if (state.disabled) {
+        PageBar.Bind(route, title = "")
+        WikiDisabledNote()
+        return
+    }
     if (linkedSpaceMissing || !linkedSpaceApplied) {
         PageBar.Bind(route, title = "")
         Box(Modifier.fillMaxSize().testTag(if (linkedSpaceMissing) "wiki-space-unavailable" else "wiki-home-loading"), contentAlignment = Alignment.Center) {
@@ -119,6 +124,13 @@ internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: Directory
         // The home is where the reader already is; the rest open as pages.
         if (pick != WikiContentsPick.Home) wikiGo(pick, nav)
     }
+}
+
+/** The Wiki reached on an account the server has not switched the wiki on for — a link, or a page kept from before: the
+ * web page's own sentence, not a failure to retry (iOS `WikiDisabledNote`). */
+@Composable
+internal fun WikiDisabledNote() {
+    Box(Modifier.fillMaxSize().testTag("wiki-disabled"), contentAlignment = Alignment.Center) { StatusMessage(WikiCopy.title, WikiCopy.disabledNote) }
 }
 
 /** A spinner, the reason the home could not be read, or — only after a read that succeeded — that there is no space yet. */
@@ -164,7 +176,7 @@ private fun WikiHomePage(content: WikiHomeContent, now: Instant, planBanner: Wik
             item(key = "principles") {
                 WikiBandHeader(WikiCopy.principles, content.principles.size, badge = if (content.principlesAllOwner) WikiCopy.trustLabel("owner") else null)
             }
-            if (content.principles.isEmpty()) item(key = "principles-empty") { WikiEmptyLine(WikiCopy.noEntries) }
+            if (content.principles.isEmpty()) item(key = "principles-empty") { WikiEmptyLine(WikiCopy.noPrinciples) }
             items(content.principles, key = { "principle:${it.id}" }) { entry ->
                 WikiRowButton("wiki-entry:${entry.id}", onClick = { openEntry(entry.id) }) {
                     WikiRowLabel(entry.displayTitle, WikiDate.relative(entry.validFrom, now), entry.summary, struck = entry.isEnded)

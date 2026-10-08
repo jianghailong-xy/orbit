@@ -22,6 +22,29 @@ class WikiLogicTest {
         assertEquals("a space an older server sent no count for adds nothing", 7, WikiLogic.proposalsToReview(listOf(
             WikiSpace("a", "a", pendingOps = 2), WikiSpace("b", "b", pendingOps = 5), WikiSpace("c", "c"))))
         assertEquals("3 proposals to review", WikiCopy.proposalsToReview(3))
+        assertEquals("one is said in the singular", "1 proposal to review", WikiCopy.proposalsToReview(1))
+    }
+
+    /** The drawer draws the Wiki row once the spaces read has answered anything but WIKI_DISABLED, and when it failed for
+     * another reason; never while it is on its way (OrbitKit `WikiLogic.shown`, the web's `wikiShown`). */
+    @Test fun theWikiRowIsDrawnOnceTheSpacesReadSaysTheWikiIsOn() {
+        val disabled = io.orbitd.android.core.net.ApiError.parse(404, """{"code":"WIKI_DISABLED","message":"off"}""".encodeToByteArray())
+        assertTrue(WikiLogic.isDisabled(disabled))
+        assertFalse("a plain 404 is not the wiki off", WikiLogic.isDisabled(io.orbitd.android.core.net.ApiError.parse(404, "{}".encodeToByteArray())))
+        assertFalse("nor is another status", WikiLogic.isDisabled(io.orbitd.android.core.net.ApiError.parse(403, """{"code":"WIKI_DISABLED"}""".encodeToByteArray())))
+        assertFalse("on its way", WikiLogic.shown(LoadState(loading = true), disabled = false))
+        assertTrue(WikiLogic.shown(LoadState().succeed(), disabled = false))
+        assertFalse("answered WIKI_DISABLED", WikiLogic.shown(LoadState().succeed(), disabled = true))
+        assertTrue("a failed read is not the server saying there is no wiki", WikiLogic.shown(LoadState().fail(), disabled = false))
+    }
+
+    /** A card names its entry by the draft's title, else the entry's own read, else the title Review's read carries. */
+    @Test fun aCardNamesItsEntryByTheTitleReviewsReadCarries() {
+        val retire = review()[1]
+        val card = WikiLogic.ReviewCard(retire, retire.ops!!.first().copy(entryTitle = "Wakeups are lost when the runner restarts"))
+        assertEquals("Wakeups are lost when the runner restarts", WikiLogic.cardTitle(card, entry = null))
+        assertEquals("the entry's own read first", "Read title", WikiLogic.cardTitle(card, WikiEntry("e", title = "Read title")))
+        assertEquals("nothing known: the placeholder word", WikiCopy.entryWord, WikiLogic.cardTitle(WikiLogic.ReviewCard(retire, retire.ops!!.first()), null))
     }
 
     @Test fun theAnchorMarkSaysTheRefOrTheWarning() {
@@ -117,8 +140,10 @@ class WikiLogicTest {
 
     @Test fun theHomePagesBands() {
         val spaces = spaces()
+        // The two bands' own reads (`?kind=principle`, `?kind=decision`), as the server answers them.
         val home = WikiHomeContent(Wire.json.decodeFromString(WikiSpace.serializer(), WikiFixtures.space), spaces, entries(), timeline(),
-            WikiLogic.proposalsToReview(spaces))
+            WikiLogic.proposalsToReview(spaces), principleEntries = entries().filter { it.kind == "principle" },
+            decisionEntries = entries().filter { it.kind == "decision" })
         assertEquals(listOf("Agent-writable data never becomes a system instruction", "Completion is adjudicated, not claimed",
             "A clock never starts agent work", "Delete means forget"), home.principles.map { it.title })
         assertTrue(home.principlesAllOwner)

@@ -103,14 +103,25 @@ fun WikiDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRo
 /** The account event that says a wiki space changed (contract `realtime.event`). */
 private const val WIKI_CHANGED = "wiki.changed"
 
-/** The drawer's Wiki row's amber number: the proposals waiting for review, summed over every space — the home
- * banner's and Review's own count — and nothing at zero (iOS `CompactShell.wikiRow`). The drawer reads the spaces
- * it counts each time it opens; deciding a proposal, not opening the Wiki, is what lowers it. */
+/** The drawer's Wiki row, drawn only for an account the server has the wiki on for (iOS `CompactShell`'s
+ * `wiki?.shown`): no row at all after a WIKI_DISABLED answer, as the web sidebar draws none — a row that led to a
+ * refusal would be worse than none. The spaces it is decided by are read as the drawer is first composed, as iOS reads
+ * them with the drawer, and again each time it opens. */
 @Composable
-fun WikiDrawerCount(app: OrbitApplication, handle: SessionHandle, drawerOpen: Boolean) {
+fun WikiDrawerRow(app: OrbitApplication, handle: SessionHandle, drawerOpen: Boolean, row: @Composable () -> Unit) {
     val store = remember(handle) { WikiStore.of(app.session, handle, app.processScope) }
     val state by store.state.collectAsState()
-    LaunchedEffect(store, drawerOpen) { if (drawerOpen && store.live()) store.loadSpaces() }
+    LaunchedEffect(store, drawerOpen) { if ((drawerOpen || !store.state.value.spacesState.hasLoaded) && store.live()) store.loadSpaces() }
+    if (state.shown) row()
+}
+
+/** The drawer's Wiki row's amber number: the proposals waiting for review, summed over every space — the home
+ * banner's and Review's own count — and nothing at zero (iOS `CompactShell.wikiRow`). The drawer reads the spaces
+ * it counts each time it opens ([WikiDrawerRow]); deciding a proposal, not opening the Wiki, is what lowers it. */
+@Composable
+fun WikiDrawerCount(app: OrbitApplication, handle: SessionHandle) {
+    val store = remember(handle) { WikiStore.of(app.session, handle, app.processScope) }
+    val state by store.state.collectAsState()
     val waiting = state.proposalsToReview
     if (waiting > 0) androidx.compose.material3.Text("$waiting", color = androidx.compose.ui.graphics.Color(0xFFFF9500),
         style = androidx.compose.material3.MaterialTheme.typography.labelSmall.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),

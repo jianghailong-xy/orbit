@@ -11,7 +11,7 @@ internal object WikiCopy {
     const val title = "Wiki"
     const val searchPlaceholder = "Search the wiki"
     const val reviewTitle = "Review"
-    fun proposalsToReview(count: Int) = "$count proposals to review"
+    fun proposalsToReview(count: Int) = "$count proposal${if (count == 1) "" else "s"} to review"
     fun proposalsFrom(count: Int, sessions: Int) =
         "$count proposal${if (count == 1) "" else "s"} from $sessions session${if (sessions == 1) "" else "s"}"
     fun oldest(`when`: String) = "oldest $`when`"
@@ -26,6 +26,8 @@ internal object WikiCopy {
     fun anchorsVerified(ref: String, ago: String) = if (ago.isEmpty()) "Anchors verified at $ref" else "Anchors verified at $ref $ago"
 
     const val noSpaces = "No wiki space yet. A space is a codebase, and the first one is made when a session proposes into it."
+    /** What the Wiki section says to an account the server has not switched the wiki on for. */
+    const val disabledNote = "The wiki is not switched on for this account."
     const val spacePickerHint = "The codebase this wiki describes"
     const val sessionsReceived = "sessions received wiki context"
     const val searches = "searches"
@@ -138,7 +140,8 @@ internal object WikiCopy {
     const val tabAmend = "Amend"
     const val tabRetire = "Retire"
 
-    const val noEntries = "Nothing has been recorded in this space yet."
+    /** The home's Principles with none to list — about the principles, not the whole space. */
+    const val noPrinciples = "No principle has been recorded yet."
     const val noReview = "Nothing is waiting for you."
     const val noChanges = "Nothing has changed yet."
     const val noDecisions = "No decision has been recorded yet."

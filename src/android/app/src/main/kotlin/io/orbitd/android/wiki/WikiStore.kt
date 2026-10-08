@@ -42,6 +42,9 @@ internal data class WikiNotice(val text: String, val refused: Boolean, val seria
 /** Everything the Wiki pages draw from — iOS `WikiModel`'s stored properties, as one value. */
 internal data class WikiState(
     val spaces: List<WikiSpace> = emptyList(), val spacesState: LoadState = LoadState(),
+    /** The server said the wiki is not switched on for this account (404 WIKI_DISABLED): an answer, not a failure — the
+     * drawer draws no Wiki row, and the section says why. */
+    val disabled: Boolean = false,
     val home: WikiHomeContent? = null, val homeState: LoadState = LoadState(),
     val review: List<WikiChangeset> = emptyList(), val reviewState: LoadState = LoadState(), val answered: Set<String> = emptySet(),
     val details: Map<String, WikiEntryDetail> = emptyMap(), val missing: Set<String> = emptySet(), val failed: Set<String> = emptySet(),
@@ -64,6 +67,8 @@ internal data class WikiState(
     /** The space the home page is about: the one picked, else the first by slug. */
     val currentSpace: WikiSpace? get() = spaces.firstOrNull { it.slug == selectedSlug } ?: spaces.firstOrNull()
     val proposalsToReview: Int get() = WikiLogic.proposalsToReview(spaces)
+    /** Whether the drawer draws the Wiki row at all. */
+    val shown: Boolean get() = WikiLogic.shown(spacesState, disabled)
     val reviewCards: List<WikiLogic.ReviewCard> get() = WikiLogic.reviewCards(review).filter { it.op.id !in answered }
     fun detail(id: String) = details[wikiKey(id)]
     fun isMissing(id: String) = wikiKey(id) in missing
@@ -133,13 +138,17 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
         set { it.copy(spacesState = it.spacesState.begin()) }
         try {
             val list = client.spaces()
-            if (newest(SPACES, ticket)) set { it.copy(spaces = list, spacesState = it.spacesState.succeed()) }
-        } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) {
-            if (newest(SPACES, ticket)) set { it.copy(spacesState = it.spacesState.fail()) }
+            if (newest(SPACES, ticket)) set { it.copy(spaces = list, disabled = false, spacesState = it.spacesState.succeed()) }
+        } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) {
+            if (!newest(SPACES, ticket)) return
+            if (WikiLogic.isDisabled(error)) set { it.copy(spaces = emptyList(), disabled = true, spacesState = it.spacesState.succeed()) }
+            else set { it.copy(spacesState = it.spacesState.fail()) }
         }
     }
 
-    /** The spaces, then the four reads the home page is drawn from, side by side — and each run Recently changed folds. */
+    /** The spaces, then the six reads the home page is drawn from, side by side — and each run Recently changed folds.
+     * Principles and Recent decisions read their own kind: out of the newest 200 entries of every kind, a space of
+     * thousands had none of them left to show. */
     suspend fun loadHome() = supervisorScope {
         val ticket = ask(HOME)
         set { it.copy(homeState = it.homeState.begin()) }
@@ -151,16 +160,19 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
         }
         val document = async { client.space(space.id) }
         val entries = async { client.entries(space.id) }
+        val principles = async { client.entries(space.id, "principle", WikiHomeContent.PRINCIPLES_READ) }
+        val decisions = async { client.entries(space.id, "decision", WikiHomeContent.RECENT_DECISIONS) }
         val timeline = async { optional { client.timeline(space.id) } }
         val health = async { optional { client.health(space.id) } }
         try {
-            val base = WikiHomeContent(document.await(), current.spaces, entries.await(), timeline.await()?.items.orEmpty(), space.pendingOps ?: 0)
+            val base = WikiHomeContent(document.await(), current.spaces, entries.await(), timeline.await()?.items.orEmpty(), space.pendingOps ?: 0,
+                principleEntries = principles.await(), decisionEntries = decisions.await())
             val runs = base.recentRunIds.map { id -> async { optional { client.changeset(id) } } }.mapNotNull { it.await() }
             val healthRead = health.await()
             if (current.currentSpace?.id != space.id || !newest(HOME, ticket)) return@supervisorScope
             set { it.copy(home = base.copy(runs = runs, health = healthRead), homeState = it.homeState.succeed()) }
         } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) {
-            document.cancel(); entries.cancel(); timeline.cancel(); health.cancel()
+            document.cancel(); entries.cancel(); principles.cancel(); decisions.cancel(); timeline.cancel(); health.cancel()
             if (current.currentSpace?.id == space.id && newest(HOME, ticket)) set { it.copy(homeState = it.homeState.fail()) }
         }
     }
@@ -187,8 +199,9 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
             if (!newest("$ENTRY$key", ticket)) return
             // A 404 is an entry the server will not show — deleted, or not this account's: what was shown of it goes;
             // any other failure keeps what is on screen, and says so only when there is nothing on screen
-            // (`WikiModel.loadEntry`).
-            if (error is ApiError && error.status == 404) set { it.copy(missing = it.missing + key, details = it.details - key) }
+            // (`WikiModel.loadEntry`). A 404 WIKI_DISABLED is the wiki off for this account, which a link can land on.
+            if (WikiLogic.isDisabled(error)) set { it.copy(disabled = true) }
+            else if (error is ApiError && error.status == 404) set { it.copy(missing = it.missing + key, details = it.details - key) }
             else set { it.copy(failed = it.failed + key) }
         }
     }

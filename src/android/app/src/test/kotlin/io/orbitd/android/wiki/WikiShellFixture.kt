@@ -42,13 +42,35 @@ internal object WikiShell {
     @Volatile var watchState = "ACTIVE"
     /** A pause answered 409 with this message, as for a watch that already ended. */
     @Volatile var pauseRefusal: String? = null
+    /** The server has the wiki off for this account: every wiki route answers 404 WIKI_DISABLED. */
+    @Volatile var wikiDisabled = false
+    /** `GET /wiki/spaces` as the server lists the spaces. */
+    @Volatile var spaces: String = WikiFixtures.spaces
+    /** Every entry of the space, which `GET …/entries` answers as `WikiService.listEntries` does. */
+    @Volatile var entries: List<JsonObject> = fixtureEntries()
+    /** `GET /wiki/review` before any decide. */
+    @Volatile var reviewQueue: String = WikiFixtures.review
     @Volatile private var frames = Channel<String>(Channel.UNLIMITED)
     @Volatile private var opened = 0
 
     fun reset() {
         calls.clear(); ended.clear(); gates.clear(); decided.clear()
         decision = "accepted"; watchState = "ACTIVE"; pauseRefusal = null
+        wikiDisabled = false; spaces = WikiFixtures.spaces; entries = fixtureEntries(); reviewQueue = WikiFixtures.review
         frames = Channel(Channel.UNLIMITED); opened = 0
+    }
+
+    private fun fixtureEntries() = Wire.json.parseToJsonElement(WikiFixtures.entries).jsonArray.map { it.jsonObject }
+
+    /** `WikiService.listEntries`: of the `kind` and `status` asked, newest recorded first, between 1 and 200 (50 unasked). */
+    fun listEntries(store: List<JsonObject>, query: List<Pair<String, String>>): String {
+        fun asked(key: String) = query.firstOrNull { it.first == key }?.second
+        fun field(entry: JsonObject, key: String) = (entry[key] as? JsonPrimitive)?.contentOrNull
+        val limit = (asked("limit")?.toIntOrNull() ?: 50).coerceIn(1, 200)
+        return JsonArray(store.filter { entry -> asked("kind").let { it == null || field(entry, "kind") == it } &&
+            asked("status").let { it == null || field(entry, "status") == it } }
+            .sortedWith(compareByDescending<JsonObject> { field(it, "recordedAt") ?: "" }.thenByDescending { field(it, "id") ?: "" })
+            .take(limit)).toString()
     }
 
     /** Hold the next `METHOD path` until the gate is completed. */
@@ -66,13 +88,13 @@ internal object WikiShell {
     private fun user() = """{"id":"u1","email":"owner@a12.test","name":"Owner"}"""
     private fun otherSpace() = WikiFixtures.space.replace(SPACE, OTHER_SPACE).replace("\"orbit\"", "\"wikova\"")
         .replace("\"Orbit\"", "\"Wikova\"")
-    private fun review(): String = JsonArray(Wire.json.parseToJsonElement(WikiFixtures.review).jsonArray.map { changeset ->
+    private fun review(): String = JsonArray(Wire.json.parseToJsonElement(reviewQueue).jsonArray.map { changeset ->
         val ops = changeset.jsonObject.getValue("ops").jsonArray.filter { it.jsonObject.getValue("id").jsonPrimitive.content !in decided }
         JsonObject(changeset.jsonObject + ("ops" to JsonArray(ops)))
     }).toString()
     /** A decide's answer: the changeset as it now stands, the answered op carrying what was recorded for it. */
     private fun decidedChangeset(changeset: String, opId: String): String {
-        val row = Wire.json.parseToJsonElement(WikiFixtures.review).jsonArray.map { it.jsonObject }
+        val row = Wire.json.parseToJsonElement(reviewQueue).jsonArray.map { it.jsonObject }
             .firstOrNull { it.getValue("id").jsonPrimitive.content == changeset } ?: return "{}"
         val ops = row.getValue("ops").jsonArray.map { op ->
             if (op.jsonObject.getValue("id").jsonPrimitive.content != opId) op
@@ -111,11 +133,13 @@ internal object WikiShell {
         return when {
             path == "auth/logout" -> ok("{}")
             path == "users/me" -> ok(user())
-            path == "wiki/spaces" -> ok(WikiFixtures.spaces)
+            wikiDisabled && path.startsWith("wiki/") -> status(404,
+                """{"code":"WIKI_DISABLED","message":"The Orbit wiki is not on for this account on this Orbit server (ORBIT_WIKI=canary), so nothing was read from it or written to it."}""")
+            path == "wiki/spaces" -> ok(spaces)
             path == "wiki/spaces/$SPACE" && method == "PATCH" -> ok(WikiFixtures.space)
             path == "wiki/spaces/$SPACE" -> ok(WikiFixtures.space)
             path == "wiki/spaces/$OTHER_SPACE" -> ok(otherSpace())
-            path.endsWith("/entries") && path.startsWith("wiki/spaces/") -> ok(WikiFixtures.entries)
+            path.endsWith("/entries") && path.startsWith("wiki/spaces/") -> ok(listEntries(entries, api.query))
             path.endsWith("/timeline") -> ok(WikiFixtures.timeline)
             path.endsWith("/docs") -> ok(docs.obj("directory").obj("read").toString())
             path.endsWith("/docs/$DOC") -> ok(docs.obj("doc").obj("read").toString())

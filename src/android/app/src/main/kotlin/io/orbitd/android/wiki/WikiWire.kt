@@ -155,6 +155,9 @@ data class WikiChangesetOp(
     val tainted: Boolean? = null, val decision: String? = null, val decisionReason: String? = null, val decisionNote: String? = null,
     val resultEntryId: String? = null, val resultRevision: Int? = null, val decidedAt: String? = null,
     val verification: WikiOpVerification? = null, val appliedByMode: String? = null, val spotCheck: Boolean? = null,
+    /** The current title of the entry `entryId` names — Review's read adds it, so a card can name an entry no other read
+     * holds. Null when the op names none, and on every other read. */
+    val entryTitle: String? = null,
 )
 
 @Serializable
