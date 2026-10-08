@@ -1,0 +1,13 @@
+URL: /wiki/orbit/activity
+executor: runner (serverExecutes: false)
+Plan card line: local-vllm · about 1–2 hours
+Draft plan beside it: true
+Card sentence: No plan yet. A plan lays out this wiki’s documents; until you confirm one, the Wiki shows its topic articles.
+Toasts: 0
+
+The Plan card's foot as the DOM has it:
+<button type="button" class="ant-btn css-dev-only-do-not-override-oc1rc0 css-var-_r_0_ ant-btn-primary ant-btn-color-primary ant-btn-variant-solid ant-btn-sm"><span>Draft plan</span></button><span class="hint">local-vllm · about 1–2 hours</span>
+
+URL: /wiki/orbit/plan
+Empty page body: A plan lays out this wiki’s documents: the categories, the documents in each, who each one is for and what it covers, and where each section’s material comes from. local-vllm drafts it; nothing is written until you confirm it.
+Empty page note: Runs as a task in the Wiki maintenance list with local-vllm — usually 1–2 hours. Until you confirm a plan, the Wiki shows its topic articles.

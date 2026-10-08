@@ -381,6 +381,12 @@ final class WikiModel {
         systemModel?.executor?.serverExecutes == true ? systemModel : nil
     }
 
+    /// Whether the server executes this account's wiki (contract `jobs.executor.read`): the plan's empty card
+    /// names the System model instead of the provider while it does. False under runner, and before the read is in.
+    var serverExecutes: Bool {
+        systemModel?.executor?.serverExecutes == true
+    }
+
     /// Every space's queue, which is what the drawer's number and the banner count.
     func loadReview() async {
         reviewState.begin()

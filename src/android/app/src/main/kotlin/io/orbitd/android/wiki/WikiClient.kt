@@ -28,6 +28,10 @@ internal class WikiClient(private val api: OrbitApi, private val handle: Session
         get(spacePath(spaceId, "entries"), ListSerializer(WikiEntry.serializer()), listOf("limit" to limit.toString()))
     suspend fun timeline(spaceId: String): WikiTimeline = get(spacePath(spaceId, "timeline"), WikiTimeline.serializer())
     suspend fun health(spaceId: String): WikiSpaceHealth = WikiSpaceHealth.decode(json(spacePath(spaceId, "health")))
+    /** `GET /wiki/system-model`: the deployment's System model and the executor switch for this account (P9). */
+    suspend fun systemModel(): WikiSystemModelStatus = WikiSystemModelStatus.read(json(listOf("wiki", "system-model")))
+    /** `GET /wiki/spaces/:id/jobs`: the space's newest server runs with their newest calls (P9). */
+    suspend fun jobs(spaceId: String): WikiJobsRead = WikiJobsRead.decode(json(spacePath(spaceId, "jobs")))
     suspend fun articleDirectory(spaceId: String) = get(spacePath(spaceId, "articles"), WikiArticleDirectory.serializer())
     suspend fun article(spaceId: String, slug: String, part: Int): WikiArticle =
         get(if (part > 0) spacePath(spaceId, "articles", slug, part.toString()) else spacePath(spaceId, "articles", slug), WikiArticle.serializer())
