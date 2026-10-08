@@ -10,12 +10,15 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -1343,6 +1346,120 @@ type kimiPromptResult struct {
 	turnID string
 	result map[string]interface{}
 	err    error
+	// usageLimit is what the turn is reported failed with when Kimi ended it on its account's usage
+	// limit (kimiTurnUsageLimit), which its answer does not say.
+	usageLimit string
+}
+
+// kimiQuotaExhaustedError is the error Kimi records a turn ending on when its provider says the
+// account's quota is spent: a 429 its own classifier reads as one (classifyKimiQuotaError — code
+// exceeded_current_quota_error, or wording such as "exceeded your current quota"; OpenAI's
+// insufficient_quota too).
+const kimiQuotaExhaustedError = "APIProviderQuotaExhaustedError"
+
+// kimiTurnOutcomeWait bounds how long a turn's end is looked for in its wire once the prompt is
+// answered: Kimi writes that record a moment after it answers — within 70 ms on kimi 2.1.1.
+const kimiTurnOutcomeWait = 2 * time.Second
+
+// kimiTurnWire is the main agent's wire of session id in home, and how much of it there is: where the
+// records of the turn about to be prompted begin. "" when the session's directory cannot be found.
+func kimiTurnWire(home, id string) (string, int64) {
+	dir := kimiSessionDirIn(home, id)
+	if dir == "" {
+		return "", 0
+	}
+	wire := filepath.Join(dir, "agents", "main", "wire.jsonl")
+	var from int64
+	if info, err := os.Stat(wire); err == nil {
+		from = info.Size()
+	}
+	return wire, from
+}
+
+// kimiTurnUsageLimit is what a turn Kimi ended on its account's usage limit is reported failed with,
+// or "" for any other end. Kimi's ACP answers a failed turn as end_turn and says nothing of why — its
+// own comment: "failed → end_turn (with the out-of-band error logged by the caller)" — so the answer
+// is read from the turn's own record instead: the main agent's turn.ended among the records written to
+// wire past from, where reason "failed" carries the error. The sentence leads with the words the
+// control plane and every client read as a spent quota (USAGE_LIMIT_ERROR_MARKERS, "hit your usage
+// limit") — Kimi gives none of its own on this path — so a session on Automatic is moved to another
+// account with room and re-sent, as a Codex one is, and Kimi's own message follows them.
+func kimiTurnUsageLimit(ctx context.Context, wire string, from int64) string {
+	if wire == "" {
+		return ""
+	}
+	deadline := time.Now().Add(kimiTurnOutcomeWait)
+	for {
+		if ended, ok := kimiTurnEnded(wire, from); ok {
+			if ended.Reason != "failed" || ended.Error == nil || ended.Error.Name != kimiQuotaExhaustedError {
+				return ""
+			}
+			sentence := "You've hit your usage limit on this Kimi Code account"
+			if message := strings.TrimSpace(ended.Error.Message); message != "" {
+				sentence += " — " + message
+			}
+			return sentence
+		}
+		if !time.Now().Before(deadline) {
+			return ""
+		}
+		select {
+		case <-ctx.Done():
+			return ""
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+}
+
+// kimiTurnRecord is what is read of the records Kimi writes to an agent's wire as one of its turns
+// opens (turn.prompt) and ends (turn.ended, whose error says why a failed one failed).
+type kimiTurnRecord struct {
+	Type    string          `json:"type"`
+	AgentID string          `json:"agentId"`
+	TurnID  json.RawMessage `json:"turnId"`
+	Reason  string          `json:"reason"`
+	Error   *struct {
+		Name    string `json:"name"`
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
+// kimiTurnEnded reads, from the whole lines of wire past from, the turn.ended of the main agent's turn
+// that opens there: the one its first turn.prompt names. By number, because the end of the turn before
+// can be written after from too, when it took longer to reach the wire than it was waited for. False
+// while it is not there yet.
+func kimiTurnEnded(wire string, from int64) (kimiTurnRecord, bool) {
+	f, err := os.Open(wire)
+	if err != nil {
+		return kimiTurnRecord{}, false
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.NewSectionReader(f, from, 1<<62))
+	if err != nil {
+		return kimiTurnRecord{}, false
+	}
+	// A line still being written is not read until it is whole.
+	end := bytes.LastIndexByte(data, '\n')
+	if end < 0 {
+		return kimiTurnRecord{}, false
+	}
+	var turn json.RawMessage
+	for _, line := range bytes.Split(data[:end], []byte{'\n'}) {
+		if !bytes.Contains(line, []byte(`"turn.`)) {
+			continue
+		}
+		var rec kimiTurnRecord
+		if json.Unmarshal(line, &rec) != nil || rec.AgentID != "main" || len(rec.TurnID) == 0 {
+			continue
+		}
+		switch {
+		case rec.Type == "turn.prompt" && turn == nil:
+			turn = rec.TurnID
+		case rec.Type == "turn.ended" && turn != nil && bytes.Equal(rec.TurnID, turn):
+			return rec, true
+		}
+	}
+	return kimiTurnRecord{}, false
 }
 
 func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, emitFor emitTurnFn, setTurn func(string), _ bool, bg *bgTailer, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
@@ -1355,10 +1472,30 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 		emit(evError, map[string]interface{}{"message": msg})
 		return stFailed, true, false
 	}
+	// The account's home: the KIMI_CODE_HOME the session's environment names, else Default's.
 	realHome, err := effectiveKimiHome(envWithAgent(job.Agent.Env), execDir)
 	if err != nil {
 		emit(evError, map[string]interface{}{"message": "failed to resolve the Kimi home directory: " + err.Error()})
 		return stFailed, true, false
+	}
+	if err := ensureKimiHomeStores(realHome); err != nil {
+		emit(evError, map[string]interface{}{"message": "failed to prepare the Kimi home: " + err.Error()})
+		return stFailed, true, false
+	}
+	// A session that has run resumes what it said on whichever of this machine's Kimi accounts said it
+	// last — one moved here by hand, or off an account whose usage limit stopped it — so that is carried
+	// into this account first. One that cannot be carried is not resumed from an older copy here, which
+	// would drop the turns it had since without anybody knowing: the run fails, and this account's
+	// sessions are as they were.
+	if job.RuntimeSessionID != "" {
+		var recorded string
+		if meta := readSessionMeta(filepath.Join(scratchDir, "meta.json")); meta != nil {
+			recorded = meta.KimiCodeHome
+		}
+		if _, err := carryKimiConversation(realHome, job.RuntimeSessionID, recorded); err != nil {
+			emit(evError, map[string]interface{}{"message": "failed to bring this session's Kimi conversation to the account it now runs on: " + err.Error()})
+			return stFailed, true, false
+		}
 	}
 	kimiHome, err := prepareKimiHomeOverlay(scratchDir, realHome)
 	if err != nil {
@@ -1441,7 +1578,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 	}
 	job.RuntimeSessionID = sessionID
 	expectedSessionID.Store(sessionID)
-	writeSessionMeta(scratchDir, job, execDir)
+	writeKimiSessionMeta(scratchDir, job, execDir)
 	if err := app.configureSession(ctx, sessionID, job.Agent); err != nil {
 		emit(evError, map[string]interface{}{"message": "failed to configure Kimi session: " + err.Error()})
 		return stFailed, true, false
@@ -1508,6 +1645,9 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 
 		status, subtype := stSucceeded, "completed"
 		resultText := strings.TrimSpace(turn.text.String())
+		// The failure of a turn Kimi answered as ended — its account's usage limit (kimiTurnUsageLimit) —
+		// reported as the turn's error, as Codex reports its own, with whatever the turn said before it.
+		var errorText string
 		if done.err != nil {
 			status, subtype = stFailed, "error"
 			resultText = done.err.Error()
@@ -1518,6 +1658,10 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 				status, subtype = stInterrupted, "interrupted"
 			case "refusal":
 				status, subtype = stFailed, "refusal"
+			default:
+				if done.usageLimit != "" {
+					status, subtype, errorText = stFailed, "error", done.usageLimit
+				}
 			}
 		}
 		if thought := strings.TrimSpace(turn.thought.String()); thought != "" {
@@ -1526,6 +1670,9 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 		if text := strings.TrimSpace(turn.text.String()); text != "" {
 			emit(evAssistant, map[string]interface{}{"text": text})
 		}
+		if errorText != "" {
+			emit(evError, map[string]interface{}{"message": errorText})
+		}
 		emit(evTurnEnd, kimiTurnEndPayload(gauge, subtype, job))
 		liveFiles, livePatches := liveDiff(job.WT)
 		liveBaseSha := job.WT.baseSha()
@@ -1533,6 +1680,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 			TurnID:           done.turnID,
 			Status:           status,
 			Result:           resultText,
+			Error:            errorText,
 			Subtype:          subtype,
 			NumTurns:         1,
 			RuntimeSessionID: sessionID,
@@ -1655,6 +1803,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 				turnID := resp.TurnID
 				interruptRequested = false
 				app.beginPermissionTurn()
+				wire, wireFrom := kimiTurnWire(realHome, sessionID)
 				pending, writeAck, promptErr := app.queueRequest("session/prompt", map[string]interface{}{
 					"sessionId": sessionID,
 					"prompt":    prepared.blocks,
@@ -1682,8 +1831,13 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 						app.forget(pending.id)
 						waitErr = ctx.Err()
 					}
+					// A failed turn is answered as end_turn, and only then is its record read.
+					var usageLimit string
+					if waitErr == nil && strings.EqualFold(firstString(result, "stopReason", "stop_reason"), "end_turn") {
+						usageLimit = kimiTurnUsageLimit(ctx, wire, wireFrom)
+					}
 					select {
-					case promptDone <- kimiPromptResult{turnID: turnID, result: result, err: waitErr}:
+					case promptDone <- kimiPromptResult{turnID: turnID, result: result, err: waitErr, usageLimit: usageLimit}:
 					case <-ctx.Done():
 					}
 				}()

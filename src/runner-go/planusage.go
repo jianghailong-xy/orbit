@@ -96,11 +96,15 @@ type PlanUsage struct {
 	// Antigravity Google account buckets from the independent /usage command.
 	Buckets []PlanUsageBucket `json:"buckets,omitempty"`
 
-	// Claude windows.
+	// Claude windows; Kimi Code's 5-hour and 7-day limits land in the first two too.
 	FiveHour       *PlanUsageWindow `json:"fiveHour,omitempty"`
 	SevenDay       *PlanUsageWindow `json:"sevenDay,omitempty"`
 	SevenDayOpus   *PlanUsageWindow `json:"sevenDayOpus,omitempty"`
 	SevenDaySonnet *PlanUsageWindow `json:"sevenDaySonnet,omitempty"`
+
+	// Kimi Code's monthly limits: everything the account spends, and its coding use (kimi_usage.go).
+	Month     *PlanUsageWindow `json:"month,omitempty"`
+	MonthCode *PlanUsageWindow `json:"monthCode,omitempty"`
 
 	// Codex windows, from app-server account/rateLimits/read.
 	Primary              *PlanUsageWindow     `json:"primary,omitempty"`
@@ -114,13 +118,15 @@ type PlanUsage struct {
 	// Earned rate-limit reset state of the default Codex account
 	// (docs/codex-rate-limit-reset-contract.md). Nil until a reader fills it; omitted on the wire.
 	RateLimitReset *PlanUsageRateLimitReset `json:"rateLimitReset,omitempty"`
-	// Codex only: every other account slot's own snapshot, by slot id (codex_account_usage.go). The
-	// windows beside it are Default's. Omitted while no other account has been read.
+	// Every other account slot's own snapshot, by slot id (codex_account_usage.go,
+	// claude_account_usage.go, kimi_account_usage.go). The windows beside it are Default's. Omitted
+	// while no other account has been read.
 	Accounts map[string]*PlanUsage `json:"accounts,omitempty"`
 
-	// Nested snapshots when more than one provider is available.
+	// Nested snapshots when more than one provider is available, and Kimi Code's always.
 	Claude *PlanUsage `json:"claude,omitempty"`
 	Codex  *PlanUsage `json:"codex,omitempty"`
+	Kimi   *PlanUsage `json:"kimi,omitempty"`
 
 	FetchedAt string `json:"fetchedAt,omitempty"`
 }
@@ -291,6 +297,8 @@ func nextPlanUsageResetAfter(usage *PlanUsage, after time.Time) (time.Time, bool
 		add(u.SevenDay)
 		add(u.SevenDayOpus)
 		add(u.SevenDaySonnet)
+		add(u.Month)
+		add(u.MonthCode)
 		add(u.Primary)
 		add(u.Secondary)
 		for _, limit := range u.RateLimits {
@@ -299,6 +307,7 @@ func nextPlanUsageResetAfter(usage *PlanUsage, after time.Time) (time.Time, bool
 		}
 		visit(u.Claude)
 		visit(u.Codex)
+		visit(u.Kimi)
 	}
 	visit(usage)
 	return best, !best.IsZero()
@@ -916,18 +925,25 @@ func codexCreditsSnapshot(raw map[string]interface{}) *CreditsSnapshot {
 	}
 }
 
-func combinePlanUsage(claude, codex *PlanUsage) *PlanUsage {
-	if claude == nil {
-		return codex
+// combinePlanUsage is the heartbeat's planUsage. A lone Claude or Codex snapshot is the payload itself,
+// as it was before runners nested them; Kimi Code's is only ever nested, under kimi, where the control
+// plane keeps its accounts (@orbit/shared PlanUsage.kimi).
+func combinePlanUsage(claude, codex, kimi *PlanUsage) *PlanUsage {
+	if kimi == nil {
+		if claude == nil {
+			return codex
+		}
+		if codex == nil {
+			return claude
+		}
 	}
-	if codex == nil {
-		return claude
+	out := &PlanUsage{Claude: claude, Codex: codex, Kimi: kimi}
+	for _, u := range []*PlanUsage{claude, codex, kimi} {
+		if u != nil && u.FetchedAt > out.FetchedAt {
+			out.FetchedAt = u.FetchedAt
+		}
 	}
-	fetchedAt := claude.FetchedAt
-	if codex.FetchedAt > fetchedAt {
-		fetchedAt = codex.FetchedAt
-	}
-	return &PlanUsage{Claude: claude, Codex: codex, FetchedAt: fetchedAt}
+	return out
 }
 
 func numberValue(v interface{}) (float64, bool) {

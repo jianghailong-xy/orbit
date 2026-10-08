@@ -803,6 +803,11 @@ func cmdResume(args []string) {
 			os.Exit(1)
 		}
 		cmd = exec.Command(providerKimi, "--resume", meta.RuntimeSessionID)
+		// kimi finds the conversation in its KIMI_CODE_HOME: the account's the session ran on, or —
+		// with none recorded — Default's, which this terminal's own environment selects.
+		if meta.KimiCodeHome != "" {
+			cmd.Env = envWithValue(os.Environ(), "KIMI_CODE_HOME", meta.KimiCodeHome)
+		}
 	case providerOpenCode:
 		if meta.RuntimeSessionID == "" {
 			fmt.Fprintln(os.Stderr, "this OpenCode session has not been initialized yet")

@@ -148,7 +148,7 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                         put("prompt", content); put("shell", shell)
                         draft.resumeConfig.text("account")?.let { account ->
                             val provider = draft.resumeConfig.text("provider") ?: detail.text("provider")
-                            // codexAccount, claudeAccount or antigravityAccount: the engines that keep several accounts.
+                            // codexAccount, claudeAccount, antigravityAccount or kimiAccount: the engines that keep several accounts.
                             if (provider != null && RunnerPage.keepsAccounts(provider) && account != "automatic") put("${provider}Account", account)
                         }
                     } else {

@@ -3,7 +3,8 @@
  * be stored with, and which account a run spends — the one every quota gate judges.
  *
  * A runner reports Default's quota as that engine's snapshot's own windows and every other account's
- * under that snapshot's `accounts`, by the account's id (src/runner-go/{codex,claude}_account_usage.go).
+ * under that snapshot's `accounts`, by the account's id (src/runner-go/{codex,claude}_account_usage.go),
+ * and Kimi Code's the same way under `kimi`.
  */
 import type { PlanUsage, PlanUsageSnapshot } from '@orbit/shared';
 import { ENGINE_ACCOUNTS_MAX, namedRunnerEngines, sanitizeRunnerEngines } from '../common/runner-engines';
@@ -41,8 +42,9 @@ export function sanitizePlanUsageAccounts(usage: PlanUsage): PlanUsage {
   if (usage.provider === 'codex' && !usage.codex) return sanitizeAccountsOf(usage) ?? usage;
   const codex = sanitizeAccountsOf(usage.codex);
   const claude = sanitizeAccountsOf(usage.claude);
-  if (codex === usage.codex && claude === usage.claude) return usage;
-  return { ...usage, ...(codex ? { codex } : {}), ...(claude ? { claude } : {}) };
+  const kimi = sanitizeAccountsOf(usage.kimi);
+  if (codex === usage.codex && claude === usage.claude && kimi === usage.kimi) return usage;
+  return { ...usage, ...(codex ? { codex } : {}), ...(claude ? { claude } : {}), ...(kimi ? { kimi } : {}) };
 }
 
 /** One engine snapshot with its `accounts` as they are stored, or the same object when it carries
@@ -93,8 +95,8 @@ export function runAccount(
 /**
  * Whether a workspace leaves its sessions' `engine` account to Orbit — Automatic: it picked none for
  * that engine, and its env selects no other config directory (CODEX_HOME, CLAUDE_CONFIG_DIR,
- * ORBIT_ANTIGRAVITY_GOOGLE_DIR) and no key of its own. Otherwise its choice or its env decides, and
- * Orbit neither picks nor moves.
+ * ORBIT_ANTIGRAVITY_GOOGLE_DIR, KIMI_CODE_HOME) and no key of its own. Otherwise its choice or its env
+ * decides, and Orbit neither picks nor moves.
  */
 export function workspaceLeavesAccountToOrbit(
   engine: AccountEngine,
@@ -243,6 +245,7 @@ export function sessionAccountPausedUntil(
     codexAccount: session.codexAccount ?? workspace?.codexAccount,
     claudeAccount: session.claudeAccount ?? workspace?.claudeAccount,
     antigravityAccount: session.antigravityAccount ?? workspace?.antigravityAccount,
+    kimiAccount: session.kimiAccount ?? workspace?.kimiAccount,
   }, runner.engines);
   return runnerAccountPausedUntil(runner.accountPauses, engine, account, now);
 }
@@ -252,4 +255,5 @@ export interface WorkspaceAccountChoices {
   codexAccount?: string | null;
   claudeAccount?: string | null;
   antigravityAccount?: string | null;
+  kimiAccount?: string | null;
 }

@@ -752,4 +752,98 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     expect(await gaugeAccount()).toEqual({ name: 'Work', note: null });
     expect(await providerMenuRows()).toBeNull();
   });
+
+  /** Two Kimi Code accounts — Default on kimi.ai, Work on kimi.com — their quota in the heartbeat's
+   *  planUsage.kimi: Default's month is 41% used, Work's 5-hour window 97%. Default's coding share is
+   *  above its month, which Kimi never reports (the share is part of the month), so that a gauge or a
+   *  row still weighing it would name it. */
+  const withKimiAccounts = (capabilities: string[] = []) =>
+    ({
+      ...RUNNER,
+      capabilities,
+      engines: [
+        ...(RUNNER.engines ?? []),
+        {
+          engine: 'kimi',
+          installed: true,
+          auth: 'yes',
+          version: '2.1.1',
+          kimiRegion: 'global',
+          accounts: [
+            { id: 'default', home: '/root/.kimi-code', auth: 'yes', kimiRegion: 'global' },
+            { id: WORK, name: 'Work', home: `/root/.orbit/kimi-accounts/${WORK}`, auth: 'yes', kimiRegion: 'mainland-cn' },
+          ],
+        },
+      ],
+      planUsage: {
+        ...(RUNNER.planUsage ?? {}),
+        kimi: {
+          provider: 'kimi',
+          fiveHour: { utilization: 12, resetsAt: RESETS },
+          month: { utilization: 41, resetsAt: RESETS },
+          monthCode: { utilization: 88, resetsAt: RESETS },
+          accounts: { [WORK]: { provider: 'kimi', fiveHour: { utilization: 97, resetsAt: RESETS } } },
+        },
+      },
+    }) as unknown as Runner;
+
+  it('starts a new Kimi session on the Kimi account picked under Kimi, its gauge that account’s', async () => {
+    runner = withKimiAccounts();
+    await mount(`/workspaces/${WORKSPACE}/new`, '.np-card:not([disabled])');
+    await click(mounted().querySelector('.np-card'));
+    await render(() => document.querySelector('.np-list'));
+    await click([...document.querySelectorAll('.np-list .np-row')].find((row) => row.querySelector('.np-row-name')?.textContent === 'Kimi'));
+    // Work's 5-hour window is nearly spent, so Automatic would start on Default, whose month the gauge shows.
+    expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 41%');
+    expect(await gaugeAccount()).toEqual({ name: 'Default', note: 'Automatic — the account whose quota resets soonest' });
+    // The month is its total: the coding share beside it is neither listed nor what the gauge reads.
+    expect([...document.querySelectorAll('.cu-pop .cu-row .cu-head')].map((head) => head.textContent)).toEqual([
+      '5h limit12%',
+      'Monthly limit41%',
+    ]);
+    expect((await providerMenuRows())!.map(rowText)).toEqual([
+      'Kimi',
+      'AutomaticSwitches to soonest reset ✓',
+      'DefaultMonthly 41%',
+      'Work5h 97%',
+    ]);
+
+    await click(await draftRow('Work'));
+    expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 97%');
+    expect(await gaugeAccount()).toEqual({ name: 'Work', note: null });
+    await sendMessage('fix the flaky test');
+    expect(creates[0]).toMatchObject({ provider: 'kimi', kimiAccount: WORK });
+    expect('codexAccount' in creates[0]).toBe(false);
+    expect('antigravityAccount' in creates[0]).toBe(false);
+  });
+
+  const onKimi = (kimiAccount: string, pinned: boolean) => ({
+    ...session(null, null),
+    provider: 'kimi',
+    model: 'kimi-code/kimi-for-coding',
+    kimiAccount,
+    kimiAccountPinned: pinned,
+    workspace: { id: WORKSPACE, codexAccount: null, claudeAccount: null, antigravityAccount: null, kimiAccount: null },
+  });
+
+  it('a live Kimi session moves to another Kimi account from the Provider menu, on a runner that carries the conversation', async () => {
+    runner = withKimiAccounts(['kimi-account-move/v1']);
+    detail = onKimi('default', false);
+    vi.mocked(switchSessionAccount).mockResolvedValue({ ok: true } as never);
+    await mount(`/sessions/${SESSION}`, '.composer-box textarea');
+    await settlesOn('Plan usage 41%');
+    const rows = (await providerMenuRows())!;
+    expect(rows.map(rowText)).toEqual(['Kimi', 'AutomaticSwitches to soonest reset ✓', 'DefaultMonthly 41%', 'Work5h 97%']);
+    await click(rows.find((row) => row.textContent?.startsWith('Work')));
+    expect(vi.mocked(switchSessionAccount)).toHaveBeenCalledWith(SESSION, WORK);
+  });
+
+  it('a session pinned to a Kimi account shows its quota, and offers no move on a runner that cannot carry the conversation', async () => {
+    runner = withKimiAccounts();
+    detail = onKimi(WORK, true);
+    await mount(`/sessions/${SESSION}`, '.composer-box textarea');
+    await settlesOn('Plan usage 97%');
+    expect(await gaugeAccount()).toEqual({ name: 'Work', note: null });
+    expect(await providerMenuRows()).toBeNull();
+  });
 });

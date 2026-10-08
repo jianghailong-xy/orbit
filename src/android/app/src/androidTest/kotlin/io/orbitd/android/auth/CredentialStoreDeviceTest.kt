@@ -15,7 +15,9 @@ import io.orbitd.android.core.protocol.LoginResponse
 import io.orbitd.android.core.protocol.User
 import io.orbitd.android.storage.*
 import java.io.File
+import java.io.IOException
 import java.security.KeyStore
+import javax.crypto.AEADBadTagException
 import javax.crypto.SecretKey
 import javax.crypto.SecretKeyFactory
 import kotlinx.coroutines.runBlocking
@@ -69,6 +71,7 @@ class CredentialStoreDeviceTest {
         } finally { store.clear() }
     }
 
+    /** A03d: a lost key is unrecoverable only where keystore2 (Android 12+) can say it is gone. */
     @Test fun tamperingAndKeyLossFailClosedAndPurgeData() = runBlocking {
         val store = AndroidCredentialStore(context, "device-test")
         val data = AndroidSessionDataStore(context, "device-data")
@@ -85,11 +88,60 @@ class CredentialStoreDeviceTest {
                 bytes[bytes.lastIndex] = (bytes.last().toInt() xor 1).toByte()
                 path.writeBytes(bytes)
             }
+            val failure = runCatching { store.load() }.exceptionOrNull() as SecureStorageException
+            // Android 10–11's keystore answers a key it cannot reach as missing: there a lost key is kept for the next launch.
+            val unrecoverable = !lostKey || Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+            assertEquals(unrecoverable, failure.unrecoverable)
+            if (!lostKey) assertTrue(generateSequence(failure.cause) { it.cause }.any { it is AEADBadTagException })
             val session = AuthSession(HttpTransport { error("No network during failed restore") }, store, instances, data, "test")
             session.restore()
             assertEquals(SignOutReason.STORAGE, (session.state.value as AuthState.SignedOut).reason)
-            assertNull(store.load())
-            assertNull(data.read(AccountKey(fixtureServer.value, "a03-fixture-user"), DataKind.DRAFT, "s1"))
+            if (unrecoverable) {
+                assertNull(store.load())
+                assertNull(data.read(AccountKey(fixtureServer.value, "a03-fixture-user"), DataKind.DRAFT, "s1"))
+            } else {
+                assertTrue(runCatching { store.load() }.exceptionOrNull() is SecureStorageException)
+                assertArrayEquals(byteArrayOf(1), data.read(AccountKey(fixtureServer.value, "a03-fixture-user"), DataKind.DRAFT, "s1"))
+                store.clear()
+                data.clearAll()
+            }
+        }
+    }
+
+    /** A03d: a record the app cannot read for now signs this launch out but deletes nothing; the next launch restores it. */
+    @Test fun aRecordThatCannotBeReadForNowIsKeptForTheNextLaunch() = runBlocking {
+        val store = AndroidCredentialStore(context, "device-test")
+        val data = AndroidSessionDataStore(context, "device-data")
+        val instances = AndroidInstanceStore(context, "device-instance")
+        val account = AccountKey(fixtureServer.value, "a03-fixture-user")
+        val path = File(context.noBackupFilesDir, "orbit/device-test.bin")
+        store.clear()
+        data.clearAll()
+        try {
+            store.save(StoredSession(fixtureServer.value, fixtureTokens()))
+            instances.save(fixtureServer.value)
+            data.write(account, DataKind.DRAFT, "s1", byteArrayOf(1))
+            assertTrue(path.setReadable(false, false))
+            val failure = runCatching { store.load() }.exceptionOrNull() as SecureStorageException
+            assertFalse(failure.unrecoverable)
+            assertTrue(failure.cause is IOException)
+            val logs = mutableListOf<String>()
+            val first = AuthSession(HttpTransport { error("No network during restore") }, store, instances, data, "test",
+                log = { logs += it })
+            first.restore()
+            assertEquals(AuthState.SignedOut(fixtureServer, SignOutReason.STORAGE), first.state.value)
+            InstrumentationRegistry.getInstrumentation().sendStatus(0, Bundle().apply { putString("a03d_restore_log", logs.joinToString(" | ")) })
+            assertTrue(logs.joinToString(), logs.last().contains("kept for the next launch"))
+            assertTrue(path.setReadable(true, true))
+            val next = AuthSession(HttpTransport { error("No network during restore") }, store, instances, data, "test")
+            next.restore()
+            val handle = (next.state.value as AuthState.SignedIn).handle
+            assertEquals(account, handle.account)
+            assertArrayEquals(byteArrayOf(1), next.readData(handle, DataKind.DRAFT, "s1"))
+        } finally {
+            path.setReadable(true, true)
+            store.clear()
+            data.clearAll()
         }
     }
 

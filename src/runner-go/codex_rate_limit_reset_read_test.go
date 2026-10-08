@@ -144,7 +144,7 @@ func TestCodexResetReadKeepsTopLevelCreditsLossless(t *testing.T) {
 				t.Fatalf("account/rateLimits/read params %v, want null", params)
 			}
 
-			wire, err := json.Marshal(HeartbeatRequest{Status: "ONLINE", LeaseOwner: codexResetTestLeaseOwner, PlanUsage: combinePlanUsage(nil, read.usage)})
+			wire, err := json.Marshal(HeartbeatRequest{Status: "ONLINE", LeaseOwner: codexResetTestLeaseOwner, PlanUsage: combinePlanUsage(nil, read.usage, nil)})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -329,7 +329,7 @@ func TestCodexResetOverrideAccountsNeverOpenReset(t *testing.T) {
 			if strings.Contains(err.Error(), secret) || strings.Contains(logs, secret) {
 				t.Fatalf("the %s value leaked: %v / %q", variable, err, logs)
 			}
-			wire, _ := json.Marshal(HeartbeatRequest{LeaseOwner: codexResetTestLeaseOwner, PlanUsage: combinePlanUsage(nil, probe.snapshot())})
+			wire, _ := json.Marshal(HeartbeatRequest{LeaseOwner: codexResetTestLeaseOwner, PlanUsage: combinePlanUsage(nil, probe.snapshot(), nil)})
 			if bytes.Contains(wire, []byte("rateLimitReset")) || bytes.Contains(wire, []byte(secret)) {
 				t.Fatalf("the heartbeat offers reset under %s: %s", variable, wire)
 			}
@@ -430,7 +430,7 @@ func TestCodexUsageProbeReadsResetThroughAFakeAppServer(t *testing.T) {
 				t.Fatal(err)
 			}
 			probe.store(usage)
-			wire, err := json.Marshal(HeartbeatRequest{Status: "ONLINE", LeaseOwner: codexResetTestLeaseOwner, PlanUsage: combinePlanUsage(nil, probe.snapshot())})
+			wire, err := json.Marshal(HeartbeatRequest{Status: "ONLINE", LeaseOwner: codexResetTestLeaseOwner, PlanUsage: combinePlanUsage(nil, probe.snapshot(), nil)})
 			if err != nil {
 				t.Fatal(err)
 			}

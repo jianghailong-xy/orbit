@@ -128,19 +128,25 @@ internal object AccountCopy {
 }
 
 /**
- * CodexAccounts: a runner's accounts of an engine that keeps several (Claude Code, Codex, Antigravity) — whose quota each
- * one reads, which one a new session starts on, and what moves a session between them. Shared by the runner pages and
- * the composer's account rows.
+ * CodexAccounts: a runner's accounts of an engine that keeps several (Claude Code, Codex, Antigravity, Kimi Code) — whose
+ * quota each one reads, which one a new session starts on, and what moves a session between them. Shared by the runner
+ * pages and the composer's account rows.
  */
 internal object EngineAccounts {
     const val DEFAULT = "default"
     const val AUTOMATIC = "automatic"
     /** What a runner declares once it signs an Antigravity account Orbit names into that account's own Gemini directory. */
     const val ANTIGRAVITY_ACCOUNT_LOGIN = "antigravity-account-login/v1"
+    /** The same for Kimi Code: an account Orbit names signs in, on the site the sign-in names, into a KIMI_CODE_HOME of its
+     * own rather than Default's. */
+    const val KIMI_ACCOUNT_LOGIN = "kimi-account-login/v1"
     private const val NEAR_LIMIT = 90.0
     private const val SHORT_WINDOW_NEAR_LIMIT = 80.0
     private const val SHORT_WINDOW_MINS = 5 * 60
     private const val WEEK_MINS = 7 * 24 * 60
+    /** How long a Kimi Code monthly window is, for weighing it against the others (shared MONTH_MINS): longer than any
+     * week, which is all its length decides here. */
+    private const val MONTH_MINS = 30 * 24 * 60
     /** How long an Antigravity bucket's window is, from agy's own name for it (shared BUCKET_WINDOW_MINS). */
     private val bucketWindowMins = mapOf("5h" to 5 * 60, "weekly" to WEEK_MINS)
 
@@ -150,10 +156,12 @@ internal object EngineAccounts {
         runner.list("engines").firstOrNull { it.str("engine") == engine }?.obj("planUsage")
         else planUsageSnapshot(runner.obj("planUsage"), engine)
 
-    /** What a runner declares when a session there can move to another of its accounts of [engine]: Antigravity's
-     * conversation lives in the session's own directory, so a runner that keeps its accounts at all moves one. */
+    /** What a runner declares when a session there can move to another of its accounts of [engine]: Codex, Claude Code and
+     * Kimi Code carry the conversation across; Antigravity's lives in the session's own directory, so a runner that keeps
+     * its accounts at all moves one. */
     fun moveCapability(engine: String) = when (engine) {
-        "claude" -> "claude-account-move/v1"; "antigravity" -> ANTIGRAVITY_ACCOUNT_LOGIN; else -> "codex-account-move/v1"
+        "claude" -> "claude-account-move/v1"; "antigravity" -> ANTIGRAVITY_ACCOUNT_LOGIN; "kimi" -> "kimi-account-move/v1"
+        else -> "codex-account-move/v1"
     }
 
     /** One Antigravity bucket as the window it names, for weighing quota against quota: what agy says is left, as the
@@ -164,10 +172,11 @@ internal object EngineAccounts {
         bucketWindowMins[bucket.str("window")]?.let { put("windowDurationMins", it) }
     }
 
-    /** Every window of one snapshot with its length in minutes: Claude's named ones by their names, Codex's as reported,
-     * Antigravity's buckets as the windows they are. */
+    /** Every window of one snapshot with its length in minutes: Claude's and Kimi Code's named ones by their names — Kimi's
+     * monthly pair both weighed, as shared weighs them — Codex's as reported, Antigravity's buckets as the windows they are. */
     fun withLength(snapshot: JsonObject): List<Pair<JsonObject, Int?>> {
-        val named = listOf("fiveHour" to 5 * 60, "sevenDay" to WEEK_MINS, "sevenDayOpus" to WEEK_MINS, "sevenDaySonnet" to WEEK_MINS)
+        val named = listOf("fiveHour" to 5 * 60, "sevenDay" to WEEK_MINS, "sevenDayOpus" to WEEK_MINS, "sevenDaySonnet" to WEEK_MINS,
+            "month" to MONTH_MINS, "monthCode" to MONTH_MINS)
             .mapNotNull { (key, mins) -> snapshot.obj(key)?.let { it to (it.int("windowDurationMins") ?: mins) } }
         val reported = listOfNotNull(snapshot.obj("primary"), snapshot.obj("secondary")) +
             snapshot.list("rateLimits").flatMap { listOfNotNull(it.obj("primary"), it.obj("secondary")) } +
@@ -284,8 +293,9 @@ internal object RunnerPage {
     /** The CLI's name where an update of it is named (runnerEngines.ts ENGINE_CLI_NAME): Antigravity's is still its CLI's. */
     private fun cliName(engine: String) = if (engine == "antigravity") "Antigravity CLI" else engineName(engine)
     /** The engines whose CLI keeps a login per directory, so one machine holds several accounts of them (shared
-     * ACCOUNT_ENGINES): an Antigravity account is a Google sign-in in a Gemini directory of its own. */
-    fun keepsAccounts(engine: String) = engine == "claude" || engine == "codex" || engine == "antigravity"
+     * ACCOUNT_ENGINES): an Antigravity account is a Google sign-in in a Gemini directory of its own, a Kimi Code account a
+     * KIMI_CODE_HOME of its own. */
+    fun keepsAccounts(engine: String) = engine == "claude" || engine == "codex" || engine == "antigravity" || engine == "kimi"
     fun isLoginEngine(engine: String) = engine in loginEngines
 
     // version
@@ -663,9 +673,22 @@ internal object RunnerPage {
     /** Every engine Orbit signs in, and Antigravity only where the runner offers its Google sign-in. */
     fun canSignIn(runner: JsonObject, engine: String) = engine != "antigravity" || antigravityCanSignIn(runner)
     /** Add Account: an engine that keeps accounts — Antigravity's only on a runner that keeps an added Google account apart
-     * from Default's (antigravity-account-login/v1); an older one would sign Default in again in its place. */
-    fun canAddAccount(runner: JsonObject, engine: String) = keepsAccounts(engine) &&
-        (engine != "antigravity" || (antigravityCanSignIn(runner) && EngineAccounts.ANTIGRAVITY_ACCOUNT_LOGIN in runner.strings("capabilities")))
+     * from Default's (antigravity-account-login/v1), Kimi's only on one that signs the account it adds into a KIMI_CODE_HOME
+     * of its own (kimi-account-login/v1); an older one would sign Default in again in its place. */
+    fun canAddAccount(runner: JsonObject, engine: String) = keepsAccounts(engine) && when (engine) {
+        "antigravity" -> antigravityCanSignIn(runner) && EngineAccounts.ANTIGRAVITY_ACCOUNT_LOGIN in runner.strings("capabilities")
+        "kimi" -> EngineAccounts.KIMI_ACCOUNT_LOGIN in runner.strings("capabilities")
+        else -> true
+    }
+    /** The engine page's name for its section of logins: Accounts where the engine keeps several on this runner, Sign-In
+     * where it has the one — as Kimi does on a runner that cannot add a second, whose page reads as it always has. */
+    fun accountsTitle(runner: JsonObject, engine: String) =
+        if (keepsAccounts(engine) && (engine != "kimi" || canAddAccount(runner, engine))) "Accounts" else "Sign-In"
+    /** Which of Kimi's two sites its login is on, said after the version on its Engines row (`2.1.1 · kimi.ai`): the same
+     * CLI signs in to either, and a session spends that site's subscription. Null for every other engine, before Kimi's
+     * first sign-in — and with several accounts, which can be on different sites: each says its own on the engine page. */
+    fun engineSite(health: JsonObject): String? =
+        if (health.str("engine") != "kimi" || health.list("accounts").size >= 2) null else KimiSite.of(health.str("kimiRegion"))?.domain
     /** The engines whose quota a runner reads: the ones Orbit signs in. */
     fun reportsQuota(engine: String) = isLoginEngine(engine)
 
@@ -750,6 +773,13 @@ internal object RunnerPage {
         return accountLabel(next, health.list("accounts"))
     }
 
+    /** Whether the engine page marks [account] NEXT beside its name, as the account pools mark theirs: the account a new
+     * session nobody picked one for starts on — so only where the engine has two accounts or more to choose between. */
+    fun marksNext(runner: JsonObject, engine: String, account: String, nowMs: Long = System.currentTimeMillis()): Boolean {
+        val health = engineHealth(runner, engine) ?: return false
+        return nextAccount(runner, health, nowMs) == account
+    }
+
     private fun nextAccount(runner: JsonObject, health: JsonObject, nowMs: Long) =
         EngineAccounts.toStartOn(health.list("accounts"), EngineAccounts.usage(health.text("engine"), runner), nowMs)
 
@@ -762,27 +792,35 @@ internal object RunnerPage {
         accounts.firstOrNull { it.str("id") == id }?.str("name")?.takeIf { it.isNotEmpty() } ?: if (id == "default") "Default" else "Account $id"
 
     /** One sign-in on the engine page. [auth] is none for an Antigravity Default on the machine's Gemini key ([envKey]),
-     * which has nothing to sign in or pause; its line says what it runs on. */
+     * which has nothing to sign in or pause; its line says what it runs on. [site]: Kimi only, the site its login is on —
+     * the account's own, Default's being the engine's. */
     data class AccountLine(val id: String, val name: String, val home: String?, val auth: String?,
-                           val signInAccount: String?, val pausedUntil: String?, val envKey: Boolean = false, val loginExpiresAt: String? = null) {
+                           val signInAccount: String?, val pausedUntil: String?, val envKey: Boolean = false, val loginExpiresAt: String? = null,
+                           val site: KimiSite? = null) {
         val isDefault get() = id == "default"
-        val subtitle get() = if (!isDefault || name == "Default") home else listOfNotNull(home, "Default").joinToString(" · ")
+        /** Where its login lives — a Kimi account's after the site it is on (`kimi.com · ~/.orbit/kimi-accounts/5c2e91a0`) —
+         * and, for a Default renamed in Orbit, that it is still the machine's own login. */
+        val subtitle get() = listOfNotNull(site?.domain, home, "Default".takeIf { isDefault && name != "Default" })
+            .takeIf { it.isNotEmpty() }?.joinToString(" · ")
     }
 
     /** Every account an engine is signed into, Default first; one line when it keeps no others, whose answer is the
      * engine's unless that is a Gemini key's rather than Default's Google sign-in (runsOnEnvKey). */
     fun accountLines(health: JsonObject): List<AccountLine> {
         val accounts = health.list("accounts")
+        val kimi = health.str("engine") == "kimi"
         if (accounts.size < 2) {
             val own = accounts.firstOrNull()
             val envKey = runsOnEnvKey(health, EngineAccounts.DEFAULT, own?.str("auth"))
             return listOf(AccountLine("default", accountLabel("default", accounts), (own?.str("home") ?: own?.str("codexHome"))?.let(::tildePath),
-                if (envKey) null else health.str("auth"), null, own?.str("pausedUntil"), envKey, own?.str("loginExpiresAt")))
+                if (envKey) null else health.str("auth"), null, own?.str("pausedUntil"), envKey, own?.str("loginExpiresAt"),
+                if (kimi) KimiSite.of(health.str("kimiRegion")) else null))
         }
         return accounts.map { account ->
             val envKey = runsOnEnvKey(health, account.text("id"), account.str("auth"))
             AccountLine(account.text("id"), accountLabel(account.text("id"), accounts), (account.str("home") ?: account.str("codexHome"))?.let(::tildePath),
-                if (envKey) null else account.str("auth"), account.text("id"), account.str("pausedUntil"), envKey, account.str("loginExpiresAt"))
+                if (envKey) null else account.str("auth"), account.text("id"), account.str("pausedUntil"), envKey, account.str("loginExpiresAt"),
+                if (kimi) KimiSite.of(account.str("kimiRegion")) else null)
         }
     }
 
@@ -992,8 +1030,9 @@ private fun codexWindowLabel(window: JsonObject, secondary: Boolean): String {
     return window.str("label") ?: if (secondary) "Secondary usage limit" else "Usage limit"
 }
 
-/** PlanUsageSnapshot.rows: present windows in provider order, every Codex rate-limit bucket kept, and each Antigravity bucket
- * by what it has left ("Weekly" / "5-hour", grouped by the bucket's id). */
+/** PlanUsageSnapshot.rows: present windows in provider order, every Codex rate-limit bucket kept, each Antigravity bucket
+ * by what it has left ("Weekly" / "5-hour", grouped by the bucket's id), and Kimi Code's in the words of its own /usage
+ * panel — the month as one row, its total: the coding share of it (`monthCode`) is not a row of its own. */
 internal fun usageRows(snapshot: JsonObject): List<UsageRow> {
     if (snapshot.str("provider") == "antigravity") return snapshot.list("buckets").map { bucket ->
         val window = bucket.text("window")
@@ -1023,6 +1062,7 @@ internal fun usageRows(snapshot: JsonObject): List<UsageRow> {
             }
         }
     }
-    return listOf("fiveHour" to "5-hour limit", "sevenDay" to "Weekly · all models", "sevenDayOpus" to "Weekly · Opus", "sevenDaySonnet" to "Weekly · Sonnet")
-        .mapNotNull { (key, label) -> snapshot.obj(key)?.let { UsageRow(key, it.str("label") ?: label, null, it) } }
+    val named = if (snapshot.str("provider") == "kimi") listOf("fiveHour" to "5h limit", "sevenDay" to "Weekly limit", "month" to "Monthly limit")
+        else listOf("fiveHour" to "5-hour limit", "sevenDay" to "Weekly · all models", "sevenDayOpus" to "Weekly · Opus", "sevenDaySonnet" to "Weekly · Sonnet")
+    return named.mapNotNull { (key, label) -> snapshot.obj(key)?.let { UsageRow(key, it.str("label") ?: label, null, it) } }
 }

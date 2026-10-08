@@ -5,6 +5,7 @@ import { WikiArticles } from './wiki-articles';
 import { WikiArticlesController } from './wiki-articles.controller';
 import { WikiDocs } from './wiki-docs';
 import { WikiDocsController } from './wiki-docs.controller';
+import { WikiExecutorSweep } from './wiki-executor-sweep';
 import { WikiHealth } from './wiki-health';
 import { WikiHealthController } from './wiki-health.controller';
 import { WikiJobReads } from './wiki-job-reads';
@@ -55,7 +56,10 @@ import { WikiSystemModelController } from './wiki-system-model.controller';
   // WikiSystemModelReads reads the System model's name and state from the row the wiki-worker writes (contract
   // `systemModel.read`), through Prisma alone, for a controller of its own; WikiJobReads a space's server runs and
   // their calls (contract `jobs.read`) for Activity, the same way.
-  providers: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiMaintenanceTrigger, WikiRunReads, WikiHealth, WikiPlans, WikiPlanJobFacts, WikiDocs, WikiSystemModelReads, WikiJobReads],
+  // WikiExecutorSweep cancels at apiserver start whatever the server still had in flight for an account the
+  // executor switch no longer serves (contract `jobs.executor.rollback`, design §10), and announces the
+  // spaces it touched the same way a run's own end does.
+  providers: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiMaintenanceTrigger, WikiRunReads, WikiHealth, WikiPlans, WikiPlanJobFacts, WikiDocs, WikiSystemModelReads, WikiJobReads, WikiExecutorSweep],
   exports: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiPlans, WikiDocs],
 })
 export class WikiModule {}

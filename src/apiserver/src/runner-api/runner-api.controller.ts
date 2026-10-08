@@ -46,6 +46,7 @@ import {
   ANTIGRAVITY_ACCOUNT_LOGIN_V1,
   CLAUDE_ACCOUNT_MOVE_V1,
   CODEX_ACCOUNT_MOVE_V1,
+  KIMI_ACCOUNT_MOVE_V1,
 } from '../providers/account-move-capability';
 import { accountEnvVar } from '../providers/account';
 import { sessionAccountPausedUntil, type WorkspaceAccountChoices } from '../providers/plan-usage-accounts';
@@ -474,7 +475,12 @@ export const CLAUDE_ACCOUNT_REMOVE_V1 = 'claude-account-remove/v1';
  *  account named by the control plane — its own Gemini directory — rather than its one Google sign-in. */
 export { ANTIGRAVITY_ACCOUNT_LOGIN_V1 } from '../providers/account-move-capability';
 export const ANTIGRAVITY_ACCOUNT_REMOVE_V1 = 'antigravity-account-remove/v1';
-export { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
+/** Kimi Code's, the same two again: a runner that declares them signs in, and removes, a Kimi account
+ *  named by the control plane — its own KIMI_CODE_HOME, on the site the sign-in names — rather than the
+ *  machine's one Kimi login. */
+export const KIMI_ACCOUNT_LOGIN_V1 = 'kimi-account-login/v1';
+export const KIMI_ACCOUNT_REMOVE_V1 = 'kimi-account-remove/v1';
+export { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1, KIMI_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
 
 /** What a runner declares before it is handed a sign-in, or a removal, of a named account of each
  *  engine that keeps accounts — and what that engine is called when it is too old to. */
@@ -482,16 +488,19 @@ const ACCOUNT_LOGIN_CAPABILITY = {
   codex: CODEX_ACCOUNT_LOGIN_V1,
   claude: CLAUDE_ACCOUNT_LOGIN_V1,
   antigravity: ANTIGRAVITY_ACCOUNT_LOGIN_V1,
+  kimi: KIMI_ACCOUNT_LOGIN_V1,
 } as const satisfies Record<AccountEngine, string>;
 const ACCOUNT_REMOVE_CAPABILITY = {
   codex: CODEX_ACCOUNT_REMOVE_V1,
   claude: CLAUDE_ACCOUNT_REMOVE_V1,
   antigravity: ANTIGRAVITY_ACCOUNT_REMOVE_V1,
+  kimi: KIMI_ACCOUNT_REMOVE_V1,
 } as const satisfies Record<AccountEngine, string>;
 const ACCOUNT_ENGINE_LABEL = {
   codex: 'Codex',
   claude: 'Claude',
   antigravity: 'Antigravity',
+  kimi: 'Kimi',
 } as const satisfies Record<AccountEngine, string>;
 /** Runner guarantees a durable compaction boundary before the next Claude top-level turn. */
 export const SESSION_CLAUDE_COORDINATOR_CONTEXT_V1 =
@@ -735,8 +744,8 @@ export type QuotaRetryTransaction = TransactionSurface<{ runner: ['findUnique'] 
 /** The retry plan reads the session, then hands the same transaction to the quota snapshot read. */
 export type RetryPlanTransaction = TransactionSurface<{ session: ['findUnique'] }> & QuotaRetryTransaction;
 
-/** A Codex usage limit reads the workspace too: whether it leaves the account to Orbit. */
-export type CodexUsageLimitTransaction = TransactionSurface<{ workspace: ['findUnique'] }> & QuotaRetryTransaction;
+/** A Codex or Kimi usage limit reads the workspace too: whether it leaves the account to Orbit. */
+export type UsageLimitTransaction = TransactionSurface<{ workspace: ['findUnique'] }> & QuotaRetryTransaction;
 
 @MachineProtocol()
 @Controller('runner')
@@ -2636,6 +2645,7 @@ export class RunnerApiController {
           codexAccount: s.codexAccount ?? workspace?.codexAccount,
           claudeAccount: s.claudeAccount ?? workspace?.claudeAccount,
           antigravityAccount: s.antigravityAccount ?? workspace?.antigravityAccount,
+          kimiAccount: s.kimiAccount ?? workspace?.kimiAccount,
           runnerEngines: s.assignedRunner?.engines,
         });
       let exec = resolveExec(s.model);
@@ -3548,7 +3558,7 @@ export class RunnerApiController {
           const session = await tx.session.findUniqueOrThrow({
             where: { id: sessionId },
             include: {
-              workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true } },
+              workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
               assignedRunner: { select: { engines: true, accountPauses: true } },
             },
           });
@@ -3999,7 +4009,8 @@ export class RunnerApiController {
         codexAccount: true,
         claudeAccount: true,
         antigravityAccount: true,
-        workspace: { select: { model: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true } },
+        kimiAccount: true,
+        workspace: { select: { model: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true, engines: true } },
       },
     });
@@ -4036,6 +4047,7 @@ export class RunnerApiController {
       codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
       claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
       antigravityAccount: session.antigravityAccount ?? session.workspace?.antigravityAccount,
+      kimiAccount: session.kimiAccount ?? session.workspace?.kimiAccount,
       runnerEngines: session.assignedRunner?.engines,
     });
     // A built-in engine authenticates itself, so moving onto one injects nothing — but the
@@ -4424,10 +4436,12 @@ export class RunnerApiController {
           poolKeyId: true,
           poolCodexAccountId: true,
           model: true,
-          // Which of the runner's Codex accounts a turn its usage limit ended ran on, and whether it
-          // was picked by hand — see `codexUsageLimit` below.
+          // Which of the runner's Codex or Kimi accounts a turn its usage limit ended ran on, and
+          // whether it was picked by hand — see `usageLimit` below.
           codexAccount: true,
           codexAccountPinned: true,
+          kimiAccount: true,
+          kimiAccountPinned: true,
           // What the run still has of its own in flight, for the OWNER_CONFIRMED question below:
           // work that will report back and wake this session again, which is what makes a turn the
           // run ends not the end of the run (`runStoppedWorking`). Read with the row.
@@ -4793,18 +4807,27 @@ export class RunnerApiController {
       // codex_account_move.go); else it waits for this account's reset. A task's run too, as a Claude
       // one does (retryPlanFor): the retry this arms holds its task's failure back (retryPending
       // below), and the run goes on in its own checkout and thread rather than ending the attempt.
-      const codexUsageLimit =
+      //
+      // A built-in Kimi session the same way, on a runner that carries its conversation to another
+      // account (KIMI_ACCOUNT_MOVE_V1, runner kimi_account_move.go). Kimi's ACP answers a turn its
+      // usage limit ended as an ordinary end and says nothing of why; the runner reads the limit from
+      // the turn's own record and reports it as the turn's error, in the words this reads
+      // (kimi_acp.go kimiTurnUsageLimit).
+      const usageLimitEngine = current.provider === AgentProvider.CODEX
+        ? 'codex' as const
+        : current.provider === AgentProvider.KIMI ? 'kimi' as const : null;
+      const usageLimit =
         failSession
         && completedTurn?.kind === 'message'
         && current.retryAt == null
-        && current.provider === AgentProvider.CODEX
+        && usageLimitEngine
         && isUsageLimitErrorText(failureText)
-          ? await this.codexUsageLimitRetry(tx, runner.id, current, failureText!)
+          ? await this.usageLimitRetry(tx, runner.id, usageLimitEngine, current, failureText!)
           : null;
       const retryArmAt = keyRetryAt
         ? new Date(keyRetryAt.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS))
-        : codexUsageLimit
-          ? codexUsageLimit.retryAt
+        : usageLimit
+          ? usageLimit.retryAt
           : unanswered && dto.numTurns === 0 && (dto.costUsd ?? 0) === 0 && current.retryAt == null
             ? nextAutoRetryAt(current.retryAttempts, new Date())
             : null;
@@ -5185,8 +5208,11 @@ export class RunnerApiController {
           ...(retryArmAt ? { retryAt: retryArmAt } : {}),
           // The account it moves to, and the line the next engine start carries into the transcript
           // (the events path attaches it, as it does a pool's).
-          ...(codexUsageLimit?.move
-            ? { codexAccount: codexUsageLimit.move.to, poolSwitchNotice: codexUsageLimit.move.notice }
+          ...(usageLimit?.move
+            ? {
+                ...(usageLimitEngine === 'kimi' ? { kimiAccount: usageLimit.move.to } : { codexAccount: usageLimit.move.to }),
+                poolSwitchNotice: usageLimit.move.notice,
+              }
             : {}),
           ...(acknowledgedCoordinatorContextKey
             ? { coordinatorContextAckKey: acknowledgedCoordinatorContextKey }
@@ -5369,7 +5395,7 @@ export class RunnerApiController {
         failSession,
         // What the STATUS below announces beside FAILED: a usage limit this turn armed is a retry
         // on its way, and the clients draw Retrying rather than Failed.
-        retryAt: codexUsageLimit?.retryAt ?? current.retryAt,
+        retryAt: usageLimit?.retryAt ?? current.retryAt,
         taskReclaimed,
         taskId: current.taskId,
         taskOwnerId: current.ownerId,
@@ -6315,7 +6341,7 @@ export class RunnerApiController {
         quotaSpent && accountEnvVar(current.provider) && current.workspaceId
           ? await tx.workspace.findUnique({
               where: { id: current.workspaceId },
-              select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true },
+              select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true },
             })
           : null;
       // A pool credential that ended the run is waited out the same way, from the pool's rows rather than
@@ -7254,10 +7280,12 @@ export class RunnerApiController {
         codexAccount: true,
         claudeAccount: true,
         claudeAccountPinned: true,
+        // The Kimi account the run spent, whose quota alone says when it frees up (quotaRetryAt).
+        kimiAccount: true,
         poolSwitchNotice: true,
         poolCodexAccountId: true,
         poolKeyId: true,
-        workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
+        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, kimiAccount: true } },
       },
     });
     if (!session) return {};
@@ -7323,20 +7351,23 @@ export class RunnerApiController {
   }
 
   /**
-   * The retry a built-in Codex session's usage limit arms: at once, on another of the runner's accounts
-   * with room, when its workspace leaves the account to Orbit (codexAccountAfterUsageLimit) and its
-   * runner can carry the thread there (CODEX_ACCOUNT_MOVE_V1) — or at this account's reset
-   * (quotaRetryAt). Null when no reset can be read either: nothing says when to try again, and the
-   * session stays FAILED, one message away from resuming.
+   * The retry a built-in Codex or Kimi session's usage limit arms: at once, on another of the runner's
+   * accounts with room, when its workspace leaves the account to Orbit (accountAfterUsageLimit) and its
+   * runner can carry the conversation there (CODEX_ACCOUNT_MOVE_V1, KIMI_ACCOUNT_MOVE_V1) — or at this
+   * account's reset (quotaRetryAt). Null when no reset can be read either: nothing says when to try
+   * again, and the session stays FAILED, one message away from resuming.
    */
-  private async codexUsageLimitRetry(
-    tx: CodexUsageLimitTransaction,
+  private async usageLimitRetry(
+    tx: UsageLimitTransaction,
     runnerId: string,
+    engine: 'codex' | 'kimi',
     session: {
       ownerId: string;
       provider: string;
       codexAccount: string | null;
       codexAccountPinned: boolean;
+      kimiAccount: string | null;
+      kimiAccountPinned: boolean;
       workspaceId: string | null;
     },
     text: string,
@@ -7349,21 +7380,16 @@ export class RunnerApiController {
     const workspace = session.workspaceId
       ? await tx.workspace.findUnique({
           where: { id: session.workspaceId },
-          select: { env: true, codexAccount: true, claudeAccount: true },
+          select: { env: true, codexAccount: true, claudeAccount: true, kimiAccount: true },
         })
       : null;
-    const move = runner?.capabilities.includes(CODEX_ACCOUNT_MOVE_V1)
-      ? accountAfterUsageLimit(
-          'codex',
-          { account: session.codexAccount, pinned: session.codexAccountPinned },
-          workspace,
-          runner.engines,
-          runner.planUsage,
-          now,
-          runner.accountPauses,
-        )
+    const own = engine === 'kimi'
+      ? { account: session.kimiAccount, pinned: session.kimiAccountPinned }
+      : { account: session.codexAccount, pinned: session.codexAccountPinned };
+    const move = runner?.capabilities.includes(engine === 'kimi' ? KIMI_ACCOUNT_MOVE_V1 : CODEX_ACCOUNT_MOVE_V1)
+      ? accountAfterUsageLimit(engine, own, workspace, runner.engines, runner.planUsage, now, runner.accountPauses)
       : null;
-    if (move && runner) return { retryAt: now, move: { to: move.to, notice: accountSwitchNotice('codex', move, runner) } };
+    if (move && runner) return { retryAt: now, move: { to: move.to, notice: accountSwitchNotice(engine, move, runner) } };
     const at = await this.quotaRetryAt(tx, runnerId, session, text, workspace);
     return at ? { retryAt: at } : null;
   }
@@ -7394,7 +7420,7 @@ export class RunnerApiController {
   private async quotaRetryAt(
     tx: QuotaRetryTransaction,
     runnerId: string,
-    session: { ownerId: string; provider: string; providerBuiltin?: boolean; codexAccount: string | null; claudeAccount?: string | null; antigravityAccount?: string | null },
+    session: { ownerId: string; provider: string; providerBuiltin?: boolean; codexAccount: string | null; claudeAccount?: string | null; antigravityAccount?: string | null; kimiAccount?: string | null },
     text: string,
     workspace: ({ env: unknown } & WorkspaceAccountChoices) | null | undefined,
   ): Promise<Date | null> {
@@ -7423,6 +7449,7 @@ export class RunnerApiController {
             codexAccount: session.codexAccount ?? workspace?.codexAccount,
             claudeAccount: session.claudeAccount ?? workspace?.claudeAccount,
             antigravityAccount: session.antigravityAccount ?? workspace?.antigravityAccount,
+            kimiAccount: session.kimiAccount ?? workspace?.kimiAccount,
           },
           runner?.engines,
         ),

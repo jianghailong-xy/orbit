@@ -44,7 +44,10 @@
 4. 开放入口：由获准用户在 Web 连接 DeepSeek Harness Key，或把已存在的 dsh 配置设为启用（`PATCH /api/providers/mine/:id {"enabled":true}`）。
 5. 冒烟：在金丝雀 runner 的工作区新建 dsh 会话。核对 init 事件为 `provider:"dsh"`、`cliVersion:"0.2.0-rc.2"`，turn_end 为 `completed / end_turn`，并且续聊时 `resumed:true`、ACP 会话 id 不变。
 6. EXECUTABLE 冒烟（可选，推荐）：建一个 provider 为该 dsh 配置的 EXECUTABLE 任务并执行，核对任务被平台机械判定为 DONE。
-   任务会话默认是 Default 模式：dsh 以只读文件策略启动，写文件时会出审批卡，只有 Approve / Reject；需要无人值守时用 Auto 模式。
+   任务会话用账号的默认权限模式（没设置时是 Auto）。Default 下 dsh 以只读文件策略启动，写文件时会出审批卡，只有 Approve / Reject。
+   Auto 下工作区和临时目录内的写直接执行；要写到别处的命令，日常的那些（隔离 worktree 里的 git commit / merge、构建缓存）由 runner 自动放行一次，push、fetch、安装等仍出审批卡。
+   不写文件的命令（包括联网的）在哪个模式下都不经文件沙箱审批；其中会动到别的系统的那几类——push、远程 shell、HTTP 写入、GitHub/集群/云/服务变更、提权、发布——由 Orbit 的工具闸门先问（Don't Ask 下直接拒绝）。
+   第三方 MCP 工具只在 Auto 下挂载，每次调用先出审批卡；Orbit 自己的 MCP 不问。
 7. 核对旧引擎：重复批次 0 中的 Claude 和 `deepseek` 续聊。
 
 **批次 2..n：其余 runner。** 每台都按批次 1 的第 1–3 步和第 5、7 步执行。
@@ -91,7 +94,7 @@
 | `DSH_REQUEST_FAILED`（限流、断网、服务端错误） | 上游错误 | 重试；不会被记为成功 |
 | `DSH_CONFIG_CONFLICT` | 恢复时 cwd、profile 或版本与身份记录不一致（例如工作区目录被移动） | 恢复原目录；不要删除会话目录 |
 | `DSH_PERMISSION_UNSUPPORTED` / `DSH_MCP_UNSUPPORTED` / `DSH_TOOL_POLICY_UNSUPPORTED` | 选择了 dsh 不支持的权限模式或工具限制 | 改用 Default / Auto / Don't Ask |
-| EXECUTABLE 任务会话一直 RUNNING | Default 模式下写文件的审批卡在等人处理 | 在会话里 Approve / Reject，或改用 Auto 模式派发 |
+| EXECUTABLE 任务会话一直 RUNNING | 审批卡在等人处理：Default 下的写文件，或 Auto 下的 push、fetch、安装等 | 在会话里 Approve / Reject；只是写文件的任务可以改用 Auto 模式派发 |
 
 排查顺序：先看 `GET /api/runners` 中的 capabilities 和 `engines[dsh]`，再看 provider 的 `enabled`，最后看会话的 `error` 和 run_event 中的 init、error、turn_end。
 
