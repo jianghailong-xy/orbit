@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Production-build checks of the tree as it is: usage prod-runs.sh <label> <step> [<step> ...]
 #   build    npm run build -w @orbit/shared && npm run build -w @orbit/web
+#   shared-build  npm run build -w @orbit/shared, the preparation the worktree overlay does: the web imports
+#            @orbit/shared from its dist, which must match the shared sources of the tree (e.g. after a rebase)
+#   merge-check  the project's merge check as given: npm run build -w @orbit/web && npm run test -w @orbit/web
 #   pilot    the P3.2 pilot suite on that build, twice (the second run measures the tree's own run-to-run noise),
 #            each with --update-snapshots=all into /var/tmp/kw2-246921c8/pilot/<label>-<n>-shots, raw results in
 #            /var/tmp/kw2-246921c8/runs/pilot-<label>-<n>, slim copy (slim.py) in pilot-<label>-<n>/ here
@@ -56,6 +59,8 @@ EOF
 for step in "$@"; do
   case $step in
     build) run build 'nice -n 10 npm run build -w @orbit/shared && nice -n 10 npm run build -w @orbit/web' || continue ;;
+    shared-build) run shared-build 'nice -n 10 npm run build -w @orbit/shared' || continue ;;
+    merge-check) run merge-check 'npm run build -w @orbit/web && npm run test -w @orbit/web' || continue ;;
     pilot) for n in 1 2; do
         run "pilot-$n" "unshare -n bash -c 'ip link set lo up && cd src/web && P32_SNAPSHOTS=$raw/pilot/$label-$n-shots P32_OUTPUT=$raw/runs/pilot-$label-$n NO_COLOR=1 nice -n -10 npx playwright test -c ui-migration/pilot.config.mjs ui-migration/pilot.browser.mjs --update-snapshots=all'" || continue
         cp src/web/.ui-migration-results/environment.json "$raw/runs/pilot-$label-$n/environment.json"

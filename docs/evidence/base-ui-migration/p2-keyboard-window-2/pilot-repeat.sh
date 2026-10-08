@@ -9,14 +9,15 @@
 #           rebuilt afterwards (a run killed in between cannot do that itself, so the script puts them back first).
 # Each run's screenshots go to /var/tmp/kw2-246921c8/pilot-repeat/<tree>-<n>; pilot-repeat.csv here gets, per run and
 # project, the SHA-256 of the close icon's pixels (x 1240-1253, y 24-41) and of the whole image; the other files of
-# the run are deleted. Usage: pilot-repeat.sh <pid to wait for>
+# the run are deleted. Usage: pilot-repeat.sh [<pid to wait for>]
+# Since the rebase onto origin/main the three files at 0638f1944 are byte for byte those of the new base, c7efa24cb.
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../../.." && pwd)
 out=/var/tmp/kw2-246921c8/pilot-repeat
 cd "$root"
 files='src/web/src/components/ui/Overlay.tsx src/web/src/components/ui/Select.tsx src/web/src/components/ui/Menu.tsx'
-while kill -0 "$1" 2>/dev/null; do sleep 30; done
+[ $# -gt 0 ] && while kill -0 "$1" 2>/dev/null; do sleep 30; done
 git diff --quiet HEAD -- $files || { echo "putting back $files"; git checkout HEAD -- $files; }
 gate() {
   while [ "$(df --output=avail -B1M / | tail -1 | tr -d ' ')" -lt 6144 ]; do
