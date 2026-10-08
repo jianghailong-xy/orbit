@@ -1,6 +1,14 @@
 package io.orbitd.android.composer
 
 import io.orbitd.android.core.realtime.SessionState
+import io.orbitd.android.management.AccountCopy
+import io.orbitd.android.management.EngineAccounts
+import io.orbitd.android.management.ProviderPools
+import io.orbitd.android.management.RunnerPage
+import io.orbitd.android.management.UsageRow
+import io.orbitd.android.management.accountSnapshot
+import io.orbitd.android.management.bindingRow
+import io.orbitd.android.management.usageRows
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 import io.orbitd.android.navigation.ObjectId
@@ -38,10 +46,23 @@ data class ComposerState(val draft: ComposerDraft = ComposerDraft(), val loaded:
 data class ProviderOption(val id: String, val label: String, val runtime: String,
     val models: List<JsonObject>, val unavailable: String? = null)
 
+/** One of the runner's accounts of an engine as a row of the account menu (web AccountChoice): its own quota's tightest
+ * window, compactly ("5h 12%", an Antigravity bucket by what is left: "gemini-5h 4% left"), "env key" for an Antigravity
+ * Default on the runner's own Gemini key, and why it can't take a session. */
+data class AccountChoice(val id: String, val label: String, val quota: String? = null, val nearLimit: Boolean = false,
+    val unavailable: String? = null)
+
 data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObject>) {
     fun usage(detail: JsonObject): JsonObject? {
         val provider = detail.text("provider") ?: return null
-        if (provider in setOf("opencode", "antigravity")) return null
+        if (provider == "opencode") return null
+        // Antigravity's quota travels with its engine health, each Google account's its own; Default's too, which a Default
+        // on the machine's Gemini key has none of.
+        if (provider == "antigravity") {
+            val account = detail.text("account") ?: detail.text("antigravityAccount") ?: EngineAccounts.DEFAULT
+            if (account == EngineAccounts.AUTOMATIC) return null
+            return accountSnapshot(EngineAccounts.usage(provider, runner), account)
+        }
         if (provider !in BUILT_INS) {
             val row = providers.firstOrNull { it.text("slug") == provider } ?: return null
             if (row["members"] is JsonArray) {
@@ -95,8 +116,28 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
                 ?: row?.text("unavailable") ?: if (row == null && engine?.text("auth") == "no" && engine.objects("accounts").none { it.text("auth") == "yes" }) "Not signed in" else null)
         }
     }
-    fun accounts(provider: String) = if (provider in setOf("codex", "claude"))
+    fun accounts(provider: String) = if (RunnerPage.keepsAccounts(provider))
         runner.objects("engines").firstOrNull { it.text("engine") == provider }?.objects("accounts").orEmpty() else emptyList()
+    /** Whether a session here moves to another of the runner's [provider] accounts (EngineAccounts.moveCapability). */
+    fun movesAccounts(provider: String) = EngineAccounts.moveCapability(provider) in runner.strings("capabilities")
+    /** SessionProviderChoices.accountChoices: the runner's accounts of [provider] as rows, each with its own quota. */
+    fun accountChoices(provider: String): List<AccountChoice> {
+        val health = runner.objects("engines").firstOrNull { it.text("engine") == provider } ?: return emptyList()
+        val accounts = accounts(provider)
+        val usage = EngineAccounts.usage(provider, runner)
+        return accounts.map { account ->
+            val id = account.text("id").orEmpty()
+            val label = RunnerPage.accountLabel(id, accounts)
+            // Antigravity's Default on the runner's own Gemini key runs, on the key, with no quota of its own: not signed out.
+            if (RunnerPage.runsOnEnvKey(health, id, account.text("auth"))) return@map AccountChoice(id, label, AccountCopy.ENV_KEY)
+            val own = if (account.text("auth") == "yes") accountSnapshot(usage, id) else null
+            val rows = own?.let(::usageRows).orEmpty()
+            // The window closest to its limit; a bucket's row counts what is left, so its tightest is the binding one.
+            val row = if (rows.any { it.remaining }) own?.let { bindingRow(it, System.currentTimeMillis()) } else rows.maxByOrNull { it.percent }
+            AccountChoice(id, label, row?.let(::quotaText), (row?.utilization ?: 0.0) >= 90,
+                if (account.text("auth") == "no") "Not signed in" else null)
+        }
+    }
     fun permissions(provider: String, model: String): List<String> {
         val runtime = runtime(provider)
         val reported = models(provider).firstOrNull { it.text("value") == model }
@@ -110,6 +151,11 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
     }
     companion object { private val BUILT_INS = setOf("claude", "codex", "kimi", "opencode", "antigravity") }
 }
+
+/** One account's tightest window, compactly: "5h 100%" — or, for an Antigravity bucket, which counts what is left, its bucket
+ * and that: "gemini-5h 4% left". */
+internal fun quotaText(row: UsageRow) =
+    if (row.remaining) "${row.groupLabel ?: row.label} ${row.percent}% left" else ProviderPools.quotaReading(row)
 
 internal fun terminal(detail: JsonObject) = detail.text("status") in setOf("ENDED", "FAILED", "CANCELLED", "COMPLETED") ||
     detail.text("runStatus") in setOf("ENDED", "FAILED", "CANCELLED", "COMPLETED")

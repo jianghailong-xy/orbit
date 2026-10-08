@@ -8,6 +8,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.core.realtime.SessionState
+import io.orbitd.android.management.usageRows
 import kotlinx.serialization.json.*
 
 @Composable
@@ -36,6 +37,13 @@ fun ComposerUsage(model: ComposerModel, state: ComposerState, detail: JsonObject
             usage?.let { snapshot ->
                 snapshot.text("planType")?.let { Text(it) }
                 snapshot.text("fetchedAt")?.let { Text("Updated $it", style = MaterialTheme.typography.bodySmall) }
+                // An Antigravity account's buckets say what is left, as agy does.
+                if (snapshot.text("provider") == "antigravity") usageRows(snapshot).forEach { row ->
+                    row.groupLabel?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                    Text("${row.label}: ${row.percent}% remaining")
+                    LinearProgressIndicator(progress = { row.percent / 100f })
+                    row.window.text("resetsAt")?.let { Text("Resets $it", style = MaterialTheme.typography.bodySmall) }
+                }
                 val limits = snapshot.objects("rateLimits")
                 val blocks = if (limits.isEmpty()) listOf(snapshot) else limits
                 blocks.forEach { block ->

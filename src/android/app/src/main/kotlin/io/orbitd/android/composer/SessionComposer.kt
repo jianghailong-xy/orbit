@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -27,6 +28,7 @@ import io.orbitd.android.attachments.*
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.realtime.SessionState
+import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.serialization.json.*
 
 @Composable
@@ -236,15 +238,18 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
                     })
                 }) { Text(option.label + (option.unavailable?.let { " · $it" } ?: "")) }
             }
-            val accounts = catalog?.accounts(provider).orEmpty().takeIf {
-                model.target != null || "$provider-account-move/v1" in catalog?.runner?.strings("capabilities").orEmpty()
-            }.orEmpty()
+            // A draft starts on any of the runner's accounts; a session moves only where the runner carries it across.
+            val accounts = catalog?.takeIf { model.target != null || it.movesAccounts(provider) }?.accountChoices(provider).orEmpty()
             if (accounts.isNotEmpty()) {
                 Text("Account")
                 TextButton(enabled = enabled, onClick = { model.config(buildJsonObject { put("account", "automatic") }, true) }) { Text("Automatic") }
-                accounts.forEach { account -> TextButton(enabled = enabled && account.text("auth") != "no", onClick = {
-                    account.text("id")?.let { model.config(buildJsonObject { put("account", it) }, true) }
-                }) { Text((account.text("name") ?: account.text("id").orEmpty()) + if (account.text("auth") == "no") " · Not signed in" else "") } }
+                accounts.forEach { account -> TextButton(enabled = enabled && account.unavailable == null, onClick = {
+                    model.config(buildJsonObject { put("account", account.id) }, true)
+                }) {
+                    Text(account.label + (account.unavailable?.let { " · $it" } ?: ""))
+                    // Its own quota beside it: "5h 12%", or what an Antigravity bucket has left, "gemini-5h 4% left".
+                    account.quota?.let { Text(" · $it", color = if (account.nearLimit) LocalOrbitColors.current.needsYou else Color.Unspecified) }
+                } }
             }
         }
     }, confirmButton = { TextButton(onClick = close) { Text("Close") } })

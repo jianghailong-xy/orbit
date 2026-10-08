@@ -51,7 +51,7 @@ sha256sum "$apk" "$tests" > "$output/apks.sha256"
 # A signed-out, empty debug installation: no earlier session or cache is carried into the fixture.
 "$adb" -s "$serial" shell pm clear "$package" > "$output/pm-clear.txt"
 test=io.orbitd.android.management.ManagementDeviceTest
-"$adb" -s "$serial" shell am instrument -w -r -e class "$test#settingsProfileSharingNotificationsAndRolesUseTheRealRoutes,$test#workspaceRunnerProvidersAndSessionShareUseTheRealRoutes,$test#mainPagesInTheAccountsDarkAppearance,$test#mainPagesAtTwiceTheFontSize" \
+"$adb" -s "$serial" shell am instrument -w -r -e class "$test#settingsProfileSharingNotificationsAndRolesUseTheRealRoutes,$test#workspaceRunnerProvidersAndSessionShareUseTheRealRoutes,$test#antigravityAccountsOneWindowAndTheSignInCard,$test#mainPagesInTheAccountsDarkAppearance,$test#mainPagesAtTwiceTheFontSize" \
   io.orbitd.android.debug.test/androidx.test.runner.AndroidJUnitRunner > "$output/instrumentation.txt" 2>&1 || true
 "$adb" -s "$serial" exec-out run-as "$package" tar -cf - -C files a13-management > "$output/captures.tar" || true
 tar --no-same-owner -xf "$output/captures.tar" -C "$output" || true
@@ -64,12 +64,13 @@ tar --no-same-owner -xf "$output/captures.tar" -C "$output" || true
   io.orbitd.android.debug.test/androidx.test.runner.AndroidJUnitRunner > "$output/instrumentation-talkback.txt" 2>&1 || true
 "$adb" -s "$serial" exec-out run-as "$package" tar -cf - -C files a13-management > "$output/captures-talkback.tar" || true
 tar --no-same-owner -xf "$output/captures-talkback.tar" -C "$output" || true
-grep -F 'OK (4 tests)' "$output/instrumentation.txt"
+grep -F 'OK (5 tests)' "$output/instrumentation.txt"
 grep -F 'OK (1 test)' "$output/instrumentation-talkback.txt"
 if grep -E 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed|INSTRUMENTATION_STATUS_CODE: -[234]' "$output/instrumentation.txt" "$output/instrumentation-talkback.txt"; then exit 1; fi
 for screenshot in settings-home settings-home-dark edit-profile change-password notifications shared-links permission-revoked sign-out-confirm \
   admin-users admin-user admin-demoted settings-home-font200 session-share workspace-settings runners-list runner-offline runner-online runner-update-failed \
   runner-engine runner-deep-link providers codex-pool \
+  agy-runner-engines agy-engine agy-engine-terms accounts-state account-menu sign-in-paste sign-in-pasted sign-in-folded sign-in-device-code \
   dark-session-share dark-workspace-settings dark-settings-home dark-edit-profile dark-notifications dark-shared-links dark-admin-users \
   dark-runners-list dark-runner dark-runner-engine dark-providers dark-codex-pool \
   font200-session-share font200-workspace-settings font200-settings-home font200-edit-profile font200-notifications font200-shared-links \

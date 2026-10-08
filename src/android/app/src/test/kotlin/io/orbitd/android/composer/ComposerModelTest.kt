@@ -268,6 +268,30 @@ class ComposerModelTest {
         assertEquals("automatic", Wire.json.parseToJsonElement(rig.calls.last().body!!.decodeToString()).jsonObject.text("account"))
     }
 
+    /** A13-4: Antigravity keeps accounts as Codex and Claude Code do — its rows are offered, a session's quota is its Google
+     * account's own buckets (read from the engine health, never the runner's own report), and a new session names the one
+     * picked as antigravityAccount. */
+    @Test fun antigravityAccountsAreOfferedReadAndCarriedLikeCodexAndClaudes() = runTest {
+        fun obj(s: String) = Wire.json.parseToJsonElement(s).jsonObject
+        val catalog = ComposerCatalog(obj("""{"id":"r","capabilities":["antigravity-account-login/v1"],"planUsage":{"claude":{"planType":"claude-plan"}},
+            "engines":[{"engine":"antigravity","installed":true,"auth":"yes","authSource":"google",
+              "accounts":[{"id":"default","auth":"yes"},{"id":"5c2e91a0","name":"Work","auth":"yes"}],
+              "planUsage":{"provider":"antigravity","buckets":[{"id":"gemini-5h","window":"5h","remainingFraction":0.5}],
+                "accounts":{"5c2e91a0":{"provider":"antigravity","buckets":[{"id":"gemini-5h","window":"5h","remainingFraction":0.04}]}}}}]}"""), emptyList())
+        assertEquals(listOf("default", "5c2e91a0"), catalog.accounts("antigravity").map { it.text("id") })
+        fun left(detail: String) = catalog.usage(obj(detail))?.objects("buckets")?.single()?.get("remainingFraction")?.jsonPrimitive?.double
+        assertEquals(0.04, left("""{"provider":"antigravity","antigravityAccount":"5c2e91a0"}""")!!, 0.0)
+        assertEquals("Default's own, without Work's", 0.5, left("""{"provider":"antigravity"}""")!!, 0.0)
+        assertNull("Automatic names no account yet", catalog.usage(obj("""{"provider":"antigravity","account":"automatic"}""")))
+        val rig = Rig(this); rig.start(); val target = DraftTarget("w")
+        val model = ComposerModel(rig.session, rig.handle, target.key, backgroundScope, target); runCurrent()
+        model.config(buildJsonObject { put("provider", "antigravity"); put("account", "5c2e91a0") }); runCurrent()
+        model.edit("create antigravity", 0, 0); model.send(); runCurrent()
+        val body = Wire.json.parseToJsonElement(rig.calls.single { it.path == listOf("sessions") && it.method == HttpMethod.POST }.body!!.decodeToString()).jsonObject
+        assertEquals("5c2e91a0", body.text("antigravityAccount"))
+        assertNull(body["account"])
+    }
+
     @Test fun draftUsageFollowsSelectionAndProviderSwitchDoesNotCarryAnotherEnginesSlot() = runTest {
         fun obj(s: String) = Wire.json.parseToJsonElement(s).jsonObject
         val catalog = ComposerCatalog(obj("""{"planUsage":{"codex":{"planType":"default","accounts":{"1a2b3c4d":{"planType":"selected"},"abcd1234":{"planType":"workspace"}}},"claude":{"planType":"claude-default"}}}"""), emptyList())
