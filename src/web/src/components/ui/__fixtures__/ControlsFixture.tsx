@@ -171,6 +171,11 @@ function Content() {
         ant={<AntTypography.Text strong>Orbit UI migration</AntTypography.Text>} />
       <Pair name="typography-code" orbit={<span className="orbit-typography"><code>RUN_ACCEPTANCE_COMMAND</code></span>}
         ant={<AntTypography.Text code>RUN_ACCEPTANCE_COMMAND</AntTypography.Text>} />
+      {/* In a 12px parent: the text keeps its own 14px, as the replaced root does. */}
+      <Pair name="typography-secondary-12px" orbit={<div style={{ fontSize: 12 }}><span className="orbit-typography orbit-typography-secondary">Why this task waits</span></div>}
+        ant={<div style={{ fontSize: 12 }}><AntTypography.Text type="secondary">Why this task waits</AntTypography.Text></div>} />
+      <Pair name="typography-paragraph-code-12px" orbit={<div style={{ fontSize: 12 }}><div className="orbit-typography">Runs <code>npm test</code> before landing</div></div>}
+        ant={<div style={{ fontSize: 12 }}><AntTypography.Paragraph>Runs <code>npm test</code> before landing</AntTypography.Paragraph></div>} />
       <Pair name="typography-code-copy" orbit={<span className="orbit-typography"><code>34ZZeq0e3IR65GVm2kAs7<span className="orbit-typography-actions"><button type="button" className="orbit-typography-copy" aria-label="Copy"><CopyOutlined aria-hidden /></button></span></code></span>}
         ant={<AntTypography.Text code copyable={{ text: '34ZZeq0e3IR65GVm2kAs7' }}>34ZZeq0e3IR65GVm2kAs7</AntTypography.Text>} />
       {(['default', 'small'] as const).map((size) => <Pair key={size} name={`list-${size}`}

@@ -56,7 +56,7 @@ P4.1（登录、初始化、个人资料、设置）按页面实际需要补齐�
 
 被替换的 Typography 与 List 没有交互，迁移为原生元素加本目录的公开类名，样式文件由调用方导入（`import '../components/ui/Typography.css'`、`List.css`）。选择器保持被替换规则的权重，并在 index.css 之后加载，所以页面原有的覆盖规则对新元素的层叠结果与对被替换元素相同；改写页面覆盖时把 `.ant-typography`/`.ant-list-*` 换成对应的 Orbit 类名即可。
 
-- `Typography.css`：`.orbit-typography` 是文字（`span`）、段落（`div`，下方 1em）或标题（`h2`/`h4`/`h5`：30/38px、20/28px、16/24px，半粗，下方 0.5em，紧跟另一个排版元素时上方 1.2em）；`.orbit-typography-secondary`（次要文字色）、`.orbit-typography-warning`（警告文字色）。强调与代码用内层 `<strong>`（600）与 `<code>`（85% 等宽、浅底细边框、3px 圆角），与被替换组件的结构相同。复制按键是 `.orbit-typography-actions > button.orbit-typography-copy`，放在 `<code>` 之内、正文之后 4px，链接色，已复制时为成功色；文案与计时（Copy / Copied，3 秒）由调用方给出。
+- `Typography.css`：`.orbit-typography` 是文字（`span`）、段落（`div`，下方 1em）或标题（`h2`/`h4`/`h5`：30/38px、20/28px、16/24px，半粗，下方 0.5em，紧跟另一个排版元素时上方 1.2em）。与被替换组件的根一样，自己取应用字体和 14px，不继承父级字号（放在 12px 的说明行里仍是 14px）；`.orbit-typography-secondary`（次要文字色）、`.orbit-typography-warning`（警告文字色）。强调与代码用内层 `<strong>`（600）与 `<code>`（85% 等宽、浅底细边框、3px 圆角），与被替换组件的结构相同。复制按键是 `.orbit-typography-actions > button.orbit-typography-copy`，放在 `<code>` 之内、正文之后 4px，链接色，已复制时为成功色；文案与计时（Copy / Copied，3 秒）由调用方给出。
 - `List.css`：`div.orbit-list.orbit-list-split[.orbit-list-sm] > ul.orbit-list-items > li.orbit-list-item`，行 12px（small 8px/16px）、行间 1px 分隔线、末行无线，≤576px 时行内换行；标题加说明的行用 `.orbit-list-item-meta > .orbit-list-item-meta-content > h4.orbit-list-item-meta-title + div.orbit-list-item-meta-description`。与被替换列表一样，列表内的元素不画 outline，行自己的焦点标记由页面样式给出。
 
 两份样式与 Empty、Skeleton、Card 的 extra/small、Alert 的 action、Badge 的 purple、Input 的 allowClear 与 warning、Button 的 iconPlacement 都在 `ui-migration/controls.html` 中与被替换组件逐部件对照（`npm run test:ui-controls -w @orbit/web`：盒、外边距、文字、颜色、部件在根内的位置、插图各形状的填充与描边，以及每个字形与图标的位置）。

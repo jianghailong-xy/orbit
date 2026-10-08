@@ -5,8 +5,11 @@
      <h2|h4|h5 class="orbit-typography">                                  a title
    with <strong> / <code> inside for emphasis and code. Selectors keep the replaced rules' weight
    (`.orbit-typography` = 0,1,0; `h4.orbit-typography` = 0,1,1) and this file loads after index.css,
-   so the pages' own rules over these elements cascade exactly as they did over the replaced ones. */
+   so the pages' own rules over these elements cascade exactly as they did over the replaced ones.
+   Like the replaced root, it sets its own font and 14px rather than taking its parent's. */
 .orbit-typography {
+  font-family: var(--orbit-font-family);
+  font-size: var(--orbit-font-size);
   color: var(--text-1);
   word-break: break-word;
   line-height: 1.5714285714285714;
