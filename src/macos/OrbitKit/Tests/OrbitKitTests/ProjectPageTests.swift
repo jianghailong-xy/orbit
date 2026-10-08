@@ -511,11 +511,16 @@ final class ProjectPageTests: XCTestCase {
                        ProjectPage.LandingLine(what: "T", running: true, state: "checking", clock: "12m 0s",
                                                word: "Landing", updated: "Updated 11m ago"))
         // An empty list is still a server that lists them; no list at all is an older server, whose
-        // row keeps the guess it always made.
+        // row reads the reports for itself — and reads them for what they are: a runner that has
+        // said nothing for a while is "No report", never a timeout (only the job's own verdict, the
+        // server's `blockingReason`, may word one) and never "Update unavailable", which is this app
+        // failing to READ the server.
         let empty = ProjectIntegrationView(integratingCount: 1, inFlight: inFlight, inFlightJobs: [])
         XCTAssertEqual(ProjectPage.landingLine(empty, now: Self.now, updatedAt: Self.now)?.state, "checking")
         let older = ProjectIntegrationView(integratingCount: 1, inFlight: inFlight)
-        XCTAssertEqual(ProjectPage.landingLine(older, now: Self.now, updatedAt: Self.now)?.state, "Update unavailable")
+        XCTAssertEqual(ProjectPage.landingLine(older, now: Self.now, updatedAt: Self.now)?.state, "No report")
+        XCTAssertEqual(ProjectPage.landingLine(older, now: Self.now, updatedAt: Self.now)?.updated,
+                       "No report for 11m")
         XCTAssertEqual(ProjectPage.landingLine(older, now: Self.now, updatedAt: Self.now)?.timedOut, false)
     }
 
