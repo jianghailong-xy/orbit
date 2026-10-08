@@ -6788,6 +6788,10 @@ model WikiChangeset {
   /// `owner` | `agent` | `maintenance` | `import` | `watch`.
   origin     String
   sessionId  String? @map("session_id") @db.Uuid
+  /// The wiki_job whose pipeline recorded it, for a run the server made (0407): a maintenance run's
+  /// changesets are one run to the circuit breaker, and the server's run has no session to be one by. A
+  /// history reference with no foreign key, as wiki_maintenance_run.job_id is; NULL for every session's.
+  jobId      String? @map("job_id") @db.Uuid
   toolCallId String? @map("tool_call_id") @db.Uuid
   rationale  String?
   /// The owner's key and the digest of the normalized request, set together: the same key with the
@@ -7134,8 +7138,10 @@ model WikiPlanProposal {
   /// `[{ kind, id }, …]`: the entries and sessions that led to it.
   facts           Json
   gate            Json
-  /// A history reference: the maintenance run that filed it.
-  authorSessionId String    @map("author_session_id") @db.Uuid
+  /// A history reference: the maintenance run that filed it — a session's, or the server's wiki job (0407,
+  /// where `wiki_plan_proposal_author_chk` holds exactly one of the two).
+  authorSessionId String?   @map("author_session_id") @db.Uuid
+  authorJobId     String?   @map("author_job_id") @db.Uuid
   decidedByUserId String?   @map("decided_by_user_id") @db.Uuid
   decidedAt       DateTime? @map("decided_at") @db.Timestamptz(3)
   decisionNote    String?   @map("decision_note")

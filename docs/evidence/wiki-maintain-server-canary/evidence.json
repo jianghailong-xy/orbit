@@ -1,0 +1,778 @@
+{
+  "checks": [
+    {
+      "what": "run 1 succeeded",
+      "ok": true
+    },
+    {
+      "what": "run 1 left the cursor advanced",
+      "ok": true,
+      "detail": "position a512292f-b6dc-4373-a58e-bade29664539 after (none)"
+    },
+    {
+      "what": "run 1 is the job's, not a task's",
+      "ok": true
+    },
+    {
+      "what": "run 2 succeeded",
+      "ok": true
+    },
+    {
+      "what": "run 2 left the cursor advanced",
+      "ok": true,
+      "detail": "position 2ccc3c6c-a1d5-4cd0-ad26-16e1b8a76214 after a512292f-b6dc-4373-a58e-bade29664539"
+    },
+    {
+      "what": "run 2 is the job's, not a task's",
+      "ok": true
+    },
+    {
+      "what": "run 3 succeeded",
+      "ok": true
+    },
+    {
+      "what": "run 3 left the cursor advanced",
+      "ok": true,
+      "detail": "position aa5988d1-66fb-4f31-b145-0cefea29a6aa after 2ccc3c6c-a1d5-4cd0-ad26-16e1b8a76214"
+    },
+    {
+      "what": "run 3 is the job's, not a task's",
+      "ok": true
+    },
+    {
+      "what": "the hidden maintenance list holds no task",
+      "ok": true,
+      "detail": "tasks 0"
+    },
+    {
+      "what": "a run that recorded ops queued the space's articles job",
+      "ok": true,
+      "detail": "articles jobs 3"
+    },
+    {
+      "what": "three maintenance runs of the canary space succeeded",
+      "ok": true,
+      "detail": "succeeded 3"
+    }
+  ],
+  "runs": [
+    {
+      "run": 1,
+      "runId": "a5334626-161e-4af4-b91e-f663fa5041e3",
+      "jobId": "490f1d3a-6e83-4dad-af42-3e89ebfe9aed",
+      "due": "backlog",
+      "catchUp": null,
+      "expect": "a512292f-b6dc-4373-a58e-bade29664539",
+      "outcome": "succeeded",
+      "opsRefused": 0,
+      "failureKind": null,
+      "error": null,
+      "report": {
+        "ops": {
+          "applied": 0,
+          "refused": 0,
+          "waiting": 2,
+          "heldBack": 0,
+          "proposed": 2,
+          "recorded": 2,
+          "selfCheckDropped": 0,
+          "heldBackByBreaker": 0
+        },
+        "docs": {
+          "tokens": {
+            "calls": 0,
+            "input": 0,
+            "output": 0
+          },
+          "seconds": 0,
+          "skipped": "no_confirmed_plan",
+          "affected": {
+            "stale": 0,
+            "total": 0,
+            "byRepo": 0,
+            "byEntries": 0,
+            "unwritten": 0
+          },
+          "proposal": null,
+          "sections": {
+            "failed": 0,
+            "written": 0,
+            "unchanged": 0
+          },
+          "unplaced": {
+            "entries": 0,
+            "designDocs": 0
+          },
+          "withdrawn": {
+            "paths": 0,
+            "sentences": 0
+          },
+          "planVersion": null
+        },
+        "tokens": {
+          "calls": 2,
+          "input": 20,
+          "output": 80
+        },
+        "anchors": {
+          "changed": 0,
+          "entries": 0,
+          "missing": 0
+        },
+        "entries": {
+          "kept": 2,
+          "dropped": 0,
+          "foreign": 0,
+          "extracted": 2,
+          "principles": 0
+        },
+        "seconds": 7,
+        "dossiers": 2,
+        "offTopic": 0,
+        "sessions": 2,
+        "unchanged": 0,
+        "cursorAdvanced": true
+      },
+      "cursor": {
+        "at": "2026-10-08T10:25:40.368Z",
+        "kind": "session_settled",
+        "ref": "a512292f-b6dc-4373-a58e-bade29664539",
+        "failures": 0
+      }
+    },
+    {
+      "run": 2,
+      "runId": "d8c3bbec-feac-43c5-bcd6-c49d2feb41eb",
+      "jobId": "6d9187c9-14fa-4d59-a921-cd727242d62f",
+      "due": "backlog",
+      "catchUp": null,
+      "expect": "2ccc3c6c-a1d5-4cd0-ad26-16e1b8a76214",
+      "outcome": "succeeded",
+      "opsRefused": 0,
+      "failureKind": null,
+      "error": null,
+      "report": {
+        "ops": {
+          "applied": 0,
+          "refused": 0,
+          "waiting": 2,
+          "heldBack": 0,
+          "proposed": 2,
+          "recorded": 2,
+          "selfCheckDropped": 0,
+          "heldBackByBreaker": 0
+        },
+        "docs": {
+          "tokens": {
+            "calls": 0,
+            "input": 0,
+            "output": 0
+          },
+          "seconds": 0,
+          "skipped": "no_confirmed_plan",
+          "affected": {
+            "stale": 0,
+            "total": 0,
+            "byRepo": 0,
+            "byEntries": 0,
+            "unwritten": 0
+          },
+          "proposal": null,
+          "sections": {
+            "failed": 0,
+            "written": 0,
+            "unchanged": 0
+          },
+          "unplaced": {
+            "entries": 0,
+            "designDocs": 0
+          },
+          "withdrawn": {
+            "paths": 0,
+            "sentences": 0
+          },
+          "planVersion": null
+        },
+        "tokens": {
+          "calls": 2,
+          "input": 20,
+          "output": 80
+        },
+        "anchors": {
+          "changed": 0,
+          "entries": 0,
+          "missing": 0
+        },
+        "entries": {
+          "kept": 2,
+          "dropped": 0,
+          "foreign": 0,
+          "extracted": 2,
+          "principles": 0
+        },
+        "seconds": 2,
+        "dossiers": 2,
+        "offTopic": 0,
+        "sessions": 2,
+        "unchanged": 0,
+        "cursorAdvanced": true
+      },
+      "cursor": {
+        "at": "2026-10-08T10:27:40.366Z",
+        "kind": "session_settled",
+        "ref": "2ccc3c6c-a1d5-4cd0-ad26-16e1b8a76214",
+        "failures": 0
+      }
+    },
+    {
+      "run": 3,
+      "runId": "78e2c052-1265-4d94-b8fb-38cbd76e4aec",
+      "jobId": "d8e356d1-526b-4aee-8199-228addc9deb5",
+      "due": "backlog",
+      "catchUp": null,
+      "expect": "aa5988d1-66fb-4f31-b145-0cefea29a6aa",
+      "outcome": "succeeded",
+      "opsRefused": 0,
+      "failureKind": null,
+      "error": null,
+      "report": {
+        "ops": {
+          "applied": 0,
+          "refused": 0,
+          "waiting": 2,
+          "heldBack": 0,
+          "proposed": 2,
+          "recorded": 2,
+          "selfCheckDropped": 0,
+          "heldBackByBreaker": 0
+        },
+        "docs": {
+          "tokens": {
+            "calls": 0,
+            "input": 0,
+            "output": 0
+          },
+          "seconds": 0,
+          "skipped": "no_confirmed_plan",
+          "affected": {
+            "stale": 0,
+            "total": 0,
+            "byRepo": 0,
+            "byEntries": 0,
+            "unwritten": 0
+          },
+          "proposal": null,
+          "sections": {
+            "failed": 0,
+            "written": 0,
+            "unchanged": 0
+          },
+          "unplaced": {
+            "entries": 0,
+            "designDocs": 0
+          },
+          "withdrawn": {
+            "paths": 0,
+            "sentences": 0
+          },
+          "planVersion": null
+        },
+        "tokens": {
+          "calls": 2,
+          "input": 20,
+          "output": 80
+        },
+        "anchors": {
+          "changed": 0,
+          "entries": 0,
+          "missing": 0
+        },
+        "entries": {
+          "kept": 2,
+          "dropped": 0,
+          "foreign": 0,
+          "extracted": 2,
+          "principles": 0
+        },
+        "seconds": 0,
+        "dossiers": 2,
+        "offTopic": 0,
+        "sessions": 2,
+        "unchanged": 0,
+        "cursorAdvanced": true
+      },
+      "cursor": {
+        "at": "2026-10-08T10:29:40.364Z",
+        "kind": "session_settled",
+        "ref": "aa5988d1-66fb-4f31-b145-0cefea29a6aa",
+        "failures": 0
+      }
+    }
+  ],
+  "jobs": [
+    {
+      "id": "490f1d3a-6e83-4dad-af42-3e89ebfe9aed",
+      "kind": "maintain",
+      "state": "succeeded",
+      "input": {
+        "runId": "a5334626-161e-4af4-b91e-f663fa5041e3"
+      },
+      "attempts": 3,
+      "failure_kind": null,
+      "error": null,
+      "created_at": "2026-10-08T10:58:42.066Z",
+      "ended_at": "2026-10-08T10:59:35.967Z",
+      "report": {
+        "kind": "maintain",
+        "runId": "a5334626-161e-4af4-b91e-f663fa5041e3",
+        "cursor": "wc1.eyJzIjoiMDI1YmRkODUtZWY2ZC00NDNjLThlZGYtNGRkZDllMWU0NzNhIiwicCI6WyIyMDI2LTEwLTA4VDEwOjI1OjQwLjM2OFoiLCJzZXNzaW9uX3NldHRsZWQiLCJhNTEyMjkyZi1iNmRjLTQzNzMtYTU4ZS1iYWRlMjk2NjQ1MzkiXX0",
+        "report": {
+          "ops": {
+            "applied": 0,
+            "refused": 0,
+            "waiting": 2,
+            "heldBack": 0,
+            "proposed": 2,
+            "recorded": 2,
+            "selfCheckDropped": 0,
+            "heldBackByBreaker": 0
+          },
+          "docs": {
+            "tokens": {
+              "calls": 0,
+              "input": 0,
+              "output": 0
+            },
+            "seconds": 0,
+            "skipped": "no_confirmed_plan",
+            "affected": {
+              "stale": 0,
+              "total": 0,
+              "byRepo": 0,
+              "byEntries": 0,
+              "unwritten": 0
+            },
+            "proposal": null,
+            "sections": {
+              "failed": 0,
+              "written": 0,
+              "unchanged": 0
+            },
+            "unplaced": {
+              "entries": 0,
+              "designDocs": 0
+            },
+            "withdrawn": {
+              "paths": 0,
+              "sentences": 0
+            },
+            "planVersion": null
+          },
+          "tokens": {
+            "calls": 2,
+            "input": 20,
+            "output": 80
+          },
+          "anchors": {
+            "changed": 0,
+            "entries": 0,
+            "missing": 0
+          },
+          "entries": {
+            "kept": 2,
+            "dropped": 0,
+            "foreign": 0,
+            "extracted": 2,
+            "principles": 0
+          },
+          "seconds": 7,
+          "dossiers": 2,
+          "offTopic": 0,
+          "sessions": 2,
+          "unchanged": 0,
+          "cursorAdvanced": true
+        },
+        "outcome": "succeeded",
+        "refused": [],
+        "advanced": true
+      }
+    },
+    {
+      "id": "6cc0ea35-7023-4029-9a30-df2109ef875d",
+      "kind": "articles",
+      "state": "succeeded",
+      "input": {},
+      "attempts": 0,
+      "failure_kind": null,
+      "error": null,
+      "created_at": "2026-10-08T10:59:35.966Z",
+      "ended_at": "2026-10-08T10:59:38.526Z",
+      "report": {
+        "ref": null,
+        "kind": "articles",
+        "calls": 0,
+        "model": "p8-maintain-system-model",
+        "stats": {
+          "chars": 0,
+          "markers": 0,
+          "footnotes": 0,
+          "sentences": 0,
+          "markersStripped": 0,
+          "sentencesDeleted": 0,
+          "sentencesTrimmed": 0
+        },
+        "usage": {
+          "inputTokens": 0,
+          "outputTokens": 0
+        },
+        "failed": 0,
+        "refWhy": null,
+        "seeded": 22,
+        "topics": [],
+        "spaceId": "025bdd85-ef6d-443c-8edf-4ddd9e1e473a",
+        "written": 0,
+        "unchanged": 0
+      }
+    },
+    {
+      "id": "6d9187c9-14fa-4d59-a921-cd727242d62f",
+      "kind": "maintain",
+      "state": "succeeded",
+      "input": {
+        "runId": "d8c3bbec-feac-43c5-bcd6-c49d2feb41eb"
+      },
+      "attempts": 0,
+      "failure_kind": null,
+      "error": null,
+      "created_at": "2026-10-08T10:59:36.680Z",
+      "ended_at": "2026-10-08T10:59:46.031Z",
+      "report": {
+        "kind": "maintain",
+        "runId": "d8c3bbec-feac-43c5-bcd6-c49d2feb41eb",
+        "cursor": "wc1.eyJzIjoiMDI1YmRkODUtZWY2ZC00NDNjLThlZGYtNGRkZDllMWU0NzNhIiwicCI6WyIyMDI2LTEwLTA4VDEwOjI3OjQwLjM2NloiLCJzZXNzaW9uX3NldHRsZWQiLCIyY2NjM2M2Yy1hMWQ1LTRjZDAtYWQyNi0xNmUxYjhhNzYyMTQiXX0",
+        "report": {
+          "ops": {
+            "applied": 0,
+            "refused": 0,
+            "waiting": 2,
+            "heldBack": 0,
+            "proposed": 2,
+            "recorded": 2,
+            "selfCheckDropped": 0,
+            "heldBackByBreaker": 0
+          },
+          "docs": {
+            "tokens": {
+              "calls": 0,
+              "input": 0,
+              "output": 0
+            },
+            "seconds": 0,
+            "skipped": "no_confirmed_plan",
+            "affected": {
+              "stale": 0,
+              "total": 0,
+              "byRepo": 0,
+              "byEntries": 0,
+              "unwritten": 0
+            },
+            "proposal": null,
+            "sections": {
+              "failed": 0,
+              "written": 0,
+              "unchanged": 0
+            },
+            "unplaced": {
+              "entries": 0,
+              "designDocs": 0
+            },
+            "withdrawn": {
+              "paths": 0,
+              "sentences": 0
+            },
+            "planVersion": null
+          },
+          "tokens": {
+            "calls": 2,
+            "input": 20,
+            "output": 80
+          },
+          "anchors": {
+            "changed": 0,
+            "entries": 0,
+            "missing": 0
+          },
+          "entries": {
+            "kept": 2,
+            "dropped": 0,
+            "foreign": 0,
+            "extracted": 2,
+            "principles": 0
+          },
+          "seconds": 2,
+          "dossiers": 2,
+          "offTopic": 0,
+          "sessions": 2,
+          "unchanged": 0,
+          "cursorAdvanced": true
+        },
+        "outcome": "succeeded",
+        "refused": [],
+        "advanced": true
+      }
+    },
+    {
+      "id": "15da12be-1b73-4d79-a228-ce1f61f37381",
+      "kind": "articles",
+      "state": "succeeded",
+      "input": {},
+      "attempts": 0,
+      "failure_kind": null,
+      "error": null,
+      "created_at": "2026-10-08T10:59:46.030Z",
+      "ended_at": "2026-10-08T10:59:48.519Z",
+      "report": {
+        "ref": null,
+        "kind": "articles",
+        "calls": 0,
+        "model": "p8-maintain-system-model",
+        "stats": {
+          "chars": 0,
+          "markers": 0,
+          "footnotes": 0,
+          "sentences": 0,
+          "markersStripped": 0,
+          "sentencesDeleted": 0,
+          "sentencesTrimmed": 0
+        },
+        "usage": {
+          "inputTokens": 0,
+          "outputTokens": 0
+        },
+        "failed": 0,
+        "refWhy": null,
+        "seeded": 0,
+        "topics": [],
+        "spaceId": "025bdd85-ef6d-443c-8edf-4ddd9e1e473a",
+        "written": 0,
+        "unchanged": 0
+      }
+    },
+    {
+      "id": "d8e356d1-526b-4aee-8199-228addc9deb5",
+      "kind": "maintain",
+      "state": "succeeded",
+      "input": {
+        "runId": "78e2c052-1265-4d94-b8fb-38cbd76e4aec"
+      },
+      "attempts": 0,
+      "failure_kind": null,
+      "error": null,
+      "created_at": "2026-10-08T10:59:46.571Z",
+      "ended_at": "2026-10-08T10:59:54.020Z",
+      "report": {
+        "kind": "maintain",
+        "runId": "78e2c052-1265-4d94-b8fb-38cbd76e4aec",
+        "cursor": "wc1.eyJzIjoiMDI1YmRkODUtZWY2ZC00NDNjLThlZGYtNGRkZDllMWU0NzNhIiwicCI6WyIyMDI2LTEwLTA4VDEwOjI5OjQwLjM2NFoiLCJzZXNzaW9uX3NldHRsZWQiLCJhYTU5ODhkMS02NmZiLTRmMzEtYjE0NS0wY2VmZWEyOWE2YWEiXX0",
+        "report": {
+          "ops": {
+            "applied": 0,
+            "refused": 0,
+            "waiting": 2,
+            "heldBack": 0,
+            "proposed": 2,
+            "recorded": 2,
+            "selfCheckDropped": 0,
+            "heldBackByBreaker": 0
+          },
+          "docs": {
+            "tokens": {
+              "calls": 0,
+              "input": 0,
+              "output": 0
+            },
+            "seconds": 0,
+            "skipped": "no_confirmed_plan",
+            "affected": {
+              "stale": 0,
+              "total": 0,
+              "byRepo": 0,
+              "byEntries": 0,
+              "unwritten": 0
+            },
+            "proposal": null,
+            "sections": {
+              "failed": 0,
+              "written": 0,
+              "unchanged": 0
+            },
+            "unplaced": {
+              "entries": 0,
+              "designDocs": 0
+            },
+            "withdrawn": {
+              "paths": 0,
+              "sentences": 0
+            },
+            "planVersion": null
+          },
+          "tokens": {
+            "calls": 2,
+            "input": 20,
+            "output": 80
+          },
+          "anchors": {
+            "changed": 0,
+            "entries": 0,
+            "missing": 0
+          },
+          "entries": {
+            "kept": 2,
+            "dropped": 0,
+            "foreign": 0,
+            "extracted": 2,
+            "principles": 0
+          },
+          "seconds": 0,
+          "dossiers": 2,
+          "offTopic": 0,
+          "sessions": 2,
+          "unchanged": 0,
+          "cursorAdvanced": true
+        },
+        "outcome": "succeeded",
+        "refused": [],
+        "advanced": true
+      }
+    },
+    {
+      "id": "cb418979-49bf-40b0-b54f-dd92dfc40337",
+      "kind": "articles",
+      "state": "queued",
+      "input": {},
+      "attempts": 0,
+      "failure_kind": null,
+      "error": null,
+      "created_at": "2026-10-08T10:59:54.019Z",
+      "ended_at": null,
+      "report": null
+    }
+  ],
+  "requests": [
+    {
+      "id": "9d09e66f-ccc8-4015-834c-0e9d904dd0ac",
+      "job_id": "490f1d3a-6e83-4dad-af42-3e89ebfe9aed",
+      "step": "extract",
+      "unit": "c21b42a8-e2fb-4b60-afaa-0a547bbcf5bf",
+      "state": "succeeded",
+      "attempt": 1,
+      "input_tokens": 10,
+      "output_tokens": 40,
+      "http_status": 200,
+      "error": null,
+      "enqueued_at": "2026-10-08T10:59:33.711Z",
+      "ended_at": "2026-10-08T10:59:33.784Z"
+    },
+    {
+      "id": "8aceee26-1a8f-43a6-a377-43b077410bd4",
+      "job_id": "490f1d3a-6e83-4dad-af42-3e89ebfe9aed",
+      "step": "extract",
+      "unit": "a512292f-b6dc-4373-a58e-bade29664539",
+      "state": "succeeded",
+      "attempt": 1,
+      "input_tokens": 10,
+      "output_tokens": 40,
+      "http_status": 200,
+      "error": null,
+      "enqueued_at": "2026-10-08T10:59:33.739Z",
+      "ended_at": "2026-10-08T10:59:35.754Z"
+    },
+    {
+      "id": "3d23e140-84f8-4945-b6f0-fcbca9f8cae0",
+      "job_id": "6d9187c9-14fa-4d59-a921-cd727242d62f",
+      "step": "extract",
+      "unit": "0f46bfd6-46be-4731-855f-9becb4372137",
+      "state": "succeeded",
+      "attempt": 1,
+      "input_tokens": 10,
+      "output_tokens": 40,
+      "http_status": 200,
+      "error": null,
+      "enqueued_at": "2026-10-08T10:59:44.312Z",
+      "ended_at": "2026-10-08T10:59:45.918Z"
+    },
+    {
+      "id": "46b2f772-0447-4c0f-950f-724472aff656",
+      "job_id": "6d9187c9-14fa-4d59-a921-cd727242d62f",
+      "step": "extract",
+      "unit": "2ccc3c6c-a1d5-4cd0-ad26-16e1b8a76214",
+      "state": "succeeded",
+      "attempt": 1,
+      "input_tokens": 10,
+      "output_tokens": 40,
+      "http_status": 200,
+      "error": null,
+      "enqueued_at": "2026-10-08T10:59:44.314Z",
+      "ended_at": "2026-10-08T10:59:45.920Z"
+    },
+    {
+      "id": "1a541717-4655-4c08-a76c-d86ad453a13d",
+      "job_id": "d8e356d1-526b-4aee-8199-228addc9deb5",
+      "step": "extract",
+      "unit": "aa5988d1-66fb-4f31-b145-0cefea29a6aa",
+      "state": "succeeded",
+      "attempt": 1,
+      "input_tokens": 10,
+      "output_tokens": 40,
+      "http_status": 200,
+      "error": null,
+      "enqueued_at": "2026-10-08T10:59:53.805Z",
+      "ended_at": "2026-10-08T10:59:53.958Z"
+    },
+    {
+      "id": "9c417865-917f-40ac-85c8-e8d488c69e06",
+      "job_id": "d8e356d1-526b-4aee-8199-228addc9deb5",
+      "step": "extract",
+      "unit": "b2bf3607-f6ab-4242-a0c7-cb4aba89d8c6",
+      "state": "succeeded",
+      "attempt": 1,
+      "input_tokens": 10,
+      "output_tokens": 40,
+      "http_status": 200,
+      "error": null,
+      "enqueued_at": "2026-10-08T10:59:53.805Z",
+      "ended_at": "2026-10-08T10:59:53.958Z"
+    }
+  ],
+  "cursor": {
+    "id": "01a11b2a-56e1-73f3-bdbd-571ab50fbb44",
+    "spaceId": "025bdd85-ef6d-443c-8edf-4ddd9e1e473a",
+    "ownerId": "7963913e-00ea-4dfb-a7fb-cb563ecf3b88",
+    "source": "facts",
+    "positionAt": "2026-10-08T10:29:40.364Z",
+    "positionKind": "session_settled",
+    "positionRef": "aa5988d1-66fb-4f31-b145-0cefea29a6aa",
+    "issuedAt": "2026-10-08T10:29:40.364Z",
+    "issuedKind": "session_settled",
+    "issuedRef": "aa5988d1-66fb-4f31-b145-0cefea29a6aa",
+    "backlog": 22,
+    "pendingSessions": 19,
+    "oldestPendingAt": "2026-10-08T10:30:40.363Z",
+    "lagSeconds": 1753,
+    "countedAt": "2026-10-08T10:59:54.004Z",
+    "lastOkAt": "2026-10-08T10:59:54.004Z",
+    "lastRunAt": "2026-10-08T10:59:54.004Z",
+    "lastOutcome": "succeeded",
+    "consecutiveFailures": 0,
+    "lastError": null,
+    "heldReason": null,
+    "heldAt": null,
+    "createdAt": "2026-10-08T10:58:42.017Z",
+    "updatedAt": "2026-10-08T10:59:54.017Z"
+  },
+  "modelCalls": 6,
+  "checkSummary": {
+    "passed": 12,
+    "failed": 0
+  }
+}

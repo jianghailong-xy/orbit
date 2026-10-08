@@ -2101,7 +2101,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // still reads the old way — after 0404, which restates it identically, it changes nothing. `wiki_plan_job` is
       // the only table it can alter; no task, project, acceptance or DONE fence object, function, trigger or type is
       // named, and no row is written.
-      '0405_wiki_plan_job_server_maker'],
+      '0405_wiki_plan_job_server_maker',
+      // A maintenance run the wiki-worker's job executes (0407): one nullable `job_id` on `wiki_changeset` with a
+      // partial index over the rows that name one, and one nullable `author_job_id` on `wiki_plan_proposal` beside
+      // 0338's `author_session_id` — which loses NOT NULL — with a CHECK holding a proposal to exactly one author.
+      // Pure addition plus DROP NOT NULL on a column every stored row fills: every existing changeset and proposal
+      // keeps its session, no row is written or backfilled, no function, trigger or type is created or replaced,
+      // and none of the six preserved objects, the 0177 relations or `project_acceptance_*` is named.
+      '0407_wiki_maintain_job'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -7,7 +7,6 @@
   "baseline": {
     "mainCommit": "083d61fc5a853af1c0fc65b9b681eb37a8e8d56e"
   },
-
   "storage": {
     "migration": "src/apiserver/prisma/migrations/0307_wiki/migration.sql",
     "reviewModeMigration": "src/apiserver/prisma/migrations/0311_wiki_review_modes/migration.sql",
@@ -43,7 +42,6 @@
     },
     "exposureRetentionDays": 90
   },
-
   "space": {
     "identity": "One space per owner and codebase. owner_id is the hard boundary: nothing is ever read, written, listed or counted across owners.",
     "slug": {
@@ -114,7 +112,14 @@
       "maintenance": {
         "type": "object",
         "phase": 2,
-        "default": { "enabled": false, "workspaceId": null, "provider": "local-vllm", "dailyRunLimit": 8, "lookbackDays": 14, "listId": null },
+        "default": {
+          "enabled": false,
+          "workspaceId": null,
+          "provider": "local-vllm",
+          "dailyRunLimit": 8,
+          "lookbackDays": 14,
+          "listId": null
+        },
         "keys": {
           "enabled": "boolean. Off by default: in a space whose maintenance is off, no fact starts a maintenance task.",
           "workspaceId": "The owner's workspace the maintenance task runs in, which decides the runner. Maintenance cannot be turned on without one.",
@@ -123,21 +128,41 @@
           "lookbackDays": "How far back the cursor starts when maintenance is turned on (maintenance.cursor.start): a whole number of days within bounds.lookbackDays — 0 reads only the facts from then on — or null, which reads from the earliest fact. 14 by default: before it, a space's first run read from its oldest fact, and orbit's cursor was started 14 days back by hand (2026-09-28). It starts a cursor that has no position once, and never moves one that has.",
           "listId": "Server-written and never taken from a request: the space's hidden Wiki maintenance task list (maintenance.list), made the first time maintenance is turned on, or by the space's first plan job (plan.jobs.task), and kept when it is turned off."
         },
-        "bounds": { "dailyRunLimit": { "min": 1, "max": 48 }, "lookbackDays": { "min": 0, "max": 365 } },
+        "bounds": {
+          "dailyRunLimit": {
+            "min": 1,
+            "max": 48
+          },
+          "lookbackDays": {
+            "min": 0,
+            "max": 365
+          }
+        },
         "channel": "The owner's alone: PATCH /api/wiki/spaces/:id on the user door with no session header — or POST /api/wiki/spaces, whose maintenance is checked before the space is made and then written as the PATCH writes it (plan.jobs.trigger) — and WIKI_OWNER_CHANNEL_ONLY otherwise. A request names any of enabled, workspaceId, provider, dailyRunLimit and lookbackDays; what it leaves out stays as it was, and lookbackDays null is a value (all history), not a key left out. A stored value out of bounds, or of a key this contract no longer has, reads as the default."
       },
-      "reservedForPhase2": ["embedding"]
+      "reservedForPhase2": [
+        "embedding"
+      ]
     }
   },
-
   "kinds": {
     "principle": {
       "phase": 1,
       "fields": {
-        "statement": { "type": "text", "required": true },
-        "rationale": { "type": "text", "required": true }
+        "statement": {
+          "type": "text",
+          "required": true
+        },
+        "rationale": {
+          "type": "text",
+          "required": true
+        }
       },
-      "ownerOnlyOps": ["add", "amend", "supersede"],
+      "ownerOnlyOps": [
+        "add",
+        "amend",
+        "supersede"
+      ],
       "amendable": true,
       "push": "always",
       "invalidation": "Only the owner revises it."
@@ -145,9 +170,19 @@
     "convention": {
       "phase": 1,
       "fields": {
-        "rule": { "type": "text", "required": true },
-        "scope": { "type": "textList", "required": true, "minItems": 1 },
-        "exceptions": { "type": "text", "required": false }
+        "rule": {
+          "type": "text",
+          "required": true
+        },
+        "scope": {
+          "type": "textList",
+          "required": true,
+          "minItems": 1
+        },
+        "exceptions": {
+          "type": "text",
+          "required": false
+        }
       },
       "ownerOnlyOps": [],
       "amendable": true,
@@ -157,19 +192,37 @@
     "decision": {
       "phase": 1,
       "fields": {
-        "context": { "type": "text", "required": true },
-        "decision": { "type": "text", "required": true },
+        "context": {
+          "type": "text",
+          "required": true
+        },
+        "decision": {
+          "type": "text",
+          "required": true
+        },
         "alternatives": {
           "type": "objectList",
           "required": true,
           "minItems": 1,
           "fields": {
-            "option": { "type": "text", "required": true },
-            "whyRejected": { "type": "text", "required": true }
+            "option": {
+              "type": "text",
+              "required": true
+            },
+            "whyRejected": {
+              "type": "text",
+              "required": true
+            }
           }
         },
-        "consequences": { "type": "text", "required": true },
-        "decidedAt": { "type": "date", "required": true }
+        "consequences": {
+          "type": "text",
+          "required": true
+        },
+        "decidedAt": {
+          "type": "date",
+          "required": true
+        }
       },
       "ownerOnlyOps": [],
       "amendable": false,
@@ -182,17 +235,42 @@
         "trigger": {
           "type": "object",
           "required": true,
-          "atLeastOneOf": ["paths", "commands", "errorSignature"],
+          "atLeastOneOf": [
+            "paths",
+            "commands",
+            "errorSignature"
+          ],
           "fields": {
-            "paths": { "type": "textList", "required": true },
-            "commands": { "type": "textList", "required": true },
-            "errorSignature": { "type": "text", "required": false }
+            "paths": {
+              "type": "textList",
+              "required": true
+            },
+            "commands": {
+              "type": "textList",
+              "required": true
+            },
+            "errorSignature": {
+              "type": "text",
+              "required": false
+            }
           }
         },
-        "symptom": { "type": "text", "required": true },
-        "cause": { "type": "text", "required": true },
-        "fix": { "type": "text", "required": true },
-        "detector": { "type": "text", "required": false }
+        "symptom": {
+          "type": "text",
+          "required": true
+        },
+        "cause": {
+          "type": "text",
+          "required": true
+        },
+        "fix": {
+          "type": "text",
+          "required": true
+        },
+        "detector": {
+          "type": "text",
+          "required": false
+        }
       },
       "ownerOnlyOps": [],
       "amendable": true,
@@ -202,13 +280,25 @@
     "recipe": {
       "phase": 1,
       "fields": {
-        "steps": { "type": "textList", "required": true, "minItems": 1 },
+        "steps": {
+          "type": "textList",
+          "required": true,
+          "minItems": 1
+        },
         "verify": {
           "type": "object",
           "required": true,
           "fields": {
-            "command": { "type": "text", "required": true },
-            "expectedExit": { "type": "integer", "required": true, "min": 0, "max": 255 }
+            "command": {
+              "type": "text",
+              "required": true
+            },
+            "expectedExit": {
+              "type": "integer",
+              "required": true,
+              "min": 0,
+              "max": 255
+            }
           }
         }
       },
@@ -220,9 +310,18 @@
     "concept": {
       "phase": 1,
       "fields": {
-        "definition": { "type": "text", "required": true },
-        "boundaries": { "type": "text", "required": true },
-        "notToConfuseWith": { "type": "text", "required": false }
+        "definition": {
+          "type": "text",
+          "required": true
+        },
+        "boundaries": {
+          "type": "text",
+          "required": true
+        },
+        "notToConfuseWith": {
+          "type": "text",
+          "required": false
+        }
       },
       "ownerOnlyOps": [],
       "amendable": true,
@@ -238,7 +337,6 @@
       "reserved": "The storage CHECK admits the word, so phase 3 needs no migration for it. Every phase-1 door refuses it: WIKI_SCHEMA on kind. It has no KIND_SPECS entry until phase 3 gives it one."
     }
   },
-
   "fieldTypes": {
     "text": "A string with something besides whitespace in it, at most limits.fieldTextMaxChars characters. pattern, when given, is a regular expression the whole string matches.",
     "textList": "An array of text, at most limits.listMaxItems long and at least minItems (0 when absent).",
@@ -248,9 +346,16 @@
     "objectList": "An array of such objects, at most limits.listMaxItems long and at least minItems.",
     "strictness": "A required field that is absent is an error, a key no schema names is an error, and an optional field that is present is held to its type. null reads as absent. Every error names its field by path, such as fields.alternatives[0].whyRejected."
   },
-
   "entryContent": {
-    "keys": ["kind", "title", "summary", "fields", "topics", "aliases", "anchors"],
+    "keys": [
+      "kind",
+      "title",
+      "summary",
+      "fields",
+      "topics",
+      "aliases",
+      "anchors"
+    ],
     "title": "Required text, at most limits.titleMaxChars characters.",
     "summary": "Required text, at most limits.summaryMaxChars characters: one sentence, the one cards and the agent slice show.",
     "fields": "Required: the kind's own fields (kinds.<kind>.fields).",
@@ -259,53 +364,120 @@
     "anchors": "Optional, at most limits.listMaxItems, each shaped as anchorTypes says.",
     "kindIsFixed": "A lineage keeps its kind. Another kind is a supersede, which starts a new lineage."
   },
-
   "anchorTypes": {
     "path": {
-      "fields": { "path": { "type": "text", "required": true } },
-      "states": ["verified", "missing"],
+      "fields": {
+        "path": {
+          "type": "text",
+          "required": true
+        }
+      },
+      "states": [
+        "verified",
+        "missing"
+      ],
       "check": "runner: git cat-file -e origin/main:<path>"
     },
     "symbol": {
       "fields": {
-        "path": { "type": "text", "required": true },
-        "symbol": { "type": "text", "required": true },
-        "regionSha256": { "type": "text", "required": false, "pattern": "^[0-9a-f]{64}$" }
+        "path": {
+          "type": "text",
+          "required": true
+        },
+        "symbol": {
+          "type": "text",
+          "required": true
+        },
+        "regionSha256": {
+          "type": "text",
+          "required": false,
+          "pattern": "^[0-9a-f]{64}$"
+        }
       },
-      "states": ["verified", "changed", "missing"],
+      "states": [
+        "verified",
+        "changed",
+        "missing"
+      ],
       "check": "runner: git grep -n finds the symbol, and the hash of the lines after it is compared with regionSha256. A hot file is anchored by symbol, never whole."
     },
     "commit": {
-      "fields": { "sha": { "type": "text", "required": true, "pattern": "^[0-9a-f]{40}$" } },
-      "states": ["verified", "missing"],
+      "fields": {
+        "sha": {
+          "type": "text",
+          "required": true,
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      },
+      "states": [
+        "verified",
+        "missing"
+      ],
       "check": "runner: git merge-base --is-ancestor <sha> origin/main. It is always checked: a sha that is not an ancestor poisons what depends on it."
     },
     "criterion": {
       "fields": {
-        "criterionId": { "type": "text", "required": true },
-        "semanticHash": { "type": "text", "required": false, "pattern": "^[0-9a-f]{64}$" }
+        "criterionId": {
+          "type": "text",
+          "required": true
+        },
+        "semanticHash": {
+          "type": "text",
+          "required": false,
+          "pattern": "^[0-9a-f]{64}$"
+        }
       },
-      "states": ["verified", "changed"],
+      "states": [
+        "verified",
+        "changed"
+      ],
       "check": "server: the criterion's semanticHash is compared."
     },
     "merge_evidence": {
-      "fields": { "contentHash": { "type": "text", "required": true, "pattern": "^[0-9a-f]{64}$" } },
-      "states": ["verified", "missing"],
+      "fields": {
+        "contentHash": {
+          "type": "text",
+          "required": true,
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "states": [
+        "verified",
+        "missing"
+      ],
       "check": "server: is that evidence still observed."
     },
     "command": {
       "fields": {
-        "command": { "type": "text", "required": true },
-        "expectedExit": { "type": "integer", "required": true, "min": 0, "max": 255 }
+        "command": {
+          "type": "text",
+          "required": true
+        },
+        "expectedExit": {
+          "type": "integer",
+          "required": true,
+          "min": 0,
+          "max": 255
+        }
       },
-      "states": ["verified", "changed"],
+      "states": [
+        "verified",
+        "changed"
+      ],
       "check": "the maintenance run runs it again (phase 2)."
     },
     "record": {
       "fields": {
-        "ref": { "type": "text", "required": true, "pattern": "^orbit-(task|session|project|list):[0-9A-Za-z-]+$" }
+        "ref": {
+          "type": "text",
+          "required": true,
+          "pattern": "^orbit-(task|session|project|list):[0-9A-Za-z-]+$"
+        }
       },
-      "states": ["verified", "missing"],
+      "states": [
+        "verified",
+        "missing"
+      ],
       "check": "server: does the record exist."
     }
   },
@@ -316,7 +488,11 @@
     "verify": {
       "phase": 2,
       "doc": "docs/wiki-contract.md section 17; design section 4.4",
-      "types": ["path", "symbol", "commit"],
+      "types": [
+        "path",
+        "symbol",
+        "commit"
+      ],
       "typesNote": "The anchors git can check. The other four are the server's or a recipe run's to check, and no check writes them yet: an entry that carries one reads unchecked until one does (aggregate).",
       "rules": {
         "symbolRegionLines": 20,
@@ -372,7 +548,6 @@
     "changed": "the last check found it, but not as recorded",
     "missing": "the last check did not find it"
   },
-
   "sourceKinds": {
     "turn": "a conversation turn; { kind: 'turn', session: 'self' } cites the calling session",
     "event": "a run event",
@@ -389,7 +564,14 @@
     "url": "a web page: only for an assumption (phase 3), and it taints the entry"
   },
   "sourceInput": {
-    "keys": ["kind", "ref", "session", "seq", "locator", "quote"],
+    "keys": [
+      "kind",
+      "ref",
+      "session",
+      "seq",
+      "locator",
+      "quote"
+    ],
     "ref": "The cited record's id, or a commit's sha: what each kind takes is refs. An id is either spelling of one, the UUID or the short public id Orbit shows. Required, except by a turn that cites the calling session. A ref of a rowIdKinds kind that is neither spelling of an id is refused WIKI_SCHEMA, errors[] naming it by its path (ops[i].sources[j].ref), and a ref is never compared with a row's id as it came.",
     "refs": {
       "turn": "the turn's id; a turn of the calling session takes no ref, and is { kind: 'turn', session: 'self' }",
@@ -406,7 +588,16 @@
       "note": "the note's id, as orbit wiki import registered it",
       "url": "nothing yet: only an assumption cites a url, and assumptions are phase 3"
     },
-    "rowIdKinds": ["turn", "event", "task", "task_comment", "approval", "owner_decision", "merge_receipt", "note"],
+    "rowIdKinds": [
+      "turn",
+      "event",
+      "task",
+      "task_comment",
+      "approval",
+      "owner_decision",
+      "merge_receipt",
+      "note"
+    ],
     "toolUseId": "A tool_call's ref is read as the tool call's id first, and as a tool_use_id when no tool call of this owner's has that id: the calling session's own call carrying it, else the call of the one other session of this owner's that carries it. A call recorded more than once in one session is one call, read from its first row; a tool_use_id no session carries, or that two sessions carry, is unresolved. What is stored is the row's id.",
     "session": "Only the word self, and only on a turn: the calling session. Its current turn may not be stored yet, so its quote is verified when the session settles, and the Review card says whether it was.",
     "seq": "Only beside session self: the event sequence number it cites, an integer from 0.",
@@ -422,23 +613,48 @@
     "url": "Only an assumption may cite a url, and such a source is always tainted."
   },
   "sourceStates": {
-    "values": ["live", "trashed", "deleted"],
-    "initial": ["live"],
-    "terminal": ["deleted"],
+    "values": [
+      "live",
+      "trashed",
+      "deleted"
+    ],
+    "initial": [
+      "live"
+    ],
+    "terminal": [
+      "deleted"
+    ],
     "transitions": [
-      { "from": "live", "to": "trashed", "trigger": "the session it cites went to Trash: its entries leave the push, and are kept because the session can come back" },
-      { "from": "trashed", "to": "live", "trigger": "that session was restored from Trash" },
-      { "from": "trashed", "to": "deleted", "trigger": "that session was purged" },
-      { "from": "live", "to": "deleted", "trigger": "the record it cites was hard-deleted or purged" }
+      {
+        "from": "live",
+        "to": "trashed",
+        "trigger": "the session it cites went to Trash: its entries leave the push, and are kept because the session can come back"
+      },
+      {
+        "from": "trashed",
+        "to": "live",
+        "trigger": "that session was restored from Trash"
+      },
+      {
+        "from": "trashed",
+        "to": "deleted",
+        "trigger": "that session was purged"
+      },
+      {
+        "from": "live",
+        "to": "deleted",
+        "trigger": "the record it cites was hard-deleted or purged"
+      }
     ],
     "deleted": "Delete means forget: in the transaction that deletes the record, quote and quote_sha256 become NULL, and a confirmed entry that no live source supports any more is marked unsupported and leaves the push. The owner's own entries are not touched."
   },
-
   "import": {
     "phase": 2,
     "doc": "docs/wiki-contract.md section 5.1; design section 8.3",
     "migration": "src/apiserver/prisma/migrations/0316_wiki_note/migration.sql",
-    "tables": ["wiki_note"],
+    "tables": [
+      "wiki_note"
+    ],
     "rules": {
       "noteMaxChars": 100000,
       "notePathMaxChars": 500,
@@ -521,25 +737,64 @@
       "cli": "The command asks the executor route first. On server it registers the files that are not yet notes (readBy server), hands the job every note to read and every note carrying ops in one create (at most maxNotes; the rest wait for the next run), writes the job's id into its memory before it waits, polls the read route, and on success writes the report into its memory as import.cli.resume keeps it — so the next run, on either path, picks up where this one stopped — and prints the report's numbers. It stops waiting, leaving the job to the server and its id in its memory, when the System model refuses the deployment's key (auth_failed) or is not configured, when the model has not been up, or the job has not started, for ten minutes, and when the job has failed three times over (its attempts); the next run collects that job before it makes another. A failed job leaves its notes registered for the next run's job. --model is not used; no ANTHROPIC_* variable and no Claude Code are needed."
     }
   },
-
   "states": {
     "entry": {
-      "values": ["proposed", "active", "superseded", "retired", "rejected"],
-      "initial": ["proposed", "active"],
+      "values": [
+        "proposed",
+        "active",
+        "superseded",
+        "retired",
+        "rejected"
+      ],
+      "initial": [
+        "proposed",
+        "active"
+      ],
       "born": {
         "proposed": "an add or supersede that waits for review, or an add that waits for its verification (reviewModes.verification)",
         "active": "an add or supersede that applied at once: the owner's own, or an add the space's review mode applied (trust auto or unreviewed)"
       },
-      "terminal": ["superseded", "retired"],
-      "ended": ["superseded", "retired", "rejected"],
+      "terminal": [
+        "superseded",
+        "retired"
+      ],
+      "ended": [
+        "superseded",
+        "retired",
+        "rejected"
+      ],
       "endedMeans": "No longer live: never pushed, never searched by an agent, and what a client shows as ended. A rejected lineage is ended without being terminal, because the one reopening a verification allows (reviewModes.verification.reopen) proposes it again.",
       "transitions": [
-        { "from": "proposed", "to": "active", "trigger": "the owner accepted the op that proposed it, as written or edited; or its verification found it supported (trust auto) or partly supported (trust unreviewed)" },
-        { "from": "proposed", "to": "rejected", "trigger": "the owner rejected that op, or it expired or was withdrawn; or its verification found it unsupported or a duplicate. The row stays, as a counter-example the next similar[] shows with its reason" },
-        { "from": "active", "to": "superseded", "trigger": "a supersede naming it applied; superseded_by_id names the successor, whose supersedes_id names it" },
-        { "from": "active", "to": "retired", "trigger": "a retire naming it applied" },
-        { "from": "active", "to": "rejected", "trigger": "the owner rejected an entry the review mode applied at once and nobody has confirmed (trust auto or unreviewed): on its spot check, or from the entry itself. It stays as a counter-example, like a rejected proposal" },
-        { "from": "rejected", "to": "proposed", "trigger": "the verdict that rejected it was reopened (reviewModes.verification.reopen): an unsupported verdict given when none of its sources could be read. It waits for its verification again. Every other rejection is final" }
+        {
+          "from": "proposed",
+          "to": "active",
+          "trigger": "the owner accepted the op that proposed it, as written or edited; or its verification found it supported (trust auto) or partly supported (trust unreviewed)"
+        },
+        {
+          "from": "proposed",
+          "to": "rejected",
+          "trigger": "the owner rejected that op, or it expired or was withdrawn; or its verification found it unsupported or a duplicate. The row stays, as a counter-example the next similar[] shows with its reason"
+        },
+        {
+          "from": "active",
+          "to": "superseded",
+          "trigger": "a supersede naming it applied; superseded_by_id names the successor, whose supersedes_id names it"
+        },
+        {
+          "from": "active",
+          "to": "retired",
+          "trigger": "a retire naming it applied"
+        },
+        {
+          "from": "active",
+          "to": "rejected",
+          "trigger": "the owner rejected an entry the review mode applied at once and nobody has confirmed (trust auto or unreviewed): on its spot check, or from the entry itself. It stays as a counter-example, like a rejected proposal"
+        },
+        {
+          "from": "rejected",
+          "to": "proposed",
+          "trigger": "the verdict that rejected it was reopened (reviewModes.verification.reopen): an unsupported verdict given when none of its sources could be read. It waits for its verification again. Every other rejection is final"
+        }
       ],
       "invariants": [
         "superseded exactly when superseded_by_id is set",
@@ -548,25 +803,105 @@
       ]
     },
     "op": {
-      "values": ["pending", "accepted", "edited", "rejected", "auto_applied", "conflict", "expired", "withdrawn", "verifying"],
-      "initial": ["pending", "auto_applied", "verifying"],
-      "terminal": ["accepted", "edited", "conflict", "expired", "withdrawn"],
+      "values": [
+        "pending",
+        "accepted",
+        "edited",
+        "rejected",
+        "auto_applied",
+        "conflict",
+        "expired",
+        "withdrawn",
+        "verifying"
+      ],
+      "initial": [
+        "pending",
+        "auto_applied",
+        "verifying"
+      ],
+      "terminal": [
+        "accepted",
+        "edited",
+        "conflict",
+        "expired",
+        "withdrawn"
+      ],
       "transitions": [
-        { "from": "verifying", "to": "auto_applied", "trigger": "its verification found it supported or partly supported, and the verdict applied it (reviewModes.verification.verdicts)" },
-        { "from": "verifying", "to": "pending", "trigger": "the verdict applied it and the draw made it a spot check (reviewModes.spotChecks.automatic): its effect stands, and the owner is asked to check it" },
-        { "from": "verifying", "to": "rejected", "trigger": "its verification found it unsupported (not_true) or a duplicate of an entry the space holds (duplicate)" },
-        { "from": "verifying", "to": "conflict", "trigger": "an amend whose entry moved, or passed into the owner's hands, before its verdict arrived: nothing applied" },
-        { "from": "verifying", "to": "withdrawn", "trigger": "the owner reverted the run it belongs to, or an amend's entry left active, before its verdict arrived" },
-        { "from": "pending", "to": "accepted", "trigger": "the owner accepted it and it applied; on a spot check, the owner confirmed what the review mode applied" },
-        { "from": "pending", "to": "edited", "trigger": "the owner edited it, accepted the edit, and the edit applied" },
-        { "from": "pending", "to": "rejected", "trigger": "the owner rejected it, naming one of rejectReasons; on a spot check, what the review mode applied is undone" },
-        { "from": "pending", "to": "conflict", "trigger": "the owner accepted it, but its baseRevision was no longer the entry's current revision, so nothing applied; on a spot check, the entry had changed since the op applied" },
-        { "from": "pending", "to": "expired", "trigger": "it waited limits.pendingExpiryDays days" },
-        { "from": "pending", "to": "withdrawn", "trigger": "its entry left active before the owner decided it (another op superseded or retired it, or a revert undid it), so it can no longer apply" },
-        { "from": "auto_applied", "to": "rejected", "trigger": "the owner rejected, from the entry itself, the add the review mode applied at once (reviewModes.entryReject)" },
-        { "from": "auto_applied", "to": "accepted", "trigger": "the owner confirmed, from the entry itself, the entry the review mode applied it to (reviewModes.entryConfirm). Every other auto_applied op stays as it is" },
-        { "from": "pending", "to": "verifying", "trigger": "a tainted add or amend that waited for the owner was sent to its verification, in a space that is automatic now (reviewModes.verification.reopen)" },
-        { "from": "rejected", "to": "verifying", "trigger": "its verdict was reopened (reviewModes.verification.reopen): an unsupported verdict given when none of its sources could be read, which moves into its verification_history. Every other rejection is final" }
+        {
+          "from": "verifying",
+          "to": "auto_applied",
+          "trigger": "its verification found it supported or partly supported, and the verdict applied it (reviewModes.verification.verdicts)"
+        },
+        {
+          "from": "verifying",
+          "to": "pending",
+          "trigger": "the verdict applied it and the draw made it a spot check (reviewModes.spotChecks.automatic): its effect stands, and the owner is asked to check it"
+        },
+        {
+          "from": "verifying",
+          "to": "rejected",
+          "trigger": "its verification found it unsupported (not_true) or a duplicate of an entry the space holds (duplicate)"
+        },
+        {
+          "from": "verifying",
+          "to": "conflict",
+          "trigger": "an amend whose entry moved, or passed into the owner's hands, before its verdict arrived: nothing applied"
+        },
+        {
+          "from": "verifying",
+          "to": "withdrawn",
+          "trigger": "the owner reverted the run it belongs to, or an amend's entry left active, before its verdict arrived"
+        },
+        {
+          "from": "pending",
+          "to": "accepted",
+          "trigger": "the owner accepted it and it applied; on a spot check, the owner confirmed what the review mode applied"
+        },
+        {
+          "from": "pending",
+          "to": "edited",
+          "trigger": "the owner edited it, accepted the edit, and the edit applied"
+        },
+        {
+          "from": "pending",
+          "to": "rejected",
+          "trigger": "the owner rejected it, naming one of rejectReasons; on a spot check, what the review mode applied is undone"
+        },
+        {
+          "from": "pending",
+          "to": "conflict",
+          "trigger": "the owner accepted it, but its baseRevision was no longer the entry's current revision, so nothing applied; on a spot check, the entry had changed since the op applied"
+        },
+        {
+          "from": "pending",
+          "to": "expired",
+          "trigger": "it waited limits.pendingExpiryDays days"
+        },
+        {
+          "from": "pending",
+          "to": "withdrawn",
+          "trigger": "its entry left active before the owner decided it (another op superseded or retired it, or a revert undid it), so it can no longer apply"
+        },
+        {
+          "from": "auto_applied",
+          "to": "rejected",
+          "trigger": "the owner rejected, from the entry itself, the add the review mode applied at once (reviewModes.entryReject)"
+        },
+        {
+          "from": "auto_applied",
+          "to": "accepted",
+          "trigger": "the owner confirmed, from the entry itself, the entry the review mode applied it to (reviewModes.entryConfirm). Every other auto_applied op stays as it is"
+        },
+        {
+          "from": "pending",
+          "to": "verifying",
+          "trigger": "a tainted add or amend that waited for the owner was sent to its verification, in a space that is automatic now (reviewModes.verification.reopen)"
+        },
+        {
+          "from": "rejected",
+          "to": "verifying",
+          "trigger": "its verdict was reopened (reviewModes.verification.reopen): an unsupported verdict given when none of its sources could be read, which moves into its verification_history. Every other rejection is final"
+        }
       ],
       "invariants": [
         "decided_at is set exactly when the decision is neither pending nor verifying",
@@ -576,12 +911,26 @@
       ]
     },
     "changeset": {
-      "values": ["pending", "settled"],
-      "initial": ["pending", "settled"],
+      "values": [
+        "pending",
+        "settled"
+      ],
+      "initial": [
+        "pending",
+        "settled"
+      ],
       "terminal": [],
       "transitions": [
-        { "from": "pending", "to": "settled", "trigger": "the last of its pending or verifying ops was decided, verified, expired or withdrawn" },
-        { "from": "settled", "to": "pending", "trigger": "one of its ops was sent back to its verification (reviewModes.verification.reopen): it waits again, with a fresh expires_at, until nothing of it does" }
+        {
+          "from": "pending",
+          "to": "settled",
+          "trigger": "the last of its pending or verifying ops was decided, verified, expired or withdrawn"
+        },
+        {
+          "from": "settled",
+          "to": "pending",
+          "trigger": "one of its ops was sent back to its verification (reviewModes.verification.reopen): it waits again, with a fresh expires_at, until nothing of it does"
+        }
       ],
       "invariants": [
         "decided_at is set exactly when the changeset is settled",
@@ -590,9 +939,15 @@
       "note": "A changeset is pending while any of its ops waits — for the owner, or for its verification — and settled once none does. One every op of which applied at once is settled when it is recorded. A request none of whose ops passed records no changeset at all. Review lists a pending changeset only while one of its ops waits for the owner: one that waits for its verification alone is not in it."
     }
   },
-
   "trust": {
-    "values": ["owner", "confirmed", "auto", "unreviewed", "proposed", "external"],
+    "values": [
+      "owner",
+      "confirmed",
+      "auto",
+      "unreviewed",
+      "proposed",
+      "external"
+    ],
     "meaning": {
       "owner": "the owner wrote it: an owner's own add or supersede",
       "confirmed": "an agent, a maintenance run, an import or a watch proposed it and the owner accepted it, as written or edited — or accepted its spot check, or confirmed it from the entry itself (reviewModes.entryConfirm)",
@@ -601,7 +956,11 @@
       "proposed": "not accepted: every proposed entry and every rejected one",
       "external": "it rests on web-derived sources (a phase-3 assumption citing a url). Never pushed"
     },
-    "pushable": ["owner", "confirmed", "auto"],
+    "pushable": [
+      "owner",
+      "confirmed",
+      "auto"
+    ],
     "onApply": {
       "ownerAddOrSupersede": "owner",
       "acceptedAddSupersedeOrAmend": "confirmed",
@@ -613,35 +972,59 @@
     },
     "edited": "An owner who edits a proposal before accepting it is recorded as the author of the revision that results, and the entry's trust is still confirmed."
   },
-
   "ops": {
     "add": {
-      "keys": { "entry": "required: entryContent", "sources": "a source list (sourceRules.required)" },
+      "keys": {
+        "entry": "required: entryContent",
+        "sources": "a source list (sourceRules.required)"
+      },
       "creates": "a new lineage at revision 1: proposed, or active when it applies at once",
       "baseRevision": "never"
     },
     "reinforce": {
-      "keys": { "entryId": "required", "sources": "required, at least one" },
+      "keys": {
+        "entryId": "required",
+        "sources": "required, at least one"
+      },
       "does": "adds sources to the entry's current revision; content, status and trust stay as they are",
       "baseRevision": "never"
     },
     "amend": {
-      "keys": { "entryId": "required", "baseRevision": "required", "changes": "required: any of title, summary, fields, topics, aliases, anchors; a key given replaces that key whole, a key omitted carries over from baseRevision", "sources": "a source list (sourceRules.required)" },
+      "keys": {
+        "entryId": "required",
+        "baseRevision": "required",
+        "changes": "required: any of title, summary, fields, topics, aliases, anchors; a key given replaces that key whole, a key omitted carries over from baseRevision",
+        "sources": "a source list (sourceRules.required)"
+      },
       "does": "a new revision of the same lineage; the kind stays",
       "baseRevision": "required"
     },
     "supersede": {
-      "keys": { "entryId": "required", "baseRevision": "required", "entry": "required: entryContent", "sources": "a source list (sourceRules.required)" },
+      "keys": {
+        "entryId": "required",
+        "baseRevision": "required",
+        "entry": "required: entryContent",
+        "sources": "a source list (sourceRules.required)"
+      },
       "does": "a new lineage that replaces the named one; when it applies, the named entry becomes superseded",
       "baseRevision": "required"
     },
     "retire": {
-      "keys": { "entryId": "required", "baseRevision": "required", "reason": "required text", "sources": "optional" },
+      "keys": {
+        "entryId": "required",
+        "baseRevision": "required",
+        "reason": "required text",
+        "sources": "optional"
+      },
       "does": "the entry leaves active for retired",
       "baseRevision": "required"
     },
     "challenge": {
-      "keys": { "entryId": "required", "reason": "required text", "sources": "optional" },
+      "keys": {
+        "entryId": "required",
+        "reason": "required text",
+        "sources": "optional"
+      },
       "does": "sets challenged, which takes the entry out of the push at once. The owner answers it in Review: Re-confirm, Amend or Retire",
       "baseRevision": "never"
     }
@@ -651,7 +1034,6 @@
     "seq": "An op is numbered by its 0-based position in the request's ops, and every answer names it by that number.",
     "reason": "A retire or a challenge says why in reason, which Review shows beside it."
   },
-
   "effectPolicy": {
     "why": "Design section 4.2: only the owner's own writes and the two safe ops take effect at once; everything else waits for the owner in Review — unless the space's review mode applies it (reviewModes), which reads this policy first and changes nothing it applies.",
     "effects": {
@@ -660,28 +1042,80 @@
       "appliedUnlessOff": "applied, unless the space's settings.autoAcceptReinforce is false, then pending"
     },
     "origins": {
-      "owner": { "add": "applied", "reinforce": "applied", "amend": "applied", "supersede": "applied", "retire": "applied", "challenge": "applied" },
-      "agent": { "add": "pending", "reinforce": "appliedUnlessOff", "amend": "pending", "supersede": "pending", "retire": "pending", "challenge": "applied" },
-      "maintenance": { "add": "pending", "reinforce": "appliedUnlessOff", "amend": "pending", "supersede": "pending", "retire": "pending", "challenge": "applied" },
-      "import": { "add": "pending", "reinforce": "appliedUnlessOff", "amend": "pending", "supersede": "pending", "retire": "pending", "challenge": "applied" },
-      "watch": { "add": "pending", "reinforce": "appliedUnlessOff", "amend": "pending", "supersede": "pending", "retire": "pending", "challenge": "applied" }
+      "owner": {
+        "add": "applied",
+        "reinforce": "applied",
+        "amend": "applied",
+        "supersede": "applied",
+        "retire": "applied",
+        "challenge": "applied"
+      },
+      "agent": {
+        "add": "pending",
+        "reinforce": "appliedUnlessOff",
+        "amend": "pending",
+        "supersede": "pending",
+        "retire": "pending",
+        "challenge": "applied"
+      },
+      "maintenance": {
+        "add": "pending",
+        "reinforce": "appliedUnlessOff",
+        "amend": "pending",
+        "supersede": "pending",
+        "retire": "pending",
+        "challenge": "applied"
+      },
+      "import": {
+        "add": "pending",
+        "reinforce": "appliedUnlessOff",
+        "amend": "pending",
+        "supersede": "pending",
+        "retire": "pending",
+        "challenge": "applied"
+      },
+      "watch": {
+        "add": "pending",
+        "reinforce": "appliedUnlessOff",
+        "amend": "pending",
+        "supersede": "pending",
+        "retire": "pending",
+        "challenge": "applied"
+      }
     },
-    "tainted": { "add": "pending", "reinforce": "pending", "amend": "pending", "supersede": "pending", "retire": "pending", "challenge": "applied" },
+    "tainted": {
+      "add": "pending",
+      "reinforce": "pending",
+      "amend": "pending",
+      "supersede": "pending",
+      "retire": "pending",
+      "challenge": "applied"
+    },
     "taintedRule": "An op is tainted when the calling session used WebFetch or WebSearch (codex's webSearch too) before it, or when a turn it cites comes from a tainted stretch. A tainted op of any origin but owner follows the tainted row instead of its origin's row, and its Review card carries the Web-derived warning. In an automatic space the review mode sends a tainted add or amend to its verification instead of to Review (reviewModes.floors.taintedWaits).",
     "challengeRule": "A challenge applies at once from every origin, tainted or not: it only raises a flag, and the flag's whole effect is to take the entry out of the push until the owner answers it.",
     "decide": {
       "route": "POST /api/wiki/changesets/:id/decide",
-      "actions": ["accept", "edit", "reject", "reconfirm", "amend", "retire"],
+      "actions": [
+        "accept",
+        "edit",
+        "reject",
+        "reconfirm",
+        "amend",
+        "retire"
+      ],
       "reject": "names one of rejectReasons, and may add a note",
       "edit": "carries the owner's version, shaped as an amend's changes over the proposal",
       "challengeAnswers": "reconfirm, amend and retire answer a challenge op, and only a challenge op: anchorRules.verify.answers.",
       "channel": "the user door only (agentSurface.decide)"
     }
   },
-
   "reviewModes": {
     "why": "Owner, 2026-09-26: not every entry needs a person, and a space can run as Wikova's does, in an Automatic mode. What the effect policy holds back, a space's review mode may apply; everything it applies is written through submitChangeset and applyOp like any other write, keeps its revision history, and can be rejected one entry at a time or undone a run at a time. Owner, 2026-09-27 (criterion 7, revision 3): Automatic verifies before it applies — the local model, called through a clean Claude Code apart from the call that proposed the op, checks each op against its own sources, and nothing an Automatic space takes in is live until a verdict says so (verification). Owner, 2026-09-27 (criterion 7, revision 4): a verification has to be able to read its evidence (verification.evidence), and what a session that read the web proposed is verified too, but never past unreviewed (floors.taintedWaits).",
-    "values": ["manual", "tiered", "automatic"],
+    "values": [
+      "manual",
+      "tiered",
+      "automatic"
+    ],
     "meaning": {
       "manual": "The effect policy and nothing else: an agent's, a maintenance run's and an import's add, amend, supersede and retire wait for the owner, as in phase 1.",
       "tiered": "An add or an amend applies at once. It is auto, and pushed, when it is the owner's own words or machine-verified (tiered); anything else it applies is unreviewed: shown, never pushed, and the owner may Reject it later.",
@@ -725,14 +1159,23 @@
       },
       "applies": "A verdict applies through applyOp and recomputeFlags like every other write (storage.singleWriter): a promote for an add, an amend for an amend, a reject, a reinforce. An op a verdict applied is recorded auto_applied with applied_by_mode automatic, so revert, entryReject and the spot checks treat it as one the mode applied.",
       "trail": {
-        "columns": ["verification_verdict", "verification_reason", "verification_model", "verified_at", "verification_duplicate_of"],
+        "columns": [
+          "verification_verdict",
+          "verification_reason",
+          "verification_model",
+          "verified_at",
+          "verification_duplicate_of"
+        ],
         "rule": "Every verdict leaves its trail on its op, the four together or none of them: which of verdicts, the verifier's reason in one sentence (redacted as every stored text is, at most rules.verificationReasonMaxChars), the model that gave it (at most rules.verificationModelMaxChars), and when the server recorded it; verification_duplicate_of exactly when the verdict is duplicate. An op reads it back as verification: {verdict, reason, model, at, duplicateOf, evidence}, null until a verdict arrives."
       },
       "evidence": {
         "why": "Owner, 2026-09-27 (criterion 7, revision 4): a verification has to be able to read its evidence. A verifier handed no text judges the claim alone, and its verdict is no verdict about the records: in the preview space 95.7% of the ops whose sources were all tool, thinking and system events were found unsupported, against 0.9% of the ops with one source whose text it could read.",
         "text": "Every source is read as its record's text, and it is the same text a submission's quote is checked against and a dossier line's spans count in (maintenance.dossier.spans). A run event: user, assistant and thinking, its text; tool_use, its tool's name and its input; tool_result, its content — a string, or the text of its blocks — marked when the tool reported an error; error, its message; background_task, its command and its summary; turn_end, its subtype; system, only the words it carries (text, notice, stderr), so a system event that is counts has none. A tool call's row is the call and its result together: its tool's name, its input, then its output — a string, the text of its blocks, or the text of the blocks of a result that carries them as content. An approval is its answers and the owner's note, a line each, and for an ExitPlanMode the plan it decided. Each is its parts, one per line, in that order (src/apiserver/src/wiki/wiki-verify-evidence.ts). Empty or blank text is none: an empty thinking is a record with nothing in it to read, not evidence that says nothing. A verifier is handed the text redacted by the shared redactor, then cut at rules.verificationSourceMaxChars.",
         "column": "verification_evidence",
-        "values": ["readable", "unreadable"],
+        "values": [
+          "readable",
+          "unreadable"
+        ],
         "mark": "readable when at least one of the op's sources has text, unreadable when none has. Each op of the list carries it (evidence), so a verifier knows before it asks a model; and the server reads it again when it records a verdict, never taking the verifier's word for it, and stores it with the verdict. NULL for a verdict recorded before migration 0314, and while there is no verdict.",
         "unreadable": "A verdict about an op none of whose sources could be read is capped at unreviewed: supported, partial and unsupported all apply the op as unreviewed — shown, labelled Unreviewed, never pushed — and a duplicate is still a reinforce of the entry it names (verdicts.duplicate). None of them counts toward the fallback.",
         "tainted": "A verdict about a tainted op is capped at unreviewed too: supported and partial apply it as unreviewed; unsupported rejects it, and counts; and a duplicate is rejected with nothing added to the entry it names, so what a session that read the web cites never changes whether an entry the space already holds is pushed (a pitfall's independent sessions, a source that keeps it supported).",
@@ -842,29 +1285,40 @@
       "verificationSourceMaxChars": 8000
     }
   },
-
   "rejectReasons": {
     "not_true": "Not true",
     "not_useful": "Not useful",
     "duplicate": "Duplicate",
     "too_specific": "Too specific"
   },
-
   "changesetOrigins": {
-    "owner": { "phase": 1, "means": "the owner's own write, on the user door" },
-    "agent": { "phase": 1, "means": "wiki_propose or orbit wiki propose from a session, or from a runner with no session (headless), on the runner door" },
-    "maintenance": { "phase": 2, "means": "a Wiki maintenance run of the space" },
-    "import": { "phase": 2, "means": "orbit wiki import: CLAUDE.md, AGENTS.md or a memory directory, one note source per file" },
-    "watch": { "phase": 3, "means": "the external watch over dependencies and upstream contracts" }
+    "owner": {
+      "phase": 1,
+      "means": "the owner's own write, on the user door"
+    },
+    "agent": {
+      "phase": 1,
+      "means": "wiki_propose or orbit wiki propose from a session, or from a runner with no session (headless), on the runner door"
+    },
+    "maintenance": {
+      "phase": 2,
+      "means": "a Wiki maintenance run of the space"
+    },
+    "import": {
+      "phase": 2,
+      "means": "orbit wiki import: CLAUDE.md, AGENTS.md or a memory directory, one note source per file"
+    },
+    "watch": {
+      "phase": 3,
+      "means": "the external watch over dependencies and upstream contracts"
+    }
   },
-
   "authorKinds": {
     "owner": "the owner wrote the revision, including an edit accepted from Review",
     "agent": "an agent's proposal, accepted as written",
     "maintenance": "a maintenance run's proposal, accepted as written",
     "system": "the server wrote it itself"
   },
-
   "exposureChannels": {
     "push": "the entry was in a session's <orbit_wiki_context>",
     "search": "wiki_search returned it",
@@ -875,13 +1329,11 @@
     "session": "A push always names its session. A search or get from a runner with no session names none.",
     "people": "Reads by people are not exposures; they are counted apart."
   },
-
   "searchMatches": {
     "keyword": "pg_trgm over wiki_entry_search_text, with the broadening session search uses",
     "semantic": "embedding similarity (phase 2, off unless the owner configures an embedding provider)",
     "path": "the query or paths parameter is a prefix of one of the entry's anchor paths or trigger paths"
   },
-
   "limits": {
     "titleMaxChars": 120,
     "summaryMaxChars": 280,
@@ -901,12 +1353,29 @@
     "getIdsMax": 10
   },
   "limitNotes": {
-    "fromTheDesign": ["titleMaxChars", "summaryMaxChars", "topicsMax", "aliasesMax", "quoteMaxChars", "opsPerTurn", "opsPerSession", "opsPerChangeset", "pendingOpsPerSpace", "pendingExpiryDays", "searchLimitMax", "getIdsMax"],
-    "addedByThisContract": ["aliasMaxChars", "slugMaxChars", "fieldTextMaxChars", "listMaxItems"],
+    "fromTheDesign": [
+      "titleMaxChars",
+      "summaryMaxChars",
+      "topicsMax",
+      "aliasesMax",
+      "quoteMaxChars",
+      "opsPerTurn",
+      "opsPerSession",
+      "opsPerChangeset",
+      "pendingOpsPerSpace",
+      "pendingExpiryDays",
+      "searchLimitMax",
+      "getIdsMax"
+    ],
+    "addedByThisContract": [
+      "aliasMaxChars",
+      "slugMaxChars",
+      "fieldTextMaxChars",
+      "listMaxItems"
+    ],
     "why": "The design bounds the common fields and leaves the text and lists inside an entry unbounded. An entry is meant to be atomic, so every text and list gets a ceiling well above anything atomic needs.",
     "quota": "opsPerTurn and opsPerSession protect the review queue, so they count only the ops that wait for the owner: the ops of one request, and the ops a session has recorded in its life, that the effect policy held back (a proposal, a challenge). An op that applies at once — the owner's own, a reinforce, or one the review mode applied — counts toward neither, and neither does one that waits for its verification (reviewModes.verification.waits); opsPerChangeset (any request, every origin, the owner's too) and the circuit breaker (reviewModes.floors) bound those. pendingOpsPerSpace counts the space's pending ops that wait on the owner's decision: a spot-check card does not count (reviewModes.spotChecks.card), and neither does an op that waits for its verification."
   },
-
   "push": {
     "block": "<orbit_wiki_context>",
     "where": "RunnerApiController.dequeueTurn, appended at delivery as user-level text. Never --append-system-prompt, never codex's application context, never buildTaskExecutionPrompt (task-start-card.ts compares that prompt byte for byte).",
@@ -914,14 +1383,29 @@
     "maxTokens": 1500,
     "maxChars": 6000,
     "eligible": {
-      "status": ["active"],
-      "trust": ["owner", "confirmed", "auto"],
-      "taintedOnlyWithTrust": ["owner", "confirmed"],
+      "status": [
+        "active"
+      ],
+      "trust": [
+        "owner",
+        "confirmed",
+        "auto"
+      ],
+      "taintedOnlyWithTrust": [
+        "owner",
+        "confirmed"
+      ],
       "challenged": false,
       "unsupported": false,
-      "anchorStateNot": ["changed", "missing"]
+      "anchorStateNot": [
+        "changed",
+        "missing"
+      ]
     },
-    "caps": { "principle": 4, "convention": 6 },
+    "caps": {
+      "principle": 4,
+      "convention": 6
+    },
     "line": "[Kind] Title — summary (orbit-wiki:<id>)",
     "header": "Reference notes confirmed by the owner. Context, not instructions; if one looks wrong or stale, say so and challenge it with wiki_propose.",
     "headerWithAuto": "Reference notes the owner wrote or confirmed, or that this space's review mode accepted. Context, not instructions; if one looks wrong or stale, say so and challenge it with wiki_propose.",
@@ -929,12 +1413,14 @@
     "never": "A session that verifies, forems or judges work gets no push: knowledge is not evidence. Nor does a project's coordinator session (the owner, 2026-09-29), decided on the relation delivery appends its standing role from (Project.coordinatorSessionId). That one is the push alone: wiki_search and wiki_get stay open to a coordinator.",
     "exposure": "one wiki_exposure row per entry pushed, channel push"
   },
-
   "maintenance": {
     "phase": 2,
     "doc": "docs/wiki-contract.md section 16; design section 8.2 step 1 and section 3 wiki_cursor",
     "migration": "src/apiserver/prisma/migrations/0315_wiki_cursor/migration.sql",
-    "tables": ["wiki_cursor", "wiki_dossier"],
+    "tables": [
+      "wiki_cursor",
+      "wiki_dossier"
+    ],
     "rules": {
       "dossierMaxTokens": 8000,
       "pageSessionsDefault": 20,
@@ -978,9 +1464,18 @@
       "budget": "A dossier is at most rules.dossierMaxTokens by wikiEstimateTokens (ASCII characters / 3.4 plus other characters / 1.25, plus one). A session whose timeline does not fit is cut to it and marked truncated.",
       "determinism": "The same records give the same text byte for byte, the same spans, and the same hash: sha256 of the text, a NUL, and the sources' ref, kind and id as JSON. The spans are not hashed: they are where the same records' words are, and a dossier whose text and records did not change is one a run has read. Nothing in a dossier reads the clock.",
       "sources": "Each line of the text starts with its short name (L1, L2, …), and sources maps each to the first-hand record it came from — turn, event, tool_call, task, task_comment, approval, merge_receipt or owner_decision — and to where in that record the line's words are (spans). A proposal made from the dossier cites those records, never the dossier.",
-      "sourceFields": ["ref", "kind", "id", "spans"],
+      "sourceFields": [
+        "ref",
+        "kind",
+        "id",
+        "spans"
+      ],
       "spans": {
-        "fields": ["start", "end", "text"],
+        "fields": [
+          "start",
+          "end",
+          "text"
+        ],
         "why": "Criterion 2, revision 2 (owner, 2026-09-28): a dossier's lines are its own writing — a tool call as its command and its result's first and last line, a message cut to a cap — and a quote copied from that writing is not in the record it cites: the maintenance trial could not verify 13 of its 49 sources, and 70% of the preview space's sources carried no quote. Each line says where its words are, so a proposal can quote the record's own words, and a footnote can be held to them.",
         "unit": "start and end are code points of the record's text — the one text a quote of it is checked against (reviewModes.verification.evidence.text) — redacted by the shared redactor with the owner's workspace.env values as literals; text is the words from start to end, verbatim.",
         "pieces": "A line copied whole is one span. A line the dossier compressed has a span for each piece of its record it kept, in order, none overlapping: a tool call's command (or path) and its result's first and last line, a message's part before its cap, a thought's signal sentences, a comment's first paragraph and its conclusions, an approval's answers and note. The dossier's own words — a speaker, a marker (\"$ \", \"→ ok:\", \"ERR:\", \"…[cut]\"), an option list — are in no span.",
@@ -1011,8 +1506,17 @@
       "token": "Opaque: the position of the last fact a page covered and the space it belongs to.",
       "advance": {
         "route": "POST /api/runner/wiki/spaces/:id/cursor",
-        "body": { "to": "required: a cursor token", "outcome": "optional: one of outcomes, default succeeded", "error": "optional: why the run did not succeed, at most 2000 characters, redacted", "failureKind": "optional: whose failure a run that did not succeed was, one of maintenance.job.recovery.failureKinds; when it is not said, read off its error by the words of maintenance.job.recovery.infra, and content otherwise" },
-        "outcomes": ["succeeded", "failed", "truncated"],
+        "body": {
+          "to": "required: a cursor token",
+          "outcome": "optional: one of outcomes, default succeeded",
+          "error": "optional: why the run did not succeed, at most 2000 characters, redacted",
+          "failureKind": "optional: whose failure a run that did not succeed was, one of maintenance.job.recovery.failureKinds; when it is not said, read off its error by the words of maintenance.job.recovery.infra, and content otherwise"
+        },
+        "outcomes": [
+          "succeeded",
+          "failed",
+          "truncated"
+        ],
         "who": "Maintenance sessions of the space, as the dossier route.",
         "rules": [
           "Only a succeeded run moves the cursor. A failed or truncated one moves nothing: it records the failure (consecutive_failures + 1, last_error, last_run_at) and is answered 200 with advanced false. orbit wiki maintain moves it earlier, by the same compare-and-set, once its ops are recorded (maintenance.job.run.steps, advance): what it reports here afterwards moves it no further.",
@@ -1028,7 +1532,12 @@
       "who": "Every maintenance session (maintenance.session), on the claim and on the reclaim a restarted runner rebuilds it from; no other session.",
       "field": "wikiMaintenance on the claimed or reclaimed session: { spaceId, workspaceId, provider, providerFallbacks, maxTurns, disallowedTools, cleanStart, refusal? }.",
       "maxTurns": 120,
-      "disallowedTools": ["Task", "Agent", "WebFetch", "WebSearch"],
+      "disallowedTools": [
+        "Task",
+        "Agent",
+        "WebFetch",
+        "WebSearch"
+      ],
       "providerFallbacks": [],
       "permissionMode": "dontAsk",
       "runtime": "claude",
@@ -1037,9 +1546,26 @@
       "capability": "wiki-maintenance-run/v1",
       "undeclared": "A runner that does not declare the capability (X-Orbit-Runner-Capabilities) is never handed a maintenance session: the claim does not offer it the row and the reclaim leaves it out, so the session waits for a runner that can start it clean.",
       "cleanStart": {
-        "flags": ["-p", "--bare", "--setting-sources ''", "--tools Bash", "--strict-mcp-config", "--mcp-config <the orbit server alone>", "--system-prompt <what a maintenance run does>", "--settings {apiKeyHelper}", "--max-turns 120", "--disallowedTools <disallowedTools and the built-in task tools>", "--permission-mode dontAsk", "--allowedTools <the orbit MCP tools below and the orbit wiki commands, by the CLI's path and bare (orbitCommand)>"],
+        "flags": [
+          "-p",
+          "--bare",
+          "--setting-sources ''",
+          "--tools Bash",
+          "--strict-mcp-config",
+          "--mcp-config <the orbit server alone>",
+          "--system-prompt <what a maintenance run does>",
+          "--settings {apiKeyHelper}",
+          "--max-turns 120",
+          "--disallowedTools <disallowedTools and the built-in task tools>",
+          "--permission-mode dontAsk",
+          "--allowedTools <the orbit MCP tools below and the orbit wiki commands, by the CLI's path and bare (orbitCommand)>"
+        ],
         "home": "HOME and CLAUDE_CONFIG_DIR are the session's own directories under the runner's scratch, empty but for onboarding when first made: no login, memory, settings or CLAUDE.md of the machine's reaches the engine, and the session's own transcript stays there for --resume.",
-        "mcpTools": ["task_get", "task_comment", "task_progress_report"],
+        "mcpTools": [
+          "task_get",
+          "task_comment",
+          "task_progress_report"
+        ],
         "auth": "apiKeyHelper prints ANTHROPIC_AUTH_TOKEN, which goes out as a bearer token: a bare run sends ANTHROPIC_API_KEY as x-api-key alone, which a local vLLM answers 401, so that variable is not handed to the engine at all.",
         "thinking": "Off: CLAUDE_CODE_EFFORT_LEVEL=unset and MAX_THINKING_TOKENS=0, whatever effort the workspace or the provider declares.",
         "orbitCommand": "The orbit wiki commands the platform pre-approves for every session, and no other command of the CLI, are pre-approved by the CLI's absolute path, quoted and (a path that is one shell word) unquoted, which the system prompt gives; and also as the bare `orbit wiki <command>` the task prompts write (maintenance.job.task, plan.jobs.task), when `orbit` on the PATH the engine is handed is the runner's own executable: the first executable file named orbit on that PATH is that same file, with no empty or relative directory before it, where a shell would look in the session's checkout. That PATH is the runner's own, with the executable's directory added at its end when that is what makes `orbit` on it the runner's own; when another orbit comes first, or an empty or relative directory does, it is left as it is and the bare form is not pre-approved, so a bare command is refused rather than run on another program. A command that names a PATH of its own, chains, pipes, substitutes or redirects is none of these rules. From 2026-10-01 to 10-03 every bare orbit wiki maintain was refused (16 of 16) and every one by the path ran (66 of 66); four runs failed on it.",
@@ -1048,7 +1574,7 @@
       },
       "bashTimeoutMs": 18000000,
       "bashCall": "Every maintenance session — a maintenance run, a plan job's draft, revision or build — makes one Bash call, the command its task names, and that call is the whole run. Its task's prompt (maintenance.job.task, plan.jobs.task) and the run's system prompt tell the model to give the call timeout bashTimeoutMs, never a shorter one: a timeout the call names wins over the default (cleanStart.bash), and on 2026-10-03 a run that gave 600000 was cut off at ten minutes, ran the command again with 1800000 and was cut off again. When the Bash tool comes back before the command has ended — it timed out, or was cut off — the command is not run again, with any timeout, and no retry is spent on it: the run reports what it printed up to there and ends, and what picks it up is the next run (a maintenance run's cursor), the owner's next request (a draft or a revision), or a later build that leaves the sections this one wrote as they are. That is not the one retry maintenance.job.recovery.inSession keeps for a run the command itself ended and says may be run again.",
-      "truncated":"A run whose opening prompt reaches maxTurns ends with the CLI's error_max_turns: its turn is FAILED, and the runner reports it on the cursor route as outcome truncated, one more of the space's consecutive failures, with the cursor no further than past the ops the run had recorded (maintenance.job.run.steps, advance) — where it was, when the run was cut short before that. A plan job's run reported so ends its job failed instead (plan.jobs), and the cursor is neither moved nor counted."
+      "truncated": "A run whose opening prompt reaches maxTurns ends with the CLI's error_max_turns: its turn is FAILED, and the runner reports it on the cursor route as outcome truncated, one more of the space's consecutive failures, with the cursor no further than past the ops the run had recorded (maintenance.job.run.steps, advance) — where it was, when the run was cut short before that. A plan job's run reported so ends its job failed instead (plan.jobs), and the cursor is neither moved nor counted."
     },
     "cli": {
       "dossier": "orbit wiki dossier --space <id> [--after <token>] [--limit N] [--json]",
@@ -1133,7 +1659,10 @@
       },
       "offTopic": "A session in the space's workspaces that is not about the space's repository yields no entry: the extraction prompt names the repository and what it is, and asks for {\"offTopic\": true} for such a session; and an entry whose code anchors none exist in the repository is dropped. Both are counted in the report (offTopic, entries.foreign).",
       "citation": {
-        "locator": ["start", "end"],
+        "locator": [
+          "start",
+          "end"
+        ],
         "rule": "A source an extracted entry cites is the record behind the line it names. Its quote, when the model gave one, is looked for in the words the line's spans hold, read as a quote is compared (backticks and asterisks aside, curly quotes straight, a run of whitespace one space): found in one span, the source carries the record's own words there — marks, quotes and spacing as the record has them, cut to limits.quoteMaxChars — as its quote, and where they are as its locator, code points of the record's redacted text. A quote no single span holds — the dossier's shorthand for the record, or words across a gap the dossier cut — and one holding words the redactor took out cite the record with no quote and no locator. A dossier from a server whose lines carry no spans keeps the line's words as the quote, and the self-check's dry run holds them to the record.",
         "strip": "A quote the server does not find is taken off its source with its locator, and the op checked again (run.steps, self-check)."
       },
@@ -1153,7 +1682,11 @@
           "proposalItemsMax": 12
         },
         "rulesNote": "proposalRoundsMax is the gate rounds a proposal has: the first, and two more with every error handed back to the model. proposalItemsMax is the most pieces of knowledge with no place one proposal is asked about: design documents first, then entries, newest first; the rest wait for the next run.",
-        "skipped": ["no_confirmed_plan", "no_server_support", "catching_up"],
+        "skipped": [
+          "no_confirmed_plan",
+          "no_server_support",
+          "catching_up"
+        ],
         "skippedNote": "no_confirmed_plan: the space has no plan its owner confirmed. no_server_support: the Orbit server predates GET …/maintenance/docs, so the run cannot tell which sections to write, and writes none. catching_up: the run was made while the space was behind (maintenance.job.catchUp.docs): it writes no section and proposes nothing, and the first run after the space has caught up takes up what changed meanwhile.",
         "report": "docs { planVersion, skipped?, repoSha, affected { byEntries, byRepo, stale, unwritten, total }, withdrawn { paths, sentences }, sections { written, unchanged, failed }, unplaced { designDocs, entries }, proposal: { outcome: proposed | failed, id, doc, newDoc, facts, rounds, reason, error } | null, tokens { input, output, calls }, seconds, error? } (WikiMaintenanceDocsReport): the step's own model calls and time are counted apart, and in the run's tokens too."
       },
@@ -1172,7 +1705,10 @@
           "rerunsMax": 1,
           "serverWaitMinutes": 15
         },
-        "failureKinds": ["infra", "content"],
+        "failureKinds": [
+          "infra",
+          "content"
+        ],
         "infra": "The platform under the run failed, not the run: its session ended runner offline, or its engine never came up (<provider> runtime not initialized, a turn that produced nothing), or the server answered 5xx or could not be reached, or the disk filled (No space left on device), or the provider was overloaded. Read off the latest session's end, or said by the run itself (cursor.advance's failureKind).",
         "content": "Every other failure: what the run read, what the model answered, an op the server refused, a turn limit, a session somebody stopped. A run that reports its failure without saying whose it was — a runner older than this field — is read off its error by the words of infra (a 5xx, a lost connection, a full disk), and is content otherwise.",
         "deadTask": "A task of the maintenance list that is OPEN or IN_PROGRESS while nothing can still work it: it has had a session, its latest session has ended, no session of it is PENDING, RUNNING, AWAITING_INPUT or INTERRUPTED, no session's own retry is armed, and no runAt waits for it. It holds the list no more.",
@@ -1192,7 +1728,10 @@
           "behindHours": 24,
           "pauseAfterFailures": 3
         },
-        "states": ["active", "paused"],
+        "states": [
+          "active",
+          "paused"
+        ],
         "behind": "A space is behind while the oldest fact after its cursor is older than rules.behindHours (wikiMaintenanceBehind), and behind no more once the cursor has passed every fact that old. It is read off the facts when a hint arrives, never waited for: no clock starts anything (hard constraint 5).",
         "paused": "While behind, catch-up pauses when the space's last rules.pauseAfterFailures runs that ended all failed — outcome failed or truncated, counted off the runs' own rows, so a run whose session died before it said how, closed by maintenance.job.recovery, counts too — and goes on with the next run that succeeds. A pause gives the day its limit back, and a run's end makes nothing.",
         "state": "Decided by the trigger when it makes a run, and kept on the run's row as catch_up: active — behind and not paused; paused — behind and paused; null — not behind, or a run of a task no trigger made. The run's context says it (catchUp).",
@@ -1219,6 +1758,41 @@
         "tool": "none: both are CLI only. maintain is a maintenance run's alone, and check is its task's acceptance command, which runs where there is no session.",
         "maintainPrecondition": "Run this only as a Wiki maintenance run of the space, once, and let it finish: it proposes as the space's maintenance run, and it moves the cursor only past the sessions whose ops it recorded — a run that failed or was cut short before that moves nothing, one that fails after it still ends failed, and one whose breaker held ops back stops it where their dossiers start.",
         "checkPrecondition": "Judge a maintenance run only by what this reads: it passes when the space's cursor reached the position the task expects and the server refused none of the run's ops, and a run cannot pass it by saying it finished."
+      },
+      "server": {
+        "phase": "server execution, P8",
+        "doc": "docs/wiki-contract.md section 19.6; docs/wiki-server-execution-design.md sections 5.1, 5.5 and 8",
+        "migration": "src/apiserver/prisma/migrations/0407_wiki_maintain_job/migration.sql",
+        "why": "The maintenance run moves off the runner for an account ORBIT_WIKI_EXECUTOR gives the server: the dossiers and the model calls happen in the wiki-worker with the System model, the runner is asked only for the repository (snapshot, read, diff, anchors), and no maintenance task and no session are made.",
+        "rules": {
+          "kind": "maintain",
+          "priority": "0: background work a fact made; the owner's own asks sort above it (jobs.priority)",
+          "steps": {
+            "extract": "extract",
+            "planProposal": "plan_proposal"
+          },
+          "extractMaxTokens": 8192,
+          "planMaxTokens": 32000,
+          "pageSessions": 5,
+          "opsPerChangeset": 30,
+          "opsPerTurn": 5,
+          "quoteMaxChars": 300,
+          "aboutMaxChars": 300,
+          "proposalRoundsMax": 3,
+          "proposalItemsMax": 12,
+          "repoWaitSeconds": 300,
+          "docsExcluded": [
+            "docs/mocks/",
+            "docs/evidence/"
+          ]
+        },
+        "trigger": "considerWikiMaintenance makes a wiki_job of kind maintain instead of a task when wikiExecutorServes holds for the owner (wiki-maintenance-run.ts, MaintenanceJobWriter). The reads that decide it are the trigger's own and unchanged — due, the day's runs, the room, the position — and no provider is consulted: the run calls the System model, and a space whose account holds no provider row can be turned on (space.settings.maintenance.channel). The run row is written with the job's id in the same transaction (wiki_maintenance_run_maker_chk), it names the list it would have used when one exists, and the hidden list itself is not required: a server-run space makes no task. All the same, an unfinished maintain job holds the space as an unended task held its list, and a plan job queued for the list still goes first.",
+        "identity": "A server run has no session, so the run is its wiki job: wiki_changeset.job_id (0407) names it, the circuit breaker counts the run's earlier changesets over it (maintenance.job.breaker, wikiMaintenanceRunChanges), the verification list finds its own ops through it (reviewModes.verification.who), and a plan proposal it files carries wiki_plan_proposal.author_job_id, with author_session_id null (plan.proposals.author). The principal is origin maintenance with no session and no user, as the documents' build job's is (docs.who.write).",
+        "door": "No session is handed the run's model work: the runner door's routes of a maintenance run — GET …/maintenance/run, GET …/spaces/:id/dossiers, POST …/maintenance/changesets, GET/POST …/maintenance/verifications, POST …/maintenance/advance and POST …/maintenance/finish — answer 409 WIKI_SERVER_EXECUTES for an account the server executes (RunnerWikiMaintainController, RunnerWikiMaintenanceController). The check route (GET …/maintenance/check) is not one of them: it is an acceptance command's read. Under runner nothing about either door changes.",
+        "skip": "A run made while the space was behind — its catch-up active or paused — skips the documents and the plan proposal whole, as the runner's does (maintenance.job.catchUp.docs).",
+        "articles": "Only a run that succeeded, recorded an op and was not made while the space was behind queues the space's articles job, through the same entry the runner path's end uses (queueWikiArticlesAfterRun, articles.regeneration).",
+        "failureKinds": "infra: the runner away or too old for a repository operation, a read or a snapshot past its wait or its limit, a request past its step's wait limit, the worker stopping. The run is not ended and nothing is counted: the job goes back to queued on the backoff (jobs.retry, §5.5). content: the model's answers that do not hold up, an op the server refuses after its dry run, a step's own error. The run ends failed through the finish route — the cursor advances as it rules and the space's consecutive failures go up by one, so three in a row tell the owner — and the job fails as content.",
+        "health": "The run rows are the count, never a task or a session (maintenance.job.catchUp.dailyLimit, maintenance.health): a run of a job is counted off its row, a run made in active catch-up whose localEndpoint is set is not counted, and no provider is read to decide it — the worker writes localEndpoint when it starts the run, from the System model's address."
       }
     },
     "health": {
@@ -1243,7 +1817,13 @@
         "lastRun": "The run that ended last, as {sessionId, outcome, endedAt}, or null: what View run opens. Beside them jobId (P9): the server's job that ran it, which has no session — View run then opens that run's row on Activity (jobs.read) instead of a session.",
         "lastFailure": "Of the runs whose latest attempt failed — outcome failed or truncated — the one that ended last, as {kind, reason, at, sessionId}: kind is its failureKind (maintenance.job.recovery.failureKinds), reason its error, at when it ended; null while no run's latest attempt failed. What a client tells the platform failing from the run failing by. Beside them jobId (P9), as lastRun's."
       },
-      "looks": ["off", "failing", "running", "behind", "ok"],
+      "looks": [
+        "off",
+        "failing",
+        "running",
+        "behind",
+        "ok"
+      ],
       "look": "The first that holds, in the order of looks: off — maintenance is off; failing — consecutiveFailures is more than 0; running — running is not null; behind — the oldest fact after the cursor is older than maintenance.rules.maxPendingAgeHours; ok — none of those (wikiMaintenanceLook).",
       "notify": {
         "afterFailures": 3,
@@ -1256,20 +1836,39 @@
       "systemModel": "While executor.serverExecutes holds, the System model as systemModel.read answers its state — { state, model, since, checkedAt, workerSeenAt }, never its address or key; null under runner, where the model is none of the account's business and is not read."
     }
   },
-
   "articles": {
     "phase": 2,
     "doc": "docs/wiki-contract.md section 18; design section 3 wiki_topic_summary and section 12.1",
     "migration": "src/apiserver/prisma/migrations/0317_wiki_topic_articles/migration.sql",
-    "tables": ["wiki_topic_summary"],
+    "tables": [
+      "wiki_topic_summary"
+    ],
     "means": "Each topic of a space has an article the local model wrote from the topic's active entries, every sentence footnoted to one of them; a topic with more entries than rules.splitAbove has an overview and subtopic articles instead. Articles are a view of the entries and a disposable cache (wiki_topic_summary): rewritten only when the topic's entry set changed, never pushed, never a source, and never returned by wiki_search or wiki_get.",
     "categories": [
-      { "key": "platform", "title": "Platform core" },
-      { "key": "runner", "title": "Runner & engines" },
-      { "key": "clients", "title": "Clients & UI" },
-      { "key": "data", "title": "Data & backend" },
-      { "key": "engineering", "title": "Engineering workflow" },
-      { "key": "collaboration", "title": "Collaboration" }
+      {
+        "key": "platform",
+        "title": "Platform core"
+      },
+      {
+        "key": "runner",
+        "title": "Runner & engines"
+      },
+      {
+        "key": "clients",
+        "title": "Clients & UI"
+      },
+      {
+        "key": "data",
+        "title": "Data & backend"
+      },
+      {
+        "key": "engineering",
+        "title": "Engineering workflow"
+      },
+      {
+        "key": "collaboration",
+        "title": "Collaboration"
+      }
     ],
     "categoriesNote": "The demo's six categories in the demo's order (平台核心, Runner 与引擎, 客户端与界面, 数据与后端, 工程流程, 协作), named in English as all UI copy is. wiki_topic.category is one of the keys, CHECKed; the directory lists the categories in this order.",
     "kinds": {
@@ -1289,7 +1888,14 @@
       "markdownMaxChars": 20000
     },
     "rulesNote": "An article's length is counted in characters (Unicode code points) of its kept sentences, footnote markers and headings left out: the demo's measure, whose articles averaged 1,052 against a 400-900 target. The writer aims inside the range and asks again once when a draft falls short of minChars; the server cuts what passes maxChars (validation.cap). splitAbove, groupTarget, groupsMax and groupMin are the writer's grouping (the demo's), entriesPerArticle the most entries one article is written from.",
-    "job": { "step": "articles", "priority": 0, "articleMaxTokens": 4096, "nameMaxTokens": 512, "parallel": 4, "snapshotWaitSeconds": 900 },
+    "job": {
+      "step": "articles",
+      "priority": 0,
+      "articleMaxTokens": 4096,
+      "nameMaxTokens": 512,
+      "parallel": 4,
+      "snapshotWaitSeconds": 900
+    },
     "jobNote": "The server's articles job (articles.serverExecution): step is the queue's step for every one of its calls, which gives them the default wait limit and call budget, 15 minutes each (modelQueue.waitLimit, modelQueue.callBudget); priority is background work (jobs.priority); articleMaxTokens is max_tokens of an article, overview or subtopic call — far above the 900 characters the server keeps — and nameMaxTokens of a group's name; parallel is how many of one topic's calls are in flight at once, the queue's own cap for one job; snapshotWaitSeconds is how long a job with no snapshot to name waits for the one it asked for.",
     "membership": {
       "entries": "A topic's entries are the space's active entries that no web-derived source tainted, each in exactly one topic.",
@@ -1363,36 +1969,321 @@
       "does": "Asks the plan for the topics whose entry set changed (--topic, one of them), reads each one's entries, groups a topic of more than rules.splitAbove entries into subtopics by their anchor paths and words, has the model name each group and write each article, and writes the topic's articles. It stops at the first 401 from the model's endpoint, and exits non-zero when any topic it took up was left unwritten. For an account the server runs the wiki for, the door answers WIKI_SERVER_EXECUTES (serverExecution.runnerDoor): it asks no model, says the Orbit server writes the articles, and exits 0."
     },
     "defaultTopics": [
-      { "slug": "sessions", "title": "会话", "category": "platform", "description": "Sessions: lifecycle, messages, turns, steer and interrupt, delivery, attachments, session merge and commit.", "pathPrefixes": ["src/apiserver/src/sessions/", "src/apiserver/src/attachments/", "src/apiserver/src/link-previews/", "src/apiserver/src/session-tags/", "docs/session-"] },
-      { "slug": "tasks", "title": "任务与派发", "category": "platform", "description": "Tasks and task lists: completion criteria, acceptance, dependencies, dispatch, retries, evidence.", "pathPrefixes": ["src/apiserver/src/tasks/", "src/apiserver/src/task-lists/", "docs/task-"] },
-      { "slug": "projects", "title": "项目与落地", "category": "platform", "description": "Projects and coordinators: the integration line, landing and promotion to main, blockers, open items, the outcome reconciler.", "pathPrefixes": ["src/apiserver/src/projects/", "src/apiserver/src/outcome-reconciler/", "src/apiserver/src/deadlock/", "scripts/outcome-reconciler", "scripts/project-", "docs/project-"] },
-      { "slug": "watches-wakeups", "title": "Watch 与唤醒", "category": "platform", "description": "Watches, scheduled wakeups, awaits and the notifications they send to sessions.", "pathPrefixes": ["src/apiserver/src/watches/", "contracts/watch", "docs/watch-"] },
-      { "slug": "wiki", "title": "Wiki", "category": "platform", "description": "The Orbit wiki itself: its contract, entries, review, maintenance and articles.", "pathPrefixes": ["src/apiserver/src/wiki/", "src/apiserver/src/runner-api/runner-wiki", "src/runner-go/wiki", "src/web/src/pages/Wiki", "src/web/src/components/Wiki", "src/web/src/lib/wiki", "src/macos/OrbitKit/Sources/OrbitKit/Models/Wiki", "src/macos/OrbitKit/Sources/OrbitKit/App/Wiki", "src/macos/OrbitKit/Tests/OrbitKitTests/Wiki", "src/macos/OrbitApp/Sources/OrbitApp/Wiki", "src/macos/OrbitApp/Sources/OrbitApp/Views/Wiki", "contracts/wiki", "docs/wiki", "docs/mocks/wiki", "scripts/wiki-"] },
-      { "slug": "runner", "title": "Runner", "category": "runner", "description": "The Go runner daemon: claim and lease, background jobs, self-update, process management, and the runner door.", "pathPrefixes": ["src/runner-go/", "src/apiserver/src/runner-api/", "src/apiserver/src/runners/"] },
-      { "slug": "engines-providers", "title": "引擎与模型提供方", "category": "runner", "description": "Coding engines and model providers: Claude Code, Codex, Kimi, OpenCode, vLLM, models, effort, quotas and rate limits.", "pathPrefixes": ["src/apiserver/src/providers/", "src/apiserver/src/agents/", "src/runner-go/claude", "src/runner-go/codex", "src/runner-go/kimi", "src/runner-go/opencode", "src/runner-go/provider", "src/runner-go/model", "src/runner-go/effort", "src/runner-go/deepseek", "src/runner-go/engine", "src/runner-go/planusage"] },
-      { "slug": "agent-tooling", "title": "Agent 工具与环境", "category": "runner", "description": "How agents work here: Bash tool quirks, MCP tools and the orbit CLI, subagents, context and the agents' memory.", "pathPrefixes": ["src/runner-go/mcp", "src/runner-go/agent_instructions", "src/runner-go/cli_", "src/runner-go/agent_cli", "src/runner-go/notify_cli", "src/runner-go/project_cli", "src/runner-go/session_cli", "src/runner-go/task_cli", "src/runner-go/token_cli", "src/runner-go/watch_cli"] },
-      { "slug": "web-client", "title": "Web 客户端", "category": "clients", "description": "The web client: React, antd, vitest, layout.", "pathPrefixes": ["src/web/"] },
-      { "slug": "apple-clients", "title": "iOS 与 macOS 客户端", "category": "clients", "description": "The iOS and macOS clients and OrbitKit: SwiftUI, Xcode, TestFlight builds.", "pathPrefixes": ["src/macos/", "src/ios/", "OrbitKit/", "OrbitApp/", "*.swift"] },
-      { "slug": "realtime-push", "title": "实时流与推送", "category": "clients", "description": "Realtime streams, server-sent events and push notifications.", "pathPrefixes": ["src/apiserver/src/realtime/", "src/apiserver/src/push/", "src/apiserver/src/events/", "docs/realtime-"] },
-      { "slug": "ui-design", "title": "UI 设计", "category": "clients", "description": "UI and UX design: mockups, screenshots, layout rules, the copy in the UI.", "pathPrefixes": ["docs/mocks/", "docs/ux/"] },
-      { "slug": "database", "title": "数据库与 Prisma", "category": "data", "description": "PostgreSQL and Prisma: schema, migrations, queries, performance, locks, backups, the write inventory.", "pathPrefixes": ["src/apiserver/prisma/", "prisma/", "src/apiserver/src/prisma/", "src/apiserver/src/common/db-write-inventory", "src/apiserver/src/common/transaction-retry", "src/apiserver/src/common/lock-order", "docs/postgres-", "docs/db-write-audit", "scripts/pg-", "scripts/sync-db-trigger-inventory", "*.sql", "*.prisma"] },
-      { "slug": "auth-workspaces", "title": "账号与工作区", "category": "data", "description": "Auth, users, accounts, workspaces, share links and permissions.", "pathPrefixes": ["src/apiserver/src/auth/", "src/apiserver/src/users/", "src/apiserver/src/share-links/", "src/apiserver/src/workspaces/", "docs/share-links-"] },
-      { "slug": "shared-contracts", "title": "共享包与契约", "category": "data", "description": "The shared package and the contracts: codecs, ids, protocol definitions.", "pathPrefixes": ["src/shared/", "contracts/", "src/apiserver/src/common/public-id"] },
-      { "slug": "security", "title": "安全与密钥", "category": "data", "description": "Secrets, keys, redaction and the handling of credentials.", "pathPrefixes": ["src/apiserver/src/common/secret", "docs/dependency-security"] },
-      { "slug": "git-worktrees", "title": "Git 与 worktree", "category": "engineering", "description": "Git and worktrees: branches, merges, rebases, cherry-picks, stash, worktree overlays and node_modules.", "pathPrefixes": ["src/runner-go/worktree", "src/runner-go/git", "src/runner-go/merge", "src/runner-go/integrate", "src/runner-go/repohealth", "scripts/worktree-overlay"] },
-      { "slug": "testing", "title": "测试", "category": "engineering", "description": "Tests: pg specs, node:test, vitest, go test, fixtures, flakes and acceptance scripts.", "pathPrefixes": ["scripts/run-pg-spec", "scripts/acceptance/", "scripts/pg-matrix-", "scripts/executable-acceptance-", "src/apiserver/src/test-support/", "test/", "*_test.go", "*.spec.ts", "*.test.ts", "*.test.tsx"] },
-      { "slug": "ci-release", "title": "CI 与发版", "category": "engineering", "description": "CI and releases: GitHub Actions, tags, versions, signing, notarization, TestFlight.", "pathPrefixes": [".github/", "scripts/ci/", "scripts/build-binaries", "scripts/runner-release", ".claude/skills/release/", "src/runner-go/selfupdate", "package.json", "package-lock.json"] },
-      { "slug": "deploy-ops", "title": "部署与运维", "category": "engineering", "description": "Deployment and the host: docker compose, upgrade, gateway, disk, memory, systemd, logs.", "pathPrefixes": ["docker-compose", "gateway/", ".claude/skills/upgrade/", "scripts/image-boot", "docs/self-hosting", "src/runner-go/hostd", "*Dockerfile"] },
-      { "slug": "observability", "title": "可观测性", "category": "engineering", "description": "Metrics, logs, dashboards and diagnosing production incidents.", "pathPrefixes": ["src/apiserver/src/metrics/", "src/apiserver/src/health/"] },
-      { "slug": "workflow-owner", "title": "与 owner 协作", "category": "collaboration", "description": "How the owner wants work done: communication, language, confirmations, scope, reporting.", "pathPrefixes": ["docs/human-only-authority", "CLAUDE.md", "AGENTS.md"] }
+      {
+        "slug": "sessions",
+        "title": "会话",
+        "category": "platform",
+        "description": "Sessions: lifecycle, messages, turns, steer and interrupt, delivery, attachments, session merge and commit.",
+        "pathPrefixes": [
+          "src/apiserver/src/sessions/",
+          "src/apiserver/src/attachments/",
+          "src/apiserver/src/link-previews/",
+          "src/apiserver/src/session-tags/",
+          "docs/session-"
+        ]
+      },
+      {
+        "slug": "tasks",
+        "title": "任务与派发",
+        "category": "platform",
+        "description": "Tasks and task lists: completion criteria, acceptance, dependencies, dispatch, retries, evidence.",
+        "pathPrefixes": [
+          "src/apiserver/src/tasks/",
+          "src/apiserver/src/task-lists/",
+          "docs/task-"
+        ]
+      },
+      {
+        "slug": "projects",
+        "title": "项目与落地",
+        "category": "platform",
+        "description": "Projects and coordinators: the integration line, landing and promotion to main, blockers, open items, the outcome reconciler.",
+        "pathPrefixes": [
+          "src/apiserver/src/projects/",
+          "src/apiserver/src/outcome-reconciler/",
+          "src/apiserver/src/deadlock/",
+          "scripts/outcome-reconciler",
+          "scripts/project-",
+          "docs/project-"
+        ]
+      },
+      {
+        "slug": "watches-wakeups",
+        "title": "Watch 与唤醒",
+        "category": "platform",
+        "description": "Watches, scheduled wakeups, awaits and the notifications they send to sessions.",
+        "pathPrefixes": [
+          "src/apiserver/src/watches/",
+          "contracts/watch",
+          "docs/watch-"
+        ]
+      },
+      {
+        "slug": "wiki",
+        "title": "Wiki",
+        "category": "platform",
+        "description": "The Orbit wiki itself: its contract, entries, review, maintenance and articles.",
+        "pathPrefixes": [
+          "src/apiserver/src/wiki/",
+          "src/apiserver/src/runner-api/runner-wiki",
+          "src/runner-go/wiki",
+          "src/web/src/pages/Wiki",
+          "src/web/src/components/Wiki",
+          "src/web/src/lib/wiki",
+          "src/macos/OrbitKit/Sources/OrbitKit/Models/Wiki",
+          "src/macos/OrbitKit/Sources/OrbitKit/App/Wiki",
+          "src/macos/OrbitKit/Tests/OrbitKitTests/Wiki",
+          "src/macos/OrbitApp/Sources/OrbitApp/Wiki",
+          "src/macos/OrbitApp/Sources/OrbitApp/Views/Wiki",
+          "contracts/wiki",
+          "docs/wiki",
+          "docs/mocks/wiki",
+          "scripts/wiki-"
+        ]
+      },
+      {
+        "slug": "runner",
+        "title": "Runner",
+        "category": "runner",
+        "description": "The Go runner daemon: claim and lease, background jobs, self-update, process management, and the runner door.",
+        "pathPrefixes": [
+          "src/runner-go/",
+          "src/apiserver/src/runner-api/",
+          "src/apiserver/src/runners/"
+        ]
+      },
+      {
+        "slug": "engines-providers",
+        "title": "引擎与模型提供方",
+        "category": "runner",
+        "description": "Coding engines and model providers: Claude Code, Codex, Kimi, OpenCode, vLLM, models, effort, quotas and rate limits.",
+        "pathPrefixes": [
+          "src/apiserver/src/providers/",
+          "src/apiserver/src/agents/",
+          "src/runner-go/claude",
+          "src/runner-go/codex",
+          "src/runner-go/kimi",
+          "src/runner-go/opencode",
+          "src/runner-go/provider",
+          "src/runner-go/model",
+          "src/runner-go/effort",
+          "src/runner-go/deepseek",
+          "src/runner-go/engine",
+          "src/runner-go/planusage"
+        ]
+      },
+      {
+        "slug": "agent-tooling",
+        "title": "Agent 工具与环境",
+        "category": "runner",
+        "description": "How agents work here: Bash tool quirks, MCP tools and the orbit CLI, subagents, context and the agents' memory.",
+        "pathPrefixes": [
+          "src/runner-go/mcp",
+          "src/runner-go/agent_instructions",
+          "src/runner-go/cli_",
+          "src/runner-go/agent_cli",
+          "src/runner-go/notify_cli",
+          "src/runner-go/project_cli",
+          "src/runner-go/session_cli",
+          "src/runner-go/task_cli",
+          "src/runner-go/token_cli",
+          "src/runner-go/watch_cli"
+        ]
+      },
+      {
+        "slug": "web-client",
+        "title": "Web 客户端",
+        "category": "clients",
+        "description": "The web client: React, antd, vitest, layout.",
+        "pathPrefixes": [
+          "src/web/"
+        ]
+      },
+      {
+        "slug": "apple-clients",
+        "title": "iOS 与 macOS 客户端",
+        "category": "clients",
+        "description": "The iOS and macOS clients and OrbitKit: SwiftUI, Xcode, TestFlight builds.",
+        "pathPrefixes": [
+          "src/macos/",
+          "src/ios/",
+          "OrbitKit/",
+          "OrbitApp/",
+          "*.swift"
+        ]
+      },
+      {
+        "slug": "realtime-push",
+        "title": "实时流与推送",
+        "category": "clients",
+        "description": "Realtime streams, server-sent events and push notifications.",
+        "pathPrefixes": [
+          "src/apiserver/src/realtime/",
+          "src/apiserver/src/push/",
+          "src/apiserver/src/events/",
+          "docs/realtime-"
+        ]
+      },
+      {
+        "slug": "ui-design",
+        "title": "UI 设计",
+        "category": "clients",
+        "description": "UI and UX design: mockups, screenshots, layout rules, the copy in the UI.",
+        "pathPrefixes": [
+          "docs/mocks/",
+          "docs/ux/"
+        ]
+      },
+      {
+        "slug": "database",
+        "title": "数据库与 Prisma",
+        "category": "data",
+        "description": "PostgreSQL and Prisma: schema, migrations, queries, performance, locks, backups, the write inventory.",
+        "pathPrefixes": [
+          "src/apiserver/prisma/",
+          "prisma/",
+          "src/apiserver/src/prisma/",
+          "src/apiserver/src/common/db-write-inventory",
+          "src/apiserver/src/common/transaction-retry",
+          "src/apiserver/src/common/lock-order",
+          "docs/postgres-",
+          "docs/db-write-audit",
+          "scripts/pg-",
+          "scripts/sync-db-trigger-inventory",
+          "*.sql",
+          "*.prisma"
+        ]
+      },
+      {
+        "slug": "auth-workspaces",
+        "title": "账号与工作区",
+        "category": "data",
+        "description": "Auth, users, accounts, workspaces, share links and permissions.",
+        "pathPrefixes": [
+          "src/apiserver/src/auth/",
+          "src/apiserver/src/users/",
+          "src/apiserver/src/share-links/",
+          "src/apiserver/src/workspaces/",
+          "docs/share-links-"
+        ]
+      },
+      {
+        "slug": "shared-contracts",
+        "title": "共享包与契约",
+        "category": "data",
+        "description": "The shared package and the contracts: codecs, ids, protocol definitions.",
+        "pathPrefixes": [
+          "src/shared/",
+          "contracts/",
+          "src/apiserver/src/common/public-id"
+        ]
+      },
+      {
+        "slug": "security",
+        "title": "安全与密钥",
+        "category": "data",
+        "description": "Secrets, keys, redaction and the handling of credentials.",
+        "pathPrefixes": [
+          "src/apiserver/src/common/secret",
+          "docs/dependency-security"
+        ]
+      },
+      {
+        "slug": "git-worktrees",
+        "title": "Git 与 worktree",
+        "category": "engineering",
+        "description": "Git and worktrees: branches, merges, rebases, cherry-picks, stash, worktree overlays and node_modules.",
+        "pathPrefixes": [
+          "src/runner-go/worktree",
+          "src/runner-go/git",
+          "src/runner-go/merge",
+          "src/runner-go/integrate",
+          "src/runner-go/repohealth",
+          "scripts/worktree-overlay"
+        ]
+      },
+      {
+        "slug": "testing",
+        "title": "测试",
+        "category": "engineering",
+        "description": "Tests: pg specs, node:test, vitest, go test, fixtures, flakes and acceptance scripts.",
+        "pathPrefixes": [
+          "scripts/run-pg-spec",
+          "scripts/acceptance/",
+          "scripts/pg-matrix-",
+          "scripts/executable-acceptance-",
+          "src/apiserver/src/test-support/",
+          "test/",
+          "*_test.go",
+          "*.spec.ts",
+          "*.test.ts",
+          "*.test.tsx"
+        ]
+      },
+      {
+        "slug": "ci-release",
+        "title": "CI 与发版",
+        "category": "engineering",
+        "description": "CI and releases: GitHub Actions, tags, versions, signing, notarization, TestFlight.",
+        "pathPrefixes": [
+          ".github/",
+          "scripts/ci/",
+          "scripts/build-binaries",
+          "scripts/runner-release",
+          ".claude/skills/release/",
+          "src/runner-go/selfupdate",
+          "package.json",
+          "package-lock.json"
+        ]
+      },
+      {
+        "slug": "deploy-ops",
+        "title": "部署与运维",
+        "category": "engineering",
+        "description": "Deployment and the host: docker compose, upgrade, gateway, disk, memory, systemd, logs.",
+        "pathPrefixes": [
+          "docker-compose",
+          "gateway/",
+          ".claude/skills/upgrade/",
+          "scripts/image-boot",
+          "docs/self-hosting",
+          "src/runner-go/hostd",
+          "*Dockerfile"
+        ]
+      },
+      {
+        "slug": "observability",
+        "title": "可观测性",
+        "category": "engineering",
+        "description": "Metrics, logs, dashboards and diagnosing production incidents.",
+        "pathPrefixes": [
+          "src/apiserver/src/metrics/",
+          "src/apiserver/src/health/"
+        ]
+      },
+      {
+        "slug": "workflow-owner",
+        "title": "与 owner 协作",
+        "category": "collaboration",
+        "description": "How the owner wants work done: communication, language, confirmations, scope, reporting.",
+        "pathPrefixes": [
+          "docs/human-only-authority",
+          "CLAUDE.md",
+          "AGENTS.md"
+        ]
+      }
     ]
   },
-
   "plan": {
     "phase": 2,
     "doc": "docs/wiki-contract.md section 21; criterion 11",
     "migration": "src/apiserver/prisma/migrations/0325_wiki_plan/migration.sql",
-    "tables": ["wiki_plan", "wiki_plan_doc", "wiki_plan_section", "wiki_plan_proposal"],
+    "tables": [
+      "wiki_plan",
+      "wiki_plan_doc",
+      "wiki_plan_section",
+      "wiki_plan_proposal"
+    ],
     "means": "Before a space's documents are written, the local model drafts a plan: categories, the documents in each, every document's reader, scope, length and outline, and for every section the conditions its material is taken by. The server's gate checks each draft; the owner confirms one; documents are written only from the version the owner confirmed (guard). A plan is a record of what the owner agreed to, kept in versions, and not knowledge: it is never pushed, never a source, and never returned by wiki_search or wiki_get.",
     "statuses": {
       "draft": "stored after the gate passed it, waiting for the owner; a space has at most one, and a newer draft supersedes it",
@@ -1437,22 +2328,88 @@
     },
     "rulesNote": "docsMin and docsMax are the document count a draft is held to when its request names no target; a request may name its own (target: { min, max }, orbit wiki plan draft --target), up to docsCeiling. Lengths are counted in characters (Unicode code points). errorsMax is the most errors one refusal lists; its message counts them all.",
     "schema": {
-      "draft": ["categories", "docs", "newFields"],
-      "category": ["key", "title", "question", "forAgents", "extra"],
-      "doc": ["category", "slug", "title", "question", "audience", "scopeIn", "scopeOut", "length", "protected", "sections", "extra"],
-      "scopeOut": ["text", "docs"],
-      "length": ["min", "max"],
-      "section": ["key", "title", "kind", "covers", "length", "sources", "extra"],
-      "sources": ["docs", "code", "contracts", "sessions"],
-      "docSource": ["path", "section"],
-      "codeSource": ["path", "symbols"],
-      "contractSource": ["path"],
-      "sessions": ["projects", "since", "until", "keywords", "anchorPaths", "entryKinds", "topics", "evidence"],
-      "newField": ["at", "name", "why"]
+      "draft": [
+        "categories",
+        "docs",
+        "newFields"
+      ],
+      "category": [
+        "key",
+        "title",
+        "question",
+        "forAgents",
+        "extra"
+      ],
+      "doc": [
+        "category",
+        "slug",
+        "title",
+        "question",
+        "audience",
+        "scopeIn",
+        "scopeOut",
+        "length",
+        "protected",
+        "sections",
+        "extra"
+      ],
+      "scopeOut": [
+        "text",
+        "docs"
+      ],
+      "length": [
+        "min",
+        "max"
+      ],
+      "section": [
+        "key",
+        "title",
+        "kind",
+        "covers",
+        "length",
+        "sources",
+        "extra"
+      ],
+      "sources": [
+        "docs",
+        "code",
+        "contracts",
+        "sessions"
+      ],
+      "docSource": [
+        "path",
+        "section"
+      ],
+      "codeSource": [
+        "path",
+        "symbols"
+      ],
+      "contractSource": [
+        "path"
+      ],
+      "sessions": [
+        "projects",
+        "since",
+        "until",
+        "keywords",
+        "anchorPaths",
+        "entryKinds",
+        "topics",
+        "evidence"
+      ],
+      "newField": [
+        "at",
+        "name",
+        "why"
+      ]
     },
     "schemaNote": "Every field a draft may carry, at each level, and no other. A draft's categories and docs are lists: a document names its category by key (a slug), and categories and documents are listed in the directory's order. A category needs key and title; a document every field but protected and extra, with audience, scopeIn and sections not empty; a section every field but key and extra. length is { min, max } for a document and one number for a section. A section's sources lists design-document sections ({ path, section }), code files with their symbols ({ path, symbols }) and contracts ({ path }); its session condition (sessions, or null) names projects (each by id or exact title), a time window (since and until, YYYY-MM-DD or null), keywords, anchor paths, entry kinds, topics (slugs of the space) and, in words, the original words to look for (evidence). A section's key is a slug, stable within its document from version to version: a section sent without one keeps the key its title had in the version revised, or is given the next s<n>.",
     "newFields": {
-      "levels": ["category", "doc", "section"],
+      "levels": [
+        "category",
+        "doc",
+        "section"
+      ],
       "rule": "A field the schema does not have is refused at the gate, unless the draft declares it in newFields ({ at, name, why }) as a field that needs adding, at category, doc or section; then its values go in that object's extra, by name, apart from the schema's own fields, and the version's gate report lists it (needsNewFields) for the owner to read. A declared name that is already a field of the schema is refused, and so is a name in extra that newFields does not declare. An owner's edit and a proposal may use the fields the version they change declared, and declare none."
     },
     "versions": "Every draft, edit and accepted proposal is a new version, numbered after every version the space has had and written in one transaction under the space row's lock (FOR NO KEY UPDATE); a version's documents and sections are only ever inserted, and the one row of a version ever updated is its own wiki_plan row, when it is confirmed or superseded. So a confirmed version never changes: what the owner confirmed is, byte for byte, what the documents are written from. Each version names the version it revises (baseVersion) and, for an accepted proposal, the proposal. A draft or an edit names the version it is built on (baseVersion; null for a space's first draft), which must be the space's newest version that is not superseded — its draft when it has one, else its confirmed version; one built on another is refused WIKI_PLAN_STALE and nothing is written — unless it is a draft landing again under the idempotency key it was stored with (plan.idempotency). An acceptance is built on the newest version as it finds it, and is refused the same way when the plan moves while it is written.",
@@ -1465,7 +2422,12 @@
       "runner": "The drafting job derives the key from its job and session and the draft it sends, so a draft sent again carries its key and another draft another; a draft under a key is sent again through a transient failure (wikiRecordsOnce), and one without is sent once."
     },
     "gate": {
-      "checks": ["schema", "docCount", "protected", "references"],
+      "checks": [
+        "schema",
+        "docCount",
+        "protected",
+        "references"
+      ],
       "schema": "Every field is one the schema has at its level (schema), or one declared as needing adding (newFields), of the right type and within rules; a section's kind is one of sectionKinds; category keys, document slugs and a document's section keys are unique.",
       "docCount": "The plan has target.min to target.max documents: rules.docsMin to rules.docsMax unless the request names its own target.",
       "protected": "A document the revised version protects is in the new version exactly as it was: the same slug, category and fields, and the same sections in the same order (their keys aside). Only the owner protects a document, so a draft or a proposal that protects one is refused. The owner's own edit is not checked: protecting is theirs.",
@@ -1482,11 +2444,19 @@
         "accepted": "the owner accepted it: its document was applied to the plan's newest version and made a new draft (resultVersion) for the owner to confirm",
         "rejected": "the owner rejected it; the plan is as it was"
       },
-      "actions": ["accept", "reject"],
-      "factKinds": ["entry", "session", "commit"],
+      "actions": [
+        "accept",
+        "reject"
+      ],
+      "factKinds": [
+        "entry",
+        "session",
+        "commit"
+      ],
       "factKindsNote": "A fact is an entry of the space, a session of the owner, or — for a design document that landed on origin/main and that no section cites — the commit that added it, named by its full sha (40 hex characters). The server has no checkout: it holds a commit to its shape, and the maintenance run found it on origin/main.",
       "accept": "Applies the document to the plan's newest version — in place of the document of its slug, or after the last document of its category — and gates the result again, protection included, since the plan may have moved since it was proposed: a result the gate refuses is WIKI_PLAN_GATE and the proposal stays pending. Otherwise the new draft and the proposal's settling are one transaction.",
-      "reject": "Settles the proposal, with the owner's note if there is one; no version changes."
+      "reject": "Settles the proposal, with the owner's note if there is one; no version changes.",
+      "author": "Who filed it (migration 0407): a maintenance session (author_session_id), or the server's maintenance run (author_job_id) when the wiki worker proposed it — exactly one, held by wiki_plan_proposal_author_chk. An owner's decision on the proposal is neither: decided_by_user_id is on the row beside them."
     },
     "guard": "requireConfirmedPlan(db, { ownerId, spaceId }) in src/apiserver/src/wiki/wiki-plan.ts: the space's confirmed version ({ id, version, confirmedAt }), or WIKI_PLAN_UNCONFIRMED. Every writer of a space's documents calls it before it writes one, so no document is written from a plan the owner did not confirm; a maintenance run's proposal needs it too.",
     "who": {
@@ -1524,7 +2494,9 @@
       "doc": "docs/wiki-contract.md sections 21.7 to 21.9; criterion 11",
       "migration": "src/apiserver/prisma/migrations/0338_wiki_plan_job/migration.sql",
       "buildMigration": "src/apiserver/prisma/migrations/0340_wiki_maintenance_docs/migration.sql",
-      "tables": ["wiki_plan_job"],
+      "tables": [
+        "wiki_plan_job"
+      ],
       "means": "A space's plan is drafted, revised and built by jobs the server runs as tasks of the space's hidden Wiki maintenance list (maintenance.list), so the session that runs one is a maintenance session (isWikiMaintenanceSession) and the plan's runner door is open to it and to nothing else. A fact asks for a job — the space's creation, or its owner — never a clock.",
       "kinds": {
         "draft": "orbit wiki plan draft: a whole plan drafted from the repository at origin/main and what the space already knows, keeping every document the version it revises protects",
@@ -1535,7 +2507,12 @@
         "space_created": "the space was created: through POST /api/wiki/spaces, or on the first proposal of a session whose workspace's repository had no space yet",
         "owner": "the owner asked on the plan page: for a draft or a revision, POST /api/wiki/spaces/:id/plan/redraft; for a build, by confirming a version, POST /api/wiki/spaces/:id/plan/versions/:version/confirm"
       },
-      "storedStates": ["queued", "held", "made", "ended"],
+      "storedStates": [
+        "queued",
+        "held",
+        "made",
+        "ended"
+      ],
       "states": {
         "queued": "the space's maintenance list has a task that has not ended; the job is made when a task of the owner's ends, before the next maintenance run (staggered)",
         "held": "the space's maintenance names no workspace, or a provider no run could start on (held.reason); the job is made when the owner's next change to the maintenance settings, or their next request, finds that settled",
@@ -1544,7 +2521,10 @@
         "failed": "its run ended without one — errors are the gate's on its last round — or its task ended before the run said how it went"
       },
       "held": {
-        "reasons": ["no_maintenance_workspace", "maintenance_provider_unusable"],
+        "reasons": [
+          "no_maintenance_workspace",
+          "maintenance_provider_unusable"
+        ],
         "where": "wiki_plan_job.held_reason and held_at, served as the job's held: { reason, at }, or null. Written when a job is not made for one of the reasons, keeping the time the reason first held, as maintenance.job.held is on the cursor; cleared when its task is made.",
         "no_maintenance_workspace": "settings.maintenance.workspaceId names no workspace of the owner's: a draft runs where maintenance runs.",
         "maintenance_provider_unusable": "settings.maintenance.provider is one no maintenance run could start on (wikiMaintenanceProviderProblem): missing, turned off, or not on the Claude Code runtime."
@@ -1682,14 +2662,18 @@
       }
     }
   },
-
   "docs": {
     "phase": 2,
     "doc": "docs/wiki-contract.md section 22; criterion 9 (revised 2026-09-28)",
     "migration": "src/apiserver/prisma/migrations/0326_wiki_docs/migration.sql",
     "dispositionsMigration": "src/apiserver/prisma/migrations/0337_wiki_doc_dispositions/migration.sql",
     "withdrawalMigration": "src/apiserver/prisma/migrations/0340_wiki_maintenance_docs/migration.sql",
-    "tables": ["wiki_doc", "wiki_doc_section", "wiki_doc_sentence", "wiki_doc_footnote"],
+    "tables": [
+      "wiki_doc",
+      "wiki_doc_section",
+      "wiki_doc_sentence",
+      "wiki_doc_footnote"
+    ],
     "means": "A space's documents, written section by section from the plan its owner confirmed (plan.guard): a document is a plan document, named by its slug, and a section a plan section, named by its key. Every footnote points at a first-hand original — a design-document section, code or a contract at a commit, or one of Orbit's own records — with its verbatim quote, and the entry it was found through is kept as the via entry: an entry is the way in, never the source. What each sentence is, and how each footnote was checked, is stored sentence by sentence. A document is a view for people: never pushed, never a source, and never returned by wiki_search or wiki_get. The topic articles (articles, wiki_topic_summary) stay, readable as they are, until the clients have moved to the documents.",
     "statuses": {
       "ok": "no more than rules.needsReviewAbove of its sentences are unsourced or unverified",
@@ -1716,8 +2700,22 @@
       "merge_receipt": "a merge receipt, by its id",
       "note": "a file orbit wiki import registered, by its id"
     },
-    "repoKinds": ["design_doc", "code", "contract"],
-    "recordKinds": ["turn", "event", "tool_call", "task", "task_comment", "approval", "owner_decision", "merge_receipt", "note"],
+    "repoKinds": [
+      "design_doc",
+      "code",
+      "contract"
+    ],
+    "recordKinds": [
+      "turn",
+      "event",
+      "tool_call",
+      "task",
+      "task_comment",
+      "approval",
+      "owner_decision",
+      "merge_receipt",
+      "note"
+    ],
     "verdicts": {
       "verified": "the quote is in the original",
       "not_found": "the quote is not in the original; a quote shorter than rules.quoteMinChars once folded is not checked, and is not found either",
@@ -1728,7 +2726,13 @@
       "server": "a record's footnote: the server read the record again and checked the quote itself",
       "runner": "a repository footnote: the runner checked the quote at sha, in the checkout the server does not have"
     },
-    "withdrawReasons": ["rejected", "retired", "superseded", "anchor_changed", "anchor_missing"],
+    "withdrawReasons": [
+      "rejected",
+      "retired",
+      "superseded",
+      "anchor_changed",
+      "anchor_missing"
+    ],
     "blockKinds": {
       "paragraph": "a paragraph, cut into sentences",
       "item": "a list item, cut into sentences",
@@ -1750,13 +2754,54 @@
     },
     "rulesNote": "Lengths are counted in characters (Unicode code points). needsReviewAbove is a share of all the document's sentences, withdrawn ones included: more than it marks the whole document, and exactly 5% does not. quoteMinChars counts the folded quote (verification.normalization). sectionsPerWrite is plan.rules.sectionsMax, so one write can carry a whole document. errorsMax is the most errors one refusal lists; its message counts them all. dispositionsPerSection is the most pieces of material one section's ledger lists (dispositions), and reasonMaxChars the longest reason one of them gives.",
     "schema": {
-      "write": ["planVersion", "repoSha", "model", "sections"],
-      "section": ["key", "materialSha256", "markdown", "footnotes", "dispositions"],
-      "repoFootnote": ["kind", "path", "sha", "lines", "section", "symbol", "quote", "excerpt", "verified", "viaEntryId"],
-      "recordFootnote": ["kind", "ref", "chars", "quote", "viaEntryId"],
-      "lines": ["start", "end"],
-      "chars": ["start", "end"],
-      "disposition": ["material", "kind", "ref", "action", "into", "reason"]
+      "write": [
+        "planVersion",
+        "repoSha",
+        "model",
+        "sections"
+      ],
+      "section": [
+        "key",
+        "materialSha256",
+        "markdown",
+        "footnotes",
+        "dispositions"
+      ],
+      "repoFootnote": [
+        "kind",
+        "path",
+        "sha",
+        "lines",
+        "section",
+        "symbol",
+        "quote",
+        "excerpt",
+        "verified",
+        "viaEntryId"
+      ],
+      "recordFootnote": [
+        "kind",
+        "ref",
+        "chars",
+        "quote",
+        "viaEntryId"
+      ],
+      "lines": [
+        "start",
+        "end"
+      ],
+      "chars": [
+        "start",
+        "end"
+      ],
+      "disposition": [
+        "material",
+        "kind",
+        "ref",
+        "action",
+        "into",
+        "reason"
+      ]
     },
     "schemaNote": "Every field a write may carry, at each level, and no other: anything else is refused WIKI_DOC_INVALID. planVersion, repoSha (the origin/main commit the run read the repository at, 40 lowercase hex) and sections are required; model is not. A section needs key (a section of the confirmed plan's document, once per write), materialSha256 (64 lowercase hex), markdown (not blank, at most rules.markdownMaxChars) and footnotes (at most rules.footnotesPerSection, and may be empty). A repository footnote (repoKinds) needs path, sha (7-64 lowercase hex: one with no sha is refused), lines { start, end } (1-based, inclusive) and verified, the runner's own check; section, symbol, quote, excerpt and viaEntryId are optional. A record footnote (recordKinds) needs ref, the record's id; chars { start, end } (code points of the record's redacted text, end exclusive), quote and viaEntryId are optional. viaEntryId, when given, is an entry of the space. A quote is at most rules.quoteMaxChars; null or left out is no quote. A section's dispositions (optional; at most rules.dispositionsPerSection) are its material's ledger (dispositions): each names the material by the id the runner gave it (material, at most 16 characters), its kind (a repoKind or a recordKind), where it is (ref: a repository path with its lines, path#Lstart-end, or a record's id), what became of it (action, one of dispositionActions), the material it was merged into (into: required for merge, null otherwise) and why (reason, not blank, at most rules.reasonMaxChars).",
     "dispositionActions": {
@@ -1899,7 +2944,6 @@
     },
     "tool": "none: no MCP tool reads or writes a document. Writing is a maintenance run's verb on the CLI; reading is the owner's, in the Wiki."
   },
-
   "systemModel": {
     "phase": "server execution, P1a",
     "doc": "docs/wiki-contract.md section 23; docs/wiki-server-execution-design.md sections 2.1, 4.1, 4.5, 5.3 and 6",
@@ -1936,7 +2980,13 @@
         "content-type": "application/json"
       },
       "body": "{model, max_tokens, system, messages: [one user message], stream: true}. Every call gives its max_tokens explicitly; no tools are sent and thinking is not turned on.",
-      "events": ["message_start", "content_block_delta", "message_delta", "message_stop", "error"],
+      "events": [
+        "message_start",
+        "content_block_delta",
+        "message_delta",
+        "message_stop",
+        "error"
+      ],
       "eventRules": "The answer is the text of the text_delta deltas, in order. message_start carries the model and the first usage, message_delta the stop reason and the usage so far. A call has ended only at message_stop: a stream that closes before it is a dropped connection. ping, content_block_start, content_block_stop and any event not named here are read past.",
       "usage": "inputTokens and outputTokens are the last values the stream reported: message_delta's, else message_start's.",
       "idleTimeoutSeconds": 300,
@@ -1952,8 +3002,13 @@
     "health": {
       "route": "GET {baseUrl}/health",
       "headers": "authorization and anthropic-version, as a call sends them.",
-      "upStatuses": [200, 404],
-      "authFailedStatuses": [401],
+      "upStatuses": [
+        200,
+        404
+      ],
+      "authFailedStatuses": [
+        401
+      ],
       "intervalSeconds": 10,
       "timeoutSeconds": 5,
       "rule": "An answer in upStatuses is up and one in authFailedStatuses auth_failed; any other status, no answer within timeoutSeconds, or no connection is down. Probed every intervalSeconds while configured, and each probe writes the state and the heartbeat together."
@@ -1962,8 +3017,20 @@
       "table": "wiki_model_status",
       "migration": "src/apiserver/prisma/migrations/0400_wiki_model_status/migration.sql",
       "row": "Exactly one, id 1, written by the worker alone with INSERT ... ON CONFLICT (id) DO UPDATE. The apiserver only reads it.",
-      "columns": ["state", "model", "since", "last_error", "checked_at", "worker_seen_at"],
-      "states": ["up", "down", "auth_failed", "unconfigured"],
+      "columns": [
+        "state",
+        "model",
+        "since",
+        "last_error",
+        "checked_at",
+        "worker_seen_at"
+      ],
+      "states": [
+        "up",
+        "down",
+        "auth_failed",
+        "unconfigured"
+      ],
       "meaning": {
         "up": "The probe answered one of health.upStatuses.",
         "down": "The probe got no answer, or another status. Requests are not taken while down (modelQueue.pause); the probe goes on, and the next up resumes them.",
@@ -1979,8 +3046,21 @@
     "read": {
       "route": "GET /api/wiki/system-model",
       "who": "Any account the wiki is on for (JwtAuthGuard and WikiRolloutGuard; a personal access token needs wiki:read): it is the deployment's model, not a space's. It writes nothing.",
-      "states": ["up", "down", "auth_failed", "unconfigured", "worker_not_running"],
-      "fields": ["state", "model", "since", "checkedAt", "workerSeenAt", "executor"],
+      "states": [
+        "up",
+        "down",
+        "auth_failed",
+        "unconfigured",
+        "worker_not_running"
+      ],
+      "fields": [
+        "state",
+        "model",
+        "since",
+        "checkedAt",
+        "workerSeenAt",
+        "executor"
+      ],
       "workerNotRunning": "No row, or a workerSeenAt older than status.workerStaleSeconds, reads as worker_not_running: what the settings page and the health line show as wiki worker not running. since is then the last heartbeat.",
       "executor": "The executor switch as it stands for the caller (jobs.executor.read, P9): { mode, serverExecutes } — what the wiki settings page reads to draw the System model instead of the provider. The other five fields are the deployment's and read the same for every account.",
       "never": "The System model's address, its key, and last_error: the read says the model's name and its state, and nothing else."
@@ -1995,15 +3075,45 @@
       }
     }
   },
-
   "jobs": {
     "phase": "server execution, P1b",
     "doc": "docs/wiki-contract.md section 24; docs/wiki-server-execution-design.md sections 5.1, 5.4 and 10",
     "why": "The wiki's pipelines move off the runner's maintenance sessions onto the server (design section 0). A unit of that work is a job: the server makes one, a wiki-worker claims it, and the model calls it makes go through the persisted request queue (modelQueue). At this phase the table, the claim, the lease, the retry and the executor switch are the contract; the seven pipeline kinds arrive with the phases that implement them (P3 to P8), and the one kind that runs today is `smoke`.",
     "table": "wiki_job",
     "migration": "src/apiserver/prisma/migrations/0401_wiki_job/migration.sql",
-    "columns": ["id", "owner_id", "space_id", "kind", "input", "priority", "state", "waiting_for", "attempts", "next_attempt_at", "lease_owner", "lease_generation", "lease_deadline_at", "progress", "report", "error", "failure_kind", "created_at", "updated_at", "started_at", "ended_at"],
-    "kinds": ["verify", "articles", "import", "plan_draft", "plan_revise", "docs_build", "maintain", "smoke"],
+    "columns": [
+      "id",
+      "owner_id",
+      "space_id",
+      "kind",
+      "input",
+      "priority",
+      "state",
+      "waiting_for",
+      "attempts",
+      "next_attempt_at",
+      "lease_owner",
+      "lease_generation",
+      "lease_deadline_at",
+      "progress",
+      "report",
+      "error",
+      "failure_kind",
+      "created_at",
+      "updated_at",
+      "started_at",
+      "ended_at"
+    ],
+    "kinds": [
+      "verify",
+      "articles",
+      "import",
+      "plan_draft",
+      "plan_revise",
+      "docs_build",
+      "maintain",
+      "smoke"
+    ],
     "kindRuns": {
       "articles": "The server's articles writer (P4, articles.serverExecution): orbit wiki articles done by the wiki worker with the System model. Its input is {}; it is made after a maintenance run of the space by the rule articles.regeneration states, at priority 0 (articles.job). It reads the plan, takes up the topics whose fingerprint changed, groups a big topic as the runner does, has the model name the groups and write the articles through the queue — step articles, a unit per topic, fingerprint and part — and writes them through WikiArticles.write. Its ref is the space's snapshot's sha, asked for once and parked on when there is none (repoOps.waiting). It succeeds when every topic it took up is written or unchanged, and fails as content, its report on the row, when one was left unwritten.",
       "smoke": "One model call, its answer and usage written into the job's report: the shortest route through the queue, and P1's end-to-end proof that claim, call, write-back and settle work together. It runs no pipeline and reads nothing; its input is { system?, prompt?, maxTokens? }, each with a default. A kind whose phase has not landed stays queued — the claim takes only the kinds the worker's build runs — so no deployment is handed work it would have to fail.",
@@ -2011,12 +3121,26 @@
       "verify": "The server's verifier (P3, design section 8 and agentSurface.verify.serverExecution): the ops an Automatic space holds back, verified by the wiki worker with the System model in place of the session's own provider. Its input is { sessionId } — the session whose waiting ops it verifies, which is the identity a verdict has to be reported under — and it runs the runner's verifier step by step: read reviewModes.verification.list for that session (rules.verificationListMax at a time, the server's own evidence reader), build the one-op prompt with the entries numbered E1..En (agentSurface.verify.prompt), ask the System model through the queue — one request per op, step verify, unit the op's id, so a replayed job reuses the answers it holds — and report each verdict through WikiService.recordVerifications, the one writer, as soon as it is read. An answer that is not a verdict is reported as nothing and counted in the report ({ looked, verified, supported, partial, unsupported, duplicate, failed, failures[{opId, why, refused}], stopped, usage }); the job still succeeds, because the ops that got verdicts are its result, and those left without one keep waiting. A space that is no longer automatic ends the pass where it stands (verification.notAutomatic), and a call whose request ends in a way that is not the platform's (the queue's own classes) is that op's failure, not the pass's. The two passes a maintenance run makes and the adoption of ended sessions' ops (verification.adoption) are arguments of the same function, P8's to call.",
       "plan_draft": "A draft of the space's plan on the server (P6, plan.jobs.server): the four steps of plan.jobs.run — the catalogue, each category's details, each document's outline, the rules' draft — through the queue, gated on the space's snapshot and by the plan's gate, three rounds at most; stored as a version the wiki_job authored. Its input is { planJobId }; its report is { kind, planJobId, outcome, version, error, plan: plan.jobs.report }. Made by advanceWikiPlanJob for a draft the space's creation or its owner asked for, at plan.jobs.server.priority.",
       "plan_revise": "A revision of the space's plan on the server (P6, plan.jobs.server): plan.jobs.run.revise through the queue — the new catalogue with what each document is made from and the conventions it moves, then the documents that merge or are new — gated as plan_draft is. Its input and report are plan_draft's; the owner's instructions are the plan job's own. Made by advanceWikiPlanJob for the owner's redraft with instructions.",
-      "docs_build": "The documents' build on the server (P7, docs.build.server): what orbit wiki docs build did in a build job's session, done by the wiki-worker with the System model. Made by the owner's confirmation of a plan version for an account the server runs, instead of the build's task (plan.jobs.server), at docs.build.server.priority; its input is { planJobId }. It reads the repository at a snapshot's commit through the space's runner, the records through the material read, writes each section through the docs write route's writer, says how far it got and how it ended on its plan job, and fails as content when a section was left unwritten."
+      "docs_build": "The documents' build on the server (P7, docs.build.server): what orbit wiki docs build did in a build job's session, done by the wiki-worker with the System model. Made by the owner's confirmation of a plan version for an account the server runs, instead of the build's task (plan.jobs.server), at docs.build.server.priority; its input is { planJobId }. It reads the repository at a snapshot's commit through the space's runner, the records through the material read, writes each section through the docs write route's writer, says how far it got and how it ended on its plan job, and fails as content when a section was left unwritten.",
+      "maintain": "A space's Wiki maintenance run on the server (P8, maintenance.job.server): what a task's session ran with `orbit wiki maintain` until P10, done by the wiki-worker with the deployment's System model and the space's snapshot. Its input is { runId } — the wiki_maintenance_run the trigger made beside it, which carries why the run was made, how far it must read and how the space stood — and the job executes exactly that run: the dossiers through WikiMaintenance.dossierPage, one request per dossier through the queue (step extract, unit the session's id, at most rules.extractConcurrency in flight), the checks and the one retry of wiki-maintain.ts, the dry run and then the batches of at most limits.opsPerChangeset ops with the run's own breaker (wiki-maintain-job.ts), the cursor advance through WikiMaintenance.advanceRecorded, its own ops verified twice and then up to rules.adoptOpsMax adopted (P3's verifyWikiOps with a maintenance-job principal), the anchors as one wiki_repo_op, and the documents' step (maintenance.job.docs) with P7's writer and P6's plan gate. It reports maintenance.job.report plus the token spend, and its end queues the articles a successful run owes (articles.regeneration). A failure of the platform is thrown as infra and the job is tried again without counting against the space; a failure of the work ends the run (outcome failed, the space's streak one higher) and the job fails as content (§5.5)."
     },
-    "states": ["queued", "running", "waiting", "succeeded", "failed", "cancelled"],
-    "waitingFor": ["repo", "model"],
+    "states": [
+      "queued",
+      "running",
+      "waiting",
+      "succeeded",
+      "failed",
+      "cancelled"
+    ],
+    "waitingFor": [
+      "repo",
+      "model"
+    ],
     "waitingRule": "Nothing writes `waiting` yet: this phase's worker keeps a job running while its model request waits, and the request's wait limit is what ends it. The transitions that park a job — on a repo operation (P2), or on the model being away — arrive with the phases that need them, and a waiting row holds no lease (the CHECK above).",
-    "failureKinds": ["infra", "content"],
+    "failureKinds": [
+      "infra",
+      "content"
+    ],
     "lease": {
       "seconds": 60,
       "renewSeconds": 20,
@@ -2028,7 +3152,11 @@
     "onePerSpace": "At most one job per space runs at a time (design section 5.1, the hidden list's maxConcurrent 1): the claim skips a space whose job is running, and a partial unique index over space_id WHERE state = 'running' is the same rule in the database, for two schedulers that read at once. A job that is waiting (waiting_for set) holds no lease and does not occupy the space.",
     "priority": "Integer, default 0. Owner-initiated work — a plan draft, a review, a build, an import from the command line — is made with a higher priority than background maintenance, and the claim takes the highest first; within one priority, the longest-waiting job first. A verify job is made with 1: the session that proposed the op is waiting for it, and the space knows nothing of what was proposed until the verdict arrives; the pass a maintenance run makes over what ended sessions left waiting (verification.adoption, P8) is background work at 0.",
     "retry": {
-      "backoffSeconds": [0, 10, 30],
+      "backoffSeconds": [
+        0,
+        10,
+        30
+      ],
       "rule": "An infra failure puts the job back to queued with attempts one higher and next_attempt_at now plus backoffSeconds[attempts], the same schedule the queue's calls use. A content failure ends it: state failed, failure_kind content, ended_at set. attempts counts the infra retries of the job's own row."
     },
     "concurrencyPerWorker": 4,
@@ -2037,8 +3165,15 @@
     "make": "The pipelines enqueue a job as a row (kind, input, priority, state queued) when the executor switch says the server runs for that account. The phases that move each pipeline add their own route or trigger: since P3 a submission that recorded an op an Automatic space holds back (reviewModes.verification.waits) makes a verify job for the session that proposed it, after its own transaction commits, at the waiting priority (priority above) — and so does the owner reopening ops a verdict should not have decided (verification.reopen), whose sessions are usually long gone — with one queued job per session and space, since a job reads the ops that wait when it runs (a later submission rides it, while an op arriving mid-run gets a job of its own); since P5 the runner door's import-jobs route makes an `import` job (import.server.create); since P4 an articles job is also made, where the server records the end of a maintenance run of an account it runs, by the rule articles.regeneration states (articles.serverExecution.made); since P6 a plan job of the account is made as a `plan_draft` or `plan_revise` job (plan.jobs.server.make); since P7 the owner's confirmation of a plan version makes a docs_build job for an account the server runs, in place of the build's task (docs.build.server.made); and smoke is made by the specs directly.",
     "progress": "A job's progress column is its own pipeline's to write (a step, a count, what it is doing), under its lease generation; report is what it ends with. The smoke job writes a report; the import job writes both (import.server.progress, import.server.report); the articles job writes its report (articles.serverExecution.ends), and so does the verify job (jobs.kindRuns.verify); the plan jobs write both (plan.jobs.server.progress, plan.jobs.server.finish), and so does the docs_build job (docs.build.server.progress, docs.build.server.end).",
     "executor": {
-      "env": { "mode": "ORBIT_WIKI_EXECUTOR", "canaryOwners": "ORBIT_WIKI_EXECUTOR_CANARY_OWNERS" },
-      "modes": ["runner", "canary", "server"],
+      "env": {
+        "mode": "ORBIT_WIKI_EXECUTOR",
+        "canaryOwners": "ORBIT_WIKI_EXECUTOR_CANARY_OWNERS"
+      },
+      "modes": [
+        "runner",
+        "canary",
+        "server"
+      ],
       "default": "runner",
       "rules": {
         "runner": "The old path only: maintenance sessions and their tasks run the pipelines, and no worker claims or executes a wiki job. Nothing about today's behavior changes.",
@@ -2049,7 +3184,10 @@
       "whoReadsIt": "One pure function (src/apiserver/src/wiki/wiki-executor-switch.ts, shaped after wiki-rollout.ts) is read by the apiserver and by the wiki-worker, so both answer the same about an account. The variables reach a service the way the model's do — compose passes them from the deployment's .env to both the apiserver and the wiki-worker (P3 wired them; test/compose-topology.test.mjs pins the two lines, and src/apiserver/src/wiki/wiki-compose-env.spec.ts holds them to names no agent session carries), and unset everywhere reads as runner. Setting the switch is the account owner's: production stays runner until P10.",
       "read": {
         "phase": "server execution, P9",
-        "fields": ["mode", "serverExecutes"],
+        "fields": [
+          "mode",
+          "serverExecutes"
+        ],
         "rule": "What a read tells the account that asks (wikiExecutorView): mode is the deployment's switch, one of modes, and serverExecutes whether the server executes this account's wiki — mode server, or canary with the account on its list. Never the list itself, nor whether any other account is on it.",
         "readBy": "systemModel.read (executor) and maintenance.health (executor): the clients draw the server's settings, the Runs card and the status line's server reasons while serverExecutes holds, and under runner — or from a control plane that predates the field — exactly what they drew before."
       }
@@ -2065,9 +3203,31 @@
       "route": "GET /api/wiki/spaces/:id/jobs",
       "who": "The space's owner on the user door (JwtAuthGuard and WikiRolloutGuard; a personal access token needs wiki:read): another account's space is the plain 404. It writes nothing.",
       "why": "A server run has no task and no session to open (design section 2.2): what it is doing — its step, its calls, where they wait — is on Activity, and this read is what the Runs card and a run's page draw.",
-      "limits": { "jobs": 10, "callsPerJob": 40 },
+      "limits": {
+        "jobs": 10,
+        "callsPerJob": 40
+      },
       "answer": "{ spaceId, jobs }: the space's newest limits.jobs rows of wiki_job, newest first by created_at.",
-      "job": ["id", "kind", "state", "waitingFor", "priority", "attempts", "createdAt", "updatedAt", "startedAt", "endedAt", "nextAttemptAt", "failureKind", "error", "ahead", "progress", "calls", "nextCall", "requests"],
+      "job": [
+        "id",
+        "kind",
+        "state",
+        "waitingFor",
+        "priority",
+        "attempts",
+        "createdAt",
+        "updatedAt",
+        "startedAt",
+        "endedAt",
+        "nextAttemptAt",
+        "failureKind",
+        "error",
+        "ahead",
+        "progress",
+        "calls",
+        "nextCall",
+        "requests"
+      ],
       "jobRules": {
         "ahead": "While the job is queued: how many queued jobs of the deployment the claim takes before it (priority DESC, created_at, id — lease.claim's order); null in every other state.",
         "progress": "The pipeline's own progress (jobs.progress) as { step, done, total }: done and total as the pipeline wrote them, or for the import's shape (import.server.progress) the notes read or failed against the notes it was handed; null when the pipeline wrote none.",
@@ -2075,7 +3235,23 @@
         "nextCall": "Of its queued calls, the one the queue reaches first: { ahead, enqueuedAt }, ahead counted as request.ahead is; null while none waits.",
         "requests": "Its newest limits.callsPerJob calls by enqueued_at, given oldest first; calls.total counts the ones left out."
       },
-      "request": ["id", "step", "unit", "attempt", "attempts", "state", "enqueuedAt", "startedAt", "endedAt", "inputTokens", "outputTokens", "httpStatus", "error", "errorKind", "ahead"],
+      "request": [
+        "id",
+        "step",
+        "unit",
+        "attempt",
+        "attempts",
+        "state",
+        "enqueuedAt",
+        "startedAt",
+        "endedAt",
+        "inputTokens",
+        "outputTokens",
+        "httpStatus",
+        "error",
+        "errorKind",
+        "ahead"
+      ],
       "requestRules": {
         "ahead": "While the call is queued: how many queued requests of the deployment the queue takes before it (priority DESC, enqueued_at, id — modelQueue.concurrency.claim's order), whoever they are for; null in every other state.",
         "times": "How long a call waited is from enqueuedAt to startedAt (or to now while it is queued), and how long it ran from startedAt to endedAt (or to now while it runs); startedAt is its first claim's, so a retry's time is the call's own."
@@ -2083,17 +3259,49 @@
       "never": "A call's request (system prompt, prompt, max_tokens), its request_sha256, answer and partial; the lease columns of either table; the job's input and report; whose the runs and calls ahead in a queue are; and the System model's address or key, which no row of either table holds (systemModel.request.errors: the queue's words name neither)."
     }
   },
-
   "modelQueue": {
     "phase": "server execution, P1b",
     "doc": "docs/wiki-contract.md section 25; docs/wiki-server-execution-design.md sections 5.2, 5.4, 5.5 and 6",
     "why": "All of the wiki's model calls go through one persisted queue, so that a deployment's System model answers at most ORBIT_WIKI_MODEL_CONCURRENCY requests at once whatever the pipelines were doing when a worker died (design section 0). The row is also the breakpoint: a pipeline replayed after a restart reuses the answer a finished call holds instead of issuing it again.",
     "table": "wiki_model_request",
     "migration": "src/apiserver/prisma/migrations/0401_wiki_job/migration.sql",
-    "columns": ["id", "job_id", "owner_id", "space_id", "step", "unit", "attempt", "attempts", "priority", "request", "request_sha256", "state", "lease_owner", "lease_generation", "lease_deadline_at", "enqueued_at", "not_before", "started_at", "ended_at", "answer", "partial", "input_tokens", "output_tokens", "http_status", "error", "error_kind"],
+    "columns": [
+      "id",
+      "job_id",
+      "owner_id",
+      "space_id",
+      "step",
+      "unit",
+      "attempt",
+      "attempts",
+      "priority",
+      "request",
+      "request_sha256",
+      "state",
+      "lease_owner",
+      "lease_generation",
+      "lease_deadline_at",
+      "enqueued_at",
+      "not_before",
+      "started_at",
+      "ended_at",
+      "answer",
+      "partial",
+      "input_tokens",
+      "output_tokens",
+      "http_status",
+      "error",
+      "error_kind"
+    ],
     "identity": "(job_id, step, unit, attempt) is unique, and the pair (step, unit) is the call's own address inside its job: enqueuing it again MEETS the row it already has rather than making a second call. `attempt` is which attempt of that unit the row is (a genuine redo moves to the next), and `attempts` is how many times this row has been tried — a lease that ran out and a retry each count one, and the backoff reads it.",
     "request": "{ system, prompt, maxTokens } — the call exactly as the client sends it, and its sha256, so the same unit twice with a different call can be told from the same call replayed.",
-    "states": ["queued", "running", "succeeded", "failed", "cancelled"],
+    "states": [
+      "queued",
+      "running",
+      "succeeded",
+      "failed",
+      "cancelled"
+    ],
     "concurrency": {
       "env": "ORBIT_WIKI_MODEL_CONCURRENCY",
       "default": 4,
@@ -2111,18 +3319,30 @@
       "answer": "A succeeded row's answer is written once, by the claim that owned it: an answer that arrives after the lease was taken over is dropped, and the takeover issues the call again."
     },
     "retry": {
-      "backoffSeconds": [0, 10, 30],
+      "backoffSeconds": [
+        0,
+        10,
+        30
+      ],
       "rule": "5xx, 429 and connection failures class retryable: the row goes back to queued, attempts one higher, not_before now plus backoffSeconds[attempts − 1] (0, then 10 s, then 30 s and every one after it). Nothing else is retried: the call's own budget running out, an answer that is not an event stream and an unclassified error end the request (state failed, error_kind other) and the job reads it.",
       "unauthorized": "A 401 (and an authentication_error event) is its own case: the request goes back to the queue — it is the deployment's key to fix, not the work's to lose — and the worker reports the refusal to the model's state, which turns auth_failed and stops the queue (pause)."
     },
     "waitLimit": {
       "defaultSeconds": 900,
-      "byStep": { "extract": 180, "docs": 180, "import": 600, "plan": 1200 },
+      "byStep": {
+        "extract": 180,
+        "docs": 180,
+        "import": 600,
+        "plan": 1200
+      },
       "rule": "How long a request may wait from its enqueue before it fails, by its step (the step's own name or one of its stages: extract*, docs*, import*, plan*). A request that waits past it ends failed with error_kind other and the wait limit's words; the job that made it reads that and fails as infra, so a model that is away for an hour ends a run rather than hanging it forever. The clock is the row's enqueued_at: a retry does not start it over."
     },
     "callBudget": {
       "defaultSeconds": 900,
-      "byStep": { "docs": 1200, "plan": 3600 },
+      "byStep": {
+        "docs": 1200,
+        "plan": 3600
+      },
       "rule": "One call's own budget, by step (design section 6): the call is disconnected when it runs out, and is also disconnected after the contract's idleTimeoutSeconds without a byte (systemModel.request)."
     },
     "pause": {
@@ -2153,7 +3373,6 @@
       }
     }
   },
-
   "repoOps": {
     "phase": "server execution, P2",
     "doc": "docs/wiki-contract.md section 26; docs/wiki-server-execution-design.md sections 4.3 and 7",
@@ -2161,15 +3380,45 @@
     "capability": "wiki-repo-op/v1",
     "table": "wiki_repo_op",
     "migration": "src/apiserver/prisma/migrations/0402_wiki_repo_op/migration.sql",
-    "columns": ["id", "job_id", "owner_id", "space_id", "workspace_id", "runner_id", "kind", "input", "state", "lease_owner", "claim_generation", "claimed_at", "heartbeat_at", "result", "error", "created_at", "updated_at", "ended_at"],
-    "kinds": ["snapshot", "read", "diff", "anchors"],
+    "columns": [
+      "id",
+      "job_id",
+      "owner_id",
+      "space_id",
+      "workspace_id",
+      "runner_id",
+      "kind",
+      "input",
+      "state",
+      "lease_owner",
+      "claim_generation",
+      "claimed_at",
+      "heartbeat_at",
+      "result",
+      "error",
+      "created_at",
+      "updated_at",
+      "ended_at"
+    ],
+    "kinds": [
+      "snapshot",
+      "read",
+      "diff",
+      "anchors"
+    ],
     "kindRuns": {
       "snapshot": "Everything the server asks of one commit at once: fetch origin/main, resolve the sha, and build the index the pipelines query — every path with its size, every document's title and headings, every source file's symbols, the commits reachable from origin/main, and the README's first paragraph. A sha the server already holds is not sent again (`input.skipSha`). Above `fragments.inlineBytes` it travels in fragments.",
       "read": "The text of named paths at a named sha, bounded: one design-document section is `read.docSectionChars` and one contract file `read.contractChars`, an item may ask for at most `read.sectionChars`, and one request answers `read.sectionChars` in all — one section's material. A footnote's whole-file read is its own case, with its own limit (`read.wholeFileChars`).",
       "diff": "`git diff --name-status -M` between two commits, and the design documents the range added or copied (`--diff-filter=AR -- docs/`) — what a maintenance run looks for.",
       "anchors": "The anchor checks a maintenance run already makes (`src/runner-go/wiki_anchors.go`), reused: a path exists, a symbol's region hashes as it is held to, a commit is reachable from the snapshot's commit set."
     },
-    "states": ["queued", "running", "succeeded", "failed", "cancelled"],
+    "states": [
+      "queued",
+      "running",
+      "succeeded",
+      "failed",
+      "cancelled"
+    ],
     "dispatch": {
       "perHeartbeat": 2,
       "claim": "One statement per heartbeat: UPDATE wiki_repo_op … FROM (SELECT … JOIN workspace w ON w.id = o.workspace_id WHERE w.runner_id = this runner AND (state = 'queued' OR (state = 'running' AND heartbeat_at < now - staleSeconds AND lease_owner IS DISTINCT FROM this process)) ORDER BY created_at, id LIMIT n FOR UPDATE SKIP LOCKED) — every claimed row a new claim_generation.",
@@ -2182,45 +3431,211 @@
       "progress": "POST /runner/wiki/repo-ops/:id/progress — the heartbeat renewal that keeps a long operation from being taken over.",
       "fragments": "POST /runner/wiki/repo-ops/:id/fragments — one call per fragment, fenced the same way, staged on the operation until its result arrives."
     },
-    "fragments": { "inlineBytes": 4194304, "fragmentBytes": 2097152, "maxSnapshotBytes": 67108864, "why": "The API's request body is capped at 10 MB (src/apiserver/src/main.ts) and a plan's repository index is larger than that (design section 4.3). A snapshot that fits travels inside the result; one that does not is uploaded in fragments and reassembled — by sha256, and by the byte count the result names — before it becomes the space's snapshot." },
+    "fragments": {
+      "inlineBytes": 4194304,
+      "fragmentBytes": 2097152,
+      "maxSnapshotBytes": 67108864,
+      "why": "The API's request body is capped at 10 MB (src/apiserver/src/main.ts) and a plan's repository index is larger than that (design section 4.3). A snapshot that fits travels inside the result; one that does not is uploaded in fragments and reassembled — by sha256, and by the byte count the result names — before it becomes the space's snapshot."
+    },
     "cache": {
-      "tables": ["wiki_repo_snapshot", "wiki_repo_snapshot_fragment"],
+      "tables": [
+        "wiki_repo_snapshot",
+        "wiki_repo_snapshot_fragment"
+      ],
       "perSpace": "One snapshot per space, replaced whole when a newer one lands: the index and the fragments it is kept in. Owner-scoped like everything else, and deleted with the space (the composite foreign key into wiki_space).",
       "visibility": "The owner's and nobody else's: no route returns it, and what reaches the System model reaches it through the same redactor the notes go through (design section 9)."
     },
-    "read": { "docSectionChars": 4200, "contractChars": 2500, "sectionChars": 22000, "wholeFileChars": 22000 },
-    "looks": ["ready", "no_workspace", "runner_missing", "runner_offline", "runner_upgrade"],
+    "read": {
+      "docSectionChars": 4200,
+      "contractChars": 2500,
+      "sectionChars": 22000,
+      "wholeFileChars": 22000
+    },
+    "looks": [
+      "ready",
+      "no_workspace",
+      "runner_missing",
+      "runner_offline",
+      "runner_upgrade"
+    ],
     "safety": "An operation checks its checkout before it reads it: the repository's origin URL must be the space's `repo.urlNorm` and the checkout's root commit must be the space's `rootCommitSha`. Otherwise it fails, says which repository it found, and reads nothing.",
     "waiting": "A job that needs a repository operation is parked (wiki_job state waiting, waiting_for 'repo', no lease) and woken by a NOTIFY on the wiki_repo_op channel when the operation settles. A runner that has not declared `wiki-repo-op/v1` is handed nothing: the operation stays queued, the job stays parked until its wait limit, and the space's health line says the runner has to be upgraded. The import's snapshot (import.server.snapshot) is the exception: it is waited for holding the job's lease, a bounded wait with a fallback, so a runner that is away costs the import its fresh anchors and never the run. The documents' build (docs.build.server.repository) waits for its snapshot and its reads the same way, each bounded by docs.build.server.repoWaitSeconds: they are many and short, and a job parked on each would replay the build each time; one past its limit fails the attempt as infra."
   },
-
   "refusals": [
-    { "code": "WIKI_DISABLED", "httpStatus": 404, "scope": "request", "when": "The wiki is off for this account (ORBIT_WIKI rollout)." },
-    { "code": "WIKI_SPACE_UNBOUND", "httpStatus": 409, "scope": "request", "when": "The calling session's workspace is bound to no space and could not be bound on first use. The message says in one sentence how the owner binds it." },
-    { "code": "WIKI_SCHEMA", "httpStatus": 400, "scope": "op", "when": "The op, its entry, its anchors or its sources do not have the shape this contract gives them: a kind's fields (KIND_SPECS), a limit, a phase-3 kind, an amend of a decision, a baseRevision where one is required or forbidden, a source ref of a kind in sourceInput.rowIdKinds that is neither spelling of an id. errors[] names every field that failed." },
-    { "code": "WIKI_KIND_OWNER_ONLY", "httpStatus": 403, "scope": "op", "when": "A non-owner op adds, amends or supersedes a kind only the owner writes (kinds.<kind>.ownerOnlyOps)." },
-    { "code": "WIKI_SOURCE_UNRESOLVED", "httpStatus": 422, "scope": "op", "when": "A source does not resolve among the owner's own rows (errors[] names it by its path), cites a wiki entry or view, or an op that must cite a source cites none." },
-    { "code": "WIKI_QUOTE_NOT_FOUND", "httpStatus": 422, "scope": "op", "when": "A quote, whitespace-normalized, is not a substring of the text of the record it cites." },
-    { "code": "WIKI_REVISION_CONFLICT", "httpStatus": 409, "scope": "op", "when": "An amend, supersede or retire names a baseRevision that is not the entry's current revision. The answer carries the current revision and a diff." },
-    { "code": "WIKI_QUOTA", "httpStatus": 429, "scope": "op", "when": "The op is past limits.opsPerChangeset in its request; or it would wait for the owner and pass limits.opsPerTurn for the request or limits.opsPerSession for the calling session (limitNotes.quota); or the review mode would apply it and the changeset would pass the circuit breaker (reviewModes.floors)." },
-    { "code": "WIKI_REVIEW_QUEUE_FULL", "httpStatus": 429, "scope": "op", "when": "The op would wait for review and the space already has limits.pendingOpsPerSpace pending ops that wait on the owner's decision (spot checks and ops waiting for their verification not counted)." },
-    { "code": "WIKI_PROBE_REFUSED", "httpStatus": 422, "scope": "op", "when": "The title or text reads as a tool probe (test, probe, TEST_WRITE_CHECK). The message says the tool works and not to retry." },
-    { "code": "WIKI_OWNER_CHANNEL_ONLY", "httpStatus": 403, "scope": "request", "when": "A decide, a revert, an entry's Reject or Confirm, a reopening of verifications, a change of the review mode or of automaticSpotChecks, or any request of the plan's on the user door (plan.who.owner) arrived with a session header, whatever the session's role: each is the owner's, on the user door, with no acting session." },
-    { "code": "WIKI_NOT_MAINTENANCE_SESSION", "httpStatus": 403, "scope": "request", "phase": 2, "when": "A maintenance-only route was called by a session that is not a maintenance run of that space." },
-    { "code": "WIKI_SESSION_EXCLUDED", "httpStatus": 403, "scope": "request", "addedByThisContract": true, "when": "The calling session verifies, forems or judges work (task.verifiesTaskId, task.isForeman, a judgment session). Knowledge is not evidence, so such a session neither reads nor proposes." },
-    { "code": "WIKI_IDEMPOTENCY_KEY_REUSED", "httpStatus": 409, "scope": "request", "addedByThisContract": true, "when": "An idempotency key the owner already used arrived with a different request (its normalized digest differs). The same request under the same key is a replay and gets the recorded answer." },
-    { "code": "WIKI_CURSOR_BEHIND", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A succeeded run asked to advance the cursor to a token behind the space's watermark: another run already went further, and the cursor only moves forward (maintenance.cursor.advance). The answer carries the cursor as it stands." },
-    { "code": "WIKI_CURSOR_INVALID", "httpStatus": 400, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A cursor token that no dossier page of this space handed out: one that does not decode, one of another space, or a position past the furthest page the space's dossier route has issued." },
-    { "code": "WIKI_ARTICLE_STALE", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "An article write named an entry-set fingerprint that is not its topic's current one: the topic's entries changed while the articles were being written (articles.regeneration). Nothing is written; the next run writes them from the entries as they stand." },
-    { "code": "WIKI_SERVER_EXECUTES", "httpStatus": 409, "scope": "request", "phase": "server execution", "addedByThisContract": true, "when": "This account's pipeline is executed by the server (jobs.executor: ORBIT_WIKI_EXECUTOR=server, or canary with the account on its list): the runner door no longer hands a session that pipeline's material, nor accepts what a session's own model wrote for it — the wiki worker runs it with the System model, so no session's provider is asked. Nothing is read or written. Under the default runner nothing answers it." },
-    { "code": "WIKI_PLAN_GATE", "httpStatus": 422, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A plan draft, an owner's edit of the plan, a proposed change to it or the acceptance of one did not pass the plan's gate (plan.gate): errors[] lists everything it found, each with its check and where it is. Nothing is stored." },
-    { "code": "WIKI_PLAN_STALE", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A plan request was built on a version that is no longer the space's newest (plan.versions), confirmed a version that is no longer a draft, or answered a proposal already decided. Nothing is written; read the plan again." },
-    { "code": "WIKI_PLAN_UNCONFIRMED", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A space's documents were to be written, or a change proposed to its plan, and the space has no plan its owner confirmed (plan.guard)." },
-    { "code": "WIKI_PLAN_NO_JOB", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A maintenance run asked for, or reported on, a job of the space's plan, and its task was made for none, or the job has ended — its run said how, or its task ended first (plan.jobs.who.runner). Nothing is written." },
-    { "code": "WIKI_DOC_INVALID", "httpStatus": 422, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A document write does not have the shape docs.schema gives it: a field it does not name, a repository footnote with no sha or no lines, a record footnote with no id, a section the confirmed plan's document does not have, a via entry that is not an entry of the space. errors[] lists everything it found, each { path, message }, the first docs.rules.errorsMax. Nothing is written." }
+    {
+      "code": "WIKI_DISABLED",
+      "httpStatus": 404,
+      "scope": "request",
+      "when": "The wiki is off for this account (ORBIT_WIKI rollout)."
+    },
+    {
+      "code": "WIKI_SPACE_UNBOUND",
+      "httpStatus": 409,
+      "scope": "request",
+      "when": "The calling session's workspace is bound to no space and could not be bound on first use. The message says in one sentence how the owner binds it."
+    },
+    {
+      "code": "WIKI_SCHEMA",
+      "httpStatus": 400,
+      "scope": "op",
+      "when": "The op, its entry, its anchors or its sources do not have the shape this contract gives them: a kind's fields (KIND_SPECS), a limit, a phase-3 kind, an amend of a decision, a baseRevision where one is required or forbidden, a source ref of a kind in sourceInput.rowIdKinds that is neither spelling of an id. errors[] names every field that failed."
+    },
+    {
+      "code": "WIKI_KIND_OWNER_ONLY",
+      "httpStatus": 403,
+      "scope": "op",
+      "when": "A non-owner op adds, amends or supersedes a kind only the owner writes (kinds.<kind>.ownerOnlyOps)."
+    },
+    {
+      "code": "WIKI_SOURCE_UNRESOLVED",
+      "httpStatus": 422,
+      "scope": "op",
+      "when": "A source does not resolve among the owner's own rows (errors[] names it by its path), cites a wiki entry or view, or an op that must cite a source cites none."
+    },
+    {
+      "code": "WIKI_QUOTE_NOT_FOUND",
+      "httpStatus": 422,
+      "scope": "op",
+      "when": "A quote, whitespace-normalized, is not a substring of the text of the record it cites."
+    },
+    {
+      "code": "WIKI_REVISION_CONFLICT",
+      "httpStatus": 409,
+      "scope": "op",
+      "when": "An amend, supersede or retire names a baseRevision that is not the entry's current revision. The answer carries the current revision and a diff."
+    },
+    {
+      "code": "WIKI_QUOTA",
+      "httpStatus": 429,
+      "scope": "op",
+      "when": "The op is past limits.opsPerChangeset in its request; or it would wait for the owner and pass limits.opsPerTurn for the request or limits.opsPerSession for the calling session (limitNotes.quota); or the review mode would apply it and the changeset would pass the circuit breaker (reviewModes.floors)."
+    },
+    {
+      "code": "WIKI_REVIEW_QUEUE_FULL",
+      "httpStatus": 429,
+      "scope": "op",
+      "when": "The op would wait for review and the space already has limits.pendingOpsPerSpace pending ops that wait on the owner's decision (spot checks and ops waiting for their verification not counted)."
+    },
+    {
+      "code": "WIKI_PROBE_REFUSED",
+      "httpStatus": 422,
+      "scope": "op",
+      "when": "The title or text reads as a tool probe (test, probe, TEST_WRITE_CHECK). The message says the tool works and not to retry."
+    },
+    {
+      "code": "WIKI_OWNER_CHANNEL_ONLY",
+      "httpStatus": 403,
+      "scope": "request",
+      "when": "A decide, a revert, an entry's Reject or Confirm, a reopening of verifications, a change of the review mode or of automaticSpotChecks, or any request of the plan's on the user door (plan.who.owner) arrived with a session header, whatever the session's role: each is the owner's, on the user door, with no acting session."
+    },
+    {
+      "code": "WIKI_NOT_MAINTENANCE_SESSION",
+      "httpStatus": 403,
+      "scope": "request",
+      "phase": 2,
+      "when": "A maintenance-only route was called by a session that is not a maintenance run of that space."
+    },
+    {
+      "code": "WIKI_SESSION_EXCLUDED",
+      "httpStatus": 403,
+      "scope": "request",
+      "addedByThisContract": true,
+      "when": "The calling session verifies, forems or judges work (task.verifiesTaskId, task.isForeman, a judgment session). Knowledge is not evidence, so such a session neither reads nor proposes."
+    },
+    {
+      "code": "WIKI_IDEMPOTENCY_KEY_REUSED",
+      "httpStatus": 409,
+      "scope": "request",
+      "addedByThisContract": true,
+      "when": "An idempotency key the owner already used arrived with a different request (its normalized digest differs). The same request under the same key is a replay and gets the recorded answer."
+    },
+    {
+      "code": "WIKI_CURSOR_BEHIND",
+      "httpStatus": 409,
+      "scope": "request",
+      "phase": 2,
+      "addedByThisContract": true,
+      "when": "A succeeded run asked to advance the cursor to a token behind the space's watermark: another run already went further, and the cursor only moves forward (maintenance.cursor.advance). The answer carries the cursor as it stands."
+    },
+    {
+      "code": "WIKI_CURSOR_INVALID",
+      "httpStatus": 400,
+      "scope": "request",
+      "phase": 2,
+      "addedByThisContract": true,
+      "when": "A cursor token that no dossier page of this space handed out: one that does not decode, one of another space, or a position past the furthest page the space's dossier route has issued."
+    },
+    {
+      "code": "WIKI_ARTICLE_STALE",
+      "httpStatus": 409,
+      "scope": "request",
+      "phase": 2,
+      "addedByThisContract": true,
+      "when": "An article write named an entry-set fingerprint that is not its topic's current one: the topic's entries changed while the articles were being written (articles.regeneration). Nothing is written; the next run writes them from the entries as they stand."
+    },
+    {
+      "code": "WIKI_SERVER_EXECUTES",
+      "httpStatus": 409,
+      "scope": "request",
+      "phase": "server execution",
+      "addedByThisContract": true,
+      "when": "This account's pipeline is executed by the server (jobs.executor: ORBIT_WIKI_EXECUTOR=server, or canary with the account on its list): the runner door no longer hands a session that pipeline's material, nor accepts what a session's own model wrote for it — the wiki worker runs it with the System model, so no session's provider is asked. Nothing is read or written. Under the default runner nothing answers it."
+    },
+    {
+      "code": "WIKI_PLAN_GATE",
+      "httpStatus": 422,
+      "scope": "request",
+      "phase": 2,
+      "addedByThisContract": true,
+      "when": "A plan draft, an owner's edit of the plan, a proposed change to it or the acceptance of one did not pass the plan's gate (plan.gate): errors[] lists everything it found, each with its check and where it is. Nothing is stored."
+    },
+    {
+      "code": "WIKI_PLAN_STALE",
+      "httpStatus": 409,
+      "scope": "request",
+      "phase": 2,
+      "addedByThisContract": true,
+      "when": "A plan request was built on a version that is no longer the space's newest (plan.versions), confirmed a version that is no longer a draft, or answered a proposal already decided. Nothing is written; read the plan again."
+    },
+    {
+      "code": "WIKI_PLAN_UNCONFIRMED",
+      "httpStatus": 409,
+      "scope": "request",
+      "phase": 2,
+      "addedByThisContract": true,
+      "when": "A space's documents were to be written, or a change proposed to its plan, and the space has no plan its owner confirmed (plan.guard)."
+    },
+    {
+      "code": "WIKI_PLAN_NO_JOB",
+      "httpStatus": 409,
+      "scope": "request",
+      "phase": 2,
+      "addedByThisContract": true,
+      "when": "A maintenance run asked for, or reported on, a job of the space's plan, and its task was made for none, or the job has ended — its run said how, or its task ended first (plan.jobs.who.runner). Nothing is written."
+    },
+    {
+      "code": "WIKI_DOC_INVALID",
+      "httpStatus": 422,
+      "scope": "request",
+      "phase": 2,
+      "addedByThisContract": true,
+      "when": "A document write does not have the shape docs.schema gives it: a field it does not name, a repository footnote with no sha or no lines, a record footnote with no id, a section the confirmed plan's document does not have, a via entry that is not an entry of the space. errors[] lists everything it found, each { path, message }, the first docs.rules.errorsMax. Nothing is written."
+    }
   ],
   "refusalRules": {
-    "order": ["changesetSize", "schema", "ownerOnlyKind", "sources", "redaction", "revision", "probe", "taint", "effect", "quota", "similar"],
+    "order": [
+      "changesetSize",
+      "schema",
+      "ownerOnlyKind",
+      "sources",
+      "redaction",
+      "revision",
+      "probe",
+      "taint",
+      "effect",
+      "quota",
+      "similar"
+    ],
     "orderNote": "The order each op is checked in (design section 4.1); redaction, taint, effect and similar refuse nothing, they mark the op. changesetSize is limits.opsPerChangeset, read off the op's position alone. quota comes after the effect because what it counts depends on it: the review queue, the ops that wait (limitNotes.quota), and the circuit breaker, which counts what the review mode applies.",
     "perOp": "Each op is judged on its own. The ops that pass are recorded in one transaction; a refused op writes nothing.",
     "status": "A request none of whose ops was recorded answers with the HTTP status of its first refusal and every op's outcome in the body. A request that recorded something answers 200.",
@@ -2229,25 +3644,42 @@
     "notFound": "Another owner's space, entry or changeset is a plain 404 with no wiki code, the same answer as one that does not exist.",
     "serviceToken": "A service token is refused on both doors (403), as session_search refuses it: entries derive from conversation text on other machines."
   },
-
   "agentSurface": {
     "why": "An agent reads the wiki and proposes to it; it never decides. Three tools, split by risk rather than by entity.",
-    "tools": ["wiki_search", "wiki_get", "wiki_propose"],
+    "tools": [
+      "wiki_search",
+      "wiki_get",
+      "wiki_propose"
+    ],
     "toolSpecs": {
       "wiki_search": {
         "readOnly": true,
-        "params": { "query": "required", "kinds": "optional", "topic": "optional", "paths": "optional", "limit": "optional, 1 to limits.searchLimitMax" },
+        "params": {
+          "query": "required",
+          "kinds": "optional",
+          "topic": "optional",
+          "paths": "optional",
+          "limit": "optional, 1 to limits.searchLimitMax"
+        },
         "returns": "entries only: id, kind, title, summary, trust, anchorState, match (searchMatches) and score"
       },
       "wiki_get": {
         "readOnly": true,
-        "params": { "ids": "required, 1 to limits.getIdsMax", "include": "optional: sources, anchors, history" },
+        "params": {
+          "ids": "required, 1 to limits.getIdsMax",
+          "include": "optional: sources, anchors, history"
+        },
         "returns": "whole entries; each anchor with its last check (the ref and the time); each source with its orbit-* link"
       },
       "wiki_propose": {
         "readOnly": false,
         "destructive": false,
-        "params": { "ops": "required: ops", "rationale": "required", "idempotencyKey": "required", "dryRun": "optional" },
+        "params": {
+          "ops": "required: ops",
+          "rationale": "required",
+          "idempotencyKey": "required",
+          "dryRun": "optional"
+        },
         "returns": "per op: pending (with waitsFor verification when an automatic space's verification, not the owner, decides it), applied, conflict (current revision and diff) or refused (reasons); similar[] beside an add or supersede"
       }
     },
@@ -2383,7 +3815,11 @@
     "excludedSessions": "Verifier, foreman and judgment sessions are refused every wiki_* call (WIKI_SESSION_EXCLUDED) and are never pushed to.",
     "rollout": {
       "env": "ORBIT_WIKI",
-      "values": ["off", "canary", "on"],
+      "values": [
+        "off",
+        "canary",
+        "on"
+      ],
       "default": "on",
       "canaryOwnersEnv": "ORBIT_WIKI_CANARY_OWNERS",
       "canary": "only the accounts ORBIT_WIKI_CANARY_OWNERS lists (comma-separated ids) have the wiki; every other account is as under off",
@@ -2391,11 +3827,12 @@
     },
     "doorMissing": "A runner newer than its apiserver says in a sentence that the server has no wiki door yet, as watch_tools.go's watchDoorMissing does."
   },
-
   "realtime": {
     "event": "wiki.changed",
     "scope": "the space's owner, on the user-scoped control-plane stream (GET /api/events). The envelope names no session.",
-    "payload": ["id"],
+    "payload": [
+      "id"
+    ],
     "id": "the space whose entries, review queue, bindings, settings, articles or plan changed",
     "redaction": "The space's id and nothing else: no entry, title, status, op or count. A client re-reads what it shows, and that read decides what it may see.",
     "publishedWhen": [
@@ -2409,11 +3846,14 @@
       "a version of a space's plan was stored or confirmed, or a change to it proposed or decided, after the transaction commits",
       "a document's sections were written, or sentences of it withdrawn for a repository file gone from origin/main, after the transaction commits"
     ],
-    "notPublishedWhen": ["an idempotent replay", "a dryRun", "a request that recorded nothing"],
+    "notPublishedWhen": [
+      "an idempotent replay",
+      "a dryRun",
+      "a request that recorded nothing"
+    ],
     "correctness": "Nothing depends on it. Dropping every announcement changes only how long a client waits: clients re-read on focus and on reconnect.",
     "clientGroup": "The web maps it to the wiki query group, never to groupsFor's default sessions group; Swift decodes it as ControlEvent.wikiChanged."
   },
-
   "vectors": [
     {
       "id": "principle-valid",
@@ -2426,7 +3866,9 @@
           "rationale": "Owners delete to forget; a wiki that kept the words would undo that."
         }
       },
-      "expect": { "errors": [] },
+      "expect": {
+        "errors": []
+      },
       "why": "The owner's new principle of 2026-09-25, spelled the way the owner writes one."
     },
     {
@@ -2437,12 +3879,21 @@
         "summary": "A column with a closed set of values is TEXT with a CHECK, never an enum type.",
         "fields": {
           "rule": "Model a closed set as TEXT plus a CHECK constraint that lists its values.",
-          "scope": ["src/apiserver/prisma/migrations/**"]
+          "scope": [
+            "src/apiserver/prisma/migrations/**"
+          ]
         },
-        "topics": ["migrations"],
-        "aliases": ["闭集", "CHECK not enum"]
+        "topics": [
+          "migrations"
+        ],
+        "aliases": [
+          "闭集",
+          "CHECK not enum"
+        ]
       },
-      "expect": { "errors": [] },
+      "expect": {
+        "errors": []
+      },
       "why": "exceptions is optional, and topics and aliases are optional common fields."
     },
     {
@@ -2455,17 +3906,28 @@
           "context": "People ask what is true now; agents need pitfalls and conventions.",
           "decision": "Store atomic entries with sources and anchors, and project every page from them.",
           "alternatives": [
-            { "option": "A page-shaped wiki", "whyRejected": "Whole-page rewrites collapse, and a page cannot be reviewed item by item." }
+            {
+              "option": "A page-shaped wiki",
+              "whyRejected": "Whole-page rewrites collapse, and a page cannot be reviewed item by item."
+            }
           ],
           "consequences": "Every view can be rebuilt; review and measurement are per entry.",
           "decidedAt": "2026-09-25"
         },
         "anchors": [
-          { "type": "path", "path": "docs/wiki-design.md" },
-          { "type": "commit", "sha": "41e75ba352a05ac9051d88f08d920800879bdb2d" }
+          {
+            "type": "path",
+            "path": "docs/wiki-design.md"
+          },
+          {
+            "type": "commit",
+            "sha": "41e75ba352a05ac9051d88f08d920800879bdb2d"
+          }
         ]
       },
-      "expect": { "errors": [] },
+      "expect": {
+        "errors": []
+      },
       "why": "A decision carries what was rejected and why; anchors of two types."
     },
     {
@@ -2475,15 +3937,31 @@
         "title": "A pg spec with no database skips and exits 0",
         "summary": "node --test on a *.pg.spec with no COORDINATOR_PG_URL skips every case and still exits 0.",
         "fields": {
-          "trigger": { "paths": ["src/apiserver/src/"], "commands": ["node --test build/"], "errorSignature": "# skipped" },
+          "trigger": {
+            "paths": [
+              "src/apiserver/src/"
+            ],
+            "commands": [
+              "node --test build/"
+            ],
+            "errorSignature": "# skipped"
+          },
           "symptom": "A green acceptance run that witnessed no assertion.",
           "cause": "Each pg spec skips itself when COORDINATOR_PG_URL is unset.",
           "fix": "Run pg specs through scripts/run-pg-spec.sh, which provisions PostgreSQL and counts a skip as red.",
           "detector": "grep '# skipped [1-9]' in the TAP summary"
         },
-        "anchors": [{ "type": "symbol", "path": "scripts/run-pg-spec.sh", "symbol": "pg_matrix_summary" }]
+        "anchors": [
+          {
+            "type": "symbol",
+            "path": "scripts/run-pg-spec.sh",
+            "symbol": "pg_matrix_summary"
+          }
+        ]
       },
-      "expect": { "errors": [] },
+      "expect": {
+        "errors": []
+      },
       "why": "Every trigger key present; detector is optional."
     },
     {
@@ -2493,11 +3971,19 @@
         "title": "Run one pg spec against a throwaway PostgreSQL",
         "summary": "scripts/run-pg-spec.sh builds the test tree, migrates a template and runs the spec on a clone.",
         "fields": {
-          "steps": ["bash scripts/worktree-overlay.sh", "bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-schema.pg.spec.ts"],
-          "verify": { "command": "bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-schema.pg.spec.ts", "expectedExit": 0 }
+          "steps": [
+            "bash scripts/worktree-overlay.sh",
+            "bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-schema.pg.spec.ts"
+          ],
+          "verify": {
+            "command": "bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-schema.pg.spec.ts",
+            "expectedExit": 0
+          }
         }
       },
-      "expect": { "errors": [] },
+      "expect": {
+        "errors": []
+      },
       "why": "A recipe is steps plus the command that proves it worked."
     },
     {
@@ -2512,7 +3998,9 @@
           "notToConfuseWith": "A project, which is a goal and its tasks; several projects can share one space."
         }
       },
-      "expect": { "errors": [] },
+      "expect": {
+        "errors": []
+      },
       "why": "concept is pull-only, but its schema is checked like any other."
     },
     {
@@ -2521,9 +4009,15 @@
         "kind": "principle",
         "title": "Delete means forget",
         "summary": "Deleting a record deletes every quote the wiki took from it.",
-        "fields": { "statement": "When a record is deleted, every quote taken from it is deleted with it." }
+        "fields": {
+          "statement": "When a record is deleted, every quote taken from it is deleted with it."
+        }
       },
-      "expect": { "errors": ["fields.rationale"] },
+      "expect": {
+        "errors": [
+          "fields.rationale"
+        ]
+      },
       "why": "A required field that is absent is named by its path."
     },
     {
@@ -2538,7 +4032,11 @@
           "why": "a key the schema does not name"
         }
       },
-      "expect": { "errors": ["fields.why"] },
+      "expect": {
+        "errors": [
+          "fields.why"
+        ]
+      },
       "why": "Strict: a key no schema names is an error rather than something silently dropped."
     },
     {
@@ -2547,9 +4045,17 @@
         "kind": "convention",
         "title": "Closed sets are CHECK constraints",
         "summary": "A column with a closed set of values is TEXT with a CHECK.",
-        "fields": { "rule": "   ", "scope": [] }
+        "fields": {
+          "rule": "   ",
+          "scope": []
+        }
       },
-      "expect": { "errors": ["fields.rule", "fields.scope"] },
+      "expect": {
+        "errors": [
+          "fields.rule",
+          "fields.scope"
+        ]
+      },
       "why": "Whitespace is not text, and a convention's scope needs at least one glob."
     },
     {
@@ -2566,7 +4072,11 @@
           "decidedAt": "2026-09-25"
         }
       },
-      "expect": { "errors": ["fields.alternatives"] },
+      "expect": {
+        "errors": [
+          "fields.alternatives"
+        ]
+      },
       "why": "A decision record is a decision and what was rejected."
     },
     {
@@ -2578,12 +4088,21 @@
         "fields": {
           "context": "Pages collapse.",
           "decision": "Store entries.",
-          "alternatives": [{ "option": "Pages" }],
+          "alternatives": [
+            {
+              "option": "Pages"
+            }
+          ],
           "consequences": "Views are rebuilt.",
           "decidedAt": "2026-02-30"
         }
       },
-      "expect": { "errors": ["fields.alternatives[0].whyRejected", "fields.decidedAt"] },
+      "expect": {
+        "errors": [
+          "fields.alternatives[0].whyRejected",
+          "fields.decidedAt"
+        ]
+      },
       "why": "Nested errors carry their index, and a date that does not exist is not a date."
     },
     {
@@ -2593,13 +4112,20 @@
         "title": "A pg spec with no database skips",
         "summary": "It exits 0 having witnessed nothing.",
         "fields": {
-          "trigger": { "paths": [], "commands": [] },
+          "trigger": {
+            "paths": [],
+            "commands": []
+          },
           "symptom": "A green run.",
           "cause": "The spec skips itself.",
           "fix": "Use scripts/run-pg-spec.sh."
         }
       },
-      "expect": { "errors": ["fields.trigger"] },
+      "expect": {
+        "errors": [
+          "fields.trigger"
+        ]
+      },
       "why": "A pitfall nothing can trigger can never be matched to the work it warns about."
     },
     {
@@ -2610,10 +4136,18 @@
         "summary": "Build, migrate, run.",
         "fields": {
           "steps": [],
-          "verify": { "command": "bash scripts/run-pg-spec.sh x.pg.spec.ts", "expectedExit": 0.5 }
+          "verify": {
+            "command": "bash scripts/run-pg-spec.sh x.pg.spec.ts",
+            "expectedExit": 0.5
+          }
         }
       },
-      "expect": { "errors": ["fields.steps", "fields.verify.expectedExit"] },
+      "expect": {
+        "errors": [
+          "fields.steps",
+          "fields.verify.expectedExit"
+        ]
+      },
       "why": "A recipe has steps, and an exit code is a whole number."
     },
     {
@@ -2622,11 +4156,36 @@
         "kind": "concept",
         "title": "Title that runs one character past the limit xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
         "summary": "Summary that runs one character past the limit yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
-        "fields": { "definition": "d", "boundaries": "b" },
-        "topics": ["one", "two", "three", "four"],
-        "aliases": ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9"]
+        "fields": {
+          "definition": "d",
+          "boundaries": "b"
+        },
+        "topics": [
+          "one",
+          "two",
+          "three",
+          "four"
+        ],
+        "aliases": [
+          "a1",
+          "a2",
+          "a3",
+          "a4",
+          "a5",
+          "a6",
+          "a7",
+          "a8",
+          "a9"
+        ]
       },
-      "expect": { "errors": ["title", "summary", "topics", "aliases"] },
+      "expect": {
+        "errors": [
+          "title",
+          "summary",
+          "topics",
+          "aliases"
+        ]
+      },
       "why": "title 121 characters, summary 281, four topics and nine aliases: each one past its limit."
     },
     {
@@ -2635,10 +4194,19 @@
         "kind": "concept",
         "title": "Space",
         "summary": "One owner's wiki for one codebase.",
-        "fields": { "definition": "d", "boundaries": "b" },
-        "topics": ["Migrations"]
+        "fields": {
+          "definition": "d",
+          "boundaries": "b"
+        },
+        "topics": [
+          "Migrations"
+        ]
       },
-      "expect": { "errors": ["topics[0]"] },
+      "expect": {
+        "errors": [
+          "topics[0]"
+        ]
+      },
       "why": "A topic is named by its slug."
     },
     {
@@ -2649,7 +4217,11 @@
         "summary": "An upstream behaviour the build relies on.",
         "fields": {}
       },
-      "expect": { "errors": ["kind"] },
+      "expect": {
+        "errors": [
+          "kind"
+        ]
+      },
       "why": "assumption is a phase-3 placeholder: storage admits the word, no phase-1 door writes it."
     },
     {
@@ -2660,7 +4232,11 @@
         "summary": "Anything at all.",
         "fields": {}
       },
-      "expect": { "errors": ["kind"] },
+      "expect": {
+        "errors": [
+          "kind"
+        ]
+      },
       "why": "The kinds are a closed set, and fields are not checked against a kind that does not exist."
     },
     {
@@ -2669,51 +4245,142 @@
         "kind": "concept",
         "title": "Space",
         "summary": "One owner's wiki for one codebase.",
-        "fields": { "definition": "d", "boundaries": "b" },
+        "fields": {
+          "definition": "d",
+          "boundaries": "b"
+        },
         "anchors": [
-          { "type": "file", "path": "docs/wiki-design.md" },
-          { "type": "symbol", "path": "scripts/run-pg-spec.sh" },
-          { "type": "commit", "sha": "41e75ba35" },
-          { "type": "path", "path": "docs/wiki-design.md", "state": "verified" },
-          { "type": "record", "ref": "orbit-task:34UuAT0pwUgBln9yRlAZF" }
+          {
+            "type": "file",
+            "path": "docs/wiki-design.md"
+          },
+          {
+            "type": "symbol",
+            "path": "scripts/run-pg-spec.sh"
+          },
+          {
+            "type": "commit",
+            "sha": "41e75ba35"
+          },
+          {
+            "type": "path",
+            "path": "docs/wiki-design.md",
+            "state": "verified"
+          },
+          {
+            "type": "record",
+            "ref": "orbit-task:34UuAT0pwUgBln9yRlAZF"
+          }
         ]
       },
-      "expect": { "errors": ["anchors[0].type", "anchors[1].symbol", "anchors[2].sha", "anchors[3].state"] },
+      "expect": {
+        "errors": [
+          "anchors[0].type",
+          "anchors[1].symbol",
+          "anchors[2].sha",
+          "anchors[3].state"
+        ]
+      },
       "why": "An unknown type, a missing key, a short sha and a server-owned key are each refused where they are; the record anchor is fine."
     },
     {
       "id": "sources-valid",
       "sources": [
-        { "kind": "turn", "session": "self" },
-        { "kind": "turn", "session": "self", "seq": 42, "quote": "the palette matched nothing at all" },
-        { "kind": "task", "ref": "34UuAT0pwUgBln9yRlAZF", "locator": { "field": "description" } },
-        { "kind": "commit", "ref": "41e75ba352a05ac9051d88f08d920800879bdb2d" }
+        {
+          "kind": "turn",
+          "session": "self"
+        },
+        {
+          "kind": "turn",
+          "session": "self",
+          "seq": 42,
+          "quote": "the palette matched nothing at all"
+        },
+        {
+          "kind": "task",
+          "ref": "34UuAT0pwUgBln9yRlAZF",
+          "locator": {
+            "field": "description"
+          }
+        },
+        {
+          "kind": "commit",
+          "ref": "41e75ba352a05ac9051d88f08d920800879bdb2d"
+        }
       ],
-      "expect": { "errors": [] },
+      "expect": {
+        "errors": []
+      },
       "why": "A turn of the calling session, with or without a sequence number, and records named by id or sha."
     },
     {
       "id": "sources-refused",
       "sources": [
-        { "kind": "wiki_entry", "ref": "0199aaaa-0000-7000-8000-000000000000" },
-        { "kind": "task", "session": "self" },
-        { "kind": "task_comment", "ref": "c1", "quote": "Quote that runs one character past the limit zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz" },
-        { "kind": "note", "ref": "n1", "seq": 3 }
+        {
+          "kind": "wiki_entry",
+          "ref": "0199aaaa-0000-7000-8000-000000000000"
+        },
+        {
+          "kind": "task",
+          "session": "self"
+        },
+        {
+          "kind": "task_comment",
+          "ref": "c1",
+          "quote": "Quote that runs one character past the limit zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+        },
+        {
+          "kind": "note",
+          "ref": "n1",
+          "seq": 3
+        }
       ],
-      "expect": { "errors": ["sources[0].kind", "sources[1].session", "sources[1].ref", "sources[2].quote", "sources[3].seq"] },
+      "expect": {
+        "errors": [
+          "sources[0].kind",
+          "sources[1].session",
+          "sources[1].ref",
+          "sources[2].quote",
+          "sources[3].seq"
+        ]
+      },
       "why": "A wiki entry is never a source; self is only a turn's; a quote is at most 300 characters; seq only sits beside session self."
     },
     {
       "id": "sources-ref-not-an-id",
       "sources": [
-        { "kind": "tool_call", "ref": "toolu_0195URa2d9G6F4AKQoGfVprN" },
-        { "kind": "task", "ref": "toolu_0195URa2d9G6F4AKQoGfVprN" },
-        { "kind": "event", "ref": "0199aaaa-0000-7000-8000-00000000000g" },
-        { "kind": "turn", "ref": "turn 3 of this session" },
-        { "kind": "approval", "ref": "34UuAT0pwUgBln9yRlAZF" },
-        { "kind": "commit", "ref": "41e75ba" }
+        {
+          "kind": "tool_call",
+          "ref": "toolu_0195URa2d9G6F4AKQoGfVprN"
+        },
+        {
+          "kind": "task",
+          "ref": "toolu_0195URa2d9G6F4AKQoGfVprN"
+        },
+        {
+          "kind": "event",
+          "ref": "0199aaaa-0000-7000-8000-00000000000g"
+        },
+        {
+          "kind": "turn",
+          "ref": "turn 3 of this session"
+        },
+        {
+          "kind": "approval",
+          "ref": "34UuAT0pwUgBln9yRlAZF"
+        },
+        {
+          "kind": "commit",
+          "ref": "41e75ba"
+        }
       ],
-      "expect": { "errors": ["sources[1].ref", "sources[2].ref", "sources[3].ref"] },
+      "expect": {
+        "errors": [
+          "sources[1].ref",
+          "sources[2].ref",
+          "sources[3].ref"
+        ]
+      },
       "why": "A row is named by either spelling of its id and nothing else: a tool_use_id is a tool_call's ref and no other kind's, a uuid with a letter past f is no id, and a commit is named by its sha."
     }
   ]

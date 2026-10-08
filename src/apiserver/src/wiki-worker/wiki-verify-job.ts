@@ -63,8 +63,13 @@ export function wikiVerifyJobInput(input: Record<string, unknown>): WikiVerifyJo
 
 /** Whose ops one pass verifies, and how strictly. */
 export interface WikiVerifyTarget {
-  /** The proposing session whose ops wait for their verdict. */
-  sessionId: string;
+  /**
+   * The proposing session whose ops wait for their verdict. Null for the server's own maintenance run
+   * (P8): its ops were proposed under the wiki job, and {@link jobId} is what names them.
+   */
+  sessionId: string | null;
+  /** The wiki job a server-run maintenance pass verifies under; null for a session's. */
+  jobId?: string | null;
   /**
    * The adoption door (contract `reviewModes.verification.adoption`, P8): the ops of the space's *ended*
    * sessions, whose proposing session nobody is left to run a verifier in.
@@ -100,9 +105,12 @@ export interface WikiVerifyReport {
   usage: { inputTokens: number; outputTokens: number };
 }
 
-/** The principal a verification is recorded as: the proposing session's, with the write marked the server's. */
-export function wikiVerifyPrincipal(ownerId: string, sessionId: string): WikiPrincipal {
-  return { origin: 'agent', ownerId, userId: null, sessionId, toolCallId: null, authorKind: 'system' };
+/**
+ * The principal a verification is recorded as: the proposing session's, or — for the server's own
+ * maintenance run — the wiki job's, with the write marked the server's either way.
+ */
+export function wikiVerifyPrincipal(ownerId: string, sessionId: string | null, jobId: string | null = null): WikiPrincipal {
+  return { origin: 'agent', ownerId, userId: null, sessionId, toolCallId: null, authorKind: 'system', jobId };
 }
 
 /**
@@ -131,7 +139,7 @@ export async function verifyWikiOps(
     stopped: null,
     usage: { inputTokens: 0, outputTokens: 0 },
   };
-  const principal = wikiVerifyPrincipal(context.job.ownerId, target.sessionId);
+  const principal = wikiVerifyPrincipal(context.job.ownerId, target.sessionId, target.jobId ?? null);
   const max = target.max ?? 0;
   let after: string | null = null;
   for (;;) {
