@@ -24,8 +24,11 @@ internal class WikiClient(private val api: OrbitApi, private val handle: Session
 
     suspend fun spaces(): List<WikiSpace> = get(listOf("wiki", "spaces"), ListSerializer(WikiSpace.serializer()))
     suspend fun space(id: String): WikiSpace = get(spacePath(id), WikiSpace.serializer(), listOf("include" to "usage"))
-    suspend fun entries(spaceId: String, limit: Int = 200): List<WikiEntry> =
-        get(spacePath(spaceId, "entries"), ListSerializer(WikiEntry.serializer()), listOf("limit" to limit.toString()))
+    /** A space's entries of every status, newest recorded first — of one kind when [kind] is given. The server answers
+     * 200 at most. */
+    suspend fun entries(spaceId: String, kind: String? = null, limit: Int = 200): List<WikiEntry> =
+        get(spacePath(spaceId, "entries"), ListSerializer(WikiEntry.serializer()),
+            listOfNotNull(kind?.let { "kind" to it }, "limit" to limit.toString()))
     suspend fun timeline(spaceId: String): WikiTimeline = get(spacePath(spaceId, "timeline"), WikiTimeline.serializer())
     suspend fun health(spaceId: String): WikiSpaceHealth = WikiSpaceHealth.decode(json(spacePath(spaceId, "health")))
     /** `GET /wiki/system-model`: the deployment's System model and the executor switch for this account (P9). */
@@ -96,6 +99,10 @@ internal class WikiClient(private val api: OrbitApi, private val handle: Session
         json(listOf("link-previews"), method = HttpMethod.POST, body = buildJsonObject {
             putJsonArray("refs") { refs.forEach { (kind, id) -> add(buildJsonObject { put("kind", kind); put("id", id) }) } }
         })["previews"] as? JsonArray ?: JsonArray(emptyList())
+
+    /** `GET /projects/:id`: the workspace the project's coordinator runs in — the space the Wiki opens from the project's
+     * pages is the one bound to it (design §12.3.4). Null from a server that did not say. */
+    suspend fun coordinatorWorkspace(projectId: String): String? = json(listOf("projects", projectId))["coordinatorWorkspaceId"].text()
 
     /** The options a maintenance form offers: the account's workspaces and runners, and its providers. */
     suspend fun workspaces(): JsonArray = json(listOf("workspaces")) as? JsonArray ?: JsonArray(emptyList())
