@@ -1,6 +1,5 @@
 import { RightOutlined } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Button } from 'antd';
 import { Link } from 'react-router-dom';
 import { accountToStartOn, withEnginePlanUsage, type ReportedEngine, type RunnerEngineHealth } from '@orbit/shared';
 import { api } from '../api';
@@ -27,6 +26,7 @@ import { useToast } from '../lib/toast';
 import { ProviderTile } from './ProviderGallery';
 import { rowKindOf } from './RunnerEngines';
 import type { Runner } from './TasksSidePanel';
+import { Button } from './ui/Button';
 
 /** Where an engine's sign-in and accounts live: its card on Providers, opened at this engine. */
 export const engineSignInHref = (runnerId: string, engine: ReportedEngine) =>

@@ -23,9 +23,12 @@ internal fun unauthorized() = ApiResponse(401, "{\"message\":\"Unauthorized\"}".
 internal class MemoryCredentials : CredentialStore {
     var value: StoredSession? = null
     var failSave = false
-    var failLoad = false
+    /** Thrown by the next loads, one each, before a load reads [value]. */
+    val loadFailures = ArrayDeque<SecureStorageException>()
+    var loads = 0
     override suspend fun load(): StoredSession? {
-        if (failLoad) throw SecureStorageException()
+        loads++
+        loadFailures.removeFirstOrNull()?.let { throw it }
         return value
     }
     override suspend fun save(session: StoredSession) {
@@ -64,11 +67,15 @@ internal class Harness(scope: TestScope) {
     val data = MemoryData()
     val emails = MemoryEmails()
     val requests = mutableListOf<HttpRequest>()
+    val logs = mutableListOf<String>()
     var handler: suspend (HttpRequest) -> ApiResponse = { ok() }
-    val client = AuthSession(HttpTransport {
+    private val dispatcher = StandardTestDispatcher(scope.testScheduler)
+    /** A session over these stores, as the next launch's process creates it. */
+    fun launch() = AuthSession(HttpTransport {
         requests += it
         if (it.api.path == listOf("auth", "logout")) ok() else handler(it)
-    }, credentials, instances, data, "test", dispatcher = StandardTestDispatcher(scope.testScheduler), emails = emails)
+    }, credentials, instances, data, "test", dispatcher = dispatcher, emails = emails, log = { logs += it })
+    val client = launch()
 
     suspend fun seed(): SessionHandle {
         instances.value = serverA.value

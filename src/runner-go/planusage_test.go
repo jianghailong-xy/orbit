@@ -214,7 +214,7 @@ func TestCodexWindowLabelMatchesTUI(t *testing.T) {
 func TestCombinePlanUsageNestsMultipleProviders(t *testing.T) {
 	claude := &PlanUsage{Provider: providerClaude, FetchedAt: "2026-07-01T10:00:00Z"}
 	codex := &PlanUsage{Provider: providerCodex, FetchedAt: "2026-07-01T11:00:00Z"}
-	got := combinePlanUsage(claude, codex)
+	got := combinePlanUsage(claude, codex, nil)
 	if got.Claude != claude || got.Codex != codex {
 		t.Fatalf("combinePlanUsage = %#v", got)
 	}

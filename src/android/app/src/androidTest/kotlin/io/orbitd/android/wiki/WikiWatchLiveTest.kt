@@ -188,6 +188,8 @@ class WikiWatchLiveTest {
     }
     private fun shows(matcher: SemanticsMatcher) = compose.onAllNodes(matcher, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun showsText(text: String) = shows(hasText(text, substring = true))
+    /** A row as TalkBack reads it, its words merged into it: a pressable row's text sits on its children. */
+    private fun reads(matcher: SemanticsMatcher) = compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
     private fun awaitNode(what: String, matcher: SemanticsMatcher, timeout: Long = 25_000) {
         try { compose.waitUntil(timeout) { compose.onAllNodes(matcher, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() } }
         catch (e: ComposeTimeoutException) { throw AssertionError("$what did not show within $timeout ms", e) }
@@ -206,12 +208,12 @@ class WikiWatchLiveTest {
         node.performClick()
     }
     private fun press(tag: String) = press(hasTestTag(tag), "tag $tag")
-    /** A row of a lazy list: scrolled into view first, then pressed. */
-    private fun pressIn(list: String, matcher: SemanticsMatcher) {
+    /** A row of a lazy list: scrolled into view first, then pressed — or, [pressIt] false, only scrolled to. */
+    private fun pressIn(list: String, matcher: SemanticsMatcher, pressIt: Boolean = true) {
         awaitTag(list)
         try { compose.waitUntil(20_000) { runCatching { compose.onNodeWithTag(list).performScrollToNode(matcher) }.isSuccess } }
         catch (e: ComposeTimeoutException) { throw AssertionError("${matcher.description} is not in $list", e) }
-        press(matcher)
+        if (pressIt) press(matcher)
     }
 
     private fun capture(name: String) {
@@ -288,9 +290,11 @@ class WikiWatchLiveTest {
             val title = readObject("the entry the search should find", owner, "wiki/entries/$entry").s("title")!!
             val hits = readObject("the server's own search", owner, "wiki/search?q=$query&space=$space").a("hits")
             ok("server: the search finds the entry", hits.any { ObjectId.same(it.s("id"), entry) })
-            awaitTag("wiki-status-line")
-            compose.onNodeWithTag("wiki-space-picker").assertTextContains(slug)
-            ok("the home shows the seeded space ($slug)", true)
+            // The space by the name a reader knows it by: its repository's last segment, else its title (A12-2).
+            val name = spaceName(space)
+            awaitTag("wiki-home-line")
+            compose.onNodeWithTag("wiki-space-picker").assertTextContains(name)
+            ok("the home shows the seeded space ($slug, called \"$name\")", true)
             capture("j1-space-home")
             compose.onNodeWithTag("wiki-search").performTextInput(query)
             awaitNode("the search hit", tagFor("wiki-hit:", entry))
@@ -309,6 +313,8 @@ class WikiWatchLiveTest {
         journey("j2-review-accept-fresh", owner, "orbit://wiki/$space") { _ ->
             val before = readObject("the fresh proposal before", owner, "wiki/changesets/$changeset")
             ok("precondition: the fresh op is pending (else the stack needs setup.sh reset)", decisionOf(before, op) == "pending")
+            // Review is Activity's first banner (A12-2).
+            press("wiki-bar-activity")
             press("wiki-review-banner")
             showReviewCard(op)
             capture("j2-review-card")
@@ -335,6 +341,8 @@ class WikiWatchLiveTest {
             val revision = entryBefore.i("currentRevision"); val summary = entryBefore.s("summary")
             ok("precondition: the entry moved on past the op's base revision ($proposedAt < $revision)",
                 proposedAt != null && revision != null && proposedAt < revision)
+            // Review is Activity's first banner (A12-2).
+            press("wiki-bar-activity")
             press("wiki-review-banner")
             showReviewCard(op)
             capture("j3-review-card")
@@ -385,7 +393,7 @@ class WikiWatchLiveTest {
         journey("j5-settings-review-mode", owner, "orbit://wiki/$space") { _ ->
             val before = readObject("the space's settings before", owner, "wiki/spaces/$space").o("settings")!!
             ok("precondition: the space is Manual", before.s("reviewMode") == "manual")
-            awaitTag("wiki-status-line")
+            awaitTag("wiki-home-line")
             press("wiki-bar-settings")
             awaitTag("wiki-settings-page")
             capture("j5-settings-manual")
@@ -471,7 +479,7 @@ class WikiWatchLiveTest {
                 listed != null && listed.none { ObjectId.same((it as? JsonObject)?.s("id"), space) })
             val withdrawn = awaitAny(20_000, hasTestTag(SPACE_UNAVAILABLE_TAG), hasText(SPACE_UNAVAILABLE, substring = true))
             // Whatever the page settled on, it is drawn before anything is asserted.
-            awaitAny(10_000, hasTestTag("wiki-status-line"), hasText(SPACE_UNAVAILABLE, substring = true))
+            awaitAny(10_000, hasTestTag("wiki-home-line"), hasText(SPACE_UNAVAILABLE, substring = true))
             capture("j7b-space")
             val leaked = ownersWordsOnScreen(words)
             ok("none of the owner's content is on screen (saw: $leaked)", leaked.isEmpty())
@@ -503,7 +511,9 @@ class WikiWatchLiveTest {
         journey("j8-run-revert", owner, "orbit://wiki/$space") { _ ->
             val before = readObject("the run before", owner, "wiki/changesets/$run")
             ok("precondition: the run is revertible (else the stack needs setup.sh reset)", before["revertible"]?.jsonPrimitive?.booleanOrNull == true)
-            pressIn("wiki-home-list", tagFor("wiki-run:", run))
+            // Recently changed is Activity's (A12-2).
+            press("wiki-bar-activity")
+            pressIn("wiki-activity-list", tagFor("wiki-run:", run))
             awaitTag("wiki-run-title")
             capture("j8-run-page")
             press("wiki-run-revert")
@@ -513,9 +523,131 @@ class WikiWatchLiveTest {
             press("wiki-run-revert-confirm")
             eventually("the run has nothing left to revert", owner, "wiki/changesets/$run") { it.obj?.get("revertible")?.jsonPrimitive?.booleanOrNull == false }
             eventually("the run's entry is no longer active", owner, "wiki/entries/$entry") { it.obj?.s("status") != null && it.obj?.s("status") != "active" }
-            // Reverted: the page closes back to the home.
+            // Reverted: the page closes back to Activity.
             awaitTag("wiki-status-line")
             capture("j8-run-reverted")
+        }
+    }
+
+    // MARK: A12c — the home is the space's content, Activity what waits and what changed
+
+    /** Every space the owner has, as `GET /wiki/spaces` lists them (pendingOps, planWaiting, workspaceIds, docs). */
+    private fun ownerSpaces(): List<WikiSpace> = (read("every space the owner has", owner, "wiki/spaces").body as JsonArray)
+        .map { Wire.json.decodeFromJsonElement(WikiSpace.serializer(), it) }
+    private fun spaceName(space: String): String = ownerSpaces().let { all -> WikiSpaceLogic.name(all.first { ObjectId.same(it.id, space) }, all) }
+
+    /** The home is the space's content as the server holds it (A12-3, iOS 712c92e10): the line under the head is worked out
+     * from the server's own documents and topic-article reads, the principles are the server's own read by kind, and a
+     * space with no confirmed plan, no topic article and maintenance off — this stack's — shows the new space's card with
+     * Set up maintenance. The stack cannot make a confirmed plan (a plan draft is a model's work, see README), so the
+     * documents by category are the controlled fixture's journey. */
+    @Test fun j9aOwnerHomeIsTheSpacesContentAsTheServerHoldsIt() {
+        val space = arg("a12Space")
+        journey("j9a-home-directory", owner, "orbit://wiki/$space") { _ ->
+            val spaces = ownerSpaces()
+            val row = spaces.first { ObjectId.same(it.id, space) }
+            val docs = Wire.json.decodeFromJsonElement(WikiDocsDirectory.serializer(), readObject("the space's documents", owner, "wiki/spaces/$space/docs"))
+            val topics = Wire.json.decodeFromJsonElement(WikiArticleDirectory.serializer(), readObject("the space's topic articles", owner, "wiki/spaces/$space/articles"))
+            val principles = (read("the space's principles, by kind", owner, "wiki/spaces/$space/entries?kind=principle&limit=200").body as JsonArray).map { it.jsonObject }
+            ok("server: the space has principles to list", principles.isNotEmpty())
+            val line = WikiLogic.homeLine(docs, topics, loading = false)!!
+            val documents = WikiLogic.homeDocuments(docs, topics, loading = false, maintenance = row.settings?.maintenance?.enabled == true, seen = null)
+            note("the server's reads make the line \"$line\" and the documents band ${documents::class.simpleName}")
+            awaitTag("wiki-home-line")
+            compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag("wiki-home-line") and hasText(line)).fetchSemanticsNodes().isNotEmpty() }
+            ok("the home's line is the server's: \"$line\"", true)
+            compose.onNodeWithTag("wiki-space-picker").assertTextContains(WikiSpaceLogic.name(row, spaces))
+            ok("the space is called \"${WikiSpaceLogic.name(row, spaces)}\" (one space: a label, no menu)", spaces.size > 1 || !shows(hasTestTag("wiki-space-picker") and hasClickAction()))
+            WikiLogic.principles(principles.map { Wire.json.decodeFromJsonElement(WikiEntry.serializer(), it) }).take(WikiLogic.PRINCIPLES_SHOWN).forEach { principle ->
+                pressIn("wiki-home-list", tagFor("wiki-home-principle:", principle.id), pressIt = false)
+                ok("the principle \"${principle.displayTitle}\" is on the home", reads(tagFor("wiki-home-principle:", principle.id) and hasText(principle.displayTitle, substring = true)))
+            }
+            when (documents) {
+                WikiLogic.HomeDocuments.NewSpace -> {
+                    pressIn("wiki-home-list", hasTestTag("wiki-home-new-space"), pressIt = false)
+                    ok("a new space's card says how documents come", showsText(WikiDocCopy.noDocumentsNote))
+                    capture("j9a-home")
+                    press("wiki-home-set-up")
+                    awaitTag("wiki-settings-page")
+                    ok("Set up maintenance opens the space's Wiki settings", true)
+                    capture("j9a-set-up")
+                }
+                is WikiLogic.HomeDocuments.Categories -> {
+                    documents.categories.flatMap { it.written }.forEach { doc ->
+                        pressIn("wiki-home-list", tagFor("wiki-home-doc:", doc.slug), pressIt = false)
+                        ok("the document ${doc.number} is on the home", true)
+                    }
+                    capture("j9a-home")
+                }
+                is WikiLogic.HomeDocuments.Topics -> {
+                    val first = documents.groups.flatMap { it.topics }.first()
+                    pressIn("wiki-home-list", hasText(first.title, substring = true), pressIt = false)
+                    ok("the topic articles are listed, \"${first.title}\" first", true)
+                    capture("j9a-home")
+                }
+                else -> capture("j9a-home")
+            }
+        }
+    }
+
+    /** Activity is what waits on the owner and what changed, as the server says (A12-2, iOS 42d12db2b): the bar's Activity
+     * and the drawer's Wiki row say the server's number — every space's pendingOps and planWaiting — "N waiting on you";
+     * Activity's first banner is the server's proposals; the status line counts the health read's entries; Recent decisions
+     * are the server's newest decisions by kind; Recently changed holds the timeline's newest rows, a run's items folded
+     * into one row. */
+    @Test fun j9bOwnerActivityIsWhatTheServerSays() {
+        val space = arg("a12Space")
+        journey("j9b-activity", owner, "orbit://wiki/$space") { _ ->
+            val spaces = ownerSpaces()
+            val waiting = WikiSpaceLogic.waiting(spaces)
+            val banner = WikiSpaceLogic.proposalsBanner(spaces, spaces.first { ObjectId.same(it.id, space) }.id)
+            val health = readObject("the space's health", owner, "wiki/spaces/$space/health")
+            val decisions = (read("the newest decisions, by kind", owner, "wiki/spaces/$space/entries?kind=decision&limit=4").body as JsonArray).map { it.jsonObject }
+            val timeline = readObject("the space's timeline", owner, "wiki/spaces/$space/timeline").a("items")
+            note("server: waiting=$waiting banner=$banner health.entries=${health.i("entries")} decisions=${decisions.size} timeline=${timeline.size}")
+            awaitTag("wiki-home-line")
+            if (waiting > 0) {
+                compose.waitUntil(20_000) { shows(hasTestTag("wiki-bar-activity") and hasStateDescription(WikiCopy.waitingOnYou(waiting))) }
+                ok("the bar's Activity says \"${WikiCopy.waitingOnYou(waiting)}\"", true)
+            }
+            press("wiki-bar-activity")
+            awaitTag("wiki-status-line")
+            val count = "${WikiArticleCopy.count(health.i("entries") ?: 0)} ${WikiCopy.entryNoun(health.i("entries") ?: 0)}"
+            compose.waitUntil(20_000) { shows(hasTestTag("wiki-status-line") and hasText(count, substring = true)) }
+            ok("the status line counts the server's entries: \"$count\"", true)
+            if (banner != null) {
+                compose.waitUntil(20_000) { reads(hasTestTag("wiki-review-banner") and hasText(banner)) }
+                ok("Activity's first banner is the server's proposals: \"$banner\"", true)
+            }
+            decisions.forEach { decision ->
+                pressIn("wiki-activity-list", tagFor("wiki-entry:", decision.s("id")!!), pressIt = false)
+                ok("the decision \"${decision.s("title")}\" is in Recent decisions", true)
+            }
+            capture("j9b-activity")
+            // Recently changed is the timeline's newest rows as Activity folds them (`WikiModeLogic.recentRows`): a run's
+            // items are one row, by the changeset they name; any other item is its own row.
+            val rows = WikiModeLogic.recentRows(timeline.map { Wire.json.decodeFromJsonElement(WikiTimelineItem.serializer(), it) }).take(5)
+            note("server: the timeline's ${timeline.size} items fold into ${rows.size} rows")
+            rows.forEach { row ->
+                when (row) {
+                    is WikiModeLogic.RecentRow.Run -> {
+                        pressIn("wiki-activity-list", tagFor("wiki-run:", row.changesetId), pressIt = false)
+                        ok("Recently changed folds the run ${row.changesetId} (${row.items.size} items) into one row", true)
+                    }
+                    is WikiModeLogic.RecentRow.Op -> {
+                        pressIn("wiki-activity-list", tagFor("wiki-change:", row.item.opId), pressIt = false)
+                        ok("Recently changed has \"${row.item.title}\"",
+                            reads(tagFor("wiki-change:", row.item.opId) and hasText(row.item.title ?: "—", substring = true)))
+                    }
+                }
+            }
+            capture("j9b-activity-changes")
+            compose.onNodeWithContentDescription("Open navigation").performClick()
+            if (waiting > 0) {
+                awaitNode("the drawer's Wiki count", hasTestTag("wiki-drawer-count") and hasText("$waiting") and hasContentDescription(WikiCopy.waitingOnYou(waiting)))
+                ok("the drawer's Wiki row says \"${WikiCopy.waitingOnYou(waiting)}\"", true)
+            }
+            capture("j9b-drawer")
         }
     }
 }

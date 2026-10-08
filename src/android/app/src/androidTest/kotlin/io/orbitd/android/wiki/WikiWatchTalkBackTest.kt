@@ -88,15 +88,21 @@ class WikiWatchTalkBackTest {
 
     // MARK: the pages
 
-    /** The home from its link, then Review from its banner by double tap: Accept, by double tap, records one decision. */
+    /** The home from its link, Activity from the bar and Review from Activity's banner, each by double tap: Accept, by double
+     * tap, records one decision. */
     @Test fun homeAndReview() = journey("home", { "orbit://wiki/${it.string("space")}" }) {
-        awaitTag("wiki-status-line")
+        awaitTag("wiki-home-line")
         page("home", steps = 30)
         touch("home", "wiki-bar-contents", "Contents")
+        touch("home", "wiki-bar-activity", "Activity")
         touch("home", "wiki-bar-settings", "Settings")
         touch("home", "wiki-space-picker", "The codebase this wiki describes")
         touch("home", "wiki-search", null)
-        activate("home", "wiki-review-banner", "proposals to review")
+        activate("home", "wiki-bar-activity", "Activity")
+        awaitTag("wiki-status-line")
+        log("double tap on Activity -> Activity opened")
+        page("activity", steps = 30)
+        activate("activity", "wiki-review-banner", "proposals to review")
         awaitTag("wiki-review-page")
         log("double tap on the banner -> Review opened")
         page("review", steps = 30)
@@ -112,7 +118,7 @@ class WikiWatchTalkBackTest {
     /** Wiki settings from the home's gear by double tap: a review mode and the spot-check switch, each by double tap, are
      * written, and TalkBack reads the switch's new state. */
     @Test fun settings() = journey("settings", { "orbit://wiki/${it.string("space")}" }) {
-        awaitTag("wiki-status-line")
+        awaitTag("wiki-home-line")
         activate("home", "wiki-bar-settings", "Settings")
         awaitTag("wiki-settings-page")
         log("double tap on Settings -> Wiki settings opened")
@@ -150,7 +156,7 @@ class WikiWatchTalkBackTest {
     /** Contents by double tap, the confirmed plan's document by double tap; a footnote's row opens its sheet, whose button
      * opens the session at the quoted record. */
     @Test fun documentAndFootnote() = journey("doc", { "orbit://wiki/${it.string("space")}" }) { ids ->
-        awaitTag("wiki-status-line")
+        awaitTag("wiki-home-line")
         activate("home", "wiki-bar-contents", "Contents")
         awaitTag("wiki-contents-sheet")
         log("double tap on Contents -> the Contents sheet opened")
@@ -178,7 +184,7 @@ class WikiWatchTalkBackTest {
     /** Contents by double tap, then the plan, its draft waiting: Confirm plan, by double tap, confirms it once. */
     @Test fun plan() = journey("plan", { "orbit://wiki/${it.string("space")}" }) {
         http("/__control", """{"draft":"v2"}""")
-        awaitTag("wiki-status-line")
+        awaitTag("wiki-home-line")
         activate("home", "wiki-bar-contents", "Contents")
         awaitTag("wiki-contents-sheet")
         activate("contents", "wiki-contents-plan", "Plan")

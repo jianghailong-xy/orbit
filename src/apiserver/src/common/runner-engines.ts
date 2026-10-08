@@ -24,11 +24,12 @@ export const LOGIN_ENGINES: readonly LoginEngine[] = ['claude', 'codex', 'kimi',
 /**
  * The engines whose CLI keeps one login per config directory, so one machine can sign in several
  * accounts of them: a Codex CODEX_HOME, a Claude Code CLAUDE_CONFIG_DIR, an Antigravity Google
- * sign-in's Gemini directory. Everything account-shaped — a per-account sign-in, the account list on a
- * report, a workspace pinning a session to one — is gated on this rather than on the engine name, so
- * the next engine is a line here and a descriptor on the runner (src/runner-go/account_slot.go).
+ * sign-in's Gemini directory, a Kimi Code KIMI_CODE_HOME. Everything account-shaped — a per-account
+ * sign-in, the account list on a report, a workspace pinning a session to one — is gated on this
+ * rather than on the engine name, so the next engine is a line here and a descriptor on the runner
+ * (src/runner-go/account_slot.go).
  */
-export const ACCOUNT_ENGINES: readonly LoginEngine[] = ['claude', 'codex', 'antigravity'];
+export const ACCOUNT_ENGINES: readonly LoginEngine[] = ['claude', 'codex', 'antigravity', 'kimi'];
 
 export function engineKeepsAccounts(engine: unknown): engine is LoginEngine {
   return typeof engine === 'string' && ACCOUNT_ENGINES.includes(engine as LoginEngine);
@@ -92,7 +93,7 @@ export function sanitizeRunnerEngines(value: unknown): RunnerEngineHealth[] | nu
     const update = sanitizeEngineUpdate(entry.update);
     // Only the engines whose CLI keeps a login per directory sign in more than one account.
     const accounts = engineKeepsAccounts(entry.engine)
-      ? sanitizeEngineAccounts(entry.accounts)
+      ? sanitizeEngineAccounts(entry.accounts, entry.engine)
       : undefined;
     // Only the CLI's own yes/no counts; everything else is the third state, which exists so
     // an engine that wouldn't answer is never shown as signed in.
@@ -252,9 +253,10 @@ function sanitizeBuckets(value: unknown): PlanUsageBucket[] {
  * is dropped on its own, like an engine's update record: it only labels the row, and whatever sits
  * there when it isn't one could be the raw account id that never leaves the machine (contract §3).
  * Returns undefined when nothing usable is left, which reads as the one account a runner had
- * before accounts.
+ * before accounts. A Kimi account's site is kept as the engine's is, one of the two Kimi names, and
+ * dropped on its own like the fingerprint: it only labels the row.
  */
-function sanitizeEngineAccounts(value: unknown): RunnerEngineAccount[] | undefined {
+function sanitizeEngineAccounts(value: unknown, engine: LoginEngine): RunnerEngineAccount[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const out: RunnerEngineAccount[] = [];
   const seen = new Set<string>();
@@ -286,12 +288,15 @@ function sanitizeEngineAccounts(value: unknown): RunnerEngineAccount[] | undefin
     // When a signed-in account's login lapses (src/runner-go claudeLoginExpiry): only a real instant,
     // re-written as ISO, so nothing but a time rides on it.
     const loginExpiresAt = auth === 'yes' ? isoInstant(entry.loginExpiresAt) : undefined;
+    // Which of Kimi's two sites this account's login is on (kimi.com or kimi.ai).
+    const kimiRegion = engine === 'kimi' && isKimiRegion(entry.kimiRegion) ? entry.kimiRegion : undefined;
     out.push({
       id: entry.id,
       ...(name ? { name } : {}),
       home,
       ...(codexHome ? { codexHome } : {}),
       auth,
+      ...(kimiRegion ? { kimiRegion } : {}),
       ...(fingerprintPrefix ? { fingerprintPrefix } : {}),
       ...(loginExpiresAt ? { loginExpiresAt } : {}),
     });

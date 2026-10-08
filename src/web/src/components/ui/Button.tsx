@@ -4,7 +4,7 @@ import { LoadingOutlined } from '@ant-design/icons';
 import './Button.css';
 
 interface ButtonAppearance {
-  variant?: 'default' | 'primary' | 'text' | 'link';
+  variant?: 'default' | 'primary' | 'dashed' | 'text' | 'link';
   size?: 'small' | 'middle' | 'large';
   danger?: boolean;
   icon?: ReactNode;

@@ -1,6 +1,5 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Checkbox, Dropdown, Input, Modal, Segmented, Select, Switch, type MenuProps } from 'antd';
 import {
   CheckCircleFilled,
   EllipsisOutlined,
@@ -23,6 +22,16 @@ import {
   type SharedPoolPerson,
 } from '../lib/sharedPools';
 import { useToast } from '../lib/toast';
+import { Button } from './ui/Button';
+import { Checkbox } from './ui/Checkbox';
+import { useConfirm } from './ui/ConfirmDialog';
+import { Dialog } from './ui/Dialog';
+import { Input } from './ui/Input';
+import { Menu, type MenuItem } from './ui/Menu';
+import { MultiSelect } from './ui/MultiSelect';
+import { PasswordInput } from './ui/PasswordInput';
+import { Segmented } from './ui/Segmented';
+import { Switch } from './ui/Switch';
 
 /**
  * What a Codex pool's people and its API keys (organization/project OpenAI API keys several people run
@@ -113,7 +122,7 @@ export function WhoCanUseItCard({
   accounts: number | null;
   onAddKey: () => void;
 }) {
-  const { modal } = App.useApp();
+  const [confirm, confirmation] = useConfirm();
   const mine = ownsPool(pool);
   const people = hasPeople(pool);
   // Everybody in it but its owner: the people they added.
@@ -131,12 +140,12 @@ export function WhoCanUseItCard({
     }
   });
   const justMine = () =>
-    modal.confirm({
+    void confirm({
       title: `Make ${pool.label} just yours?`,
-      content: <JustMineCost pool={pool} accounts={accounts} />,
-      okText: 'Make it just mine',
-      okButtonProps: { danger: true },
-      onOk: () => keepToSelf.mutateAsync(undefined),
+      description: <JustMineCost pool={pool} accounts={accounts} />,
+      confirmText: 'Make it just mine',
+      danger: true,
+      onConfirm: () => keepToSelf.mutateAsync(undefined),
     });
   return (
     <div className="re-card pool-card pool-sub-sec who-card">
@@ -163,12 +172,13 @@ export function WhoCanUseItCard({
           {/* What it says is the pool's people: a press opens what changes them, and the pool's next
               read moves it. */}
           <Segmented
+            aria-label="Who can use it"
             value={people ? 'people' : 'me'}
             options={[
               { value: 'me', label: 'Just me' },
               { value: 'people', label: 'Me and people I add' },
             ]}
-            onChange={(value) => (value === 'people' ? setSharing(true) : justMine())}
+            onValueChange={(value) => (value === 'people' ? setSharing(true) : justMine())}
           />
           <span className="who-mode-h">
             {people
@@ -190,7 +200,7 @@ export function WhoCanUseItCard({
             <Switch
               checked={pool.membersCanAdd}
               loading={save.isPending}
-              onChange={(on) => save.mutate({ membersCanAdd: on })}
+              onCheckedChange={(on) => save.mutate({ membersCanAdd: on })}
               aria-label="They can add their own API keys"
             />
           </div>
@@ -205,7 +215,7 @@ export function WhoCanUseItCard({
             <Switch
               checked={pool.membersCanAddAccounts}
               loading={save.isPending}
-              onChange={(on) => save.mutate({ membersCanAddAccounts: on })}
+              onCheckedChange={(on) => save.mutate({ membersCanAddAccounts: on })}
               aria-label="They can add their own ChatGPT accounts"
             />
           </div>
@@ -228,7 +238,7 @@ export function WhoCanUseItCard({
             <b>{listOf(added.map((person) => person.name))} can’t start a session here yet.</b> {pool.label} has no
             API key{accounts !== null ? ' and no ChatGPT account signed in' : ''}.
           </span>
-          <Button size="small" type="primary" onClick={onAddKey}>
+          <Button size="small" variant="primary" onClick={onAddKey}>
             Add an API key
           </Button>
         </div>
@@ -236,6 +246,7 @@ export function WhoCanUseItCard({
       {sharing && (
         <SharePoolModal pool={pool} accounts={accounts} onAddKey={onAddKey} onClose={() => setSharing(false)} />
       )}
+      {confirmation}
     </div>
   );
 }
@@ -307,33 +318,44 @@ function PersonRow({
 /** The owner's say over somebody they added: whether they stay — and, in a pool made on the shared pools
  *  page, which may have more admins than its maker, whether they are one. */
 function PersonMenu({ pool, person }: { pool: SharedPool; person: SharedPoolPerson }) {
-  const { modal } = App.useApp();
+  const [confirm, confirmation] = useConfirm();
+  const trigger = useRef<HTMLButtonElement>(null);
   const at = `${poolPath(pool)}/people/${encodeId(person.userId)}`;
   const setRole = usePoolWrite("Couldn't change the role", (role: 'ADMIN' | 'MEMBER') =>
     api(at, { method: 'PATCH', body: { role } }),
   );
   const remove = usePoolWrite("Couldn't remove the person from the pool", () => api(at, { method: 'DELETE' }));
-  const items: MenuProps['items'] = [
-    ...(pool.shared ? [{ key: 'role', label: person.role === 'ADMIN' ? 'Make member' : 'Make admin' }] : []),
-    { key: 'remove', label: 'Remove from pool', danger: true },
+  const items: MenuItem[] = [
+    ...(pool.shared
+      ? [{
+          key: 'role',
+          label: person.role === 'ADMIN' ? 'Make member' : 'Make admin',
+          onSelect: () => setRole.mutate(person.role === 'ADMIN' ? 'MEMBER' : 'ADMIN'),
+        }]
+      : []),
+    {
+      key: 'remove',
+      label: 'Remove from pool',
+      danger: true,
+      onSelect: () =>
+        void confirm({
+          title: `Remove ${person.name} from ${pool.label}?`,
+          description: 'Their keys leave with them.',
+          confirmText: 'Remove',
+          danger: true,
+          onConfirm: () => remove.mutateAsync(undefined),
+          returnFocus: trigger,
+        }),
+    },
   ];
-  const onClick: MenuProps['onClick'] = ({ key }) => {
-    if (key === 'role') {
-      setRole.mutate(person.role === 'ADMIN' ? 'MEMBER' : 'ADMIN');
-      return;
-    }
-    modal.confirm({
-      title: `Remove ${person.name} from ${pool.label}?`,
-      content: 'Their keys leave with them.',
-      okText: 'Remove',
-      okButtonProps: { danger: true },
-      onOk: () => remove.mutateAsync(undefined),
-    });
-  };
   return (
-    <Dropdown trigger={['click']} menu={{ items, onClick }}>
-      <Button size="small" type="text" icon={<EllipsisOutlined />} aria-label={`Manage ${person.name}`} />
-    </Dropdown>
+    <>
+      <Menu
+        items={items}
+        trigger={<Button ref={trigger} size="small" variant="text" icon={<EllipsisOutlined />} aria-label={`Manage ${person.name}`} />}
+      />
+      {confirmation}
+    </>
   );
 }
 
@@ -436,7 +458,7 @@ function SharePoolModal({
         Share anyway
       </Button>
       <Button
-        type="primary"
+        variant="primary"
         onClick={() => {
           onClose();
           onAddKey();
@@ -448,20 +470,21 @@ function SharePoolModal({
   ) : (
     <>
       <Button onClick={onClose}>Cancel</Button>
-      <Button type="primary" disabled={typed.length === 0} loading={share.isPending} onClick={() => share.mutate()}>
+      <Button variant="primary" disabled={typed.length === 0} loading={share.isPending} onClick={() => share.mutate()}>
         Share
       </Button>
     </>
   );
   return (
-    <Modal open width={500} title={`Share ${pool.label}`} footer={footer} onCancel={onClose}>
+    <Dialog open width={500} className="pool-dialog" title={`Share ${pool.label}`} footer={footer} onClose={onClose}>
       <div className="np-field">
         <span className="np-field-l">Emails of their Orbit accounts</span>
-        <Select
+        <MultiSelect
           mode="tags"
           className="pool-share-emails"
+          options={[]}
           value={emails}
-          onChange={(next: string[]) => {
+          onValueChange={(next) => {
             setEmails(next);
             setTyping('');
           }}
@@ -515,12 +538,12 @@ function SharePoolModal({
               <b>Everyone sees each person’s share</b> of this month’s API key use.
             </li>
           </ul>
-          <Checkbox checked={canAdd} onChange={(e) => setCanAdd(e.target.checked)}>
+          <Checkbox checked={canAdd} onCheckedChange={setCanAdd}>
             They can add their own API keys
           </Checkbox>
         </>
       )}
-    </Modal>
+    </Dialog>
   );
 }
 
@@ -547,13 +570,13 @@ function KeyField({
   return (
     <div className="np-field">
       <span className="np-field-l">Key</span>
-      <Input.Password
+      <PasswordInput
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="sk-…"
         autoComplete="off"
         aria-label="Key"
-        status={error ? 'error' : undefined}
+        invalid={!!error}
       />
       {error ? (
         <div className="np-field-h np-field-err">{error}</div>
@@ -619,7 +642,7 @@ export function AddKeyModal({ pool, onClose }: { pool: SharedPool; onClose: () =
     step === 'consent' ? (
       <>
         <Button onClick={onClose}>Cancel</Button>
-        <Button type="primary" onClick={() => setStep('form')}>
+        <Button variant="primary" onClick={() => setStep('form')}>
           Continue
         </Button>
       </>
@@ -627,7 +650,7 @@ export function AddKeyModal({ pool, onClose }: { pool: SharedPool; onClose: () =
       <>
         <Button onClick={onClose}>Cancel</Button>
         <Button
-          type="primary"
+          variant="primary"
           disabled={!label.trim() || !apiKey.trim()}
           loading={add.isPending}
           onClick={() => {
@@ -642,7 +665,7 @@ export function AddKeyModal({ pool, onClose }: { pool: SharedPool; onClose: () =
       <>
         <Button onClick={onClose}>Close</Button>
         <Button
-          type="primary"
+          variant="primary"
           onClick={() => {
             setApiKey('');
             setStep('form');
@@ -652,13 +675,13 @@ export function AddKeyModal({ pool, onClose }: { pool: SharedPool; onClose: () =
         </Button>
       </>
     ) : (
-      <Button type="primary" onClick={onClose}>
+      <Button variant="primary" onClick={onClose}>
         Done
       </Button>
     );
 
   return (
-    <Modal open width={500} title={`Add a key to ${pool.label}`} footer={footer} onCancel={onClose}>
+    <Dialog open width={500} className="pool-dialog" title={`Add a key to ${pool.label}`} footer={footer} onClose={onClose}>
       {step === 'consent' && (
         <div className="pa-consent">
           <div className="pa-lead">Paste an OpenAI API key to put in this pool.</div>
@@ -757,7 +780,7 @@ export function AddKeyModal({ pool, onClose }: { pool: SharedPool; onClose: () =
           </div>
         </div>
       )}
-    </Modal>
+    </Dialog>
   );
 }
 
@@ -797,17 +820,28 @@ export function ReplaceKeyModal({
     },
   });
   return (
-    <Modal
+    <Dialog
       open
       width={500}
+      className="pool-dialog"
       title={`Replace ${poolKey.label}`}
-      okText="Replace key"
-      okButtonProps={{ disabled: !apiKey.trim(), loading: replace.isPending }}
-      onOk={() => {
-        setError(null);
-        replace.mutate();
-      }}
-      onCancel={onClose}
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            disabled={!apiKey.trim()}
+            loading={replace.isPending}
+            onClick={() => {
+              setError(null);
+              replace.mutate();
+            }}
+          >
+            Replace key
+          </Button>
+        </>
+      }
     >
       <div className="pa-lead">
         OpenAI rejected {poolKey.fingerprint}. Paste a working key to put {poolKey.label} back in the pool.
@@ -820,6 +854,6 @@ export function ReplaceKeyModal({
         }}
         error={error}
       />
-    </Modal>
+    </Dialog>
   );
 }

@@ -39,7 +39,7 @@ class WikiHealthTest {
             assertEquals("$name: weight", expected.map { it.getValue("strong").jsonPrimitive.boolean }, parts.map { it.strong })
             assertEquals(name, case.string("text"), WikiHealthLogic.text(parts))
             // The whole line under the title: every active entry the read counts, the anchors, then maintenance.
-            val home = WikiHomeContent(space, listOf(space), emptyList(), emptyList(), space.pendingOps ?: 0, health = health)
+            val home = WikiHomeContent(space, listOf(space), emptyList(), emptyList(), health = health)
             assertEquals("$name: the line under the title", case.string("line"), home.statusLine(now))
         }
     }
@@ -48,12 +48,12 @@ class WikiHealthTest {
         val shared = fixture.getValue("space").jsonObject
         val space = WikiSpace(shared.getValue("id").jsonPrimitive.content, shared.getValue("slug").jsonPrimitive.content,
             rootCommitSha = shared["rootCommitSha"]?.jsonPrimitive?.contentOrNull)
-        assertEquals("0 entries · Anchors verified at 1588c3b", WikiHomeContent(space, listOf(space), emptyList(), emptyList(), 0).statusLine(now))
+        assertEquals("0 entries · Anchors verified at 1588c3b", WikiHomeContent(space, listOf(space), emptyList(), emptyList()).statusLine(now))
         val later = WikiSpaceHealth.decode(Wire.json.parseToJsonElement("""{"spaceId":"s","entries":3,"maintenance":{"look":"paused","enabled":true}}"""))
         assertEquals("a key a server one release apart left out reads as its default", 0, later.maintenance.backlog)
         assertEquals(emptyList<WikiStatusPart>(), WikiHealthLogic.parts(later.maintenance, now))
         assertEquals("3 entries · Anchors verified at 1588c3b",
-            WikiHomeContent(space, listOf(space), emptyList(), emptyList(), 0, health = later).statusLine(now))
+            WikiHomeContent(space, listOf(space), emptyList(), emptyList(), health = later).statusLine(now))
     }
 
     @Test fun theTimesReadAsTheWebReadsThem() {
@@ -74,5 +74,13 @@ class WikiHealthTest {
         assertEquals("Maintenance failed", WikiHealthCopy.failed(1))
         assertEquals("Maintenance failed 3 times", WikiHealthCopy.failed(3))
         assertEquals("View run", WikiModeCopy.viewRun)
+    }
+
+    /** With maintenance off, a read of the repository that waits still says the runner: the case the fixture's
+     * "nothing waits on the offline runner" leaves out. A read one release apart is `WikiServerExecutionFixtureTest`'s. */
+    @Test fun aWaitingReadSaysTheRunnerWithMaintenanceOff() {
+        val waiting = WikiSpaceHealth.decode(Wire.json.parseToJsonElement("""{"spaceId":"s","entries":3,"maintenance":{"look":"off","enabled":false},
+            "repo":{"look":"runner_offline","pending":1},"executor":{"mode":"server","serverExecutes":true},"systemModel":{"state":"up"}}"""))
+        assertEquals("Maintenance off · ● Waiting for the runner to come online · Set up", WikiHealthLogic.text(WikiHealthLogic.parts(waiting, now)))
     }
 }

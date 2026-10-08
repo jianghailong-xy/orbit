@@ -1,0 +1,176 @@
+=== RUN   TestDshACPProcessMultiTurn
+--- PASS: TestDshACPProcessMultiTurn (0.05s)
+=== RUN   TestDshACPStartupAndProtocolFailures
+=== RUN   TestDshACPStartupAndProtocolFailures/missing-executable
+--- PASS: TestDshACPStartupAndProtocolFailures/missing-executable (0.00s)
+=== RUN   TestDshACPStartupAndProtocolFailures/unsupported-version
+--- PASS: TestDshACPStartupAndProtocolFailures/unsupported-version (0.00s)
+=== RUN   TestDshACPStartupAndProtocolFailures/malformed-stdout
+--- PASS: TestDshACPStartupAndProtocolFailures/malformed-stdout (0.59s)
+=== RUN   TestDshACPStartupAndProtocolFailures/wrong-protocol-version
+--- PASS: TestDshACPStartupAndProtocolFailures/wrong-protocol-version (0.03s)
+=== RUN   TestDshACPStartupAndProtocolFailures/eof-zero
+--- PASS: TestDshACPStartupAndProtocolFailures/eof-zero (1.03s)
+=== RUN   TestDshACPStartupAndProtocolFailures/unclosed-tool
+--- PASS: TestDshACPStartupAndProtocolFailures/unclosed-tool (0.03s)
+=== RUN   TestDshACPStartupAndProtocolFailures/rpc-error-does-not-poison-next-turn
+--- PASS: TestDshACPStartupAndProtocolFailures/rpc-error-does-not-poison-next-turn (0.03s)
+=== RUN   TestDshACPStartupAndProtocolFailures/unknown-live-model-rejected
+--- PASS: TestDshACPStartupAndProtocolFailures/unknown-live-model-rejected (0.03s)
+=== RUN   TestDshACPStartupAndProtocolFailures/non-object-result
+--- PASS: TestDshACPStartupAndProtocolFailures/non-object-result (0.03s)
+--- PASS: TestDshACPStartupAndProtocolFailures (1.78s)
+=== RUN   TestDshACPPermissionRoundTrip
+=== RUN   TestDshACPPermissionRoundTrip/allow-once
+--- PASS: TestDshACPPermissionRoundTrip/allow-once (0.04s)
+=== RUN   TestDshACPPermissionRoundTrip/reject-once
+--- PASS: TestDshACPPermissionRoundTrip/reject-once (0.04s)
+--- PASS: TestDshACPPermissionRoundTrip (0.08s)
+=== RUN   TestDshACPRecordedEventMapping
+=== RUN   TestDshACPRecordedEventMapping/committed_blocks_and_known_context
+--- PASS: TestDshACPRecordedEventMapping/committed_blocks_and_known_context (0.27s)
+=== RUN   TestDshACPRecordedEventMapping/basic_multiturn
+--- PASS: TestDshACPRecordedEventMapping/basic_multiturn (0.26s)
+=== RUN   TestDshACPRecordedEventMapping/native_tools_and_failed_tool
+--- PASS: TestDshACPRecordedEventMapping/native_tools_and_failed_tool (0.26s)
+--- PASS: TestDshACPRecordedEventMapping (0.79s)
+=== RUN   TestDshEventsToolCallJoin
+--- PASS: TestDshEventsToolCallJoin (0.52s)
+=== RUN   TestDshLifecycleInterrupt
+=== RUN   TestDshLifecycleInterrupt/cancel-active-turn
+--- PASS: TestDshLifecycleInterrupt/cancel-active-turn (0.09s)
+=== RUN   TestDshLifecycleInterrupt/cancel-beats-racing-end_turn
+--- PASS: TestDshLifecycleInterrupt/cancel-beats-racing-end_turn (0.07s)
+=== RUN   TestDshLifecycleInterrupt/approval-stop
+--- PASS: TestDshLifecycleInterrupt/approval-stop (0.08s)
+--- PASS: TestDshLifecycleInterrupt (0.24s)
+=== RUN   TestDshLifecycleCredentialReload
+--- PASS: TestDshLifecycleCredentialReload (0.16s)
+=== RUN   TestDshLifecycleWiring
+=== RUN   TestDshLifecycleWiring/file-policy
+--- PASS: TestDshLifecycleWiring/file-policy (0.00s)
+=== RUN   TestDshLifecycleWiring/production-seam-reads-dispatch
+--- PASS: TestDshLifecycleWiring/production-seam-reads-dispatch (0.00s)
+=== RUN   TestDshLifecycleWiring/canonical-cwd-seal-and-execdir
+--- PASS: TestDshLifecycleWiring/canonical-cwd-seal-and-execdir (0.05s)
+=== RUN   TestDshLifecycleWiring/launch-cwd-mismatch
+--- PASS: TestDshLifecycleWiring/launch-cwd-mismatch (0.00s)
+=== RUN   TestDshLifecycleWiring/resume-failure-never-opens-new
+--- PASS: TestDshLifecycleWiring/resume-failure-never-opens-new (0.04s)
+=== RUN   TestDshLifecycleWiring/runtime-id-conflict
+--- PASS: TestDshLifecycleWiring/runtime-id-conflict (0.05s)
+--- PASS: TestDshLifecycleWiring (0.14s)
+=== RUN   TestDshMCPServers
+=== RUN   TestDshMCPServers/orbit-server-and-session-identity
+--- PASS: TestDshMCPServers/orbit-server-and-session-identity (0.00s)
+=== RUN   TestDshMCPServers/sse-entry-refused-before-launch
+--- PASS: TestDshMCPServers/sse-entry-refused-before-launch (0.00s)
+=== RUN   TestDshMCPServers/unverified-remote-refused
+--- PASS: TestDshMCPServers/unverified-remote-refused (0.00s)
+=== RUN   TestDshMCPServers/relative-command-refused
+--- PASS: TestDshMCPServers/relative-command-refused (0.00s)
+=== RUN   TestDshMCPServers/third-party-server-only-where-unapproved-actions-run
+--- PASS: TestDshMCPServers/third-party-server-only-where-unapproved-actions-run (0.00s)
+=== RUN   TestDshMCPServers/session-identity-is-not-the-agents-to-set
+--- PASS: TestDshMCPServers/session-identity-is-not-the-agents-to-set (0.00s)
+--- PASS: TestDshMCPServers (0.00s)
+=== RUN   TestDshToolPolicy
+--- PASS: TestDshToolPolicy (0.00s)
+=== RUN   TestDshAgentOverlay
+--- PASS: TestDshAgentOverlay (0.00s)
+=== RUN   TestDshPermissionPolicy
+=== RUN   TestDshPermissionPolicy/supported-modes
+--- PASS: TestDshPermissionPolicy/supported-modes (0.00s)
+=== RUN   TestDshPermissionPolicy/unsupported-modes-refused-before-launch
+--- PASS: TestDshPermissionPolicy/unsupported-modes-refused-before-launch (0.00s)
+--- PASS: TestDshPermissionPolicy (0.00s)
+=== RUN   TestDshPermissionBridge
+=== RUN   TestDshPermissionBridge/allow-once-joins-the-bare-tool-call-id
+--- PASS: TestDshPermissionBridge/allow-once-joins-the-bare-tool-call-id (0.01s)
+=== RUN   TestDshPermissionBridge/reject
+--- PASS: TestDshPermissionBridge/reject (0.01s)
+=== RUN   TestDshPermissionBridge/late-allow-after-stop-is-never-sent
+--- PASS: TestDshPermissionBridge/late-allow-after-stop-is-never-sent (0.00s)
+=== RUN   TestDshPermissionBridge/closed-bridge-cancels-without-asking
+--- PASS: TestDshPermissionBridge/closed-bridge-cancels-without-asking (0.00s)
+=== RUN   TestDshPermissionBridge/unknown-tool-call-is-rejected
+--- PASS: TestDshPermissionBridge/unknown-tool-call-is-rejected (0.00s)
+=== RUN   TestDshPermissionBridge/dont-ask-rejects-unasked
+--- PASS: TestDshPermissionBridge/dont-ask-rejects-unasked (0.00s)
+=== RUN   TestDshPermissionBridge/unknown-options-never-default-to-allow
+--- PASS: TestDshPermissionBridge/unknown-options-never-default-to-allow (0.00s)
+=== RUN   TestDshPermissionBridge/auto-allows-a-routine-escalation-without-a-card
+--- PASS: TestDshPermissionBridge/auto-allows-a-routine-escalation-without-a-card (0.00s)
+=== RUN   TestDshPermissionBridge/auto-leaves-a-high-impact-escalation-to-a-person
+--- PASS: TestDshPermissionBridge/auto-leaves-a-high-impact-escalation-to-a-person (0.01s)
+=== RUN   TestDshPermissionBridge/default-never-allows-an-escalation-itself
+--- PASS: TestDshPermissionBridge/default-never-allows-an-escalation-itself (0.01s)
+--- PASS: TestDshPermissionBridge (0.02s)
+=== RUN   TestDshAutoRoutineEscalation
+=== RUN   TestDshAutoRoutineEscalation/commit
+--- PASS: TestDshAutoRoutineEscalation/commit (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/commit_in_the_workspace_by_absolute_cd
+--- PASS: TestDshAutoRoutineEscalation/commit_in_the_workspace_by_absolute_cd (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/message_from_command_substitution
+--- PASS: TestDshAutoRoutineEscalation/message_from_command_substitution (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/merge_with_workdir
+--- PASS: TestDshAutoRoutineEscalation/merge_with_workdir (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/amend
+--- PASS: TestDshAutoRoutineEscalation/amend (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/build_cache
+--- PASS: TestDshAutoRoutineEscalation/build_cache (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/message_file_in_tmp
+--- PASS: TestDshAutoRoutineEscalation/message_file_in_tmp (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/index_file_named_by_PWD
+--- PASS: TestDshAutoRoutineEscalation/index_file_named_by_PWD (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/prose_in_a_quoted_message
+--- PASS: TestDshAutoRoutineEscalation/prose_in_a_quoted_message (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/message_that_runs_a_command
+--- PASS: TestDshAutoRoutineEscalation/message_that_runs_a_command (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/message_flag_of_another_program
+--- PASS: TestDshAutoRoutineEscalation/message_flag_of_another_program (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/not_an_escalation
+--- PASS: TestDshAutoRoutineEscalation/not_an_escalation (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/push
+--- PASS: TestDshAutoRoutineEscalation/push (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/fetch
+--- PASS: TestDshAutoRoutineEscalation/fetch (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/install
+--- PASS: TestDshAutoRoutineEscalation/install (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/inline_interpreter
+--- PASS: TestDshAutoRoutineEscalation/inline_interpreter (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/interpreter_reads_a_here-document
+--- PASS: TestDshAutoRoutineEscalation/interpreter_reads_a_here-document (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/unterminated_here-document
+--- PASS: TestDshAutoRoutineEscalation/unterminated_here-document (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/write_into_HOME
+--- PASS: TestDshAutoRoutineEscalation/write_into_HOME (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/HOME_variable
+--- PASS: TestDshAutoRoutineEscalation/HOME_variable (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/unknown_variable_path
+--- PASS: TestDshAutoRoutineEscalation/unknown_variable_path (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/absolute_path_elsewhere
+--- PASS: TestDshAutoRoutineEscalation/absolute_path_elsewhere (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/cd_elsewhere
+--- PASS: TestDshAutoRoutineEscalation/cd_elsewhere (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/dot-dot_leaves
+--- PASS: TestDshAutoRoutineEscalation/dot-dot_leaves (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/bare_cd
+--- PASS: TestDshAutoRoutineEscalation/bare_cd (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/git_-C_elsewhere
+--- PASS: TestDshAutoRoutineEscalation/git_-C_elsewhere (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/recursive_delete
+--- PASS: TestDshAutoRoutineEscalation/recursive_delete (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/workdir_elsewhere
+--- PASS: TestDshAutoRoutineEscalation/workdir_elsewhere (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/cluster_change
+--- PASS: TestDshAutoRoutineEscalation/cluster_change (0.00s)
+=== RUN   TestDshAutoRoutineEscalation/container
+--- PASS: TestDshAutoRoutineEscalation/container (0.00s)
+--- PASS: TestDshAutoRoutineEscalation (0.01s)
+=== RUN   TestDshPermissionCard
+--- PASS: TestDshPermissionCard (0.00s)
+=== RUN   TestDshToolGate
+--- PASS: TestDshToolGate (0.01s)
+PASS
+ok  	orbit	4.846s
