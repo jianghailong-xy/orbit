@@ -18,7 +18,7 @@ require(sourceSha.matches(Regex("[0-9a-f]{40}"))) { "orbitSourceSha must be a fu
 val sourceDirty = providers.gradleProperty("orbitSourceDirty").map { it.toBooleanStrict() }.orElse(
     providers.exec {
         workingDir(rootDir.resolve("../.."))
-        commandLine("git", "status", "--porcelain", "--", "src/android", ".github/workflows/android.yml", ".github/workflows/android-release.yml")
+        commandLine("git", "status", "--porcelain", "--", "src/android", ".github/workflows/android.yml", ".github/workflows/release.yml")
     }.standardOutput.asText.map { it.isNotBlank() },
 ).get()
 
@@ -32,9 +32,16 @@ val releaseVersionCode = providers.environmentVariable("ORBIT_ANDROID_VERSION_CO
 require(releaseVersionCode in 1..2100000000) { "Version code must be between 1 and 2100000000" }
 val packageId = providers.environmentVariable("ORBIT_ANDROID_APPLICATION_ID").orElse("io.orbitd.android").get()
 require(packageId.matches(Regex("[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+"))) { "Invalid Android application ID" }
-// The in-app updater reads android-v* releases of this GitHub repository.
+// The in-app updater reads the v* releases of this GitHub repository through api.github.com.
 val updateRepository = providers.gradleProperty("orbitUpdateRepository").orElse("jianghailong-xy/orbit").get()
 require(updateRepository.matches(Regex("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+"))) { "orbitUpdateRepository must be owner/name" }
+// Only an update rehearsal swaps GitHub for a stand-in on the device's loopback (adb reverse), and only in a
+// disposable *.upgradetest package; that build alone may reach 127.0.0.1 without TLS (src/updateRehearsal).
+val githubApi = "https://api.github.com"
+val updateApi = providers.gradleProperty("orbitUpdateApi").orElse(githubApi).get()
+require(updateApi == githubApi || updateApi.matches(Regex("http://127\\.0\\.0\\.1:[1-9][0-9]{0,4}")) && packageId.endsWith(".upgradetest")) {
+    "orbitUpdateApi is $githubApi, or http://127.0.0.1:<port> for a *.upgradetest rehearsal build"
+}
 
 // Environment only: no credential files or passwords in Gradle properties or source control.
 val signingValues = listOf("KEYSTORE_PATH", "STORE_PASSWORD", "KEY_ALIAS", "KEY_PASSWORD").associateWith {
@@ -60,6 +67,7 @@ android {
         buildConfigField("String", "SOURCE_SHA", "\"$sourceSha\"")
         buildConfigField("boolean", "SOURCE_DIRTY", sourceDirty.toString())
         buildConfigField("String", "UPDATE_REPOSITORY", "\"$updateRepository\"")
+        buildConfigField("String", "UPDATE_API", "\"$updateApi\"")
         // Firebase client values are supplied per build, independently of signing/release settings.
         // An empty or mismatched configuration keeps push disabled; no credential is required by CI.
         mapOf("APP_ID" to "AppId", "API_KEY" to "ApiKey", "PROJECT_ID" to "ProjectId",
@@ -89,6 +97,11 @@ android {
         release {
             if (hasSigning) signingConfig = signingConfigs.getByName("internalRelease")
         }
+    }
+
+    if (updateApi != githubApi) sourceSets.getByName("release") {
+        manifest.srcFile("src/updateRehearsal/AndroidManifest.xml")
+        res.srcDir("src/updateRehearsal/res")
     }
 
     // Opt-in for upgrade verification against a non-debuggable, test-signed release APK.

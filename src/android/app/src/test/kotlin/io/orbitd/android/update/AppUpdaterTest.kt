@@ -37,14 +37,17 @@ internal class GitHubFixture(val server: MockWebServer) {
     val releases = mutableListOf<String>()
     val files = ConcurrentHashMap<String, ByteArray>()
     val hits = ConcurrentHashMap<String, AtomicInteger>()
+    /** Every request target as sent, query included. */
+    val targets = java.util.concurrent.CopyOnWriteArrayList<String>()
     @Volatile var list: (() -> MockResponse)? = null
-    val listUrl get() = server.url("/repos/o/r/releases?per_page=100").toString()
+    val listUrl get() = server.url("/repos/o/r/releases?per_page=${UpdateCatalog.PAGE_SIZE}").toString()
 
     init {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 val path = request.requestUrl!!.encodedPath
                 hits.getOrPut(path) { AtomicInteger() }.incrementAndGet()
+                targets += request.path!!
                 if (path == "/repos/o/r/releases") return list?.invoke()
                     ?: MockResponse().setBody(releases.joinToString(",", "[", "]"))
                 return files[path]?.let { MockResponse().setBody(Buffer().write(it)) } ?: MockResponse().setResponseCode(404)
@@ -54,22 +57,32 @@ internal class GitHubFixture(val server: MockWebServer) {
 
     fun count(path: String) = hits[path]?.get() ?: 0
 
-    /** Publishes an android-v* release with its APK and android-update.json, as android-release.yml does. */
+    /**
+     * Publishes the Android side of a release as release.yml does: the APK, its .sha256 and android-update.json on
+     * the [tag] release (v + versionName unless a test says otherwise), beside the DMG the macOS job put there.
+     */
     fun publish(name: String, code: Long, apk: ByteArray, cert: String, applicationId: String = "io.orbitd.android",
-                draft: Boolean = false, sha: String = sha256(apk)): UpdateManifest {
-        val tag = "android-v$name"
+                draft: Boolean = false, sha: String = sha256(apk), tag: String = "v$name"): UpdateManifest {
         val apkName = "orbit-android-$name.apk"
         val apkUrl = server.url("/download/$tag/$apkName").toString()
-        val manifest = UpdateManifest(1, applicationId, name, code, 29, apkName, apkUrl, apk.size.toLong(), sha, cert,
+        val manifest = UpdateManifest(1, tag, applicationId, name, code, 29, apkName, apkUrl, apk.size.toLong(), sha, cert,
             sourceSha = "0".repeat(40), publishedAt = "2026-10-07T00:00:00Z", notes = "Notes for $name")
         val manifestBytes = Json.encodeToString(manifest).encodeToByteArray()
         files["/download/$tag/$apkName"] = apk
         files["/download/$tag/android-update.json"] = manifestBytes
         releases += """{"tag_name":"$tag","draft":$draft,"prerelease":true,"assets":[
+            {"name":"Orbit-$tag-arm64.dmg","browser_download_url":"${server.url("/download/$tag/Orbit-$tag-arm64.dmg")}","size":15000000},
             {"name":"$apkName","browser_download_url":"$apkUrl","size":${apk.size}},
             {"name":"$apkName.sha256","browser_download_url":"${apkUrl}.sha256","size":80},
             {"name":"android-update.json","browser_download_url":"${server.url("/download/$tag/android-update.json")}","size":${manifestBytes.size}}]}"""
         return manifest
+    }
+
+    /** A v* release from before Android joined, or one whose Android jobs did not publish: DMG and zip, no manifest. */
+    fun appleOnly(tag: String) {
+        releases += """{"tag_name":"$tag","draft":false,"prerelease":true,"assets":[
+            {"name":"Orbit-$tag-arm64.dmg","browser_download_url":"${server.url("/download/$tag/Orbit-$tag-arm64.dmg")}","size":15000000},
+            {"name":"Orbit-$tag-arm64.zip","browser_download_url":"${server.url("/download/$tag/Orbit-$tag-arm64.zip")}","size":15000000}]}"""
     }
 
     companion object {
@@ -121,8 +134,9 @@ class AppUpdaterTest {
     }
 
     @Test fun picksTheHighestCompatibleAndroidReleaseAndPromptsOnce() {
-        github.releases += """{"tag_name":"v1.9.0","draft":false,"assets":[{"name":"Orbit.dmg","browser_download_url":"x","size":1}]}"""
+        github.appleOnly("v1.9.0")
         github.publish("0.9.0", 9, apk(1), signer, draft = true)
+        github.publish("0.8.5", 9, apk(12), signer, tag = "android-v0.8.5")
         github.publish("0.8.0", 8, apk(2), signer, applicationId = "io.orbitd.android.upgradetest")
         github.publish("0.7.0", 7, apk(3), "00".repeat(32))
         github.publish("0.6.0", 6, apk(4), signer.uppercase())
@@ -133,9 +147,12 @@ class AppUpdaterTest {
 
         val found = (updater.state.value as UpdateState.Available).release
         assertEquals(6L, found.manifest.versionCode)
-        assertEquals("android-v0.6.0", found.tag)
+        assertEquals("v0.6.0", found.tag)
         assertSame(found, updater.prompt.value)
-        assertEquals("Draft releases are never read", 0, github.count("/download/android-v0.9.0/android-update.json"))
+        assertEquals("Draft releases are never read", 0, github.count("/download/v0.9.0/android-update.json"))
+        assertEquals("Only v* tags carry Android releases", 0, github.count("/download/android-v0.8.5/android-update.json"))
+        assertEquals("One page of the list, never releases/latest",
+            listOf("/repos/o/r/releases?per_page=30"), github.targets.filter { it.startsWith("/repos/") })
         updater.dismissPrompt()
         assertNull(updater.prompt.value)
 
@@ -146,6 +163,20 @@ class AppUpdaterTest {
         now += 7 * hour
         foreground(updater)
         assertEquals(10L, updater.prompt.value!!.manifest.versionCode)
+    }
+
+    @Test fun releasesWithoutAnAndroidManifestAndDraftsAreNoUpdate() {
+        github.publish("0.4.0", 4, apk(13), signer)
+        github.publish("0.6.0", 6, apk(14), signer, draft = true)
+        github.appleOnly("v0.7.0")
+        val updater = updater()
+
+        foreground(updater)
+        assertEquals(UpdateState.Current, updater.state.value)
+        assertNull(updater.prompt.value)
+        updater.checkNow()
+        assertEquals("A newer macOS-only release and a draft are not updates", UpdateState.Current, updater.state.value)
+        assertEquals(0, github.count("/download/v0.6.0/android-update.json"))
     }
 
     @Test fun automaticChecksRunOnStartAndForegroundAtMostEverySixHours() {
@@ -238,7 +269,7 @@ class AppUpdaterTest {
         assertEquals(UpdateState.Failed(UpdateFailure.INSTALL_CANCELLED, release), updater.state.value)
 
         updater.install(release) // Try again reuses the verified file.
-        assertEquals(1, github.count("/download/android-v0.6.0/orbit-android-0.6.0.apk"))
+        assertEquals(1, github.count("/download/v0.6.0/orbit-android-0.6.0.apk"))
         assertEquals(2, installed.size)
     }
 
@@ -307,7 +338,7 @@ class AppUpdaterTest {
         assertEquals(release, second.prompt.value)
         second.install(release)
         assertEquals(UpdateState.Installing(release), second.state.value)
-        assertEquals("The verified file is reused", 1, github.count("/download/android-v0.6.0/orbit-android-0.6.0.apk"))
+        assertEquals("The verified file is reused", 1, github.count("/download/v0.6.0/orbit-android-0.6.0.apk"))
         assertEquals(1, installed.size)
 
         // Later, or any final installer result, forgets it.

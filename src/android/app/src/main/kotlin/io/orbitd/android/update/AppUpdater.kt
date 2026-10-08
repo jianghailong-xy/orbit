@@ -69,7 +69,7 @@ data class UpdateConfig(
         /** Debug builds (.debug) never look for release updates. */
         fun forBuild() = UpdateConfig(
             enabled = !BuildConfig.DEBUG,
-            releasesUrl = "https://api.github.com/repos/${BuildConfig.UPDATE_REPOSITORY}/releases?per_page=100",
+            releasesUrl = "${BuildConfig.UPDATE_API}/repos/${BuildConfig.UPDATE_REPOSITORY}/releases?per_page=${UpdateCatalog.PAGE_SIZE}",
             applicationId = BuildConfig.APPLICATION_ID,
             versionCode = BuildConfig.VERSION_CODE.toLong(),
             sdk = Build.VERSION.SDK_INT,
@@ -79,7 +79,7 @@ data class UpdateConfig(
 }
 
 /**
- * Looks for a newer android-v* GitHub release of this exact package and signer, downloads it into
+ * Looks for a newer v* GitHub release carrying this exact package and signer, downloads it into
  * app-private storage, checks its SHA-256 and signing certificate, then hands it to PackageInstaller.
  * Automatic checks run when the app starts or returns to the foreground, at most once per interval,
  * and fail silently; only a manual check reports why it could not finish. Nothing here touches the
