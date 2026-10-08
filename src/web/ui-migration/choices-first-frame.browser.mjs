@@ -188,7 +188,12 @@ for (const [name, kind] of Object.entries(kinds)) {
       expect.soft([...frames, settled].map((frame) => frame.scrolled ?? scrolled), `${place.name}, ${opening}: owner's scroll`)
         .toEqual([...frames, settled].map(() => scrolled));
       if (!place.antd || opening !== (kind.antdOpening ?? opening)) continue;
-      const antd = await sample(page, info, kind, 'antd', place, opening);
+      let antd = await sample(page, info, kind, 'antd', place, opening);
+      // The replaced submenu opens on the pointer entering its item, and now and then is not open when read: once more.
+      if (!antd.settled.shown) {
+        info.annotations.push({ type: 'replaced popup sampled again', description: `${place.name}, ${opening}` });
+        antd = await sample(page, info, kind, 'antd', place, opening);
+      }
       entry.antd = antd.settled;
       expect.soft(antd.settled.shown, `${place.name}: AntD shown`).toBe(true);
       if (narrowed(settled) || narrowed(antd.settled)) {
