@@ -108,18 +108,26 @@ public enum WikiPlanCopy {
     /// A version as the head and the version menu name it: `v2` (`wikiPlanVersionLabel`).
     public static func versionLabel(_ version: Int) -> String { "v\(version)" }
 
+    /// Who drafts the plan while the server executes the account (`WIKI_PLAN_DRAFTER_SERVER`): the wiki-worker's
+    /// System model, never the account's provider. Every sentence that names the drafter takes it then; under
+    /// runner each keeps `<provider>`, word for word (owner's call 2026-10-08).
+    public static let drafterServer = "System model"                        // WIKI_PLAN_DRAFTER_SERVER
+
     /// The empty page's sentence (`wikiPlanEmptyText`).
-    public static func emptyText(provider: String?) -> String {
-        "A plan lays out this wiki’s documents: the categories, the documents in each, who each one is for and what it covers, "
-            + "and where each section’s material comes from. \(provider ?? WikiCopy.historyMaintenance) drafts it; nothing is written until you confirm it."
+    public static func emptyText(provider: String?, serverExecutes: Bool) -> String {
+        let drafter = serverExecutes ? "The \(drafterServer)" : provider ?? WikiCopy.historyMaintenance
+        return "A plan lays out this wiki’s documents: the categories, the documents in each, who each one is for and what it covers, "
+            + "and where each section’s material comes from. \(drafter) drafts it; nothing is written until you confirm it."
     }
 
-    /// Where a draft runs and how long it takes, under Draft plan (`wikiPlanEmptyNote`), and the same line
-    /// while the server executes the account (`WIKI_PLAN_NOTE_SERVER`, owner's call 2026-10-08, mock 35's
-    /// Plan card): the wiki-worker drafts with the System model and the duration is not touched until P10.
+    /// Where a draft runs and how long it takes, under Draft plan (`wikiPlanEmptyNote`), and the sentence the plan's
+    /// empty page keeps while the server executes the account (`WIKI_PLAN_EMPTY_NOTE_SERVER`, owner's call
+    /// 2026-10-08): the wiki-worker drafts with the System model and the duration is not touched until P10.
+    /// Activity's Plan card says the short one (`noteServer`, `WIKI_PLAN_NOTE_SERVER`).
     public static let noteServer = "System model · about 1–2 hours"         // WIKI_PLAN_NOTE_SERVER
+    public static let emptyNoteServer = "Runs on the server with the System model — usually 1–2 hours. Until you confirm a plan, the Wiki shows its topic articles."   // WIKI_PLAN_EMPTY_NOTE_SERVER
     public static func emptyNote(where place: String?, provider: String?, serverExecutes: Bool) -> String {
-        if serverExecutes { return noteServer }
+        if serverExecutes { return emptyNoteServer }
         let on = place.map { ", on \($0)" } ?? ""
         let with = provider.map { " with \($0)" } ?? ""
         return "Runs as a task in the Wiki maintenance list\(on)\(with) — usually 1–2 hours. Until you confirm a plan, the Wiki shows its topic articles."
@@ -153,9 +161,10 @@ public enum WikiPlanCopy {
     }
 
     /// The dialog's sentence (`wikiPlanRedraftNote`): what drafts it again, from which version, how often it retries.
-    public static func redraftNote(provider: String?, from: (version: Int, inForce: Bool)?) -> String {
+    public static func redraftNote(provider: String?, from: (version: Int, inForce: Bool)?, serverExecutes: Bool) -> String {
         let base = from.map { $0.inForce ? " from v\($0.version), the plan in force," : " from draft v\($0.version)," } ?? ""
-        return "\(provider ?? WikiCopy.historyMaintenance) drafts it again\(base) with what you write here. A draft that doesn’t pass the plan check is "
+        let drafter = serverExecutes ? "The \(drafterServer)" : provider ?? WikiCopy.historyMaintenance
+        return "\(drafter) drafts it again\(base) with what you write here. A draft that doesn’t pass the plan check is "
             + "redrafted with its errors, up to 3 times."
     }
 
@@ -636,7 +645,7 @@ public enum WikiPlanLogic {
 
     /// The job's card (`wikiPlanJobCard`): queued, drafting with its round, held with why, failed with how —
     /// and, on the version in force, its documents being written, or that the writing stopped short.
-    public static func jobCard(_ job: WikiPlanJob?, now: Date, runnerOnline: Bool?, failed: WikiPlanJob?, inForce: Bool,
+    public static func jobCard(_ job: WikiPlanJob?, now: Date, runnerOnline: Bool?, serverExecutes: Bool, failed: WikiPlanJob?, inForce: Bool,
                                directory: WikiDocsDirectory?) -> JobCard? {
         let open: [WikiPlanJobState] = [.queued, .held, .running]
         let draft = job.flatMap { $0.kind != .build && open.contains($0.state) ? $0 : nil }
@@ -653,7 +662,7 @@ public enum WikiPlanLogic {
                            link: runLink(going.waitingFor?.sessionId), progress: nil)
         }
         if let draft, draft.state == .running {
-            let who = draft.provider ?? WikiCopy.historyMaintenance
+            let who = serverExecutes ? WikiPlanCopy.drafterServer : draft.provider ?? WikiCopy.historyMaintenance
             let text = draft.startedAt.map { "\(who) · attempt \(draft.attempt ?? 1) of \(draft.attemptsMax ?? 3) · started \(WikiHealthLogic.ago($0, now: now))" }
                 ?? "\(who) · waiting for its run to start"
             return JobCard(look: .drafting, title: WikiPlanCopy.drafting, text: text, link: runLink(draft.sessionId), progress: nil)

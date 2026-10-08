@@ -233,7 +233,7 @@ struct WikiPlanPage: View {
                 .foregroundStyle(.secondary)
             Text(WikiPlanCopy.emptyTitle)
                 .font(.title3.bold())
-            Text(WikiPlanCopy.emptyText(provider: provider))
+            Text(WikiPlanCopy.emptyText(provider: provider, serverExecutes: serverExecutes))
                 .font(.orbitSubtext)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
