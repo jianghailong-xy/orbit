@@ -235,7 +235,12 @@ type sessionMeta struct {
 	// on (antigravitySessionGoogleDirToRecord): what a removal of that account refuses to take while
 	// the session is running. Empty on Default.
 	AntigravityGoogleDir string `json:"antigravityGoogleDir,omitempty"`
-	WorkDir              string `json:"workDir"`
+	// KimiCodeHome is the KIMI_CODE_HOME of the added Kimi account this session runs on
+	// (kimiSessionHomeToRecord): where its conversation is kept, so where `orbit resume` looks for it,
+	// and what a removal of that account refuses to take while the session is running. Empty on
+	// Default.
+	KimiCodeHome string `json:"kimiCodeHome,omitempty"`
+	WorkDir      string `json:"workDir"`
 	// PreviousWorkDir is the WorkDir before the last write that changed it: where a session moved
 	// to another of this machine's workspaces last ran, and so where its Claude conversation is
 	// (carryMovedClaudeConversation). Each run records its own WorkDir before its engine starts.
@@ -307,6 +312,7 @@ func writeSessionMetaWithCodexState(scratch string, job *ClaimedSession, execDir
 	// falls back from runner-shared state to a stale legacy session directory.
 	claudeDir := claudeSessionConfigDirToRecord(job, execDir)
 	antigravityDir := antigravitySessionGoogleDirToRecord(job)
+	kimiHome := kimiSessionHomeToRecord(job, execDir)
 	existing := readSessionMeta(filepath.Join(scratch, "meta.json"))
 	if layout == "" || claudeDir == "" {
 		if existing != nil {
@@ -340,6 +346,7 @@ func writeSessionMetaWithCodexState(scratch string, job *ClaimedSession, execDir
 		CodexStateHome:       codexHome,
 		ClaudeConfigDir:      claudeDir,
 		AntigravityGoogleDir: antigravityDir,
+		KimiCodeHome:         kimiHome,
 		WorkDir:              execDir,
 		PreviousWorkDir:      previousWorkDir,
 		Title:                job.Title,

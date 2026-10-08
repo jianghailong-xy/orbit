@@ -1355,9 +1355,14 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 		emit(evError, map[string]interface{}{"message": msg})
 		return stFailed, true, false
 	}
+	// The account's home: the KIMI_CODE_HOME the session's environment names, else Default's.
 	realHome, err := effectiveKimiHome(envWithAgent(job.Agent.Env), execDir)
 	if err != nil {
 		emit(evError, map[string]interface{}{"message": "failed to resolve the Kimi home directory: " + err.Error()})
+		return stFailed, true, false
+	}
+	if err := ensureKimiHomeStores(realHome); err != nil {
+		emit(evError, map[string]interface{}{"message": "failed to prepare the Kimi home: " + err.Error()})
 		return stFailed, true, false
 	}
 	kimiHome, err := prepareKimiHomeOverlay(scratchDir, realHome)

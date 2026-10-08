@@ -204,6 +204,9 @@ type EngineAccountReport struct {
 	// clients warn about ahead of time as Claude Code does. Omitted where the CLI recorded none.
 	// Claude only.
 	LoginExpiresAt string `json:"loginExpiresAt,omitempty"`
+	// The site this account's login is on, "mainland-cn" (kimi.com) or "global" (kimi.ai); omitted
+	// when it has none (kimi_region.go). Kimi only: the engine's own kimiRegion stays Default's.
+	KimiRegion string `json:"kimiRegion,omitempty"`
 }
 
 // EngineUpdateReport is the updater's last word on one engine, carried alongside that engine's
