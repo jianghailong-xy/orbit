@@ -17,11 +17,11 @@ final class SettingsHomeTests: XCTestCase {
     func testTheGroupsReadInTheOrderTheyWerePicked() {
         XCTAssertEqual(SettingsHome.Group.allCases.map(SettingsHome.header),
                        ["Sessions", "Machines & models", "Preferences", "Account"])
-        XCTAssertEqual(SettingsHome.rows(.sessions, isAdmin: false), [.defaultPermission, .orchestration])
+        XCTAssertEqual(SettingsHome.rows(.sessions, isAdmin: false), [.defaultPermission, .orchestration, .modelRouting])
         XCTAssertEqual(SettingsHome.rows(.machines, isAdmin: false), [.runners, .providers])
         XCTAssertEqual(SettingsHome.rows(.preferences, isAdmin: false), [.notifications, .appearance])
         XCTAssertEqual(SettingsHome.rows(.account, isAdmin: false),
-                       [.email, .instance, .sharedLinks, .changePassword])
+                       [.email, .instance, .sharedLinks, .accessTokens, .changePassword])
     }
 
     /// Admin is role-gated here as everywhere else, and comes last in Account.
@@ -117,8 +117,9 @@ final class SettingsHomeTests: XCTestCase {
     // MARK: - Copy that is composed
 
     func testTheComposedLinesReadAsTheWebsDo() {
-        XCTAssertEqual(SettingsCopy.signOutTitle(instance: "orbitd.io"), "Sign out of orbitd.io?")
-        XCTAssertEqual(SettingsCopy.signOutTitle(instance: nil), "Sign out?")
+        // Names neither the server nor the account: the question is asked over the screen that
+        // already shows both.
+        XCTAssertEqual(SettingsCopy.signOutTitle, "Sign out?")
         XCTAssertEqual(SettingsCopy.deviceHeader("iPhone"), "This iPhone")
     }
 

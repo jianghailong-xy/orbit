@@ -29,7 +29,9 @@
  *  (5) A refresh the token endpoint refuses, or a 401 on a token just refreshed: SIGNED_OUT with the
  *      reason, answered 403 — "only you can sign in again" — and the session told; nothing more goes out.
  *      Only the owner can sign in again, and the same session goes on when they do.
- *  (6) A rate limit (recorded) is waited out on the same login, and marks nothing.
+ *  (6) A rate limit (recorded) is waited out on the same login, and marks nothing — the short mark that
+ *      holds the account out of new claims (0302… 0382) is left only when the gateway's own wait is spent
+ *      and the 429 goes back to codex, which does not retry one.
  *  (7) The ledger: per session and hour, summed; a row whose session is gone before the write is dropped.
  *  (8) No database connection is held while a response streams.
  *  (9) Nothing the gateway logged carries a token, in the clear or encrypted.
@@ -887,8 +889,36 @@ exit 0
     }
     const row = await loginRow(pool.id, pool.accountId);
     assert.deepEqual({ state: row.state, spentUntil: row.spentUntil }, { state: 'ACTIVE', spentUntil: null });
+    // Waited out inside the request, so nothing is held against the account: no throttle either.
+    assert.equal(row.throttledUntil, null);
     assert.equal((await sessionRow(session)).poolSwitchNotice, null);
     assert.deepEqual(await carriers(session), []);
+  });
+
+  await t.test("(6) a rate limit that outlasts the gateway's own wait is held against the account", async () => {
+    const pool = await world('Throttled');
+    const session = await pool.sessionOf();
+    const token = tokenOf(await claim(owner, session));
+    const recorded = CLI.rateLimit;
+    const limited = (): Scripted => ({ status: recorded.response.status, headers: { ...headersOf(recorded.response), 'retry-after': '1' }, body: bodyOf(recorded.response) });
+    // One more 429 than the gateway may send, so its own wait is spent and the 429 goes back to codex.
+    script.push(limited(), limited(), limited(), limited());
+    seen.length = 0;
+    const before = Date.now();
+    const answer = await ask(token);
+    assert.equal(answer.status, 429, 'the upstream 429 goes back unchanged');
+    assert.equal(backendRequests().length, 4, 'and only after every send the gateway may make');
+    // Held out of new claims for the mark's floor — the backend asked for 1s, which is shorter than the
+    // wait the gateway has already spent — while `spent_until` stays untouched: a rate limit is not a budget.
+    const row = await loginRow(pool.id, pool.accountId);
+    assert.equal(row.spentUntil, null);
+    assert.ok(row.throttledUntil !== null, 'the account is held out');
+    const held = row.throttledUntil!.getTime() - before;
+    assert.ok(held >= 60_000, `expected at least a minute, got ${held}ms`);
+    assert.ok(held < 120_000, `and no more than the floor plus the request, got ${held}ms`);
+    // The gateway moves nobody: the next claim is what takes the session off the account.
+    const moved = await sessionRow(session);
+    assert.deepEqual({ accountId: moved.poolCodexAccountId, notice: moved.poolSwitchNotice }, { accountId: pool.accountId, notice: null });
   });
 
   await t.test('(7) the ledger: per session and hour, summed; a row whose session is gone before the write is dropped', async () => {

@@ -1,0 +1,111 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T09:54:04.172Z",
+    "duration": 8130.426,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 3,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "unexpected",
+      "results": [
+        {
+          "status": "failed",
+          "duration": 2103
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-expiry-open-value.png",
+          "sha256": "afaeb5e4bf110207eec7157339142a824e42faf7b2973de5ab287f690dc83edb"
+        },
+        {
+          "file": "chromium-light-desktop--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-expiry-open-value.png",
+          "sha256": "57792d138c6049caa462e30bce5eba79d929112ec6c35cfe28a0ddaf162295d6"
+        },
+        {
+          "file": "chromium-light-desktop--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "bfd04e9b7016c92f2e00795efce16142983eb842f6ac37c81b39dc10c5d02b39"
+        },
+        {
+          "file": "chromium-light-desktop--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--error-context.md",
+          "sha256": "4ed7938032f5d59aa3e5859049634546d4fc3e19ccb8d84c2587248cb7d8a7da"
+        },
+        {
+          "file": "chromium-light-desktop--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--trace.zip",
+          "sha256": "138db77bf858d40cc30d57925e7d28fb189e99c4caa8fb7757b65a6924008406"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--account-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "unexpected",
+      "results": [
+        {
+          "status": "failed",
+          "duration": 2308
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--account-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-account-open-value.png",
+          "sha256": "672c87661c4a906f3ae8f76be7b9f76e43754091d70a65296d49db5e839d89f6"
+        },
+        {
+          "file": "chromium-light-desktop--account-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-account-open-value.png",
+          "sha256": "2f3cb0e7a081776849e7aae3619565c4bb73895facc00b54fbb7d219d3f66ab4"
+        },
+        {
+          "file": "chromium-light-desktop--account-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "364caa4277366db2b06ce09be52da59438a7cc64bf40ecaa51efe588fefed5e1"
+        },
+        {
+          "file": "chromium-light-desktop--account-dims-the-current-value-while-open-and-restores-it-on-Escape--error-context.md",
+          "sha256": "6635a5aad1832feb99ddf30edc23f1dd0cb0bb203c9b3827da289b6bb641787f"
+        },
+        {
+          "file": "chromium-light-desktop--account-dims-the-current-value-while-open-and-restores-it-on-Escape--trace.zip",
+          "sha256": "cdb375d4fa53705ea8179773f7e289853ff165aa9e075b03703e3c1d811edb8b"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--search-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "unexpected",
+      "results": [
+        {
+          "status": "failed",
+          "duration": 2174
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--search-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-search-open-value.png",
+          "sha256": "9187d451c5590a5199a1ee1592432a07086454281c57be7c1f7cfc9ab9887c61"
+        },
+        {
+          "file": "chromium-light-desktop--search-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-search-open-value.png",
+          "sha256": "5538ad8953eabd3588b5ca02011700802360884eb3143af8342bfb061a3ef182"
+        },
+        {
+          "file": "chromium-light-desktop--search-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "4da7dacae2c87b570071c7045c0aea14516f592fce94827640efe3cae1eff966"
+        },
+        {
+          "file": "chromium-light-desktop--search-dims-the-current-value-while-open-and-restores-it-on-Escape--error-context.md",
+          "sha256": "c38dd124c3095383e72ed02cf83271bed15a044cc75d7010271d05e232ace4a9"
+        },
+        {
+          "file": "chromium-light-desktop--search-dims-the-current-value-while-open-and-restores-it-on-Escape--trace.zip",
+          "sha256": "18bdaaa6361509094295a8a9698ec9b5464863d8b7b9a7073ace211117ea7b5d"
+        }
+      ]
+    }
+  ]
+}

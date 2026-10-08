@@ -212,6 +212,7 @@ describe("each engine's sign-in, quota and way to its sign-in", () => {
       ['Kimi Code', 'ok', 'Signed in'],
       // OpenCode signs in per provider, with nothing on the machine to report.
       ['OpenCode', 'muted', '—'],
+      ['Antigravity CLI', 'muted', 'Update runner'],
     ]);
   });
 
@@ -234,21 +235,24 @@ describe("each engine's sign-in, quota and way to its sign-in", () => {
       ['Codex', 'warn', 'Signed out'],
       ['Kimi Code', 'warn', 'Signed out'],
       ['OpenCode', 'muted', 'Not installed'],
+      ['Antigravity CLI', 'muted', 'Update runner'],
     ]);
   });
 
-  it('shows every quota window of a signed-in login, amber from 90%', () => {
-    // Its runner reports Claude's windows only: Codex is signed in with nothing to show.
+  it('shows the quota window of a signed-in login closest to its limit, amber from 90%', () => {
+    // Its runner reports Claude's windows only: Codex is signed in with nothing to show. One window
+    // per row, the one that stops the login first; every window is the engine page's.
     const rows = rowsOf(render(wikova()));
     expect(rows.map((row) => [row.name, row.quota, row.quotaNote])).toEqual([
-      ['Claude Code', ['5-hour limit 14%', 'Weekly · all models 98% !'], null],
+      ['Claude Code', ['Weekly · all models 98% !'], null],
       ['Codex', [], 'No quota reported'],
       ['Kimi Code', [], 'No quota reported'],
       ['OpenCode', [], '—'],
+      ['Antigravity CLI', [], '—'],
     ]);
     // Signed out, the last reading is about sessions that can no longer start.
     const out = rowsOf(render(wikova({ engines: [health({ engine: 'claude', auth: 'no' })] })));
-    expect(out.map((row) => [row.quota, row.quotaNote])).toEqual([[[], '—']]);
+    expect(out.map((row) => [row.quota, row.quotaNote])).toEqual([[[], '—'], [[], '—']]);
   });
 
   it('reads a window past its reset as the fresh one it now is', () => {
@@ -261,12 +265,13 @@ describe("each engine's sign-in, quota and way to its sign-in", () => {
         } as PlanUsage,
       }),
     );
-    expect(rowsOf(html)[0].quota).toEqual(['5-hour limit 0%', 'Weekly · all models 59%']);
+    // The spent 5-hour window has rolled over, so it no longer stops the login: the weekly one does.
+    expect(rowsOf(html)[0].quota).toEqual(['Weekly · all models 59%']);
   });
 
   it('shows an engine with several accounts by the one a new session starts on, named', () => {
     // Two Claude logins. Default's 5-hour window is spent, so a session nobody picked an account for
-    // starts on jianghailong.rd — and its windows are the ones that say what that session has. Default's
+    // starts on jianghailong.rd — and its window is the one that says what that session has. Default's
     // under "2 accounts signed in" would read as the whole machine's.
     const html = render(
       runner({
@@ -298,14 +303,14 @@ describe("each engine's sign-in, quota and way to its sign-in", () => {
     );
     const [claude] = rowsOf(html);
     expect(claude.signIn).toEqual(['ok', '2 accounts signed in']);
-    expect(claude.quota).toEqual(['5-hour limit 1%', 'Weekly · all models 0%']);
+    expect(claude.quota).toEqual(['5-hour limit 1%']);
     expect(/class="rd-quota-next">([^<]*)</.exec(html)?.[1]).toBe('Next: jianghailong.rd');
   });
 
   it('leads every row to that engine’s sign-in on Providers, its card opened', () => {
     const r = wikova();
     expect(rowsOf(render(r)).map((row) => row.href)).toEqual(
-      ['claude', 'codex', 'kimi', 'opencode'].map(
+      ['claude', 'codex', 'kimi', 'opencode', 'antigravity'].map(
         (engine) => `/providers?runner=${encodeId(r.id)}&engine=${engine}`,
       ),
     );

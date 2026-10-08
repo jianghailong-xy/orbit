@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
 import { RunnerEngines } from './RunnerEngines';
-import { clickRunnerMenuItem, openRunnerMenu, runnerMenuItem } from './RunnerEngines.test-helpers';
+import { clickRunnerMenuItem, openRunnerCards, openRunnerMenu, runnerMenuItem } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -94,7 +94,7 @@ afterEach(() => {
 });
 
 function mount(runners: Runner[]) {
-  localStorage.setItem('orbit:providers-expanded-runners', JSON.stringify(runners.map((r) => r.id)));
+  openRunnerCards(runners);
   apiMock.mockImplementation(async (path: string, options?: { method?: string }) => {
     if (path === '/runners') return runners;
     if (path.endsWith('/login') && (options?.method ?? 'GET') === 'GET') {
@@ -273,5 +273,38 @@ describe('a removal the machine would not do', () => {
 
     expect((await runnerMenuItem(workRow, 'Remove account')).getAttribute('aria-disabled')).toBe('true');
     expect(workRow.querySelector('.re-panel.bad')).toBeNull();
+  });
+});
+
+describe('an account on its way out', () => {
+  // Between the press and the beat that drops the row — the machine may already have said done —
+  // the row says Removing… instead of its sign-in, and the group's head stops counting it.
+  it.each(['pending', 'done'] as const)('reads Removing… and leaves the head’s count while %s', async (status) => {
+    const page = mount([
+      runner([DEFAULT, WORK, PERSONAL], {
+        accountRemove: { engine: 'codex', account: PERSONAL.id, status, message: null },
+      }),
+    ]);
+    const [, workRow, personalRow] = accountsOf(page);
+
+    expect(personalRow.classList.contains('account-removing')).toBe(true);
+    expect(personalRow.querySelector('.re-status')?.textContent).toBe('Removing…');
+    expect((await runnerMenuItem(personalRow, 'Remove account')).getAttribute('aria-disabled')).toBe('true');
+    expect(workRow.classList.contains('account-removing')).toBe(false);
+    expect(workRow.querySelector('.re-status')?.textContent).not.toContain('Removing');
+    expect(page.querySelector('[data-engine="codex"] .re-meta')?.textContent).toContain('of 2 accounts available');
+  });
+
+  it('is back to itself when the machine refused', () => {
+    const page = mount([
+      runner([DEFAULT, WORK], {
+        accountRemove: { engine: 'codex', account: WORK.id, status: 'failed', message: 'a session is running on it' },
+      }),
+    ]);
+    const [, workRow] = accountsOf(page);
+
+    expect(workRow.classList.contains('account-removing')).toBe(false);
+    expect(workRow.querySelector('.re-status')?.textContent).not.toContain('Removing');
+    expect(page.querySelector('[data-engine="codex"] .re-meta')?.textContent).toContain('of 2 accounts available');
   });
 });

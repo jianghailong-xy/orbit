@@ -292,6 +292,18 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     });
   };
 
+  it('opens under the engine the session runs on, as a title that picks nothing', async () => {
+    // The session is on `anthropic-2`, a configured Claude-runtime provider: the title names the CLI
+    // that executes, not the vendor whose models it writes. And it is a title, not a row — clicking
+    // it asks the server for nothing.
+    await mount();
+    await open();
+    const title = document.querySelector<HTMLElement>('.composer-engine-title .composer-engine-title-name');
+    expect(title?.textContent).toBe('Claude Code');
+    await click(row('engine-title'), 'the engine title');
+    expect(configCalls()).toHaveLength(0);
+  });
+
   it('starts a new Codex session with the remembered model and clamps effort for that model', async () => {
     serveCodexDraft({ defaultModels: { codex: 'gpt-6.1-sol', claude: 'claude-sonnet-5' }, defaultEffort: 'max' });
     await mount('GPT-6.1-SolDefault', `/workspaces/${WORKSPACE}/new`, codexRunner);

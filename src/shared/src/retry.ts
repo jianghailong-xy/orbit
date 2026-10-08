@@ -65,6 +65,40 @@ export const API_ERROR_RETRY_BACKOFF_MS = [30_000, 2 * 60_000, 5 * 60_000];
 export const MAX_API_ERROR_RETRIES = API_ERROR_RETRY_BACKOFF_MS.length;
 
 /**
+ * What an armed continue sends: the turn that picks a session back up when there is nothing of the
+ * person's left to re-send.
+ *
+ * A quota or a provider error that kills a turn nobody sent — a background job's wake, a turn the
+ * runtime started for itself — leaves the chooser with no message to carry (auto-retry.service.ts
+ * `messageToResend`), and stepping past the wake to the message before it would re-ask a question
+ * already answered. There is still a way on, though: say "continue" and the session resumes with its
+ * whole conversation — the wake's result included, which the runtime hands back with the next message
+ * it is sent. This is that sentence, and it is one sentence on purpose: the card's Continue button
+ * sends it as the person's own message, the switch has the server send the same turn at the reset,
+ * and the two must not drift into two different asks.
+ *
+ * `CONTINUE` is the platform's own words about nobody's message, so it is only ever sent on an arm
+ * somebody owns — the switch is on the card, its wording says what will be sent, and turning it off
+ * is the whole opt-out. Nothing decides to continue behind a reader's back.
+ */
+export const CONTINUE_MESSAGE = 'Continue where you left off.';
+
+/**
+ * How long a rate-limited pool session waits on the credential it is already on before moving to another
+ * one is worth it.
+ *
+ * A move is not free, and the price is the prompt cache: measured on a real codex thread (2026-10-02, the
+ * P0 in docs/codex-shared-pool-design.md §2.3), the credential a session moves to knows only the shared
+ * instruction prefix, so the whole thread history is billed once as uncached — at tenth of the cached
+ * price per token, and, on a pool of subscriptions, out of somebody's window rather than a card. A rate
+ * limit the gateway could not wait out is minutes, not days, so a short one is worth sitting out where the
+ * session already is; past this the wait costs more than the cache does, and the pool's ordinary answer
+ * stands — move now if another credential can run. Only the rate limit is judged this way: a spent account
+ * is a reset away and moving off it is what the pool is for.
+ */
+export const POOL_RATE_LIMIT_WAIT_MS = 2 * 60_000;
+
+/**
  * When to re-send after a transient provider error, or null once the attempts are spent.
  *
  * The jitter is the same precaution as the quota retry's, for the same reason: an overload is
@@ -77,9 +111,22 @@ export function apiErrorRetryAt(
   now: Date,
   rand: () => number = Math.random,
 ): Date | null {
+  if (!apiErrorRetryBudgetLeft(attempts)) return null;
   const step = API_ERROR_RETRY_BACKOFF_MS[attempts];
-  if (step === undefined) return null;
   return new Date(now.getTime() + step + Math.floor(rand() * step * 0.25));
+}
+
+/**
+ * Whether the run-failure budget still allows one more automatic re-send, `attempts` spent.
+ *
+ * This is the *whether*, which no answer about *when* replaces: the ladder is not the only thing that
+ * can say when to try again — a pool credential's own mark is a better answer, and a rate limit is
+ * armed at it — but the count that stops a provider being re-sent to forever belongs to this budget,
+ * and a caller that arms on a time from anywhere else has to ask it first. The sweep spends one
+ * attempt per re-send whatever armed it; without this it would go on being armed.
+ */
+export function apiErrorRetryBudgetLeft(attempts: number): boolean {
+  return API_ERROR_RETRY_BACKOFF_MS[attempts] !== undefined;
 }
 
 const MONTHS = [

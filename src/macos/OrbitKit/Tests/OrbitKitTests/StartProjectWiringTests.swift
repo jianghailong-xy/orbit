@@ -79,6 +79,8 @@ final class StartProjectWiringTests: XCTestCase {
                       "\"started\" is read off the project's own startedAt")
         XCTAssertFalse(console.contains("projectStarted = document.coordinatorEnabled"),
                        "and not off Automatic, which is how a started project runs")
+        XCTAssertTrue(console.contains("projectEscalationSeconds = document.exceptionEscalationSeconds ?? projectEscalationSeconds"),
+                      "the escalation window the card quotes is read off the same document")
     }
 
     func testTheChangeCardIsDeliveredForAStartedProjectWhoseServerSaysWhatMoved() throws {
@@ -160,7 +162,10 @@ final class StartProjectWiringTests: XCTestCase {
                                 to: "private struct CriteriaChangeCardView: View")
         XCTAssertTrue(start.contains("let standing = console.startStanding(itemID)"),
                       "the standing is re-derived from the console's reads on every render")
-        XCTAssertTrue(start.contains(".approvalChrome(.blue, dimmed: !StartProject.isOpen(standing))"),
+        let startForm = try section(file, from: "struct StartProjectCard: View",
+                                    to: "private struct CriteriaChangeCardView: View")
+        XCTAssertTrue(startForm.contains("ApprovalReviewLayout(title: StartProject.title"))
+        XCTAssertTrue(startForm.contains("dimmed: !StartProject.isOpen(standing)"),
                       "the confirmation card's surface, dimmed once its request no longer stands")
         XCTAssertTrue(start.contains(".disabled(starting || standing != .live || !draft.complete)"),
                       "Start is dead unless the request stands and the settings are ones the door "
@@ -171,12 +176,26 @@ final class StartProjectWiringTests: XCTestCase {
         XCTAssertTrue(start.contains("Menu {"), "Tasks land on is picked from a menu")
         XCTAssertTrue(start.contains("Toggle(isOn: lineBinding(.projectBranch, draft))"))
         XCTAssertTrue(start.contains("Toggle(isOn: lineBinding(.main, draft))"))
-        XCTAssertTrue(start.contains("Text(RunSettings.automaticHint(draft.line))"),
-                      "the Automatic sentence follows the line chosen")
+        XCTAssertTrue(start.contains("Text(RunSettings.automaticSays(automatic: draft.automatic, line: draft.line,"),
+                      "the Automatic sentence follows the switch and the line chosen")
+        XCTAssertTrue(start.contains("let items = StartProject.comesToYou(automatic: draft.automatic, line: draft.line,"),
+                      "what still comes to the owner is listed under the switch, off the same draft")
+        XCTAssertTrue(start.contains("private var opensCoordinator: Bool { draft.automatic && !hasCoordinator }"),
+                      "a start with Automatic on says it opens the coordinator the project has not got")
         XCTAssertTrue(start.contains("in: 1...StartProject.maxConcurrentTasks)"),
                       "At most is a stepper bounded where the door bounds it")
-        XCTAssertTrue(start.contains("let missing = draft.mergeCheckMissing"),
-                      "the merge check row turns amber on the ready check's own rule")
+        XCTAssertTrue(start.contains("Text(draft.hasMergeCheck ? RunSettings.mergeCheckSet : RunSettings.mergeCheckNone)"),
+                      "an empty merge check is a value like any other, folded to Set or None")
+        XCTAssertFalse(start.contains("mergeCheckMissing"),
+                       "and nothing the owner is warned about (the owner, 2026-10-07)")
+        XCTAssertFalse(start.contains("request.warnings"),
+                       "the ready check's warnings are the coordinator's, and the card draws none")
+        XCTAssertTrue(start.contains("if let levels = plan.levels {"),
+                      "the plan is drawn by level, the batch review's rule")
+        XCTAssertTrue(start.contains("Text(StartProject.barCaption(opensCoordinator: opensCoordinator, startsNow: plan.startsNow,"),
+                      "and the line under Start says what pressing it does")
+        XCTAssertTrue(start.contains("escalationSeconds: console.projectEscalationSeconds,"),
+                      "the conversation's card says the project's own escalation window")
         XCTAssertTrue(start.contains("console.startPlanChangeReply(criteriaDigest: request.criteriaDigest, question: .start)"),
                       "Chat about this talks about the criteria the coordinator asked to start on")
         XCTAssertTrue(start.contains("Text(Approvals.chatAction).approvalActionLabel()"),
@@ -188,7 +207,8 @@ final class StartProjectWiringTests: XCTestCase {
                                  to: "private struct StartSectionHead: View")
         XCTAssertTrue(change.contains("CriteriaChanges.rows(changes)"),
                       "the rows are the server's changes, as OrbitKit lays them out")
-        XCTAssertTrue(change.contains(".approvalChrome(.blue, dimmed: !CriteriaChanges.isOpen(standing))"))
+        XCTAssertTrue(change.contains("ApprovalReviewLayout(title: CriteriaChanges.title"))
+        XCTAssertTrue(change.contains("dimmed: !CriteriaChanges.isOpen(standing)"))
         XCTAssertTrue(change.contains(".disabled(confirming || !CriteriaChanges.answerable(standing))"))
         XCTAssertTrue(change.contains("console.startPlanChangeReply(standing, question: .criteriaChange)"))
         XCTAssertFalse((start + change).contains("\"Chat"),

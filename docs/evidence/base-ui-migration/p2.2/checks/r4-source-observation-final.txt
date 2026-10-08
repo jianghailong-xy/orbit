@@ -1,0 +1,56 @@
+{
+  "runtimeFilesUnchanged": 609,
+  "historicalEvidenceFilesUnchanged": 12586,
+  "discovery": 520,
+  "runs": {
+    "diagnosis-first": {
+      "startTime": "2026-10-04T11:43:25.768Z",
+      "duration": 36226.916,
+      "expected": 12,
+      "skipped": 0,
+      "unexpected": 4,
+      "flaky": 0
+    },
+    "diagnosis-native-input": {
+      "startTime": "2026-10-04T11:45:35.183Z",
+      "duration": 39148.571,
+      "expected": 16,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "final-entry": {
+      "startTime": "2026-10-04T11:48:18.011Z",
+      "duration": 60711.295000000006,
+      "expected": 32,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "final-reduced-repeat": {
+      "startTime": "2026-10-04T11:51:55.276Z",
+      "duration": 69666.277,
+      "expected": 40,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "negative-control-first": {
+      "startTime": "2026-10-04T11:53:26.833Z",
+      "duration": 9349.396,
+      "expected": 8,
+      "skipped": 0,
+      "unexpected": 8,
+      "flaky": 0
+    },
+    "negative-control-standard": {
+      "startTime": "2026-10-04T11:54:26.365Z",
+      "duration": 15357.756,
+      "expected": 16,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    }
+  },
+  "artifactsVerified": 448
+}

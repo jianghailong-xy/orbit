@@ -9,6 +9,7 @@ export * from './codexRateLimitReset';
 export * from './criteria-changes';
 export * from './dbConflict';
 export * from './link-preview';
+export * from './managedRunner';
 export * from './realtime';
 export * from './models';
 export * from './mergeRecovery';
@@ -19,6 +20,7 @@ export * from './project-progress';
 export * from './project-done';
 export * from './project-start';
 export * from './providerPresets';
+export * from './openCodeKeys';
 export * from './providerTransport';
 export * from './retry';
 export * from './searchTerms';
@@ -26,6 +28,7 @@ export * from './sessionCreatedTasks';
 export * from './session-message';
 export * from './session-request';
 export * from './source';
+export * from './source-refusal';
 export * from './task-start';
 export * from './task-run-reason';
 export * from './watch';
@@ -35,6 +38,8 @@ export * from './wikiHealth';
 export * from './wikiMaintain';
 export * from './wikiPlan';
 export * from './wikiDocs';
+export * from './wikiJobs';
+export * from './wikiSystemModel';
 
 /** Hard cap on a single user prompt / turn message, in characters. An oversized input
  *  freezes the web and macOS clients — one giant text node lays out synchronously on the

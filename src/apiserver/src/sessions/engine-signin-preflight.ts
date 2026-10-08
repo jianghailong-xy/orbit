@@ -6,8 +6,9 @@ import {
   type RunnerEngineHealth,
 } from '@orbit/shared';
 import { isLoginEngine, namedRunnerEngines } from '../common/runner-engines';
-import { accountDir } from '@orbit/shared';
-import { DEFAULT_ACCOUNT, accountEnvVar, accountOnRunner } from '../providers/account';
+import { accountDir, isAccountEngine } from '@orbit/shared';
+import { ACCOUNT_CHOICE, DEFAULT_ACCOUNT, accountEnvVar, accountOnRunner } from '../providers/account';
+import type { WorkspaceAccountChoices } from '../providers/plan-usage-accounts';
 import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
 import { antigravityGoogleLogin } from '../common/antigravity-readiness';
 
@@ -59,7 +60,7 @@ export interface EnginePreflightRunner {
   capabilities?: readonly string[];
 }
 
-function bringsOwnEnvCredential(engine: LoginEngine, workspaceEnv: unknown): boolean {
+export function bringsOwnEnvCredential(engine: LoginEngine, workspaceEnv: unknown): boolean {
   if (!workspaceEnv || typeof workspaceEnv !== 'object') return false;
   const env = workspaceEnv as Record<string, unknown>;
   const has = (key: string) => typeof env[key] === 'string' && env[key].trim() !== '';
@@ -192,8 +193,8 @@ export function signedOutEngineRefusal(args: {
   /** The workspace's custom environment, which the runner layers onto the engine process. */
   workspaceEnv?: unknown;
   /** The accounts this session's workspace pins it to, one per engine that keeps accounts
-   *  (Workspace.codexAccount / Workspace.claudeAccount). Absent or null is Default. */
-  accounts?: { codexAccount?: string | null; claudeAccount?: string | null } | null;
+   *  (Workspace.codexAccount / claudeAccount / antigravityAccount). Absent or null is Default. */
+  accounts?: WorkspaceAccountChoices | null;
   runner: EnginePreflightRunner;
   nowMs?: number;
 }): string | null {
@@ -215,12 +216,23 @@ export function signedOutEngineRefusal(args: {
   if (!engines || !health) return null;
   const machine = args.runner.displayName || args.runner.name || 'this runner';
   if (runtime === 'antigravity') {
+    // A session on an added Google account runs on that account's sign-in or not at all (the runner
+    // never falls back to a key for it). Default is judged as the engine always was: its own sign-in,
+    // else the runner's GEMINI_API_KEY.
+    const pick = args.accounts?.antigravityAccount?.trim();
+    const slot = pick && pick !== DEFAULT_ACCOUNT ? accountOnRunner(runtime, pick, engines) : null;
+    if (slot) {
+      return slot.auth === 'no'
+        ? `Antigravity account ${slot.name ? `"${slot.name}"` : slot.id} is signed out on runner "${machine}" — every session run on that account fails immediately. ` +
+          'Sign it in from the Providers page, then start this session again.'
+        : null;
+    }
     return health.auth === 'no' ? antigravityRefusal(health, args.runner, machine) : null;
   }
   if (!health.installed) return null;
   // An engine that keeps one sign-in per account is judged on the account this session runs on;
   // one that keeps a single login is judged on that.
-  const account = runtime === 'claude' ? args.accounts?.claudeAccount : args.accounts?.codexAccount;
+  const account = isAccountEngine(runtime) ? args.accounts?.[ACCOUNT_CHOICE[runtime]] : undefined;
   const login: SessionLogin | null = accountEnvVar(runtime)
     ? sessionAccountLogin(runtime, health, account, args.workspaceEnv, engines)
     : { auth: health.auth };

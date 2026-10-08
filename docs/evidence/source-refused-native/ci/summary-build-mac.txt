@@ -1,0 +1,6 @@
+Test Case '-[RunStartMacProbeUITests.RunStartShotTests testMacShowsWhyTheRunNeverStarted]' started.
+Test Case '-[RunStartMacProbeUITests.RunStartShotTests testMacShowsWhyTheRunNeverStarted]' passed (125.105 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 125.105 (125.108) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 125.105 (125.110) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 125.105 (125.111) seconds
+** TEST SUCCEEDED **

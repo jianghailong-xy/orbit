@@ -321,13 +321,17 @@ func claudeCredentialsPathIn(configDir string) string {
 func claudeCredentialsPath() string { return claudeCredentialsPathIn("") }
 
 // claudeOAuthLogin is what the runner takes from one login's stored credentials: the access token a
-// usage read sends, when that token expires (zero when the CLI recorded no time), and whether a
-// refresh token is stored beside it — never the refresh token itself, which is the CLI's alone
-// (claudeUsageRead).
+// usage read sends, when that token expires (zero when the CLI recorded no time), whether a refresh
+// token is stored beside it — never the refresh token itself, which is the CLI's alone
+// (claudeUsageRead) — and when that refresh token expires, which is when the login itself does.
 type claudeOAuthLogin struct {
 	accessToken string
 	expiresAt   time.Time
 	refreshable bool
+	// loginExpiresAt is the CLI's refreshTokenExpiresAt: past it no refresh is taken and the login is
+	// signed out. Claude Code warns three days ahead of it ("Your login expires in 3 days · run /login
+	// to renew", 2.1.292). Zero when the CLI recorded none.
+	loginExpiresAt time.Time
 }
 
 // expiresWithin is a token at most lead from its expiry, or past it — with no lead, one the endpoint
@@ -346,6 +350,8 @@ func parseClaudeOAuthLogin(b []byte) (claudeOAuthLogin, error) {
 			// Milliseconds since the epoch, as the CLI writes it. Read loosely: an expiry in a shape
 			// this runner does not know reads as none, rather than costing the login its reading.
 			ExpiresAt interface{} `json:"expiresAt"`
+			// The refresh token's expiry, in the same milliseconds and read as loosely.
+			RefreshTokenExpiresAt interface{} `json:"refreshTokenExpiresAt"`
 		} `json:"claudeAiOauth"`
 	}
 	if err := json.Unmarshal(b, &c); err != nil {
@@ -354,6 +360,9 @@ func parseClaudeOAuthLogin(b []byte) (claudeOAuthLogin, error) {
 	login := claudeOAuthLogin{accessToken: c.ClaudeAiOauth.AccessToken, refreshable: c.ClaudeAiOauth.RefreshToken != ""}
 	if ms, ok := int64Value(c.ClaudeAiOauth.ExpiresAt); ok && ms > 0 {
 		login.expiresAt = time.UnixMilli(ms)
+	}
+	if ms, ok := int64Value(c.ClaudeAiOauth.RefreshTokenExpiresAt); ok && ms > 0 {
+		login.loginExpiresAt = time.UnixMilli(ms)
 	}
 	return login, nil
 }

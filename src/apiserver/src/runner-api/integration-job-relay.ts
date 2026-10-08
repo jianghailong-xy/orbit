@@ -11,7 +11,6 @@ import {
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  DEFAULT_CHECK_TIMEOUT_SECONDS,
   INTEGRATION_CLAIM_STALE_MS,
   INTEGRATION_JOBS_PER_HEARTBEAT,
   INTEGRATION_JOB_CLAIM,
@@ -21,11 +20,14 @@ import {
   MAX_CHECK_OUTPUT_TAIL,
   PROMOTION_AUTOMATIC_LAND,
   checkSawTheFinishedBranch,
+  checksFor,
   integrationDedupeKey,
   integrationItemTitle,
   isTerminalJobState,
   jobLanded,
   landingFailureClass,
+  skippedMergeCheck,
+  type SkippedMergeCheckRecord,
   landingJudgedTooEarly,
   landingLeftWorkBehind,
   openItemKindForJobState,
@@ -111,10 +113,11 @@ export class IntegrationJobRelay {
     jobId: string,
     runnerId: string,
     body: IntegrationJobResultRequest,
+    ownerId?: string,
   ): Promise<{ answer: IntegrationJobResultResponse; after: IntegrationResultAftermath | null }> {
     return applyIntegrationJobResult(
       this.prisma,
-      { jobId, runnerId, body },
+      { jobId, runnerId, ownerId, body },
       loggedRetry(this.logger, 'integrationJob.applyResult'),
     );
   }
@@ -150,6 +153,8 @@ interface ClaimedRow {
   mergeCheckCommand: string | null;
   mergeCheckTimeoutSeconds: number | null;
   cancelRequestedAt: Date | null;
+  /** This generation runs no merge check (0393): the account owner approved skipping it. */
+  skipMergeCheck: boolean;
   /** A promotion job's frozen source, and the two facts M-S3 compares before it lands. */
   jobSourceSha: string | null;
   promotionId: string | null;
@@ -251,44 +256,6 @@ export async function dispatchIntegrationJobs(
     });
   }
   return commands;
-}
-
-/**
- * The commands to run on the combined tree (§2.4 J-S5), in the order a person would run them: the
- * task's own acceptance first, because a task that cannot pass its own criterion on the merged tree
- * is the narrower failure and the one whose owner is obvious.
- *
- * A task with no acceptance command contributes none. That is not a gap: an EVIDENCE_JUDGMENT or
- * OWNER_CONFIRMED task was settled by somebody looking at it, and there is no command to re-run.
- */
-function checksFor(row: ClaimedRow): IntegrationCheckSpec[] {
-  const checks: IntegrationCheckSpec[] = [];
-  // Which checks a job runs is decided by WHAT IT IS PUTTING WHERE (§3.4 M-S3). A landing on the
-  // project branch runs the task's own acceptance on the combined tree, and so does a `TASK_BRANCH`
-  // promotion — it is one task's work arriving on the upstream, and the task's acceptance command is
-  // the criterion the whole thing was judged by. A `PROJECT_BRANCH` promotion runs the project's
-  // merge check and nothing else: every task it carries already passed its own acceptance on the
-  // line, and the session the job names belongs to one of those tasks only so the queue can find a
-  // checkout to work in — the job itself names no task, which is why `row.acceptanceCommand` here is
-  // that session's task's and not the promotion's.
-  const taskAcceptanceApplies = row.kind === 'LAND_TASK' || row.promotionSourceKind === 'TASK_BRANCH';
-  if (taskAcceptanceApplies && row.acceptanceCommand && row.acceptanceExpectedExitCode != null) {
-    checks.push({
-      name: 'TASK_ACCEPTANCE',
-      command: row.acceptanceCommand,
-      expectedExitCode: row.acceptanceExpectedExitCode,
-      timeoutSeconds: row.acceptanceTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS,
-    });
-  }
-  if (row.mergeCheckCommand) {
-    checks.push({
-      name: 'MERGE_CHECK',
-      command: row.mergeCheckCommand,
-      expectedExitCode: 0,
-      timeoutSeconds: row.mergeCheckTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS,
-    });
-  }
-  return checks;
 }
 
 /**
@@ -419,6 +386,9 @@ async function claimOne(
       cb."merge_check_command" AS "mergeCheckCommand",
       cb."merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
       j."cancel_requested_at" AS "cancelRequestedAt",
+      -- §2.4 J-S5 / 0393: a generation whose merge check was approved away. It travels with the
+      -- claim because the command this beat builds is where the check would have been handed over.
+      j."skip_merge_check" AS "skipMergeCheck",
       j."source_sha" AS "jobSourceSha",
       j."promotion_id" AS "promotionId",
       j."confirmed_automatically" AS "confirmedAutomatically",
@@ -625,7 +595,8 @@ export interface IntegrationResultAftermath {
  */
 export async function applyIntegrationJobResult(
   prisma: PrismaService,
-  input: { jobId: string; runnerId?: string; body: IntegrationJobResultRequest },
+  /** `ownerId`, the reporting runner's owner: another account's job is answered as one that does not exist. */
+  input: { jobId: string; runnerId?: string; ownerId?: string; body: IntegrationJobResultRequest },
   onRetry?: Parameters<typeof withTransactionRetry>[2],
 ): Promise<{ answer: IntegrationJobResultResponse; after: IntegrationResultAftermath | null }> {
   const body = input.body;
@@ -642,14 +613,23 @@ export async function applyIntegrationJobResult(
   }
 
   return withTransactionRetry(prisma, async (tx) => {
-    const job = await tx.projectIntegrationJob.findUnique({
-      where: { id: input.jobId },
+    // Found among the reporting runner's owner's jobs only, before anything about it is answered: a
+    // runner of another account is told neither that the job exists, nor the state it ended in, nor
+    // that it is still live — an id that names nothing is what it gets (T2 of the tenant isolation
+    // census). A runner of the same owner meets the claim fence below, as J-T3 has it.
+    const job = await tx.projectIntegrationJob.findFirst({
+      where: { id: input.jobId, ...(input.ownerId != null ? { ownerId: input.ownerId } : {}) },
       select: {
         id: true, projectId: true, ownerId: true, kind: true, state: true,
         taskId: true, sessionId: true, promotionId: true, targetRef: true, sourceRef: true,
         claimLeaseOwner: true, claimGeneration: true, runnerId: true, claimedAt: true,
         generation: true, retryOfJobId: true, retryFailureClass: true, retryReason: true,
         retryRequestedBySessionId: true,
+        retryRequestedByUserId: true,
+        // 0393: what this generation ran instead of its merge check, so the failure it goes on to
+        // open can say so — a red reported by a landing whose check never ran must not read as a
+        // check that failed.
+        skipMergeCheck: true, skipReason: true, skipApprovedByUserId: true, skipApprovalId: true,
         session: { select: { baseSha: true } },
         task: { select: { title: true, assigneeId: true, creatorType: true, creatorId: true } },
       },
@@ -986,8 +966,10 @@ export async function applyIntegrationJobResult(
                 failureClass: job.retryFailureClass,
                 reason: job.retryReason,
                 requestedBySessionId: job.retryRequestedBySessionId,
+                requestedByUserId: job.retryRequestedByUserId,
               }
             : null,
+          skippedCheck: skippedMergeCheck(job),
         }),
       });
       openItemId = opened?.itemId ?? openItemId;
@@ -1108,7 +1090,15 @@ function nothingToLandComment(input: {
       failureClass: string | null;
       reason: string | null;
       requestedBySessionId: string | null;
+      requestedByUserId: string | null;
     } | null;
+    /**
+     * The merge check this generation did NOT run, when the account owner approved skipping it
+     * (§2.4 J-S5, 0393). A failure of such a generation is about the rest of its work, and the item
+     * has to say so: without it, a tree that came back red on the TASK_ACCEPTANCE alone would read
+     * as the very check the owner had just taken off it.
+     */
+    skippedCheck: SkippedMergeCheckRecord | null;
   },
 ): Record<string, unknown> {
   // What every failure says about itself beside its own facts: the class its next step turns on
@@ -1118,6 +1108,7 @@ function nothingToLandComment(input: {
     failureClass: landingFailureClass({ state, checks: detail.checks }),
     generation: detail.generation,
     ...(detail.retry ? { retry: detail.retry } : {}),
+    ...(detail.skippedCheck ? { skippedCheck: detail.skippedCheck } : {}),
   };
   if (state === 'CONFLICT') {
     return {

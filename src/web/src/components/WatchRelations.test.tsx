@@ -233,10 +233,21 @@ describe('a session’s Following and Followed by', () => {
     targetStatus: { status, running: over.running ?? false, queued: over.queued ?? false },
   });
 
+  /** A session target's run state as the watch read carries it. */
+  const run = (status: string, over: { running?: boolean; queued?: boolean } = {}) => standing(status, over);
+  const SETTLED = { kind: 'ALL', over: 'ALL_TARGETS', leaf: 'SESSION_TURN_SETTLED' } as const;
+
+  it('leaves a wait on tasks to the Tasks card: no strip for it', async () => {
+    serve([watch('W', { targets: [target('TASK', 'T1', standing('OPEN', { running: true }))], ...resumes('S_ME') })]);
+    await mount(<SessionWatchStrip sessionId="S_ME" />);
+    expect(container!.innerHTML).toBe('');
+  });
+
   it('keeps one line above the composer: the lone target by name, and where it stands', async () => {
     serve([
       watch('WAITING', {
-        targets: [target('TASK', 'T1', { targetTitle: 'A task', ...standing('OPEN', { running: true }) })],
+        predicate: SETTLED,
+        targets: [target('SESSION', 'S1', { targetTitle: 'A session', ...run('RUNNING', { running: true }) })],
         expiresAt: at(6 * HOUR + 10 * MINUTE),
         ...resumes('S_ME'),
       }),
@@ -247,7 +258,7 @@ describe('a session’s Following and Followed by', () => {
     expect(strip.classList.contains('bg-tray')).toBe(true);
     expect(strip.querySelector('.bg-tray-title')?.textContent).toBe('Watching');
     // The name the watch carries, and the task list's own pill for where the task is: no read of its own.
-    expect(strip.querySelector('.ct-one')?.textContent).toBe('A task');
+    expect(strip.querySelector('.ct-one')?.textContent).toBe('A session');
     expect(strip.querySelector('.status-pill')?.textContent).toBe('Running');
     expect(vi.mocked(api).mock.calls.map(([path]) => path).filter((path) => !path.startsWith('/watches'))).toEqual([]);
     // Neither the watch's own `met` nor its deadline is on the folded line: the pill says how far it
@@ -261,18 +272,19 @@ describe('a session’s Following and Followed by', () => {
   it('counts several targets in Tasks created here’s sentence, each target once', async () => {
     serve([
       watch('W1', {
+        predicate: SETTLED,
         targets: [
-          target('TASK', 'T1', standing('OPEN', { running: true })),
-          target('TASK', 'T2', standing('FAILED')),
+          target('SESSION', 'S1', run('RUNNING', { running: true })),
+          target('SESSION', 'S2', run('FAILED')),
         ],
         ...resumes('S_ME'),
       }),
-      watch('W2', { targets: [target('TASK', 'T2', standing('FAILED'))], ...resumes('S_ME') }),
+      watch('W2', { predicate: SETTLED, targets: [target('SESSION', 'S2', run('FAILED'))], ...resumes('S_ME') }),
     ]);
     await mount(<SessionWatchStrip sessionId="S_ME" />);
     const strip = container!.querySelector('.watch-strip')!;
-    // T1 and T2, not T1, T2 and T2 again.
-    expect(strip.querySelector('.watch-strip-target')?.textContent).toBe('2 tasks');
+    // S1 and S2, not S1, S2 and S2 again.
+    expect(strip.querySelector('.watch-strip-target')?.textContent).toBe('2 sessions');
     expect(strip.querySelector('.ct-count')?.textContent).toBe('1 running · 1 failed · 0/2 done');
     expect(strip.querySelector('.ct-count .ct-failed')?.textContent).toBe('1 failed');
     // No one target's pill on a line that names none.
@@ -280,17 +292,19 @@ describe('a session’s Following and Followed by', () => {
   });
 
   it('counts out what a lone watch’s own condition needs, in the card’s noun', async () => {
-    const four = [target('TASK', 'T1'), target('TASK', 'T2'), target('TASK', 'T3'), target('TASK', 'T4')];
+    const four = [target('SESSION', 'S1'), target('SESSION', 'S2'), target('SESSION', 'S3'), target('SESSION', 'S4')];
     const middle = async (predicate: WatchView['predicate']) => {
       serve([watch('W1', { predicate, targets: four, ...resumes('S_ME') })]);
       await mount(<SessionWatchStrip sessionId="S_ME" />);
       return container!.querySelector('.watch-strip-target')?.textContent;
     };
     // Four targets, three conditions, three different amounts of work.
-    expect(await middle({ kind: 'ANY', over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' })).toBe('any 1 of 4 tasks');
-    expect(await middle({ kind: 'ALL', over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' })).toBe('all 4 tasks');
-    expect(await middle({ kind: 'AT_LEAST', count: 2, over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' })).toBe(
-      '2 of 4 tasks',
+    expect(await middle({ kind: 'ANY', over: 'ALL_TARGETS', leaf: 'SESSION_TURN_SETTLED' })).toBe(
+      'any 1 of 4 sessions',
+    );
+    expect(await middle({ kind: 'ALL', over: 'ALL_TARGETS', leaf: 'SESSION_TURN_SETTLED' })).toBe('all 4 sessions');
+    expect(await middle({ kind: 'AT_LEAST', count: 2, over: 'ALL_TARGETS', leaf: 'SESSION_TURN_SETTLED' })).toBe(
+      '2 of 4 sessions',
     );
   });
 
@@ -298,8 +312,8 @@ describe('a session’s Following and Followed by', () => {
     serve([
       watch('W1', {
         lastEvaluatedAt: at(-MINUTE),
-        predicate: { kind: 'ANY', over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' },
-        targets: [target('TASK', 'T1', { targetTitle: 'A task', ...standing('OPEN') })],
+        predicate: { kind: 'ANY', over: 'ALL_TARGETS', leaf: 'SESSION_TURN_SETTLED' },
+        targets: [target('SESSION', 'S1', { targetTitle: 'A session', ...run('AWAITING_INPUT') })],
         ...resumes('S_ME'),
       }),
     ]);
@@ -313,7 +327,7 @@ describe('a session’s Following and Followed by', () => {
     expect(strip.querySelectorAll('.ct-row')).toHaveLength(0);
     const links = [...strip.querySelectorAll<HTMLAnchorElement>('.ct-foot a')];
     expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
-      ['Open task ›', '/tasks/T1'],
+      ['Open session ›', '/sessions/S1'],
       ['Manage in Watches ›', '/following'],
     ]);
     // Read-only: no View/Edit/Pause/Stop anywhere, and no button but the caret.
@@ -327,18 +341,18 @@ describe('a session’s Following and Followed by', () => {
     serve([
       watch('W1', {
         lastEvaluatedAt: at(-MINUTE),
-        predicate: { kind: 'ALL', over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' },
+        predicate: SETTLED,
         targets: [
-          target('TASK', 'T1', { targetTitle: 'First', ...standing('OPEN', { running: true }) }),
-          target('TASK', 'T2', { state: 'SATISFIED', targetTitle: 'Second', ...standing('DONE') }),
+          target('SESSION', 'S1', { targetTitle: 'First', ...run('RUNNING', { running: true }) }),
+          target('SESSION', 'S2', { state: 'SATISFIED', targetTitle: 'Second', ...run('SUCCEEDED') }),
         ],
         expiresAt: at(6 * HOUR + 10 * MINUTE),
         ...resumes('S_ME'),
       }),
       watch('W2', {
         lastEvaluatedAt: at(-MINUTE),
-        predicate: { kind: 'ANY', over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' },
-        targets: [target('TASK', 'T3', { targetTitle: 'Third', ...standing('OPEN', { queued: true }) })],
+        predicate: { kind: 'ANY', over: 'ALL_TARGETS', leaf: 'SESSION_TURN_SETTLED' },
+        targets: [target('SESSION', 'S3', { targetTitle: 'Third', ...run('QUEUED', { queued: true }) })],
         ...resumes('S_ME'),
       }),
     ]);
@@ -357,10 +371,10 @@ describe('a session’s Following and Followed by', () => {
         a.getAttribute('href'),
       ]);
     expect(rows(watches[0])).toEqual([
-      ['Done', 'Second', '/tasks/T2'],
-      ['Running', 'First', '/tasks/T1'],
+      ['Succeeded', 'Second', '/sessions/S2'],
+      ['Running', 'First', '/sessions/S1'],
     ]);
-    expect(rows(watches[1])).toEqual([['Queued', 'Third', '/tasks/T3']]);
+    expect(rows(watches[1])).toEqual([['Queued', 'Third', '/sessions/S3']]);
     // Several targets: the foot is the way to the Following page alone.
     expect([...strip.querySelectorAll('.ct-foot a')].map((a) => a.textContent)).toEqual(['Manage in Watches ›']);
     expect(buttons(strip.querySelector('.ct-list')!)).toEqual([]);
@@ -369,7 +383,8 @@ describe('a session’s Following and Followed by', () => {
   it('lists every target a wide watch waits on, the list scrolling past its height', async () => {
     serve([
       watch('WIDE', {
-        targets: Array.from({ length: 24 }, (_, i) => target('TASK', `T${i + 1}`, standing('OPEN'))),
+        predicate: SETTLED,
+        targets: Array.from({ length: 24 }, (_, i) => target('SESSION', `S${i + 1}`, run('RUNNING', { running: true }))),
         ...resumes('S_ME'),
       }),
     ]);
@@ -408,7 +423,14 @@ describe('a session’s Following and Followed by', () => {
 
   it('says so under a watch nobody has checked for more than three minutes', async () => {
     const strip = async (lastEvaluatedAt: string) => {
-      serve([watch('W', { lastEvaluatedAt, targets: [target('TASK', 'T1', standing('OPEN'))], ...resumes('S_ME') })]);
+      serve([
+        watch('W', {
+          lastEvaluatedAt,
+          predicate: SETTLED,
+          targets: [target('SESSION', 'S1', run('RUNNING', { running: true }))],
+          ...resumes('S_ME'),
+        }),
+      ]);
       await mount(<SessionWatchStrip sessionId="S_ME" />);
       const shown = container!.querySelector('.watch-strip')!;
       await click(shown.querySelector('.bg-tray-row'), 'the strip');
@@ -457,7 +479,8 @@ describe('a live watch older than the newest 100', () => {
   );
   const older = watch('OLD_WAIT', {
     createdAt: at(-30 * HOUR),
-    targets: [target('TASK', 'T_OLD'), target('TASK', 'T_OLD_2')],
+    // A session among its targets, so the Watching strip draws it rather than the Tasks card.
+    targets: [target('TASK', 'T_OLD'), target('SESSION', 'S_OLD_2')],
     ...resumes('S_ME'),
   });
 
@@ -472,7 +495,7 @@ describe('a live watch older than the newest 100', () => {
     );
 
     expect(container!.querySelector('.watch-strip .bg-tray-title')?.textContent).toBe('Watching');
-    expect(buttons(container!.querySelector('.watch-badges')!)).toEqual(['Following 2 tasks', 'Follow']);
+    expect(buttons(container!.querySelector('.watch-badges')!)).toEqual(['Following 2 targets', 'Follow']);
     const followedBy = container!.querySelector('section')!;
     expect(followedBy.querySelector('.tdp-section-title span')?.textContent).toBe('Followed by (1)');
     expect([...followedBy.querySelectorAll<HTMLElement>('.watch-row')].map((r) => r.dataset.watchId)).toEqual([

@@ -46,6 +46,7 @@ struct SettingsSheet: View {
                         case .settingsPage(let page):     SettingsPageView(page: page)
                         case .accountPool(let poolID):    AccountPoolSettingsPage(poolID: poolID)
                         case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)
+                        case .providerDetail(let providerID): ProviderDetailSettingsPage(providerID: providerID)
                         case .userDetail(let userID):     AdminUserDetailView(userID: userID)
                         default:                          EmptyView()
                         }
@@ -76,6 +77,7 @@ private struct SettingsPageView: View {
         case .providers:      ProvidersSettingsPage()
         case .notifications:  NotificationSettingsPage()
         case .sharedLinks:    SharedLinksSettingsPage()
+        case .accessTokens:   AccessTokensSettingsPage()
         case .changePassword: ChangePasswordPage()
         case .admin:          AdminUsersView(rowNavigation: .push)
         }
@@ -93,6 +95,8 @@ struct SettingsHomeView: View {
     @State private var permMode: PermissionMode = .default
     /// The account's one orchestration switch. Absent on the server means on.
     @State private var orchestration = true
+    /// The account's switch for smart model selection. Absent on the server means off.
+    @State private var modelRouting = false
     @State private var seeded = false
     /// This device's own answer to "may Orbit alert you" — nil until asked.
     @State private var alertsAllowed: Bool?
@@ -127,8 +131,9 @@ struct SettingsHomeView: View {
                 Text("Settings").font(.headline).opacity(headerScrolledAway ? 1 : 0)
             }
         }
-        .confirmationDialog(SettingsCopy.signOutTitle(instance: SettingsHome.instanceName(model.baseURL)),
-                            isPresented: $confirmingSignOut, titleVisibility: .visible) {
+        // Signing out asks first, in the shape the width calls for (see `ConfirmationStyle`): an alert
+        // on a phone, the anchored panel on a tablet.
+        .orbitConfirmation(SettingsCopy.signOutTitle, isPresented: $confirmingSignOut) {
             Button(SettingsCopy.signOut, role: .destructive) { model.logout() }
             Button(SharePanelCopy.cancel, role: .cancel) {}
         }
@@ -151,11 +156,16 @@ struct SettingsHomeView: View {
             guard (model.user?.preferences?.enableOrchestration ?? true) != value else { return }
             Task { await model.savePreferences(UpdatePreferencesRequest(enableOrchestration: value)) }
         }
+        .onChange(of: modelRouting) { _, value in
+            guard (model.user?.preferences?.smartModelSelection ?? false) != value else { return }
+            Task { await model.savePreferences(UpdatePreferencesRequest(modelRouting: value)) }
+        }
         .onAppear(perform: seed)
         // Each row's value is its own read, so they are asked for side by side.
         .task { alertsAllowed = await model.notifications.alertsAllowed() }
         .task { await model.runners?.load() }
         .task { await model.sharedLinks?.load() }
+        .task { await model.accessTokens?.load() }
         // Back from the system's Settings, where the card sends you: say what it is now.
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
@@ -228,6 +238,21 @@ struct SettingsHomeView: View {
             } label: { label }
         case .orchestration:
             Toggle(isOn: $orchestration) { label }
+        case .modelRouting:
+            // The one switch on the list whose name doesn't say what it does, so the web's hint goes
+            // under it.
+            Toggle(isOn: $modelRouting) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(SettingsHome.title(row)).foregroundStyle(Color.primary)
+                        Text(SettingsCopy.smartModelSelectionHint)
+                            .font(.orbitListSubtitle)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: SettingsHome.systemImage(row)).foregroundStyle(Color.primary)
+                }
+            }
         case .appearance:
             Picker(selection: $theme) {
                 Text("System").tag("system")
@@ -242,7 +267,7 @@ struct SettingsHomeView: View {
             NavigationLink(value: NavNode.settingsRunners) {
                 LabeledContent { if let value = runnersValue { Text(value) } } label: { label }
             }
-        case .providers, .notifications, .sharedLinks, .changePassword, .admin:
+        case .providers, .notifications, .sharedLinks, .accessTokens, .changePassword, .admin:
             if let page = SettingsHome.page(row) {
                 NavigationLink(value: NavNode.settingsPage(page)) {
                     LabeledContent { if let value = value(of: row) { Text(value) } } label: { label }
@@ -263,6 +288,8 @@ struct SettingsHomeView: View {
             return SettingsHome.notificationsValue(allowed: alertsAllowed)
         case .sharedLinks:
             return model.sharedLinks?.activeCount.map(SettingsHome.sharedLinksValue)
+        case .accessTokens:
+            return model.accessTokens?.activeCount.map(SettingsHome.accessTokensValue)
         default:
             return nil
         }
@@ -299,6 +326,7 @@ struct SettingsHomeView: View {
         // a mode the account isn't actually running.
         permMode = PermissionMode(rawValue: p?.defaultPermissionMode ?? "") ?? AgentDefaults.defaultPermissionMode
         orchestration = p?.enableOrchestration ?? true
+        modelRouting = p?.smartModelSelection ?? false
     }
 }
 
@@ -867,10 +895,13 @@ private struct ProvidersSettingsPage: View {
         ProvidersOverviewForm(runners: model.runners?.runners ?? [],
                               pools: pools,
                               sharedPools: model.sharedPools?.pools ?? [],
-                              keys: model.agents?.configuredProviders ?? [])
+                              keys: model.agents?.configuredProviders ?? [],
+                              mine: model.agents?.personalProviders ?? [],
+                              balances: model.agents?.deepSeekBalances ?? [:])
             .navigationTitle(SettingsPage.providers.title)
             .task { await model.runners?.load() }
             .task { await model.agents?.load() }
+            .task { await model.agents?.loadDeepSeekBalances() }
             .task { await model.sharedPools?.load() }
             .task(id: codexPoolIDs) {
                 for id in codexPoolIDs { await model.sharedPools?.loadAccess(id) }
@@ -953,6 +984,24 @@ private struct AccountPoolSettingsPage: View {
         model.sharedPools?.forget(pool.id)
         dismiss()
         return nil
+    }
+}
+
+/// A DeepSeek key's page, read-only: the key as the account's own list last read it, and the balance of
+/// its DeepSeek account — read with the list, and asked of DeepSeek again by Refresh or Retry.
+private struct ProviderDetailSettingsPage: View {
+    @Environment(AppModel.self) private var model
+    let providerID: String
+
+    var body: some View {
+        let key = PublicID.storageKey(providerID)
+        if let agents = model.agents,
+           let provider = agents.personalProviders.first(where: { $0.providerID.map(PublicID.storageKey) == key }) {
+            DeepSeekKeyPageView(key: provider, reading: agents.deepSeekBalances[providerID],
+                                refresh: { await agents.refreshDeepSeekBalance(providerID) })
+        } else {
+            ContentUnavailableView(ProvidersOverview.keyGone, systemImage: "key")
+        }
     }
 }
 
@@ -1081,13 +1130,6 @@ private struct SharedLinksSettingsPage: View {
         .navigationTitle(SharedLinksList.title)
         .task { await model.sharedLinks?.load() }
         .refreshable { await model.sharedLinks?.load() }
-        .confirmationDialog(SharePanelCopy.turnOffTitle, isPresented: turnOffAsked, titleVisibility: .visible,
-                            presenting: pendingTurnOff) { link in
-            Button(SharePanelCopy.turnOff, role: .destructive) { Task { await turnOff(link) } }
-            Button(SharePanelCopy.cancel, role: .cancel) {}
-        } message: { _ in
-            Text(SharePanelCopy.turnOffDetail)
-        }
         .overlay(alignment: .bottom) {
             if let notice {
                 Text(notice)
@@ -1142,6 +1184,15 @@ private struct SharedLinksSettingsPage: View {
                 }
             }
         }
+        // On the link's own row — the swipe and the long-press menu both raise it — so the panel opens
+        // against that row rather than at the top of the page.
+        .orbitConfirmation({ _ in SharePanelCopy.turnOffTitle },
+                           isPresented: turnOffAsked, presenting: pendingTurnOff) { link in
+            Button(SharePanelCopy.turnOff, role: .destructive) { Task { await turnOff(link) } }
+            Button(SharePanelCopy.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(SharePanelCopy.turnOffDetail)
+        }
     }
 
     private func turnOff(_ link: OrbitKit.ShareLink) async {
@@ -1150,6 +1201,121 @@ private struct SharedLinksSettingsPage: View {
             return
         }
         show(SharedLinksList.turnedOff(count))
+    }
+
+    /// A line over the list's foot for a moment — the app's toast lives under this sheet.
+    private func show(_ text: String) {
+        notice = text
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            if notice == text { notice = nil }
+        }
+    }
+}
+
+// MARK: - Access tokens
+
+/// Every personal access token this account has issued, by whether it still works — the web page's
+/// tabs, lines and words. A token that works is revoked by a swipe or from its context menu, which
+/// asks first: anything using it stops working at once. A new token is issued on the web only
+/// (docs/personal-access-token-design.md §9), which the page's footer says.
+private struct AccessTokensSettingsPage: View {
+    @Environment(AppModel.self) private var model
+
+    @State private var tab: AccessTokensList.Tab = .active
+    @State private var pendingRevoke: AccessToken?
+    @State private var notice: String?
+
+    var body: some View {
+        let tokens = model.accessTokens?.tokens ?? []
+        let shown = AccessTokensList.tokens(tokens, in: tab)
+        List {
+            Section {
+                Picker(AccessTokensList.title, selection: $tab) {
+                    ForEach(AccessTokensList.Tab.allCases) { tab in
+                        Text("\(tab.label) \(AccessTokensList.tokens(tokens, in: tab).count)").tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+            } footer: {
+                Text(AccessTokensList.subtitle + " " + AccessTokensList.issuedOnTheWeb)
+            }
+
+            Section {
+                switch LoadFailureLogic.presentation(model.accessTokens?.loadState ?? ListLoadState(),
+                                                     isEmpty: tokens.isEmpty) {
+                case .loading:
+                    HStack { Spacer(); ProgressView(); Spacer() }
+                case .failed:
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(model.accessTokens?.errorText ?? AccessTokensList.couldNotLoad)
+                            .foregroundStyle(.secondary)
+                        Button(SharePanelCopy.retry) { Task { await model.accessTokens?.load() } }
+                    }
+                case .empty, .content:
+                    if shown.isEmpty {
+                        Text(tab.empty).foregroundStyle(.secondary)
+                    }
+                    ForEach(shown) { token in
+                        row(token)
+                    }
+                }
+            }
+        }
+        .navigationTitle(AccessTokensList.title)
+        .task { await model.accessTokens?.load() }
+        .refreshable { await model.accessTokens?.load() }
+        .orbitConfirmation(AccessTokensList.revokeTitle, isPresented: revokeAsked,
+                           presenting: pendingRevoke) { token in
+            Button(AccessTokensList.revoke, role: .destructive) { Task { await revoke(token) } }
+            Button(SharePanelCopy.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(AccessTokensList.revokeDetail)
+        }
+        .overlay(alignment: .bottom) {
+            if let notice {
+                Text(notice)
+                    .font(.orbitListSubtitle.weight(.semibold))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.bottom, 24)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.default, value: notice)
+    }
+
+    private var revokeAsked: Binding<Bool> {
+        Binding(get: { pendingRevoke != nil }, set: { if !$0 { pendingRevoke = nil } })
+    }
+
+    private func row(_ token: AccessToken) -> some View {
+        AccessTokenRow(token: token, now: Date())
+            .opacity(model.accessTokens?.revokingID == token.id ? 0.5 : 1)
+            .swipeActions(edge: .trailing) {
+                if AccessTokensList.canRevoke(token) {
+                    Button(AccessTokensList.revoke, role: .destructive) { pendingRevoke = token }
+                }
+            }
+            .contextMenu {
+                if AccessTokensList.canRevoke(token) {
+                    Button(role: .destructive) { pendingRevoke = token } label: {
+                        Label(AccessTokensList.revoke, systemImage: "xmark.circle")
+                    }
+                }
+            }
+    }
+
+    private func revoke(_ token: AccessToken) async {
+        guard let accessTokens = model.accessTokens else { return }
+        if let reason = await accessTokens.revoke(token) {
+            show(AccessTokensList.notRevoked(reason))
+        } else {
+            show(AccessTokensList.revoked)
+        }
     }
 
     /// A line over the list's foot for a moment — the app's toast lives under this sheet.

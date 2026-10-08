@@ -1,0 +1,21 @@
+{
+  "baseline": "67e62c0b4028eefe2c619dac80d3fac312cea601",
+  "historicalP0Unchanged": true,
+  "scope": "src/web and task evidence only",
+  "runtimeFiles": [
+    "src/web/src/components/ui/foundation.css",
+    "src/web/src/components/ui/Combobox.tsx",
+    "src/web/src/components/ui/ComboboxOption.tsx",
+    "src/web/src/components/ui/Floating.css",
+    "src/web/src/components/ui/Floating.ts",
+    "src/web/src/components/ui/Menu.tsx",
+    "src/web/src/components/ui/MultiSelect.tsx",
+    "src/web/src/components/ui/Popover.tsx",
+    "src/web/src/components/ui/Select.css",
+    "src/web/src/components/ui/Select.tsx",
+    "src/web/src/components/ui/SelectEmpty.tsx",
+    "src/web/src/components/ui/Tooltip.tsx"
+  ],
+  "runtimeAntDImportsOrSelectors": [],
+  "runtimeMatchesSuccessfulBuildHashes": true
+}

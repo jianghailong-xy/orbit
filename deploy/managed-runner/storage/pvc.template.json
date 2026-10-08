@@ -1,0 +1,22 @@
+{
+  "apiVersion": "v1",
+  "kind": "PersistentVolumeClaim",
+  "metadata": {
+    "name": "${storage.pvcName}",
+    "namespace": "${kubernetes.namespace}",
+    "annotations": {
+      "orbit.dev/owner-id": "${storage.ownerID}",
+      "orbit.dev/runner-id": "${storage.runnerID}"
+    }
+  },
+  "spec": {
+    "storageClassName": "${storage.className}",
+    "accessModes": ["ReadWriteOnce"],
+    "volumeMode": "Filesystem",
+    "resources": {
+      "requests": {
+        "storage": "${storage.capacity}"
+      }
+    }
+  }
+}

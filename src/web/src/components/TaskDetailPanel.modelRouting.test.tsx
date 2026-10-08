@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeId } from '../lib/idCodec';
+import { meQuery, type UserPreferences } from '../lib/queries';
 import type { ConfiguredProvider } from '../lib/workspaceDefaults';
 
 /**
@@ -18,6 +19,9 @@ import type { ConfiguredProvider } from '../lib/workspaceDefaults';
  * Runs: each run's "model · effort", a ✦ tier tag on a run that ran on the pick (↑ when a failure
  * moved it up), a purple line on a run that did not, saying what smart selection would have picked —
  * and either one opens the Why: the decision's own reasons and its policy and time.
+ *
+ * All of it only while the account's switch (`preferences.modelRouting`) is on; off — the default —
+ * the panel reads as it did before smart selection existed.
  */
 
 vi.mock('../api', async (importOriginal) => ({
@@ -110,9 +114,17 @@ async function settle(): Promise<void> {
   }
 }
 
-/** The panel over this read, with the assignee Agent and its runner as the workspace list reports them. */
-async function mount(data: Record<string, unknown>, agent: Record<string, unknown> = {}, machine: Record<string, unknown> = {}, providers: ConfiguredProvider[] = []): Promise<void> {
+/** The panel over this read, with the assignee Agent and its runner as the workspace list reports them,
+ *  for an account with smart selection on unless `preferences` says otherwise. */
+async function mount(
+  data: Record<string, unknown>,
+  agent: Record<string, unknown> = {},
+  machine: Record<string, unknown> = {},
+  providers: ConfiguredProvider[] = [],
+  preferences: UserPreferences = { modelRouting: true },
+): Promise<void> {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
+  client.setQueryData(meQuery().queryKey, { id: 'u1', email: 'a@b.c', name: 'A', createdAt: '2026-01-01T00:00:00Z', preferences });
   client.setQueryData(['task', TASK], data);
   client.setQueryData(['workspaces'], [{ id: AGENT, name: 'orbit', runnerId: RUNNER, provider: 'claude', ...agent }]);
   client.setQueryData(['runners'], [
@@ -147,6 +159,21 @@ async function mount(data: Record<string, unknown>, agent: Record<string, unknow
   await settle();
 }
 
+/** A mouse press as a browser delivers it — pointer and mouse down and up, then the click — which
+ *  a list option needs before it takes a click as a choice rather than a keyboard activation. */
+async function press(element: Element | null | undefined, what: string): Promise<void> {
+  expect(element, `${what} is on screen`).toBeTruthy();
+  await act(async () => {
+    const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
+    element!.dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse' }));
+    element!.dispatchEvent(new MouseEvent('mousedown', init));
+    element!.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0, pointerType: 'mouse' }));
+    element!.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
+    element!.dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
+  });
+  await settle();
+}
+
 async function click(element: Element | null | undefined, what: string): Promise<MouseEvent> {
   expect(element, `${what} is on screen`).toBeTruthy();
   const event = new MouseEvent('click', { bubbles: true, cancelable: true });
@@ -173,17 +200,20 @@ const patches = () =>
     .filter(([path, options]) => path === `/tasks/${TASK}` && options?.method === 'PATCH')
     .map(([, options]) => options?.body);
 
-/** Open the Suggested picker, and wait for its rows to be in the popup antd portals out. */
+/** Open the Suggested picker, and wait for its rows to be in the popup it portals out. */
 async function openSuggested(): Promise<HTMLElement[]> {
-  await act(async () => {
-    field('Suggested').querySelector('.ant-select-content')!
-      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-  });
+  await click(field('Suggested').querySelector('[role="combobox"]'), 'the Suggested picker');
   await vi.waitFor(() =>
-    expect(document.body.querySelectorAll('.tdp-hint-popup .ant-select-item-option').length).toBe(5),
+    expect(document.body.querySelectorAll('.tdp-hint-popup [role="option"]').length).toBe(5),
   );
-  return [...document.body.querySelectorAll<HTMLElement>('.tdp-hint-popup .ant-select-item-option')];
+  return [...document.body.querySelectorAll<HTMLElement>('.tdp-hint-popup [role="option"]')];
 }
+/** What a field's picker says while nothing is chosen: a Select shows it as its value, a searchable
+ *  one as the hint beside its input. */
+const placeholderOf = (label: string): string | null | undefined => {
+  const picker = field(label).querySelector('[role="combobox"]');
+  return picker?.tagName === 'INPUT' ? picker.getAttribute('aria-placeholder') : picker?.textContent;
+};
 const optionText = (option: HTMLElement) => ({
   name: option.querySelector('.tdp-hint-option-name')?.textContent,
   detail: option.querySelector('.tdp-hint-option-detail')?.textContent,
@@ -252,7 +282,7 @@ describe('the Suggested tier in Details', { timeout: 60_000 }, () => {
 
   it('reads No suggestion, with no reason line, on a task without one', async () => {
     await mount(detail({ modelHint: null, modelHintReason: null }));
-    expect(field('Suggested').querySelector('.ant-select-placeholder')?.textContent).toBe('No suggestion');
+    expect(placeholderOf('Suggested')).toBe('No suggestion');
     expect(field('Suggested').querySelector('.tdp-hint-value')).toBeNull();
     expect(field('Suggested').querySelector('.tdp-field-note')).toBeNull();
   });
@@ -283,15 +313,15 @@ describe('the Suggested tier in Details', { timeout: 60_000 }, () => {
     await mount(detail());
     let options = await openSuggested();
     // The tier it already has is no change, and reaches the server as none.
-    await click(options[2], 'M');
+    await press(options[2], 'M');
     expect(patches()).toEqual([]);
 
     options = await openSuggested();
-    await click(options[3], 'L');
+    await press(options[3], 'L');
     await vi.waitFor(() => expect(patches()).toEqual([{ modelHint: 'L', modelHintReason: null }]));
 
     options = await openSuggested();
-    await click(options[0], 'No suggestion');
+    await press(options[0], 'No suggestion');
     await vi.waitFor(() =>
       expect(patches()).toEqual([
         { modelHint: 'L', modelHintReason: null },
@@ -300,15 +330,32 @@ describe('the Suggested tier in Details', { timeout: 60_000 }, () => {
     );
   });
 
+  it('saves a model picked by hand, and the model it already has as no change', async () => {
+    await mount(detail({ provider: 'claude', model: 'claude-opus-5-5' }));
+    const openModel = async () => {
+      await press(field('Model').querySelector('[role="combobox"]'), 'the Model picker');
+      await vi.waitFor(() => expect(document.body.querySelectorAll('[role="listbox"] [role="option"]').length).toBe(3));
+      return [...document.body.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')];
+    };
+    let options = await openModel();
+    // As in the select this replaces, picking the chosen option only closes the list.
+    await press(options.find((option) => option.textContent?.includes('Opus 5.5')), 'Opus 5.5');
+    expect(patches()).toEqual([]);
+
+    options = await openModel();
+    await press(options.find((option) => option.textContent?.includes('Sonnet 5.5')), 'Sonnet 5.5');
+    await vi.waitFor(() => expect(patches()).toEqual([expect.objectContaining({ model: 'claude-sonnet-5-5' })]));
+  });
+
   it('reads ✦ Smart selection in an unpinned Model while the assignee has it on, and Provider default otherwise', async () => {
     await mount(detail(), { modelRouting: true });
-    expect(field('Model').querySelector('.ant-select-placeholder')?.textContent).toBe('✦ Smart selection');
+    expect(placeholderOf('Model')).toBe('✦ Smart selection');
     await act(async () => root!.unmount());
     root = null;
     container!.remove();
 
     await mount(detail(), { modelRouting: false });
-    expect(field('Model').querySelector('.ant-select-placeholder')?.textContent).toBe('Provider default');
+    expect(placeholderOf('Model')).toBe('Provider default');
   });
 });
 
@@ -319,11 +366,9 @@ describe('Gemini task provider pins', () => {
     await mount(detail(), { antigravityKeyAvailableByRunner: { [RUNNER]: keyAvailable } }, {
       antigravity: { supported: false, installed: true, version: '1.2.16', envKeyAvailable: true },
     }, [gemini]);
-    await act(async () => {
-      field('Provider').querySelector('.ant-select-content')!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-    });
-    await vi.waitFor(() => expect(document.body.querySelectorAll('.ant-select-item-option').length).toBe(keyAvailable ? 6 : 5));
-    const options = [...document.body.querySelectorAll<HTMLElement>('.ant-select-item-option')];
+    await press(field('Provider').querySelector('[role="combobox"]'), 'the Provider picker');
+    await vi.waitFor(() => expect(document.body.querySelectorAll('[role="listbox"] [role="option"]').length).toBe(keyAvailable ? 6 : 5));
+    const options = [...document.body.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')];
     const builtin = options.find((option) => option.textContent?.includes('env key'));
     expect(!!builtin).toBe(keyAvailable);
     if (builtin) expect(builtin.textContent).toContain('env key');
@@ -331,7 +376,7 @@ describe('Gemini task provider pins', () => {
     const provider = options.find((option) => option.textContent?.includes('API key'))!;
     expect(provider.textContent).toContain('Antigravity');
     expect(provider.textContent).toContain('Update runner');
-    await click(provider, 'Gemini needing a runner update');
+    await press(provider, 'Gemini needing a runner update');
     expect(where).toBe('/providers');
     expect(patches()).toEqual([]);
   });
@@ -470,4 +515,53 @@ describe('what each run was routed to, and why', { timeout: 60_000 }, () => {
     expect(panel().querySelector('.tdp-route-tag')).toBeNull();
     expect(panel().querySelector('.tdp-route-would')).toBeNull();
   });
+});
+
+describe('with the account switch off', { timeout: 60_000 }, () => {
+  const cases: Array<[string, UserPreferences]> = [
+    ['preferences without modelRouting', {}],
+    ['modelRouting: false', { modelRouting: false }],
+  ];
+  for (const [what, preferences] of cases) {
+    it(`(${what}) nothing of smart selection shows`, async () => {
+      const shadow = route({ level: 'S', model: 'claude-sonnet-5-5', effort: 'low', applied: false });
+      // Everything that draws smart selection while it is on: a tier and its reason, an assignee with
+      // the Agent switch on, a run on the pick, a run beside it, and a run not claimed yet.
+      await mount(
+        detail({
+          sessions: [
+            run(RUN_3, { status: 'PENDING', route: route({ level: 'L', model: 'claude-opus-5-5', effort: 'high' }) }),
+            run(RUN_2, { status: 'RUNNING', model: 'claude-sonnet-5-5', effort: 'medium', route: route() }),
+            run(RUN_1, { status: 'SUCCEEDED', model: 'claude-opus-5-5', effort: null, route: shadow }),
+          ],
+        }),
+        { modelRouting: true },
+        {},
+        [],
+        preferences,
+      );
+
+      // Details: no Suggested, and Model's placeholder is the one it always had.
+      expect(labels().slice(0, 3)).toEqual(['Assignee', 'Provider', 'Model']);
+      expect(labels()).not.toContain('Suggested');
+      expect(panel().querySelector('.tdp-hint-value')).toBeNull();
+      expect(panel().textContent).not.toContain(`Coordinator: ${REASON}`);
+      expect(placeholderOf('Model')).toBe('Provider default');
+
+      // Runs: what each run used, and nothing about what smart selection picked or would have.
+      expect(row(RUN_3).querySelector('.tdp-session-sub')?.textContent).toBe(short('2026-10-03T01:12:00.000Z'));
+      expect(row(RUN_2).querySelector('.tdp-session-sub')?.textContent).toBe(
+        `${short('2026-10-03T01:12:00.000Z')} · Sonnet 5.5 · medium`,
+      );
+      expect(row(RUN_1).querySelector('.tdp-session-sub')?.textContent).toBe(
+        `${short('2026-10-03T01:12:00.000Z')} · Opus 5.5 · default effort`,
+      );
+      expect(panel().querySelector('.tdp-route-tag')).toBeNull();
+      expect(panel().querySelector('.tdp-route-would')).toBeNull();
+      expect(panel().querySelector('.tdp-route-why')).toBeNull();
+      expect(panel().textContent).not.toContain('✦');
+      expect(panel().textContent).not.toContain('Smart selection');
+      expect(panel().textContent).not.toContain('would have picked');
+    });
+  }
 });

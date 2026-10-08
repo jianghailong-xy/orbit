@@ -2,6 +2,7 @@ package io.orbitd.android
 
 import android.app.Application
 import io.orbitd.android.core.auth.AuthSession
+import io.orbitd.android.core.auth.GoogleSignIn
 import io.orbitd.android.core.net.OkHttpTransport
 import io.orbitd.android.storage.AndroidCredentialStore
 import io.orbitd.android.storage.AndroidInstanceStore
@@ -23,8 +24,11 @@ import io.orbitd.android.navigation.ObjectId
 /** One process-wide session owns all HTTP requests and token rotations, across activity recreation. */
 open class OrbitApplication : Application() {
     val session: AuthSession by lazy { createSession() }
+    /** The Google sign-in this process started, if any: its verifier is in memory only. */
+    val googleSignIn = GoogleSignIn()
     internal val processScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val realtime: RealtimeStore by lazy { RealtimeStore(session, processScope).also { RealtimeLifecycle(this, it) } }
+    val push: io.orbitd.android.push.PushController by lazy { createPush() }
     private var composerHandle: SessionHandle? = null
     private val composers = mutableMapOf<String, ComposerModel>()
     fun composer(handle: SessionHandle, sessionId: String, target: DraftTarget? = null): ComposerModel {
@@ -36,6 +40,7 @@ open class OrbitApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         realtime // Register lifecycle/network callbacks before the first Activity starts.
+        push.start()
         clearAttachmentHandoffs(this)
         processScope.launch { session.state.collect { state ->
             if (state is AuthState.SignedOut || composerHandle != null && state is AuthState.SignedIn && state.handle !== composerHandle) {
@@ -51,4 +56,5 @@ open class OrbitApplication : Application() {
         OkHttpTransport(), AndroidCredentialStore(this), AndroidInstanceStore(this),
         AndroidSessionDataStore(this), BuildConfig.VERSION_NAME, allowLoopbackHttp = BuildConfig.DEBUG,
     )
+    protected open fun createPush() = io.orbitd.android.push.PushController(this, session, realtime, processScope)
 }

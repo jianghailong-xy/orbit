@@ -53,8 +53,12 @@ open Orbit.xcodeproj           # ⌘R to run on a simulator
 # or headless. Keep signing on: a simulator build signs ad hoc without a team, but an unsigned one
 # (CODE_SIGNING_ALLOWED=NO, fine for CI's compile check) can't use the Keychain, so sign-in
 # succeeds and then drops straight back to the login screen.
+# Pick the simulator by UDID: since Xcode 27, `name=iPhone 17 Pro` alone no longer matches (exit 70,
+# "platform doesn't match"). If `xcode-select -p` points at CommandLineTools, first
+# `export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`.
+UDID=$(xcrun simctl list devices available | grep -m1 'iPhone 17 Pro (' | grep -oE '[0-9A-F-]{36}')
 xcodebuild -project Orbit.xcodeproj -scheme Orbit \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
+  -destination "platform=iOS Simulator,id=$UDID" build
 ```
 
 `Orbit.xcodeproj` is generated and git-ignored — edit `project.yml`, not the project. On Linux only

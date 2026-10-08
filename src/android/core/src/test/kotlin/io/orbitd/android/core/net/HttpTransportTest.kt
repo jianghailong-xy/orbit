@@ -5,6 +5,7 @@ import io.orbitd.android.core.auth.MemoryCredentials
 import io.orbitd.android.core.auth.MemoryData
 import io.orbitd.android.core.auth.MemoryInstances
 import io.orbitd.android.core.auth.tokens
+import io.orbitd.android.core.protocol.SignInMethods
 import io.orbitd.android.core.protocol.Wire
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.async
@@ -73,6 +74,35 @@ class HttpTransportTest {
             assertArrayEquals(body, calls[1].body.readByteArray())
             assertArrayEquals(body, calls[3].body.readByteArray())
             assertTrue(calls[4].body.readUtf8().contains(tokens(version = 1).refreshToken))
+        }
+    }
+
+    @Test fun signInMethodsAndGoogleExchangeUseTheWireContract() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""{"password":true,"google":true,"googleSignup":true}"""))
+            server.enqueue(MockResponse().setBody(Wire.json.encodeToString(tokens())))
+            val client = AuthSession(OkHttpTransport(), MemoryCredentials(), MemoryInstances(), MemoryData(), "0.1.0-d1", true)
+            assertEquals(SignInMethods(google = true, googleSignup = true), client.signInMethods(server.address()))
+            client.loginWithGoogleTicket(server.address(), "fixture-ticket", "fixture-verifier")
+            val (methods, exchange) = List(2) { server.takeRequest(5, TimeUnit.SECONDS)!! }
+            assertEquals("GET /prefix/api/auth/methods", "${methods.method} ${methods.path}")
+            assertEquals("POST /prefix/api/auth/google/exchange", "${exchange.method} ${exchange.path}")
+            assertTrue(listOf(methods, exchange).all { it.getHeader("X-Orbit-Client") == "android/0.1.0-d1" && it.getHeader("Authorization") == null })
+            assertEquals("application/json; charset=utf-8", exchange.getHeader("Content-Type"))
+            assertEquals("""{"ticket":"fixture-ticket","codeVerifier":"fixture-verifier"}""", exchange.body.readUtf8())
+        }
+    }
+
+    @Test fun signInMethodsSurvivesAPooledConnectionTheServerClosed() = runBlocking {
+        MockWebServer().use { server ->
+            // The first answer ends its connection afterwards, as a server's idle keep-alive timeout does.
+            server.enqueue(MockResponse().setBody("""{"password":true,"google":false,"googleSignup":false}""")
+                .setSocketPolicy(SocketPolicy.DISCONNECT_AT_END))
+            server.enqueue(MockResponse().setBody("""{"password":true,"google":true,"googleSignup":false}"""))
+            val client = AuthSession(OkHttpTransport(), MemoryCredentials(), MemoryInstances(), MemoryData(), "test", true)
+            assertEquals(SignInMethods(), client.signInMethods(server.address()))
+            Thread.sleep(200)
+            assertEquals(SignInMethods(google = true), client.signInMethods(server.address()))
         }
     }
 

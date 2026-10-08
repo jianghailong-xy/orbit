@@ -19,6 +19,9 @@ export const PROVIDER_TRANSPORTS: Record<AgentProvider, ProviderTransport> = {
   // transport's (see MID_TURN_STEER).
   [AgentProvider.CODEX]: 'json-rpc',
   [AgentProvider.KIMI]: 'json-rpc',
+  // ACP JSON-RPC over one resident process; a prompt remains outstanding until ordered updates
+  // settle. It has cancellation and configuration, but no mid-turn steer (P0 contract §4).
+  [AgentProvider.DSH]: 'json-rpc',
   // One process per turn, carrying that turn's prompt and exiting with it.
   [AgentProvider.OPENCODE]: 'one-shot',
   // One resident `agy --print=` process per session, stream-json in both directions, a `result`
@@ -74,6 +77,7 @@ const MID_TURN_STEER: Record<AgentProvider, string | typeof ALWAYS | typeof NEVE
   [AgentProvider.CLAUDE]: ALWAYS,
   [AgentProvider.CODEX]: SESSION_CODEX_STEER_V1,
   [AgentProvider.KIMI]: NEVER,
+  [AgentProvider.DSH]: NEVER,
   [AgentProvider.OPENCODE]: NEVER,
   // agy runs a mid-turn frame as a turn of its own after the current `result` (contract §8.1),
   // and the runner refuses a steer for it (provider_runtime.go). A message sent mid-turn queues.

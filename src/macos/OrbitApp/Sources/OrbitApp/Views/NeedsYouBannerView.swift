@@ -20,7 +20,7 @@ import OrbitKit
 /// nothing can arrive below it and it cannot leave the screen. The two cards a project's ruler is
 /// decided from stop nothing — the coordinator keeps working and its messages push them up — so a
 /// question delivered forty messages ago is off-screen and unfindable, which is precisely what this
-/// bar exists to fix. So it stays, says what is below rather than where to go, and a press scrolls.
+/// bar exists to fix. A press reveals that card and opens its review when available.
 ///
 /// The in-conversation question WINS when both exist. Not because it is more urgent — a session
 /// blocked elsewhere is stopped work — but because the bar can only carry one destination, this
@@ -41,8 +41,11 @@ struct NeedsYouBannerView: View {
     /// Questions in THIS conversation that stop no turn, if any. Nil from a list, and from a console
     /// holding none.
     var below: WaitingBelow? = nil
-    /// Where a press goes when the bar is pointing down: the console scrolls to that row.
+    /// The console reveals this row and opens its existing review, if it has one.
     var onOpenBelow: ((String) -> Void)? = nil
+    /// Whether a project's sessions page opens in this shell's session column (an iPad's wide
+    /// shell) rather than as a page of its own — where the merge into main's card is.
+    var projectInColumn = false
 
     var body: some View {
         if let below {
@@ -56,7 +59,7 @@ struct NeedsYouBannerView: View {
                 // escalation that became the owner's, a pause only they can lift), and a reader
                 // told to look for a question finds a card reading "Escalated to you" — the same
                 // wrong noun the line above stopped using.
-                hint: "Scrolls to what is waiting in this conversation") {
+                hint: "Shows what is waiting in this conversation") {
                 onOpenBelow?(below.rowID)
             }
         } else if let banner = model.needsYouBanner(excluding: excluding) {
@@ -68,7 +71,7 @@ struct NeedsYouBannerView: View {
                     ? "Opens the session waiting on you"
                     : "Opens the card waiting on you") {
                 if let item = banner.ownerItem {
-                    model.openNeedsYouItem(banner.target, item)
+                    model.openNeedsYouItem(banner.target, item, projectInColumn: projectInColumn)
                 } else {
                     model.openNeedsYouSession(banner.target)
                 }

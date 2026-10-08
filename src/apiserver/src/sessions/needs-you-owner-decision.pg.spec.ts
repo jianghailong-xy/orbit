@@ -98,6 +98,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { readOwnerDecisionSignals } from '../projects/owner-decision-signal';
+import { ownerItemNeed } from '../projects/project-open-item';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { criterionKeyOf } from '../projects/project-acceptance';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
@@ -111,6 +112,12 @@ const skip = !URL;
 const METHOD = 'A person reads the criterion and says whether it holds';
 const FIRST = 'the badge is lit by a question, not by a row in the approval table';
 const SECOND = 'the criterion this fixture drops, to make an edit a loosening';
+
+test('owner-item signal copy names the raw exception kind', () => {
+  // The database reader already selects `kind`; this assertion pins the no-extra-read projection
+  // used by readOwnerItemSignals and keeps the session sentence from regressing to "Escalated".
+  assert.equal(ownerItemNeed('INTEGRATION_CHECK_FAILED'), 'Checks failed');
+});
 
 /** The write path's answer when it held an edit instead of applying it. */
 interface Held {

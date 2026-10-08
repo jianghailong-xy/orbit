@@ -26,9 +26,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import io.orbitd.android.auth.AuthScreen
 import io.orbitd.android.auth.AuthViewModel
+import io.orbitd.android.auth.openInSignInBrowser
 import io.orbitd.android.core.BuildIdentity
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.reader.SessionReader
+import io.orbitd.android.tasks.TasksScreen
+import io.orbitd.android.projects.ProjectsScreen
 import io.orbitd.android.wiki.PageBar
 import io.orbitd.android.wiki.WikiDrawerCount
 import io.orbitd.android.wiki.WikiDestination
@@ -41,30 +44,44 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.directory.*
 import io.orbitd.android.navigation.*
-import io.orbitd.android.ui.OrbitTheme
+import io.orbitd.android.management.*
 import io.orbitd.android.ui.LocalOrbitColors
+import io.orbitd.android.push.PushNoticeHost
+import io.orbitd.android.push.NotificationSettings
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 
 class MainActivity : ComponentActivity() {
+    private lateinit var auth: AuthViewModel
     private var incoming by mutableStateOf<Pair<Long, String>?>(null)
     private var linkSequence = 0L
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        auth = ViewModelProvider(this, ViewModelProvider.AndroidViewModelFactory(application))[AuthViewModel::class.java]
+        // A recreated activity's intent was handled when it first arrived.
         if (savedInstanceState == null) acceptIntent(intent)
-        val auth = ViewModelProvider(this, ViewModelProvider.AndroidViewModelFactory(application))[AuthViewModel::class.java]
-        setContent { OrbitTheme { OrbitShell(auth, application as OrbitApplication, incoming) } }
+        setContent {
+            AccountAppearance(application as OrbitApplication) {
+                PushNoticeHost((application as OrbitApplication).push) {
+                    OrbitShell(auth, application as OrbitApplication, incoming) { address ->
+                        auth.continueWithGoogle(address) { url -> openInSignInBrowser(this@MainActivity, url) }
+                    }
+                }
+            }
+        }
     }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); acceptIntent(intent) }
     private fun acceptIntent(intent: Intent) {
+        // `orbit://auth/google`, from GoogleSignInRedirectActivity; any other address is not Google's answer.
+        intent.data?.let { auth.handleGoogleCallback(it.toString()) }
         if (intent.action == Intent.ACTION_VIEW) intent.dataString?.let { incoming = ++linkSequence to it }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pair<Long, String>?) {
+private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pair<Long, String>?, continueWithGoogle: (String) -> Unit) {
     val authState by auth.state.collectAsState()
     val authMessage by auth.message.collectAsState()
     val signedIn = authState as? AuthState.SignedIn
@@ -100,7 +117,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                 if (showBuild) BuildInformation { showBuild = false } else Column(
                     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineLarge)
-                    AuthScreen(authState, authMessage, auth::login, auth::logout)
+                    AuthScreen(authState, authMessage, auth::login, auth::logout, auth::signInMethods, continueWithGoogle)
                     Button(onClick = { showBuild = true }) { Text(stringResource(R.string.build_information)) }
                 }
             }
@@ -114,11 +131,21 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
     // Saved UI keys must survive a process restart; request ownership still uses the live handle.
     key(accountKey) {
         val api = remember(signedIn.handle) { DirectoryApi(app.session, signedIn.handle) }
+        val management = remember(signedIn.handle) { ManagementApi(app.session, signedIn.handle, app.processScope) }
         val data by rememberDirectoryData(app, signedIn.handle)
         val live by remember(app) { app.realtime.state.map { it.handle to it.invalidationRevision }.distinctUntilChanged() }
             .collectAsState(null to 0L)
         val revision = if (live.first === signedIn.handle) live.second else 0L
         val holder = rememberSaveableStateHolder()
+        // A13's settings and runner pages are built anew each time they are pushed, as on iOS: once such a route has
+        // left every stack, its saved state goes too, so a cancelled edit or an old draft never comes back.
+        val held = remember { mutableSetOf<OrbitRoute>() }
+        LaunchedEffect(navigation.stacks) {
+            val kept = navigation.stacks.values.flatten().toSet()
+            held.filterNot(kept::contains).forEach { holder.removeState(Wire.json.encodeToString(it)) }
+            held.retainAll(kept)
+            held += kept.filter { it.destination == Destination.SETTINGS || it.destination == Destination.RUNNER }
+        }
         // A12's Wiki and Watch pages start afresh each time they are pushed, as on iOS: once such a route has left every
         // stack its saved state goes too, so a document opened again at a section scrolls there and an old refusal is
         // not shown on the next visit. (A link's arrival is a route of its own: OrbitRoute.entry.)
@@ -186,6 +213,12 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                             Icon(painterResource(if (navigation.canGoBack) R.drawable.ic_back else R.drawable.ic_menu), if (navigation.canGoBack) "Back" else "Open navigation")
                         }
                     }, actions = {
+                        if (route.destination == Destination.WORKSPACE) IconButton(onClick = {
+                            open(OrbitRoute(Destination.SETTINGS, id = "workspace", workspaceId = route.id))
+                        }) { Icon(painterResource(R.drawable.ic_settings), "Workspace settings") }
+                        if (route.destination == Destination.SESSION && route.id != null) IconButton(onClick = {
+                            open(OrbitRoute(Destination.SETTINGS, id = "share", recordId = "SESSION:${route.id}"))
+                        }) { Icon(painterResource(R.drawable.ic_share), "Share session") }
                         PageBar.Actions(route, this)
                         if (navigation.canGoBack) IconButton(onClick = { scope.launch { focus.clearFocus(); drawer.open() } }) { Icon(painterResource(R.drawable.ic_menu), "Open navigation") }
                         IconButton(onClick = { app.realtime.refreshDirectory() }) { Icon(painterResource(R.drawable.ic_refresh), "Refresh directory") }
@@ -201,15 +234,21 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.SEARCH -> SearchScreen(api, ::open)
                                 Destination.SESSION -> SessionReader(app, signedIn.handle, route, api, data, ::open)
                                 Destination.DRAFT -> NewSessionComposer(app, signedIn.handle, route, data, ::open)
+                                Destination.TASKS, Destination.TASK, Destination.LIST -> TasksScreen(app, signedIn.handle, route, revision, ::open) { navigation = navigation.back() }
+                                Destination.PROJECTS, Destination.PROJECT -> ProjectsScreen(app, signedIn.handle, route, revision, ::open) { navigation = navigation.back() }
                                 Destination.WIKI, Destination.WIKI_ENTRY, Destination.WIKI_BROWSE, Destination.WIKI_INDEX,
                                 Destination.WIKI_ARTICLE, Destination.WIKI_DOC, Destination.WIKI_REVIEW, Destination.WIKI_SETTINGS,
                                 Destination.WIKI_RUN, Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION ->
                                     WikiDestination(app, signedIn.handle, route, data, ::open) { change -> navigation = change(navigation) }
                                 Destination.WATCH -> WatchDestination(app, signedIn.handle, route,
                                     navigate = { change -> navigation = change(navigation) }, open = ::open)
-                                Destination.SETTINGS -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    AuthScreen(authState, authMessage, auth::login, auth::logout)
-                                    Button(onClick = { open(OrbitRoute(Destination.BUILD)) }) { Text("Build information") }
+                                Destination.SETTINGS -> SettingsScreen(management, route, revision, ::open, { navigation = navigation.back() }, auth::logout,
+                                    changed = { app.realtime.refreshDirectory() },
+                                    workspaceDeleted = { select("workspaces", OrbitRoute(Destination.WORKSPACES)) },
+                                    deviceAlerts = { if (app.push.configured) app.push.notifications.allowed() else null },
+                                    notifications = { NotificationSettings(app.push) })
+                                Destination.RUNNER -> RunnerScreen(management, route.id, route.recordId, revision, ::open, { navigation = navigation.back() }) {
+                                    select(it, OrbitRoute(Destination.WORKSPACE, it, it))
                                 }
                                 Destination.BUILD -> BuildInformation { navigation = navigation.back() }
                                 else -> ObjectDestination(route, api, data, revision, ::open) { app.realtime.refreshDirectory() }
@@ -239,6 +278,9 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     Destination.WIKI_RUN -> "Maintenance"
     Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION -> "Wiki plan"
     Destination.WATCH -> if (route.id == null) "Following" else "Watch"
+    Destination.SETTINGS -> if (route.id == "workspace") data.workspaces.firstOrNull { ObjectId.same(it.id, route.workspaceId) }?.name
+        ?.let { "$it settings" } ?: settingsTitle(route.id) else settingsTitle(route.id, route.recordId)
+    Destination.RUNNER -> runnerTitle(route.recordId, route.id, data.runners.firstOrNull { ObjectId.same(it.id, route.id) }?.name)
     else -> route.destination.name.lowercase().replaceFirstChar(Char::uppercase)
 }
 

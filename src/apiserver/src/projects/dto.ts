@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -24,8 +24,11 @@ import {
 import {
   ProjectStatus,
   type AcceptedGap,
+  type DoneRequestGap,
+  type ProjectDoneRequestDeclineBody,
   type ProjectDoneRequestBody,
   type ProjectStartRequestBody,
+  type RequestProjectDoneBody,
   type StartProjectRequestBody,
 } from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
@@ -33,7 +36,17 @@ import { MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS } from '../tasks/task-criterio
 import { MAX_BLOCKER_RESOLUTION_REASON_CHARS } from './project-blocker-resolution';
 import { MAX_OPEN_ITEM_RESOLUTION_NOTE, MAX_QUESTION_CHARS } from './project-open-item';
 import { MAX_INTEGRATION_RETRY_REASON } from './project-integration-retry';
+import { MAX_INTEGRATION_SKIP_REASON } from './project-integration-skip-check';
 import { MAX_START_REQUEST_WHY } from './project-start-request';
+import {
+  MAX_DONE_REQUEST_EVIDENCE_REF,
+  MAX_DONE_REQUEST_EVIDENCE_REFS,
+  MAX_DONE_REQUEST_DECLINE_NOTE,
+  MAX_DONE_REQUEST_GAPS,
+  MAX_DONE_REQUEST_GAP_TEXT,
+  MAX_DONE_REQUEST_GAP_TITLE,
+  MAX_DONE_REQUEST_JUDGMENT,
+} from './project-done-request';
 import type { IntegrationLine, IntegrationSettings } from './project-integration-line';
 
 const PROJECT_STATUSES = Object.values(ProjectStatus);
@@ -173,8 +186,11 @@ const BRANCH_REF = /^refs\/heads\/\S+$/;
 /**
  * `PATCH /projects/:id/integration`, and `integration` on a project update: the account owner's
  * choice of where this project's finished tasks land and what is checked before they do
- * (`docs/project-integration-line-contract.md` L5). Only the owner's — a request carrying an
- * acting session is refused whole — and each field is written only when sent.
+ * (`docs/project-integration-line-contract.md` L5). Each field is written only when sent, and on
+ * the update route they are not all the owner's in the same way: the line is, whole, while the
+ * merge check is a session's to propose and the owner's to allow on a card
+ * (`project-integration-approval.ts`). `PATCH /projects/:id/integration` is the owner's own door
+ * and is unaffected — it carries no acting session, so no card is asked for.
  */
 export class UpdateProjectIntegrationDto implements IntegrationSettings {
   /** `MAIN` lands finished tasks straight on the upstream; `PROJECT_BRANCH` on the project's own
@@ -259,6 +275,18 @@ export class CreateProjectDto {
 
   @IsOptional() @IsInt() @Min(1) @Max(MAX_PROJECT_SESSION_BUDGET_PER_DAY)
   sessionBudgetPerDay?: number | null;
+
+  /**
+   * Not this door's fields, and nothing here writes them: a new project's Automatic is
+   * `coordinatorEnabled`, and its coordinator is whoever opens where `workspaceId` says. Declared all
+   * the same, and validated as `PATCH /projects/:id` validates them, so that a request carrying one is
+   * refused it by name with the rest of the authorization set rather than having it stripped by the
+   * whitelist and a project made without it: a personal access token at the user door
+   * (docs/personal-access-token-design.md §5.1), an agent at the runner door. A login is not refused
+   * them, and they stay unwritten.
+   */
+  @IsSent() @IsBoolean() automatic?: boolean;
+  @IsOptional() @IsPublicId() coordinatorAgentId?: string | null;
 }
 
 export class UpdateProjectDto {
@@ -296,8 +324,10 @@ export class UpdateProjectDto {
    * automatic-only, so a project is settled by whoever writes this column and by nothing else. */
   @IsOptional() @IsIn(PROJECT_STATUSES) status?: ProjectStatus;
 
-  /** This project's integration line and merge check (`UpdateProjectIntegrationDto`). The account
-   *  owner's to set: like `status`, a request carrying an acting session is refused whole. */
+  /** This project's integration line and merge check (`UpdateProjectIntegrationDto`). The line is
+   *  the account owner's alone, refused whole to a request carrying an acting session. The merge
+   *  check may be changed from a session, but only on a confirmation card the owner has answered
+   *  for this project and exactly this change (`project-integration-approval.ts`). */
   @IsOptional() @ValidateNested() @Type(() => UpdateProjectIntegrationDto)
   integration?: UpdateProjectIntegrationDto;
 
@@ -450,6 +480,17 @@ export class DoneProjectDto implements ProjectDoneRequestBody {
 }
 
 /**
+ * `POST /projects/:id/done-requests/:itemId/decline`: the account owner's Not yet… note.
+ *
+ * The service trims and validates again because this DTO is only the HTTP boundary; direct callers
+ * and retries must meet the same rule.
+ */
+export class DeclineDoneRequestDto implements ProjectDoneRequestDeclineBody {
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @IsString() @MinLength(1) @MaxLength(MAX_DONE_REQUEST_DECLINE_NOTE) note!: string;
+}
+
+/**
  * `POST /projects/:id/start` (`@orbit/shared` `StartProjectRequestBody`): the version of the
  * criteria the owner read, and every setting the project is to run with — each one required,
  * because a start writes the whole set and a field left out would be a setting nobody chose.
@@ -480,7 +521,8 @@ export class StartProjectDto implements StartProjectRequestBody {
 /**
  * `POST /runner/projects/:id/start-requests` (`@orbit/shared` `ProjectStartRequestBody`): the
  * settings a project's coordinator suggests it start with — the ones `StartProjectDto` writes, under
- * the same rules — and why the plan is ready. The merge check may be left out, which suggests none.
+ * the same rules — and why the plan is ready. The merge check may be left out, which suggests none,
+ * and so may Automatic, which suggests it on.
  */
 export class RequestProjectStartDto implements ProjectStartRequestBody {
   @IsIn(INTEGRATION_LINES) line!: IntegrationLine;
@@ -489,12 +531,42 @@ export class RequestProjectStartDto implements ProjectStartRequestBody {
     message: 'CODEBASE_AUTHORITY_INVALID: projectBranchName must be a full branch ref such as refs/heads/project/next',
   })
   projectBranchName?: string;
-  @IsBoolean() automatic!: boolean;
+  /** Left out is on: the owner's card opens with Automatic on whatever is suggested. */
+  @IsOptional() @IsBoolean() automatic?: boolean;
   @IsInt() @Min(1) @Max(MAX_PROJECT_CONCURRENT_TASKS) maxConcurrentTasks!: number;
   @IsOptional() @ValidateIf((_object, value) => value !== null) @IsString()
   mergeCheckCommand?: string | null;
   /** Shown to the owner on the card, as written. */
   @IsString() @MinLength(1) @MaxLength(MAX_START_REQUEST_WHY) why!: string;
+}
+
+/**
+ * One gap a project's coordinator names when it asks for the project to be recorded done
+ * (`@orbit/shared` `DoneRequestGap`): the criterion by the key `project_get` gives it, why Orbit
+ * cannot prove it, what the coordinator checked instead and where that evidence is, and optionally a
+ * few words naming it. The service restates every rule, which is where both doors meet.
+ */
+export class DoneRequestGapDto implements DoneRequestGap {
+  [key: string]: unknown;
+  @IsString() @MinLength(1) @MaxLength(64) criterionKey!: string;
+  @IsOptional() @IsString() @MaxLength(MAX_DONE_REQUEST_GAP_TITLE) title?: string;
+  @IsString() @MinLength(1) @MaxLength(MAX_DONE_REQUEST_GAP_TEXT) whyNotProven!: string;
+  @IsString() @MinLength(1) @MaxLength(MAX_DONE_REQUEST_GAP_TEXT) coordinatorChecked!: string;
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(MAX_DONE_REQUEST_EVIDENCE_REFS)
+  @IsString({ each: true }) @MaxLength(MAX_DONE_REQUEST_EVIDENCE_REF, { each: true })
+  evidenceRefs!: string[];
+}
+
+/**
+ * `POST /runner/projects/:id/done-requests` (`@orbit/shared` `RequestProjectDoneBody`): the
+ * coordinator's call on whether its project is done, and every criterion Orbit cannot prove.
+ */
+export class RequestProjectDoneDto implements RequestProjectDoneBody {
+  /** Shown to the owner first on the card, as written. */
+  @IsString() @MinLength(1) @MaxLength(MAX_DONE_REQUEST_JUDGMENT) judgment!: string;
+  @IsArray() @ArrayMaxSize(MAX_DONE_REQUEST_GAPS)
+  @ValidateNested({ each: true }) @Type(() => DoneRequestGapDto)
+  gaps!: DoneRequestGapDto[];
 }
 
 /** The two spellings a criteria decision can have. `REJECT` settles the proposal and applies
@@ -641,6 +713,11 @@ export class ResolveOpenItemDto {
   @IsString() @MinLength(1) @MaxLength(MAX_OPEN_ITEM_RESOLUTION_NOTE) note!: string;
 }
 
+/** The coordinator's explanation when it deliberately hands an open item to the account owner. */
+export class HandOverOpenItemDto {
+  @IsString() @MinLength(1) @MaxLength(MAX_OPEN_ITEM_RESOLUTION_NOTE) note!: string;
+}
+
 /**
  * The project's coordinator running one of its failed landings again (`integration_retry`, contract
  * §2.3 J-T1b). One field, required for the reason the hand-close's note is: a rerun is a decision
@@ -649,6 +726,31 @@ export class ResolveOpenItemDto {
  */
 export class RetryIntegrationDto {
   @IsString() @MinLength(1) @MaxLength(MAX_INTEGRATION_RETRY_REASON) reason!: string;
+}
+
+/**
+ * One landing queued again with its merge check NOT RUN (`integration_skip_merge_check`, contract
+ * §2.4 J-S5). The reason is the rerun's — the sentence that says why this check was not the
+ * delivery's to fail — and the card is the account owner's answer to it: the id of the confirmation
+ * the runner filed before calling here, required on the coordinator channel and refused by the
+ * service when it names nothing, names a card nobody has answered, or names one raised about another
+ * landing. The account owner's own door needs no card (they are the person it would ask) and reads
+ * none.
+ */
+export class SkipMergeCheckDto {
+  @IsString() @MinLength(1) @MaxLength(MAX_INTEGRATION_SKIP_REASON) reason!: string;
+  /** The card's own id, in either spelling: the runner hands back the uuid its own create answered
+   *  with, and a client that read the card off a public list may paste the short form. */
+  @IsOptional() @IsPublicId() approvalId?: string;
+}
+
+/**
+ * The account owner's own skip: the reason alone. Deliberately not the DTO above with its card field
+ * omitted — the owner needs no card because they are the person one would ask, and a body that could
+ * name one would suggest a confirmation had been checked that this door never reads.
+ */
+export class SkipMergeCheckAsOwnerDto {
+  @IsString() @MinLength(1) @MaxLength(MAX_INTEGRATION_SKIP_REASON) reason!: string;
 }
 
 export class RecordMergeEvidenceDto {

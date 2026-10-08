@@ -14,9 +14,30 @@ export interface ModelRoutingReportGroup {
   firstPassTaskCount: number;
   firstPassRate: number | null;
   averageFailureCount: number | null;
+  /** `null` when no task completed, or when any completed task ran with unknown usage. */
   tokensPerCompletedTask: number | null;
+  /** `null` when no task completed, or when any completed task ran with unknown usage. */
   costUsdPerCompletedTask: number | null;
+  /** Completed tasks with a run whose runtime reported no cost or tokens (DeepSeek Harness): their
+   *  spend is unknown, not $0 / 0 tokens, so the two per-task averages above are withheld. */
+  usageUnknownCompletedTaskCount: number;
   durationP50Ms: number | null;
+}
+
+/**
+ * Whether a session ran on a runtime that reports no cost or tokens (DeepSeek Harness reports only
+ * context occupancy) and nothing was recorded for it anyway. Its `cost_usd` 0 is then a default,
+ * not a measurement. The dsh identity is the one queue.service's capability gate uses.
+ */
+export function sessionUsageUnreported(session: string): Prisma.Sql {
+  const s = Prisma.raw(session);
+  return Prisma.sql`(${s}.cost_usd = 0
+    AND NOT EXISTS (SELECT 1 FROM usage unreported WHERE unreported.session_id = ${s}.id)
+    AND ((${s}.provider = 'dsh' AND ${s}.provider_builtin) OR EXISTS (
+      SELECT 1 FROM model_provider unreported_mp
+       WHERE NOT ${s}.provider_builtin AND unreported_mp.slug = ${s}.provider
+         AND unreported_mp.runtime = 'dsh'
+         AND (unreported_mp.owner_id IS NULL OR unreported_mp.owner_id = ${s}.owner_id))))`;
 }
 
 @Injectable()
@@ -44,6 +65,7 @@ export class TaskModelRoutingReportService {
       -- Filters choose samples, never cut short the history that determines the first run or cost.
       work_runs AS (
         SELECT s.id, s.task_id, s.status, s.error, s.cost_usd, s.created_at,
+               ${sessionUsageUnreported('s')} AS usage_unknown,
                row_number() OVER history AS ordinal,
                lead(s.created_at) OVER history AS next_created_at
           FROM session s
@@ -77,7 +99,8 @@ export class TaskModelRoutingReportService {
       ),
       task_totals AS (
         SELECT w.task_id, count(*) AS run_count, count(*) FILTER (WHERE w.failed) AS failures,
-               sum(coalesce(u.tokens, 0)) AS tokens, sum(w.cost_usd) AS cost_usd
+               sum(coalesce(u.tokens, 0)) AS tokens, sum(w.cost_usd) AS cost_usd,
+               bool_or(w.usage_unknown) AS usage_unknown
           FROM assessed_runs w LEFT JOIN usage_totals u ON u.session_id = w.id
          GROUP BY w.task_id
       ),
@@ -88,10 +111,16 @@ export class TaskModelRoutingReportService {
                (count(*) FILTER (WHERE r.task_status = 'DONE' AND totals.run_count = 1
                                  AND totals.failures = 0 AND r.run_status <> 'FAILED'))::int AS first_pass_task_count,
                avg(totals.failures)::double precision AS average_failure_count,
-               (sum(totals.tokens) FILTER (WHERE r.task_status = 'DONE'))::double precision
-                 / nullif(count(*) FILTER (WHERE r.task_status = 'DONE'), 0) AS tokens_per_completed_task,
-               sum(totals.cost_usd) FILTER (WHERE r.task_status = 'DONE')
-                 / nullif(count(*) FILTER (WHERE r.task_status = 'DONE'), 0) AS cost_usd_per_completed_task
+               (count(*) FILTER (WHERE r.task_status = 'DONE' AND totals.usage_unknown))::int
+                 AS usage_unknown_completed_task_count,
+               CASE WHEN bool_or(totals.usage_unknown) FILTER (WHERE r.task_status = 'DONE') THEN NULL
+                    ELSE (sum(totals.tokens) FILTER (WHERE r.task_status = 'DONE'))::double precision
+                         / nullif(count(*) FILTER (WHERE r.task_status = 'DONE'), 0)
+               END AS tokens_per_completed_task,
+               CASE WHEN bool_or(totals.usage_unknown) FILTER (WHERE r.task_status = 'DONE') THEN NULL
+                    ELSE sum(totals.cost_usd) FILTER (WHERE r.task_status = 'DONE')
+                         / nullif(count(*) FILTER (WHERE r.task_status = 'DONE'), 0)
+               END AS cost_usd_per_completed_task
           FROM routed_runs r
           JOIN work_runs first_run ON first_run.id = r.session_id AND first_run.ordinal = 1
           JOIN task_totals totals ON totals.task_id = r.task_id
@@ -113,6 +142,7 @@ export class TaskModelRoutingReportService {
              t.average_failure_count AS "averageFailureCount",
              t.tokens_per_completed_task AS "tokensPerCompletedTask",
              t.cost_usd_per_completed_task AS "costUsdPerCompletedTask",
+             coalesce(t.usage_unknown_completed_task_count, 0) AS "usageUnknownCompletedTaskCount",
              r.duration_p50_ms AS "durationP50Ms"
         FROM run_stats r LEFT JOIN task_stats t
           ON t.policy_version = r.policy_version AND t.applied = r.applied AND t.provider = r.provider

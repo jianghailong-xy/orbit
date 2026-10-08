@@ -444,7 +444,15 @@ const questionLine = (): HTMLButtonElement | null =>
 /** What that line counts, as it says it to a screen reader, or null when no such line is drawn. */
 const counted = (): string | null =>
   questionLine()?.getAttribute('aria-label')?.split(': ')[0] ?? null;
-const settlementCards = (): HTMLElement[] => [...mounted().querySelectorAll<HTMLElement>('.settlement-card')];
+// The rail reaches the full form on wide screens.
+const settlementCards = (): HTMLElement[] => [...mounted().querySelectorAll<HTMLElement>('#settlement-preview')];
+async function openSettlement(): Promise<HTMLElement> {
+  const card = settlementCards()[0]!;
+  expect(card.querySelector('.review-card-preview')).toBeNull();
+  expect(card.querySelector('.settlement-card')).not.toBeNull();
+  expect(document.querySelector('.review-card-dialog')).toBeNull();
+  return card;
+}
 
 /** Presses the line, and returns every element that press scrolled to. */
 async function pressLine(): Promise<Element[]> {
@@ -489,10 +497,12 @@ describe('the settlement question on the pinned line', { timeout: 60_000 }, () =
     await coordinatorWithTheCard();
     server.standing = standingOf('CONFIRMED');
     await reread(acceptanceConfirmationKey(PROJECT_PUBLIC), () => confirmationReads);
-    // The confirmation has reached the card: still on the page, and saying it was answered.
+    // An external answer updates the full form in place.
+    const dialog = await openSettlement();
     await waitForUi(() => {
-      expect(settlementCards()[0]?.querySelector('.settlement-card-stale')?.textContent ?? '').toContain('Already confirmed');
+      expect(dialog.querySelector('.settlement-card-stale')?.textContent ?? '').toContain('Already confirmed');
     });
+    expect(dialog.querySelector<HTMLButtonElement>('.settlement-card-actions button')!.disabled).toBe(true);
     await waitForUi(() => {
       expect(counted(), 'a set confirmed at another end is still counted as a question').toBe(needsDecisionCount(1));
     });
@@ -573,7 +583,7 @@ describe('the settlement question on the pinned line', { timeout: 60_000 }, () =
     const card = settlementCards()[0]!;
     const requestedBefore = requested.length;
 
-    const weakening = mounted().querySelector<HTMLElement>('.criteria-decision');
+    const weakening = mounted().querySelector<HTMLElement>(`#criteria-decision-${INTENT}`);
     expect(weakening, 'the weakening card was not drawn').toBeTruthy();
     const first = await pressLine();
     expect(first, 'the first press did not go to the weakening drawn above the settlement card').toEqual([weakening]);
@@ -593,8 +603,10 @@ describe('the settlement question on the pinned line', { timeout: 60_000 }, () =
     expect(stray.map((button) => button.outerHTML), 'the strip grew a control that goes nowhere').toEqual([]);
     expect(strip()!.textContent).not.toContain(ACCEPTANCE_CONFIRM_LABEL);
     expect(strip()!.textContent).not.toContain(OWNER_SEND_BACK_ACTION);
-    // The answer is still where it lives: on the card.
-    expect([...settlementCards()[0]!.querySelectorAll<HTMLButtonElement>('button')].map(labelOf))
+    // The answer is immediately available on the full card.
+    expect(settlementCards()[0]!.textContent).toContain(ACCEPTANCE_CONFIRM_LABEL);
+    const dialog = await openSettlement();
+    expect([...dialog.querySelectorAll<HTMLButtonElement>('.settlement-card-actions button')].map(labelOf))
       .toContain(ACCEPTANCE_CONFIRM_LABEL);
   });
 });

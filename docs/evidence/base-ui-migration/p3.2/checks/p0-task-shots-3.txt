@@ -1,0 +1,53 @@
+
+Running 8 tests using 1 worker
+
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/chromium-light-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/chromium-light-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/chromium-light-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/chromium-light-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/chromium-light-desktop/task-share-dialog.png, writing actual.
+  ✓  1 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (3.0s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/chromium-light-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/chromium-light-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/chromium-light-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/chromium-light-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/chromium-light-phone/task-share-dialog.png, writing actual.
+  ✓  2 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (2.8s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/chromium-dark-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/chromium-dark-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/chromium-dark-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/chromium-dark-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/chromium-dark-desktop/task-share-dialog.png, writing actual.
+  ✓  3 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (2.7s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/chromium-dark-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/chromium-dark-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/chromium-dark-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/chromium-dark-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/chromium-dark-phone/task-share-dialog.png, writing actual.
+  ✓  4 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (2.5s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/webkit-light-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/webkit-light-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/webkit-light-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/webkit-light-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/webkit-light-desktop/task-share-dialog.png, writing actual.
+  ✓  5 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (3.8s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/webkit-light-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/webkit-light-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/webkit-light-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/webkit-light-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/webkit-light-phone/task-share-dialog.png, writing actual.
+  ✓  6 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (2.9s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/webkit-dark-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/webkit-dark-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/webkit-dark-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/webkit-dark-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/webkit-dark-desktop/task-share-dialog.png, writing actual.
+  ✓  7 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (3.4s)
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/webkit-dark-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/webkit-dark-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/webkit-dark-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/webkit-dark-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32-final/p0-del-task-shots-3/webkit-dark-phone/task-share-dialog.png, writing actual.
+  ✓  8 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (3.0s)
+
+  8 passed (27.4s)

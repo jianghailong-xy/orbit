@@ -126,14 +126,15 @@ struct ComposerView: View {
                 id: console.modelID,
                 name: console.isDraft ? "Runtime default" : console.modelID)]
         }
-        var models = AgentDefaults.models(for: console.provider, catalog: console.modelCatalog,
+        // `providerChoice`: on OpenCode with a configured key, that key's models (`OpenCodeKeys`).
+        var models = AgentDefaults.models(for: console.providerChoice, catalog: console.modelCatalog,
                                           configured: console.configuredProviders)
         // A Runtime may report a valid default that has not appeared in its catalog yet. Preserve
         // it as a selectable row so choosing another model does not make the original unreachable.
         if !models.contains(where: { $0.id == console.modelID }) {
             models.insert(ModelOption(
                 id: console.modelID,
-                name: AgentDefaults.friendlyName(console.modelID, for: console.provider,
+                name: AgentDefaults.friendlyName(console.modelID, for: console.providerChoice,
                                                   catalog: console.modelCatalog,
                                                   configured: console.configuredProviders)), at: 0)
         }
@@ -151,8 +152,16 @@ struct ComposerView: View {
     /// hold here: a session cannot move machines. Bypass on a root runner is not awaiting its moment,
     /// it is a session claude refuses to start. Shown but not selectable (web parity: the option
     /// carries `disabled` rather than being filtered out), so the reason stays visible.
+    ///
+    /// A mode the RUNTIME refuses outright is disabled for the same reason: DeepSeek Harness runs only
+    /// Default, Auto and Don't Ask, and the server rejects a session configured with any other.
     private func modeRunnable(_ mode: PermissionMode) -> Bool {
         AgentDefaults.isRunnable(mode, runsAsRoot: console.runnerRunsAsRoot)
+            && modeSupported(mode)
+    }
+
+    private func modeSupported(_ mode: PermissionMode) -> Bool {
+        AgentDefaults.isSupported(mode, provider: console.provider, configured: console.configuredProviders)
     }
 
     /// Keep a stored project-defined OpenCode variant visible until a catalog explicitly says it
@@ -427,7 +436,7 @@ struct ComposerView: View {
                 // detail rather than beside it, where a phone's footer has no room for an email (web
                 // parity).
                 PlanUsageIndicator(usage: usage,
-                                   account: console.accountLabel.map {
+                                   account: (console.accountLabel ?? console.poolAccountLabel).map {
                                        PlanUsageAccount(label: $0, note: console.accountNote)
                                    }, resetConsole: console)
             }
@@ -545,7 +554,9 @@ struct ComposerView: View {
                     console.permissionModeWasEdited = true
                     Task { await console.applyConfig(permissionMode: mode.rawValue) }
                 } label: {
-                    menuItemLabel(AgentDefaults.label(mode), selected: mode == console.permissionMode)
+                    menuItemLabel(modeSupported(mode) ? AgentDefaults.label(mode)
+                                      : "\(AgentDefaults.label(mode)) — not on DeepSeek Harness",
+                                  selected: mode == console.permissionMode)
                 }
                 .disabled(!modeRunnable(mode))
             }
@@ -554,6 +565,17 @@ struct ComposerView: View {
         }
         .footerMenuChrome()
         .layoutPriority(2)
+    }
+
+    /// The model menu's title: the engine running this session, and — while a held pick stands on a
+    /// different engine — where the next turn goes (`SessionProviderChoices.engineTitle`, web
+    /// `engineTitleFor`). The held pick has already replaced `provider`, so the stored half comes
+    /// from `pendingResumeFrom`.
+    private var engineTitleLabel: String {
+        SessionProviderChoices.engineTitle(
+            provider: console.pendingResumeFrom ?? console.provider,
+            configured: console.configuredProviders,
+            nextProvider: console.pendingResumeProvider).label
     }
 
     /// Provider, model and effort are one control, written the way the reference composer writes
@@ -566,6 +588,14 @@ struct ComposerView: View {
     /// menu does, whichever way the system opens it.
     private var modelMenu: some View {
         Menu {
+            // The menu's own title: the engine this session runs on (web parity:
+            // `.composer-engine-title`). A bare `Text` picks nothing, and the Section's own rule is
+            // what the web draws as the title's border — `→ Codex` appears only while a held pick
+            // will carry the next turn to another engine.
+            Section {
+                Text(engineTitleLabel)
+                    .lineLimit(1)
+            }
             // A task run on smart selection's pick opens on why it is this model, and on where to fix
             // the model for every run (model routing §9; web parity: the `smart-route` group).
             if let route = smartRoute {
@@ -601,9 +631,9 @@ struct ComposerView: View {
                         // (web parity): hiding it turns "not signed in on this machine" into
                         // "Orbit lost my provider". The running one is exempt — it is the row's
                         // own caption, and a parenthetical there would sit under every turn.
-                        let blocked = choice.unavailable != nil && choice.slug != console.provider
-                        // Each built-in engine's accounts under it, as the new-session picker lists
-                        // them (web parity): on the engine the session is on, the ones it moves
+                        let blocked = choice.unavailable != nil && choice.slug != console.providerChoice
+                        // Each built-in engine's accounts under it (web parity): on the engine the
+                        // session (or draft) is on, the ones it moves
                         // between; under another, the ones a switch onto that engine lands on.
                         let here = choice.slug == console.accountEngine
                         let elsewhere = here || blocked ? [] : console.accountChoices(for: choice.slug)
@@ -614,35 +644,41 @@ struct ComposerView: View {
                         // that, so it is greyed out with its reason instead.
                         let fixable = blocked && choice.fixEngine != nil
                         let reason = choice.unavailable ?? ""
-                        let fix = fixable ? (choice.fixEngine == "antigravity" ? " →" : ", sign in →") : ""
-                        Button {
-                            // Picking a blocked row isn't a switch — it's a request for the
-                            // sign-in that would make it one, so go to that runner's Engines
-                            // section rather than doing nothing.
-                            if fixable {
-                                if choice.fixEngine == "antigravity", let url = console.antigravityProvidersURL { openURL(url) }
-                                else if let rid = console.runnerID { app.route(to: .runner(rid)) }
-                            } else if !blocked {
-                                Task { await console.selectProvider(choice.slug) }
+                        let fix = fixable ? (["antigravity", "dsh", DshRuntime.connectFix].contains(choice.fixEngine ?? "") ? " →" : ", sign in →") : ""
+                        // On iOS the engine names a section of its accounts instead of a row above
+                        // them (`accountsUnderHeader`).
+                        let headsSection = Self.accountsUnderHeader && listsAccounts
+                        if !headsSection {
+                            Button {
+                                // Picking a blocked row isn't a switch — it's a request for the
+                                // sign-in that would make it one, so go to that runner's Engines
+                                // section rather than doing nothing.
+                                if fixable {
+                                    if let rid = console.runnerID, let url = console.webFixURL(engine: choice.fixEngine ?? "", runnerID: rid) { openURL(url) }
+                                    else if let rid = console.runnerID { app.route(to: .runner(rid)) }
+                                } else if !blocked {
+                                    Task { await console.selectProvider(choice.slug) }
+                                }
+                            } label: {
+                                menuItemLabel(
+                                    blocked ? "\(choice.label) — \(reason)\(fix)" : [choice.label, choice.labelDetail].compactMap { $0 }.joined(separator: " · "),
+                                    selected: choice.slug == console.providerChoice && !listsAccounts)
                             }
-                        } label: {
-                            menuItemLabel(
-                                blocked ? "\(choice.label) — \(reason)\(fix)" : [choice.label, choice.labelDetail].compactMap { $0 }.joined(separator: " · "),
-                                selected: choice.slug == console.provider && !listsAccounts)
+                            .disabled(blocked && !fixable)
                         }
-                        .disabled(blocked && !fixable)
-                        if here && console.accountRowsOffered {
-                            accountItems(choice.slug)
-                        } else if !elsewhere.isEmpty {
-                            switchAccountItems(choice.slug, elsewhere)
+                        if headsSection {
+                            Section([choice.label, choice.labelDetail].compactMap { $0 }.joined(separator: " · ")) {
+                                engineAccountItems(choice.slug, here: here, elsewhere: elsewhere)
+                            }
+                        } else {
+                            engineAccountItems(choice.slug, here: here, elsewhere: elsewhere)
                         }
                     }
                 } label: {
                     menuSubmenuLabel(
                         "Provider",
-                        value: AgentDefaults.providerName(
-                            console.provider,
-                            configured: console.configuredProviders))
+                        value: console.providerSwitchChoices.first { $0.slug == console.providerChoice }?.label
+                            ?? AgentDefaults.providerName(console.provider, configured: console.configuredProviders))
                 }
                 Divider()
             }
@@ -655,7 +691,7 @@ struct ComposerView: View {
                         catalog: console.modelCatalog, configured: console.configuredProviders)
                     let resetEffort = nextEffort != console.effort
                     let clampedPermissionMode = console.selectModel(m.id)
-                    app.rememberDefaultModel(m.id, for: console.provider)
+                    app.rememberDefaultModel(m.id, for: console.providerChoice)
                     let permissionMode = clampedPermissionMode
                         ? console.permissionMode.rawValue
                         : nil
@@ -738,10 +774,12 @@ struct ComposerView: View {
     }
 
     /// The decision behind this task run, while the chip still shows the model it picked
-    /// (`ComposerLogic.smartRoute`); nil on a session opened by hand and on a shadow-only run.
+    /// (`ComposerLogic.smartRoute`); nil on a session opened by hand, on a shadow-only run, and on
+    /// every run while the account's switch for smart model selection is off.
     private var smartRoute: TaskRunRoute? {
         ComposerLogic.smartRoute(taskID: console.taskID, route: console.worktree.detail?.route,
-                                 modelID: console.modelID)
+                                 modelID: console.modelID,
+                                 smartSelection: app.user?.preferences?.smartModelSelection ?? false)
     }
 
     /// The model's name as the chip shows it: "Runtime default" for a draft whose provider has not
@@ -750,7 +788,7 @@ struct ComposerView: View {
         !console.providerCapabilitiesResolved && console.isDraft
             ? "Runtime default"
             : AgentDefaults.friendlyName(
-                console.modelID, for: console.provider,
+                console.modelID, for: console.providerChoice,
                 catalog: console.modelCatalog,
                 configured: console.configuredProviders)
     }
@@ -909,6 +947,28 @@ struct ComposerView: View {
             .contentShape(Rectangle())
     }
 
+    /// An engine's accounts in the Provider submenu: on the engine the session is on, the ones it moves
+    /// between; under another, the ones a switch onto that engine lands on.
+    @ViewBuilder
+    private func engineAccountItems(_ engine: String, here: Bool, elsewhere: [AccountChoice]) -> some View {
+        if here && console.accountRowsOffered {
+            accountItems(engine)
+        } else if !elsewhere.isEmpty {
+            switchAccountItems(engine, elsewhere)
+        }
+    }
+
+    /// iOS 26 gives every row of a menu the image column once any row has an image, so an account
+    /// can't be drawn one level in from its engine: the engine names a section of its accounts
+    /// instead. Its own row would add nothing there — on the session's engine it is the pick already
+    /// (`selectProvider` returns), and a switch onto another lands through its Automatic row or an
+    /// account. macOS keeps the engine row with its accounts under it.
+    #if os(iOS)
+    private static let accountsUnderHeader = true
+    #else
+    private static let accountsUnderHeader = false
+    #endif
+
     /// The runner's accounts of the session's engine, right under it in the Provider submenu (web
     /// parity): Automatic first where its workspace leaves the account to Orbit, then each account with
     /// its own quota. A pick moves the session there (`ConsoleModel.switchAccount`); a signed-out
@@ -922,10 +982,10 @@ struct ComposerView: View {
                 #if os(iOS)
                 // Once it is the pick, "Current" says all there is: what Automatic does is why
                 // someone picks it, not news to the session already on it.
-                accountRowLabel("Automatic", detail: console.sessionAutomatic ? nil : "Resets soonest",
+                accountRowLabel("Automatic", detail: console.sessionAutomatic ? nil : "Switches to soonest reset",
                                 selected: console.sessionAutomatic)
                 #else
-                menuItemLabel("Automatic · Resets soonest", selected: console.sessionAutomatic)
+                menuItemLabel("Automatic · Switches to soonest reset", selected: console.sessionAutomatic)
                 #endif
             }
         }
@@ -963,9 +1023,9 @@ struct ComposerView: View {
                 Task { await console.selectProvider(engine, account: CodexAccounts.automaticID) }
             } label: {
                 #if os(iOS)
-                accountRowLabel("Automatic", detail: "Resets soonest", selected: false)
+                accountRowLabel("Automatic", detail: "Switches to soonest reset", selected: false)
                 #else
-                menuItemLabel("Automatic · Resets soonest", selected: false)
+                menuItemLabel("Automatic · Switches to soonest reset", selected: false)
                 #endif
             }
         }
@@ -1003,37 +1063,35 @@ struct ComposerView: View {
         Text(Self.menuBreakable(text))
         if selected { Text("Current") }
         #else
+        // A macOS menu turns this row into a title and an image and draws the image in the menu's
+        // own colour — a clear checkmark rendered as a tick on every row (seen in the P5 Mac shots:
+        // both DeepSeek models and every mode ticked). So the image exists only on the selected row.
         HStack(spacing: 8) {
             Text(text).lineLimit(1)
             Spacer(minLength: 8)
-            Image(systemName: "checkmark")
-                .foregroundStyle(selected ? Color.accentColor : Color.clear)
-                .frame(width: 20, alignment: .trailing)
-                .accessibilityHidden(!selected)
+            if selected {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 20, alignment: .trailing)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         #endif
     }
 
     #if os(iOS)
-    /// An account under its engine in the Provider submenu, one level in from the provider rows: the
-    /// transparent glyph takes the image column the provider rows leave empty, and iOS starts the
-    /// title of a row with an image past that column. Its quota — or what Automatic does — goes
-    /// underneath; the account the session is on says "Current" there first.
+    /// An account in its engine's section of the Provider submenu (`accountsUnderHeader`), on the
+    /// margin like every other row. Its quota — or what Automatic does — goes underneath; the account
+    /// the session is on says "Current" there first.
     @ViewBuilder
     private func accountRowLabel(_ name: String, detail: String?, selected: Bool) -> some View {
-        Label { Text(Self.menuBreakable(name)) } icon: { Image(uiImage: Self.clearGlyph) }
+        Text(Self.menuBreakable(name))
         if selected {
             Text(detail.map { "Current · \($0)" } ?? "Current")
         } else if let detail {
             Text(detail)
         }
     }
-
-    /// The indent for `accountRowLabel`: a checkmark drawn fully transparent, rendered as is — a
-    /// template image would be tinted back into a visible check by the menu.
-    private static let clearGlyph = UIImage(systemName: "checkmark")?
-        .withTintColor(.clear, renderingMode: .alwaysOriginal) ?? UIImage()
 
     /// A name the menu has to wrap — an email, a "name@Provider" — breaks before its "@" or after a
     /// dot, where a zero-width space marks the line's break opportunities, rather than where the
@@ -1442,7 +1500,8 @@ private struct PlanUsageAccount {
 }
 
 /// Compact plan-usage pill for the composer footer. Limit items mirror Codex TUI,
-/// while percentages retain Orbit's percent-consumed semantics.
+/// while percentages retain Orbit's percent-consumed semantics — but for an Antigravity
+/// bucket's, which says what is left, as agy does, and says so ("4% left").
 private struct PlanUsageIndicator: View {
     let usage: PlanUsageSnapshot
     var account: PlanUsageAccount?
@@ -1462,21 +1521,26 @@ private struct PlanUsageIndicator: View {
     }
 
     var body: some View {
-        if let pct = usage.bindingRow()?.percent {
+        if let row = usage.bindingRow() {
+            let pct = row.percent
+            // An Antigravity bucket counts what is left, as agy does: said so, or 100% would read spent
+            // (web parity).
+            let left = row.remaining ? " left" : ""
             Button { showDetail.toggle() } label: {
                 HStack(spacing: 5) {
-                    UsageBar(percent: pct).frame(width: gaugeShowsNumber ? 26 : 20, height: 4)
+                    UsageBar(percent: pct, warn: row.remaining ? row.nearLimit : nil)
+                        .frame(width: gaugeShowsNumber ? 26 : 20, height: 4)
                     if gaugeShowsNumber {
                         // fixedSize keeps the pill at its ideal width: an unbounded Text is the most
                         // flexible view in the toolbar, so without this a tight row wraps "12%" onto
                         // two lines instead of truncating the (lineLimit-1) model name.
-                        Text("\(pct)%").foregroundStyle(.secondary).fixedSize()
+                        Text(verbatim: "\(pct)%\(left)").foregroundStyle(.secondary).fixedSize()
                     }
                 }
             }
             .buttonStyle(.plain)
-            .help("Plan usage \(pct)%")
-            .accessibilityLabel("Plan usage \(pct)%")
+            .help("Plan usage \(pct)%\(left)")
+            .accessibilityLabel("Plan usage \(pct)%\(left)")
             .modifier(PlanUsageDetailPresentation(isPresented: $showDetail, usage: usage,
                                                    account: account, resetConsole: resetConsole))
         }
@@ -1805,10 +1869,11 @@ private struct PlanUsageDetailRows: View {
                     HStack {
                         Text(row.label)
                         Spacer()
-                        Text("\(row.percent)%").foregroundStyle(.secondary)
+                        Text(verbatim: "\(row.percent)%\(row.remaining ? " remaining" : "")").foregroundStyle(.secondary)
                     }
                     .font(compact ? .caption : .subheadline)
-                    UsageBar(percent: row.percent).frame(height: compact ? 5 : 8)
+                    UsageBar(percent: row.percent, warn: row.remaining ? row.nearLimit : nil)
+                        .frame(height: compact ? 5 : 8)
                     if let reset = row.window.resetsAt.flatMap(formatReset) {
                         Text("Resets \(reset)")
                             .font(compact ? .caption2 : .caption)
@@ -1823,13 +1888,16 @@ private struct PlanUsageDetailRows: View {
 /// A horizontal utilization gauge that fills its frame; turns amber past 90%.
 private struct UsageBar: View {
     let percent: Int
+    /// Whether it is amber, for a reading that counts what is left (an Antigravity bucket), whose
+    /// percent says nothing of how near its limit it is. Nil judges `percent` as the share used.
+    var warn: Bool? = nil
     private var fraction: CGFloat { CGFloat(min(100, max(0, percent))) / 100 }
 
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule().fill(.quaternary)
-                Capsule().fill(percent >= 90 ? Color.orange : Color.accentColor)
+                Capsule().fill((warn ?? (percent >= 90)) ? Color.orange : Color.accentColor)
                     .frame(width: geo.size.width * fraction)
             }
         }

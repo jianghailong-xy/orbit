@@ -12,6 +12,10 @@ const RUNNER = {
   ownerId: '22222222-2222-4222-8222-222222222222',
 };
 
+/** The runner's owner as usableProviderScope reads them: an admin, for whom the configured rows on a runtime
+ *  include the shared ones. A member's is shared-provider-admin-only.pg.spec.ts's. */
+const admin = { findUnique: async () => ({ role: 'ADMIN' }) };
+
 /** Whether a session query asks for `slug`'s rows: the preflights name every slug on a runtime. */
 const asksFor = (where: Record<string, unknown>, slug: string) =>
   (where.provider as { in?: string[] } | undefined)?.in?.includes(slug) ?? false;
@@ -32,6 +36,7 @@ test('legacy claim explains the pending OpenCode stall without stranding other w
         return { count: 1 };
       },
     },
+    user: admin,
     modelProvider: { findMany: async () => [] },
   } as never;
   const queue = {
@@ -70,6 +75,7 @@ test('an OpenCode-capable runner that does not name Antigravity has its Antigrav
         return { count: 1 };
       },
     },
+    user: admin,
     modelProvider: { findMany: async () => [] },
   } as never;
   const queue = {
@@ -86,7 +92,7 @@ test('an OpenCode-capable runner that does not name Antigravity has its Antigrav
     null,
   );
   // Only the runtime it did not name is asked about: OpenCode needs no preflight here.
-  assert.deepEqual(asked, [{ in: [AgentProvider.ANTIGRAVITY] }]);
+  assert.deepEqual(asked, [{ in: [AgentProvider.ANTIGRAVITY] }, undefined]);
   assert.equal(marked.length, 1);
   assert.equal(marked[0].data.error, ANTIGRAVITY_RUNNER_UPGRADE_ERROR);
   // Conditional on the row still being a pending, uncancelled Antigravity row of this runner, so
@@ -122,10 +128,11 @@ test('a Gemini key borrows Antigravity, so a runner that does not name it has th
         return { count: 1 };
       },
     },
+    user: admin,
     modelProvider: {
       findMany: async (args: unknown) => {
         providerLookups.push(args);
-        return [{ slug: 'gemini' }];
+        return (args as { where: { runtime: string } }).where.runtime === AgentProvider.ANTIGRAVITY ? [{ slug: 'gemini' }] : [];
       },
     },
   } as never;
@@ -142,6 +149,10 @@ test('a Gemini key borrows Antigravity, so a runner that does not name it has th
         enabled: true,
         OR: [{ ownerId: null }, { ownerId: RUNNER.ownerId }],
       },
+      select: { slug: true },
+    },
+    {
+      where: { runtime: AgentProvider.DSH, enabled: true, OR: [{ ownerId: null }, { ownerId: RUNNER.ownerId }] },
       select: { slug: true },
     },
   ]);
@@ -163,6 +174,7 @@ test('a row already carrying the notice is not written again on every long poll'
         return { count: 1 };
       },
     },
+    user: admin,
     modelProvider: { findMany: async () => [] },
   } as never;
   const queue = { claimSessionForRunner: async () => null } as never;
@@ -181,7 +193,7 @@ test('current claim advertises OpenCode and Antigravity directly to the atomic q
     },
   } as never;
   const controller = new RunnerApiController(
-    { session: { findMany: async () => assert.fail('capable runner should not need a preflight') } } as never,
+    { runner: { findUnique: async () => ({ capabilities: ['provider:dsh'], capabilitiesReportedAt: new Date() }) }, session: { findMany: async () => assert.fail('capable runner should not need a preflight') } } as never,
     queue,
     {} as never,
     {} as never,
@@ -193,7 +205,7 @@ test('current claim advertises OpenCode and Antigravity directly to the atomic q
   // Fully capable: OpenCode and Antigravity advertised AND `source-pin/v1` declared, so no
   // preflight has anything to explain and the claim goes straight to the queue.
   assert.equal(
-    await controller.claim(RUNNER, SESSION_SOURCE_PIN_V1, 'claude,codex,opencode,antigravity'),
+    await controller.claim(RUNNER, SESSION_SOURCE_PIN_V1, 'claude,codex,opencode,antigravity,dsh'),
     null,
   );
   assert.deepEqual(advertised, [
@@ -201,6 +213,7 @@ test('current claim advertises OpenCode and Antigravity directly to the atomic q
     AgentProvider.CODEX,
     AgentProvider.OPENCODE,
     AgentProvider.ANTIGRAVITY,
+    AgentProvider.DSH,
   ]);
 });
 

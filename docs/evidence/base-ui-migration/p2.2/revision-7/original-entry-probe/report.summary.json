@@ -1,0 +1,427 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/node_modules/@playwright/test/cli.js",
+   "test",
+   "--config",
+   "docs/evidence/base-ui-migration/p2.2/revision-7/entry-diagnostic.config.mjs",
+   "--project=webkit-dark-desktop",
+   "--repeat-each=5"
+  ],
+  "configFile": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/docs/evidence/base-ui-migration/p2.2/revision-7/entry-diagnostic.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/docs/evidence/base-ui-migration/p2.2/revision-7",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/src/web/.r7-entry-diagnostics",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/docs/evidence/base-ui-migration/p2.2/revision-7",
+    "testIgnore": [],
+    "testMatch": [
+     "entry-original.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/src/web/.r7-entry-diagnostics",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/docs/evidence/base-ui-migration/p2.2/revision-7",
+    "testIgnore": [],
+    "testMatch": [
+     "entry-original.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/src/web/.r7-entry-diagnostics",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/docs/evidence/base-ui-migration/p2.2/revision-7",
+    "testIgnore": [],
+    "testMatch": [
+     "entry-original.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/src/web/.r7-entry-diagnostics",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/docs/evidence/base-ui-migration/p2.2/revision-7",
+    "testIgnore": [],
+    "testMatch": [
+     "entry-original.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/src/web/.r7-entry-diagnostics",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/docs/evidence/base-ui-migration/p2.2/revision-7",
+    "testIgnore": [],
+    "testMatch": [
+     "entry-original.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/src/web/.r7-entry-diagnostics",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/docs/evidence/base-ui-migration/p2.2/revision-7",
+    "testIgnore": [],
+    "testMatch": [
+     "entry-original.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/src/web/.r7-entry-diagnostics",
+    "repeatEach": 5,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/docs/evidence/base-ui-migration/p2.2/revision-7",
+    "testIgnore": [],
+    "testMatch": [
+     "entry-original.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/src/web/.r7-entry-diagnostics",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/docs/evidence/base-ui-migration/p2.2/revision-7",
+    "testIgnore": [],
+    "testMatch": [
+     "entry-original.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/src/web/.r7-entry-diagnostics/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 14377 --strictPort",
+   "cwd": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/src/web/",
+   "url": "http://127.0.0.1:14377",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "entry-original.browser.mjs",
+   "file": "entry-original.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "observe original legacy confirmation entry without synchronization",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2013,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T13:38:59.246Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "native-entry",
+           "contentType": "application/json"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/src/web/.r7-entry-diagnostics/entry-original.browser.mjs-952ae-try-without-synchronization-webkit-dark-desktop/trace.zip"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f21c5790dcc0ef1b2c61-33648e6dca025734df80",
+     "file": "entry-original.browser.mjs",
+     "line": 6,
+     "column": 1
+    },
+    {
+     "title": "observe original legacy confirmation entry without synchronization",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1530,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T13:39:01.672Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "native-entry",
+           "contentType": "application/json"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/src/web/.r7-entry-diagnostics/entry-original.browser.mjs-952ae-try-without-synchronization-webkit-dark-desktop-repeat1/trace.zip"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f21c5790dcc0ef1b2c61-586dcfb0abd5d5ec0035",
+     "file": "entry-original.browser.mjs",
+     "line": 6,
+     "column": 1
+    },
+    {
+     "title": "observe original legacy confirmation entry without synchronization",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1501,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T13:39:03.571Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "native-entry",
+           "contentType": "application/json"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/src/web/.r7-entry-diagnostics/entry-original.browser.mjs-952ae-try-without-synchronization-webkit-dark-desktop-repeat2/trace.zip"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f21c5790dcc0ef1b2c61-d1b89d4be5c53dc56cf4",
+     "file": "entry-original.browser.mjs",
+     "line": 6,
+     "column": 1
+    },
+    {
+     "title": "observe original legacy confirmation entry without synchronization",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1487,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T13:39:05.436Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "native-entry",
+           "contentType": "application/json"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/src/web/.r7-entry-diagnostics/entry-original.browser.mjs-952ae-try-without-synchronization-webkit-dark-desktop-repeat3/trace.zip"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f21c5790dcc0ef1b2c61-f2de0195ec02624138ac",
+     "file": "entry-original.browser.mjs",
+     "line": 6,
+     "column": 1
+    },
+    {
+     "title": "observe original legacy confirmation entry without synchronization",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1528,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T13:39:07.279Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "native-entry",
+           "contentType": "application/json"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/src/web/.r7-entry-diagnostics/entry-original.browser.mjs-952ae-try-without-synchronization-webkit-dark-desktop-repeat4/trace.zip"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f21c5790dcc0ef1b2c61-c8273ca40c81240c665a",
+     "file": "entry-original.browser.mjs",
+     "line": 6,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T13:38:58.437Z",
+  "duration": 10549.66,
+  "expected": 5,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

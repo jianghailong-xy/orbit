@@ -4,7 +4,7 @@ import XCTest
 /// SwiftUI doesn't exist on Linux, so nothing here compiles the app shells. These hold the Runners
 /// list and a runner's pages to the effect mocks they were built from (ios-list.png, ios-detail.png)
 /// by reading the source they now *are*: a row whose label is the label colour and which pushes by
-/// hand, Add Runner and Edit wired under the rows, the page's sections in the mocks' order, the engine
+/// hand, Add Runner wired under the rows, the page's sections in the mocks' order, the engine
 /// and name pages one push away on whichever stack the record rides — and every word and rule taken
 /// from OrbitKit (`RunnerAttention`, `RunnerPageCopy`, `RunnerPageFormat`), where it is tested.
 /// Each check reads the slice of the file it is about, so a match somewhere else can't pass it.
@@ -176,9 +176,9 @@ final class RunnersPageWiringTests: XCTestCase {
         XCTAssertTrue(model.contains("self.api.approveDevice(userCode: userCode)"))
     }
 
-    /// ⑦ Edit: the list's own move and delete, a move saved as the web list's drag order is, and a
-    /// delete that asks first.
-    func testEditReordersAndRemovesAfterAsking() throws {
+    /// The list's own move and delete, a move saved as the web list's drag order is, and a delete
+    /// that asks first. The list does not show an Edit button.
+    func testListReordersAndRemovesAfterAsking() throws {
         let text = try runners()
         for list in try lists() {
             XCTAssertTrue(list.code.contains(".onMove { moveRunners(runners, from: $0, to: $1) }"), list.name)
@@ -187,10 +187,9 @@ final class RunnersPageWiringTests: XCTestCase {
             XCTAssertTrue(list.code.contains(".modifier(RunnerListEditing("), list.name)
         }
         let editing = try slice(text, from: "private struct RunnerListEditing: ViewModifier {", to: "/// A drag in Edit")
-        try assertInOrder(editing, ["#if os(iOS)", "ToolbarItem(placement: .topBarTrailing) { EditButton() }", "#endif"],
-                          "Edit is iOS's")
+        XCTAssertFalse(code(text).contains("EditButton("), "Runners lists do not show an Edit button")
         let asked = code(editing)
-        XCTAssertTrue(asked.contains(".confirmationDialog(removalTitle, isPresented: removalAsked"))
+        XCTAssertTrue(asked.contains(".orbitConfirmation({ _ in removalTitle },"))
         XCTAssertTrue(asked.contains("Text(RunnerPageCopy.RUNNER_REMOVE_FOOTER)"))
         XCTAssertTrue(asked.contains("await runners.delete(runner.id)"))
         let move = code(try slice(text, from: "@MainActor private func moveRunners(", to: "/// The row a delete"))
@@ -283,9 +282,11 @@ final class RunnersPageWiringTests: XCTestCase {
 
         let row = code(try slice(try appSource("Views/RunnerPageParts.swift"),
                                  from: "struct RunnerEngineRow: View {", to: "struct RunnerWorkspaceRow: View {"))
-        for piece in ["ProviderMark(provider: health.engine, size: 28", "RunnerPageFormat.engineStatus(health)",
+        for piece in ["ProviderMark(provider: health.engine, size: 28", "RunnerPageFormat.engineStatus(health, runner: runner)",
                       "RunnerPageFormat.updateFailedLine(health, now: now)", "RunnerPageFormat.needsSignIn(health)",
                       "RunnerPageFormat.engineWindows(runner, engine: health.engine)",
+                      "RunnerPageFormat.engineNextAccount(runner, engine: health.engine)",
+                      "Text(RunnerPageCopy.runnerEngineNext(account: next))",
                       "RunnerWindowRow(row: row, resets: RunnerPageFormat.resetsLine(row, now: now))"] {
             XCTAssertTrue(row.contains(piece), "the engine row lost \(piece)")
         }
@@ -324,13 +325,14 @@ final class RunnersPageWiringTests: XCTestCase {
         let page = code(try appSource("Views/RunnerEnginePage.swift"))
         for piece in ["RunnerPageFormat.accountLines(health)",
                       "RunnerPageFormat.accountWindows(runner, engine: engine, account: line.id)",
-                      "RunnerSignInView(runnerID: runner.id, engine: login, account: line.signInAccount)",
+                      "RunnerSignInView(runnerID: runner.id, engine: login, account: line.signInAccount, autoStart: true,",
+                      "onClose: { closeSignIn() }, onSignedIn: { landed(line.id) })",
                       "Button(\"Add Account\")",
                       // The press starts the sign-in under a name the page picks; the name typed over it
                       // is saved as Rename… saves one, once the runner reports the account — and once
                       // that account is signed in and named, the card folds back into Add Account.
                       "newAccountPicked = RunnerPageFormat.defaultAccountName(accounts)",
-                      "RunnerSignInView(runnerID: runner.id, engine: login, accountName: newAccountName, autoStart: true)",
+                      "RunnerSignInView(runnerID: runner.id, engine: login, accountName: newAccountName, autoStart: true,",
                       ".focused($newAccountFocused)",
                       ".onSubmit { newAccountFocused = false }",
                       "if !focused { saveNewAccountName(health) }",
@@ -343,7 +345,7 @@ final class RunnersPageWiringTests: XCTestCase {
                       ".swipeActions(edge: .trailing, allowsFullSwipe: false) {",
                       "if !line.isDefault {",
                       "Button(role: .destructive) { pendingRemoval = line } label: {",
-                      ".confirmationDialog(removalTitle, isPresented: removalAsked",
+                      ".orbitConfirmation({ _ in removalTitle },",
                       "await runners.removeAccount(id, engine: login, account: line.id)",
                       ".disabled(offline || removal?.pending == true)",
                       "Text(RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER)",
@@ -364,7 +366,7 @@ final class RunnersPageWiringTests: XCTestCase {
         }
         try assertInOrder(page, [".contextMenu {", ".swipeActions(edge: .trailing, allowsFullSwipe: false) {"],
                           "Rename is the menu's, not the swipe's")
-        let swipe = try slice(page, from: ".swipeActions(edge: .trailing, allowsFullSwipe: false) {", to: "addAccountRow(health, login: login")
+        let swipe = try slice(page, from: "private func trailingActions(", to: "private func accountMenu(")
         XCTAssertFalse(swipe.contains("Rename"), "a swipe performs; it does not open an editor")
         let runnersModel = code(try appSource("RunnersModel.swift"))
         XCTAssertTrue(runnersModel.contains("api.renameRunnerAccount(id, engine: engine, account: account, name: name)"))
@@ -374,13 +376,86 @@ final class RunnersPageWiringTests: XCTestCase {
         XCTAssertTrue(signIn.contains("var accountName: String? = nil"), "or a new account's name")
         XCTAssertTrue(signIn.contains("Task { await model.begin(accountName: accountName) }"))
         XCTAssertTrue(signIn.contains("var autoStart = false"), "or starts as it appears")
-        try assertInOrder(code(signIn), ["let fresh = model == nil", "if autoStart, fresh {",
-                                         "await m.begin(accountName: accountName)", "await m.refresh()"],
-                          "an Add Account card starts its sign-in on its first appearance only")
+        try assertInOrder(code(signIn), ["let fresh = model == nil", "if autoStart, fresh, engine != .kimi {",
+                                         "if accountName == nil { await m.refresh() }",
+                                         "if m.status?.inFlight != true { await m.begin(accountName: accountName) }",
+                                         "} else {", "await m.refresh()"],
+                          "a card its press raised starts its sign-in on its first appearance only — and one for an "
+                              + "account the runner has follows a sign-in already under way for it instead")
         let model = code(try appSource("RunnerSignInModel.swift"))
-        XCTAssertTrue(model.contains("api.startRunnerLogin(runnerID, engine: engine, account: account, accountName: name)"))
+        // …and, for Kimi, the site the card's press picked (KimiSite).
+        XCTAssertTrue(model.contains("api.startRunnerLogin(runnerID, engine: engine, account: account, accountName: name, region: site?.rawValue)"))
         XCTAssertTrue(model.contains("if adding { return startedHere }"),
                       "a card adding an account owns only the sign-in it started")
+    }
+
+    /// On a phone an account's row says only where it stands, and its presses are on its left swipe
+    /// and its long-press menu (docs/mocks/account-pause-swipe-ios.html): Pause — Resume while it is
+    /// paused — inside Remove on the swipe, drawn as the session list's circles on iOS 26; Rename…,
+    /// Sign In Again, the pause and Remove… in the menu. A Mac keeps the presses on the row.
+    func testAnAccountsPressesAreOnItsSwipeAndMenu() throws {
+        let page = code(try appSource("Views/RunnerEnginePage.swift"))
+        let swipe = try slice(page, from: "private func trailingActions(", to: "private func accountMenu(")
+        try assertInOrder(swipe, ["RowSwipeAction(title: \"Remove\", systemImage: \"trash\", tint: .red, role: .destructive,",
+                                  "RowSwipeAction(title: \"Resume\", systemImage: \"play\", tint: .green,",
+                                  "RowSwipeAction(title: \"Pause\", systemImage: \"pause\", tint: .orange,"],
+                          "Remove outermost on the swipe, then Pause or Resume")
+        XCTAssertTrue(swipe.contains("perform: { pausing = line }"), "Pause opens the Pause Account sheet")
+        XCTAssertTrue(swipe.contains("perform: { resume(line) }"), "Resume resumes at once")
+        XCTAssertFalse(swipe.contains("Sign In Again"), "a swipe performs; signing in again opens a card")
+        XCTAssertTrue(page.contains("AccountPauseSheet(name: line.name, scope: Self.pauseScope) { minutes in"))
+
+        let actions = try slice(page, from: "private func withActions<", to: "private func systemSwipeActions<")
+        XCTAssertTrue(actions.contains("if #available(iOS 26.0, *), horizontalSizeClass == .compact, !trailing.isEmpty {"))
+        XCTAssertTrue(actions.contains(".circleSwipeActions(id: id, leading: [], trailing: trailing, leadingFullSwipe: false)"))
+        XCTAssertTrue(page.contains("trailing: signingIn == line.id ? []"), "a row whose sign-in card is open has no swipe")
+
+        let menu = try slice(page, from: "private func accountMenu(", to: "private func addAccountRow(")
+        try assertInOrder(menu, ["Label(\"Rename…\", systemImage: \"pencil\")",
+                                 "Label(\"Sign In Again\", systemImage: \"arrow.clockwise\")",
+                                 "Label(\"Resume Now\", systemImage: \"play.fill\")",
+                                 "Label(\"Change Duration…\", systemImage: \"clock\")",
+                                 "Label(\"Pause…\", systemImage: \"pause.fill\")",
+                                 "Label(\"Remove…\", systemImage: \"trash\")"],
+                          "the menu holds everything the row and its swipe offer")
+
+        let row = try slice(page, from: "private func accountRow(", to: "private func withActions<")
+        XCTAssertTrue(row.contains("AccountPauseLine(pausedUntil: line.pausedUntil)"), "Paused stays, as a line")
+        XCTAssertTrue(row.contains("RunnerPageFormat.loginExpiresLine(line, now: now)"))
+        XCTAssertTrue(row.contains("Button(RunnerPageCopy.RUNNER_ENGINE_RENEW) { signingIn = line.id }"))
+        XCTAssertTrue(row.contains("RunnerPageFormat.signedOutNote(line, alone: alone, engine: engine)"))
+        XCTAssertTrue(row.contains("&& (Self.pressesOnRow || line.auth != \"yes\") {"),
+                      "on a phone a signed-in account is signed in again from its menu, not its row")
+        XCTAssertTrue(row.contains("} else if Self.pressesOnRow && canPause"), "a Mac keeps the pause on the row")
+    }
+
+    /// The sign-in card has one way out at a time — Cancel while a sign-in runs, Close otherwise — so the
+    /// page draws none of its own; a pasted code goes at once; a device code comes first, under the one
+    /// press that copies it and opens its page; and a card whose sign-in landed folds back once the
+    /// runner reports the account signed in (docs/mocks/account-sign-in-ios.html ④–⑧).
+    func testTheSignInCardOffersOneWayOutAndPastesInOneTap() throws {
+        let signIn = code(try appSource("Views/RunnerSignInView.swift"))
+        XCTAssertTrue(signIn.contains("var onClose: (() -> Void)? = nil"))
+        let cancel = try slice(signIn, from: "private func cancelButton(", to: "private var closeButton")
+        try assertInOrder(cancel, ["await model.cancel()", "if model.errorText == nil { onClose?() }"],
+                          "Cancel cancels the sign-in, then puts the card away")
+        let paste = try slice(signIn, from: "private struct PasteBackForm: View {", to: "struct AuthErrorCardView: View {")
+        XCTAssertTrue(paste.contains("PasteButton(payloadType: String.self) { pasted in"))
+        try assertInOrder(paste, ["model.code = code", "await model.submitCode()"], "a pasted code is sent at once")
+        XCTAssertTrue(paste.contains("if phase == .active, opened { returned = true }"),
+                      "back from the page it opened, Paste is the prominent press")
+        let device = try slice(signIn, from: "private func deviceFlow(", to: "private func idle(")
+        try assertInOrder(device, ["Text(site?.enterCode ?? \"Enter this one-time code on the sign-in page:\")", "Text(code)",
+                                   "PlatformPasteboard.copyString(code)", "openURL(url)",
+                                   "Label(site?.copyCodeAndOpen ?? \"Copy Code & Open Sign-In Page\", systemImage: \"doc.on.doc\")"],
+                          "the code first, then the press that copies it and opens its page")
+
+        let page = code(try appSource("Views/RunnerEnginePage.swift"))
+        XCTAssertFalse(page.contains("Button(\"Close\") { closeSignIn() }"), "the card's own Cancel or Close is the way out")
+        try assertInOrder(page, ["private func foldsBack(",
+                                 "signingIn == line.id && landedHere == line.id && line.auth == \"yes\"",
+                                 "&& RunnerPageFormat.loginExpiresLine(line, now: now) == nil"],
+                          "a card folds back once the row it folds into says the account is signed in")
     }
 
     /// ⑤ A workspace row says how many of its sessions run, and opens them — after the Settings sheet
@@ -420,8 +495,10 @@ final class RunnersPageWiringTests: XCTestCase {
         let page = try detail()
         XCTAssertTrue(page.contains("Button(RunnerPageCopy.RUNNER_ROTATE_TOKEN) { confirmingRotate = true }"))
         XCTAssertTrue(page.contains("Button(role: .destructive) { confirmingRemove = true } label: {"))
-        XCTAssertTrue(page.contains("isPresented: $confirmingRotate, titleVisibility: .visible) {"))
-        XCTAssertTrue(page.contains("isPresented: $confirmingRemove, titleVisibility: .visible) {"))
+        XCTAssertTrue(page.contains("orbitConfirmation(\"Rotate token for"),
+                      "the token card asks first, in the shape the width calls for")
+        XCTAssertTrue(page.contains("orbitConfirmation(\"Remove "),
+                      "and so does the remove card")
         XCTAssertTrue(page.contains("if let token = rotatedToken {"))
         XCTAssertTrue(page.contains("Button(RunnerPageCopy.RUNNER_COPY) { copy(token) }"))
         XCTAssertFalse(code(try appSource("RunnersModel.swift")).contains("revealedToken"),

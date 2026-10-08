@@ -270,7 +270,7 @@ export interface SlashCommandInfo {
 /** One model option reported by a runner runtime. For Codex this is derived from
  *  `codex debug models`, so newly shipped model slugs do not require a web release. */
 export interface RunnerModelInfo {
-  /** Runtime model id / slug, e.g. `gpt-5.6`. */
+  /** Runtime model id / slug, e.g. `gpt-5.6`; dsh ACP values are opaque configOptions tokens. */
   value: string;
   /** Human display name shown in pickers. */
   label: string;
@@ -298,7 +298,9 @@ export interface RunnerModelInfo {
 /** Models a runner says its local runtimes can use. Keys are provider ids. Antigravity's rows
  *  come from `agy models`, whose slugs carry their level (`gemini-3.8-flash-high`): the runner
  *  folds them into one row per base model (`gemini-3.8-flash`) with its levels as
- *  `reasoningLevels`, and a session passes them back as `--model` and `--effort`. */
+ *  `reasoningLevels`, and a session passes them back as `--model` and `--effort`. DeepSeek
+ *  Harness reports opaque model and reasoning option values; preserve them for ACP
+ *  session/set_config_option without reconstructing ids or inventing context windows. */
 export type RunnerModelCatalog = Partial<Record<AgentProvider, RunnerModelInfo[]>>;
 
 /** Effective default model reported by each built-in runtime on one runner heartbeat. This is
@@ -413,10 +415,10 @@ export interface PlanUsageSnapshot {
   /** Codex earned rate-limit reset state (docs/codex-rate-limit-reset-contract.md). Absent from
    *  older runners and from non-Codex snapshots. */
   rateLimitReset?: PlanUsageRateLimitReset;
-  /** Codex only: the snapshot of every other account on the runner, keyed by its id
-   *  (RunnerEngineAccount.id); the windows beside it are Default's (codexAccountSnapshot). An entry
-   *  never carries a reset block — reset is Default's alone. Absent from older runners, and until the
-   *  runner has read an account other than Default. */
+  /** The snapshot of every other account on the runner — of Codex, Claude Code or Antigravity —
+   *  keyed by its id (RunnerEngineAccount.id); the windows beside it are Default's
+   *  (codexAccountSnapshot). An entry never carries a reset block — reset is Default's alone. Absent
+   *  from older runners, and until the runner has read an account other than Default. */
   accounts?: Record<string, PlanUsageSnapshot>;
   /** Antigravity only: the Google account's quota buckets from the runner's `/usage` probe
    *  (docs/antigravity-runtime-contract.md §16.6), flattened across agy's model groups. */
@@ -448,7 +450,58 @@ export interface PlanUsage extends PlanUsageSnapshot {
   claude?: PlanUsageSnapshot;
   codex?: PlanUsageSnapshot;
   kimi?: PlanUsageSnapshot;
+  /** Antigravity's Google accounts. Never in a heartbeat's own planUsage: a runner reports it with the
+   *  engine's health (RunnerEngineHealth.planUsage), and a reader that weighs every engine's quota the
+   *  same way folds it in here first (withEnginePlanUsage). */
+  antigravity?: PlanUsageSnapshot;
 }
+
+/** Why the DeepSeek account balance behind a key could not be read: DeepSeek refused the key
+ *  (401/403), the server never reached DeepSeek, or DeepSeek answered with an error or with
+ *  something that is not a balance. */
+export type ProviderBalanceFailure = 'KEY_REJECTED' | 'NETWORK' | 'UPSTREAM_ERROR';
+
+/** One currency of a DeepSeek account's balance. The amounts are the decimal strings DeepSeek
+ *  sends (`balance_infos[]`), never computed here; DeepSeek spends granted before topped-up. */
+export interface ProviderBalanceAmount {
+  currency: string;
+  totalBalance: string;
+  grantedBalance: string;
+  toppedUpBalance: string;
+}
+
+/** Another of the owner's DeepSeek providers holding the very same key — so the same account, and
+ *  the same balance. */
+export interface ProviderBalanceSibling {
+  id: string;
+  label: string;
+}
+
+/** One read of a DeepSeek account's balance, as the server keeps it for a key. A failure carries why
+ *  and when it was tried, and no amount at all — a balance that could not be read is never a 0. */
+export type ProviderBalanceRead =
+  | {
+      ok: true;
+      balances: ProviderBalanceAmount[];
+      /** DeepSeek's `is_available`: false when the account can't pay for more requests. */
+      isAvailable: boolean;
+      /** When the server asked DeepSeek (ISO-8601). Providers sharing a key share this read. */
+      fetchedAt: string;
+    }
+  | {
+      ok: false;
+      reason: ProviderBalanceFailure;
+      /** What happened, in a sentence; the clients add what to do about it where they are. */
+      message: string;
+      fetchedAt: string;
+    };
+
+/**
+ * GET /providers/mine/:id/balance: the balance of the whole DeepSeek account a provider's stored
+ * key belongs to (DeepSeek's `GET /user/balance`, asked by the server — the key never leaves it).
+ * It is not what any session spent: DeepSeek has no per-request or per-day spend API.
+ */
+export type ProviderBalance = ProviderBalanceRead & { sharedWith: ProviderBalanceSibling[] };
 
 export interface RunnerHeartbeatRequest {
   status: RunnerStatus;
@@ -508,6 +561,51 @@ export interface RunnerHeartbeatRequest {
    *  and a machine with no reported root is not offered as a clone target at all, rather than
    *  having one guessed for it. */
   reposRoot?: string;
+  /** Where this runner's updates of itself stand. Sent on every beat by a runner that knows the
+   *  field; absent from an older one — or one rolled back to an older release — which the control
+   *  plane stores as NULL, "not reported", rather than keeping what a newer binary last said. */
+  selfUpdate?: RunnerSelfUpdate;
+}
+
+/** What a runner's self-updater last found:
+ *  - `enabled`: nothing in the way — on its assigned release, or about to install it.
+ *  - `disabledByEnv`: turned off — ORBIT_NO_SELFUPDATE, a development build, or a platform no
+ *    release is published for; `reason` says which.
+ *  - `dirNotWritable`: `installDir` is not writable by the runner's user, so no release can be
+ *    swapped in until someone runs `sudo orbit upgrade` there.
+ *  - `waitingForIdle`: a release is waiting for the turns in flight to end.
+ *  - `failed`: the release check or the install failed; `reason` is the runner's own words.
+ *  - `heldByRollout`: a newer release exists, but its staged rollout has not reached this runner. */
+export type RunnerSelfUpdateState =
+  | 'enabled'
+  | 'disabledByEnv'
+  | 'dirNotWritable'
+  | 'waitingForIdle'
+  | 'failed'
+  | 'heldByRollout';
+
+export const RUNNER_SELF_UPDATE_STATES: readonly RunnerSelfUpdateState[] = [
+  'enabled',
+  'disabledByEnv',
+  'dirNotWritable',
+  'waitingForIdle',
+  'failed',
+  'heldByRollout',
+];
+
+/** A runner's report on its updates of itself (RunnerHeartbeatRequest.selfUpdate), as the runner
+ *  list and detail return it — `null` there for a runner that does not report one. */
+export interface RunnerSelfUpdate {
+  state: RunnerSelfUpdateState;
+  /** Why: set for `failed`, and for `disabledByEnv` (which switch turned it off). */
+  reason?: string;
+  /** The directory holding the binary an update replaces, symlinks resolved. */
+  installDir?: string;
+  /** The last update the runner installed into itself: ISO-8601 time and the versions it moved
+   *  between. Absent until there has been one. */
+  lastUpdatedAt?: string;
+  lastUpdatedFrom?: string;
+  lastUpdatedTo?: string;
 }
 
 /** What the runner saw at one agent's working directory. Reported from the runner's own disk,
@@ -736,6 +834,11 @@ export interface RunnerHeartbeatResponse {
    *  pass. Set once per user request and cleared as it is handed over, so a runner that misses it
    *  (offline, older build) costs nothing more than the wait it was already in. */
   refreshModelCatalog?: boolean;
+  /** Check for a runner release now — the owner's "Update Runner Now" — instead of at the runner's
+   *  next periodic check. The same check: a turn in flight still defers the update, which the
+   *  runner then reports as `waitingForIdle`. Set once per request and cleared as it is handed
+   *  over, like `refreshModelCatalog`. */
+  checkSelfUpdate?: boolean;
   /** This machine's free-space floor in MB (Runner.minFreeDiskMb), the same number the auto-run
    *  disk gate reads. Sent so the runner can apply it to work only it can see — reclaiming the
    *  session checkouts on its own disk — without keeping a second copy of the setting.
@@ -975,8 +1078,22 @@ export interface CodexRateLimitResetResultRefusal {
  */
 export type LoginEngine = 'claude' | 'codex' | 'kimi' | 'antigravity';
 
-/** Engines with an install action in Providers: every engine a runner signs in with. */
-export type InstallEngine = LoginEngine;
+/**
+ * Kimi Code's two sign-in sites, as `kimi login --region` names them: `mainland-cn` is kimi.com,
+ * `global` is kimi.ai. Each keeps accounts, a sign-in page and an API of its own, so an account of
+ * one cannot sign in on the other.
+ */
+export type KimiRegion = 'mainland-cn' | 'global';
+export const KIMI_REGIONS: readonly KimiRegion[] = ['mainland-cn', 'global'];
+
+/** Runner signs Kimi Code in on the site a login `start` names (`region`). One that does not runs a
+ *  bare `kimi login`, which goes wherever the CLI decides — the site it last signed in to, or the one
+ *  its installer came from — so it is handed no start naming a site. */
+export const KIMI_LOGIN_REGION_V1 = 'kimi-login-region/v1';
+
+/** Engines with an install action in Providers: every engine a runner signs in with, plus `dsh` and
+ *  OpenCode, which are installed without one — the relay needs an install command, not a way in. */
+export type InstallEngine = LoginEngine | 'opencode' | 'dsh';
 
 /**
  * Every engine CLI a runner reports on, which is a wider set than the ones it can sign into:
@@ -984,7 +1101,7 @@ export type InstallEngine = LoginEngine;
  * is installed on the machine, updated by the same periodic pass, and its version drifts like any
  * other. Which of these a given page offers to sign in is that page's question.
  */
-export type ReportedEngine = LoginEngine | 'opencode';
+export type ReportedEngine = LoginEngine | 'opencode' | 'dsh';
 
 /** The credential a runner's built-in Antigravity runs on: its Google sign-in, or the
  *  `GEMINI_API_KEY` in its own environment. A Google sign-in wins when both exist. */
@@ -1056,6 +1173,10 @@ export interface LoginCommand {
   account?: string;
   /** Codex only: sign in a NEW account, which the runner adds under this name. */
   accountName?: string;
+  /** Kimi only: the site to sign in on (`kimi login --region`). Only a runner that declares
+   *  `kimi-login-region/v1` is handed a start naming one; absent, the runner runs a bare `kimi login`,
+   *  exactly as before the choice. */
+  region?: KimiRegion;
 }
 
 /**
@@ -1126,29 +1247,51 @@ export interface RunnerEngineHealth {
   installed: boolean;
   /** Whatever `<engine> --version` printed. Absent when not installed or the CLI wouldn't say. */
   version?: string;
+  /** Fixed-version/platform admission failures, independent of installation presence. */
+  installationError?: string;
+  /** Harness session keys arrive with dispatch; the runner's own report leaves validation unknown. */
+  dsh?: DshRuntimeHealth;
   /** The CLI's own answer to "am I signed in", with `unknown` for anything ambiguous. */
   auth: 'yes' | 'no' | 'unknown';
   /** What the runner's updater last did to this engine. Absent from an older runner, and until
    *  the first pass — shown as "not reported yet", never as a problem. */
   update?: RunnerEngineUpdate;
-  /** Codex only: every account signed into this machine's CLI, Default first, each with its own
-   *  sign-in state. `auth` above stays Default's answer, which is what every reader older than
-   *  accounts takes it for. Absent from an older runner, and whenever the runner couldn't list its
-   *  accounts — read as the one account every machine had before accounts. */
+  /** Codex, Claude Code and Antigravity: every account signed into this machine's CLI, Default
+   *  first, each with its own sign-in state. `auth` above stays the engine's answer, which is what
+   *  every reader older than accounts takes it for — for Antigravity that may be a GEMINI_API_KEY,
+   *  while its Default account is the runner's Google sign-in alone. Absent from an older runner, and
+   *  whenever the runner couldn't list its accounts — read as the one account every machine had
+   *  before accounts. */
   accounts?: RunnerEngineAccount[];
   /** Antigravity only: the credential `auth` is about — the runner's Google sign-in, which wins
    *  when there is one, or the `GEMINI_API_KEY` in its environment. Absent when it has neither,
    *  and from a runner older than Google sign-in. */
   authSource?: AntigravityAuthSource;
-  /** Antigravity only: the Google account's quota, read by the same probe that answered `auth`.
-   *  Carries `provider`, `fetchedAt` and `buckets`, nothing else; present only while that sign-in
-   *  answers `yes`. */
+  /** Antigravity only: its Google accounts' quota, read by the same probe that answered each one's
+   *  sign-in. Default's `buckets` (with `fetchedAt`) are present only while the runner's own Google
+   *  sign-in answers `yes`; every other signed-in account's are under `accounts`, by its id. */
   planUsage?: PlanUsageSnapshot;
+  /** Kimi only: the site the CLI's own login is on, read from the managed Kimi Code provider it keeps
+   *  in config.toml — still reported once that login has expired, and absent before the first sign-in
+   *  on this machine (an installer's default is not a sign-in), after a logout, and from an older
+   *  runner. */
+  kimiRegion?: KimiRegion;
+}
+
+export interface DshRuntimeHealth {
+  versionCompatible: boolean;
+  credentialPresent: boolean;
+  modelCatalogReadable: boolean;
+  requestValidation: 'unknown' | 'valid' | 'invalid';
+  sandboxEnforcement: 'unknown' | 'full' | 'partial' | 'unavailable';
+  /** A fixed diagnostic code, never upstream error text or credentials. */
+  diagnostic?: string;
 }
 
 /**
  * One account on a runner: a directory the CLI keeps that login in — a Codex CODEX_HOME, a Claude
- * Code's CLAUDE_CONFIG_DIR — which the runner signs in and runs sessions on.
+ * Code's CLAUDE_CONFIG_DIR, an Antigravity Google sign-in's Gemini directory — which the runner signs
+ * in and runs sessions on.
  *
  * Nothing here names the account itself. Neither its email nor its account id leaves the machine
  * (docs/codex-rate-limit-reset-contract.md §3): `name` is what the user called the slot, and
@@ -1177,6 +1320,10 @@ export interface RunnerEngineAccount {
    *  read one for this account, and for engines that report none. Two accounts showing the same one
    *  are the same account. */
   fingerprintPrefix?: string;
+  /** When this signed-in account's login lapses, ISO 8601: the CLI's own expiry for it (Claude Code's
+   *  refreshTokenExpiresAt, which the CLI warns about three days ahead). Absent where the CLI recorded
+   *  none, for an account not signed in, and for every engine but Claude Code. */
+  loginExpiresAt?: string;
 }
 
 /**
@@ -1369,6 +1516,8 @@ export interface ArtifactCommand {
   requestId: string;
   sessionId: string;
   path: string;
+  /** A changed file relative to this session's worktree; absent for legacy absolute paths. */
+  source?: 'worktree';
 }
 
 // ─────────────────────────── Interactive sessions (Route B) ───────────────────────────
@@ -2104,6 +2253,7 @@ export interface ArtifactResultRequest {
   status: 'uploaded' | 'missing' | 'error';
   attachmentId?: string;
   message?: string;
+  errorCode?: 'too_large';
 }
 
 /**

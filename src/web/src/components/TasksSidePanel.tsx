@@ -34,7 +34,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { Avatar, Dropdown, Tooltip } from 'antd';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useLocation, useMatch, useNavigate } from 'react-router-dom';
+import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom';
 import type {
   PlanUsage,
   RunnerAntigravityState,
@@ -42,15 +42,18 @@ import type {
   RunnerEngineHealth,
   RunnerInstallState,
   RunnerModelCatalog,
+  RunnerSelfUpdate,
   RuntimeDefaultModels,
   SlashCommandInfo,
 } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
+import { useIsMobile } from '../lib/useMediaQuery';
 import {
   avatarQuery,
   meQuery,
   openProjectsQuery,
+  projectDetailsQuery,
   sessionQuery,
   wikiSpacesQuery,
   workspaceSessionCountsQuery,
@@ -64,7 +67,8 @@ import {
   sidebarProjects,
   type SidebarProject,
 } from '../lib/projectAttention';
-import { wikiProposalsToReview, wikiShown } from '../lib/wiki';
+import { wikiShown, wikiWaitingOnYou } from '../lib/wiki';
+import { wikiWaiting, writeWikiFromWorkspace } from '../lib/wikiSpace';
 import { SidebarNavIcon } from './SidebarNavIcon';
 
 const IS_MAC_PLATFORM =
@@ -230,6 +234,10 @@ export interface Runner {
   // Bypass under root and exits before its first message. undefined/null = a runner too old to
   // report it, which stays unrestricted.
   runsAsRoot?: boolean | null;
+  // Where this runner's updates of itself stand, as it last reported: why it is or isn't on the
+  // latest release, and the last update it installed. undefined/null = a runner too old to report
+  // it, which the Runners page judges by runsAsRoot as it always has.
+  selfUpdate?: RunnerSelfUpdate | null;
   // Free-space floor in MB (PATCH minFreeDiskMb): below it this machine takes no new task runs.
   // null = no floor.
   minFreeDiskMb?: number | null;
@@ -293,9 +301,15 @@ async function logout() {
   location.href = '/login';
 }
 
-export function TasksSidePanel({ open = false }: { open?: boolean }) {
+// Every row is a destination, as on the iPhone drawer (OrbitKit `DrawerDestination`): a section, a
+// workspace's session list, or a project's sessions page. A row is lit while the screen belongs to
+// it, a click on the lit row goes nowhere, and any other click lands on its destination's root.
+// `onNavigate` is told of every click, so the narrow layout's drawer closes even when the click
+// changed nothing, or only the query (a project's page is a `?project=` on the console).
+export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; onNavigate?: () => void }) {
   const loc = useLocation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   // The signed-in user, for the footer avatar + name. Shares its key with the account
   // page (and the BootGate pre-warm) so it reads straight from cache.
   const me = useQuery(meQuery());
@@ -303,11 +317,12 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   const avatar = useQuery(avatarQuery(me.data?.avatarUpdatedAt));
   const { mode, setMode } = useThemeMode();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  // The Wiki's amber count: the proposals waiting for the owner, summed over every space (a wiki
-  // belongs to the account, and Review's own page asks across all of them). Its own key root, so the
-  // control plane's `wiki.changed` refresh reaches it and nothing else has to.
+  // The Wiki's amber count: what waits on the owner across every space — the proposals in Review and
+  // what each plan waits for (design §12.3.3) — the number the Wiki head's Activity badge shows, from the
+  // same function. Its own key root, so the control plane's `wiki.changed` refresh reaches it and nothing
+  // else has to.
   const wikiSpaces = useQuery({ ...wikiSpacesQuery(), enabled: !!me.data });
-  const wikiPending = (wikiSpaces.data ?? []).reduce((sum, space) => sum + (space.pendingOps ?? 0), 0);
+  const wikiWaitingCount = wikiWaiting(wikiSpaces.data ?? []);
   // No Wiki row at all for an account the server has not switched the wiki on for (WIKI_DISABLED):
   // an entry that led to a refusal would be worse than none.
   const topItems = wikiShown(wikiSpaces) ? TOP : TOP.filter((t) => t.key !== 'wiki');
@@ -323,6 +338,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   const agentsMatch = useMatch('/agents/:id/*');
   const openWorkspaceId = routeId((workspacesMatch ?? agentsMatch)?.params.id);
   const sessionId = routeId(useMatch('/sessions/:id')?.params.id);
+  const narrow = useIsMobile();
   const sessionQ = useQuery({
     ...sessionQuery(sessionId),
     // Keep the previous session's data while the next one loads so activeWorkspaceId
@@ -360,11 +376,34 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     openProjectId && openProjects.some((p) => encodeId(p.id) === openProjectId)
       ? `project:${openProjectId}`
       : null;
+  // A project's sessions page — the console with `?project=` — is that project's row's, over
+  // whichever workspace or member session it shows, and the workspace's row is not lit there.
+  const onConsole = !!(workspacesMatch ?? agentsMatch) || !!sessionId;
+  const projectPageId = onConsole ? routeId(searchParams.get('project')) : null;
+  const projectPageKey =
+    projectPageId && openProjects.some((p) => encodeId(p.id) === projectPageId)
+      ? `project:${projectPageId}`
+      : null;
+  const litWorkspaceId = projectPageKey ? null : activeWorkspaceId;
+
+  // Where this tab is, for the space `/wiki` opens (design §12.3.4): the active workspace, or on a
+  // project's page or its sessions page the workspace the project's coordinator runs in. A page that
+  // is neither — the Projects or Tasks list — is nowhere, and the Wiki's own pages keep what the page
+  // before them said.
+  const projectInViewId = openProjectId ?? projectPageId;
+  const projectInView = useQuery({ ...projectDetailsQuery(projectInViewId ?? ''), enabled: !!projectInViewId });
+  const hereWorkspaceId = projectInViewId ? routeId(projectInView.data?.coordinatorWorkspaceId) : activeWorkspaceId;
+  const onWiki = loc.pathname === '/wiki' || loc.pathname.startsWith('/wiki/');
+  useEffect(() => {
+    if (!onWiki) writeWikiFromWorkspace(hereWorkspaceId);
+  }, [onWiki, hereWorkspaceId]);
 
   // Workspace/session routes have no proxy parent in TOP: a resolved Workspace highlights its own
   // row, while an unresolved deep link briefly leaves the fixed nav unselected. Runner management
   // remains scoped to Runners.
-  const routeKey = activeWorkspaceId
+  const routeKey = projectPageKey
+    ? projectPageKey
+    : activeWorkspaceId
     ? '' // scoped to one workspace — its row highlights below, no top item
     : loc.pathname.startsWith('/workspaces/') ||
         loc.pathname.startsWith('/sessions/') ||
@@ -554,17 +593,23 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
 
   // Open a workspace's console — the same destination the runner detail page uses.
   // Config-only workspaces (no runner) have no console to open.
+  // The lit workspace's row goes nowhere: its list is already showing.
   const openWorkspace = useCallback(
     (a: Workspace) => {
-      if (!(a.runner?.id ?? a.runnerId)) return;
+      onNavigate?.();
+      if (!(a.runner?.id ?? a.runnerId) || a.id === litWorkspaceId) return;
       navigate(`/workspaces/${encodeId(a.id)}`);
     },
-    [navigate],
+    [navigate, onNavigate, litWorkspaceId],
   );
 
   const openTopNav = useCallback(
-    (key: string) => navigate(`/${key}`),
-    [navigate],
+    (key: string) => {
+      onNavigate?.();
+      if (key === sel) return;
+      navigate(`/${key}`);
+    },
+    [navigate, onNavigate, sel],
   );
 
   // Cmd/Ctrl + P opens Projects from every route. Like the other modifier shortcuts, it remains
@@ -615,10 +660,22 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [activeWorkspaceId, orderedWorkspaces, openWorkspace]);
 
+  // A project's row opens its sessions page over the workspace showing (members span workspaces,
+  // so the workspace only decides where the page's back leads), or the first one; with no
+  // workspace to show it over, the project's own page. Beside an open conversation on a wide screen
+  // only the list column changes and the conversation stays, as the iPad's sidebar has it; a phone
+  // shows one pane, so there the page is what opens.
   const openProject = (project: SidebarProject) => {
+    onNavigate?.();
     const key = encodeId(project.id);
+    if (sel === `project:${key}`) return;
     setSel(`project:${key}`);
-    navigate(`/projects/${key}`);
+    if (sessionId && !narrow) {
+      navigate(`/sessions/${encodeId(sessionId)}?project=${key}`);
+      return;
+    }
+    const over = activeWorkspaceId ?? orderedWorkspaces.find((a) => a.runner?.id ?? a.runnerId)?.id;
+    navigate(over ? `/workspaces/${encodeId(over)}?project=${key}` : `/projects/${key}`);
   };
 
   return (
@@ -672,8 +729,14 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
             title={`${t.label}${t.shortcut ? `  ${t.shortcut}` : ''}`}
           >
             <span className="tp-ico">{t.icon}</span>
-            {t.key === 'wiki' && wikiPending > 0 && (
-              <span className="tp-rail-badge needs-you">{wikiPending}</span>
+            {t.key === 'wiki' && wikiWaitingCount > 0 && (
+              <span
+                className="tp-rail-badge needs-you"
+                title={wikiWaitingOnYou(wikiWaitingCount)}
+                aria-label={wikiWaitingOnYou(wikiWaitingCount)}
+              >
+                {wikiWaitingCount}
+              </span>
             )}
           </div>
         ))}
@@ -692,7 +755,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
           return (
             <div
               key={a.id}
-              className={`tp-rail-item ${a.id === activeWorkspaceId ? 'active' : ''}`}
+              className={`tp-rail-item ${a.id === litWorkspaceId ? 'active' : ''}`}
               onClick={() => openWorkspace(a)}
               title={`${a.name} · ${runnerLabel}${shortcutLabel ? `  ${shortcutLabel}` : ''}`}
             >
@@ -727,13 +790,13 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
             >
               <span className="tp-ico">{t.icon}</span>
               <span className="tp-label">{t.label}</span>
-              {t.key === 'wiki' && wikiPending > 0 ? (
+              {t.key === 'wiki' && wikiWaitingCount > 0 ? (
                 <span
                   className="tp-count needs-you"
-                  title={wikiProposalsToReview(wikiPending)}
-                  aria-label={wikiProposalsToReview(wikiPending)}
+                  title={wikiWaitingOnYou(wikiWaitingCount)}
+                  aria-label={wikiWaitingOnYou(wikiWaitingCount)}
                 >
-                  {wikiPending}
+                  {wikiWaitingCount}
                 </span>
               ) : (
                 t.shortcut && (
@@ -791,7 +854,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
                       key={a.id}
                       workspace={a}
                       runnerLabel={runnerLabel}
-                      active={a.id === activeWorkspaceId}
+                      active={a.id === litWorkspaceId}
                       offline={workspaceRunnerIsOffline(
                         runnerId,
                         runnerId ? runnerOnlineById.get(runnerId) : undefined,

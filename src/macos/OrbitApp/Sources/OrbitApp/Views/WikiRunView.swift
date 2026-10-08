@@ -52,16 +52,6 @@ struct WikiRunPage: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .confirmationDialog(WikiModeCopy.rejectOnRecord,
-                            isPresented: Binding(get: { rejecting != nil }, set: { if !$0 { rejecting = nil } }),
-                            titleVisibility: .visible) {
-            ForEach(WikiRejectReason.allCases, id: \.self) { reason in
-                Button(WikiCopy.rejectReasonLabel(reason)) {
-                    if let id = rejecting?.entryId { actions.reject(id, reason) }
-                    rejecting = nil
-                }
-            }
-        }
     }
 
     /// The kicker, the count as the title, when — then Revert run… and Open session side by side.
@@ -160,6 +150,19 @@ struct WikiRunPage: View {
                 Button(WikiCopy.reject, role: .destructive) { rejecting = row }
             }
         }
+        // On the entry's own row, whose swipe raises it, so the panel opens against the row rather
+        // than at the top of the page.
+        .orbitConfirmation(WikiModeCopy.rejectOnRecord,
+                           isPresented: Binding(get: { rejecting != nil }, set: { if !$0 { rejecting = nil } })) {
+            ForEach(WikiRejectReason.allCases, id: \.self) { reason in
+                Button(WikiCopy.rejectReasonLabel(reason)) {
+                    if let id = rejecting?.entryId { actions.reject(id, reason) }
+                    rejecting = nil
+                }
+            }
+            // The reasons are the question; this is the way out of it.
+            Button(WikiModeCopy.cancel, role: .cancel) {}
+        }
     }
 }
 
@@ -171,6 +174,7 @@ struct WikiRunView: View {
 
     @State private var reverting = false
     @State private var notice: String?
+    @State private var noticeTitle = WikiCopy.runRevertFailed
 
     var body: some View {
         if let wiki = model.wiki {
@@ -182,6 +186,7 @@ struct WikiRunView: View {
                             Button(WikiModeCopy.revertRunConfirm, role: .destructive) {
                                 Task {
                                     if let answer = await wiki.revert(changeset) {
+                                        noticeTitle = WikiCopy.runRevertFailed
                                         notice = answer
                                     } else {
                                         model.showToast(WikiModeCopy.reverted)
@@ -201,7 +206,7 @@ struct WikiRunView: View {
                 }
             }
             .task(id: changesetID) { await wiki.loadRun(changesetID) }
-            .alert(WikiCopy.refused, isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
+            .alert(noticeTitle, isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
                 Button("OK", role: .cancel) { notice = nil }
             } message: {
                 Text(notice ?? "")
@@ -219,6 +224,7 @@ struct WikiRunView: View {
             reject: { id, reason in
                 Task {
                     if let answer = await wiki.reject(id, reason: reason) {
+                        noticeTitle = WikiCopy.entryRejectFailed
                         notice = answer
                     } else {
                         model.showToast(WikiModeCopy.rejected)

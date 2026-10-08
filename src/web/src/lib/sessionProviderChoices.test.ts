@@ -3,11 +3,13 @@ import {
   brandForProvider,
   currentProviderChoice,
   defaultModelLabel,
+  engineChoices,
+  engineTitleFor,
   providerChoices,
   runtimeSummary,
   sameRuntimeChoices,
 } from './sessionProviderChoices';
-import type { ConfiguredProvider } from './workspaceDefaults';
+import { runtimeForProvider, type ConfiguredProvider } from './workspaceDefaults';
 import { PROVIDER_GLYPHS } from './providerGlyphs';
 import { encodeId } from './idCodec';
 import type { CodexLogin } from './codexLogin';
@@ -106,6 +108,23 @@ describe('providerChoices', () => {
       label: 'Antigravity', labelDetail: 'API key', glyphKey: 'antigravity', modelLabel: 'Gemini 3.8 Flash',
     });
     expect(providerChoices([{ ...gemini, label: 'Work Gemini' }], catalog).find((c) => c.slug === 'gemini')?.label).toBe('Work Gemini');
+  });
+
+  it('allows a workspace key to run Antigravity after the runner Google sign-in expires', () => {
+    const expired = {
+      supported: true, installed: true, version: 'agy 1.2.16', envKeyAvailable: false,
+      authSource: 'google' as const, googleLogin: 'available' as const,
+    };
+    const health = [{ engine: 'antigravity' as const, installed: true, auth: 'no' as const, authSource: 'google' as const }];
+    const choice = (keyAvailable?: boolean) => providerChoices([gemini], catalog, undefined, health, [], undefined, expired, keyAvailable)
+      .find((c) => c.slug === 'antigravity');
+    expect(choice()).toMatchObject({ labelDetail: 'Google account', unavailable: 'Not signed in', fixEngine: 'antigravity' });
+    expect(choice(true)).toMatchObject({ kind: 'engine', labelDetail: 'env key' });
+    expect(choice(true)?.unavailable).toBeUndefined();
+    expect(choice(true)?.fixEngine).toBeUndefined();
+    const withoutCli = providerChoices([], catalog, undefined, health, [], undefined, { ...expired, installed: false }, true)
+      .find((c) => c.slug === 'antigravity');
+    expect(withoutCli).toMatchObject({ unavailable: 'Not installed', fixEngine: 'antigravity' });
   });
 
   it.each([
@@ -309,6 +328,100 @@ describe('the runner’s Codex accounts, under the Codex choice', () => {
       // Its 5-hour window reads 0% but its weekly one is spent: the row says what stops it.
       { id: 'default', label: 'Default', quota: 'Weekly 100%', nearLimit: true },
       { id: 'fad98727', label: 'jianghailong.rd', quota: 'Weekly 28%' },
+    ]);
+  });
+});
+
+describe('the runner’s Antigravity (Google) accounts, under the Antigravity choice', () => {
+  const google = {
+    supported: true,
+    installed: true,
+    version: 'agy 1.3.0',
+    envKeyAvailable: true,
+    authSource: 'google' as const,
+    googleLogin: 'available' as const,
+  };
+  const home = (id: string) => (id === 'default' ? '/root/.orbit/antigravity/google' : `/root/.orbit/antigravity-accounts/${id}`);
+  const bucket = (id: string, window: string, remainingFraction: number) => ({ id, window, remainingFraction });
+  // Antigravity's quota is never in the heartbeat's planUsage: it is on the engine's own health,
+  // Default's buckets beside every other account's.
+  const engines = (
+    accounts: Array<{ id: string; name?: string; auth: 'yes' | 'no' | 'unknown' }>,
+    over: Record<string, unknown> = {},
+  ) => [
+    { engine: 'claude' as const, installed: true, auth: 'yes' as const },
+    {
+      engine: 'antigravity' as const,
+      installed: true,
+      auth: 'yes' as const,
+      authSource: 'google' as const,
+      accounts: accounts.map((account) => ({ ...account, home: home(account.id) })),
+      planUsage: {
+        provider: 'antigravity',
+        buckets: [bucket('gemini-weekly', 'weekly', 1), bucket('3p-weekly', 'weekly', 0.98), bucket('gemini-5h', '5h', 1)],
+        accounts: {
+          '5c2e91a0': {
+            provider: 'antigravity',
+            buckets: [bucket('gemini-weekly', 'weekly', 0.61), bucket('gemini-5h', '5h', 0.04)],
+          },
+        },
+      },
+      ...over,
+    },
+  ];
+  const accountsOf = (choices: ReturnType<typeof providerChoices>) =>
+    choices.find((choice) => choice.slug === 'antigravity')?.accounts;
+
+  it('lists each account by the bucket with the least left, in what is left, read from the engine’s health', () => {
+    const choices = providerChoices(
+      [],
+      catalog,
+      undefined,
+      engines([{ id: 'default', auth: 'yes' }, { id: '5c2e91a0', name: 'Work', auth: 'yes' }, { id: 'c0ffee42', auth: 'no' }]),
+      [],
+      // The heartbeat's own report holds nothing of Antigravity's.
+      { claude: { provider: 'claude', fiveHour: { utilization: 3 } } } as never,
+      google,
+    );
+    expect(accountsOf(choices)).toEqual([
+      { id: 'default', label: 'Default', quota: '3p-weekly 98% left' },
+      { id: '5c2e91a0', label: 'Work', quota: 'gemini-5h 4% left', nearLimit: true },
+      { id: 'c0ffee42', label: 'Account c0ffee42', unavailable: 'Not signed in' },
+    ]);
+    // The Provider menu may still say how the engine signs in.
+    expect(choices.find((choice) => choice.slug === 'antigravity')?.labelDetail).toBe('Google account');
+  });
+
+  it('lists none for one account, or for an engine that cannot run', () => {
+    expect(accountsOf(providerChoices([], catalog, undefined, engines([{ id: 'default', auth: 'yes' }]), [], null, google))).toBeUndefined();
+    const lapsed = { ...google, envKeyAvailable: false };
+    const blocked = providerChoices(
+      [],
+      catalog,
+      undefined,
+      engines([{ id: 'default', auth: 'no' }, { id: '5c2e91a0', auth: 'no' }], { auth: 'no' }),
+      [],
+      null,
+      lapsed,
+    );
+    expect(blocked.find((choice) => choice.slug === 'antigravity')?.unavailable).toBe('Not signed in');
+    expect(accountsOf(blocked)).toBeUndefined();
+  });
+
+  it('offers Default on the runner’s Gemini key as the key it runs on, never as signed out', () => {
+    const onKey = { ...google, authSource: 'env_key' as const };
+    const choices = providerChoices(
+      [],
+      catalog,
+      undefined,
+      engines([{ id: 'default', auth: 'no' }, { id: '5c2e91a0', name: 'Work', auth: 'yes' }], { authSource: 'env_key' }),
+      [],
+      null,
+      onKey,
+    );
+    expect(accountsOf(choices)).toEqual([
+      { id: 'default', label: 'Default', quota: 'env key' },
+      { id: '5c2e91a0', label: 'Work', quota: 'gemini-5h 4% left', nearLimit: true },
     ]);
   });
 });
@@ -718,5 +831,127 @@ describe('runtimeSummary', () => {
     expect(runtimeSummary('kimi')).toBe('Runs on the Kimi CLI');
     expect(runtimeSummary('codex')).toBe('OpenAI-compatible');
     expect(runtimeSummary('claude')).toBe('Anthropic-compatible');
+  });
+});
+
+describe('engineChoices', () => {
+  const configured = [deepseek, moonshot, gemini];
+  const all = providerChoices(configured, catalog, undefined, undefined, [], undefined, undefined, true);
+
+  it('lists each engine once, its keys folded into the engine that runs them', () => {
+    expect(engineChoices(all, configured).map((engine) => engine.slug)).toEqual(['claude', 'codex', 'antigravity', 'kimi']);
+  });
+
+  it("lands on the engine's own sign-in, unless a preferred provider of it can run", () => {
+    const landing = (preferred: string[]) =>
+      engineChoices(all, configured, preferred).map((engine) => engine.provider.slug);
+    expect(landing([])).toEqual(['claude', 'codex', 'antigravity', 'kimi']);
+    // The draft's pick first, then what the workspace last ran: each only where it runs.
+    expect(landing(['deepseek', 'moonshot'])).toEqual(['deepseek', 'codex', 'antigravity', 'moonshot']);
+  });
+
+  it('skips a preferred provider that cannot run, and a signed-out engine, for one that can', () => {
+    const choices = providerChoices(configured, catalog, undefined, [{ engine: 'claude', installed: true, auth: 'no' }]);
+    const claude = engineChoices(choices, configured, [])[0];
+    expect(claude.provider.slug).toBe('deepseek');
+    expect(claude.unavailable).toBeUndefined();
+  });
+
+  it('carries the reason when no provider of the engine can run', () => {
+    const choices = providerChoices(configured, catalog, undefined, [{ engine: 'kimi', installed: false, auth: 'unknown' }]);
+    const kimi = engineChoices(choices, configured, ['moonshot']).find((engine) => engine.slug === 'kimi')!;
+    expect(kimi.provider.slug).toBe('kimi');
+    expect(kimi.unavailable).toBe('Not installed');
+    expect(kimi.provider.fixEngine).toBe('kimi');
+  });
+
+});
+
+describe('OpenCode and the keys it may spend', () => {
+  const anthropicKey: ConfiguredProvider = {
+    slug: 'anthropic',
+    label: 'Anthropic (Claude)',
+    runtime: 'claude',
+    models: [],
+    defaultModel: 'claude-opus-5',
+    presetSlug: 'anthropic',
+    modelsFromRuntime: true,
+    runsOnOpenCode: true,
+  };
+  const configured: ConfiguredProvider[] = [
+    { ...deepseek, runsOnOpenCode: true },
+    { ...moonshot, runsOnOpenCode: true },
+    anthropicKey,
+    // A Claude subscription token: the server says no.
+    { ...anthropicKey, slug: 'anthropic-sub', label: 'Subscription', runsOnOpenCode: false },
+  ];
+  const installed = [{ engine: 'opencode' as const, installed: true, auth: 'unknown' as const }];
+
+  it('offers nothing for OpenCode until the runner reports it installed', () => {
+    expect(providerChoices(configured, catalog).some((c) => runtimeForProvider(c.slug, configured) === 'opencode')).toBe(false);
+    expect(
+      providerChoices(configured, catalog, undefined, [{ engine: 'opencode', installed: false, auth: 'unknown' }])
+        .some((c) => c.slug === 'opencode'),
+    ).toBe(false);
+  });
+
+  it('lists its own config, then every key it may spend — each key under its own engine as well', () => {
+    const choices = providerChoices(configured, catalog, undefined, installed);
+    const openCode = choices.filter((c) => runtimeForProvider(c.slug, configured) === 'opencode');
+    expect(openCode.map((c) => c.slug)).toEqual(['opencode', 'opencode/deepseek', 'opencode/moonshot', 'opencode/anthropic']);
+    expect(openCode.map((c) => c.label)).toEqual(['OpenCode', 'DeepSeek', 'Kimi (Moonshot)', 'Anthropic (Claude)']);
+    expect(openCode[1].modelLabel).toBe('DeepSeek V4 Pro');
+    expect(choices.some((c) => c.slug === 'deepseek')).toBe(true);
+  });
+
+  it('picks OpenCode engine by engine, and says which key it would spend', () => {
+    const choices = providerChoices(configured, catalog, undefined, installed);
+    const openCode = engineChoices(choices, configured, ['opencode/deepseek']).find((e) => e.slug === 'opencode')!;
+    expect(openCode.label).toBe('OpenCode');
+    expect(openCode.provider.slug).toBe('opencode/deepseek');
+    expect(sameRuntimeChoices('opencode/deepseek', choices, configured).map((c) => c.slug)).toEqual([
+      'opencode',
+      'opencode/deepseek',
+      'opencode/moonshot',
+      'opencode/anthropic',
+    ]);
+  });
+});
+
+describe('engineTitleFor', () => {
+  it('names the CLI that executes, not the vendor whose models it writes', () => {
+    // The composer menu's title answers "which engine runs this session". A BYOK provider writes
+    // its own models while Claude Code executes them, so the name is the CLI's.
+    expect(engineTitleFor('claude', [])).toMatchObject({ slug: 'claude', name: 'Claude Code', glyphKey: 'anthropic' });
+    expect(engineTitleFor('deepseek', [deepseek])).toMatchObject({
+      slug: 'claude',
+      name: 'Claude Code',
+      glyphKey: 'anthropic',
+    });
+    expect(engineTitleFor('my-endpoint', [custom]).name).toBe('Claude Code');
+  });
+
+  it('gives every other engine its own product name and mark', () => {
+    expect(engineTitleFor('codex', [])).toMatchObject({ name: 'Codex', glyphKey: 'openai' });
+    expect(engineTitleFor('kimi', [])).toMatchObject({ name: 'Kimi Code', glyphKey: 'moonshot' });
+    expect(engineTitleFor('opencode', []).name).toBe('OpenCode');
+    expect(engineTitleFor('antigravity', [])).toMatchObject({ name: 'Antigravity CLI', glyphKey: 'antigravity' });
+    expect(engineTitleFor('dsh', []).name).toBe('DeepSeek Harness');
+  });
+
+  it('takes the safe Claude fallback for a provider it cannot place', () => {
+    expect(engineTitleFor('nonsense', []).name).toBe('Claude Code');
+    expect(engineTitleFor(null, []).name).toBe('Claude Code');
+  });
+
+  it('says where a standing pick goes only when it changes the engine', () => {
+    // A pick that crosses CLIs is a transition worth printing.
+    expect(engineTitleFor('claude', [], 'codex')).toMatchObject({ name: 'Claude Code', nextName: 'Codex' });
+    expect(engineTitleFor('opencode', [], 'claude')).toMatchObject({ name: 'OpenCode', nextName: 'Claude Code' });
+    // Two providers of one CLI are the same engine — the title stays one name, and the Provider
+    // row below is where that pick is read.
+    expect(engineTitleFor('deepseek', [deepseek], 'claude').nextName).toBeNull();
+    expect(engineTitleFor('claude', [], 'deepseek').nextName).toBeNull();
+    expect(engineTitleFor('claude', [], null).nextName).toBeNull();
   });
 });

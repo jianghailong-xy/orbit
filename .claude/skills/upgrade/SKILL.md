@@ -6,8 +6,9 @@ description: Upgrade the Orbit Docker Compose deployment — rebuild the apiserv
 # Upgrade the Orbit stack
 
 Orbit runs as a single Docker Compose stack (`docker-compose.yml` at the repo
-root) with four services: `postgres`, `apiserver`, `web`, and `gateway`.
-`apiserver` and `web` are built locally from source; `postgres` and `gateway`
+root) with `postgres`, `apiserver`, `wiki-worker`, `web`, and `gateway` among its
+services. `apiserver` and `web` are built locally from source, and `wiki-worker`
+runs the `apiserver` image with another command; `postgres` and `gateway`
 (nginx) use pinned upstream images. A routine upgrade rebuilds the locally-built
 images and recreates only the services that actually changed — an unchanged
 `postgres` is never restarted. Refreshing the upstream base images is opt-in via
@@ -45,10 +46,17 @@ It will, in order:
    not pushed yet) deploys as it is. Off `main` nothing is pulled unless you
    pass `--pull`; `--no-pull` skips the pull.
 2. Resolve the checked-out commit as `ORBIT_SOURCE_SHA`, then run
-   `docker compose build apiserver web` to rebuild from that exact source revision.
-3. `docker compose up -d --wait apiserver web gateway` — recreate only the
+   `docker compose build apiserver wiki-worker web` to rebuild from that exact source
+   revision (`wiki-worker` has no build of its own: it runs the `apiserver` image).
+   The running `orbit-web` image is tagged `orbit-web:previous-release` and passed
+   as `--build-arg PREVIOUS_RELEASE_IMAGE`, so the new web image keeps the runner
+   release it replaces at `/dl/previous/` — what a staged rollout holds runners at
+   and a rollback returns them to (docs/release-process.md, "Runner rollout and
+   rollback"). With no `orbit-web` container running, nothing is kept.
+3. `docker compose up -d --wait apiserver wiki-worker web gateway` — recreate only the
    services whose image or config changed (the freshly built `apiserver`/`web`,
-   and `gateway` only if its image or mounted `nginx.conf` changed), and block
+   `wiki-worker` with the `apiserver` image it runs, and `gateway` only if its
+   image or mounted `nginx.conf` changed), and block
    until they pass their healthcheck (apiserver runs migrations on boot).
    `postgres` is left running untouched — it is not in the recreate set.
 4. Print `docker compose ps`.
@@ -89,7 +97,7 @@ applied — this is the only path that may recreate (restart) `postgres`.
 
 ## Notes
 
-- The default `up -d --wait apiserver web gateway` only recreates services whose
+- The default `up -d --wait apiserver wiki-worker web gateway` only recreates services whose
   image or config changed, so an upgrade with no source changes is a no-op (and
   stays healthy). `postgres` is never recreated unless you pass `--pull-base` and
   its base image actually changed.

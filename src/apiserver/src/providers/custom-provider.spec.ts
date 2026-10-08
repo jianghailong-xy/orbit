@@ -32,15 +32,13 @@ test('custom-provider', async (t) => {
     assert.equal(isBuiltinProvider('deepseek'), false);
   });
 
-  await t.test('a stale old-replica kimi identity is fenced to the historical Claude fallback', () => {
-    const exec = resolveProviderExec({
+  await t.test('a stale old-replica kimi identity cannot dispatch on the runner Claude login', () => {
+    assert.throws(() => resolveProviderExec({
       declaredProvider: AgentProvider.KIMI,
       declaredProviderBuiltin: false,
       customRow: null,
       sessionModel: 'kimi-k2.7-code',
-    });
-    assert.equal(exec.provider, AgentProvider.CLAUDE);
-    assert.equal(exec.model, 'claude-opus-5');
+    }), /provider not available/);
   });
 
   await t.test('built-in claude: model kept, workspace env passed through, no injection', () => {
@@ -320,6 +318,38 @@ test('custom-provider', async (t) => {
     );
   });
 
+  await t.test('built-in antigravity: a Google sign-in’s models survive dispatch', () => {
+    // The account catalogue `agy models` reports after a Google sign-in (contract §16.7): the
+    // Gemini rows plus Claude Opus/Sonnet 5.5 and GPT-OSS. Judging `gemini-…` alone dropped every
+    // extra row, and the session silently ran agy's own Gemini default instead of the pick.
+    const catalog = {
+      antigravity: [
+        { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', reasoningLevels: ['low', 'medium', 'high'] },
+        { value: 'claude-opus-5-5', label: 'Claude Opus 5.5', reasoningLevels: ['low', 'medium', 'high'] },
+        { value: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5', reasoningLevels: ['low', 'medium', 'high'] },
+        { value: 'gpt-oss-120b', label: 'GPT-OSS 120B', reasoningLevels: ['medium'] },
+      ],
+    };
+    const base = { declaredProvider: AgentProvider.ANTIGRAVITY, customRow: null, modelCatalog: catalog };
+    const opus = resolveProviderExec({ ...base, sessionModel: 'claude-opus-5-5' });
+    assert.equal(opus.model, 'claude-opus-5-5');
+    assert.equal(opus.retiredPin, undefined);
+    assert.equal(
+      resolveProviderExec({ ...base, sessionModel: 'gpt-oss-120b' }).model,
+      'gpt-oss-120b',
+    );
+    // A level-suffixed slug the CLI also accepts names that same model: its base row vouches for
+    // it, so it is neither rewritten nor dropped as retired.
+    const slug = resolveProviderExec({ ...base, sessionModel: 'claude-sonnet-5-5-medium' });
+    assert.equal(slug.model, 'claude-sonnet-5-5-medium');
+    assert.equal(slug.retiredPin, undefined);
+    // An id the catalogue does not carry is still retired — to what the runner runs, never to a
+    // substitute model chosen for it.
+    const stale = resolveProviderExec({ ...base, sessionModel: 'gemini-3.7-flash' });
+    assert.equal(stale.model, 'gemini-3.8-flash');
+    assert.equal(stale.retiredPin, true);
+  });
+
   await t.test('built-in antigravity: a pin agy no longer lists yields to the current default', () => {
     const base = {
       declaredProvider: AgentProvider.ANTIGRAVITY,
@@ -533,6 +563,36 @@ test('custom-provider', async (t) => {
     assert.equal(exec.env?.CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP, '1');
   });
 
+  // A conversation that has run on Anthropic's own endpoint carries its late tool discoveries
+  // inline (`tool_definition`); replayed to a vendor shim that speaks only the by-name form, every
+  // turn answers 422 — and the CLI's own fallback never fires because the vendor's wording is not
+  // the one its rejection classifier knows. Off by env, the engine re-declares those tools in
+  // `tools[]` instead, which is the shape such a shim accepts.
+  await t.test('a vendor endpoint is told not to inline late tool definitions', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'deepseek',
+      customRow: row(),
+      sessionModel: null,
+      workspaceModel: null,
+      workspaceEnv: null,
+    });
+    assert.equal(exec.env?.CLAUDE_CODE_INLINE_TOOLS, 'false');
+  });
+
+  // Anthropic's own API serves the inline form, so a BYOK row pointed at it keeps the shape — the
+  // env that turns it off is for the hosts that do not.
+  await t.test('a row pointed at Anthropic keeps inline tool definitions', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'anthropic',
+      customRow: row({ baseUrl: 'https://api.anthropic.com' }),
+      sessionModel: null,
+      workspaceModel: null,
+      workspaceEnv: null,
+    });
+    assert.equal(exec.env?.CLAUDE_CODE_INLINE_TOOLS, undefined);
+    assert.equal(exec.env?.ANTHROPIC_BASE_URL, 'https://api.anthropic.com');
+  });
+
   // The CLI assumes 200k for a model id its own catalog doesn't describe and auto-compacts the
   // session inside that; DeepSeek's shim serves no /v1/models for it to learn the real window from.
   // The preset's declared window is the one authoritative number, so it rides in the env the CLI
@@ -683,8 +743,8 @@ test('custom-provider', async (t) => {
     assert.deepEqual(Object.keys(exec.env ?? {}).sort(), ['OPENAI_API_KEY', 'OPENAI_BASE_URL']);
   });
 
-  await t.test('a disabled custom row preserves its legacy Workspace pin during rolling deploy', () => {
-    const exec = resolveProviderExec({
+  await t.test('a disabled custom row cannot dispatch on the runner Claude login during rolling deploy', () => {
+    assert.throws(() => resolveProviderExec({
       declaredProvider: 'deepseek',
       customRow: row({ enabled: false }),
       sessionModel: null,
@@ -692,10 +752,7 @@ test('custom-provider', async (t) => {
       usesRuntimeDefaultModel: false,
       runtimeDefaultModels: { claude: 'claude-sonnet-5' },
       workspaceEnv: { A: '1' },
-    });
-    assert.equal(exec.provider, 'claude');
-    assert.equal(exec.model, 'claude-opus-4-8');
-    assert.deepEqual(exec.env, { A: '1' });
+    }), /provider is disabled/);
   });
 
   await t.test('new model-less sessions ignore legacy Workspace pins and use Runtime defaults', () => {

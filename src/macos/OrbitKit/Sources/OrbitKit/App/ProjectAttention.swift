@@ -56,6 +56,10 @@ public enum ProjectAttentionReason: String, Sendable {
     /// The fifth: its coordinator has asked the owner to start it (`project_request_start`), and
     /// nobody has. A project whose coordinator has not asked is waiting on nobody, and has no reason.
     case readyToStart = "ready-to-start"
+    /// The sixth: its coordinator has asked the owner to record the OPEN project done
+    /// (`project_request_done`), and nobody has answered — "Needs you · Ready to close". Not
+    /// `readyToClose` below, which is a project whose tasks all settled and that nobody asked about.
+    case doneRequest = "done-request"
     /// The coordinator is working an exception: the project is moving, so it explains a chip and
     /// never moves a row.
     case coordinatorHandling = "coordinator-handling"
@@ -73,16 +77,18 @@ public enum ProjectAttentionReason: String, Sendable {
     }
 
     /// Whether the owner is being asked for something in person: one of the four items, or a
-    /// coordinator's request to start the project. One tier, and one lane — Needs attention.
+    /// coordinator's request to start the project or to record it done. One tier, and one lane —
+    /// Needs attention.
     public var isNeedsYou: Bool {
-        self == .readyToStart || isOwnerItem
+        self == .readyToStart || self == .doneRequest || isOwnerItem
     }
 
-    /// One tier, not five: which of the four items — or a request to start — an owner is asked
-    /// about is a fact about the project, the reader's queue is that they are asked at all.
+    /// One tier, not six: which of the four items — or a request to start, or to close — an owner
+    /// is asked about is a fact about the project, the reader's queue is that they are asked at all.
     fileprivate var rank: Int {
         switch self {
-        case .approveMergeToMain, .coordinatorQuestion, .escalatedToYou, .fusePaused, .readyToStart:
+        case .approveMergeToMain, .coordinatorQuestion, .escalatedToYou, .fusePaused, .readyToStart,
+             .doneRequest:
             return 1
         case .needsUser: return 2
         case .autoRemediation: return 3
@@ -225,7 +231,7 @@ public enum ProjectAttention {
     }
 
     /// How long an item has been waiting, for the chips that name one: `20m`, `2h`, `3d`.
-    private static func elapsedLabel(_ iso: String?, now: Date) -> String? {
+    static func elapsedLabel(_ iso: String?, now: Date) -> String? {
         let at = rank(iso)
         let nowSeconds = now.timeIntervalSince1970
         if at == -.infinity || at > nowSeconds { return nil }
@@ -272,20 +278,41 @@ public enum ProjectAttention {
         project.attention?.startRequest
     }
 
+    /// The coordinator's open request to record this project done, when the read carries one. The
+    /// server sends it only while the project is OPEN, so its presence is the whole answer.
+    private static func doneRequest(_ project: ProjectSummary) -> ProjectListDoneRequest? {
+        project.attention?.doneRequest
+    }
+
     /// Whether the row leads with the start request rather than with one of the four: the one that
     /// has waited longest, as between the four — and on a tie the four, which come first in the
-    /// fixed order for the reason `leadOwnerItem` gives.
+    /// fixed order for the reason `leadOwnerItem` gives. A request to close that has waited longer
+    /// still is named instead.
     private static func startRequestLeads(_ project: ProjectSummary) -> Bool {
         guard let start = startRequest(project) else { return false }
+        if let done = doneRequest(project), byInstantAsc(done.waitingSince, start.waitingSince) < 0 {
+            return false
+        }
         guard let lead = leadOwnerItem(project) else { return true }
         return byInstantAsc(start.waitingSince, lead.oldestWaitingSince) < 0
     }
 
+    /// Whether the row leads with the request to record the project done: the one that has waited
+    /// longest, as the start request is — after the four and after a start request on a tie.
+    private static func doneRequestLeads(_ project: ProjectSummary) -> Bool {
+        guard let done = doneRequest(project) else { return false }
+        if let start = startRequest(project), byInstantAsc(start.waitingSince, done.waitingSince) <= 0 {
+            return false
+        }
+        guard let lead = leadOwnerItem(project) else { return true }
+        return byInstantAsc(done.waitingSince, lead.oldestWaitingSince) < 0
+    }
+
     /// Since when the owner has been asked for what the row names: the lead's own instant.
     private static func needsYouSince(_ project: ProjectSummary) -> String? {
-        startRequestLeads(project)
-            ? startRequest(project)?.waitingSince
-            : leadOwnerItem(project)?.oldestWaitingSince
+        if startRequestLeads(project) { return startRequest(project)?.waitingSince }
+        if doneRequestLeads(project) { return doneRequest(project)?.waitingSince }
+        return leadOwnerItem(project)?.oldestWaitingSince
     }
 
     private static func reason(for kind: OwnerItemKind) -> ProjectAttentionReason? {
@@ -303,9 +330,10 @@ public enum ProjectAttention {
         guard project.status == .open else { return nil }
 
         // An item sitting on the OWNER outranks everything else the row could say. A coordinator
-        // asking to start the project is the fifth, in the same tier: whichever has waited longest
-        // is the one named.
+        // asking to start the project is the fifth, and one asking to record it done the sixth, in
+        // the same tier: whichever has waited longest is the one named.
         if startRequestLeads(project) { return .readyToStart }
+        if doneRequestLeads(project) { return .doneRequest }
         if let lead = leadOwnerItem(project), let reason = reason(for: lead.kind) { return reason }
 
         if autoRemediationBlockerCount(project) > 0 { return .autoRemediation }
@@ -437,6 +465,7 @@ public enum ProjectAttention {
         case .integrationCheckFailed: return "checks failed"
         case .integrationError: return "handling an integration error"
         case .taskFailed: return "handling a failed task"
+        case .deliveryReview: return "reviewing a delivery"
         case .unknown: return nil
         }
     }
@@ -457,6 +486,10 @@ public enum ProjectAttention {
     /// (`StartProject.readyToStart`): its coordinator has asked to start the project.
     public static let readyToStartSays = "Needs you · \(StartProject.readyToStart)"
 
+    /// The sixth, in the words the coordinator's session row and the project page say it
+    /// (`ProjectDone.readyToClose`): its coordinator has asked to record the project done.
+    public static let readyToCloseSays = "Needs you · \(ProjectDone.readyToClose)"
+
     private static func joined(_ parts: [String?]) -> String {
         parts.compactMap { $0 }.joined(separator: " · ")
     }
@@ -472,6 +505,12 @@ public enum ProjectAttention {
             return ProjectAttentionChip(
                 tone: .warning,
                 text: joined([readyToStartSays, elapsedLabel(startRequest(project)?.waitingSince, now: now)]))
+
+        // The coordinator asked to record the project done, and has been waiting this long.
+        case .doneRequest:
+            return ProjectAttentionChip(
+                tone: .warning,
+                text: joined([readyToCloseSays, elapsedLabel(doneRequest(project)?.waitingSince, now: now)]))
 
         case .approveMergeToMain, .coordinatorQuestion, .escalatedToYou, .fusePaused:
             guard let item = leadOwnerItem(project), let says = ownerItemSays(item) else { return nil }
@@ -547,14 +586,22 @@ public enum ProjectAttention {
         project.status == .open ? startRequest(project) : nil
     }
 
+    /// The coordinator's request to record this project done, while it is open and waiting on the
+    /// reader.
+    private static func waitingDoneRequest(_ project: ProjectSummary) -> ProjectListDoneRequest? {
+        project.status == .open ? doneRequest(project) : nil
+    }
+
     /// How many things wait on the reader in this project — a merge to approve, a question, an
-    /// escalation, a pause, and a coordinator asking to start it — together: the row's amber count.
+    /// escalation, a pause, and a coordinator asking to start it or to record it done — together:
+    /// the row's amber count.
     public static func needsYouItemCount(_ project: ProjectSummary) -> Int {
         waitingOwnerItems(project).reduce(0) { $0 + $1.count } + (waitingStartRequest(project) != nil ? 1 : 0)
+            + (waitingDoneRequest(project) != nil ? 1 : 0)
     }
 
     /// Whether anything is waiting on the reader in this project: one of the four owner items, or
-    /// its coordinator asking to start it.
+    /// its coordinator asking to start it or to record it done.
     public static func needsYou(_ project: ProjectSummary) -> Bool {
         needsYouItemCount(project) > 0
     }
@@ -562,6 +609,10 @@ public enum ProjectAttention {
     /// When the reader was first asked — the oldest of the things waiting on them.
     private static func oldestWait(_ project: ProjectSummary) -> String? {
         var oldest = waitingStartRequest(project)?.waitingSince
+        if let done = waitingDoneRequest(project)?.waitingSince,
+           oldest == nil || byInstantAsc(done, oldest) < 0 {
+            oldest = done
+        }
         for item in waitingOwnerItems(project) where oldest == nil || byInstantAsc(item.oldestWaitingSince, oldest) < 0 {
             oldest = item.oldestWaitingSince
         }

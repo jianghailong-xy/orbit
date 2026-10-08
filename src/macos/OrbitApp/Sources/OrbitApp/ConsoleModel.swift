@@ -102,17 +102,29 @@ final class ConsoleModel {
     /// (docs/session-folders-move-design.md §3.3). Nil for a draft opened from a list.
     private let draftFolderID: String?
     private(set) var provider = "claude"
-    /// Draft only: an explicit provider pick from the new-session hero, as opposed to the agent's
+    /// Draft only: an explicit provider pick (the hero's engine, or the composer's Provider menu), as opposed to the agent's
     /// own. Non-nil means the create request carries it AND the pick is remembered on the agent
     /// once the session exists — so the next draft here opens on it without the override.
     private(set) var draftProviderOverride: String?
-    /// Draft only: a Codex account picked under Codex in the new-session picker (`default` or a slot
+    /// Draft only: the picker identity of that pick when it is not the provider itself — a configured
+    /// key run on OpenCode (`OpenCodeKeys.choice`), whose session is created on `opencode`. It is
+    /// the model space the draft seeds from, so a re-seed cannot drop the key for OpenCode's own.
+    private(set) var draftChoice: String?
+    /// The picker identity this draft or session is on (web `providerChoiceFor`): the provider,
+    /// except that OpenCode on a configured key is on that key — whose models the composer lists and
+    /// whose row the Provider menu ticks.
+    var providerChoice: String {
+        if isDraft, let draftChoice { return draftChoice }
+        return OpenCodeKeys.choice(provider: provider, model: modelID)
+    }
+    /// Draft only: a Codex account picked under Codex in the composer's Provider menu (`default` or a slot
     /// id). Nil leaves it to the workspace: its own pick, else Automatic — the account with the most
     /// room, which the server chooses when it creates the session.
     private(set) var draftCodexAccount: String?
-    /// Draft only: the same for a Claude account picked under Claude. At most one of the two is set —
-    /// a pick is made under one engine.
+    /// Draft only: the same for a Claude account picked under Claude, and an Antigravity account picked
+    /// under Antigravity. At most one of the three is set — a pick is made under one engine.
     private(set) var draftClaudeAccount: String?
+    private(set) var draftAntigravityAccount: String?
     /// Which Codex account this session runs on, from its detail: its own (`Session.codexAccount`),
     /// and its workspace's for a session that stored none. Only a detail read sets them.
     private(set) var sessionCodexAccount: String?
@@ -124,11 +136,21 @@ final class ConsoleModel {
     private(set) var workspaceClaudeAccount: String?
     private(set) var sessionCodexAccountPinned = false
     private(set) var sessionClaudeAccountPinned = false
+    /// The same three for Antigravity.
+    private(set) var sessionAntigravityAccount: String?
+    private(set) var workspaceAntigravityAccount: String?
+    private(set) var sessionAntigravityAccountPinned = false
     private(set) var workspaceEnv: [String: String]?
     private var workspaceAntigravityKeys: [String: Bool]?
     private(set) var runnerAntigravity: RunnerAntigravityState?
     private(set) var runnerVersion: String?
     private(set) var sessionError: String?
+    /// The SOURCE refusal this session's row carries, adopted by name like `sessionError` — the
+    /// three columns the "never started" card reads to say WHY a run that produced no transcript
+    /// never began. Nil on a session that was not refused.
+    private(set) var sessionSourceState: String?
+    private(set) var sessionSourceRefusalCode: String?
+    private(set) var sessionSourceRefusalDetail: SourceRefusalDetail?
     private(set) var antigravityInstalling = false
     private(set) var runnerInstall: RunnerInstallState?
 
@@ -147,6 +169,89 @@ final class ConsoleModel {
     var queuedAntigravityRepair: EngineAuth.AntigravityRepair? {
         guard executesAntigravity, sessionStatus == .pending else { return nil }
         return EngineAuth.antigravityRepair(sessionError)
+    }
+
+    /// A DeepSeek Harness key: a configured row whose runtime is `dsh` (its runtime can never change).
+    var executesDsh: Bool {
+        SessionProviderChoices.executingRuntime(provider, configured: configuredProviders) == "dsh"
+    }
+
+    /// Whether this console's runner can start Harness — nil before any runner snapshot is read,
+    /// which claims nothing (`DshRuntime.state`).
+    var dshRunnerState: DshRuntime.RunnerState? {
+        guard runnerEngines != nil || runnerCapabilities != nil else { return nil }
+        return DshRuntime.state(capabilities: runnerCapabilities, engines: runnerEngines)
+    }
+
+    var queuedDshRepair: DshRuntime.Repair? {
+        guard executesDsh, sessionStatus == .pending else { return nil }
+        return DshRuntime.repair(sessionError)
+    }
+
+    /// The card this session's page draws when no engine ever ran on it — a refused SOURCE, or a
+    /// machine-side reason with nothing behind it. Nil when this console has nothing to say (see
+    /// `SessionRunStart`), which is also how the two engine cards above stay the only card for the
+    /// engines they own.
+    var runStart: SessionRunStart.Card? {
+        SessionRunStart.card(error: sessionError, sourceState: sessionSourceState,
+                             sourceRefusalCode: sessionSourceRefusalCode,
+                             sourceRefusalDetail: sessionSourceRefusalDetail,
+                             status: sessionStatus, runnerName: runnerName, runnerVersion: runnerVersion)
+    }
+
+    /// "Start it again" for a refused run: SR34's recovery, which is a NEW run on the task — a
+    /// refused session never re-resolves. The same door the task page's Run press uses, with this
+    /// press's own trigger id (the server's idempotency name for one ask).
+    func startRefusedRunAgain() async {
+        guard let taskID, !startingRun else { return }
+        startingRun = true
+        defer { startingRun = false }
+        do {
+            try await api.executeTask(taskID, triggerId: PublicID.newToken())
+            showTransientStatus("Starting a new run…")
+        } catch {
+            statusMessage = "Couldn't start it again — \(APIClient.failureReason(error))."
+        }
+    }
+
+    /// Hand the composer a reply about this run, the way every other card's "Chat about this" does.
+    func chatAboutRunStart() {
+        composerText = "About this run: "
+    }
+
+    var canInstallDsh: Bool {
+        runnerID != nil && runnerOnline == true && runnerCapabilities?.contains(DshRuntime.runnerCapability) == true
+            && !antigravityInstalling && runnerInstall?.inFlight != true
+    }
+
+    /// Where a Harness key is fixed: the session's own key row in the web app's Providers, or the
+    /// connect form when the account has none. These clients do not edit keys themselves.
+    func dshKeyURL() async -> URL {
+        let keys = try? await api.personalProviders()
+        if let key = keys?.first(where: { $0.slug == provider && $0.runtime == "dsh" }) ?? keys?.first(where: { $0.runtime == "dsh" }),
+           let id = key.providerID {
+            return api.baseURL.appendingPathComponent("providers/\(id)")
+        }
+        return api.baseURL.appendingPathComponent("providers/new/\(DshRuntime.presetSlug)")
+    }
+
+    /// The web page a picker row's `fixEngine` is fixed on, or nil when the fix is this runner's
+    /// own Engines section: Antigravity's and Harness's rows are fixed in Providers.
+    func webFixURL(engine: String, runnerID: String) -> URL? {
+        if engine == DshRuntime.connectFix {
+            return api.baseURL.appendingPathComponent("providers/new/\(DshRuntime.presetSlug)")
+        }
+        return engine == "antigravity" || engine == "dsh" ? providersURL(engine: engine, runnerID: runnerID) : nil
+    }
+
+    func installDsh() async {
+        guard let runnerID, canInstallDsh else { return }
+        antigravityInstalling = true
+        defer { antigravityInstalling = false }
+        do {
+            runnerInstall = try await api.installDsh(runnerID)
+            showTransientStatus("Installing DeepSeek Harness…")
+        } catch { statusMessage = "Couldn't install DeepSeek Harness — \(APIClient.failureReason(error))." }
     }
 
     var executesAntigravity: Bool {
@@ -208,6 +313,10 @@ final class ConsoleModel {
     /// Nil unless the user picked one here: the session's own provider must never be re-asserted
     /// from a console whose context has not loaded yet.
     private(set) var pendingResumeProvider: String?
+    /// The provider the session itself is stored on, kept only while a held pick has replaced
+    /// `provider` (`pendingResumeProvider`). What is running and what is coming are two different
+    /// facts then, and the model menu's title says both.
+    private(set) var pendingResumeFrom: String?
     /// The account of the engine `pendingResumeProvider` moves the session onto, picked under it in the
     /// Provider submenu — sent with that switch on the revive (`ResumeRequest.account`).
     private(set) var pendingResumeAccount: String?
@@ -256,6 +365,17 @@ final class ConsoleModel {
     /// (auto-scroll, sticky-header recompute) observe this O(1) counter instead of an
     /// `onChange(of: state.items)` that Equatable-compares the whole item array every publish.
     private(set) var stateRevision = 0
+    /// The rows' clocks for the `state` published at `stateRevision` (`ReceiptAnchor.Clocks`). The
+    /// console's body places records on every update — `TranscriptRows.build` and the needs-you bar
+    /// both — and reading every row's clock again for each was the idle console's main cost; a
+    /// published state's clocks never change, so they are read once per publish.
+    @ObservationIgnored private var clocksCache: (revision: Int, clocks: ReceiptAnchor.Clocks)?
+    var receiptClocks: ReceiptAnchor.Clocks {
+        if let cached = clocksCache, cached.revision == stateRevision { return cached.clocks }
+        let clocks = ReceiptAnchor.Clocks(state.items)
+        clocksCache = (stateRevision, clocks)
+        return clocks
+    }
     /// Bumped whenever the LOCAL user sends a message from this console. The transcript observes it
     /// to force a scroll to the live tail on send — even when the user had scrolled up to read
     /// history (the `stateRevision` follow only re-pins while already at the bottom). Web parity:
@@ -321,6 +441,8 @@ final class ConsoleModel {
     /// Keeps the composer's contents put and the send button spinning until the ids land.
     private(set) var waitingForUploads = false
     private(set) var sending = false
+    /// A "Start it again" on a refused run is in flight: one press, one new run.
+    private(set) var startingRun = false
     /// True from the moment the user sends a message until the agent's first output for that turn
     /// lands (or the send fails). Bridges the window where the POST has returned but the live
     /// `RUNNING` status hasn't arrived yet, so the tail "working" indicator doesn't blink off in
@@ -351,9 +473,11 @@ final class ConsoleModel {
     /// and none at all while no account can be named.
     var planUsage: PlanUsageSnapshot? {
         if currentPool != nil { return poolAccount?.member.planUsage }
-        // A built-in Codex or Claude session spends one of the runner's accounts — the one it runs on.
-        if let engine = accountEngine, account(for: engine) != CodexAccounts.defaultID {
-            return CodexAccounts.snapshot(runnerPlanUsage?.snapshot(for: engine), account: account(for: engine))
+        // A built-in Codex, Claude or Antigravity session spends one of the runner's accounts — the one
+        // it runs on. Antigravity's Default too: its quota is never in the runner's own report, only
+        // with its engine's health (`engineUsage`), and a Default on the machine's Gemini key has none.
+        if let engine = accountEngine, engine == "antigravity" || account(for: engine) != CodexAccounts.defaultID {
+            return CodexAccounts.snapshot(engineUsage(engine), account: account(for: engine))
         }
         return AgentDefaults.planUsage(for: provider, runner: runnerPlanUsage,
                                        configured: configuredProviders)
@@ -368,12 +492,13 @@ final class ConsoleModel {
     }
 
     /// Whether the usage sheet should reserve room for the reset card. Unsupported/auth-unknown
-    /// answers stay hidden just like the web card; CREDITS_UNAVAILABLE remains visible with a reason.
+    /// answers and zero credits stay hidden; CREDITS_UNAVAILABLE remains visible with a reason.
     var codexResetCardVisible: Bool {
         guard let block = codexResetBlock,
               Self.isCodexResetBlockValid(block),
               let fingerprint = block.accountFingerprint,
-              Self.isCodexResetFingerprint(fingerprint) else { return false }
+              Self.isCodexResetFingerprint(fingerprint),
+              block.rateLimitResetCredits?.availableCount != 0 else { return false }
         return block.support == "SUPPORTED" || block.support == "CREDITS_UNAVAILABLE"
     }
 
@@ -532,14 +657,19 @@ final class ConsoleModel {
         default: return nil
         }
     }
-    /// The engine whose account this draft or session names: the built-in Codex or Claude engine, not
-    /// an account pool. Nil for everything else.
+    /// The engine whose account this draft or session names: the built-in Codex, Claude or Antigravity
+    /// engine, not an account pool. Nil for everything else.
     var accountEngine: String? {
-        currentPool == nil && (provider == "codex" || provider == "claude") ? provider : nil
+        currentPool == nil && RunnerPageFormat.keepsAccounts(provider) ? provider : nil
     }
     /// The runner's accounts of `engine`, as its heartbeat reports them.
     func engineAccounts(_ engine: String) -> [RunnerEngineAccount] {
         runnerEngines?.first { $0.engine == engine }?.accounts ?? []
+    }
+    /// The snapshot the runner's accounts of `engine` read their quota from (`CodexAccounts.usage`):
+    /// Antigravity's travels with its engine health rather than in the runner's plan usage.
+    private func engineUsage(_ engine: String) -> PlanUsageSnapshot? {
+        CodexAccounts.usage(engine, planUsage: runnerPlanUsage, engines: runnerEngines)
     }
     /// The runner's Codex accounts, as its heartbeat reports them.
     var codexAccounts: [RunnerEngineAccount] { engineAccounts("codex") }
@@ -550,37 +680,68 @@ final class ConsoleModel {
         if isDraft {
             return CodexAccounts.automaticOffered(engine: engine, agent: draftAgent, accounts: engineAccounts(engine))
         }
-        return CodexAccounts.automaticOffered(engine: engine,
-                                              pick: engine == "claude" ? workspaceClaudeAccount : workspaceCodexAccount,
+        return CodexAccounts.automaticOffered(engine: engine, pick: workspaceAccount(engine),
                                               env: workspaceEnv, accounts: engineAccounts(engine))
     }
     /// The account picked for this draft under `engine`, if any.
-    func draftAccount(_ engine: String) -> String? { engine == "claude" ? draftClaudeAccount : draftCodexAccount }
+    func draftAccount(_ engine: String) -> String? {
+        switch engine {
+        case "claude": return draftClaudeAccount
+        case "antigravity": return draftAntigravityAccount
+        default: return draftCodexAccount
+        }
+    }
+    /// This session's own account of `engine`, from its detail.
+    private func sessionAccount(_ engine: String) -> String? {
+        switch engine {
+        case "claude": return sessionClaudeAccount
+        case "antigravity": return sessionAntigravityAccount
+        default: return sessionCodexAccount
+        }
+    }
+    /// Whether that account was picked for it by hand, which keeps it there.
+    private func sessionAccountPinned(_ engine: String) -> Bool {
+        switch engine {
+        case "claude": return sessionClaudeAccountPinned
+        case "antigravity": return sessionAntigravityAccountPinned
+        default: return sessionCodexAccountPinned
+        }
+    }
+    /// The session's workspace's account of `engine`, from the session's detail.
+    private func workspaceAccount(_ engine: String) -> String? {
+        switch engine {
+        case "claude": return workspaceClaudeAccount
+        case "antigravity": return workspaceAntigravityAccount
+        default: return workspaceCodexAccount
+        }
+    }
     /// This draft starts `engine` on Automatic: it is on offer and no account is picked.
     func draftAutomatic(_ engine: String) -> Bool { isDraft && automaticOffered(engine) && draftAccount(engine) == nil }
     /// This session is on Automatic: nobody picked its account by hand, and its workspace leaves the
     /// account to Orbit — so it moves to an account with room when the one it is on hits its limit. An
     /// ended session's held switch onto the engine says so itself.
     var sessionAutomatic: Bool {
-        guard !isDraft, let engine = accountEngine else { return false }
+        guard let engine = accountEngine else { return false }
+        // A draft is on it as it will start: Automatic on offer and no account picked.
+        if isDraft { return draftAutomatic(engine) }
         if pendingResumeProvider == engine && !isLive {
             return automaticOffered(engine)
                 && (pendingResumeAccount == nil || pendingResumeAccount == CodexAccounts.automaticID)
         }
-        return automaticOffered(engine) && !(engine == "claude" ? sessionClaudeAccountPinned : sessionCodexAccountPinned)
+        return automaticOffered(engine) && !sessionAccountPinned(engine)
     }
     /// Where an ended session's held switch onto `engine` resumes, as the server decides it
     /// (accountOnProviderSwitch): the account it names; else, unless the session is pinned there,
     /// Automatic's pick; else where it already was.
     private func pendingEngineAccount(_ engine: String) -> String? {
         if let named = pendingResumeAccount, named != CodexAccounts.automaticID { return named }
-        let own = engine == "claude" ? sessionClaudeAccount : sessionCodexAccount
-        let pinned = engine == "claude" ? sessionClaudeAccountPinned : sessionCodexAccountPinned
+        let own = sessionAccount(engine)
+        let pinned = sessionAccountPinned(engine)
         if pinned && pendingResumeAccount == nil { return own }
         if automaticOffered(engine) {
-            return CodexAccounts.toStartOn(engineAccounts(engine), usage: runnerPlanUsage?.snapshot(for: engine))
+            return CodexAccounts.toStartOn(engineAccounts(engine), usage: engineUsage(engine))
         }
-        return own ?? (engine == "claude" ? workspaceClaudeAccount : workspaceCodexAccount)
+        return own ?? workspaceAccount(engine)
     }
     /// The `engine` account this draft or session runs on, as far as its runner reports it: a draft's
     /// pick, else its workspace's, else the one Automatic would choose now; a session's own, else its
@@ -588,27 +749,39 @@ final class ConsoleModel {
     func account(for engine: String) -> String {
         let wanted: String?
         if isDraft {
-            wanted = draftAccount(engine) ?? (engine == "claude" ? draftAgent?.claudeAccount : draftAgent?.codexAccount)
+            wanted = draftAccount(engine) ?? CodexAccounts.workspaceAccount(engine, of: draftAgent)
                 ?? (draftAutomatic(engine)
-                    ? CodexAccounts.toStartOn(engineAccounts(engine), usage: runnerPlanUsage?.snapshot(for: engine))
+                    ? CodexAccounts.toStartOn(engineAccounts(engine), usage: engineUsage(engine))
                     : nil)
         } else if pendingResumeProvider == engine && !isLive {
             // Only while it is held: once the revive lands the session is live and says itself.
             wanted = pendingEngineAccount(engine)
         } else {
-            wanted = engine == "claude"
-                ? (sessionClaudeAccount ?? workspaceClaudeAccount)
-                : (sessionCodexAccount ?? workspaceCodexAccount)
+            wanted = sessionAccount(engine) ?? workspaceAccount(engine)
         }
         return CodexAccounts.onRunner(wanted, accounts: engineAccounts(engine))
     }
     /// The Codex account this draft or session runs on (`account(for:)`).
     var codexAccount: String { account(for: "codex") }
     /// Which of the runner's accounts this session spends, named in the quota gauge's detail. Nil
-    /// unless it is on the built-in Codex or Claude engine and the runner has several.
+    /// unless it is on a built-in engine that keeps accounts (`accountEngine`) and the runner has several.
     var accountLabel: String? {
         guard let engine = accountEngine, engineAccounts(engine).count >= 2 else { return nil }
         return CodexAccounts.label(account(for: engine), accounts: engineAccounts(engine))
+    }
+    /// The same name for a session on a pool (`poolAccount`): the account its last claim recorded,
+    /// under the same rule — said only when the pool holds more than one to tell apart. Nil for a
+    /// session on no pool, one on a single-account pool, and one whose pool names no member.
+    ///
+    /// The footer has room for this name beside the gauge on a Mac, and the pool's own name is the
+    /// model control's provider row; this is what carries it into the gauge's detail as well, which is
+    /// the only place a phone's Plan usage sheet has room for it.
+    var poolAccountLabel: String? {
+        guard let pool = currentPool, let account = poolAccount else { return nil }
+        let accounts = CodexLoginPool.isLoginPool(pool)
+            ? CodexLoginPool.logins(pool).count
+            : pool.members.count
+        return accounts > 1 ? account.member.label : nil
     }
     /// The line under that name: on a draft nothing picked an account for, how it came to that one;
     /// on a session on Automatic whose runner can move it, that it moves.
@@ -619,30 +792,31 @@ final class ConsoleModel {
             ? "Automatic — moves to another account when this one hits its limit" : nil
     }
     /// Whether the model menu's Provider submenu lists the runner's accounts of this session's engine
-    /// to move between (web parity): a session, not a draft — the new-session picker offers them there
-    /// — on a runner with two or more that carries a conversation from one to another.
+    /// to move between (web parity): two or more of them — for a session, on a runner that carries a
+    /// conversation from one to another (`CodexAccounts.moveCapability`); a draft has no conversation
+    /// to carry, so it starts on any.
     var accountRowsOffered: Bool {
-        guard !isDraft, let engine = accountEngine, engineAccounts(engine).count >= 2 else { return false }
-        let capability = engine == "claude" ? "claude-account-move/v1" : "codex-account-move/v1"
-        return runnerCapabilities?.contains(capability) ?? false
+        guard let engine = accountEngine, engineAccounts(engine).count >= 2 else { return false }
+        if isDraft { return true }
+        return runnerCapabilities?.contains(CodexAccounts.moveCapability(engine)) ?? false
     }
     /// Those rows, each with its own quota (`SessionProviderChoices.accountChoices`).
     var accountChoices: [AccountChoice] {
         guard accountRowsOffered, let engine = accountEngine else { return [] }
-        return SessionProviderChoices.accountChoices(engineAccounts(engine),
-                                                     usage: runnerPlanUsage?.snapshot(for: engine)) ?? []
+        return SessionProviderChoices.accountChoices(runnerEngines?.first(where: { $0.engine == engine }),
+                                                     usage: engineUsage(engine)) ?? []
     }
-    /// Another built-in engine's accounts, listed under it in the Provider submenu as the new-session
-    /// picker lists them (web parity): a switch onto that engine can land on any of them. A session, on
-    /// a runner that carries a conversation between them, with two or more to choose from.
+    /// Another built-in engine's accounts, listed under it in the Provider submenu as the engine's own
+    /// are (web parity): a switch onto that engine can land on any of them. Two or more to choose from
+    /// — for a session, on a runner that carries a conversation between them.
     func accountChoices(for engine: String) -> [AccountChoice] {
-        guard !isDraft, engine == "codex" || engine == "claude", engineAccounts(engine).count >= 2 else { return [] }
-        let capability = engine == "claude" ? "claude-account-move/v1" : "codex-account-move/v1"
-        guard runnerCapabilities?.contains(capability) ?? false else { return [] }
-        return SessionProviderChoices.accountChoices(engineAccounts(engine),
-                                                     usage: runnerPlanUsage?.snapshot(for: engine)) ?? []
+        guard RunnerPageFormat.keepsAccounts(engine), engineAccounts(engine).count >= 2 else { return [] }
+        guard isDraft || (runnerCapabilities?.contains(CodexAccounts.moveCapability(engine)) ?? false) else { return [] }
+        return SessionProviderChoices.accountChoices(runnerEngines?.first(where: { $0.engine == engine }),
+                                                     usage: engineUsage(engine)) ?? []
     }
     private(set) var modelCatalog: RunnerModelCatalog?
+    private var runtimeDefaultModels: [String: String]?
     /// What the session's runner last reported about each engine CLI it can host. A provider
     /// choice is a claim about that machine, so the picker greys out what it says can't run there.
     /// Nil until the runner read lands (and from an older server), which claims nothing.
@@ -670,7 +844,7 @@ final class ConsoleModel {
     /// the endpoint.
     private(set) var configuredProviders: [ConfiguredProvider] = []
     private var configuredProvidersLoaded = false
-    /// The user's account pools (GET /providers/pools): the new-session picker's pool rows, and which
+    /// The user's account pools (GET /providers/pools): the Provider menu's pool rows, and which
     /// of a pool's accounts a session on one is spending. Each also rides in `configuredProviders`
     /// (`ProviderPools.asProviders`), where a pool's name, runtime and models resolve from. Loaded
     /// with them; an older server without the route leaves it empty.
@@ -689,6 +863,10 @@ final class ConsoleModel {
     /// The same read on a shared pool, whose claim names the key it chose (`session.poolKeyId`)
     /// rather than one of the viewer's own accounts.
     private(set) var poolKeyID: String?
+    /// On a Codex pool of one's own ChatGPT accounts: the account this session runs on, as the
+    /// masked view the session detail carries (`session.poolCodexLogin`) — the pool's members never
+    /// record one. Only a detail read sets it, like the two above.
+    private(set) var poolCodexLogin: CodexLogin?
 
     /// The pool this session or draft runs on, if its provider is one.
     var currentPool: ProviderPool? { allPools.first { $0.slug == provider } }
@@ -697,6 +875,14 @@ final class ConsoleModel {
     /// next claim picks. Nil once the recorded member has left the pool: nobody is guessed.
     var poolAccount: PoolAccount? {
         guard let pool = currentPool else { return nil }
+        // A login pool's session records the ChatGPT account it runs on (`session.poolCodexLogin`),
+        // and names that — not the pool's `next` member, which is the answer for a session starting
+        // now: with the pool's oldest account spent there is no next, while the session runs on that
+        // very account (web parity).
+        if !isDraft, CodexLoginPool.isLoginPool(pool), let login = poolCodexLogin,
+           let member = CodexLoginPool.sessionMember(in: pool, login: login) {
+            return PoolAccount(member: member, current: true)
+        }
         // A shared pool's session records the key its claim chose; an account pool's the account.
         let memberID = isDraft ? nil : (pool.shared != nil ? poolKeyID : poolMemberProviderID)
         return ProviderPools.sessionAccount(in: pool, memberID: memberID)
@@ -726,7 +912,31 @@ final class ConsoleModel {
     /// to send, so it belongs next to the input and stays until the ✕. Fleeting confirmations must
     /// *not* land here: the line is in-flow, so each one reflowed the composer up and back down
     /// mid-typing. They go to the app's toast host instead — see `showTransientStatus`.
-    var statusMessage: String?
+    var statusMessage: String? {
+        didSet { statusMessageRevision += 1 }
+    }
+    /// A repeated failure is a new notice even when its text matches an earlier attempt.
+    private(set) var statusMessageRevision = 0
+
+    /// The approval decisions this window has sent, by approval id, and how far each has got.
+    ///
+    /// The one fact a view cannot get back out of the pending list: an approval that is gone looks
+    /// the same whether somebody else answered it or the reader just did, and reading the second
+    /// case as the first is the one reading of its own press a window can be sure is wrong (the
+    /// same defect `decideCriteria` closes its card for). The review sheet reads this to leave with
+    /// the reader's own press instead of reporting it back to them as news.
+    ///
+    /// `decide` writes `.sending` with the optimistic removal and `.sent` only once the door has
+    /// taken it; a refusal clears the entry, because then the card the re-seed brings back is the
+    /// live answer, and the status line above the composer says why.
+    private(set) var approvalAnswers: [String: ApprovalAnswerPhase] = [:]
+
+    enum ApprovalAnswerPhase: Equatable {
+        /// Pressed, optimistically removed, and not yet answered by the door.
+        case sending
+        /// The door took it. The card is not coming back.
+        case sent
+    }
     /// Sink for a session outcome — the app's toast host, injected by `ConsoleRegistry`.
     @ObservationIgnored var onToast: (ToastRequest) -> Void = { _ in }
     /// Local `/status` results belong in the conversation, not the error/info banner above the
@@ -842,6 +1052,21 @@ final class ConsoleModel {
             for: provider, model: defaultModel, catalog: modelCatalog,
             configured: configuredProviders)
         wireWorktree()
+    }
+
+    /// Seed a console opened from a list before its first frame. The list already owns the config;
+    /// the cached runner/provider catalogs name it without waiting for `loadContext`'s REST reads.
+    func seedSessionContext(_ session: Session, modelCatalog: RunnerModelCatalog?,
+                            runtimeDefaultModels: [String: String]?,
+                            configuredProviders: [ConfiguredProvider], configuredProvidersLoaded: Bool,
+                            providerPools: [ProviderPool], sharedPools: [SharedPool]) {
+        self.modelCatalog = modelCatalog
+        self.runtimeDefaultModels = runtimeDefaultModels
+        self.providerPools = providerPools
+        self.sharedPools = sharedPools
+        self.configuredProviders = configuredProviders + ProviderPools.asProviders(allPools)
+        self.configuredProvidersLoaded = configuredProvidersLoaded
+        adoptSessionConfiguration(session)
     }
 
     /// Seed the live composer's first frame before the draft opens it. The create response owns
@@ -1498,6 +1723,7 @@ final class ConsoleModel {
         runnerHeartbeatDraining = runner.heartbeatDraining
         runnerPlanUsage = runner.planUsage
         modelCatalog = runner.modelCatalog
+        runtimeDefaultModels = runner.runtimeDefaultModels
         runnerEngines = runner.engines
         runnerAntigravity = runner.antigravity
         runnerVersion = runner.version
@@ -1512,6 +1738,7 @@ final class ConsoleModel {
         runnerHeartbeatDraining = nil
         runnerPlanUsage = nil
         modelCatalog = nil
+        runtimeDefaultModels = nil
         runnerEngines = nil
         runnerAntigravity = nil
         runnerVersion = nil
@@ -1555,43 +1782,23 @@ final class ConsoleModel {
         taskID = s.taskId
         ownerReadMoment = runMoment(s)
         if taskID != nil { Task { [weak self] in await self?.refreshOwnerConfirmation() } }
-        provider = s.provider ?? "claude"
         poolMemberProviderID = s.poolMemberProviderId
         poolKeyID = s.poolKeyId
+        poolCodexLogin = s.poolCodexLogin
         sessionCodexAccount = s.codexAccount
         workspaceCodexAccount = s.agent?.codexAccount
         sessionClaudeAccount = s.claudeAccount
         workspaceClaudeAccount = s.agent?.claudeAccount
         sessionCodexAccountPinned = s.codexAccountPinned ?? false
         sessionClaudeAccountPinned = s.claudeAccountPinned ?? false
+        sessionAntigravityAccount = s.antigravityAccount
+        workspaceAntigravityAccount = s.agent?.antigravityAccount
+        sessionAntigravityAccountPinned = s.antigravityAccountPinned ?? false
         workspaceEnv = s.agent?.env
         workspaceAntigravityKeys = s.agent?.antigravityKeyAvailableByRunner
 
-        // A historical Session.model is authoritative and can be adopted immediately. If the user
-        // already touched the picker while the session request was in flight, their explicit value
-        // wins and no later context request may replace it.
-        if modelSelectionRevision.isPristine {
-            modelID = s.model ?? AgentDefaults.defaultModel(for: provider)
-        }
-        // A stored mode is adopted verbatim; a session with none (task- or MCP-created) resolves
-        // exactly as the server will — account default, else the floor. Web parity
-        // (`effectivePermissionMode`).
-        permissionMode = AgentDefaults.resolvePermissionMode(
-            session: s.permissionMode, accountDefault: accountDefaultPermissionMode())
-        if let ef = s.effort ?? s.agent?.effort, let e = Effort(rawValue: ef) {
-            effort = AgentDefaults.normalizeEffort(e, for: provider)
-        } else {
-            effort = .default
-        }
-        // Fast mode is stored, never inherited from the agent: a session either is in the lane or
-        // is not, and an absent field (older server, or one that never set it) is off.
-        fastMode = s.fastMode == true
+        adoptSessionConfiguration(s)
         let live = ComposerLogic.isLive(status: s.effectiveRunStatus)
-        // When the session already stores a model, this is a complete server baseline before the
-        // slower optional Runner/provider reads. A manual pick can now PATCH against it safely.
-        if live, s.model != nil, modelSelectionRevision.isPristine {
-            syncedConfig = (modelID, permissionMode.rawValue, effort.rawValue, fastMode)
-        }
 
         // Plan usage + Runtime model/default data ride the GET /runners list. A request failure is
         // merely unavailable data and must retain the model already on screen.
@@ -1654,18 +1861,45 @@ final class ConsoleModel {
         }
     }
 
+    /// List seeds and the later detail read resolve the same settings. A model-less session keeps
+    /// using the cached Runtime default while the runner refresh is in flight.
+    private func adoptSessionConfiguration(_ session: Session) {
+        provider = session.provider ?? "claude"
+        // A picker edit made while REST was in flight always wins over the server's seed.
+        if modelSelectionRevision.isPristine {
+            modelID = session.model ?? AgentDefaults.effectiveDefaultModel(
+                for: provider, catalog: modelCatalog, configured: configuredProviders,
+                runtimeDefaults: runtimeDefaultModels)
+        }
+        permissionMode = AgentDefaults.resolvePermissionMode(
+            session: session.permissionMode, accountDefault: accountDefaultPermissionMode())
+        effort = AgentDefaults.normalizeEffort(
+            Effort(rawValue: session.effort ?? session.agent?.effort ?? "") ?? .default,
+            for: provider)
+        // Fast mode belongs to the session; it is never inherited from the workspace.
+        fastMode = session.fastMode == true
+        if ComposerLogic.isLive(status: session.effectiveRunStatus), session.model != nil,
+           modelSelectionRevision.isPristine {
+            syncedConfig = (modelID, permissionMode.rawValue, effort.rawValue, fastMode)
+        }
+    }
+
     /// Adopt a fresh list/detail snapshot too. The app's control-plane-driven list refresh carries
     /// heartbeat-derived capability changes, so an open console needn't keep an older denial.
     func adoptServerSnapshot(_ session: Session?) {
         guard let session, session.id == sessionID else { return }
         serverStatus = session.effectiveRunStatus
         sessionError = session.error
+        sessionSourceState = session.sourceState
+        sessionSourceRefusalCode = session.sourceRefusalCode
+        sessionSourceRefusalDetail = session.sourceRefusalDetail
         if let keys = session.agent?.antigravityKeyAvailableByRunner { workspaceAntigravityKeys = keys }
         serverCapabilities = session.capabilities
         // What this row says it is waiting on the owner for moves before any card here does: a
         // coordinator asking to start its project lands on its row as a count (`waitingKind`
         // START_REQUEST), and the card that asks it is drawn from the read this kicks.
         let waiting = "\(session.pendingApprovals ?? 0)|\(session.waitingKind?.rawValue ?? "")"
+        sessionWaitingKind = session.waitingKind
         if waiting != waitingSignal {
             waitingSignal = waiting
             if projectID != nil {
@@ -1716,12 +1950,16 @@ final class ConsoleModel {
         adoptServerSnapshot(s)
         poolMemberProviderID = s.poolMemberProviderId
         poolKeyID = s.poolKeyId
+        poolCodexLogin = s.poolCodexLogin
         sessionCodexAccount = s.codexAccount
         workspaceCodexAccount = s.agent?.codexAccount
         sessionClaudeAccount = s.claudeAccount
         workspaceClaudeAccount = s.agent?.claudeAccount
         sessionCodexAccountPinned = s.codexAccountPinned ?? false
         sessionClaudeAccountPinned = s.claudeAccountPinned ?? false
+        sessionAntigravityAccount = s.antigravityAccount
+        workspaceAntigravityAccount = s.agent?.antigravityAccount
+        sessionAntigravityAccountPinned = s.antigravityAccountPinned ?? false
         workspaceEnv = s.agent?.env
         workspaceAntigravityKeys = s.agent?.antigravityKeyAvailableByRunner
         return true
@@ -1746,21 +1984,22 @@ final class ConsoleModel {
     }
 
     /// Where this session could move without changing CLI, for the composer's Provider menu.
-    /// Offered on the two routes that actually carry a provider: a live session's config PATCH and
-    /// the resume that revives an ended one. A draft picks in the new-session hero instead (which
-    /// offers every runtime, not one), and `availability` excludes an ended session that cannot be
-    /// revived at all — `canSend` already folds "terminal and not resumable" into `.blocked`. One
-    /// entry means there is nowhere to go, and the composer omits the menu entirely — the common
-    /// case of a single sign-in and no configured providers.
+    /// Offered on the three routes that actually carry a provider: a live session's config PATCH, the
+    /// resume that revives an ended one, and a draft's create — whose engine the new-session hero
+    /// picks, so here too it is the same-runtime slice. `availability` excludes an ended session that
+    /// cannot be revived at all — `canSend` already folds "terminal and not resumable" into
+    /// `.blocked`. One entry means there is nowhere to go, and the composer omits the menu entirely —
+    /// the common case of a single sign-in and no configured providers.
     var providerSwitchChoices: [ProviderChoice] {
-        guard !isDraft, isLive || availability != .blocked else { return [] }
+        guard isDraft || isLive || availability != .blocked else { return [] }
         return SessionProviderChoices.sameRuntime(
-            provider,
+            providerChoice,
             in: SessionProviderChoices.choices(configured: configuredProviders,
                                                catalog: modelCatalog, engines: runnerEngines,
                                                pools: allPools,
                                                antigravity: runnerAntigravity,
-                                               antigravityKeyAvailable: antigravityKeyAvailable),
+                                               antigravityKeyAvailable: antigravityKeyAvailable,
+                                               dshState: dshRunnerState),
             configured: configuredProviders,
             catalog: modelCatalog,
             antigravity: runnerAntigravity)
@@ -1776,9 +2015,24 @@ final class ConsoleModel {
     /// engine's own row: the switch lands the session there (`ConfigUpdateRequest.account`) —
     /// Automatic's pick otherwise.
     func selectProvider(_ slug: String, account: String? = nil) async {
-        guard !isDraft else { return }
-        if slug == provider {
+        if isDraft {
+            // A draft holds the pick for its create (`pickDraftProvider` re-seeds what follows it);
+            // a blocked row is refused here as below.
+            guard providerSwitchChoices.first(where: { $0.slug == slug })?.unavailable == nil else { return }
+            if let account { pickDraftAccount(slug, account == CodexAccounts.automaticID ? nil : account) }
+            else { pickDraftProvider(slug) }
+            return
+        }
+        if slug == providerChoice {
             if let account { await switchAccount(account) }
+            return
+        }
+        // Within OpenCode a key is part of the model (`OpenCodeKeys`), so moving between its own config
+        // and its keys is a model change, onto the default of the one picked (web parity).
+        if provider == "opencode", slug == "opencode" || OpenCodeKeys.choiceKey(slug) != nil {
+            let next = AgentDefaults.defaultModel(for: slug, catalog: modelCatalog, configured: configuredProviders)
+            let clamped = selectModel(next)
+            await applyConfig(model: next, permissionMode: clamped ? permissionMode.rawValue : nil)
             return
         }
         // Read before the assignment below, because what the note is ABOUT is the move from one to
@@ -1804,6 +2058,10 @@ final class ConsoleModel {
                                                         catalog: modelCatalog,
                                                         configured: configuredProviders)
         providerSwitchNote = TaskRunHandoff.providerSwitchNote(from: from, to: slug, liveRun: isLive)
+        // A held pick replaces `provider` before the resume carries it, so remember what the session
+        // is actually on for as long as the pick stands: the model menu's title reads the pair
+        // (`SessionProviderChoices.engineTitle`), and only the stored half can name what is running.
+        if !isLive, pendingResumeProvider == nil { pendingResumeFrom = from }
         provider = slug
         if nextModel != modelID {
             modelID = nextModel
@@ -1820,40 +2078,46 @@ final class ConsoleModel {
         // here would silently re-assert itself on some later resume of this same console.
         pendingResumeProvider = nil
         pendingResumeAccount = nil
+        pendingResumeFrom = nil
         await applyConfig(model: nextModel, permissionMode: nextMode.rawValue,
                           effort: nextEffort.rawValue, provider: slug, account: account)
     }
 
-    /// Pick a provider for this draft (the new-session hero). Each provider owns its own model
+    /// Pick a provider for this draft (an engine on the new-session hero, or a provider of it in the
+    /// composer's Provider menu). Each provider owns its own model
     /// space, so the model can't survive the switch — it is re-seeded from the incoming provider's
     /// remembered model or default, and the mode/effort pills are re-clamped to what it accepts. The seed is
     /// marked pristine again on purpose: a model chosen for the outgoing provider is not a choice
     /// about this one, and keeping it would pin an id the new provider may not even offer.
     func pickDraftProvider(_ slug: String) {
-        guard isDraft, slug != provider else { return }
-        draftProviderOverride = slug
-        provider = slug
+        guard isDraft, slug != providerChoice else { return }
+        // A key run on OpenCode creates the session on `opencode`; the key rides in its model.
+        let engine = OpenCodeKeys.choiceKey(slug) == nil ? slug : "opencode"
+        draftChoice = engine == slug ? nil : slug
+        draftProviderOverride = engine
+        provider = engine
         modelID = draftModelSeed(AgentDefaults.defaultModel(
             for: slug, catalog: modelCatalog, configured: configuredProviders))
         modelSelectionRevision = ModelSelectionRevision()
         if providerCapabilitiesResolved {
             permissionMode = AgentDefaults.clampPermissionMode(
-                permissionMode, for: modelID, provider: slug, configured: configuredProviders,
+                permissionMode, for: modelID, provider: engine, configured: configuredProviders,
                 catalog: modelCatalog)
         }
-        effort = AgentDefaults.normalizedEffort(effort, for: slug, model: modelID,
+        effort = AgentDefaults.normalizedEffort(effort, for: engine, model: modelID,
                                                 catalog: modelCatalog,
                                                 configured: configuredProviders)
     }
 
     /// Pick one of the runner's accounts of `slug` for this draft — or Automatic (`nil`) — from the rows
-    /// under that engine in the new-session picker. Picks the engine too, when it isn't the one
+    /// under that engine in the composer's Provider menu. Picks the engine too, when it isn't the one
     /// picked. Like the provider, it binds the session being drafted and rewrites no workspace setting.
     func pickDraftAccount(_ slug: String, _ account: String?) {
         guard isDraft else { return }
-        if slug != provider { pickDraftProvider(slug) }
+        if slug != providerChoice { pickDraftProvider(slug) }
         draftCodexAccount = slug == "codex" ? account : nil
         draftClaudeAccount = slug == "claude" ? account : nil
+        draftAntigravityAccount = slug == "antigravity" ? account : nil
     }
 
     /// Move this session to another of its runner's accounts — which pins it there — or back onto
@@ -1861,7 +2125,12 @@ final class ConsoleModel {
     /// re-spawns a live engine on it once no turn is in flight, and the runner carries the
     /// conversation across; an ended session takes it with its next resume.
     func switchAccount(_ account: String) async {
-        guard !isDraft, let engine = accountEngine else { return }
+        guard let engine = accountEngine else { return }
+        // A draft starts on it: nothing on the server yet, so the pick rides on the create.
+        if isDraft {
+            pickDraftAccount(engine, account == CodexAccounts.automaticID ? nil : account)
+            return
+        }
         // An ended session whose switch onto this engine is still held: nothing on the server is on
         // the engine yet, so the account rides along with the switch, on the message that revives it.
         if pendingResumeProvider == engine && !isLive {
@@ -1909,7 +2178,7 @@ final class ConsoleModel {
             // resolve the picked provider's own default instead of dragging the agent's back in.
             let fallback = draftProviderOverride == nil
                 ? defaultModel
-                : AgentDefaults.defaultModel(for: provider, catalog: modelCatalog,
+                : AgentDefaults.defaultModel(for: providerChoice, catalog: modelCatalog,
                                              configured: configuredProviders)
             modelID = draftModelSeed(fallback)
         }
@@ -1926,7 +2195,7 @@ final class ConsoleModel {
 
     private func draftModelSeed(_ fallback: String, runtimeDefaults: [String: String]? = nil) -> String {
         AgentDefaults.newSessionModel(
-            for: provider, accountModels: accountDefaultModels(), fallback: fallback,
+            for: providerChoice, accountModels: accountDefaultModels(), fallback: fallback,
             catalog: modelCatalog, configured: configuredProviders, runtimeDefaults: runtimeDefaults)
     }
 
@@ -1999,7 +2268,8 @@ final class ConsoleModel {
     /// The catalog this session's provider can actually invoke. Derived, not filtered at load
     /// time, because the provider is known later than the runner catalog.
     var composerSlashItems: [SlashCommandInfo] {
-        ComposerSlash.forProvider(items: slashItems, provider: provider)
+        // A Harness key's slug names its runtime, which has no runner slash registry.
+        ComposerSlash.forProvider(items: slashItems, provider: executesDsh ? "dsh" : provider)
     }
     var hasCommands: Bool { composerSlashItems.contains { $0.type == "command" } }
     var hasSkills: Bool { composerSlashItems.contains { $0.type == "skill" } }
@@ -2033,8 +2303,11 @@ final class ConsoleModel {
     /// `+` menu → Shell: prefix the draft with `!` so send() routes the rest as a raw shell command
     /// run on the runner, bypassing claude. The user types the command after. Mirrors web's insertShell.
     func insertShell() {
+        if executesDsh { statusMessage = Self.dshShellRefusal; return }
         if !composerText.hasPrefix("!") { composerText = "!" + composerText }
     }
+
+    static let dshShellRefusal = "DeepSeek Harness sessions don't run ! shell commands — ask the agent to run it instead."
 
     /// `authoritative` is the session's live control-plane run status
     /// (`app.session(id:)?.effectiveRunStatus`), read
@@ -2069,6 +2342,12 @@ final class ConsoleModel {
         // A leading `!` runs the remainder as a raw shell command on the runner, bypassing claude
         // (mirrors the web composer). A bare `!` with nothing after it is a no-op.
         let (text, shell) = ComposerLogic.parseShell(overrideText ?? composerText)
+        // DeepSeek Harness has no shell bridge (the runner settles such a turn as a refusal), so the
+        // command stays in the composer rather than going out to fail (web parity).
+        if shell, executesDsh {
+            statusMessage = Self.dshShellRefusal
+            return
+        }
         // Empty text still sends when something is staged to carry the message (see
         // `canSendAttachmentsAlone`) — but never as a shell turn: a bare `!` is a no-op that only
         // clears itself, and attachments mean nothing to a raw command (web ignores them there too).
@@ -2341,6 +2620,11 @@ final class ConsoleModel {
     /// Whose those words are, when the server's answer says they are another Orbit session's
     /// (`RetryMessage.sessionMessage`): what routes the Retry to the server (`RetryRoute`).
     private(set) var serverRetrySender: SessionMessage?
+    /// …and whether the server said there is nothing at all for a re-send to carry
+    /// (`RetryMessage.nothingToResend`). The card swaps its verb for a continue then, and the press
+    /// sends the platform's own sentence (`AutoRetryLogic.continueMessage`) rather than any words
+    /// read from this window.
+    private(set) var serverNothingToResend = false
 
     /// What a retry sends: what is on screen when that answers it, and the server's answer when
     /// nothing on screen does.
@@ -2355,6 +2639,7 @@ final class ConsoleModel {
         let answer = try? await api.retryMessage(sessionID: sessionID)
         serverRetryText = answer?.text ?? ""
         serverRetrySender = answer?.sessionMessage
+        serverNothingToResend = answer?.nothingToResend ?? false
     }
 
     /// Re-send that message once the runner is signed back in (web's "Retry — re-send my last
@@ -2368,6 +2653,18 @@ final class ConsoleModel {
         // window — the server's words stand in, and there are no files to carry with them.
         let last = lastUserMessage
         guard !sending, !retryInFlight else { return }
+        // Nothing of anybody's to re-send — the failure landed on a turn nobody sent, and the server
+        // said so. The press sends the platform's own sentence in the reader's name
+        // (`AutoRetryLogic.continueMessage`, quoted under the button they pressed), through the same
+        // send as anything typed, so the composer's provider pick travels with it.
+        if last.text.isEmpty, serverRetryText.isEmpty, serverNothingToResend {
+            retryInFlight = true
+            defer { retryInFlight = false }
+            sendingAutoRetry = true
+            defer { sendingAutoRetry = false }
+            await send(overrideText: AutoRetryLogic.continueMessage, overrideAttachments: [])
+            return
+        }
         switch RetryRoute.of(loadedText: last.text, loadedSender: last.sessionMessage,
                              serverText: serverRetryText, serverSender: serverRetrySender) {
         case .nothing:
@@ -2395,7 +2692,11 @@ final class ConsoleModel {
         sending = true
         defer { sending = false }
         do {
-            _ = try await api.resendRetryMessage(sessionID: sessionID)
+            // What the composer has picked, if anything: pressing Retry after choosing a provider
+            // means "re-send this there", and the server moves the session as it would on a send.
+            _ = try await api.resendRetryMessage(sessionID: sessionID,
+                                                 provider: pendingResumeProvider,
+                                                 account: pendingResumeProvider != nil ? pendingResumeAccount : nil)
             statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)
         } catch {
             statusMessage = ComposerLogic.sendFailureMessage(error)
@@ -2412,6 +2713,13 @@ final class ConsoleModel {
     var armedRetryAt: Date? { worktree.detail?.retryAt.flatMap(RelativeTime.parse) }
     /// Attempts already spent on the current outage — what separates "never armed" from "gave up".
     var retryAttempts: Int { worktree.detail?.retryAttempts ?? 0 }
+    /// The provider whose outage the card names: the SESSION's own, never the composer's pending
+    /// pick. Picking a provider for the next turn — exactly what a person does when a quota is spent
+    /// — writes the same `provider` this console otherwise shows, and it renamed the provider that
+    /// had failed, so a card about claude's spent window read as deepseek's. The detail is the
+    /// freshest word on what the session runs; the console's own provider is the fallback for a
+    /// detail that has not loaded.
+    var outageProvider: String { worktree.detail?.provider ?? provider }
 
     /// Re-read the armed retry. Called when an auto-retry card appears: the server arms the retry as
     /// the failing turn settles, and a session that just went terminal is exactly the one the
@@ -2555,6 +2863,10 @@ final class ConsoleModel {
     private func createDraftSession() async {
         guard let agent = draftAgent else { return }
         let (text, shell) = ComposerLogic.parseShell(composerText)
+        if shell, executesDsh {
+            statusMessage = Self.dshShellRefusal
+            return
+        }
         guard !text.isEmpty || (!shell && canSendAttachmentsAlone) else {
             if shell { composerText = "" }
             return
@@ -2586,6 +2898,7 @@ final class ConsoleModel {
                 // account, or to Automatic, which the server resolves when it creates the session.
                 codexAccount: provider == "codex" ? draftCodexAccount : nil,
                 claudeAccount: provider == "claude" ? draftClaudeAccount : nil,
+                antigravityAccount: provider == "antigravity" ? draftAntigravityAccount : nil,
                 // The folder page this draft was opened from, if any: the session is filed in it as
                 // it is created (§3.3). Omitted for a draft from a list.
                 folderId: draftFolderID))
@@ -2594,8 +2907,10 @@ final class ConsoleModel {
             // The pick was this session's binding; nothing to write back. The next draft here
             // opens on it anyway, because the default is read from what the project last ran.
             draftProviderOverride = nil
+            draftChoice = nil
             draftCodexAccount = nil
             draftClaudeAccount = nil
+            draftAntigravityAccount = nil
             // The Mode pick is different: without a write-back it lived on this one session, while
             // the runs nobody starts from a composer — task-launched, MCP-created — keep resolving
             // the ACCOUNT default server-side. Web parity, and best-effort: a failed write costs a
@@ -3086,16 +3401,23 @@ final class ConsoleModel {
     func decide(_ approval: PendingApproval, behavior: ApprovalBehavior,
                 answers: [String: [String]]? = nil, remember: Bool = false) async {
         var rules: [PermissionRule]?
-        if remember, behavior == .allow, let input = approval.input {
+        if remember, behavior == .allow, !executesDsh, let input = approval.input {
             rules = Approvals.rememberRules(toolName: approval.toolName ?? "", input: input)
         }
         // Optimistic: drop the card now (the SSE `approval_resolved` echoes this). On failure,
         // re-seed from REST so it reappears rather than silently vanishing.
         reducer.removeApproval(id: approval.id)
         publishStateNow()
+        approvalAnswers[approval.id] = .sending
         let req = ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRules: rules)
-        do { try await api.decideApproval(sessionID: sessionID, approvalID: approval.id, req) }
+        do {
+            try await api.decideApproval(sessionID: sessionID, approvalID: approval.id, req)
+            approvalAnswers[approval.id] = .sent
+        }
         catch {
+            // Nothing was decided: the press is not what took this card away, and the re-seed below
+            // is what puts it back.
+            approvalAnswers[approval.id] = nil
             statusMessage = "Approval failed — \(APIClient.failureReason(error))."
             await refreshApprovals()
         }
@@ -3148,6 +3470,9 @@ final class ConsoleModel {
     /// read is not OPEN either — and `ProjectCriteriaDocument.taskCount` is where a document that
     /// did not say the count is read as none.
     private(set) var projectTaskCount = 0
+    /// How long a problem waits on this project's coordinator before it reaches the owner, off the
+    /// same read — what the start card's list of what still comes to the owner says.
+    private(set) var projectEscalationSeconds = StartProject.defaultEscalationSeconds
     /// The coordinator's request the start card in this conversation is drawn for — kept while the
     /// card is on screen, so a request that stops standing leaves its card stale in place rather
     /// than blank (web's `delivered`), and let go of once the project is started.
@@ -3170,6 +3495,25 @@ final class ConsoleModel {
     /// `waitingKind`): a change is what makes the project's cards worth reading again — a
     /// coordinator asking to start its project lands on this row as a count before anything else.
     private var waitingSignal: String?
+    /// What that row says the owner is waiting on — `RECORD_AS_DONE` puts "Is this project done?" up
+    /// with no request behind it (`ProjectDone.slot`).
+    private var sessionWaitingKind: SessionWaitingKind?
+
+    // MARK: closing the project — "Is this project done?" and "Why is this project not done?"
+
+    /// The project as the closing cards read it — the projection of its facts, and its done record —
+    /// off the same document read as its criteria. Nil until that read answers; a read that fails
+    /// leaves the last answer standing.
+    private(set) var projectDone: ProjectDoneSubject?
+    /// The coordinator's open request to record the project done, while there is one
+    /// (`ProjectDone.live`).
+    private(set) var doneRequestRow: ProjectOpenItemRow?
+    /// What a press here recorded, before the document read catches up with it — the receipt the card
+    /// turns into in place (web's `doneReceipt`).
+    private(set) var doneRecord: ProjectDoneRecord?
+    /// When that press came back. A document read begun after it that still says the project is not
+    /// DONE means it was reopened since — here or at another end — and the press no longer stands.
+    private var doneRecordAt: Date?
 
     /// The task whose run this conversation is, adopted from the session payload. Nil for an
     /// ordinary conversation, and then nothing below ever asks about a confirmation: the card is
@@ -3257,6 +3601,12 @@ final class ConsoleModel {
             // is not pointed at.
             case .startProject(let itemID):
                 return waiting(StartProject.isOpen(startStanding(itemID)), question: true)
+            // "Is this project done?" while it is asking — not once it is its own receipt — and the
+            // card that explains why it is not done, which asks nothing.
+            case .projectDone:
+                return waiting(doneCardAsking, question: true)
+            case .projectNotDone:
+                return nil
             case .criteriaChange:
                 return waiting(CriteriaChanges.isOpen(acceptanceConfirmation), question: true)
             case .evidenceDecision(let taskID, let evidenceRevision):
@@ -3329,7 +3679,7 @@ final class ConsoleModel {
             else { return state.items.count }
             return at
         case .at(let moment):
-            let read = clocks ?? ReceiptAnchor.Clocks(state.items)
+            let read = clocks ?? receiptClocks
             clocks = read
             switch ReceiptAnchor.place(read, at: moment) {
             case .after(let id): return state.items.firstIndex { $0.id == id } ?? state.items.count
@@ -3411,12 +3761,21 @@ final class ConsoleModel {
             acceptanceConfirmation = standing
             adoptAcceptanceReceipt()
         }
+        let documentAskedAt = Date()
         if let document = try? await api.projectCriteria(projectID: projectID) {
             projectCriteria = document.acceptanceCriteriaItems ?? []
             projectDocumentTitle = document.title
             projectStatus = document.status
             projectStarted = document.started
             projectTaskCount = document.taskCount
+            projectEscalationSeconds = document.exceptionEscalationSeconds ?? projectEscalationSeconds
+            projectDone = document.doneSubject
+            // A read asked for after a press here, and still not DONE: the project was reopened, so
+            // the press's own record no longer makes the card a receipt (`ProjectDone.recorded`).
+            if document.status != "DONE", let at = doneRecordAt, documentAskedAt > at {
+                doneRecord = nil
+                doneRecordAt = nil
+            }
         }
         // The project's two owner cards. Same rule as the four above: each is independent, a read
         // that fails leaves the last answer standing, and neither may close a card.
@@ -3483,6 +3842,9 @@ final class ConsoleModel {
         // plan passed Orbit's ready check — the open START_REQUEST the open-items read above serves
         // — and never inferred from the project holding a task.
         adoptStartRequest()
+        // And the closing card: "Is this project done?" once the coordinator asks — or its receipt
+        // once the project is recorded done — and otherwise why it is not done yet.
+        adoptDoneSlot()
         if startRequestRow != nil, let graph = try? await api.projectDependencyGraph(projectID) {
             projectGraph = graph
         }
@@ -3536,7 +3898,7 @@ final class ConsoleModel {
     }
 
     /// The start card's settings as the owner has left them: their edits on this request, or the
-    /// coordinator's suggestion untouched.
+    /// coordinator's suggestion with Automatic on (`StartSettingsDraft(_:)`).
     func startDraft(for row: ProjectOpenItemRow) -> StartSettingsDraft {
         if let draft = startDrafts[row.itemId] { return draft }
         guard let request = row.startRequest else {
@@ -3547,6 +3909,107 @@ final class ConsoleModel {
 
     func setStartDraft(_ draft: StartSettingsDraft, for itemID: String) {
         startDrafts[itemID] = draft
+    }
+
+    /// Which closing card this conversation draws (`ProjectDone.slot`), adopted from the reads — one
+    /// at a time, the way the browser's `SessionProjectSettlementCard` switches between them: "Is
+    /// this project done?" while the coordinator's request stands (or the row says Record as done…),
+    /// its receipt once the project is recorded done, and otherwise nothing. Nothing asks "Why is
+    /// this project not done?" in a conversation any more (the owner's ruling of 2026-10-07
+    /// 04:20Z); Orbit's own DONE is the terminal state of that old card, drawn as it always was.
+    ///
+    /// Each card is re-derived from the reads on every render, so a request the coordinator filed
+    /// again is the same card with the new request in it. A read that has not answered changes
+    /// nothing on screen; one that answered and asks nothing takes the closing card down, as the
+    /// browser draws none — the owner's card is up only while it is asked or recorded.
+    private func adoptDoneSlot() {
+        let live = ProjectDone.live(openItems: openItems, status: projectDone?.status)
+        doneRequestRow = live
+        switch ProjectDone.slot(subject: projectDone, request: live, waitingKind: sessionWaitingKind,
+                                record: doneRecord) {
+        case .none:
+            if projectDone != nil {
+                decisionCards.removeAll { $0.kind == .projectDone || $0.kind == .projectNotDone }
+            }
+        case .notDone:
+            decisionCards.removeAll { $0.kind == .projectDone }
+            deliver(.projectNotDone)
+        case .done:
+            decisionCards.removeAll { $0.kind == .projectNotDone }
+            deliver(.projectDone, placement: donePlacement(live))
+        }
+    }
+
+    /// Whether the done card is asking the owner right now: the project is not recorded done, and the
+    /// coordinator's request stands or the row says Record as done….
+    private var doneCardAsking: Bool {
+        guard let subject = projectDone, !ProjectDone.recorded(subject, record: doneRecord) else { return false }
+        return doneRequestRow != nil || sessionWaitingKind == .recordAsDone
+    }
+
+    /// Where the done card goes when it arrives: a request — the question — where it arrived, like
+    /// the start card; a project already recorded done, where that happened (`DeliveryAnchor`).
+    private func donePlacement(_ live: ProjectOpenItemRow?) -> DeliveredDecisionCard.Placement {
+        if live == nil, let subject = projectDone, ProjectDone.recorded(subject, record: doneRecord),
+           let at = doneRecord?.doneAt ?? subject.doneAt, ThinkingSummary.date(at) != nil {
+            return .at(at)
+        }
+        return .onArrival(afterItemID: DeliveryAnchor.onArrival(of: .projectDone, items: state.items))
+    }
+
+    /// Record the project done from its card (`POST /projects/:id/done`, `ProjectDone.body`): the
+    /// request the card answers and that request's own seal — or, unasked, the seal standing now —
+    /// and the gaps the card shows. The card turns into its receipt in place; a request superseded
+    /// meanwhile, or a seal that moved, is a 409 that writes nothing, said over the door's words.
+    func recordProjectDone() async {
+        guard let projectID, let subject = projectDone,
+              let body = ProjectDone.body(subject: subject, requestID: doneRequestRow?.itemId,
+                                          request: doneRequestRow?.doneRequest,
+                                          currentDigest: acceptanceConfirmation?.currentVersion.digest)
+        else { return }
+        do {
+            doneRecord = try await api.recordProjectDone(projectID: projectID, body)
+            doneRecordAt = Date()
+        } catch {
+            statusMessage = "\(ProjectDone.notRecorded) — \(APIClient.failureReason(error))."
+        }
+        await refreshRulerQuestions(force: true)
+    }
+
+    /// "Not yet…": the coordinator's request is ended with the owner's note, which reaches this
+    /// conversation's agent with the card's facts; the card gives way to why the project is not done.
+    /// Says whether the note went.
+    func declineDoneRequest(note: String) async -> Bool {
+        guard let projectID, let row = doneRequestRow else { return false }
+        do {
+            _ = try await api.declineDoneRequest(projectID: projectID, itemID: row.itemId, note: note)
+        } catch {
+            statusMessage = "\(ProjectDone.notDeclined) — \(APIClient.failureReason(error))."
+            return false
+        }
+        await refreshRulerQuestions(force: true)
+        return true
+    }
+
+    /// Reopen project, from the receipt — the same status door the project page's menu presses.
+    func reopenProject() async {
+        guard let projectID else { return }
+        do {
+            _ = try await api.updateProjectStatus(projectID, to: .open)
+            doneRecord = nil
+            doneRecordAt = nil
+        } catch {
+            statusMessage = "\(ProjectDone.notReopened) — \(APIClient.failureReason(error))."
+        }
+        await refreshRulerQuestions(force: true)
+    }
+
+    /// "Ask the coordinator to handle it": the card's own facts — the blocked criteria, what each is
+    /// waiting on and what would clear them — as one ordinary turn to this conversation's agent
+    /// (web's `delegateProjectSettlement`). The facts are the whole message; the card stays.
+    func askCoordinatorAboutDone() async {
+        guard let subject = projectDone else { return }
+        await send(overrideText: ProjectDone.settlementContext(subject))
     }
 
     /// Whether a STARTED project's criteria moved since the owner confirmed them, and the server
@@ -4206,48 +4669,68 @@ final class ConsoleModel {
     /// The card is not dropped: the interesting outcomes are the door's refusals and the states
     /// that follow (it goes to CONFIRMED, then RECHECKING or MERGED), and the card is where a
     /// reader watches that happen.
-    func confirmMergeToMain(_ view: ProjectPromotionView) async {
-        guard let projectID else { return }
+    @discardableResult
+    func confirmMergeToMain(_ view: ProjectPromotionView) async -> String? {
+        guard let projectID else { return nil }
+        var failure: String?
         do {
             promotion = try await api.confirmPromotion(projectID: projectID,
                                                        promotionID: view.promotionId,
                                                        sourceSha: view.sourceSha)
         } catch {
-            statusMessage = "That merge was not confirmed — \(APIClient.failureReason(error))."
+            failure = "That merge was not confirmed — \(APIClient.failureReason(error))."
+            statusMessage = failure
         }
         await refreshRulerQuestions(force: true)
+        return failure
     }
 
     /// M-T10: call it back, while the landing job has not reached the push. The card stays: what
     /// the door answers is the state it left the candidate in, which is what the reader watches.
-    func cancelMergeToMain(_ view: ProjectPromotionView) async {
-        guard let projectID else { return }
+    @discardableResult
+    func cancelMergeToMain(_ view: ProjectPromotionView) async -> String? {
+        guard let projectID else { return nil }
+        var failure: String?
         do {
             promotion = try await api.cancelPromotion(projectID: projectID,
                                                       promotionID: view.promotionId)
         } catch {
-            statusMessage = "That merge was not called back — \(APIClient.failureReason(error))."
+            failure = "That merge was not called back — \(APIClient.failureReason(error))."
+            statusMessage = failure
         }
         await refreshRulerQuestions(force: true)
+        return failure
     }
 
     /// M-T5: not now. The branch is left exactly where it is, and the next landing offers it again.
-    func declineMergeToMain(_ view: ProjectPromotionView) async {
-        guard let projectID else { return }
+    @discardableResult
+    func declineMergeToMain(_ view: ProjectPromotionView) async -> String? {
+        guard let projectID else { return nil }
+        var failure: String?
         do {
             promotion = try await api.declinePromotion(projectID: projectID,
                                                        promotionID: view.promotionId)
             close(.promotionApproval(promotionID: view.promotionId))
         } catch {
-            statusMessage = "That was not recorded — \(APIClient.failureReason(error))."
+            failure = "That was not recorded — \(APIClient.failureReason(error))."
+            statusMessage = failure
         }
         await refreshRulerQuestions(force: true)
+        return failure
     }
 
     private func close(_ kind: DeliveredDecisionCard.Kind) {
         let id = DeliveredDecisionCard(kind: kind).id
         closedCards.insert(id)
         decisionCards.removeAll { $0.id == id }
+    }
+
+    /// Whether this window is the one that answered the card — the same "answered or set aside
+    /// HERE" set the transcript reads (`closedCards`), read by the review sheet presenting the
+    /// card: it leaves with its own press instead of drawing the card's answer back as somebody
+    /// else's ("recorded somewhere else", "approved at another end").
+    func answeredHere(_ card: DeliveredDecisionCard) -> Bool {
+        closedCards.contains(card.id)
     }
 
     /// What a decision leaves behind, in the flow, where it happened — the same place web's

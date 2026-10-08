@@ -37,6 +37,8 @@ class RealtimeStoreTest {
         var directoryError: Int? = null
         var detailError: Int? = null
         var project = false
+        /** The server's own null: a 200 with no body, as `promotions/current` answers for a project asking nothing. */
+        var emptyPromotion = false
         var heldDirectory: CompletableDeferred<Unit>? = null
         var heldDetail: CompletableDeferred<Unit>? = null
         fun response(json: String) = ApiResponse(200, json.encodeToByteArray())
@@ -64,6 +66,7 @@ class RealtimeStoreTest {
                     captured?.let { return@HttpTransport ApiResponse(it, "{}".encodeToByteArray()) }
                     response("""{"id":"${path.last()}","status":"RUNNING"${if (project) ",\"taskId\":\"t1\",\"projectId\":\"p1\"" else ""}}""")
                 }
+                emptyPromotion && path.takeLast(2) == listOf("promotions", "current") -> ApiResponse(200, ByteArray(0))
                 path.last() in setOf("approvals", "turns", "background") ->
                     response(if (pending) """[{"id":"pending-card-marker","status":"PENDING"}]""" else "[]")
                 else -> response(if (pending) """{"pending":[{"id":"standing-card-marker"}]}""" else "null")
@@ -111,6 +114,17 @@ class RealtimeStoreTest {
         assertTrue(store.state.value.session!!.snapshot!!.queuedTurns.isEmpty())
         assertTrue(store.state.value.session!!.snapshot!!.background.isEmpty())
         assertEquals("null", store.state.value.session!!.snapshot!!.standing["ownerConfirmation"].toString())
+    }
+
+    /** A project nobody has started has no promotion: the server's null for it is a read like any other, and the
+     * conversation stays fresh with its cards (the coordinator's start request among them). */
+    @Test fun aReadAnsweredWithNoBodyIsNullNotAFailedSnapshot() = runTest {
+        val rig = Rig(this)
+        rig.project = true; rig.pending = false; rig.emptyPromotion = true
+        val (_, store) = rig.start()
+        assertTrue(store.state.value.session!!.fresh)
+        assertEquals(kotlinx.serialization.json.JsonNull, store.state.value.session!!.snapshot!!.standing["promotion"])
+        assertTrue(rig.reads.any { it.api.path.joinToString("/") == "projects/p1/promotions/current" })
     }
 
     @Test fun forbiddenAndMissingSessionWithdrawTranscriptAndCacheUntilAuthorityRecovers() = runTest {

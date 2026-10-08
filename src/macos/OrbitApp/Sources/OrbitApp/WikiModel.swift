@@ -15,9 +15,18 @@ final class WikiModel {
     /// Every space, by slug, each with the proposals waiting in it.
     private(set) var spaces: [WikiSpace] = []
     private(set) var spacesState = ListLoadState()
-    /// The home page of the space on screen, once all four of its reads are in.
-    private(set) var home: WikiHomeContent?
+    /// The server said the wiki is not switched on for this account (404 WIKI_DISABLED): an answer,
+    /// not a failure — the drawer draws no Wiki row, and the section says why.
+    private(set) var disabled = false
+    /// The home's content (design §12.3.1): every principle of the space on screen, read by kind — its
+    /// documents and topic articles are `docsDirectory` and `directory` — and the space all of it was read
+    /// for. Until that is the space on screen the home draws grey bars (`homeLoading`).
+    private(set) var principles: [WikiEntry] = []
+    private(set) var homeSpaceID: String?
     private(set) var homeState = ListLoadState()
+    /// What Activity draws of the space on screen (design §12.3.2), once all five of its reads are in.
+    private(set) var activity: WikiHomeContent?
+    private(set) var activityState = ListLoadState()
     /// Every changeset with an op still waiting, across the spaces — the queue Review pages through.
     private(set) var review: [WikiChangeset] = []
     private(set) var reviewState = ListLoadState()
@@ -51,6 +60,9 @@ final class WikiModel {
     /// the articles are, and dropped with them when another space is picked.
     private(set) var docsDirectory: WikiDocsDirectory?
     private(set) var docs: [String: WikiDoc] = [:]
+    /// The space's newest entries, as many as one read answers (200): the summaries under the entries a
+    /// document's quotes came through.
+    private(set) var entries: [WikiEntry] = []
     private(set) var missingDocs: Set<String> = []
     private(set) var failedDocs: Set<String> = []
     private(set) var docIndex: WikiDocsIndex?
@@ -62,6 +74,10 @@ final class WikiModel {
     /// Every version, newest first (the version menu), and the older ones read whole when picked.
     private(set) var planVersions: [WikiPlanVersionSummary] = []
     private(set) var planVersionReads: [Int: WikiPlanVersion] = [:]
+    /// The plans of the other spaces where something waits on the owner (`planWaiting`), by space id:
+    /// Activity's banners for them (design §12.3.3). Read for Activity, and only those.
+    private(set) var otherPlans: [String: WikiPlanState] = [:]
+    @ObservationIgnored private var otherPlansRead = false
 
     private let api: APIClient
     @ObservationIgnored private var nudgeTask: Task<Void, Never>?
@@ -69,7 +85,8 @@ final class WikiModel {
     /// screen is read again when it next appears.
     @ObservationIgnored private var onScreen: [String: Int] = [:]
 
-    /// The space the home page shows, by slug — the last one picked, kept across launches.
+    /// The space the home page shows, by slug — the one picked, or opened by the rule (`open(fromWorkspace:)`),
+    /// kept across launches as the last one looked at (`orbit.wiki.space`, design §12.3.4).
     var selectedSlug: String? {
         didSet {
             guard selectedSlug != oldValue else { return }
@@ -83,12 +100,70 @@ final class WikiModel {
         selectedSlug = UserDefaults.standard.string(forKey: Self.spaceKey)
     }
 
-    /// The drawer's amber number: every space's proposals, summed as the web sidebar sums them.
-    var proposalsToReview: Int { WikiLogic.proposalsToReview(spaces) }
+    /// The drawer's amber number — the iPad sidebar's, and the bar's Activity badge: what waits on the owner
+    /// across every space, each space's proposals and what its plan waits for, as the web sidebar counts it.
+    var waiting: Int { WikiSpaceLogic.waiting(spaces) }
 
-    /// The space the home page is about: the one picked, else the first by slug.
+    /// Whether the drawer — and the iPad sidebar, the same rail — draws the Wiki row at all.
+    var shown: Bool { WikiLogic.shown(spacesState, disabled: disabled) }
+
+    /// Whether the home's content is still on its first read for the space on screen: its head is drawn from
+    /// the spaces list at once, its line and documents as grey bars until then (mock 31 ⑦). A read the home
+    /// already has stays drawn while it is read again.
+    var homeLoading: Bool { homeSpaceID == nil || homeSpaceID != currentSpace?.id }
+
+    /// The space the pages are about: the one picked or opened, else the one the Wiki opens by its rule.
     var currentSpace: WikiSpace? {
-        spaces.first { $0.slug == selectedSlug } ?? spaces.first
+        spaces.first { $0.slug == selectedSlug }
+            ?? WikiSpaceLogic.defaultSpace(spaces, workspaceID: fromWorkspaceID, lastSlug: nil)
+    }
+
+    /// The workspace the reader was in when they last came into the Wiki (design §12.3.4).
+    private(set) var fromWorkspaceID: String?
+    /// The reader came into the Wiki: the space it opens is chosen once the spaces are in.
+    @ObservationIgnored private var choosing = false
+
+    /// The reader comes into the Wiki from `workspaceID` — nil from a page of no workspace: it opens the space
+    /// bound to that workspace, else the one last looked at, else the one with the most documents written
+    /// (`WikiSpaceLogic.defaultSpace`), as `/wiki` does on the web. Chosen now, or once the spaces read answers.
+    func open(fromWorkspace workspaceID: String?) {
+        fromWorkspaceID = workspaceID
+        choosing = true
+        chooseSpace()
+    }
+
+    private func chooseSpace() {
+        guard choosing, spacesState.hasLoaded else { return }
+        choosing = false
+        if let space = WikiSpaceLogic.defaultSpace(spaces, workspaceID: fromWorkspaceID, lastSlug: selectedSlug) {
+            selectedSlug = space.slug
+        }
+    }
+
+    // MARK: since the reader last looked
+
+    /// What each space's stamp said before this run of the app last moved it.
+    @ObservationIgnored private var seenLog = WikiSeenLog()
+
+    /// When the reader last looked at the space `slug` (seconds since 1970, 0 for never), as the home reads it
+    /// as it opens — before its own look moves it (the web home's `readWikiSeen`).
+    func seen(_ slug: String) -> Double {
+        UserDefaults.standard.double(forKey: WikiSeenLog.key(space: slug))
+    }
+
+    /// When the reader last looked at the space `slug`, as Activity reads it: from before the home moved it as
+    /// it opened (`WikiSeenLog`, the web's `readWikiSeenBefore`).
+    func seenBefore(_ slug: String) -> Double {
+        let key = WikiSeenLog.key(space: slug)
+        return seenLog.seenBefore(key, stored: UserDefaults.standard.double(forKey: key))
+    }
+
+    /// The reader looks at the space `slug` now — the home as it opens, and Activity (`moveWikiSeen`).
+    func moveSeen(_ slug: String, at date: Date = Date()) {
+        let key = WikiSeenLog.key(space: slug)
+        let now = date.timeIntervalSince1970
+        seenLog.move(key, at: now, stored: UserDefaults.standard.double(forKey: key))
+        UserDefaults.standard.set(now, forKey: key)
     }
 
     /// The pending ops Review pages through.
@@ -122,49 +197,127 @@ final class WikiModel {
         do {
             let list = try await api.wikiSpaces()
             if list != spaces { spaces = list }
+            disabled = false
+            spacesState.succeed()
+            chooseSpace()
+        } catch let error where WikiLogic.isDisabled(error) {
+            disabled = true
+            if !spaces.isEmpty { spaces = [] }
             spacesState.succeed()
         } catch {
             spacesState.fail()
         }
     }
 
-    /// The spaces, then the four reads the home page is drawn from, side by side — and then each run
-    /// Recently changed folds, by its own read.
+    /// The home's content (design §12.3.1), side by side: the principles by kind, the confirmed plan's
+    /// documents and the topic articles the home lists before a plan — and the spaces list again, for the
+    /// head's numbers. The head needs none of them: it is the spaces list the drawer has already read, and
+    /// only a page opened before that read waits for it here.
     func loadHome() async {
-        homeState.begin()
-        await loadSpaces()
-        guard let space = currentSpace else {
-            home = nil
+        if !spacesState.hasLoaded { await loadSpaces() }
+        guard let space = articlesSpace() else {
             if spacesState.lastLoadFailed { homeState.fail() } else { homeState.succeed() }
             return
         }
-        async let documentRead = api.wikiSpace(space.id)
-        async let entriesRead = api.wikiEntries(spaceID: space.id)
-        async let timelineRead = api.wikiTimeline(spaceID: space.id)
-        async let healthRead = api.wikiHealth(spaceID: space.id)
+        homeState.begin()
+        // Side by side through task handles, not `async let`: iOS 27's concurrency runtime can abort
+        // while tearing down several async-let results in one continuation (d22b276cc).
+        let spacesRead = Task { await loadSpaces() }
+        // The principles read their own kind: out of the newest 200 entries of every kind, a space of
+        // thousands had none of its principles left to show.
+        let principlesRead = Task {
+            try await api.wikiEntries(spaceID: space.id, kind: .principle, limit: WikiLogic.principlesRead)
+        }
+        let docsRead = Task { try await api.wikiDocs(spaceID: space.id) }
+        let articlesRead = Task { try await api.wikiArticleDirectory(spaceID: space.id) }
+        defer {
+            spacesRead.cancel()
+            principlesRead.cancel()
+            docsRead.cancel()
+            articlesRead.cancel()
+        }
         do {
-            let document = try await documentRead
-            let entries = try await entriesRead
-            // The timeline is one band of six; the page still draws without it.
-            let timeline = try? await timelineRead
+            let docs = try await docsRead.value
+            // The topic articles are what the home lists only before a plan is confirmed.
+            let articles: WikiArticleDirectory?
+            if WikiDocLogic.readsByDocs(docs) {
+                articles = try? await articlesRead.value
+            } else {
+                articles = try await articlesRead.value
+            }
+            // Without its principles the home still draws its documents; the ones it had stay.
+            let principles = try? await principlesRead.value
+            // Another space was picked while this one was reading: its own read owns the page.
+            if articlesSpaceID == space.id {
+                if docs != docsDirectory { docsDirectory = docs }
+                if let articles {
+                    if articles != directory { directory = articles }
+                    directoryState.succeed()
+                }
+                if let principles, principles != self.principles { self.principles = principles }
+                homeSpaceID = space.id
+                homeState.succeed()
+            }
+        } catch {
+            if articlesSpaceID == space.id { homeState.fail() }
+        }
+        // The head's numbers, read beside the content and never cut short by it.
+        await spacesRead.value
+    }
+
+    /// What Activity draws (design §12.3.2): the space with its usage window, its newest entries, its newest
+    /// decisions by kind, the timeline and its health, side by side — and then each run Recently changed
+    /// folds, by its own read.
+    func loadActivity() async {
+        activityState.begin()
+        await loadSpaces()
+        guard let space = currentSpace else {
+            activity = nil
+            if spacesState.lastLoadFailed { activityState.fail() } else { activityState.succeed() }
+            return
+        }
+        // Side by side through task handles, not `async let`: iOS 27's concurrency runtime can abort
+        // while tearing down several async-let results in one continuation (d22b276cc).
+        let documentRead = Task { try await api.wikiSpace(space.id) }
+        let entriesRead = Task { try await api.wikiEntries(spaceID: space.id) }
+        // Recent decisions read their own kind: out of the newest 200 entries of every kind, a space of
+        // thousands had none of its decisions left to show.
+        let decisionsRead = Task {
+            try await api.wikiEntries(spaceID: space.id, kind: .decision, limit: WikiHomeContent.recentDecisionCount)
+        }
+        let timelineRead = Task { try await api.wikiTimeline(spaceID: space.id) }
+        let healthRead = Task { try await api.wikiHealth(spaceID: space.id) }
+        defer {
+            documentRead.cancel()
+            entriesRead.cancel()
+            decisionsRead.cancel()
+            timelineRead.cancel()
+            healthRead.cancel()
+        }
+        do {
+            let document = try await documentRead.value
+            let entries = try await entriesRead.value
+            let decisions = try await decisionsRead.value
+            // The timeline is one band of five; the page still draws without it.
+            let timeline = try? await timelineRead.value
             // The status line's count and maintenance part (criterion 5); without it the line says what
             // the entries read here count, and nothing of maintenance.
-            let health = try? await healthRead
+            let health = try? await healthRead.value
             // Every item names its changeset: the runs among the rows are read by their ids, whether or
             // not anything of them still waits in Review. A run whose read failed keeps its row.
             let base = WikiHomeContent(space: document, spaces: spaces, entries: entries,
-                                       timeline: timeline?.items ?? [], proposals: space.pendingOps ?? 0)
+                                       decisions: decisions, timeline: timeline?.items ?? [])
             let runs = await readRuns(base.recentRunIDs)
             // Another space was picked while this one was reading: its own read owns the page.
             guard currentSpace?.id == space.id else { return }
             let content = WikiHomeContent(space: base.space, spaces: base.spaces, entries: base.entries,
-                                          timeline: base.timeline, proposals: base.proposals, runs: runs,
+                                          decisions: base.decisionEntries, timeline: base.timeline, runs: runs,
                                           health: health)
-            if content != home { home = content }
-            homeState.succeed()
+            if content != activity { activity = content }
+            activityState.succeed()
         } catch {
             guard currentSpace?.id == space.id else { return }
-            homeState.fail()
+            activityState.fail()
         }
     }
 
@@ -181,7 +334,8 @@ final class WikiModel {
     }
 
     /// One entry's page. A 404 is an entry the server will not show — deleted, or not this account's;
-    /// any other failure keeps what is on screen, and says so only when there is nothing on screen.
+    /// any other failure keeps what is on screen, and says so only when there is nothing on screen. A
+    /// 404 WIKI_DISABLED is the wiki off for this account, which a link from a conversation can land on.
     func loadEntry(_ id: String) async {
         let key = PublicID.storageKey(id)
         do {
@@ -189,6 +343,8 @@ final class WikiModel {
             missing.remove(key)
             failed.remove(key)
             if details[key] != detail { details[key] = detail }
+        } catch let error where WikiLogic.isDisabled(error) {
+            disabled = true
         } catch APIError.http(let status, _) where status == 404 {
             missing.insert(key)
         } catch {
@@ -216,6 +372,10 @@ final class WikiModel {
             missingDocs = []
             failedDocs = []
             docIndex = nil
+            entries = []
+            principles = []
+            homeSpaceID = nil
+            homeState = ListLoadState()
             plan = nil
             planState = ListLoadState()
             planMissing = false
@@ -301,18 +461,21 @@ final class WikiModel {
     /// What is loaded, read again — what the control plane's reconnect asks for too. Of the entry pages,
     /// only the ones on screen: the others are read when they next appear.
     func reloadLoaded() async {
-        if home != nil || homeState.hasLoaded {
+        if homeSpaceID != nil || homeState.hasLoaded {
             await loadHome()
         } else {
             await loadSpaces()
         }
+        if activity != nil || activityState.hasLoaded { await loadActivity() }
         if directory != nil { await loadDirectory() }
         if articleIndex != nil { await loadArticleIndex() }
         for address in Array(articles.keys) { await loadArticle(address) }
         if docsDirectory != nil { await loadDocsDirectory() }
         if docIndex != nil { await loadDocIndex() }
+        if !entries.isEmpty { await loadEntries() }
         for slug in Array(docs.keys) { await loadDoc(slug) }
         if plan != nil || planState.hasLoaded { await loadPlan() }
+        if otherPlansRead { await loadOtherPlans() }
         for key in Array(runs.keys) { await loadRun(key) }
         if reviewState.hasLoaded { await loadReview() }
         for key in Array(onScreen.keys) { await loadEntry(key) }
@@ -354,6 +517,14 @@ final class WikiModel {
         if read != docIndex { docIndex = read }
     }
 
+    /// The space's newest entries, for the summaries a document's page shows under its entries.
+    func loadEntries() async {
+        if spaces.isEmpty { await loadSpaces() }
+        guard let space = articlesSpace() else { return }
+        guard let read = try? await api.wikiEntries(spaceID: space.id), articlesSpaceID == space.id else { return }
+        if read != entries { entries = read }
+    }
+
     // MARK: the plan (criterion 11) — the owner's door only
 
     /// The plan, its versions and the directory its documents are written into, side by side.
@@ -361,7 +532,9 @@ final class WikiModel {
         if spaces.isEmpty { await loadSpaces() }
         guard let space = articlesSpace() else { return }
         planState.begin()
-        async let versionsRead = api.wikiPlanVersions(spaceID: space.id)
+        // Beside the plan through a task handle, not `async let` (d22b276cc).
+        let versionsRead = Task { try await api.wikiPlanVersions(spaceID: space.id) }
+        defer { versionsRead.cancel() }
         do {
             let read = try await api.wikiPlan(spaceID: space.id)
             guard articlesSpaceID == space.id else { return }
@@ -376,9 +549,28 @@ final class WikiModel {
         } catch {
             planState.fail()
         }
-        if let versions = try? await versionsRead, articlesSpaceID == space.id, versions.versions != planVersions {
+        if let versions = try? await versionsRead.value, articlesSpaceID == space.id, versions.versions != planVersions {
             planVersions = versions.versions
         }
+    }
+
+    /// The plans of the other spaces where something waits (`planWaiting`), side by side: Activity says what
+    /// waits in each. A read that fails leaves that space's banners out.
+    func loadOtherPlans() async {
+        if spaces.isEmpty { await loadSpaces() }
+        let current = currentSpace?.id
+        let waiting = spaces.filter { $0.id != current && ($0.planWaiting ?? 0) > 0 }
+        let api = self.api
+        let read = await withTaskGroup(of: (String, WikiPlanState?).self) { group in
+            for space in waiting {
+                group.addTask { (space.id, try? await api.wikiPlan(spaceID: space.id)) }
+            }
+            var plans: [String: WikiPlanState] = [:]
+            for await (id, plan) in group { if let plan { plans[id] = plan } }
+            return plans
+        }
+        otherPlansRead = true
+        if read != otherPlans { otherPlans = read }
     }
 
     /// One older version, read whole when the version menu picks it.
@@ -398,7 +590,7 @@ final class WikiModel {
     /// Draft plan, or Redraft… with the owner's words: a task of the maintenance list. Nil on success
     /// (with whether a job was made, or one already on its way answered), else the sentence to show.
     func redraftPlan(instructions: String?) async -> (created: Bool, refusal: String?) {
-        guard let space = currentSpace else { return (false, WikiCopy.refused) }
+        guard let space = currentSpace else { return (false, WikiCopy.noSpaces) }
         busy = true
         defer { busy = false }
         do {
@@ -440,7 +632,7 @@ final class WikiModel {
     /// the second only once the first came back with a draft the gate passed. A refusal of the first
     /// leaves the plan as it was, and its errors are the answer; nothing is confirmed.
     func acceptPlanProposal(_ id: String, confirm: Bool) async -> (accepted: PlanWrite, confirmed: Bool) {
-        guard let space = currentSpace else { return (.failed(WikiCopy.refused), false) }
+        guard let space = currentSpace else { return (.failed(WikiCopy.noSpaces), false) }
         busy = true
         defer { busy = false }
         let draft: WikiPlanVersion
@@ -448,7 +640,7 @@ final class WikiModel {
             let decided = try await api.decideWikiPlanProposal(id, WikiPlanDecideRequest(action: .accept))
             guard let made = decided.draft else {
                 await loadPlan()
-                return (.failed(WikiCopy.refused), false)
+                return (.failed(APIClient.failureReason(APIError.invalidResponse)), false)
             }
             draft = made
         } catch {
@@ -474,7 +666,7 @@ final class WikiModel {
     }
 
     private func planWrite(_ write: (WikiSpace) async throws -> WikiPlanVersion) async -> PlanWrite {
-        guard let space = currentSpace else { return .failed(WikiCopy.refused) }
+        guard let space = currentSpace else { return .failed(WikiCopy.noSpaces) }
         busy = true
         defer { busy = false }
         do {
@@ -587,9 +779,9 @@ final class WikiModel {
         }
     }
 
-    /// A run by either spelling of its id: its page's own read, else the one the home read.
+    /// A run by either spelling of its id: its page's own read, else the one Activity read.
     func run(_ id: String) -> WikiChangesetView? {
-        runs[PublicID.storageKey(id)] ?? home?.run(id)
+        runs[PublicID.storageKey(id)] ?? activity?.run(id)
     }
 
     /// Whether the server does not know the run: another account's, or none at all.
@@ -659,7 +851,7 @@ final class WikiModel {
     /// One owner write, with the rationale it is recorded under and an idempotency key of its own, so
     /// a resend of the same press is one write. Nil on success, else the sentence to show.
     private func write(_ entry: WikiEntry, _ op: WikiOwnerOp, rationale: String, key: String) async -> String? {
-        guard let spaceID = entry.spaceId ?? currentSpace?.id else { return WikiCopy.refused }
+        guard let spaceID = entry.spaceId ?? currentSpace?.id else { return WikiCopy.noSpaces }
         busy = true
         defer { busy = false }
         do {
@@ -677,21 +869,22 @@ final class WikiModel {
         }
     }
 
-    /// What the server said when it refused a write — its own sentence, as the web shows it — or the
-    /// web's fallback when it said nothing readable.
+    /// What the server said when it refused a write — its own sentence, as the web shows it — or
+    /// the readable reason when the request failed without a server message.
     private static func refusal(_ error: Error) -> String {
         if case APIError.http(_, let body?) = error, let data = body.data(using: .utf8),
            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let message = object["message"] as? String, !message.isEmpty {
             return message
         }
-        return WikiCopy.refused
+        return APIClient.failureReason(error)
     }
 
     private func reloadAfterWrite() async {
         await loadSpaces()
         if reviewState.hasLoaded { await loadReview() }
         if homeState.hasLoaded { await loadHome() }
+        if activityState.hasLoaded { await loadActivity() }
     }
 
     /// An anchor as a proposer writes it: every key but `check`.

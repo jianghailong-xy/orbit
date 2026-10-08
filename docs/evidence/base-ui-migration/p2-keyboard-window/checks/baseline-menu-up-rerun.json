@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec && NO_COLOR=1 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.config.mjs --project chromium-dark-desktop --grep ' (orbit\\-menu\\ menu\\-up\\-enter\\ burst\\ sample\\ 10)$'",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_a9a9855a9a1c",
+ "cwd": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec",
+ "commit": "25309143fa5b571bb85c0f634cb04f339c9c3ccd",
+ "webTree": "7709bb72da4dd0ddb22b6563a62715821318a913",
+ "outputLastWritten": "2026-10-06T21:54:09.226749+00:00",
+ "exitCode": 0,
+ "outputSha256": "ff6337c19925ec236b3d3784bf4888f03006e91179dd987a02c755ee900a5ded",
+ "outputBytes": 580,
+ "note": "1 passed: the baseline-menu-up sample whose page never mounted, run again with the same probe on the delivered tree; with it every ↑-opener target and sequence has 20 burst + 20 paced samples."
+}

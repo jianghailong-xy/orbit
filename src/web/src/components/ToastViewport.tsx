@@ -11,13 +11,14 @@ import {
   SyncOutlined,
   UndoOutlined,
 } from '@ant-design/icons';
-import { useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { encodeId } from '../lib/idCodec';
 import { levelOf, type ToastGlyph, type ToastItem } from '../lib/toastFeed';
 import { closeToast, holdToasts, openToast, releaseToasts, useToastFeed } from '../lib/toastStore';
 import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
+import { useFeedbackPortal } from './ui/feedbackPortal';
 
 /**
  * Every toast on screen (docs/mocks/toast-system): what waits for you, pinned, above what passes.
@@ -33,6 +34,71 @@ import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
  */
 export function ToastViewport() {
   const feed = useToastFeed();
+  const portal = useFeedbackPortal();
+  // A stable React portal keeps notification DOM and hover state across modal
+  // ownership changes. The manual popover paints outside ancestor transforms.
+  const [host] = useState(() => {
+    const element = document.createElement('div');
+    element.className = 'toast-layer';
+    element.popover = 'manual';
+    return element;
+  });
+  useLayoutEffect(() => {
+    // Reparenting restarts CSS animations even when React keeps the same DOM.
+    // Carry the current entrance or exit time into its new parent.
+    for (const toast of host.querySelectorAll<HTMLElement>('[data-toast-animation-start]')) {
+      toast.style.animationDelay = `${Number(toast.dataset.toastAnimationStart) - Number(document.timeline.currentTime)}ms`;
+    }
+    (portal ?? document.body).appendChild(host);
+    host.showPopover?.();
+    return () => { host.remove(); };
+  }, [host, portal]);
+  const hovered = useRef<Element | null>(null);
+  const release = useCallback(() => {
+    if (!hovered.current) return;
+    hovered.current = null;
+    releaseToasts();
+  }, []);
+  useLayoutEffect(() => {
+    // A dismissed or replaced card may not send a mouse boundary event.
+    if (hovered.current && (!host.contains(hovered.current) || hovered.current.closest('.toast-slot--leaving'))) release();
+  });
+  useLayoutEffect(() => {
+    // WebKit can omit mouseleave when a hovered node changes modal owners.
+    // mouseover also covers a notification arriving or moving under a still
+    // pointer. Movement remains necessary when WebKit omits a boundary event.
+    const trackHover = (event: MouseEvent) => {
+      const target = event.target;
+      const next = target instanceof Element && host.contains(target) && !target.closest('.toast-slot--leaving')
+        ? target.closest('[data-toast-dwell]') : null;
+      // Reapply hold on entry: clearing the feed resets the store's hold state.
+      if (next) { hovered.current = next; holdToasts(); }
+      else release();
+    };
+    document.addEventListener('mouseover', trackHover, true);
+    document.addEventListener('mousemove', trackHover, true);
+    document.addEventListener('mouseleave', release);
+    return () => {
+      document.removeEventListener('mouseover', trackHover, true);
+      document.removeEventListener('mousemove', trackHover, true);
+      document.removeEventListener('mouseleave', release);
+      release();
+    };
+  }, [host, release]);
+  const [viewportWidth, setViewportWidth] = useState<number>();
+  useLayoutEffect(() => {
+    // WebKit top-layer descendants can retain a wider scroll viewport during
+    // modal transitions. Match a body-mounted notification even while closing.
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;inset:0;visibility:hidden;pointer-events:none';
+    probe.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(probe);
+    const measure = () => setViewportWidth(probe.getBoundingClientRect().width);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(probe);
+    return () => { observer.disconnect(); probe.remove(); };
+  }, []);
   const narrow = useMediaQuery(PHONE_QUERY);
   const navigate = useNavigate();
   const [allPinned, setAllPinned] = useState(false);
@@ -46,33 +112,121 @@ export function ToastViewport() {
     navigate(`/sessions/${encodeId(toast.sessionId)}`);
   };
 
-  const pinned = !narrow && allPinned ? [...feed.pinned].reverse() : feed.pinned.slice(-1);
-  const passing = narrow ? feed.transient.slice(-1) : feed.transient;
-  if (pinned.length === 0 && passing.length === 0) return null;
+  const visible = useMemo(() => {
+    const pinned = !narrow && allPinned ? [...feed.pinned].reverse() : feed.pinned.slice(-1);
+    const passing = narrow ? feed.transient.slice(-1) : feed.transient;
+    return [
+      ...pinned.map((toast) => ({ toast, folded: narrow && feed.expanded !== toast.id, behind: feed.pinned.length - 1 })),
+      ...passing.map((toast) => ({ toast, folded: false, behind: 0 })),
+    ];
+  }, [feed, narrow, allPinned]);
+  const [previous, setPrevious] = useState(visible);
+  const [shown, setShown] = useState(visible);
+  // Keep a departing toast in its slot for the 250ms exit, including its last card/pill shape.
+  // Updating during render keeps the new feed and its presentation in the same commit.
+  if (previous !== visible) {
+    setPrevious(visible);
+    const next = [...visible];
+    shown.forEach((entry, index) => {
+      if (!visible.some((one) => identityOf(one.toast) === identityOf(entry.toast))) next.splice(index, 0, entry);
+    });
+    setShown(next);
+  }
+  const remove = useCallback((id: string) => setShown((items) => items.filter((one) => identityOf(one.toast) !== id)), []);
+  // A phone column keeps its plain CSS width, as WebKit lays it out in body, until a modal takes it.
+  // The moved column can be laid out against another viewport width, also while the modal closes, so
+  // from then on it holds the width it last had in body (or the probe's) until it empties.
+  const [bodyWidth, setBodyWidth] = useState<{ width: number; viewportWidth?: number }>();
+  const [held, setHeld] = useState(false);
+  const showing = shown.length > 0;
+  if (showing && portal && !held) setHeld(true);
+  if (!showing && (held || bodyWidth)) {
+    setHeld(false);
+    setBodyWidth(undefined);
+  }
+  const current = useRef({ portal, held, viewportWidth });
+  useLayoutEffect(() => { current.current = { portal, held, viewportWidth }; });
+  const observeColumn = useCallback((section: HTMLElement | null) => {
+    if (!section) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const { portal, held, viewportWidth } = current.current;
+      if (!portal && !held) setBodyWidth({ width: entry.borderBoxSize[0].inlineSize, viewportWidth });
+    });
+    observer.observe(section);
+    return () => observer.disconnect();
+  }, []);
+  if (!showing) return null;
 
   return createPortal(
-    <section className={narrow ? 'toast-viewport toast-viewport--narrow' : 'toast-viewport'} aria-label="Notifications">
-      {pinned.map((toast) =>
-        narrow && feed.expanded !== toast.id ? (
-          <Pill key={toast.id} toast={toast} behind={feed.pinned.length - 1} onClick={() => openToast(toast.id)} />
-        ) : (
-          <AttentionCard key={toast.id} toast={toast} onOpen={openSession} />
-        ),
-      )}
+    <section ref={observeColumn} className={narrow ? 'toast-viewport toast-viewport--narrow' : 'toast-viewport'} aria-label="Notifications"
+      onAnimationStart={(event) => {
+        const toast = event.target;
+        if (!(toast instanceof HTMLElement) || !event.animationName.startsWith('orbit-toast-') || toast.dataset.toastAnimationStart) return;
+        const animation = toast.getAnimations().find((a) => a instanceof CSSAnimation && a.animationName === event.animationName);
+        if (animation) toast.dataset.toastAnimationStart = String(Number(document.timeline.currentTime) - Number(animation.currentTime));
+      }}
+      style={viewportWidth ? narrow
+        ? held ? { width: bodyWidth?.viewportWidth === viewportWidth ? `${bodyWidth.width}px` : `calc(${viewportWidth}px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px))` } : undefined
+        : { left: `calc(${viewportWidth}px - max(16px, env(safe-area-inset-right, 0px)) - 360px)`, right: 'auto' }
+        : undefined}>
+      {shown.map(({ toast, folded, behind }) => (
+        <ToastPresence
+          key={identityOf(toast)}
+          id={identityOf(toast)}
+          leaving={!visible.some((one) => identityOf(one.toast) === identityOf(toast))}
+          onExit={remove}
+        >
+          {folded ? (
+            <Pill toast={toast} behind={behind} onClick={() => openToast(toast.id)} />
+          ) : levelOf(toast) === 'attention' ? (
+            <AttentionCard toast={toast} onOpen={openSession} />
+          ) : levelOf(toast) === 'result' ? (
+            <ResultCard toast={toast} onOpen={openSession} />
+          ) : (
+            <Pill toast={toast} onClick={toast.sessionId ? () => openSession(toast) : undefined} />
+          )}
+        </ToastPresence>
+      ))}
       {!narrow && feed.pinned.length > 1 && (
         <button type="button" className="toast-more" onClick={() => setAllPinned((all) => !all)}>
           {allPinned ? 'Show less' : `+${feed.pinned.length - 1} more`}
         </button>
       )}
-      {passing.map((toast) =>
-        levelOf(toast) === 'result' ? (
-          <ResultCard key={toast.id} toast={toast} onOpen={openSession} />
-        ) : (
-          <Pill key={toast.id} toast={toast} onClick={toast.sessionId ? () => openSession(toast) : undefined} />
-        ),
-      )}
     </section>,
-    document.body,
+    host,
+  );
+}
+
+// A keyed operation keeps its presentation when the feed moves it between transient and pinned.
+function identityOf(toast: ToastItem): string {
+  return toast.key ?? toast.id;
+}
+
+/** Exit is visual only: dismissed actions immediately stop accepting clicks or keyboard focus. */
+function ToastPresence({ id, leaving, onExit, children }: {
+  id: string;
+  leaving: boolean;
+  onExit: (id: string) => void;
+  children: ReactNode;
+}) {
+  const slot = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    // The next phase has its own clock; an entrance delay must not skip exit.
+    slot.current!.style.animationDelay = '';
+    delete slot.current!.dataset.toastAnimationStart;
+    // WebKit can keep the old activeElement after its ancestor becomes inert.
+    const focused = document.activeElement;
+    if (leaving && focused instanceof HTMLElement && slot.current!.contains(focused)) focused.blur();
+  }, [leaving]);
+  useEffect(() => {
+    if (!leaving) return;
+    const timer = setTimeout(() => onExit(id), 250);
+    return () => clearTimeout(timer);
+  }, [id, leaving, onExit]);
+  return (
+    <div ref={slot} className={`toast-slot${leaving ? ' toast-slot--leaving' : ''}`} inert={leaving} aria-hidden={leaving || undefined}>
+      {children}
+    </div>
   );
 }
 
@@ -134,8 +288,7 @@ function Pill({ toast, behind = 0, onClick }: { toast: ToastItem; behind?: numbe
       type="button"
       className={`toast toast--pill toast--live${tinted}`}
       onClick={onClick}
-      onMouseEnter={holdToasts}
-      onMouseLeave={releaseToasts}
+      data-toast-dwell=""
     >
       {body}
     </button>
@@ -147,7 +300,7 @@ function Pill({ toast, behind = 0, onClick }: { toast: ToastItem; behind?: numbe
 function ResultCard({ toast, onOpen }: { toast: ToastItem; onOpen: (toast: ToastItem) => void }) {
   const action = toast.action;
   return (
-    <div className="toast toast--card toast--live" onMouseEnter={holdToasts} onMouseLeave={releaseToasts}>
+    <div className="toast toast--card toast--live" data-toast-dwell="">
       <Glyph toast={toast} />
       {toast.sessionId ? (
         <button
@@ -180,7 +333,12 @@ function ResultCard({ toast, onOpen }: { toast: ToastItem; onOpen: (toast: Toast
   );
 }
 
-/** ③ What failed, what it was about, the server's words to read twice and paste, and what to do. */
+/** ③ What failed, what it was about, the server's words to read twice and paste, and what to do.
+ *
+ *  The copy block carries the click into the session, the same as ② — a press that only follows the
+ *  toast is one the whole card should answer, not one the card keeps to a button of its own. A
+ *  button is left here only for what does MORE than follow it (`action`, which resolves in the
+ *  session) or what acts on the card's own text (`Copy error`). */
 function AttentionCard({ toast, onOpen }: { toast: ToastItem; onOpen: (toast: ToastItem) => void }) {
   const copyable = typeof toast.detail === 'string' ? toast.detail : null;
   const action = toast.action;
@@ -188,15 +346,26 @@ function AttentionCard({ toast, onOpen }: { toast: ToastItem; onOpen: (toast: To
     <div className={`toast toast--card toast--attention toast--${toast.tone} toast--live`}>
       <div className="toast-row">
         <Glyph toast={toast} />
-        <span className="toast-copy">
-          <Copy toast={toast} withDetail={false} />
-        </span>
+        {toast.sessionId ? (
+          <button
+            type="button"
+            className="toast-copy toast-copy--link"
+            aria-label={typeof toast.subtitle === 'string' ? `Open ${toast.subtitle}` : undefined}
+            onClick={() => onOpen(toast)}
+          >
+            <Copy toast={toast} withDetail={false} />
+          </button>
+        ) : (
+          <span className="toast-copy">
+            <Copy toast={toast} withDetail={false} />
+          </span>
+        )}
         <button type="button" className="toast-close" aria-label="Dismiss" onClick={() => closeToast(toast.id)}>
           <CloseOutlined />
         </button>
       </div>
       {present(toast.detail) && <div className="toast-reason">{toast.detail}</div>}
-      {(action || toast.sessionId || copyable) && (
+      {(action || copyable) && (
         <div className="toast-actions">
           {action && (
             <button
@@ -209,15 +378,6 @@ function AttentionCard({ toast, onOpen }: { toast: ToastItem; onOpen: (toast: To
               }}
             >
               {action.label}
-            </button>
-          )}
-          {toast.sessionId && (
-            <button
-              type="button"
-              className={action ? 'toast-action' : 'toast-action toast-action--primary'}
-              onClick={() => onOpen(toast)}
-            >
-              Open session
             </button>
           )}
           {copyable && (

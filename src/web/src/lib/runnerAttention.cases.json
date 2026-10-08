@@ -2092,6 +2092,488 @@
     }
   },
   {
+    "name": "selfUpdate dirNotWritable and behind: its install folder isn’t writable, with sudo orbit upgrade to copy",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.190",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "selfUpdate": { "state": "dirNotWritable", "installDir": "/usr/local/bin" },
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "cannotSelfUpdate",
+          "tone": "warn",
+          "short": "Install folder isn’t writable",
+          "title": "Install folder isn’t writable",
+          "actionKind": "copyCommand"
+        }
+      ],
+      "listLine": "Install folder isn’t writable",
+      "subtitle": "lab-host · v0.1.190",
+      "disk": null
+    }
+  },
+  {
+    "name": "selfUpdate disabledByEnv and behind: its updates are turned off, and nothing to press",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.190",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "selfUpdate": {
+          "state": "disabledByEnv",
+          "reason": "ORBIT_NO_SELFUPDATE is set",
+          "installDir": "/Users/lab/.orbit/bin"
+        },
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "cannotSelfUpdate",
+          "tone": "warn",
+          "short": "Updates are turned off",
+          "title": "Updates are turned off",
+          "actionKind": null
+        }
+      ],
+      "listLine": "Updates are turned off",
+      "subtitle": "lab-host · v0.1.190",
+      "disk": null
+    }
+  },
+  {
+    "name": "selfUpdate failed and behind: its update failed, with Update Runner Now, though it runs as root",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.190",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "selfUpdate": {
+          "state": "failed",
+          "reason": "installing 0.1.197: sha256 mismatch for orbit-linux-amd64.gz",
+          "installDir": "/root/.orbit/bin"
+        },
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "cannotSelfUpdate",
+          "tone": "warn",
+          "short": "Runner update failed",
+          "title": "Runner update failed",
+          "actionKind": "updateRunner"
+        }
+      ],
+      "listLine": "Runner update failed",
+      "subtitle": "lab-host · v0.1.190",
+      "disk": null
+    }
+  },
+  {
+    "name": "selfUpdate waitingForIdle and behind: nothing, though not root — it installs once no turn is running",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.190",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "selfUpdate": { "state": "waitingForIdle", "installDir": "/home/lab/.orbit/bin" },
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.190", "disk": null }
+  },
+  {
+    "name": "selfUpdate heldByRollout and behind: nothing, though not root — the rollout reaches it later",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.190",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "selfUpdate": { "state": "heldByRollout", "installDir": "/home/lab/.orbit/bin" },
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.190", "disk": null }
+  },
+  {
+    "name": "selfUpdate enabled and behind: nothing, though not root — it installs the release itself",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.190",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "selfUpdate": {
+          "state": "enabled",
+          "installDir": "/home/lab/.orbit/bin",
+          "lastUpdatedAt": "2026-09-20T08:00:00.000Z",
+          "lastUpdatedFrom": "0.1.189",
+          "lastUpdatedTo": "0.1.190"
+        },
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.190", "disk": null }
+  },
+  {
+    "name": "selfUpdate dirNotWritable on the latest release: nothing",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "selfUpdate": { "state": "dirNotWritable", "installDir": "/usr/local/bin" },
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.197", "disk": null }
+  },
+  {
+    "name": "selfUpdate failed while offline: only offline — Update Runner Now needs it online",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.190",
+        "online": false,
+        "lastHeartbeatAt": "2026-09-27T00:15:00Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "selfUpdate": {
+          "state": "failed",
+          "reason": "cannot read the release to install: connection refused"
+        },
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "offline",
+          "tone": "idle",
+          "short": "Offline",
+          "title": "Offline for 2 days",
+          "actionKind": null
+        }
+      ],
+      "listLine": null,
+      "subtitle": "Offline · last seen 2d ago · v0.1.190",
+      "disk": null
+    }
+  },
+  {
+    "name": "selfUpdate dirNotWritable while offline: offline, and its install folder isn’t writable",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.190",
+        "online": false,
+        "lastHeartbeatAt": "2026-09-27T00:15:00Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "selfUpdate": { "state": "dirNotWritable", "installDir": "/usr/local/bin" },
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "offline",
+          "tone": "idle",
+          "short": "Offline",
+          "title": "Offline for 2 days",
+          "actionKind": null
+        },
+        {
+          "kind": "cannotSelfUpdate",
+          "tone": "warn",
+          "short": "Install folder isn’t writable",
+          "title": "Install folder isn’t writable",
+          "actionKind": "copyCommand"
+        }
+      ],
+      "listLine": null,
+      "subtitle": "Offline · last seen 2d ago · v0.1.190",
+      "disk": null
+    }
+  },
+  {
+    "name": "selfUpdate disabledByEnv while offline: offline, and its updates are turned off",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.190",
+        "online": false,
+        "lastHeartbeatAt": "2026-09-27T00:15:00Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "selfUpdate": { "state": "disabledByEnv", "reason": "development build" },
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "offline",
+          "tone": "idle",
+          "short": "Offline",
+          "title": "Offline for 2 days",
+          "actionKind": null
+        },
+        {
+          "kind": "cannotSelfUpdate",
+          "tone": "warn",
+          "short": "Updates are turned off",
+          "title": "Updates are turned off",
+          "actionKind": null
+        }
+      ],
+      "listLine": null,
+      "subtitle": "Offline · last seen 2d ago · v0.1.190",
+      "disk": null
+    }
+  },
+  {
+    "name": "selfUpdate null — a runner too old to report it — not root and behind: can’t update itself, as before",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.190",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "selfUpdate": null,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "cannotSelfUpdate",
+          "tone": "warn",
+          "short": "Can’t update itself",
+          "title": "Can’t update itself",
+          "actionKind": "copyCommand"
+        }
+      ],
+      "listLine": "Can’t update itself",
+      "subtitle": "lab-host · v0.1.190",
+      "disk": null
+    }
+  },
+  {
+    "name": "selfUpdate in a state this client doesn’t know, not root and behind: nothing",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.190",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "selfUpdate": { "state": "pausedByOwner" },
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.190", "disk": null }
+  },
+  {
     "name": "checkout unmerged: raised",
     "input": {
       "runner": {

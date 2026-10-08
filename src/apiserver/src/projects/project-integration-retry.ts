@@ -22,6 +22,8 @@ import {
 
 /** Only the conversation the project is coordinated from may rerun one of its landings. 403. */
 export const INTEGRATION_RETRY_COORDINATOR_ONLY = 'INTEGRATION_RETRY_COORDINATOR_ONLY';
+/** The user door may only answer an integration item assigned to the account owner. 403. */
+export const INTEGRATION_RETRY_OWNER_ONLY = 'INTEGRATION_RETRY_OWNER_ONLY';
 /** A rerun nobody explained is the silent retry J5 refuses. 400. */
 export const INTEGRATION_RETRY_REASON_REQUIRED = 'INTEGRATION_RETRY_REASON_REQUIRED';
 /** The task is not filed under the project the call names. 403. */
@@ -42,12 +44,18 @@ export const MAX_INTEGRATION_RETRY_REASON = 2_000;
 
 /** What the decision is taken over, read in the retry's own transaction under the task row. */
 export interface IntegrationRetryFacts {
+  /** Which side is pressing the door; omitted means the historical coordinator decision. */
+  requester?: 'COORDINATOR' | 'OWNER';
   /** The project's Automatic switch (`coordinator_enabled`). */
   coordinatorEnabled: boolean;
   taskStatus: string;
   /** The task's newest LAND_TASK, by generation; null when it never had one. `phase` is where it
    *  stopped: a CONFLICT at MAIN_SYNC is the line's, and its refusal says what resolves that one. */
-  newestLanding: { id: string; generation: number; state: string; checks: unknown; phase?: string | null } | null;
+  newestLanding: {
+    id: string; generation: number; state: string; checks: unknown; phase?: string | null;
+    /** RUNNING, and its runner has said nothing past the job's limit (§1.6 `inFlightJobs`). */
+    timedOut?: boolean;
+  } | null;
   /** The task's OPEN `INTEGRATION_*` items. */
   openItems: ReadonlyArray<{ id: string; kind: string; assignee: string; assigneeReason: string }>;
   /** The task's open `project_blocker` episodes that wait on the account owner. */
@@ -73,6 +81,8 @@ export type IntegrationRetryDecision =
        * asked for, because nobody knows yet which of the two it will be.
        */
       handle: string[];
+      /** The rerun replaces a RUNNING landing that timed out, which the door ends first (J-T9). */
+      endsTimedOutJob?: boolean;
     }
   | IntegrationRetryRefusal;
 
@@ -117,13 +127,17 @@ export function decideIntegrationRetry(facts: IntegrationRetryFacts): Integratio
       { newestLanding: null });
   }
   const landing = { jobId: newest.id, generation: newest.generation, state: newest.state };
-  if (newest.state === 'QUEUED' || newest.state === 'RUNNING') {
+  // A landing whose runner stopped reporting past its limit will not end by itself (§2.2 J-T9): the
+  // retry ends it as the ERROR it is, and reruns it like any other.
+  const timedOut = newest.state === 'RUNNING' && newest.timedOut === true;
+  if (!timedOut && (newest.state === 'QUEUED' || newest.state === 'RUNNING')) {
     return refuse(409, INTEGRATION_RETRY_IN_FLIGHT,
       `generation ${newest.generation} of this task's landing is already ${newest.state}: nothing new is `
-      + 'queued beside it. Wait for its result — if it fails, its own item reaches you.',
+      + 'queued beside it. Wait for its result — if it fails, its own item reaches you; if its runner '
+      + 'stops reporting past its limit, it can be retried then.',
       { newestLanding: landing });
   }
-  const failureClass: LandingFailureClass | null = landingFailureClass(newest);
+  const failureClass: LandingFailureClass | null = timedOut ? 'ERROR' : landingFailureClass(newest);
   if (!isRetryableLandingFailure(failureClass)) {
     return refuse(409, INTEGRATION_RETRY_NOT_APPLICABLE,
       notRetryable(newest.state, failureClass, newest.phase ?? null), {
@@ -131,6 +145,26 @@ export function decideIntegrationRetry(facts: IntegrationRetryFacts): Integratio
       });
   }
 
+  const requester = facts.requester ?? 'COORDINATOR';
+  if (requester === 'OWNER') {
+    const mine = facts.openItems.filter((item) => item.assignee === 'OWNER');
+    // A timed-out landing has no item to be anybody's yet, and it is the owner's project: their press
+    // is the decision.
+    if (mine.length === 0 && !timedOut) return ownerOnlyRefusal('failed landing');
+    if (facts.ownerBlockers.length > 0) {
+      return refuse(409, INTEGRATION_RETRY_OWNER_BLOCKER,
+        'the account owner has an open blocker about this task waiting on their decision. Running the '
+        + 'landing again before that blocker is resolved would answer it for them: resolve the blocker '
+        + 'first.', { blockerIds: facts.ownerBlockers.map((blocker) => blocker.id) });
+    }
+    return {
+      ok: true,
+      retryOfJobId: newest.id,
+      failureClass,
+      handle: mine.map((item) => item.id),
+      ...(timedOut ? { endsTimedOutJob: true } : {}),
+    };
+  }
   const owned = ownerItemRefusal(facts.openItems, 'failed landing');
   if (owned) return owned;
   if (facts.ownerBlockers.length > 0) {
@@ -147,12 +181,15 @@ export function decideIntegrationRetry(facts: IntegrationRetryFacts): Integratio
     retryOfJobId: newest.id,
     failureClass,
     handle: mine.map((item) => item.id),
+    ...(timedOut ? { endsTimedOutJob: true } : {}),
   };
 }
 
 /** What a blocked candidate's re-check is decided over, read in the retry's own transaction under the
  *  candidate's row lock. */
 export interface PromotionRetryFacts {
+  /** Which side is pressing the door; omitted means the historical coordinator decision. */
+  requester?: 'COORDINATOR' | 'OWNER';
   /** The project's Automatic switch (`coordinator_enabled`). */
   coordinatorEnabled: boolean;
   /** Where the candidate is (`project_promotion.state`). */
@@ -204,6 +241,17 @@ export function decidePromotionRetry(facts: PromotionRetryFacts): IntegrationRet
       : `this candidate's newest ${newest.kind} is ${newest.state}, which is not a failure a rerun `
         + 'answers: only CHECK_FAILED, CHECK_TIMED_OUT and ERROR are run again.',
     { newestJob: { jobId: newest.id, kind: newest.kind, generation: newest.generation, state: newest.state, failureClass } });
+  }
+  const requester = facts.requester ?? 'COORDINATOR';
+  if (requester === 'OWNER') {
+    const mine = facts.openItems.filter((item) => item.assignee === 'OWNER');
+    if (mine.length === 0) return ownerOnlyRefusal('blocked merge into main');
+    return {
+      ok: true,
+      retryOfJobId: newest.id,
+      failureClass,
+      handle: mine.map((item) => item.id),
+    };
   }
   const owned = ownerItemRefusal(facts.openItems, 'blocked merge into main');
   if (owned) return owned;
@@ -259,6 +307,13 @@ function notAutomaticRefusal(failure: string): IntegrationRetryRefusal {
     + 'about this one has been handed to you. Ask them (ask_owner), or let them hand you the item.');
 }
 
+/** The user door is scoped to the exception card in front of the account owner. */
+function ownerOnlyRefusal(failure: string): IntegrationRetryRefusal {
+  return refuse(403, INTEGRATION_RETRY_OWNER_ONLY,
+    `this ${failure} is not assigned to the account owner. The owner retry door only answers an `
+    + 'open owner item; use the project coordinator\'s integration_retry door for a coordinator item.');
+}
+
 /** Why a landing that ended this way is not run again, and what answers it instead. */
 function notRetryable(state: string, failureClass: LandingFailureClass | null, phase: string | null): string {
   if (failureClass === 'CONFLICT' && phase === 'MAIN_SYNC') {
@@ -294,6 +349,9 @@ function notRetryable(state: string, failureClass: LandingFailureClass | null, p
 
 /** What each way an item reaches the owner means, for the one sentence a refusal gives it. */
 function ownerItemWhy(reasons: readonly string[]): string {
+  if (reasons.includes('HANDED_OVER')) {
+    return 'the coordinator handed it over because it could not settle it itself.';
+  }
   if (reasons.includes('ESCALATED')) {
     return 'it escalated to them because it waited longer than the project\'s escalation window.';
   }

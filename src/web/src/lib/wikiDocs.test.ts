@@ -27,6 +27,8 @@ import {
   WIKI_MARK_NO_SOURCE,
   WIKI_MARK_WITHDRAWN,
   WIKI_NEXT_MARKED,
+  WIKI_NO_DOCUMENTS,
+  WIKI_NO_DOCUMENTS_NOTE,
   WIKI_NO_QUOTE_GIVEN,
   WIKI_OPEN_THE_ENTRY,
   WIKI_REWRITE_PENDING,
@@ -54,6 +56,8 @@ import {
   wikiDocsIndexMeta,
   wikiDocsIndexPath,
   wikiDocsIndexSummary,
+  wikiDocsNotWrittenYet,
+  wikiDocsWritten,
   wikiExcerptLines,
   wikiFootnoteIsRepo,
   wikiFootnoteOpen,
@@ -63,11 +67,15 @@ import {
   wikiFootnoteWhere,
   wikiFootnotesSummary,
   wikiGithubRepo,
+  wikiHomeCategories,
+  wikiHomeLine,
   wikiLineRange,
   wikiMarkNote,
   wikiMonthDayTime,
   wikiMoreLines,
   wikiMoreSections,
+  wikiNotWrittenRow,
+  wikiNotWrittenYet,
   wikiQuoted,
   wikiReadsByDocs,
   wikiScopeTarget,
@@ -376,5 +384,71 @@ describe('the directory, Browse and the A–Z index by document', () => {
     expect(wikiDocsIndexPath('orbit', first)).toBe(`/wiki/orbit/d/${first.docSlug}`);
     const section = docs.index.items.find((item) => item.kind === 'section')!;
     expect(wikiDocsIndexPath('orbit', section)).toBe(`/wiki/orbit/d/${section.docSlug}#sec-${section.sectionKey}`);
+  });
+});
+
+/**
+ * The home, by the confirmed plan (design §12.3.1, mocks 30 ③ and 31 ①): the line under its head, and its
+ * documents — the written ones with their leads, a blue dot on those written since the reader last looked,
+ * the rest folded into one row a category. The words are declared once here, for OrbitKit to say too.
+ */
+describe('the home, by the confirmed plan', () => {
+  const read = docs.directory.read;
+  /** The fixture's read, its written documents with a lead each, as a server that writes them answers. */
+  const led: WikiDocsDirectory = {
+    ...read,
+    categories: read.categories.map((category) => ({
+      ...category,
+      docs: category.docs.map((doc) => (doc.written ? { ...doc, lead: `${doc.title} 的头两句。` } : doc)),
+    })),
+  };
+
+  it('says under its head what the space holds: its documents and how many are written, its articles before a plan, else none yet', () => {
+    expect(wikiHomeLine(read, 0)).toBe('5 documents · 3 written');
+    expect(wikiDocsWritten(35, 5)).toBe('35 documents · 5 written');
+    expect(wikiDocsWritten(1, 0)).toBe('1 document · 0 written');
+    expect(wikiDocsWritten(1200, 1000)).toBe('1,200 documents · 1,000 written');
+    expect(wikiHomeLine({ ...read, plan: null }, 12)).toBe('12 articles');
+    expect(wikiHomeLine({ ...read, plan: null }, 1)).toBe('1 article');
+    expect(wikiHomeLine(undefined, 0)).toBe(WIKI_NO_DOCUMENTS);
+    expect(WIKI_NO_DOCUMENTS).toBe('No documents yet');
+    expect(WIKI_NO_DOCUMENTS_NOTE).toBe(
+      'This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space.',
+    );
+  });
+
+  it('folds what is not written yet into one row a category, saying how many', () => {
+    expect(wikiNotWrittenYet(3)).toBe('+3 not written yet');
+    expect(wikiDocsNotWrittenYet(3)).toBe(`3 documents · ${WIKI_DOC_NOT_WRITTEN_SHORT}`);
+    expect(wikiDocsNotWrittenYet(1)).toBe('1 document · Not written yet');
+  });
+
+  it('lists each category’s written documents with their leads, the rest after them, a category with none left out', () => {
+    const seen = Date.parse('2026-09-28T11:00:00.000Z');
+    const categories = wikiHomeCategories(led, seen);
+    expect(
+      categories.map((category) => ({
+        number: category.number,
+        written: category.written.map((doc) => `${doc.number} ${doc.title}${doc.fresh ? ' •' : ''}`),
+        folded: wikiNotWrittenRow(category),
+        notWritten: category.notWritten.map((doc) => doc.number),
+      })),
+    ).toEqual([
+      { number: 1, written: ['1.1 产品定位与使用场景'], folded: null, notWritten: [] },
+      { number: 3, written: ['3.1 会话运行模型与长连接 •', '3.2 会话状态生命周期 •'], folded: '+1 not written yet', notWritten: ['3.3'] },
+      { number: 4, written: [], folded: '1 document · Not written yet', notWritten: ['4.1'] },
+    ]);
+    expect(categories[1].written[0].lead).toBe('会话运行模型与长连接 的头两句。');
+    // A read from before the lead, or a document whose first section says nothing yet: no line under the title.
+    expect(wikiHomeCategories(read, seen)[1].written[0].lead).toBeNull();
+  });
+
+  it('marks every written document new to a reader who has not looked before', () => {
+    expect(wikiHomeCategories(led, 0).flatMap((category) => category.written.map((doc) => doc.fresh))).toEqual([true, true, true]);
+    expect(wikiHomeCategories(led, Date.parse('2026-09-29T00:00:00.000Z')).flatMap((category) => category.written.map((doc) => doc.fresh))).toEqual([
+      false,
+      false,
+      false,
+    ]);
   });
 });

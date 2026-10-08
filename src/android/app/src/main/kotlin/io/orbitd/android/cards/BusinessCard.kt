@@ -29,16 +29,13 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
     var custom by rememberSaveable(card.key, card.binding, stateSaver = jsonSaver(MapSerializer(String.serializer(), String.serializer()))) { mutableStateOf<Map<String, String>>(emptyMap()) }
     var ownerAnswers by rememberSaveable(card.key, card.binding, stateSaver = jsonSaver(ListSerializer(OwnerAnswer.serializer()))) { mutableStateOf<List<OwnerAnswer>>(emptyList()) }
     var option by rememberSaveable(card.key, card.binding) { mutableStateOf(card.source.obj("question")?.number("recommendedOption")) }
-    var settings by rememberSaveable(card.key, card.binding, stateSaver = jsonSaver(ProjectStartSettings.serializer().nullable)) { mutableStateOf(card.source.obj("startRequest")?.obj("settings")?.let {
-        runCatching { Wire.json.decodeFromJsonElement(ProjectStartSettings.serializer(), it) }.getOrNull()
-    }) }
     var reason by rememberSaveable(card.key, card.binding) { mutableStateOf<String?>(null) }
     val proposal = card.source.obj("payload")?.let { it.obj("entry") ?: it.obj("changes") } ?: card.source.obj("entry")
     var editTitle by rememberSaveable(card.key, card.binding) { mutableStateOf(proposal?.text("title").orEmpty()) }
     var editSummary by rememberSaveable(card.key, card.binding) { mutableStateOf(proposal?.text("summary").orEmpty()) }
     var confirming by remember { mutableStateOf<CardVerb?>(null) }
     val enabled = fresh && !result.busy && !result.uncertain && !result.settled
-    val input = CardInput(note, selections, custom, ownerAnswers, option, settings,
+    val input = CardInput(note, selections, custom, ownerAnswers, option,
         edited = if (editTitle.isBlank()) null else buildJsonObject {
             // Amend replaces proposed changes, so preserve the fields this two-field form doesn't edit.
             if (card.source.text("op") == "amend") {
@@ -115,9 +112,6 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
                 OutlinedTextField(note, { note = it }, Modifier.fillMaxWidth(), enabled = enabled,
                     label = { Text(if (option == null) "Your answer" else "Add a note (optional)") })
             }
-            if (CardVerb.START in card.actions) settings?.let { draft ->
-                StartSettings(draft, enabled) { settings = it }
-            }
             if (card.actions.any { it in setOf(CardVerb.WIKI_REJECT, CardVerb.WIKI_REJECT_ENTRY) }) {
                 Text("If rejecting, choose a reason", style = MaterialTheme.typography.labelMedium)
                 CardRequests.wikiRejectReasons.forEach { value -> ChoiceRow(value.replace('_', ' '), null, reason == value, enabled) { reason = value } }
@@ -176,19 +170,4 @@ private fun ChoiceRow(label: String, description: String?, selected: Boolean, en
         if (multiple) Checkbox(selected, null, enabled = enabled) else RadioButton(selected, null, enabled = enabled)
         Column(Modifier.weight(1f)) { Text(label + if (recommended) " · Recommended" else ""); description?.let { Text(it, style = MaterialTheme.typography.bodySmall) } }
     }
-}
-
-@Composable
-private fun StartSettings(settings: ProjectStartSettings, enabled: Boolean, change: (ProjectStartSettings) -> Unit) {
-    Text("Run settings", style = MaterialTheme.typography.titleSmall)
-    ChoiceRow("Project branch", "Finished tasks land on the project's branch.", settings.line == "PROJECT_BRANCH", enabled) { change(settings.copy(line = "PROJECT_BRANCH")) }
-    ChoiceRow("Main", "Finished tasks land on the upstream branch.", settings.line == "MAIN", enabled) { change(settings.copy(line = "MAIN")) }
-    if (settings.line == "PROJECT_BRANCH") OutlinedTextField(settings.projectBranchName.orEmpty(), { change(settings.copy(projectBranchName = it)) },
-        Modifier.fillMaxWidth(), enabled = enabled, label = { Text("Project branch (optional)") })
-    ChoiceRow("Automatic", "The coordinator runs the project.", settings.automatic, enabled, multiple = true) { change(settings.copy(automatic = !settings.automatic)) }
-    var count by remember(settings.maxConcurrentTasks) { mutableStateOf(settings.maxConcurrentTasks.toString()) }
-    OutlinedTextField(count, { count = it; change(settings.copy(maxConcurrentTasks = it.toIntOrNull() ?: 0)) }, Modifier.fillMaxWidth(), enabled = enabled,
-        label = { Text("Concurrent tasks (1–100)") }, isError = settings.maxConcurrentTasks !in 1..100)
-    OutlinedTextField(settings.mergeCheckCommand.orEmpty(), { change(settings.copy(mergeCheckCommand = it)) }, Modifier.fillMaxWidth(), enabled = enabled,
-        label = { Text("Merge check command") })
 }

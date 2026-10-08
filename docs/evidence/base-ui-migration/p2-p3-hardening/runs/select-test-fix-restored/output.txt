@@ -1,0 +1,36 @@
+
+ RUN  v5.0.2 /root/.orbit/worktrees/81d798cd-8d2e-56d8-8e3d-7f8e64e1ee3d/src/web
+
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","ArrowDown","Enter"] from "1" with focus in the list (the reference) 117ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","ArrowUp","Enter"] from "1" with focus in the list (the reference) 29ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","ArrowUp","ArrowUp","Enter"] from "1" with focus in the list (the reference) 26ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","ArrowDown","ArrowDown","Enter"] from "1" with focus in the list (the reference) 21ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","Enter"] from "1" with focus in the list (the reference) 20ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowUp","ArrowUp","Enter"] from "1" with focus in the list (the reference) 23ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowUp","ArrowDown","Enter"] from "1" with focus in the list (the reference) 21ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["Enter","ArrowDown","Enter"] from "1" with focus in the list (the reference) 22ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["Enter","ArrowUp","Enter"] from "1" with focus in the list (the reference) 21ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["Enter","Enter"] from "1" with focus in the list (the reference) 20ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","Enter"] from null with focus in the list (the reference) 19ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowUp","Enter"] from null with focus in the list (the reference) 20ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["Enter","Enter"] from null with focus in the list (the reference) 18ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","ArrowDown","Enter"] from "1" before focus enters the list picks what the reference picks 20ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","ArrowUp","Enter"] from "1" before focus enters the list picks what the reference picks 18ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","ArrowUp","ArrowUp","Enter"] from "1" before focus enters the list picks what the reference picks 19ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","ArrowDown","ArrowDown","Enter"] from "1" before focus enters the list picks what the reference picks 18ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","Enter"] from "1" before focus enters the list picks what the reference picks 19ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowUp","ArrowUp","Enter"] from "1" before focus enters the list picks what the reference picks 19ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowUp","ArrowDown","Enter"] from "1" before focus enters the list picks what the reference picks 19ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["Enter","ArrowDown","Enter"] from "1" before focus enters the list picks what the reference picks 19ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["Enter","ArrowUp","Enter"] from "1" before focus enters the list picks what the reference picks 22ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["Enter","Enter"] from "1" before focus enters the list picks what the reference picks 18ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowDown","Enter"] from null before focus enters the list picks what the reference picks 20ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["ArrowUp","Enter"] from null before focus enters the list picks what the reference picks 17ms
+ ✓ src/components/ui/Select.test.tsx > Select keys pressed before focus enters the open list > ["Enter","Enter"] from null before focus enters the list picks what the reference picks 16ms
+
+ Test Files  1 passed (1)
+      Tests  26 passed (26)
+   Start at  20:05:44
+   Duration  1.27s (tests 51%, environment 21%, import 20%, transform 7%)
+
+JSON report written to /root/.orbit/worktrees/81d798cd-8d2e-56d8-8e3d-7f8e64e1ee3d/docs/evidence/base-ui-migration/p2-p3-hardening/runs/select-test-fix-restored/vitest.json

@@ -15,6 +15,7 @@ import { Client } from 'pg';
 import {
   IntegrationJobCommand,
   IntegrationJobResultRequest,
+  IntegrationCheckResult,
   RunEventType,
   RunStatus as SharedRunStatus,
   TaskStatus as DeclaredTaskStatus,
@@ -40,10 +41,11 @@ import {
 import { CoordinatorWakeService } from './coordinator-wake.service';
 import { CriterionReadyProducer } from './criterion-ready.producer';
 import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
-import { INTEGRATION_JOB_CLAIM, shortBranchName } from './project-integration-job';
+import { INTEGRATION_JOB_CLAIM, PROMOTION_AUTOMATIC_LAND, shortBranchName } from './project-integration-job';
 import { ProjectOpenItemEscalationService } from './open-item-escalation.service';
 import { configureProjectIntegration } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
+import { ProjectIntegrationRetryController } from './project-integration-retry.controller';
 import { ProjectPromotionService } from './project-promotion.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
@@ -92,6 +94,7 @@ interface Stack {
   api: RunnerApiController;
   jobs: IntegrationJobRelay;
   openItems: ProjectOpenItemService;
+  ownerRetry: ProjectIntegrationRetryController;
 }
 
 /** The production wiring over one client, with the real completion-input router behind task writes. */
@@ -123,6 +126,7 @@ async function connect(): Promise<Stack> {
   const openItems = new ProjectOpenItemService(prisma, sessions);
   const tasks = new TasksService(prisma, sessions, realtime, undefined, router, undefined, openItems);
   const jobs = new IntegrationJobRelay(prisma, openItems);
+  const ownerRetry = new ProjectIntegrationRetryController(openItems);
   const push = new Proxy({}, { get: () => async () => undefined }) as never;
   // The result route as production wires it, down to the promotion service its aftermath asks to
   // consider the project branch for main (§3.4 M-F1) — which is what "the landing goes on to the
@@ -145,7 +149,7 @@ async function connect(): Promise<Stack> {
     undefined,
     new ProjectPromotionService(prisma),
   );
-  return { db, sessions, tasks, api, jobs, openItems };
+  return { db, sessions, tasks, api, jobs, openItems, ownerRetry };
 }
 
 interface World {
@@ -352,12 +356,17 @@ async function doneTask(
 }
 
 /** The runner asking for work, as its heartbeat does. */
-function claim(stack: Stack, w: World, lease: string): Promise<IntegrationJobCommand[]> {
+function claim(
+  stack: Stack,
+  w: World,
+  lease: string,
+  extraCapabilities: string[] = [],
+): Promise<IntegrationJobCommand[]> {
   return stack.jobs.dispatch({
     runnerId: w.runnerId,
     leaseOwner: lease,
     draining: false,
-    capabilities: [INTEGRATION_JOB_CLAIM],
+    capabilities: [INTEGRATION_JOB_CLAIM, ...extraCapabilities],
   });
 }
 
@@ -388,6 +397,16 @@ const RED_MERGE_CHECK: Failure = {
     durationMs: 1_609_148,
     outputTail: '--- FAIL: TestRealClaudeAcceptsASetModel (1.45s)\nFAIL\torbit\t551.473s',
   }],
+};
+
+const GREEN_MERGE_CHECK: IntegrationCheckResult = {
+  name: 'MERGE_CHECK',
+  command: 'npm test',
+  expectedExitCode: 0,
+  exitCode: 0,
+  timedOut: false,
+  durationMs: 1,
+  outputTail: 'ok\n',
 };
 
 const TIMED_OUT_CHECK: Failure = {
@@ -448,6 +467,37 @@ async function failedLanding(
   return { task, job: claimed[0]! };
 }
 
+/** A project-branch candidate whose first CHECK_PROMOTION ended in a red check. */
+async function failedPromotion(
+  stack: Stack,
+  w: World,
+  label: string,
+): Promise<{ promotionId: string; check: IntegrationJobCommand }> {
+  const task = await doneTask(stack, w, label);
+  const [landing] = await claim(stack, w, `lease-${label}-landing`);
+  assert.ok(landing, 'the task landing was queued');
+  const landed = await report(stack, w, landing!, LANDED);
+  assert.equal(landed.accepted, true, 'the task landed on the project branch');
+  const [check] = await claim(stack, w, `lease-${label}-check`);
+  assert.equal(check?.kind, 'CHECK_PROMOTION', 'the landing queued a promotion check');
+  const blocked = await report(stack, w, check!, {
+    ...RED_MERGE_CHECK,
+    sourceSha: 'd'.repeat(40),
+    targetShaBefore: 'f'.repeat(40),
+    upstreamSha: 'f'.repeat(40),
+    testedSha: '2'.repeat(40),
+    testedTreeSha: '3'.repeat(40),
+  });
+  assert.equal(blocked.accepted, true, 'the check failure blocked the candidate');
+  const promotion = await stack.db.projectPromotion.findFirstOrThrow({
+    where: { projectId: w.projectId },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, state: true },
+  });
+  assert.equal(promotion.state, 'BLOCKED');
+  return { promotionId: promotion.id, check: check! };
+}
+
 interface JobRow {
   id: string;
   generation: number;
@@ -458,6 +508,7 @@ interface JobRow {
   retryFailureClass: string | null;
   retryReason: string | null;
   retryRequestedBySessionId: string | null;
+  retryRequestedByUserId: string | null;
 }
 
 /** Every LAND_TASK of this task, oldest generation first. */
@@ -475,6 +526,7 @@ function landings(db: PrismaClient, taskId: string): Promise<JobRow[]> {
       retryFailureClass: true,
       retryReason: true,
       retryRequestedBySessionId: true,
+      retryRequestedByUserId: true,
     },
   });
 }
@@ -496,16 +548,18 @@ interface ItemRow {
   integrationJobId: string | null;
   handlingJobId: string | null;
   handlingSessionId: string | null;
+  handlingUserId: string | null;
   handlingReason: string | null;
   payload: {
     failureClass?: string;
     generation?: number;
-    retry?: { retryOfJobId?: string; failureClass?: string; reason?: string; requestedBySessionId?: string };
+    retry?: { retryOfJobId?: string; failureClass?: string; reason?: string; requestedBySessionId?: string; requestedByUserId?: string };
     check?: { name: string; timedOut?: boolean };
   };
   resolution: string | null;
   resolvedBy: string | null;
   resolvedBySessionId: string | null;
+  resolvedByUserId: string | null;
   resolutionNote: string | null;
   supersededByItemId: string | null;
 }
@@ -515,9 +569,11 @@ function itemsOf(db: PrismaClient, taskId: string): Promise<ItemRow[]> {
   return db.$queryRaw<ItemRow[]>(Prisma.sql`
     SELECT "id", "kind", "state", "assignee", "assignee_reason" AS "assigneeReason",
            "integration_job_id" AS "integrationJobId", "handling_job_id" AS "handlingJobId",
-           "handling_session_id" AS "handlingSessionId", "handling_reason" AS "handlingReason",
+           "handling_session_id" AS "handlingSessionId", "handling_user_id" AS "handlingUserId",
+           "handling_reason" AS "handlingReason",
            "payload", "resolution",
-           "resolved_by" AS "resolvedBy", "resolved_by_session_id" AS "resolvedBySessionId",
+           "resolved_by" AS "resolvedBy", "resolved_by_user_id" AS "resolvedByUserId",
+           "resolved_by_session_id" AS "resolvedBySessionId",
            "resolution_note" AS "resolutionNote", "superseded_by_item_id" AS "supersededByItemId"
       FROM "project_open_item"
      WHERE "task_id" = ${taskId}::uuid
@@ -532,6 +588,25 @@ function retry(stack: Stack, w: World, taskId: string, reason: string, sessionId
     taskId,
     { reason },
     sessionId === undefined ? w.coordinatorSessionId : sessionId,
+  );
+}
+
+/** The owner door as the user controller calls it; unlike the runner door it records a USER id. */
+function ownerRetry(stack: Stack, w: World, taskId: string, reason: string) {
+  return stack.ownerRetry.retryIntegration(
+    { userId: w.ownerId, email: `${w.ownerId}@retry.invalid` },
+    w.projectId,
+    taskId,
+    { reason },
+  );
+}
+
+function ownerPromotionRetry(stack: Stack, w: World, promotionId: string, reason: string) {
+  return stack.ownerRetry.retryPromotionCheck(
+    { userId: w.ownerId, email: `${w.ownerId}@retry.invalid` },
+    w.projectId,
+    promotionId,
+    { reason },
   );
 }
 
@@ -1000,6 +1075,227 @@ test('a reason is required: empty, blank and over-long reasons write nothing',
     }
   });
 
+test('owner task retry records a USER requester, creates one generation, and deduplicates concurrent presses',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'owner-task-dedupe', false);
+      const { task } = await failedLanding(stack, w, 'owner-task-dedupe');
+      const [item] = await itemsOf(stack.db, task.taskId);
+      assert.equal(item?.assignee, 'OWNER');
+
+      const raced = await Promise.allSettled([
+        ownerRetry(stack, w, task.taskId, 'the owner repaired the integration baseline'),
+        ownerRetry(stack, w, task.taskId, 'the owner pressed twice'),
+      ]);
+      assert.equal(raced.filter((result) => result.status === 'fulfilled').length, 1);
+      const loser = raced.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+      assert.ok(loser?.reason instanceof HttpException);
+      assert.equal((loser!.reason as HttpException).getStatus(), 409);
+      assert.equal(((loser!.reason as HttpException).getResponse() as { code: string }).code,
+        'INTEGRATION_RETRY_IN_FLIGHT');
+
+      const rows = await landings(stack.db, task.taskId);
+      assert.deepEqual(rows.map((row) => [row.generation, row.state]),
+        [[1, 'CHECK_FAILED'], [2, 'QUEUED']], 'the two presses made one new generation');
+      const second = rows[1]!;
+      assert.equal(second.retryRequestedByUserId, w.ownerId);
+      assert.equal(second.retryRequestedBySessionId, null);
+      const [handling] = await itemsOf(stack.db, task.taskId);
+      assert.equal(handling?.handlingJobId, second.id);
+      assert.equal(handling?.handlingSessionId, null);
+      assert.equal(handling?.handlingUserId, w.ownerId);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('owner task retry resolves as USER, or supersedes as USER with the next item still owned by the owner',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const successWorld = await world(stack, 'owner-task-handled', false);
+      const success = await failedLanding(stack, successWorld, 'owner-task-handled');
+      const retried = await ownerRetry(stack, successWorld, success.task.taskId, REASON);
+      const [rerun] = await claim(stack, successWorld, 'owner-task-handled-rerun');
+      assert.equal(rerun?.jobId, retried.jobId);
+      await report(stack, successWorld, rerun!, LANDED);
+      const [handled] = await itemsOf(stack.db, success.task.taskId);
+      assert.equal(handled?.state, 'RESOLVED');
+      assert.equal(handled?.resolution, 'HANDLED');
+      assert.equal(handled?.resolvedBy, 'USER');
+      assert.equal(handled?.resolvedByUserId, successWorld.ownerId);
+      assert.equal(handled?.resolvedBySessionId, null);
+
+      const retryWorld = await world(stack, 'owner-task-retried', false);
+      const failed = await failedLanding(stack, retryWorld, 'owner-task-retried');
+      const ownerRun = await ownerRetry(stack, retryWorld, failed.task.taskId, REASON);
+      const [ownerJob] = await claim(stack, retryWorld, 'owner-task-retried-rerun');
+      assert.equal(ownerJob?.jobId, ownerRun.jobId);
+      const answer = await report(stack, retryWorld, ownerJob!, TIMED_OUT_CHECK);
+      assert.equal(answer.accepted, true);
+      const all = await itemsOf(stack.db, failed.task.taskId);
+      const old = all.find((item) => item.handlingJobId === ownerJob!.jobId)!;
+      const next = all.find((item) => item.id === answer.openItemId)!;
+      assert.equal(old.state, 'SUPERSEDED');
+      assert.equal(old.resolution, 'RETRIED');
+      assert.equal(old.resolvedBy, 'USER');
+      assert.equal(old.resolvedByUserId, retryWorld.ownerId);
+      assert.equal(old.resolvedBySessionId, null);
+      assert.equal(old.supersededByItemId, next.id);
+      assert.equal(next.assignee, 'OWNER');
+      assert.equal(next.payload.retry?.requestedByUserId, retryWorld.ownerId);
+      assert.equal(next.payload.retry?.requestedBySessionId, null);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('owner task retry uses the shared refusal codes',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const reasonWorld = await world(stack, 'owner-refuse-reason', false);
+      const reasonFailure = await failedLanding(stack, reasonWorld, 'owner-refuse-reason');
+      const blank = await denied(() => ownerRetry(stack, reasonWorld, reasonFailure.task.taskId, '  '));
+      assert.equal(blank.status, 400);
+      assert.equal(blank.code, 'INTEGRATION_RETRY_REASON_REQUIRED');
+
+      const wrongProjectId = randomUUID();
+      await stack.db.project.create({
+        data: { id: wrongProjectId, ownerId: reasonWorld.ownerId, title: 'another owner project', coordinatorEnabled: false },
+      });
+      const foreign = await stack.tasks.create(reasonWorld.ownerId, {
+        title: 'another project\'s task',
+        assigneeId: reasonWorld.workspaceId,
+        projectId: wrongProjectId,
+      });
+      const wrong = await denied(() => ownerRetry(stack, reasonWorld, foreign.id, REASON));
+      assert.equal(wrong.status, 403);
+      assert.equal(wrong.code, 'INTEGRATION_RETRY_NOT_THIS_PROJECT');
+
+      const ownerOnlyWorld = await world(stack, 'owner-refuse-owner-only', true);
+      const ownerOnlyFailure = await failedLanding(stack, ownerOnlyWorld, 'owner-refuse-owner-only');
+      const ownerItem = (await itemsOf(stack.db, ownerOnlyFailure.task.taskId))[0]!;
+      const ownerOnly = await denied(() => ownerRetry(stack, ownerOnlyWorld, ownerOnlyFailure.task.taskId, REASON));
+      assert.equal(ownerOnly.status, 403);
+      assert.equal(ownerOnly.code, 'INTEGRATION_RETRY_OWNER_ONLY');
+      assert.equal(ownerItem.assignee, 'COORDINATOR');
+
+      const blockerWorld = await world(stack, 'owner-refuse-blocker', false);
+      const blockerFailure = await failedLanding(stack, blockerWorld, 'owner-refuse-blocker');
+      const now = new Date();
+      await stack.db.projectBlocker.create({
+        data: {
+          projectId: blockerWorld.projectId,
+          kind: 'AWAITING_USER_APPROVAL',
+          owner: 'USER',
+          recovery: 'HUMAN',
+          severity: 'CRITICAL',
+          requiredAction: 'decide',
+          nextCheckAt: now,
+          subjectType: 'TASK',
+          subjectId: blockerFailure.task.taskId,
+          detail: { reason: 'OWNER_RETRY_TEST' },
+          dedupeKey: `OWNER_RETRY_TEST:${blockerFailure.task.taskId}`,
+          lifecycleGeneration: 1n,
+          conditionVersion: 'c'.repeat(64),
+          firstSeenAt: now,
+          lastSeenAt: now,
+        },
+      });
+      const blocker = await denied(() => ownerRetry(stack, blockerWorld, blockerFailure.task.taskId, REASON));
+      assert.equal(blocker.status, 409);
+      assert.equal(blocker.code, 'INTEGRATION_RETRY_OWNER_BLOCKER');
+
+      const conflictWorld = await world(stack, 'owner-refuse-conflict', false);
+      const conflict = await failedLanding(stack, conflictWorld, 'owner-refuse-conflict', CONFLICTED);
+      const conflictRefusal = await denied(() => ownerRetry(stack, conflictWorld, conflict.task.taskId, REASON));
+      assert.equal(conflictRefusal.status, 409);
+      assert.equal(conflictRefusal.code, 'INTEGRATION_RETRY_NOT_APPLICABLE');
+
+      const flightWorld = await world(stack, 'owner-refuse-flight', false);
+      const flight = await failedLanding(stack, flightWorld, 'owner-refuse-flight');
+      await ownerRetry(stack, flightWorld, flight.task.taskId, REASON);
+      const inFlight = await denied(() => ownerRetry(stack, flightWorld, flight.task.taskId, REASON));
+      assert.equal(inFlight.status, 409);
+      assert.equal(inFlight.code, 'INTEGRATION_RETRY_IN_FLIGHT');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('owner promotion recheck records USER and a READY result is automatically merged',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'owner-promotion-ready', true);
+      await stack.db.runner.update({ where: { id: w.runnerId }, data: { capabilities: [INTEGRATION_JOB_CLAIM, PROMOTION_AUTOMATIC_LAND] } });
+      const { promotionId } = await failedPromotion(stack, w, 'owner-promotion-ready');
+      const [item] = await stack.db.projectOpenItem.findMany({
+        where: { promotionId, state: 'OPEN' },
+        orderBy: { createdAt: 'asc' },
+      });
+      assert.equal(item?.assignee, 'COORDINATOR');
+      // Model the escalation clock handing the card to its owner while the check is blocked.
+      await stack.db.projectOpenItem.update({
+        where: { id: item!.id },
+        data: { assignee: 'OWNER', assigneeReason: 'ESCALATED', assignedAt: new Date(), escalatedAt: new Date() },
+      });
+      const retried = await ownerPromotionRetry(stack, w, promotionId, REASON);
+      const job = await stack.db.projectIntegrationJob.findUniqueOrThrow({ where: { id: retried.jobId } });
+      assert.equal(job.generation, 2);
+      assert.equal(job.retryRequestedByUserId, w.ownerId);
+      assert.equal(job.retryRequestedBySessionId, null);
+      const handling = await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: item!.id } });
+      assert.equal(handling.handlingJobId, retried.jobId);
+      assert.equal(handling.handlingUserId, w.ownerId);
+      assert.equal(handling.handlingSessionId, null);
+
+      const [check] = await claim(stack, w, 'owner-promotion-ready-rerun');
+      assert.equal(check?.jobId, retried.jobId);
+      await report(stack, w, check!, {
+        state: 'READY',
+        phase: 'CHECK',
+        sourceSha: 'd'.repeat(40),
+        targetShaBefore: 'f'.repeat(40),
+        upstreamSha: 'f'.repeat(40),
+        testedSha: '2'.repeat(40),
+        testedTreeSha: '3'.repeat(40),
+        checks: [GREEN_MERGE_CHECK],
+        conflicts: [],
+      });
+      const promotionAfterCheck = await stack.db.projectPromotion.findUniqueOrThrow({ where: { id: promotionId } });
+      assert.equal(promotionAfterCheck.state, 'CONFIRMED');
+      assert.equal(promotionAfterCheck.confirmedAutomatically, true);
+      const closed = await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: item!.id } });
+      assert.equal(closed.state, 'RESOLVED');
+      assert.equal(closed.resolution, 'HANDLED');
+      assert.equal(closed.resolvedBy, 'USER');
+      assert.equal(closed.resolvedByUserId, w.ownerId);
+
+      const [land] = await claim(stack, w, 'owner-promotion-ready-land', [PROMOTION_AUTOMATIC_LAND]);
+      assert.equal(land?.kind, 'LAND_PROMOTION');
+      await report(stack, w, land!, {
+        state: 'LANDED',
+        phase: 'PUSH',
+        sourceSha: 'd'.repeat(40),
+        targetShaBefore: 'f'.repeat(40),
+        upstreamSha: 'f'.repeat(40),
+        testedSha: '2'.repeat(40),
+        testedTreeSha: '3'.repeat(40),
+        landedSha: '4'.repeat(40),
+        landedTreeSha: '3'.repeat(40),
+        aheadOfUpstream: 1,
+        checks: [GREEN_MERGE_CHECK],
+        conflicts: [],
+      });
+      assert.equal((await stack.db.projectPromotion.findUniqueOrThrow({ where: { id: promotionId } })).state, 'MERGED');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
 test('a task of another project is refused, as is one that is not DONE, one that landed, and one with no landing at all',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
@@ -1057,6 +1353,96 @@ test('a task of another project is refused, as is one that is not DONE, one that
       await stack.db.$disconnect();
     }
   });
+
+test('timed out: the owner retries a landing whose runner never answered its claim — the lost generation '
+  + 'ends ERROR · RUNNER_LOST and the next one is queued as theirs (§2.2 J-T9)',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'timeout-owner');
+      const task = await doneTask(stack, w, 'timeout-owner');
+      const [lost] = await claim(stack, w, 'lease-lost-response');
+      assert.ok(lost, `the DONE queued no landing — ${await jobsOf(stack.db, task.taskId)}`);
+      const owner = { userId: w.ownerId, email: `${w.ownerId}@retry.invalid` };
+      const press = () => stack.ownerRetry.retryTimedOutJob(owner, w.projectId, lost.jobId);
+
+      // Inside the lease the claim is in flight, whatever became of it: nothing is retried beside it.
+      const early = await denied(press);
+      assert.deepEqual([early.status, early.code], [409, 'INTEGRATION_RETRY_IN_FLIGHT']);
+
+      // The response carrying the claim never reached the runner: nothing reported since, past the lease.
+      const claimedAt = new Date(Date.now() - 11 * 60_000);
+      await stack.db.projectIntegrationJob.update({
+        where: { id: lost.jobId },
+        data: { claimedAt, heartbeatAt: claimedAt },
+      });
+
+      const view = await press();
+      const rows = await landings(stack.db, task.taskId);
+      assert.deepEqual(rows.map((row) => [row.generation, row.state]), [[1, 'ERROR'], [2, 'QUEUED']]);
+      const ended = await stack.db.projectIntegrationJob.findUniqueOrThrow({
+        where: { id: lost.jobId },
+        select: { errorCode: true, errorDetail: true, finishedAt: true },
+      });
+      assert.equal(ended.errorCode, 'RUNNER_LOST');
+      assert.equal((ended.errorDetail as { pushRecorded?: boolean; phase?: string }).pushRecorded, false);
+      assert.equal((ended.errorDetail as { phase?: string }).phase, 'FETCH');
+      assert.ok(ended.finishedAt, 'the lost generation is finished');
+      const next = rows[1]!;
+      assert.equal(next.retryOfJobId, lost.jobId);
+      assert.equal(next.retryFailureClass, 'ERROR');
+      assert.equal(next.retryRequestedByUserId, w.ownerId);
+      assert.equal(next.retryRequestedBySessionId, null);
+      assert.match(next.retryReason ?? '',
+        /^Retried by the account owner after a timeout: no report from runner .+ for 11 minutes \(limit 10\), last step FETCH\.$/);
+      // The press answers with the view the job list redraws from: the next generation, the owner's.
+      assert.deepEqual(view.inFlightJobs?.map((job) => [job.generation, job.state, job.retriedBy, job.timedOut]),
+        [[2, 'QUEUED', 'OWNER', false]]);
+      // The retry is the answer to the timeout: no item is opened about it.
+      assert.deepEqual(await itemsOf(stack.db, task.taskId), []);
+
+      // Were the lost claim to report after all, the job it names is finished: nothing of it is taken.
+      const late = await report(stack, w, lost, LANDED);
+      assert.equal(late.accepted, false);
+
+      // And a second press finds nothing timed out to retry.
+      const again = await denied(press);
+      assert.deepEqual([again.status, again.code], [409, 'INTEGRATION_RETRY_NOT_APPLICABLE']);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('timed out: the coordinator\'s integration_retry takes a landing whose runner went silent mid-step, '
+  + 'and refuses one that is still reporting', { skip, timeout: 180_000 }, async () => {
+  const stack = await connect();
+  try {
+    const w = await world(stack, 'timeout-coordinator');
+    const task = await doneTask(stack, w, 'timeout-coordinator');
+    const [silent] = await claim(stack, w, 'lease-silent');
+    assert.ok(silent, `the DONE queued no landing — ${await jobsOf(stack.db, task.taskId)}`);
+    // It reported a step, then nothing past the lease.
+    const lastReport = new Date(Date.now() - 12 * 60_000);
+    await stack.db.projectIntegrationJob.update({
+      where: { id: silent.jobId },
+      data: { phase: 'REBASE', claimedAt: new Date(lastReport.getTime() - 60_000), heartbeatAt: lastReport },
+    });
+
+    const queued = await retry(stack, w, task.taskId, 'its runner went silent mid-rebase: the machinery, not the delivery');
+    assert.deepEqual([queued.generation, queued.failureClass, queued.retryOfJobId], [2, 'ERROR', silent.jobId]);
+    const rows = await landings(stack.db, task.taskId);
+    assert.deepEqual(rows.map((row) => [row.generation, row.state]), [[1, 'ERROR'], [2, 'QUEUED']]);
+    assert.equal(rows[1]!.retryRequestedBySessionId, w.coordinatorSessionId);
+
+    // The next generation is claimed and reports within its lease: a retry of it is in flight.
+    const [running] = await claim(stack, w, 'lease-healthy');
+    assert.equal(running?.jobId, rows[1]!.id);
+    const refused = await denied(() => retry(stack, w, task.taskId, 'pressed while it runs'));
+    assert.deepEqual([refused.status, refused.code], [409, 'INTEGRATION_RETRY_IN_FLIGHT']);
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
 
 test('the integration-retry PostgreSQL target is explicitly disposable', { skip }, () => {
   assert.doesNotThrow(() => assertCoordinatorPgUrlIsIsolated(URL));

@@ -154,31 +154,48 @@ public enum RunnerPageFormat {
     // MARK: Engines
 
     /// The engines a runner reports on, in the order its page lists them — runnerEngines.ts
-    /// `ENGINE_CLI_NAME`'s — and any the page doesn't know yet after them, as reported.
-    public static let engineOrder = ["claude", "codex", "kimi", "opencode", "antigravity"]
+    /// `ENGINE_CLI_NAME`'s — and any the page doesn't know yet after them, as reported. A runner
+    /// predating Antigravity keeps its row too, so the page can explain that it needs an update.
+    public static let engineOrder = ["claude", "codex", "kimi", "opencode", "antigravity", "dsh"]
 
     public static func engines(_ runner: Runner) -> [RunnerEngineHealth] {
-        let reported = runner.engines ?? []
+        var reported = runner.engines ?? []
+        if !reported.contains(where: { $0.engine == "antigravity" }) {
+            reported.append(RunnerEngineHealth(engine: "antigravity", installed: runner.antigravity?.installed,
+                                               version: runner.antigravity?.version))
+        }
         let known = engineOrder.compactMap { engine in reported.first { $0.engine == engine } }
         return known + reported.filter { !engineOrder.contains($0.engine) }
     }
 
     /// The CLI's own product name: `Claude Code`, `Codex`, `Kimi Code`, `OpenCode`,
-    /// `Antigravity CLI`.
+    /// `Antigravity`.
     public static func engineName(_ engine: String) -> String {
         if let login = LoginEngine(rawValue: engine) { return login.displayName }
-        if engine == "antigravity" { return "Antigravity CLI" }
+        if engine == "dsh" { return "DeepSeek Harness" }
         return engine == "opencode" ? "OpenCode" : engine
     }
 
-    /// The engines Orbit signs in on a runner. OpenCode's sign-in belongs to whichever provider it
-    /// runs, and Antigravity has none — it runs on a Gemini API key from its environment — so a
-    /// runner page has nothing to say about either.
+    /// OpenCode's sign-in belongs to whichever provider it runs.
     public static func loginEngine(_ engine: String) -> LoginEngine? { LoginEngine(rawValue: engine) }
 
     /// The engines whose CLI keeps a login per directory, so one machine holds several accounts of
-    /// them (web `ACCOUNT_ENGINES`).
-    public static func keepsAccounts(_ engine: String) -> Bool { engine == "claude" || engine == "codex" }
+    /// them (shared `ACCOUNT_ENGINES`): an Antigravity account is a Google sign-in in a Gemini
+    /// directory of its own.
+    public static func keepsAccounts(_ engine: String) -> Bool {
+        engine == "claude" || engine == "codex" || engine == "antigravity"
+    }
+
+    /// Antigravity's Default on a runner that runs agy on its own GEMINI_API_KEY (web `runsOnEnvKey`):
+    /// the engine answers signed in — on the key, `authSource` not google — while Default, which is
+    /// the runner's Google sign-in and nothing else, does not. A session there runs on that key, so
+    /// Default is neither signed out nor short of quota: its line says it runs on the key, as the
+    /// engine's row always has ("env key"), and nothing that counts signed-out accounts counts it.
+    /// `auth` is Default's own answer — nil where the runner lists no accounts.
+    public static func runsOnEnvKey(_ health: RunnerEngineHealth, account: String, auth: String?) -> Bool {
+        health.engine == "antigravity" && account == CodexAccounts.defaultID && auth != "yes"
+            && health.auth == "yes" && health.authSource != "google"
+    }
 
     /// The version a CLI reported, without what it printed around it: `2.1.284 (Claude Code)` and
     /// `codex-cli 0.158.0` are `2.1.284` and `0.158.0`. Nil when it reported none.
@@ -227,24 +244,85 @@ public enum RunnerPageFormat {
     /// Where an engine's sign-ins stand, after its version on the Engines row. An engine with several
     /// accounts is signed in only when every one of them is (web `signedIn`): a row that called the
     /// machine signed in over a signed-out account would hide the one thing it is there to say.
-    public static func engineStatus(_ health: RunnerEngineHealth) -> Status? {
+    public static func engineStatus(_ health: RunnerEngineHealth, runner: Runner? = nil) -> Status? {
+        // Harness has no sign-in: each session brings a configured API key. What this machine decides
+        // is whether it can start one at all, which is what the row says instead (web parity).
+        if health.engine == "dsh" {
+            let state = runner.map { DshRuntime.state(of: $0) }
+                ?? DshRuntime.state(capabilities: [DshRuntime.runnerCapability], engines: [health])
+            guard let label = state.label else { return Status(text: "Uses API keys", tone: .muted) }
+            return Status(text: label, tone: state == .notInstalled ? .muted : .warn)
+        }
+        if health.engine == "antigravity", let runner, health.installed != false, health.auth != "yes" {
+            switch runner.antigravity?.googleLogin {
+            case .unsupportedPlatform: return Status(text: "Not supported yet", tone: .muted)
+            case .available: break
+            default: return Status(text: "Update runner", tone: .muted)
+            }
+        }
         guard health.installed == true else {
             return Status(text: RunnerPageCopy.RUNNER_ENGINE_NOT_INSTALLED, tone: .muted)
         }
         guard loginEngine(health.engine) != nil else { return nil }
         let accounts = health.accounts ?? []
-        guard accounts.count >= 2 else { return authStatus(health.auth) }
-        if accounts.allSatisfy({ $0.auth == "yes" }) {
+        guard accounts.count >= 2 else {
+            // A runner that runs Antigravity on its own Gemini key and holds no Google account but
+            // Default says so, as its row always has: the key is what its sessions run on.
+            if runsOnEnvKey(health, account: CodexAccounts.defaultID, auth: accounts.first?.auth) {
+                return Status(text: "env key", tone: .ok)
+            }
+            return authStatus(health.auth)
+        }
+        // Default on such a runner's key runs, so it counts as in, never as out.
+        let auths: [String?] = accounts.map { runsOnEnvKey(health, account: $0.id, auth: $0.auth) ? "yes" : $0.auth }
+        if auths.allSatisfy({ $0 == "yes" }) {
             return Status(text: RunnerPageCopy.runnerEngineAccountsSignedIn(count: accounts.count), tone: .ok)
         }
-        return accounts.contains { $0.auth == "no" } ? authStatus("no") : nil
+        return auths.contains("no") ? authStatus("no") : nil
+    }
+
+    /// Which of Kimi's two sites its login is on, said after the version on its Engines row (web's
+    /// `2.1.1 · kimi.ai`): the same CLI signs in to either, and a session spends that site's
+    /// subscription. Nil for every other engine, and before Kimi's first sign-in.
+    public static func engineSite(_ health: RunnerEngineHealth) -> String? {
+        KimiSite.current(of: health)?.domain
     }
 
     /// Whether the Engines row offers Sign In: an engine Orbit signs in, installed, with a login
-    /// signed out.
+    /// signed out — never Antigravity's Default on a runner that runs on its own Gemini key
+    /// (`runsOnEnvKey`), which is not out.
     public static func needsSignIn(_ health: RunnerEngineHealth) -> Bool {
         guard health.installed == true, loginEngine(health.engine) != nil else { return false }
-        return health.auth == "no" || (health.accounts ?? []).contains { $0.auth == "no" }
+        return health.auth == "no" || (health.accounts ?? []).contains {
+            $0.auth == "no" && !runsOnEnvKey(health, account: $0.id, auth: $0.auth)
+        }
+    }
+
+    /// Why the engine page cannot sign `engine` in on this runner, where a sentence says it: only
+    /// Antigravity, whose Google sign-in an older runner or a macOS one doesn't offer.
+    public static func signInHint(_ runner: Runner, engine: String) -> String? {
+        engine == "antigravity" ? EngineAuth.antigravityLoginHint(runner.antigravity?.googleLogin) : nil
+    }
+
+    /// Whether the engine page signs an account of `engine` in on this runner: every engine Orbit
+    /// signs in, and Antigravity's Google sign-in only where the runner offers it.
+    public static func canSignIn(_ runner: Runner, engine: String) -> Bool {
+        engine != "antigravity" || antigravityCanSignIn(runner)
+    }
+
+    /// Whether the engine page offers Add Account: an engine that keeps accounts — for Antigravity, on
+    /// a runner that relays its Google sign-in and keeps the account it signs in apart from Default's
+    /// (`antigravity-account-login/v1`); an older one would sign Default in again in its place.
+    public static func canAddAccount(_ runner: Runner, engine: String) -> Bool {
+        guard keepsAccounts(engine) else { return false }
+        return engine != "antigravity"
+            || (antigravityCanSignIn(runner)
+                && runner.capabilities?.contains(CodexAccounts.antigravityAccountLoginCapability) == true)
+    }
+
+    public static func antigravityCanSignIn(_ runner: Runner) -> Bool {
+        runner.antigravity?.googleLogin == .available
+            && runner.engines?.first(where: { $0.engine == "antigravity" })?.installed == true
     }
 
     /// `Update to 2.1.270 failed Sep 13` — only for a failure that has become the row's problem
@@ -274,19 +352,52 @@ public enum RunnerPageFormat {
         return checked.map { RunnerPageCopy.runnerEnginesChecked(when: RunnerAttention.ago($0.0, nowMs: nowMs(now))) }
     }
 
-    /// The quota windows an Engines row shows under the engine: Default's, while the engine is signed
-    /// in and has one account. With several, each account's quota is its own and lives on the
-    /// engine's page (web: a group's own columns stay empty rather than speak for one account).
-    public static func engineWindows(_ runner: Runner, engine: String) -> [PlanUsageRow] {
+    /// The quota window an Engines row shows under the engine: the binding one — the window that stops
+    /// a login, or will stop it first (`PlanUsageSnapshot.bindingRow`, the one the composer's gauge
+    /// shows). Default's while the engine is signed in and has one account; with several, that of the
+    /// account a new session starts on, which the row names above it (`engineNextAccount`, web's
+    /// "Next: …") so it never reads as the whole machine's. One per row, whether the CLI reports two
+    /// windows or four: every window, and every account's, is the engine page's to list.
+    public static func engineWindows(_ runner: Runner, engine: String, now: Date = Date()) -> [PlanUsageRow] {
+        guard let health = runner.engines?.first(where: { $0.engine == engine }), health.installed == true else {
+            return []
+        }
+        let account: String
+        if (health.accounts ?? []).count >= 2 {
+            guard let next = nextAccount(runner, health: health, now: now) else { return [] }
+            account = next
+        } else {
+            guard health.auth == "yes" else { return [] }
+            account = CodexAccounts.defaultID
+        }
+        let usage = CodexAccounts.usage(engine, planUsage: runner.planUsage, engines: runner.engines)
+        return CodexAccounts.snapshot(usage, account: account)?.bindingRow(at: now).map { [$0] } ?? []
+    }
+
+    /// The account an Engines row names above its window while the engine has several: the one a new
+    /// session starts on, whose window that is. Nil with one account, with none signed in, or when that
+    /// account has no window to show — web's row names it above one only too.
+    public static func engineNextAccount(_ runner: Runner, engine: String, now: Date = Date()) -> String? {
         guard let health = runner.engines?.first(where: { $0.engine == engine }), health.installed == true,
-              health.auth == "yes", (health.accounts ?? []).count < 2 else { return [] }
-        return accountWindows(runner, engine: engine, account: CodexAccounts.defaultID)
+              let next = nextAccount(runner, health: health, now: now),
+              !engineWindows(runner, engine: engine, now: now).isEmpty else { return nil }
+        return CodexAccounts.label(next, accounts: health.accounts)
+    }
+
+    /// Which of an engine's several accounts a new session starts on (`CodexAccounts.toStartOn`, web's
+    /// `accountToStartOn`); nil with one account, or none signed in.
+    private static func nextAccount(_ runner: Runner, health: RunnerEngineHealth, now: Date) -> String? {
+        let usage = CodexAccounts.usage(health.engine, planUsage: runner.planUsage, engines: runner.engines)
+        return CodexAccounts.toStartOn(health.accounts, usage: usage, now: now)
     }
 
     /// One account's own windows: Default's are the engine snapshot's, another's its entry under
-    /// `accounts` (`CodexAccounts.snapshot`, web `codexAccountSnapshot`).
+    /// `accounts` (`CodexAccounts.snapshot`, web `codexAccountSnapshot`) — Antigravity's snapshot being
+    /// the one its engine health carries (`CodexAccounts.usage`), where Default's buckets are there only
+    /// while the runner's own Google sign-in is.
     public static func accountWindows(_ runner: Runner, engine: String, account: String) -> [PlanUsageRow] {
-        CodexAccounts.snapshot(runner.planUsage?.snapshot(for: engine), account: account)?.rows ?? []
+        let usage = CodexAccounts.usage(engine, planUsage: runner.planUsage, engines: runner.engines)
+        return CodexAccounts.snapshot(usage, account: account)?.rows ?? []
     }
 
     /// The engines whose quota a runner reads: the ones Orbit signs in.
@@ -301,36 +412,79 @@ public enum RunnerPageFormat {
         public let name: String
         /// Where its login lives on that machine, with the home directory as `~`.
         public let home: String?
+        /// Its sign-in's answer, `yes` / `no` / `unknown` — none for one that runs on a key (`envKey`).
         public let auth: String?
+        /// Antigravity's Default on a runner that runs on its own Gemini key (`runsOnEnvKey`): neither
+        /// signed in nor out, with nothing to sign in or pause, its line says what it runs on instead.
+        public let envKey: Bool
         public var isDefault: Bool { id == CodexAccounts.defaultID }
-        /// The line under the name: where its login lives — and, for a Default renamed in Orbit, that
-        /// it is still the machine's own login (web's DEFAULT mark).
+        /// The line under the name: where its login lives — Kimi's, which keeps no directory of its
+        /// own, on which site — and, for a Default renamed in Orbit, that it is still the machine's
+        /// own login (web's DEFAULT mark).
         public var subtitle: String? {
-            guard isDefault, name != "Default" else { return home }
-            return [home, "Default"].compactMap { $0 }.joined(separator: " · ")
+            let place = home ?? site
+            guard isDefault, name != "Default" else { return place }
+            return [place, "Default"].compactMap { $0 }.joined(separator: " · ")
         }
         /// What a sign-in on this line names: the account, when the runner lists more than one; nil —
         /// the runner's own login, as every sign-in was before accounts — when it doesn't.
         public let signInAccount: String?
         public let pausedUntil: String?
+        /// When its login lapses, as the runner read it (`RunnerEngineAccount.loginExpiresAt`).
+        public let loginExpiresAt: String?
+        /// Kimi only: the site its login is on, `kimi.com` or `kimi.ai` (`KimiSite`).
+        public var site: String? = nil
     }
 
     /// Every account an engine is signed into on that runner, Default first. One line for the
-    /// runner's own login when it keeps no others.
+    /// runner's own login when it keeps no others — whose answer is the engine's, unless that is a
+    /// Gemini key's rather than Default's Google sign-in (`runsOnEnvKey`).
     public static func accountLines(_ health: RunnerEngineHealth) -> [AccountLine] {
         let accounts = health.accounts ?? []
         guard accounts.count >= 2 else {
             let own = accounts.first
+            let envKey = runsOnEnvKey(health, account: CodexAccounts.defaultID, auth: own?.auth)
             return [AccountLine(id: CodexAccounts.defaultID,
                                 name: CodexAccounts.label(CodexAccounts.defaultID, accounts: accounts),
                                 home: (own?.home ?? own?.codexHome).map(tildePath),
-                                auth: health.auth, signInAccount: nil, pausedUntil: own?.pausedUntil)]
+                                auth: envKey ? nil : health.auth, envKey: envKey,
+                                signInAccount: nil, pausedUntil: own?.pausedUntil,
+                                loginExpiresAt: own?.loginExpiresAt, site: engineSite(health))]
         }
         return accounts.map { account in
-            AccountLine(id: account.id, name: CodexAccounts.label(account.id, accounts: accounts),
-                        home: (account.home ?? account.codexHome).map(tildePath),
-                        auth: account.auth, signInAccount: account.id, pausedUntil: account.pausedUntil)
+            let envKey = runsOnEnvKey(health, account: account.id, auth: account.auth)
+            return AccountLine(id: account.id, name: CodexAccounts.label(account.id, accounts: accounts),
+                               home: (account.home ?? account.codexHome).map(tildePath),
+                               auth: envKey ? nil : account.auth, envKey: envKey,
+                               signInAccount: account.id, pausedUntil: account.pausedUntil,
+                               loginExpiresAt: account.loginExpiresAt)
         }
+    }
+
+    /// How far ahead of a login lapsing its line warns: Claude Code's own lead ("Your login expires in
+    /// 3 days · run /login to renew"), so the page says it when the CLI would.
+    public static let loginWarningLead: TimeInterval = 3 * 86_400
+
+    /// The warning under a signed-in account whose login lapses within `loginWarningLead`, in whole
+    /// days rounded up the way Claude Code counts them. Nil for an account not signed in, one whose
+    /// login records no lapse, one further off — and one already past it, which the runner reports
+    /// signed out.
+    public static func loginExpiresLine(_ line: AccountLine, now: Date) -> String? {
+        guard line.auth == "yes", let lapses = line.loginExpiresAt.flatMap(RelativeTime.parse) else { return nil }
+        let left = lapses.timeIntervalSince(now)
+        guard left > 0, left <= loginWarningLead else { return nil }
+        let days = Int((left / 86_400).rounded(.up))
+        return RunnerPageCopy.runnerEngineLoginExpires(
+            count: days, unit: days == 1 ? RunnerPageCopy.RUNNER_UNIT_DAY : RunnerPageCopy.RUNNER_UNIT_DAYS)
+    }
+
+    /// What a signed-out account costs, under its Signed out: nothing runs on it until it is signed in
+    /// again — and when it is the engine's only account on that machine, nothing runs on the engine
+    /// there at all. Nil for any account not signed out.
+    public static func signedOutNote(_ line: AccountLine, alone: Bool, engine: String) -> String? {
+        guard line.auth == "no" else { return nil }
+        return alone ? RunnerPageCopy.runnerEngineSignedOutAlone(engine: engineName(engine))
+                     : RunnerPageCopy.RUNNER_ENGINE_ACCOUNT_SIGNED_OUT_NOTE
     }
 
     /// What Add Account calls a new account until the user names it: its number on the machine,
@@ -411,9 +565,11 @@ public enum RunnerPageFormat {
 
     // MARK: About This Runner
 
-    /// `0.1.197 · Latest`; a root runner that is behind installs the release itself when no turn is
-    /// running, so it says so (`0.1.194 · 0.1.197 installs when no turn is running`). One that can't
-    /// update itself is Needs Attention's to say, and here is just its version.
+    /// `0.1.197 · Latest`; a runner that is behind and installs the release itself says so
+    /// (`0.1.194 · 0.1.197 installs when no turn is running`), and so does one a staged rollout holds
+    /// back (`0.1.194 · 0.1.197 not rolled out to it yet`). One that can't update itself is Needs
+    /// Attention's to say, and here is just its version. A runner that reports where its updates stand
+    /// says which it is; an older one is judged by `runsAsRoot`, as before.
     public static func versionValue(_ runner: Runner, latest: String?) -> String? {
         guard let version = runner.version?.trimmingCharacters(in: .whitespacesAndNewlines), !version.isEmpty else {
             return nil
@@ -424,9 +580,30 @@ public enum RunnerPageFormat {
         if RunnerAttention.compareRunnerVersions(version, latest) >= 0 {
             return version + RunnerPageCopy.RUNNER_LINE_SEPARATOR + RunnerPageCopy.RUNNER_VERSION_LATEST
         }
-        guard runner.runsAsRoot == true else { return version }
-        return version + RunnerPageCopy.RUNNER_LINE_SEPARATOR + latest + " "
-            + RunnerPageCopy.RUNNER_VERSION_INSTALLS_WHEN_IDLE
+        let note: String?
+        switch runner.selfUpdate?.state {
+        case nil: note = runner.runsAsRoot == true ? RunnerPageCopy.RUNNER_VERSION_INSTALLS_WHEN_IDLE : nil
+        case "enabled"?, "waitingForIdle"?: note = RunnerPageCopy.RUNNER_VERSION_INSTALLS_WHEN_IDLE
+        case "heldByRollout"?: note = RunnerPageCopy.RUNNER_VERSION_NOT_ROLLED_OUT
+        default: note = nil
+        }
+        guard let note else { return version }
+        return version + RunnerPageCopy.RUNNER_LINE_SEPARATOR + latest + " " + note
+    }
+
+    /// `Sep 20, 4:00 PM · 0.1.189 → 0.1.190`: when the runner last updated itself, in the reader's time
+    /// zone, and between which versions. Nil for a runner that doesn't report its updates, and for one
+    /// that hasn't updated itself yet.
+    public static func lastUpdate(_ runner: Runner, timeZone: TimeZone = .current) -> String? {
+        guard let report = runner.selfUpdate else { return nil }
+        let versions: String?
+        if let from = report.lastUpdatedFrom, let to = report.lastUpdatedTo {
+            versions = RunnerPageCopy.runnerUpdatedFromTo(from: from, to: to)
+        } else {
+            versions = report.lastUpdatedTo
+        }
+        let parts = [report.lastUpdatedAt.flatMap { lastSeen($0, timeZone: timeZone) }, versions].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: RunnerPageCopy.RUNNER_LINE_SEPARATOR)
     }
 
     public static func runsAsValue(_ runner: Runner) -> String? {

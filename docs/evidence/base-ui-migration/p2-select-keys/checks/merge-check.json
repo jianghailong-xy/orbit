@@ -1,0 +1,13 @@
+{
+ "command": "npm run build -w @orbit/web && npm run test -w @orbit/web",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_445f89d3952b",
+ "cwd": "/root/.orbit/worktrees/f9ffd160-2464-5af0-9d66-5af91c8bd5ab",
+ "commit": "632b7950ea2c303b7fab6856365ac233f6359f45",
+ "webTree": "35301ab31d4cd93761cad55eb7bc2bf1f7a3fa98",
+ "outputLastWritten": "2026-10-06T08:36:19.297590+00:00",
+ "exitCode": 0,
+ "outputSha256": "6a0f15b24e9dbd6be4778286e25b90c59e6ff27413f6ed5ea28c65f9af9eeb4d",
+ "outputBytes": 1009505,
+ "note": "Build passed (existing large-chunk notice kept); 320 test files / 3987 tests passed."
+}

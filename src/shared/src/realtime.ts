@@ -1,4 +1,5 @@
 import {
+  ProjectStatus,
   RunStatus,
   SessionEndReason,
   SessionFilingState,
@@ -10,6 +11,7 @@ import type { SessionCapabilities } from './dto';
 import type { ConfirmationUnderReview } from './owner-confirmation-review';
 import type { SessionOwnerItem, SessionWaitingKind } from './project-progress';
 import type { SessionRequestPeer } from './session-request';
+import type { SessionSourceRefusalDetail, SourceRefusalCode, SourceState } from './source';
 
 /**
  * The user-scoped control-plane stream's wire protocol (`GET /api/events`).
@@ -104,6 +106,14 @@ export interface ControlEvent {
   data: Record<string, unknown>;
 }
 
+/** Project membership derived from coordinator, task, context, judgment or root-session links. */
+export interface SessionProjectMembership {
+  projectId: string;
+  projectTitle: string;
+  projectStatus: `${ProjectStatus}`;
+  role: 'COORDINATOR' | 'TASK' | 'CONTEXT' | 'JUDGMENT' | 'CHILD';
+}
+
 /** `data` for `session.created` / `session.updated`: the slim list-row summary, field-aligned
  *  with the `GET /sessions` list response so the client can upsert it verbatim. */
 export interface ControlSessionSummary {
@@ -136,6 +146,20 @@ export interface ControlSessionSummary {
   /** Project relation projected onto a coordinator Session. Optional for rolling-version peers. */
   projectId?: string | null;
   projectTitle?: string | null;
+  /** Always sent by current servers; null clears membership, absence supports older peers. */
+  projectMembership?: SessionProjectMembership | null;
+  /** Which commit this run starts from (`docs/project-source-contract.md` §6.1): `UNBOUND` for
+   *  every Legacy session, `SELECTED` / `PINNED` while a resolved one is being pinned, and
+   *  `REFUSED` when the runner refused its baseline before any engine started. Always sent by a
+   *  server that knows about SOURCE — the "this run never started" card reads it BEFORE the run
+   *  status, because a refused session is not waiting for anything. */
+  sourceState?: SourceState;
+  /** Which §10.1 gate refused it, when `sourceState` is REFUSED; null on every other session, and
+   *  absent only from an older control plane. */
+  sourceRefusalCode?: SourceRefusalCode | null;
+  /** The structured diagnosis that came with the code, with §10.1's `fixAction` in it — what the
+   *  card tells the owner to do. Null on every session that was not refused. */
+  sourceRefusalDetail?: SessionSourceRefusalDetail | null;
   /** Active control-plane repair facts involving this exact Session. Always sent by current
    *  servers (including `[]` on recovery) so a stream upsert can both install and clear one. */
   controlPlaneObligations?: Array<{
@@ -176,10 +200,12 @@ export interface ControlSessionSummary {
    *  plane, means "unchanged". */
   confirmationUnderReview?: ConfirmationUnderReview | null;
   /** Which of the four owner items are waiting on this conversation, oldest first (§7.6 V13) — so
-   *  the "needs you" banner can name one and open its card instead of only counting. Always sent
-   *  by a server that knows about them, as `[]` when none: a client folds this summary into a row
-   *  it holds, and an item that was answered clears the banner by arriving as an empty list. An
-   *  absent key is an older control plane, and leaves whatever the row had. */
+   *  the "needs you" banner can name one and open its card instead of only counting. Each item may
+   *  also carry the server-derived `need` short phrase (for example "Checks failed"); it is
+   *  optional so an older control plane can still be folded safely. Always sent by a server that
+   *  knows about them, as `[]` when none: a client folds this summary into a row it holds, and an
+   *  item that was answered clears the banner by arriving as an empty list. An absent key is an
+   *  older control plane, and leaves whatever the row had. */
   ownerItems?: SessionOwnerItem[];
   /** The sessions this one asked for a reply and is still waiting on (`session_send` /
    *  `project_send` with `expectReply`, docs/session-request-reply-contract.md §6), oldest first.

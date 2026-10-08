@@ -14,6 +14,9 @@ import { ownPoolWithAccess, poolAccessQuery, sharedPoolAsProviderPool, sharedPoo
 import { AccountPools, PoolHint } from '../components/AccountPools';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
 import { RunnerEngines } from '../components/RunnerEngines';
+import { DshRunnerStatus } from '../components/DshRunnerStatus';
+import { DeepSeekBalanceLine } from '../components/DeepSeekBalance';
+import { hasDeepSeekBalance } from '../lib/deepseekBalance';
 import { useIsMobile } from '../lib/useMediaQuery';
 import { useToast } from '../lib/toast';
 import type { Runner } from '../components/TasksSidePanel';
@@ -104,6 +107,14 @@ export function ProvidersPage() {
                 </div>
               </div>
             )}
+            {p.runtime === 'dsh' && <DshRunnerStatus runners={(runners.data ?? []) as Runner[]} />}
+            {p.runtime === 'claude' && p.presetSlug === 'deepseek' && (
+              <div className="prov-runtime">
+                <div>Runs on Claude Code</div>
+              </div>
+            )}
+            {/* A DeepSeek key also carries its whole account's balance (DeepSeekBalance.tsx). */}
+            {hasDeepSeekBalance(p) && <DeepSeekBalanceLine row={p} />}
           </div>
           {/* The Enabled column collapses to a dot on narrow screens — the tag's words would
               outrun a phone's width on their own. */}
@@ -181,20 +192,18 @@ export function ProvidersPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 className="page-title" style={{ marginBottom: 0 }}>
-            Providers
-          </h1>
-          <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
-            Where your workspaces&apos; models come from — the CLIs signed in on your machines, and the
-            API keys on your account.
-          </div>
-        </div>
+      <div className="prov-page-head">
+        <h1 className="page-title" style={{ marginBottom: 0 }}>
+          Providers
+        </h1>
         {/* Still only about keys: an engine gets its identity from the Sign in on its own row. */}
         <Button type="primary" onClick={() => navigate('/providers/new')}>
           Add provider
         </Button>
+        <div className="prov-page-sub">
+          Where your workspaces&apos; models come from — the CLIs signed in on your machines, and the
+          API keys on your account.
+        </div>
       </div>
 
       <div ref={runnerSection} id="provider-runners"><RunnerEngines /></div>

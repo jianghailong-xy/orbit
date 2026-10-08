@@ -19,6 +19,15 @@ export class CreateUserDto {
   @IsOptional()
   @IsBoolean()
   force?: boolean;
+
+  /**
+   * Create the account without a password: it signs in with Google only (docs/google-sign-in-design.md
+   * §5.4). Refused together with `password`, and with `force`, which would otherwise erase an existing
+   * account's password.
+   */
+  @IsOptional()
+  @IsBoolean()
+  passwordless?: boolean;
 }
 
 /** The longest display name an account may give itself. */
@@ -103,6 +112,15 @@ export class UpdatePreferencesDto {
   @IsOptional()
   @IsBoolean()
   enableOrchestration?: boolean;
+
+  /**
+   * Whether smart model selection is on for this account: the master switch over the whole
+   * feature, read wherever it acts (common/model-routing-switch.ts). Default OFF (absent = off),
+   * unlike the switches above, so it is only ever written to turn it on — or back off.
+   */
+  @IsOptional()
+  @IsBoolean()
+  modelRouting?: boolean;
 }
 
 /** Set a user's access role (admin area). */

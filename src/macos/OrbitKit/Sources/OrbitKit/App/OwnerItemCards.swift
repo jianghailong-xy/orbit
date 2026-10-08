@@ -221,6 +221,32 @@ public enum PromotionCards {
         }
     }
 
+    /// The transcript preview keeps the branch on its own line, outside the heading.
+    public static func previewTitle(_ view: ProjectPromotionView) -> String {
+        let into = shortRef(view.upstreamRef)
+        switch stage(view) {
+        case .askingYou: return "Merge to \(into)"
+        case .merging: return "\(mergingActionLabel(view)) · \(into)"
+        case .blocked: return "Merge to \(into) blocked"
+        case .merged: return title(view)
+        case .none: return supersededTitle
+        }
+    }
+
+    public static func previewCounts(_ view: ProjectPromotionView) -> String {
+        let tasks = view.taskIds.count
+        let taskCount = "\(tasks) task\(tasks == 1 ? "" : "s")"
+        guard let commits = view.commitsAhead else { return taskCount }
+        return "\(commits) commit\(commits == 1 ? "" : "s") · \(taskCount)"
+    }
+
+    /// No commands in the preview, but every recorded check contributes to its verdict.
+    public static func previewChecks(_ view: ProjectPromotionView) -> String {
+        guard !view.checks.isEmpty else { return "No checks recorded" }
+        if view.checks.contains(where: { $0.timedOut == true }) { return "Checks timed out" }
+        return view.checks.allSatisfy(\.passed) ? "✓ Checks passed" : "✕ Checks failed"
+    }
+
     /// `project/bg-jobs · 7 commits ahead of main` — mock 4's Branch row.
     public static func branchLine(_ view: ProjectPromotionView) -> String {
         let branch = shortRef(view.sourceRef)
@@ -237,12 +263,14 @@ public enum PromotionCards {
     /// `✓ Passed on the combined tree · <command> · 6m 12s`, or what failed instead. The check the
     /// owner is being asked to trust, named by the command that ran and how long it took.
     public static func checksLine(_ view: ProjectPromotionView) -> String {
-        guard let check = view.checks.last else { return "no checks recorded" }
-        let elapsed = check.durationMs.map { " · \(duration(ms: $0))" } ?? ""
-        let verdict = check.passed
-            ? "✓ Passed on the combined tree"
-            : (check.timedOut == true ? "✕ Timed out on the combined tree" : "✕ Failed on the combined tree")
-        return "\(verdict) · \(check.command)\(elapsed)"
+        guard !view.checks.isEmpty else { return "no checks recorded" }
+        return view.checks.map { check in
+            let elapsed = check.durationMs.map { " · \(duration(ms: $0))" } ?? ""
+            let verdict = check.passed
+                ? "✓ Passed on the combined tree"
+                : (check.timedOut == true ? "✕ Timed out on the combined tree" : "✕ Failed on the combined tree")
+            return "\(verdict) · \(check.command)\(elapsed)"
+        }.joined(separator: "\n\n")
     }
 
     /// The upstream row: whether this candidate conflicts with it, and — on a re-check — that it
@@ -417,6 +445,173 @@ public enum PromotionCards {
     /// of the window when the moment is above it.
     public static func receipts(merged: [ProjectPromotionView]) -> [Receipt] {
         merged.compactMap(Receipt.init)
+    }
+
+    // MARK: the project's sessions page, and the conversation's one line
+
+    /// The merge card's heading on the project's sessions page (owner decision 2026-10-06: the
+    /// merge lives there, not in the coordinator's conversation). The branch is the line under it —
+    /// the page is the project's own, so the heading says only what is being asked of main. Web's
+    /// `promotionPageTitle`.
+    public static func pageTitle(_ view: ProjectPromotionView) -> String {
+        let into = shortRef(view.upstreamRef)
+        switch stage(view) {
+        case .askingYou: return "Merge into \(into)?"
+        case .merging:
+            if view.execution?.state == "QUEUED" { return "Merge into \(into) queued" }
+            if view.execution?.state != "RUNNING" { return "Merge into \(into) confirmed" }
+            if view.execution?.phase == "CHECK" { return "Re-checking before merging into \(into)…" }
+            return "Merging into \(into)…"
+        case .merged: return title(view)
+        case .blocked: return "Can’t merge into \(into) yet"
+        case .none: return supersededTitle
+        }
+    }
+
+    /// `2 tasks · 10 files` — what the card carries, under the branch line that already says how
+    /// many commits.
+    public static func pageCounts(_ view: ProjectPromotionView) -> String {
+        let tasks = taskCount(view)
+        guard let files = view.filesChanged else { return tasks }
+        return "\(tasks) · \(files) file\(files == 1 ? "" : "s")"
+    }
+
+    /// The titles of the tasks a candidate carries, at most `limit` of them, and how many more
+    /// there are. A task the read did not name (a server older than `tasks`) is still counted in
+    /// `more`, so the card never says it carries less than it does.
+    public static func taskTitles(_ view: ProjectPromotionView, limit: Int = 3) -> (shown: [String], more: Int) {
+        let shown = view.tasks.prefix(Swift.max(0, limit)).map(\.title)
+        return (shown, Swift.max(view.taskIds.count, view.tasks.count) - shown.count)
+    }
+
+    /// `+2 more`, under the titles — nil when they were all named.
+    public static func moreTasks(_ more: Int) -> String? {
+        more > 0 ? "+\(more) more" : nil
+    }
+
+    /// The trailing word on the conversation's line while the candidate is asking.
+    public static let review = "Review"
+    /// The page card's badge while it asks — the compact card's own word for the same state.
+    public static let needsYouBadge = "Needs you"
+    /// The page card's way into the full review.
+    public static let details = "Details"
+    /// B's sentence on the page card, where it stands alone rather than as the `You` row's value.
+    public static let pageNothingToDo =
+        "Nothing to do — it lands on its own if the re-check passes, and comes back here if it doesn’t."
+
+    /// How the conversation's line is drawn: orange only while it waits on the reader, which is
+    /// the one state the needs-you bar counts.
+    public enum EventTone: Equatable, Sendable { case needsYou, working, blocked, quiet }
+
+    /// The coordinator conversation's one line for a candidate, in place of the card it used to
+    /// draw there. Same states, same words as the page's card, so the line and the card cannot say
+    /// two things about one merge. Web's `promotionEventLine`.
+    public static func eventLine(_ view: ProjectPromotionView?) -> (text: String, tone: EventTone) {
+        guard let view, let stage = stage(view) else { return (supersededTitle, .quiet) }
+        switch stage {
+        case .askingYou: return ("Merge into \(shortRef(view.upstreamRef)) is waiting for you", .needsYou)
+        case .merging: return (pageTitle(view), .working)
+        case .blocked: return ("\(pageTitle(view)) · \(blockedReason(view))", .blocked)
+        case .merged: return (receiptLine(view), .quiet)
+        }
+    }
+
+    /// D's reason in a few words, for a line too short for the files: `2 files conflict`, or
+    /// `checks failed`.
+    public static func blockedReason(_ view: ProjectPromotionView) -> String {
+        guard !view.conflicts.isEmpty else { return "checks failed" }
+        let n = view.conflicts.count
+        return "\(n) file\(n == 1 ? "" : "s") conflict"
+    }
+
+    /// The record's one line in the conversation: `✓ Merged into main · 8d5a868 · 2 tasks`, and
+    /// ` · automatically` when nobody pressed Merge — the receipt is still the only place that says
+    /// so (§3.3 M-T11).
+    public static func receiptLine(_ view: ProjectPromotionView) -> String {
+        var parts = ["✓ Merged into \(shortRef(view.upstreamRef))"]
+        if let sha = view.merged?.sha { parts.append(String(sha.prefix(7))) }
+        parts.append(taskCount(view))
+        if view.merged?.automatic == true { parts.append("automatically") }
+        return parts.joined(separator: " · ")
+    }
+
+    /// The timeline row's heading on the sessions page. The check mark is the row's icon there.
+    public static func timelineTitle(_ view: ProjectPromotionView) -> String {
+        "Merged into \(shortRef(view.upstreamRef))"
+    }
+
+    /// The timeline row's second line: `8d5a868 · 2 tasks · by you`, or `· automatically`.
+    public static func timelineDetail(_ view: ProjectPromotionView) -> String {
+        let who = view.merged?.automatic == true ? "automatically" : "by you"
+        return [view.merged.map { String($0.sha.prefix(7)) }, taskCount(view), who]
+            .compactMap { $0 }.joined(separator: " · ")
+    }
+
+    /// The receipt's `Now on main` row. The request's `4 landed on the branch` answered "how much
+    /// would this carry"; read on a receipt it said nothing about what is now on main.
+    public static func nowOnMainLine(_ view: ProjectPromotionView) -> String {
+        taskCount(view)
+    }
+
+    /// `5 commits · 10 files` — the receipt's size row, nil when the read gave neither.
+    public static func changesLine(_ view: ProjectPromotionView) -> String? {
+        let parts = [view.commitsAhead.map { "\($0) commit\($0 == 1 ? "" : "s")" },
+                     view.filesChanged.map { "\($0) file\($0 == 1 ? "" : "s")" }].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    static func taskCount(_ view: ProjectPromotionView) -> String {
+        let n = view.taskIds.count
+        return "\(n) task\(n == 1 ? "" : "s")"
+    }
+}
+
+/// What the project's sessions page draws under its progress card about main: the candidate's own
+/// card while it asks, merges or is blocked, and the merge check's live line before any of that.
+/// Nothing at all when none of them applies — the page is then what it was before (§ owner
+/// decision 2026-10-06).
+public enum ProjectMergeCard {
+    public enum Shape: Equatable, Sendable {
+        /// The merge check is running on the combined tree; nobody is being asked anything yet.
+        case checking
+        case asking
+        case merging
+        case blocked
+    }
+
+    /// The two job kinds that are about main. Their live line belongs to the merge card; a task
+    /// landing on the project branch keeps the progress card's line.
+    public static let mergeJobKinds: Set<String> = ["CHECK_PROMOTION", "LAND_PROMOTION"]
+
+    public static func isMergeJob(_ inFlight: ProjectIntegrationInFlight?) -> Bool {
+        inFlight?.kind.map(mergeJobKinds.contains) == true
+    }
+
+    public static func shape(promotion: ProjectPromotionView?,
+                             integration: ProjectIntegrationView?) -> Shape? {
+        switch promotion.flatMap(PromotionCards.stage) {
+        case .askingYou: return .asking
+        case .merging: return .merging
+        case .blocked: return .blocked
+        case .merged, .none:
+            return isMergeJob(integration?.inFlight) ? .checking : nil
+        }
+    }
+
+    /// The progress card's landing line, minus a merge job: that one is drawn in the merge card.
+    public static func progressLandingLine(_ view: ProjectIntegrationView, now: Date = Date(),
+                                           updatedAt: Date? = nil,
+                                           refreshFailed: Bool = false) -> ProjectPage.LandingLine? {
+        guard !isMergeJob(view.inFlight) else { return nil }
+        return ProjectPage.landingLine(view, now: now, updatedAt: updatedAt, refreshFailed: refreshFailed)
+    }
+
+    /// The merge job's live line, for the merge card — nil when the job in flight is not one.
+    public static func mergeLandingLine(_ view: ProjectIntegrationView, now: Date = Date(),
+                                        updatedAt: Date? = nil,
+                                        refreshFailed: Bool = false) -> ProjectPage.LandingLine? {
+        guard isMergeJob(view.inFlight) else { return nil }
+        return ProjectPage.landingLine(view, now: now, updatedAt: updatedAt, refreshFailed: refreshFailed)
     }
 }
 

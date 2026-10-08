@@ -1,3 +1,4 @@
+import AuthenticationServices
 import Foundation
 import Observation
 import OrbitKit
@@ -19,6 +20,7 @@ struct ToastRequest: Equatable {
     var tone: ToastTone = .success
     var key: String?
     var inProgress = false
+    var mergeConflict: ToastMergeConflict?
 }
 
 /// Top-level app state: instance + auth + the Open session list. All UI-driving state lives
@@ -28,11 +30,20 @@ struct ToastRequest: Equatable {
 final class AppModel {
     // auth / instance
     var signedIn = false
-    var instanceField = "orbitd.io"
+    static let defaultInstance = "orbitd.io"
+    var instanceField = AppModel.defaultInstance
     var email = ""
     var password = ""
     var errorText: String?
     var busy = false
+    /// Continue with Google is under way: its sheet is up, or its ticket is being traded.
+    var googleBusy = false
+    /// What the login page's server offers besides a password (`GET /auth/methods`,
+    /// docs/google-sign-in-design.md §6), read when the page appears and again when the server
+    /// changes. Password only until the server answers, and for a server that can't say.
+    private(set) var signInMethods = SignInMethods.passwordOnly
+    /// The server `signInMethods` was asked of.
+    @ObservationIgnored private var signInMethodsServer: URL?
 
     // data
     var user: User? {
@@ -74,6 +85,9 @@ final class AppModel {
     var selectedSection: AppSection {
         get { nav.section }
         set {
+            // Coming into the Wiki from another section, it opens the space bound to the workspace the
+            // reader was in (wiki design §12.3.4) — read off the stack being left, before the switch.
+            if newValue == .wiki && nav.section != .wiki { wiki?.open(fromWorkspace: workspaceInView) }
             nav.section = newValue
             // Switching sections tears down the other sections' *views* (the compact shell renders
             // one at a time), but not their navigation: each section keeps its own stack, so coming
@@ -91,7 +105,7 @@ final class AppModel {
     /// Latches the one-shot default-landing resolution so it runs only after the first successful
     /// agent-list load, and never overrides a later user/deep-link choice.
     private var didResolveDefaultLanding = false
-    /// The workspace a cold launch landed on from its snapshot (`restoreLaunchSnapshot`) before the
+    /// The workspace a cold launch landed on from its snapshot (`adoptLaunchSnapshot`) before the
     /// workspace fetch answered. While it is still the one selected nobody has chosen anything, so
     /// `resolveDefaultLanding` decides afresh once the fetch succeeds.
     private var provisionalLandingAgentID: String?
@@ -339,11 +353,17 @@ final class AppModel {
     private static let runnerSnapshotRefreshInterval: TimeInterval = 15
     #endif
     private var lastSnapshot: [Session]?
-    /// True from a cold launch's restore (`restoreLaunchSnapshot`) until the first fetched Open
+    /// True from a cold launch's restore (`adoptLaunchSnapshot`) until the first fetched Open
     /// snapshot lands. The list in hand until then is the previous run's, or built on it by an
     /// in-place update, and a diff against it would announce everything that changed while the app
     /// was gone — so it never becomes `lastSnapshot`, and that first fetch only primes.
     private var openListFromLaunchSnapshot = false
+    /// Whether a server-answered Open list has landed since the last sign-out — the race guard for
+    /// the launch restore, which reads its file off the main thread and must never put the previous
+    /// run's rows over this run's fetch. Distinct from `openListFromLaunchSnapshot`, which says what
+    /// the list in hand IS: this one is latched, so a list that later turns out to be a snapshot's
+    /// cannot un-answer it.
+    private var openListAnswered = false
     /// Sessions known to be leaving Open because somebody FILED them (completed / trashed), rather
     /// than because a run finished. Filing drops the row from Open, which the snapshot diff would
     /// otherwise read as the run finishing and announce with a "Session finished" banner — reporting
@@ -391,8 +411,27 @@ final class AppModel {
     private var libraryRefreshQueue = CoalescedRefreshQueue<LibraryTarget, String>()
     private var libraryRefreshTask: Task<Void, Never>?
     private var libraryRefreshGeneration = 0
+    /// `loadSessions`'s single flight: the fetch on the wire, whether a call is waiting for one more,
+    /// and how the last one went. The generation retires a flight across an instance switch.
+    private var sessionsLoadTask: Task<Void, Never>?
+    private var sessionsLoadPending = false
+    private var sessionsLoadSucceeded = false
+    private var sessionsLoadGeneration = 0
+    /// How a poll reads the Open list: the delta against the last list fetched where the server has
+    /// it, else the tagged full read that comes back as an empty 304 when nothing changed. Told
+    /// whenever `sessions` is written any other way (an event folded in), so an "unchanged" answer
+    /// only ever vouches for the list it describes. One per instance and sign-in.
+    private var openListReader: OpenListReader?
+    /// Whether `sessions` is the list the reader last handed out, apart from the rows in
+    /// `eventWrittenRows` that `applySessionRow` has changed in place since — what lets a poll that
+    /// only changed rows in place be applied one row at a time (`fetchOpenSessions`). Any other
+    /// write goes through `applySessionSnapshot`, which clears it.
+    private var openListIsReaderBase = false
+    private var eventWrittenRows: Set<String> = []
 
     private static let instanceKey = "orbit.instance"
+    /// The email of the last successful sign-in, prefilled on the login page.
+    private static let emailKey = "orbit.email"
     /// Remembers the last agent you selected so a cold launch lands there instead of always the
     /// first agent in the list. Read in `loadAgentsThenLand`, written by `selectedAgentID`'s didSet.
     private static let lastAgentKey = "orbit.lastAgent"
@@ -404,6 +443,7 @@ final class AppModel {
         tokenStore = InMemoryTokenStore()
         #endif
 
+        email = UserDefaults.standard.string(forKey: Self.emailKey) ?? ""
         // Restore the last instance; if its token is still in the Keychain, skip the login screen —
         // and draw the first frame from what the last run left rather than from nothing.
         if let saved = UserDefaults.standard.string(forKey: Self.instanceKey),
@@ -424,6 +464,9 @@ final class AppModel {
     private(set) var admin: AdminModel?
     /// Every public link the account has made: Settings → Shared links, and the count on its row.
     private(set) var sharedLinks: SharedLinksModel?
+    /// Every personal access token the account has issued: Settings → Access tokens, and the count
+    /// on its row.
+    private(set) var accessTokens: AccessTokensModel?
     /// The shared pools the account is in: Settings → Providers, and each pool's page.
     private(set) var sharedPools: SharedPoolsModel?
     /// The account's watches: Following, the console's Watching card, and every session's row and header.
@@ -437,6 +480,9 @@ final class AppModel {
     /// What the next cold launch draws first (`persistLaunchSnapshot` / `restoreLaunchSnapshot`),
     /// scoped to this instance.
     @ObservationIgnored private var launchSnapshots: LaunchSnapshotStore?
+    /// The launch restore's read of that file, off the main thread — held so a switch of instance
+    /// cancels it rather than letting the old instance's snapshot land on the new one's app.
+    @ObservationIgnored private var launchSnapshotRestore: Task<Void, Never>?
     #if os(macOS)
     /// The local runner this Mac may host. Shared between the menu-bar tray (status + quick
     /// Start/Stop) and the runner-manager window (log + enroll). Created per instance. macOS-only:
@@ -446,6 +492,8 @@ final class AppModel {
     #endif
 
     private func configure(_ url: URL) {
+        launchSnapshotRestore?.cancel()
+        launchSnapshotRestore = nil
         controlRefreshGeneration &+= 1
         controlRefreshTask?.cancel()
         controlRefreshTask = nil
@@ -454,11 +502,16 @@ final class AppModel {
         libraryRefreshTask?.cancel()
         libraryRefreshTask = nil
         libraryRefreshQueue = CoalescedRefreshQueue()
+        sessionsLoadGeneration &+= 1
+        sessionsLoadTask?.cancel()
+        sessionsLoadTask = nil
+        sessionsLoadPending = false
         apiGeneration &+= 1
         sessionDetails.removeAll()
         baseURL = url
         let client = APIClient(baseURL: url, tokenStore: tokenStore)
         api = client
+        openListReader = OpenListReader(api: client)
         // One link-preview store for the app, with an age on its answers: a screen that stays open
         // asks for its cards again as it redraws, and only what has gone stale costs a request.
         linkCards = OrbitLinkCards(baseURL: url,
@@ -472,10 +525,16 @@ final class AppModel {
         tasksModel.setSectionActive(selectedSection == .tasks)
         tasksModel.setSelectedDetailID(selectedTaskID)
         tasks = tasksModel
-        agents = AgentsModel(baseURL: url, tokenStore: tokenStore)
+        let agentsModel = AgentsModel(baseURL: url, tokenStore: tokenStore)
+        agentsModel.refreshOpen = { [weak self] in
+            guard let self, await self.loadSessions() else { return nil }
+            return self.sessions
+        }
+        agents = agentsModel
         runners = RunnersModel(baseURL: url, tokenStore: tokenStore)
         admin = AdminModel(baseURL: url, tokenStore: tokenStore)
         sharedLinks = SharedLinksModel(baseURL: url, tokenStore: tokenStore)
+        accessTokens = AccessTokensModel(baseURL: url, tokenStore: tokenStore)
         sharedPools = SharedPoolsModel(baseURL: url, tokenStore: tokenStore)
         let watchesModel = WatchesModel(baseURL: url, tokenStore: tokenStore)
         #if os(macOS)
@@ -496,6 +555,7 @@ final class AppModel {
         consoleRegistry?.onToast = { [weak self] request, sessionID in
             self?.showToast(request.message, sessionID: sessionID,
                             detail: request.detail, tone: request.tone,
+                            mergeConflict: request.mergeConflict,
                             key: request.key.map { "\($0):\(sessionID ?? "")" }, inProgress: request.inProgress)
         }
         // The permission posture a session inherits when it stores none, and where a Mode picked in
@@ -507,6 +567,19 @@ final class AppModel {
             self?.rememberDefaultPermissionMode(raw)
         }
         consoleRegistry?.accountDefaultModels = { [weak self] in self?.defaultModels ?? [:] }
+        consoleRegistry?.seedSessionContext = { [weak self] console in
+            guard let self, let session = self.session(id: console.sessionID) else { return }
+            console.seedSessionContext(
+                session,
+                modelCatalog: self.agents?.modelCatalog(for: session.assignedRunnerId),
+                runtimeDefaultModels: session.assignedRunnerId.flatMap {
+                    self.agents?.runnerRuntimeDefaultModels[$0]
+                },
+                configuredProviders: self.agents?.configuredProviders ?? [],
+                configuredProvidersLoaded: self.agents?.configuredProvidersLoaded ?? false,
+                providerPools: self.agents?.providerPools ?? [],
+                sharedPools: self.agents?.sharedPools ?? [])
+        }
         #if os(macOS)
         runnerControl = RunnerControl(baseURL: url, tokenStore: tokenStore)
         #endif
@@ -666,22 +739,85 @@ final class AppModel {
             return
         }
         configure(url)
-        UserDefaults.standard.set(instanceField, forKey: Self.instanceKey)
+
+        email = LoginFailure.submittedEmail(email)
 
         busy = true
         defer { busy = false }
         do {
             _ = try await api!.login(email: email, password: password)
+            // Remember only what signed in, so a mistyped server or email never sticks.
+            UserDefaults.standard.set(instanceField, forKey: Self.instanceKey)
+            UserDefaults.standard.set(email, forKey: Self.emailKey)
             user = try? await api!.me()
             password = ""
             signedIn = true
-        } catch APIError.unauthorized {
-            errorText = "Invalid email or password"
-        } catch is TokenNotStoredError {
-            errorText = "Signed in, but this device couldn't save the session to the Keychain."
         } catch {
-            errorText = "Sign-in failed — check the instance URL and that the server is reachable."
+            errorText = LoginFailure.message(for: error)
         }
+    }
+
+    /// Ask the login page's server how it signs people in (`signInMethods`). A server from before
+    /// Google sign-in answers 404, which reads as password only; so does one that can't be reached.
+    func loadSignInMethods() async {
+        guard let url = ServerURL.normalize(instanceField) else {
+            signInMethods = .passwordOnly
+            signInMethodsServer = nil
+            return
+        }
+        // Never another server's Google button, not even while this one is asked.
+        if url != signInMethodsServer { signInMethods = .passwordOnly }
+        signInMethodsServer = url
+        let methods = (try? await APIClient(baseURL: url, tokenStore: tokenStore).signInMethods()) ?? .passwordOnly
+        // The server changed while this one was asked: the answer isn't the page's any more.
+        guard ServerURL.normalize(instanceField) == url else { return }
+        signInMethods = methods
+    }
+
+    /// Continue with Google (docs/google-sign-in-design.md §8.2): the server's Google sign-in in the
+    /// system's web authentication sheet, then in the way `login` is — the session kept and read
+    /// back, the server remembered, the account read. Closing the sheet is not a failure.
+    func loginWithGoogle() async {
+        // A second press before the button has redrawn as disabled: one sheet at a time.
+        guard !busy, !googleBusy else { return }
+        errorText = nil
+        guard let url = ServerURL.normalize(instanceField) else {
+            errorText = "Enter a valid instance URL"
+            return
+        }
+        guard let anchor = googleSignInAnchor else {
+            errorText = LoginFailure.googleUnavailable
+            return
+        }
+        configure(url)
+
+        googleBusy = true
+        defer { googleBusy = false }
+        let sheet = GoogleWebAuthentication(anchor: anchor)
+        do {
+            _ = try await GoogleSignIn.signIn(api: api!) { try await sheet.authenticate($0) }
+            UserDefaults.standard.set(instanceField, forKey: Self.instanceKey)
+            user = try? await api!.me()
+            password = ""
+            signedIn = true
+        } catch GoogleSignInError.cancelled {
+            // The sheet was closed: the page stays as it was.
+        } catch {
+            errorText = LoginFailure.googleMessage(for: error)
+        }
+    }
+
+    /// The window Continue with Google's sheet is presented over, which macOS has to be told: the
+    /// key window, whose button was just pressed.
+    private var googleSignInAnchor: ASPresentationAnchor? {
+        #if os(macOS)
+        NSApp.keyWindow ?? NSApp.mainWindow
+        #else
+        let scene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+        return scene?.windows.first(where: { $0.isKeyWindow }) ?? scene?.windows.first
+        #endif
     }
 
     func logout() {
@@ -701,6 +837,11 @@ final class AppModel {
         libraryRefreshTask?.cancel()
         libraryRefreshTask = nil
         libraryRefreshQueue = CoalescedRefreshQueue()
+        sessionsLoadGeneration &+= 1
+        sessionsLoadTask?.cancel()
+        sessionsLoadTask = nil
+        sessionsLoadPending = false
+        openListReader = api.map { OpenListReader(api: $0) }
         controlPlaneLive = false
         consoleRegistry?.reset()   // persist open transcripts, drop the warm cache
         // The account's lists leave with it: the next launch here may be someone else's.
@@ -727,11 +868,18 @@ final class AppModel {
         jobWorkspaceIDs = []
         projectCoordinators = [:]
         sessionFolders = []
+        projectSessions = []
+        projectSessionsAddress = nil
+        projectSessionsError = nil
+        projectCompletedSessions = [:]
         #endif
         sessionDetails.removeAll()
         resetNavigation()
         lastSnapshot = nil
         openListFromLaunchSnapshot = false
+        openListAnswered = false
+        openListIsReaderBase = false
+        eventWrittenRows = []
         menuSummary = .empty
         updateDockBadge(nil)
         // Clear the write-skip trackers so the next sign-in's first snapshot always reconciles the
@@ -775,9 +923,9 @@ final class AppModel {
         }
         #endif
         #if os(macOS)
-        // Frozen-runner upkeep: a Sparkle app update ships a newer bundled runner than the installed
-        // ~/.orbit/bin copy (its network self-update is off), so re-sync it once at launch.
-        Task { await runnerControl?.syncBundledRunner() }
+        // A Mac an older app enrolled runs a LaunchAgent that keeps its runner from updating
+        // itself; rewrite it once, at launch.
+        Task { await runnerControl?.migrateLaunchAgent() }
         #endif
     }
 
@@ -972,7 +1120,7 @@ final class AppModel {
             break
         }
         // A project's lanes move when one of its tasks does, and an owner item rides the approval
-        // count; no event names projects, so a loaded index refetches shortly after either.
+        // count, so a loaded index refetches shortly after either.
         switch ev.type {
         case .taskChanged, .taskListChanged, .approvalRequested, .approvalResolved:
             projects?.nudge()
@@ -1014,6 +1162,9 @@ final class AppModel {
                 scheduleLibraryRefresh(.tasks)
                 scheduleControlRefresh()
             }
+        // A project changed — including its title or progress — so refresh its summaries.
+        case .projectChanged:
+            projects?.nudge()
         // A wiki space changed — a proposal filed, ops decided, a binding moved. The event names the
         // space and nothing else, so the loaded Wiki re-reads what it shows (the drawer's number
         // included). It moves no session row: falling through to the snapshot below would be the web's
@@ -1040,6 +1191,12 @@ final class AppModel {
             }
         case .sessionCreated, .sessionUpdated:
             if let summary = ev.payload(ControlSessionSummary.self) {
+                // Progress comes from the sidebar read rather than the session summary. Include
+                // a former member too, so removing its relation refreshes that project at once.
+                if summary.projectMembership.flatMap({ $0 }) != nil
+                    || sessions.contains(where: { $0.id == summary.id && $0.projectMembership != nil }) {
+                    projects?.nudge()
+                }
                 // Session state is the authority for a task row's running/queued overlays. The
                 // summary names that task on current servers, so starting, claiming and settling a
                 // run update one lightweight row instead of waiting for the minute reconciliation.
@@ -1094,26 +1251,11 @@ final class AppModel {
     }
 
     /// Fold a `session.created` / `session.updated` summary into the row already on hand. Returns
-    /// false when only the list query can answer the change, and the caller should nudge a refresh:
-    ///   • the session left Open — the row has to disappear, which membership alone decides;
-    ///   • the row isn't loaded — a session created elsewhere can't be built from the slim summary
-    ///     (no preview line, tags, runner or background count), and prepending a half-populated row
-    ///     would render worse than the ~½s wait for the real snapshot;
-    ///   • the run just reached a terminal status — whether that is an outcome or a failure the
-    ///     server is about to retry is decided by `retryAt`, which the summary doesn't carry, so
-    ///     folding the status in alone would announce a failure that undoes itself a minute later.
-    ///     Once per session ended, against a per-turn event: the refetch costs nothing here.
+    /// false when only the list query can answer the change (`OpenRowChange.merging` says when), and
+    /// the caller should nudge a refresh.
     private func mergeSessionSummary(_ summary: ControlSessionSummary) -> Bool {
         patchSessionProjectRelation(summary)
-        if let lifecycle = summary.effectiveLifecycleState, lifecycle != .open { return false }
-        if summary.effectiveRunStatus.isTerminal { return false }
-        guard let index = sessions.firstIndex(where: { $0.id == summary.id }) else { return false }
-        let merged = sessions[index].applying(summary)
-        guard merged != sessions[index] else { return true }   // nothing user-visible changed
-        var list = sessions
-        list[index] = merged
-        applySessionSnapshot(list)
-        return true
+        return applySessionRow(OpenRowChange.merging(summary, into: sessions))
     }
 
     /// Relation metadata has a different membership rule from run/lifecycle state: a Project can
@@ -1121,14 +1263,10 @@ final class AppModel {
     /// every loaded copy before the ordinary Open-only summary gate, using the payload's
     /// absent/null/value distinction so an older server preserves rather than clears the relation.
     private func patchSessionProjectRelation(_ summary: ControlSessionSummary) {
-        guard summary.projectId != nil || summary.projectTitle != nil else { return }
+        guard summary.projectId != nil || summary.projectTitle != nil || summary.projectMembership != nil else { return }
         if let index = sessions.firstIndex(where: { $0.id == summary.id }) {
             let merged = sessions[index].applyingProjectRelation(summary)
-            if merged != sessions[index] {
-                var list = sessions
-                list[index] = merged
-                applySessionSnapshot(list)
-            }
+            if merged != sessions[index] { applySessionRow(.replace(index: index, row: merged)) }
         }
         if let cached = sessionDetails.resolve(summary.id) {
             sessionDetails.store(cached.applyingProjectRelation(summary))
@@ -1146,13 +1284,8 @@ final class AppModel {
     /// gone.
     private func mergePendingApprovals(sessionID: String, pending: Int,
                                        waitingKind: SessionWaitingKind?) -> Bool {
-        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return false }
-        guard sessions[index].pendingApprovals != pending
-                || sessions[index].waitingKind != waitingKind else { return true }
-        var list = sessions
-        list[index] = list[index].settingPendingApprovals(pending, waitingKind: waitingKind)
-        applySessionSnapshot(list)
-        return true
+        applySessionRow(OpenRowChange.settingPendingApprovals(sessionID: sessionID, pending: pending,
+                                                              waitingKind: waitingKind, in: sessions))
     }
 
     /// The owner-level lists a control event can dirty, each backed by its own model.
@@ -1309,17 +1442,62 @@ final class AppModel {
         notifications.focusedSessionID = id
     }
 
-    func loadSessions() async {
-        guard let api else { return }
+    /// Refresh the Open list, one fetch at a time. A call while one is on the wire doesn't start a
+    /// second beside it — the Open list is the app's largest response, and launch alone asks for it
+    /// from the poll, the stream connecting and the list appearing. It asks for one more fetch after
+    /// that one instead, since the one in flight may have left before whatever the caller refreshes
+    /// for (the stream connecting, an event), and every call meanwhile shares it. Each call returns
+    /// once a fetch that started after it has finished: true when that fetch adopted a list.
+    @discardableResult
+    func loadSessions() async -> Bool {
+        sessionsLoadPending = true
+        if sessionsLoadTask == nil {
+            let generation = sessionsLoadGeneration
+            sessionsLoadTask = Task { @MainActor [weak self] in
+                while let self, self.sessionsLoadGeneration == generation, self.sessionsLoadPending {
+                    self.sessionsLoadPending = false
+                    self.sessionsLoadSucceeded = await self.fetchOpenSessions()
+                }
+                if let self, self.sessionsLoadGeneration == generation { self.sessionsLoadTask = nil }
+            }
+        }
+        await sessionsLoadTask?.value
+        return sessionsLoadSucceeded
+    }
+
+    private func fetchOpenSessions() async -> Bool {
+        guard let reader = openListReader else { return false }
         do {
-            let list = try await api.listSessions(view: .open)
+            guard case .list(let list) = try await reader.read() else {
+                // Unchanged: `sessions` is still the list the server has, so there is nothing to
+                // adopt or announce. The review-due timer re-arms against it, as an adopted snapshot does.
+                scheduleReviewDueRefresh(sessions)
+                return true
+            }
             openListFromLaunchSnapshot = false
-            applySessionSnapshot(list)
+            // A poll that changed rows of the same sessions goes through the same one-row path as an
+            // event: the rows it changed, and the rows events wrote since the last adopted list
+            // (which the server's list now answers for), are all that can differ from it. A new
+            // order is then taken as it stands (`adoptOpenOrder`).
+            if openListIsReaderBase, let replaced = reader.replacedRows, lastSnapshot != nil,
+               let poll = OpenRowChange.replacements(
+                   of: Set(replaced.map(\.id)).union(eventWrittenRows), in: list, over: sessions) {
+                for change in poll.changes { applySessionRow(.replace(index: change.index, row: change.row)) }
+                if poll.reordered { adoptOpenOrder(list) }
+                scheduleReviewDueRefresh(sessions)
+            } else {
+                applySessionSnapshot(list)
+            }
+            reader.adopted()
+            openListIsReaderBase = true
+            eventWrittenRows = []
+            return true
         } catch APIError.unauthorized {
             logout()
         } catch {
             // Transient — keep the last good list.
         }
+        return false
     }
 
     /// Adopt a new Open snapshot: the ONE place the list and everything derived from it are written,
@@ -1330,20 +1508,14 @@ final class AppModel {
     /// `notify: false` is for a snapshot whose transitions the caller already accounted for (a local
     /// purge), where the diff would otherwise post a bogus "finished" alert.
     private func applySessionSnapshot(_ list: [Session], notify: Bool = true) {
+        openListAnswered = true   // a server-answered list is in hand; see `openListAnswered`
+        openListReader?.invalidate()   // see `openListReader`; a fetch marks it adopted once this is done
+        openListIsReaderBase = false
         // Notify on snapshot-to-snapshot transitions (skip the first load, which only primes). Skip
         // the session whose console is on screen — its own stream already shows the change.
         if notify, let prev = lastSnapshot {
-            for event in SessionDelta.diff(previous: prev, current: list,
-                                           focusedSessionID: focusedConsoleSessionID,
-                                           filed: filedSessions) {
-                #if os(iOS)
-                // The server already pushes approvals to this device over APNs, in every app state
-                // (PushService.notifyApprovalRequest) — posting the diff's banner too would alert
-                // twice for one approval. macOS has no APNs path, so it keeps announcing them here.
-                if case .needsApproval = event { continue }
-                #endif
-                notifications.post(Notifications.content(for: event))
-            }
+            post(SessionDelta.diff(previous: prev, current: list,
+                                   focusedSessionID: focusedConsoleSessionID, filed: filedSessions))
         }
         // A filing has done its silencing once a snapshot without the row lands: `lastSnapshot` no
         // longer holds it either, so nothing later can read its absence as a finish. Releasing here
@@ -1374,12 +1546,29 @@ final class AppModel {
             updateDockBadge(summary.badge)
         }
         #if os(iOS)
-        // Foreground reconcile: drop delivered approval banners for sessions that no longer need
-        // a reply (e.g. handled on web/macOS), so Notification Center matches the badge — and to
-        // cover the case a silent push couldn't (a force-quit app). See docs/cross-platform-badge-sync.md.
-        // Gated on the id set actually changing: this is a cross-process round-trip, and most
-        // snapshots (a turn ticking along) don't move it at all.
-        let needsYou = Set(SessionGrouping.group(list).needsYou.map(\.id))
+        reconcileDeliveredApprovals(Set(SessionGrouping.group(list).needsYou.map(\.id)))
+        #endif
+    }
+
+    private func post(_ events: [NotificationEvent]) {
+        for event in events {
+            #if os(iOS)
+            // The server already pushes approvals to this device over APNs, in every app state
+            // (PushService.notifyApprovalRequest) — posting the diff's banner too would alert
+            // twice for one approval. macOS has no APNs path, so it keeps announcing them here.
+            if case .needsApproval = event { continue }
+            #endif
+            notifications.post(Notifications.content(for: event))
+        }
+    }
+
+    #if os(iOS)
+    /// Foreground reconcile: drop delivered approval banners for sessions that no longer need
+    /// a reply (e.g. handled on web/macOS), so Notification Center matches the badge — and to
+    /// cover the case a silent push couldn't (a force-quit app). See docs/cross-platform-badge-sync.md.
+    /// Gated on the id set actually changing: this is a cross-process round-trip, and most
+    /// snapshots (a turn ticking along) don't move it at all.
+    private func reconcileDeliveredApprovals(_ needsYou: Set<String>) {
         if needsYou != lastNeedsYou {
             lastNeedsYou = needsYou
             // A server banner's thread id is the session's stored UUID; `needsYou` is list-spelled.
@@ -1389,7 +1578,88 @@ final class AppModel {
             // leave a card asking for something that's already been decided.
             toasts.clearApprovals(stillWaiting: needsYou)
         }
+    }
+    #endif
+
+    /// Apply a control event's change to ONE row of the Open list, leaving the same state behind as
+    /// `applySessionSnapshot` would with that row swapped in — without its whole-list work: the
+    /// notification diff, the derived surfaces (`OpenListDerived`) and the agent pane read only what
+    /// this row could have moved. Several running sessions send several of these a second, all on
+    /// the main thread. Returns false for `needsSnapshot`, as the callers' own contract does.
+    ///
+    /// That equivalence rests on `lastSnapshot` being the list in hand and on the derived values
+    /// having been derived from it, which holds once a fetched snapshot has primed it. Until then —
+    /// signed in but nothing fetched, or a launch's restored list — the full path runs instead.
+    @discardableResult
+    private func applySessionRow(_ change: OpenRowChange) -> Bool {
+        guard case .replace(let index, let row) = change else { return change == .unchanged }
+        guard lastSnapshot != nil, !openListFromLaunchSnapshot else {
+            var list = sessions
+            list[index] = row
+            applySessionSnapshot(list)
+            return true
+        }
+        openListReader?.invalidate()   // not a full write either; see `openListReader`
+        eventWrittenRows.insert(row.id)
+        let old = sessions[index]
+        // Every other row is unchanged, so this row's diff is the whole list's.
+        post(SessionDelta.diff(previous: [old], current: [row],
+                               focusedSessionID: focusedConsoleSessionID, filed: filedSessions))
+        sessions[index] = row
+        lastSnapshot = sessions
+        // The ids are the same, so `filedSessions` keeps every entry it had.
+        sessionDetails.reconcile(with: [row])
+
+        #if os(iOS)
+        let activity = OpenListDerived.Activity(runningWorkspaceIDs: runningWorkspaceIDs,
+                                                jobWorkspaceIDs: jobWorkspaceIDs,
+                                                coordinatorPulses: projectCoordinators)
+        #else
+        let activity: OpenListDerived.Activity? = nil
         #endif
+        var derived = OpenListDerived(needsYou: needsYouSessions, agentNeedsYou: agentNeedsYou,
+                                      menu: menuSummary, activity: activity)
+        derived.replace(old, with: row, in: sessions)
+        // Written only where they moved: Observation invalidates on any assignment.
+        #if os(iOS)
+        let needsYouIDsMoved = derived.needsYou.map(\.id) != needsYouSessions.map(\.id)
+        #endif
+        if derived.needsYou != needsYouSessions { needsYouSessions = derived.needsYou }
+        if derived.agentNeedsYou != agentNeedsYou { agentNeedsYou = derived.agentNeedsYou }
+        #if os(iOS)
+        if let marks = derived.activity {
+            if marks.runningWorkspaceIDs != runningWorkspaceIDs { runningWorkspaceIDs = marks.runningWorkspaceIDs }
+            if marks.jobWorkspaceIDs != jobWorkspaceIDs { jobWorkspaceIDs = marks.jobWorkspaceIDs }
+            if marks.coordinatorPulses != projectCoordinators { projectCoordinators = marks.coordinatorPulses }
+        }
+        #endif
+        agents?.applyOpenRow(sessions, workspaceIDs: [old.agent?.id ?? old.agentId, row.agent?.id ?? row.agentId])
+        if old.confirmationUnderReview?.dueAt != row.confirmationUnderReview?.dueAt {
+            scheduleReviewDueRefresh(sessions)
+        }
+        if derived.menu != menuSummary { menuSummary = derived.menu }
+        if lastBadge != derived.menu.badge {
+            lastBadge = derived.menu.badge
+            updateDockBadge(derived.menu.badge)
+        }
+        #if os(iOS)
+        if needsYouIDsMoved { reconcileDeliveredApprovals(Set(derived.needsYou.map(\.id))) }
+        #endif
+        return true
+    }
+
+    /// `list` is `sessions` in another order (`fetchOpenSessions` has already applied every row that
+    /// differs). Nothing transitions, so nothing is announced; only what is read in list order moves.
+    private func adoptOpenOrder(_ list: [Session]) {
+        openListAnswered = true   // server-ordered rows; see `openListAnswered`
+        sessions = list
+        lastSnapshot = list
+        var derived = OpenListDerived(needsYou: needsYouSessions, agentNeedsYou: agentNeedsYou,
+                                      menu: menuSummary, activity: nil)
+        derived.reorder(list)
+        if derived.needsYou != needsYouSessions { needsYouSessions = derived.needsYou }
+        if derived.menu != menuSummary { menuSummary = derived.menu }
+        agents?.applyOpenSnapshot(list)
     }
 
     /// The Open list and everything the drawer and the session lists derive from it. Written by a
@@ -1544,18 +1814,6 @@ final class AppModel {
         }
     }
 
-    /// Open a **Recents** row from the drawer: jump into the session's owning agent and put its
-    /// console on screen. The Open list nests the agent, so there's no fetch (unlike a cold deep link
-    /// — see ``openSession``). A no-op agent switch leaves the page where it is; a real one replaces
-    /// it, which is also the whole of "clear the prior agent's session/compose state": both were
-    /// pages of this one stack, and a page cannot outlive the frame it was.
-    func openRecentSession(_ s: Session) {
-        // The frame records where it came from — a Recents drawer row — so the compact shell frees
-        // the left edge for the drawer-open swipe on that console (see `NavState.consoleFromRecents`).
-        // Nothing to set first, and no observer with an ordering convention to preserve it.
-        show(.console(sessionID: s.id, origin: .drawer), agent: s.agent?.id ?? s.agentId)
-    }
-
     /// The "needs you" banner's state for a screen showing `focused` (nil from a list, which shows no
     /// one session). Cheap enough to read per body pass — it filters the handful of blocked rows, not
     /// the Open list, which `applySessionSnapshot` already narrowed.
@@ -1579,7 +1837,15 @@ final class AppModel {
     /// the console which card first, so the read that console runs on appearing is the one that
     /// spends the press: a card delivered by that read is scrolled to as it arrives, rather than a
     /// moment after the reader has looked away.
-    func openNeedsYouItem(_ s: Session, _ item: SessionOwnerItem) {
+    func openNeedsYouItem(_ s: Session, _ item: SessionOwnerItem, projectInColumn: Bool = false) {
+        #if os(iOS)
+        // The merge into main is answered on the project's sessions page, where its card is (owner
+        // decision 2026-10-06); the coordinator's conversation keeps only a line about it. A wide
+        // shell opens that page in its session column, as the drawer's project row does.
+        if item.kind == .promotionApproval, let projectID = s.projectMembership?.projectId {
+            return openProjectSessions(projectID, inColumn: projectInColumn)
+        }
+        #endif
         consoleRegistry?.model(for: s.id, agentID: s.agent?.id ?? s.agentId).focus(ownerItem: item)
         openNeedsYouSession(s)
     }
@@ -1610,16 +1876,40 @@ final class AppModel {
         return session(id: id)?.capabilities?.canComplete ?? true
     }
 
-    /// iOS compact: true when the console currently pushed on the Agents stack was opened from a
-    /// **Recents** drawer row (and is still the one showing). The compact shell uses this to free the
-    /// left screen edge for the drawer-open swipe on that page — you came from the drawer, so the edge
-    /// returns you there — while the nav-bar back button still pops to the agent's session list.
-    var consoleFromRecents: Bool { nav.consoleFromRecents }
+    /// The drawer row the screen belongs to (`NavState.drawerDestination`): the row drawn as
+    /// selected, and the one whose tap only closes the drawer.
+    var drawerDestination: DrawerDestination { nav.drawerDestination(agentID: selectedAgentID) }
 
-    /// iOS compact: the same for the project page on top of the Projects stack, when one of the
-    /// drawer's project rows opened it — the edge returns you to the drawer, the back button to the
-    /// Projects list.
-    var projectFromDrawer: Bool { nav.projectFromDrawer }
+    /// The workspace the reader is in, for the space the Wiki opens when they come into it (wiki design
+    /// §12.3.4): the one whose session list is showing, a project's coordinator workspace on its pages, and
+    /// none on the Projects or Tasks list.
+    private var workspaceInView: String? {
+        WikiSpaceLogic.workspaceInView(nav, agentID: selectedAgentID,
+                                       coordinatorWorkspace: { self.coordinatorWorkspaceID(ofProject: $0) })
+    }
+
+    /// The workspace a project's coordinator runs in, for the space the Wiki opens from its pages: what its
+    /// page's read says, else the workspace of the coordinator's conversation among the sessions held.
+    private func coordinatorWorkspaceID(ofProject projectID: String) -> String? {
+        if let id = projects?.detail(projectID).document?.coordinatorWorkspaceId { return id }
+        let key = PublicID.storageKey(projectID)
+        #if os(iOS)
+        let held = sessions + (agents?.allSessions ?? [])
+        #else
+        let held = sessions
+        #endif
+        let coordinator = held.first {
+            $0.projectMembership?.role == .coordinator
+                && $0.projectMembership.map { PublicID.storageKey($0.projectId) } == key
+        }
+        return coordinator.flatMap { $0.agent?.id ?? $0.agentId }
+    }
+
+    /// iOS compact: the page on top is its drawer destination's own — a section's list, or a
+    /// project's sessions page put up as the project's own rather than pushed by a list row — so the
+    /// left screen edge opens the drawer; over any page pushed above one the edge is the system
+    /// back-swipe's.
+    var atDestinationRoot: Bool { nav.atDestinationRoot }
 
     /// True when the current section's navigation stack is at its root (nothing pushed) — the
     /// compact shell uses this to yield the left screen edge to its drawer-open gesture only where
@@ -1708,6 +1998,7 @@ final class AppModel {
     /// trash state).
     private(set) var toasts = ToastFeed()
     @ObservationIgnored private var toastExpiry: Task<Void, Never>?
+    @ObservationIgnored private var heldToastID: ToastItem.ID?
     @ObservationIgnored private var toastFold: Task<Void, Never>?
 
     /// Refresh whichever session lists are on screen (Open always; the agent list if
@@ -1716,6 +2007,9 @@ final class AppModel {
         await loadSessions()
         await agents?.reloadCurrentSessions()
         sessionDetails.reconcile(with: agents?.agentSessions ?? [])
+        #if os(iOS)
+        if let address = nav.projectSessionsColumn { await loadProjectSessions(address) }
+        #endif
     }
 
     /// Float a result as a toast. What it asks of you decides how long it stays (`ToastItem.dwell`),
@@ -1733,16 +2027,17 @@ final class AppModel {
     func showToast(_ message: String, subtitle: String? = nil, sessionID: String? = nil,
                    sessionTitle: String? = nil, detail: String? = nil, tone: ToastTone = .success,
                    icon: String? = nil, canUndo: Bool = false, awaitsApproval: Bool = false,
+                   mergeConflict: ToastMergeConflict? = nil,
                    key: String? = nil, inProgress: Bool = false) {
         let line = subtitle ?? sessionTitle ?? sessionID.flatMap(toastSessionTitle)
         let item = ToastItem(message: message, subtitle: line, detail: detail, tone: tone, icon: icon,
                              sessionID: sessionID, canUndo: canUndo, awaitsApproval: awaitsApproval,
-                             key: key, inProgress: inProgress)
+                             key: key, inProgress: inProgress, mergeConflict: mergeConflict)
         guard let id = toasts.post(item, at: Date()), let shown = toasts.item(id) else { return }
         announce(shown)
         if shown.level == .attention {
             foldToastLater(id)
-        } else if let dwell = shown.dwell {
+        } else if let dwell = shown.dwell, heldToastID != id {
             expireToastLater(id, after: dwell)
         }
     }
@@ -1794,12 +2089,15 @@ final class AppModel {
         foldToastLater(id)
     }
 
-    /// The pointer resting on a toast keeps it; its dwell starts over when the pointer leaves.
+    /// A finger or pointer resting on a toast keeps it; its dwell starts over when released.
     func holdToast(_ id: ToastItem.ID) {
-        if toasts.transient?.id == id { toastExpiry?.cancel() }
+        guard toasts.transient?.id == id else { return }
+        heldToastID = id
+        toastExpiry?.cancel()
     }
 
     func releaseToast(_ id: ToastItem.ID) {
+        if heldToastID == id { heldToastID = nil }
         guard let toast = toasts.transient, toast.id == id, let dwell = toast.dwell else { return }
         expireToastLater(id, after: dwell)
     }
@@ -1820,6 +2118,18 @@ final class AppModel {
         guard let sessionID = toasts.item(id)?.sessionID else { return }
         toasts.dismiss(id)
         route(to: .session(sessionID))
+    }
+
+    /// The conflict card hands the same branch and target to the session as the worktree bar does.
+    func resolveToastConflict(_ id: ToastItem.ID) {
+        guard let toast = toasts.item(id), let sessionID = toast.sessionID,
+              let conflict = toast.mergeConflict, let registry = consoleRegistry else { return }
+        toasts.dismiss(id)
+        route(to: .session(sessionID))
+        Task {
+            await registry.resolveInSession(sessionID: sessionID,
+                                            branch: conflict.branch, target: conflict.target)
+        }
     }
 
     /// Complete a session, drop it from any open pane and offer Undo.
@@ -2012,6 +2322,231 @@ final class AppModel {
     // MARK: session folders (iOS — docs/session-folders-move-design.md §3–4)
 
     #if os(iOS)
+    private(set) var projectSessions: [Session] = []
+    private(set) var projectSessionsLoading = false
+    private(set) var projectSessionsError: String?
+    /// The project's landing read, for the summary card's landing line (`ProjectPage.landingLine`).
+    private(set) var projectSessionsIntegration: ProjectIntegrationView?
+    private(set) var projectSessionsIntegrationReadAt: Date?
+    private(set) var projectSessionsIntegrationReadFailed = false
+    /// The page the state above is for. The page reads it so that nothing held for another address,
+    /// and nothing before its own load has begun, is drawn as its own.
+    private(set) var projectSessionsAddress: SessionProjectAddress?
+    /// Each project's Completed members as its page last read them: what a poll takes them from,
+    /// and what the page opens on when it comes back to the project. The Open members are always
+    /// the app's own Open list's.
+    private var projectCompletedSessions: [String: [Session]] = [:]
+    /// When this page's members were last read; nil until a read has answered for it.
+    private var projectSessionsReadAt: Date?
+    /// The merge into main for the project whose sessions page is showing: the card under its
+    /// progress card and the merges on its timeline (owner decision 2026-10-06).
+    private(set) var projectSessionsMerge: ProjectMergeModel?
+    /// The open items of the project whose sessions page is showing, read only while nobody has
+    /// started it: what the progress card's start row is drawn from (`StartProject.pageRow`).
+    private(set) var projectSessionsOpenItems: ProjectOpenItemsView?
+
+    var projectSessionsColumn: SessionProjectAddress? { nav.projectSessionsColumn }
+
+    func openProjectSessions(_ address: SessionProjectAddress) {
+        nav.enterProjectSessions(address)
+    }
+
+    /// Every drawer row's tap. The row of the destination already showing only closes the drawer;
+    /// any other lands on its destination's root. On a phone that is the destination's whole stack;
+    /// in the iPad's sidebar column only the list column changes, and the detail keeps its page.
+    func openDrawerDestination(_ destination: DrawerDestination, inColumn: Bool) {
+        guard destination != drawerDestination else { return }
+        switch destination {
+        case .section(let section):
+            selectedSection = section
+            guard !inColumn else { return }
+            nav.popToRoot()
+            if section == .tasks { tasks?.selectScope(.all) }
+            syncTaskDetailStore()
+        case .workspace(let agentID):
+            selectedSection = .agents
+            if selectedAgentID != agentID {
+                selectedAgentID = agentID
+                nav.popToRoot()
+            } else if inColumn {
+                nav.leaveProjectSessions()
+            } else {
+                nav.popToRoot()
+            }
+        case .project(let projectID):
+            openProjectSessions(projectID, inColumn: inColumn)
+        }
+    }
+
+    /// A project's sessions page over its coordinator's workspace (or the one already showing).
+    /// Without any workspace it opens the project's page. On a phone it is the stack's whole content,
+    /// the project's own page, rather than a page pushed over that workspace's list.
+    private func openProjectSessions(_ projectID: String, inColumn: Bool) {
+        let key = PublicID.storageKey(projectID)
+        let coordinator = (sessions + (agents?.allSessions ?? [])).first {
+            $0.projectMembership?.role == .coordinator
+                && $0.projectMembership.map { PublicID.storageKey($0.projectId) } == key
+        }
+        guard let agentID = coordinator.flatMap({ $0.agent?.id ?? $0.agentId })
+                ?? selectedAgentID ?? orderedAgents.first?.id else { return openProject(projectID) }
+        selectedSection = .agents
+        if selectedAgentID != agentID {
+            selectedAgentID = agentID
+            nav.popToRoot()
+        }
+        let address = SessionProjectAddress(projectID: projectID, agentID: agentID, view: .open)
+        if inColumn {
+            nav.enterProjectSessions(address)
+        } else {
+            nav.path = [.sessionProject(address, asDestination: true)]
+        }
+    }
+
+    func leaveProjectSessions(_ projectID: String? = nil) {
+        nav.leaveProjectSessions(projectID)
+    }
+
+    /// Project membership spans Workspaces; this request deliberately has no runner/agent filter.
+    /// A new address opens on what the app already holds of the project — its Open members from
+    /// the app's Open list, a workspace list's rows, the Completed ones its page last read — rather
+    /// than on none, and the read replaces them when it answers.
+    func loadProjectSessions(_ address: SessionProjectAddress) async {
+        guard let api else { return }
+        let key = PublicID.storageKey(address.projectID)
+        if projectSessionsAddress != address {
+            projectSessionsAddress = address
+            projectSessions = SessionProjectMembers.members(
+                of: address.projectID,
+                in: sessions + (agents?.allSessions ?? []) + (projectCompletedSessions[key] ?? []))
+            projectSessionsReadAt = nil
+            projectSessionsError = nil
+            projectSessionsIntegration = nil
+            projectSessionsIntegrationReadAt = nil
+            projectSessionsIntegrationReadFailed = false
+            projectSessionsOpenItems = nil
+        }
+        projectSessionsLoading = true
+        defer { if projectSessionsAddress == address { projectSessionsLoading = false } }
+        do {
+            let openRead = Task { try await api.listSessions(view: .open, projectId: address.projectID) }
+            let completedRead = Task { try await api.listSessions(view: .completed, projectId: address.projectID) }
+            defer {
+                openRead.cancel()
+                completedRead.cancel()
+            }
+            let rows = try await openRead.value + completedRead.value
+            guard projectSessionsAddress == address, !Task.isCancelled else { return }
+            // An older server may ignore projectId. It must never put unrelated sessions here.
+            projectSessions = SessionProjectMembers.members(of: address.projectID, in: rows)
+            projectCompletedSessions[key] = projectSessions.filter { $0.effectiveLifecycleState != .open }
+            projectSessionsReadAt = Date()
+            projectSessionsError = nil
+            for row in projectSessions { sessionDetails.store(row) }
+        } catch {
+            guard projectSessionsAddress == address, !Task.isCancelled else { return }
+            projectSessionsError = APIClient.failureReason(error)
+        }
+    }
+
+    /// One poll of the page's members that asks again for neither list unless something moved. The
+    /// Open members are the app's own Open list's, kept current by its poll and the control stream;
+    /// the Completed ones are read again only when an Open member has left that list — how a
+    /// session joins them from here — or `SessionProjectMembers.completedRefresh` after the last
+    /// read. Until a read has answered for this page, or before the server has answered the app's
+    /// Open list (`openListAnswered`), a poll is the full read.
+    func pollProjectSessions(_ address: SessionProjectAddress) async {
+        guard let api, projectSessionsAddress == address else { return }
+        guard projectSessionsError == nil, let readAt = projectSessionsReadAt, openListAnswered else {
+            return await loadProjectSessions(address)
+        }
+        let key = PublicID.storageKey(address.projectID)
+        let poll = SessionProjectMembers.poll(shown: projectSessions, projectID: address.projectID,
+                                              openList: sessions, completed: projectCompletedSessions[key] ?? [])
+        if poll.members != projectSessions { projectSessions = poll.members }
+        guard poll.moved || Date().timeIntervalSince(readAt) >= SessionProjectMembers.completedRefresh else { return }
+        do {
+            let rows = try await api.listSessions(view: .completed, projectId: address.projectID)
+            guard projectSessionsAddress == address, !Task.isCancelled else { return }
+            let completed = SessionProjectMembers.members(of: address.projectID, in: rows)
+            projectCompletedSessions[key] = completed
+            projectSessionsReadAt = Date()
+            let members = SessionProjectMembers.members(of: address.projectID, in: sessions + completed)
+            if members != projectSessions { projectSessions = members }
+            for row in completed { sessionDetails.store(row) }
+        } catch {
+            guard projectSessionsAddress == address, !Task.isCancelled else { return }
+            projectSessionsError = APIClient.failureReason(error)
+        }
+    }
+
+    /// One poll of the landing line's read, beside the members' reads rather than behind them: it
+    /// is the live line, and the member lists are the slowest reads the page makes. A read that
+    /// fails keeps the last answer and says it is stale.
+    func loadProjectIntegration(_ address: SessionProjectAddress) async {
+        guard let api else { return }
+        let integration = try? await api.projectIntegration(address.projectID)
+        guard projectSessionsAddress == address, !Task.isCancelled else { return }
+        if let integration {
+            projectSessionsIntegration = integration
+            projectSessionsIntegrationReadAt = Date()
+            projectSessionsIntegrationReadFailed = false
+        } else {
+            projectSessionsIntegrationReadFailed = true
+        }
+    }
+
+    /// Retry, on a landing job the server judged timed out, from the page's job list
+    /// (`ProjectLandingJobsSheet`): its silent generation ends and the next one is queued. Throws
+    /// what the server answered, for the job's row to say; the page reads its line again itself.
+    func retryIntegrationJob(_ projectID: String, jobID: String) async throws {
+        guard let api else { throw APIError.notConfigured }
+        _ = try await api.retryIntegrationJob(projectID, jobID: jobID)
+    }
+
+    /// One poll of the page's merge into main. Kept apart from `loadProjectSessions` so the
+    /// sessions are on screen before the promotion reads answer; another project's merge is
+    /// dropped the moment the address changes, never shown under this one.
+    func loadProjectMerge(_ address: SessionProjectAddress, force: Bool = false) async {
+        guard let api else { return }
+        if projectSessionsMerge?.projectID != address.projectID {
+            projectSessionsMerge = ProjectMergeModel(projectID: address.projectID, api: api)
+        }
+        await projectSessionsMerge?.load(force: force)
+    }
+
+    /// One poll of what the page's start row needs (docs/mocks/project-start-sessions-page): the
+    /// project's open items — the coordinator's request to start among them — while the sidebar row
+    /// says nobody has started it. A started project, or one the row does not say about, reads
+    /// nothing more than before; a read that fails keeps the last answer rather than drawing none.
+    func loadProjectStart(_ address: SessionProjectAddress) async {
+        guard let api else { return }
+        let key = PublicID.storageKey(address.projectID)
+        let row = projects?.sidebarProjects.first { PublicID.storageKey($0.id) == key }
+        guard row?.status == .open, row?.started == false else {
+            projectSessionsOpenItems = nil
+            return
+        }
+        let items = try? await api.projectOpenItems(projectID: address.projectID)
+        guard projectSessionsAddress == address, !Task.isCancelled, let items else { return }
+        projectSessionsOpenItems = items
+    }
+
+    /// A member may belong to another Workspace. Carry its record into the console's cache, which
+    /// is where its console reads that Workspace from. A phone pushes the console over the page it
+    /// was opened from and leaves the Workspace beneath alone, so back retraces the way in to the
+    /// Workspace the project's page was entered from (owner, 2026-10-06). A wide shell's list column
+    /// follows the console into its Workspace, without replacing the project page underneath it.
+    func openProjectMember(_ session: Session, push: Bool) {
+        sessionDetails.store(session)
+        let node = NavNode.console(sessionID: session.id, origin: .list)
+        if push {
+            self.push(node)
+        } else {
+            if let agentID = session.agent?.id ?? session.agentId { selectedAgentID = agentID }
+            nav.selectConsole(node)
+        }
+    }
+
     /// Load the owner's folder library: when a workspace's session list appears, and again when
     /// `folder.changed` says one was created, renamed or deleted, here or on another device.
     /// Best-effort like the tag library — an older server without the endpoint leaves it empty, and
@@ -2259,13 +2794,11 @@ final class AppModel {
         return try await api.taskPage(cursor: cursor, limit: 50, counts: .none, creatorSessionId: sessionID)
     }
 
-    /// Open one project's page from outside the Projects list — the drawer's project rows: the
-    /// section's list at the root and the project on top, whatever was showing there before. The
-    /// drawer's rows pass `.drawer`, so the compact shell frees the left edge for the drawer-open
-    /// swipe on that page (see `NavState.projectFromDrawer`).
-    func openProject(_ id: String, origin: NavOrigin = .list) {
+    /// Open one project's page from outside the Projects list: the section's list at the root and
+    /// the project on top, whatever was showing there before.
+    func openProject(_ id: String) {
         selectedSection = .projects
-        nav.path = [.projectDetail(projectID: id, origin: origin)]
+        nav.path = [.projectDetail(projectID: id)]
     }
 
     /// The project line on a task's page. Over that project's own page — one of its rows opened the
@@ -2277,9 +2810,9 @@ final class AppModel {
     }
 
     /// A project's page opened from inside a conversation — a coordinator conversation's title, a
-    /// project link in a transcript. On a phone (`overConsole`) it is pushed over the console, so the
-    /// back swipe returns to the conversation; on the wide shells it opens in the Projects section,
-    /// whose sidebar is the way back.
+    /// project link in a transcript — or from a project's sessions page. On a phone (`overConsole`)
+    /// it is pushed over that page, so the back swipe returns to it; on the wide shells it opens in
+    /// the Projects section, whose sidebar is the way back.
     func openProjectFromConversation(_ id: String, overConsole: Bool) {
         let id = PublicID.toPublic(id)
         guard overConsole else { return openProject(id) }
@@ -2537,30 +3070,63 @@ final class AppModel {
         provisionalLandingAgentID = nil
     }
 
+    /// Read what the previous run left (`persistLaunchSnapshot`) and adopt it — off the main thread,
+    /// so the first frame is not held behind reading and decoding the whole Open list. Called from
+    /// `init`, where the old synchronous `load()` used to run before the first frame; the read now
+    /// runs beside the launch and `adoptLaunchSnapshot` applies it as it arrives.
+    private func restoreLaunchSnapshot() {
+        guard let store = launchSnapshots else { return }
+        launchSnapshotRestore?.cancel()
+        launchSnapshotRestore = Task { [weak self] in
+            let snapshot = await store.loadOffMain()
+            guard !Task.isCancelled, let self, let snapshot else { return }
+            self.adoptLaunchSnapshot(snapshot)
+        }
+    }
+
     /// Draw a cold launch from what the previous run left (`persistLaunchSnapshot`): the account, the
     /// workspace list and the Open sessions, landed on the workspace you were in — so the first frame
     /// is that workspace's session list rather than a spinner. Nothing here is treated as an answer:
     /// the launch's own fetches replace every list as they land, and the landing made here is only
     /// provisional (see `resolveDefaultLanding`). Nothing is announced off this list either: see
     /// `openListFromLaunchSnapshot`.
-    private func restoreLaunchSnapshot() {
-        guard let snapshot = launchSnapshots?.load(), let agents else { return }
-        let landing = snapshot.landingAgentID(
-            lastAgentID: UserDefaults.standard.string(forKey: Self.lastAgentKey))
-        user = snapshot.user
-        // Points the landing's list at its Open rows, which `adoptOpenList` then fills.
-        agents.adoptLaunchSnapshot(snapshot, showing: landing)
-        openListFromLaunchSnapshot = true
-        adoptOpenList(snapshot.openSessions)
-        guard let landing else { return }
-        provisionalLandingAgentID = landing
-        selectedAgentID = landing
+    ///
+    /// This runs when the snapshot's file finishes decoding rather than in `init`, so a fetch may
+    /// already have answered — and that answer is newer than a file written as the previous run left
+    /// the foreground. `fillIn` is what keeps the two apart: what the launch already has is not
+    /// adopted, so the previous run's rows can never land on top of this run's.
+    private func adoptLaunchSnapshot(_ snapshot: LaunchSnapshot) {
+        guard signedIn, let agents else { return }
+        let fillIn = snapshot.fillIn(accountAnswered: user != nil,
+                                     workspacesAnswered: agents.loadState.hasLoaded,
+                                     openListAnswered: openListAnswered)
+        guard !fillIn.isEmpty else { return }
+        if let account = fillIn.user { user = account }
+        if let workspaces = fillIn.workspaces {
+            let landing = snapshot.landingAgentID(
+                lastAgentID: UserDefaults.standard.string(forKey: Self.lastAgentKey))
+            // Points the landing's list at its Open rows, which `adoptOpenList` then fills.
+            agents.adoptLaunchSnapshot(workspaces, showing: landing)
+            if let landing {
+                provisionalLandingAgentID = landing
+                selectedAgentID = landing
+            }
+        }
+        if let openSessions = fillIn.openSessions {
+            openListFromLaunchSnapshot = true
+            adoptOpenList(openSessions)
+        }
     }
 
     /// Write what the next cold launch draws first. Called as the app leaves the foreground — the
     /// last moment it is sure of the CPU — and synchronous for the same reason
     /// `ConsoleRegistry.persistAll` is. Only once this run's workspace fetch has answered: a run that
     /// never reached the server leaves the previous snapshot as it was.
+    ///
+    /// Deliberately still synchronous, unlike the read (`restoreLaunchSnapshot`): the encode is of
+    /// the same size, but it is paid on the way out of the foreground — where a write that is still
+    /// in flight when iOS suspends is a write that never happened — and never on the launch path the
+    /// first frame waits behind.
     func persistLaunchSnapshot() {
         guard signedIn, let agents, agents.loadState.hasLoaded, let launchSnapshots else { return }
         launchSnapshots.save(LaunchSnapshot(user: user, agents: agents.items,
@@ -2574,6 +3140,14 @@ final class AppModel {
         case .open(let route): self.route(to: route)
         case let .approve(sid, behavior): Task { await approveAll(sessionID: sid, behavior: behavior) }
         case let .reply(sid, text): Task { await reply(sessionID: sid, text: text) }
+        case let .openProjectMerge(projectID, sid):
+            #if os(iOS)
+            // A push names its project by the stored UUID; every list row spells it base62.
+            settingsPresented = false
+            openProjectSessions(PublicID.toPublic(projectID), inColumn: false)
+            #else
+            route(to: .session(sid))
+            #endif
         }
     }
 

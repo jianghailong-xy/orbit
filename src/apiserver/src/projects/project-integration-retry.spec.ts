@@ -15,6 +15,7 @@ import {
   INTEGRATION_RETRY_IN_FLIGHT,
   INTEGRATION_RETRY_NOT_APPLICABLE,
   INTEGRATION_RETRY_NOT_AUTOMATIC,
+  INTEGRATION_RETRY_OWNER_ONLY,
   INTEGRATION_RETRY_OWNER_BLOCKER,
   INTEGRATION_RETRY_OWNER_ITEM,
   IntegrationRetryFacts,
@@ -99,6 +100,29 @@ test('Automatic: a red, a timed-out or an errored landing of a DONE task is reru
   });
 });
 
+test('the owner door reruns only the owner\'s item and attributes the decision to the user', () => {
+  const decision = decideIntegrationRetry(facts({
+    requester: 'OWNER',
+    openItems: [{ id: 'owner-item', kind: 'INTEGRATION_CHECK_FAILED', assignee: 'OWNER', assigneeReason: 'ESCALATED' }],
+  }));
+  assert.deepEqual(decision, {
+    ok: true,
+    retryOfJobId: 'job-1',
+    failureClass: 'CHECK_FAILED',
+    handle: ['owner-item'],
+  });
+
+  const coordinatorItem = decideIntegrationRetry(facts({
+    requester: 'OWNER',
+    openItems: [{ id: 'coordinator-item', kind: 'INTEGRATION_CHECK_FAILED', assignee: 'COORDINATOR', assigneeReason: 'DEFAULT' }],
+  }));
+  assert.equal(coordinatorItem.ok, false);
+  if (!coordinatorItem.ok) {
+    assert.equal(coordinatorItem.status, 403);
+    assert.equal(coordinatorItem.body.code, INTEGRATION_RETRY_OWNER_ONLY);
+  }
+});
+
 test('not Automatic: a failure nobody handed over is the owner\'s; one the owner handed back is the coordinator\'s', () => {
   const ownersFromBirth = refusalOf(facts({
     coordinatorEnabled: false,
@@ -153,6 +177,32 @@ test('in flight, not DONE, never landed, landed or conflicted: refused, each say
     assert.equal(refused.code, INTEGRATION_RETRY_NOT_APPLICABLE, JSON.stringify(over));
     assert.match(refused.message, pattern);
   }
+});
+
+test('a RUNNING landing whose runner stopped reporting is retried as the ERROR it is (J-T9)', () => {
+  const silent = { id: 'job-2', generation: 2, state: 'RUNNING', checks: [], phase: 'FETCH', timedOut: true };
+  // The coordinator: the same rules as any failed landing, with no item about it yet.
+  assert.deepEqual(decideIntegrationRetry(facts({ newestLanding: silent, openItems: [] })), {
+    ok: true, retryOfJobId: 'job-2', failureClass: 'ERROR', handle: [], endsTimedOutJob: true,
+  });
+  assert.equal(refusalOf(facts({ newestLanding: silent, openItems: [], coordinatorEnabled: false })).code,
+    INTEGRATION_RETRY_NOT_AUTOMATIC);
+  // The account owner: no item of theirs is needed — nothing has opened one, and the press decides.
+  assert.deepEqual(decideIntegrationRetry(facts({ requester: 'OWNER', newestLanding: silent, openItems: [] })), {
+    ok: true, retryOfJobId: 'job-2', failureClass: 'ERROR', handle: [], endsTimedOutJob: true,
+  });
+  assert.equal(refusalOf(facts({
+    requester: 'OWNER', newestLanding: silent, openItems: [],
+    ownerBlockers: [{ id: 'b-1', kind: 'AWAITING_USER_APPROVAL' }],
+  })).code, INTEGRATION_RETRY_OWNER_BLOCKER);
+  // Still inside its limit, or queued, it is in flight: nothing is queued beside it.
+  for (const landing of [{ ...silent, timedOut: false }, { ...silent, state: 'QUEUED' }]) {
+    const refused = refusalOf(facts({ requester: 'OWNER', newestLanding: landing, openItems: [] }));
+    assert.equal(refused.code, INTEGRATION_RETRY_IN_FLIGHT, landing.state);
+    assert.match(refused.message, /stops reporting past its limit/);
+  }
+  // A failed landing's decision does not change shape: it carries no timeout to end.
+  assert.equal('endsTimedOutJob' in decideIntegrationRetry(facts()), false);
 });
 
 const PROJECT = '01a0f53a-99c8-7488-82b1-b4b2d95ecbe1';
@@ -348,11 +398,11 @@ test('the owner\'s item about a blocked merge offers "Ask the coordinator again"
   const about = { taskId: null, promotionId: CANDIDATE, fuseEpisodeId: null };
   for (const kind of ['INTEGRATION_CONFLICT', 'INTEGRATION_CHECK_FAILED', 'INTEGRATION_ERROR']) {
     assert.deepEqual(openItemActions({ ...about, kind, assignee: 'OWNER', askable: true }),
-      ['ASK_COORDINATOR_AGAIN', 'REVIEW'], kind);
+      ['ASK_COORDINATOR_AGAIN', 'RETRY', 'REVIEW'], kind);
     assert.deepEqual(openItemActions({ ...about, kind, assignee: 'OWNER', askable: false }),
-      ['REVIEW'], `${kind}, with no conversation to ask`);
+      ['RETRY', 'REVIEW'], `${kind}, with no conversation to ask`);
     assert.deepEqual(openItemActions({ ...about, kind, assignee: 'COORDINATOR', askable: true }),
-      ['REVIEW'], `${kind}, already the coordinator's`);
+      ['RETRY', 'REVIEW'], `${kind}, already the coordinator's`);
   }
   // Deciding the merge is the owner's, on its own card: there is nothing to hand back.
   assert.deepEqual(openItemActions({ ...about, kind: 'PROMOTION_APPROVAL', assignee: 'OWNER', askable: true }),
@@ -360,7 +410,7 @@ test('the owner\'s item about a blocked merge offers "Ask the coordinator again"
   // A task's escalated item is what it was.
   assert.deepEqual(openItemActions({
     kind: 'TASK_FAILED', assignee: 'OWNER', taskId: TASK, promotionId: null, fuseEpisodeId: null, askable: true,
-  }), ['ASK_COORDINATOR_AGAIN', 'OPEN_TASK_SESSION', 'CANCEL_TASK']);
+  }), ['ASK_COORDINATOR_AGAIN', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK']);
 });
 
 test('a candidate in flight, waiting on the owner\'s merge, ended, never checked or conflicted is refused, each saying why', () => {
@@ -438,6 +488,8 @@ test('a blocked candidate\'s item names the door that checks it again, and that 
     payload: { jobKind: 'CHECK_PROMOTION', phase: 'MERGE', files: ['src/web/src/pages/ProjectsPage.tsx'], failureClass: 'CONFLICT', generation: 1 },
   });
   assert.match(conflicted, /integration_retry 也不接受冲突/);
+  assert.match(conflicted, /用 task_create 新建一条同步任务，从项目分支 tip 出发把 upstream tip 合进它的源分支/);
+  assert.match(conflicted, /解掉冲突并提交/);
   assert.doesNotMatch(conflicted, /promotionId 传/);
 });
 

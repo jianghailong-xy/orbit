@@ -1,0 +1,16 @@
+# origin/main 4354230b0 (newest at 2026-10-07T20:24Z) + this fix (cherry-picked as 2022153aa), HPC, codex-cli 0.161.0.
+# The acceptance command, verbatim, in that tree. Head, every failure line (none) and the summary of the raw output; runner log chatter cut.
+2022153aa test(runner): assert codex 0.161's retried rate limit in TestRealCodexOnAChatGPTLogin
+4354230b0 Merge refs/heads/project/34ZZeq0e3IR65GVm2kAs7 into refs/heads/main
+codex-cli 0.161.0
+ 04:24:49 up 5 days,  5:09,  1 user,  load average: 7.50, 5.47, 4.82
+2026-10-07T20:24:49Z
+ok  	orbit	12.109s
+ok  	orbit	244.344s
+?   	orbit/cmd/release-manifest	[no test files]
+real	4m23.599s
+user	1m10.779s
+sys	0m21.362s
+MAIN_EXIT=0
+ 04:29:13 up 5 days,  5:13,  1 user,  load average: 13.64, 9.71, 6.72
+2026-10-07T20:29:13Z

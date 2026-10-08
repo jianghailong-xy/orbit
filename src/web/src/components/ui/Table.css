@@ -1,0 +1,120 @@
+/* A native table drawn as the replaced data table: in TableScroll's box it scrolls wider content
+   sideways (at least the box's width) and shades an edge with more beyond it; a semibold header row
+   over a split line, with 1px separators between its cells; 16px cells; a row washes on hover; an
+   empty table says so in one faint centred row (tr.orbit-table-empty > td > div). */
+.orbit-table-scroll {
+  position: relative;
+  border-radius: 8px 8px 0 0;
+  background: var(--bg-raised);
+  /* The replaced table's scrollbar colours, which also keep the browser's own (overlay) scrollbar
+     in place of the app's 8px one. */
+  scrollbar-color: var(--orbit-control-disabled-text) var(--orbit-border-split);
+}
+.orbit-table-scroll::before,
+.orbit-table-scroll::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: -1px;
+  width: 30px;
+  pointer-events: none;
+  transition: box-shadow 0.3s;
+}
+.orbit-table-scroll::before {
+  inset-inline-start: 0;
+  border-start-start-radius: 8px;
+}
+.orbit-table-scroll::after {
+  inset-inline-end: 0;
+  border-start-end-radius: 8px;
+}
+.orbit-table-scroll[data-more-start]::before {
+  box-shadow: inset 10px 0 8px -8px var(--orbit-border-split);
+}
+.orbit-table-scroll[data-more-end]::after {
+  box-shadow: inset -10px 0 8px -8px var(--orbit-border-split);
+}
+.orbit-table-content {
+  overflow: auto hidden;
+  border-radius: 8px 8px 0 0;
+  /* Its width is the visible width the empty-table message keeps to (100cqw below). */
+  container-type: inline-size;
+}
+.orbit-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: auto;
+  color: var(--text-1);
+  font-family: var(--orbit-font-family);
+  font-size: var(--orbit-font-size);
+  line-height: 1.5714285714285714;
+  text-align: start;
+}
+.orbit-table th,
+.orbit-table td {
+  position: relative;
+  padding: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  overflow-wrap: break-word;
+}
+.orbit-table th {
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font-weight: 600;
+  text-align: start;
+  transition: background-color 0.2s;
+}
+.orbit-table thead th:first-child {
+  border-start-start-radius: 8px;
+}
+.orbit-table thead th:last-child {
+  border-start-end-radius: 8px;
+}
+/* The replaced table measured every column with a space in it, so a column with nothing in its header
+   is a space wide too. */
+.orbit-table th:empty::after {
+  content: '\a0';
+}
+.orbit-table thead th:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  inset-inline-end: 0;
+  width: 1px;
+  height: 1.6em;
+  background-color: var(--border-subtle);
+  transform: translateY(-50%);
+  transition: background-color 0.2s;
+}
+.orbit-table td {
+  transition: background-color 0.2s, border-color 0.2s;
+}
+.orbit-table tbody tr:not(.orbit-table-empty):hover > td {
+  background: var(--bg-hover);
+}
+.orbit-table-empty > td {
+  color: var(--orbit-control-disabled-text);
+  text-align: center;
+}
+/* The message keeps to the visible width, over the cell's padding, and stays put while a wider table
+   scrolls under it. */
+.orbit-table-empty > td > div {
+  position: sticky;
+  inset-inline-start: 0;
+  box-sizing: border-box;
+  width: 100cqw;
+  margin: -16px;
+  padding: 16px;
+  overflow: hidden;
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbit-table-scroll::before,
+  .orbit-table-scroll::after,
+  .orbit-table th,
+  .orbit-table td,
+  .orbit-table thead th::before {
+    transition: none;
+  }
+}

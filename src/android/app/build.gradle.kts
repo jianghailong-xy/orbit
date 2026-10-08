@@ -33,10 +33,20 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0-a06"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = providers.gradleProperty("orbitTestRunner")
+            .orElse("androidx.test.runner.AndroidJUnitRunner").get()
 
         buildConfigField("String", "SOURCE_SHA", "\"$sourceSha\"")
         buildConfigField("boolean", "SOURCE_DIRTY", sourceDirty.toString())
+        // Firebase client values are supplied per build, independently of signing/release settings.
+        // An empty or mismatched configuration keeps push disabled; no credential is required by CI.
+        mapOf("APP_ID" to "AppId", "API_KEY" to "ApiKey", "PROJECT_ID" to "ProjectId",
+            "SENDER_ID" to "SenderId", "ANDROID_PACKAGE" to "AndroidPackage").forEach { (name, property) ->
+            val value = providers.environmentVariable("ORBIT_ANDROID_FIREBASE_$name")
+                .orElse(providers.gradleProperty("orbitFirebase$property")).orElse("").get()
+            require(value.matches(Regex("[A-Za-z0-9_.:-]*"))) { "Invalid Firebase client configuration: $name" }
+            buildConfigField("String", "FIREBASE_$name", "\"$value\"")
+        }
     }
 
     buildTypes {
@@ -69,6 +79,7 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.browser)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
     // Parse CommonMark/GFM into native selectable Compose content; no HTML/WebView runtime.
@@ -77,6 +88,8 @@ dependencies {
         implementation("org.commonmark:$it:${libs.versions.commonmark.get()}")
     }
     implementation(libs.okhttp)
+    implementation("com.google.firebase:firebase-messaging:25.0.1")
+    implementation("androidx.work:work-runtime-ktx:2.10.1")
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)

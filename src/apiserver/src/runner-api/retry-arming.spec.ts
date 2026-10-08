@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   API_ERROR_RETRY_BACKOFF_MS,
   MAX_API_ERROR_RETRIES,
+  POOL_RATE_LIMIT_WAIT_MS,
   parseQuotaResetAt,
   type PlanUsageSnapshot,
 } from '@orbit/shared';
@@ -22,6 +23,8 @@ const OVERLOADED =
 const QUOTA = "You've hit your session limit · resets 6:20pm (Europe/Berlin)";
 const RATE_LIMITED =
   "API Error: Request rejected (429) · This request would exceed your account's rate limit. Please try again later.";
+const CODEX_RATE_LIMITED =
+  'exceeded retry limit, last status: 429 Too Many Requests, request id: 95e00d6c-68cc-4d64-b4da-01a6252260c2';
 
 type RetryPlan = { retryAt?: Date | null; retryAttempts?: number };
 
@@ -68,12 +71,29 @@ function poolQueue(members: Array<PlanUsageSnapshot | null>): QueueService {
   return new QueueService(prisma as never, {} as never, planUsage as never);
 }
 
+/**
+ * What the claim service answers for a session on no pool at all: its credential lookups say nothing, and
+ * the fixed backoff stands. That is the ordinary case — a built-in engine, or a configured provider that
+ * is not a pool — and the one every case below but the rate-limit pair is judged by.
+ */
+const noPool = {
+  sharedPoolRetryAt: async () => null,
+  loginPoolRetryAt: async () => null,
+} as unknown as QueueService;
+
+/** A claim service whose pool answers with `at` — what a rate limit the pool itself can speak for does. */
+const poolArmsAt = (at: Date | null): QueueService =>
+  ({
+    sharedPoolRetryAt: async () => at,
+    loginPoolRetryAt: async () => at,
+  }) as unknown as QueueService;
+
 /** The session row `retryPlanFor` reads, and the runner's quota snapshot beside it. `queue` is the
  *  claim service, which is what answers for an account pool. */
 function planFor(
   session: { taskId?: string | null; retryAttempts?: number; provider?: string },
   text: string,
-  queue: QueueService = {} as never,
+  queue: QueueService = noPool,
   delivered = true,
 ): Promise<RetryPlan> {
   const tx = transactionDouble<RetryPlanTransaction>({
@@ -83,6 +103,8 @@ function planFor(
         provider: session.provider ?? 'claude',
         taskId: session.taskId ?? null,
         retryAttempts: session.retryAttempts ?? 0,
+        poolCodexAccountId: null,
+        poolKeyId: null,
       }),
     },
     runner: { findUnique: async () => ({ planUsage: null, capabilities: [] }) },
@@ -104,6 +126,67 @@ function planFor(
     }
   ).retryPlanFor(tx, 'session-1', RUNNER_ID, text, delivered);
 }
+
+/**
+ * The claim service over a Codex pool of OWNER_ID's own holding these ChatGPT accounts — the shape
+ * `loginPoolRetryAt` reads. Nothing else of the pool's is asked after.
+ */
+function codexLoginPool(
+  accounts: Array<{ accountId: string; spentUntil?: Date | null; throttledUntil?: Date | null }>,
+): { db: unknown; queue: QueueService } {
+  const db = {
+    providerPool: {
+      findFirst: async () => ({ id: 'pool-1', label: 'Codex Pool', engine: 'codex', ownKeyFirst: true, members: [] }),
+    },
+    poolCodexLogin: {
+      findMany: async () =>
+        accounts.map((account) => ({
+          poolId: 'pool-1',
+          userId: OWNER_ID,
+          email: `${account.accountId}@chatgpt.invalid`,
+          state: 'ACTIVE',
+          usage: null,
+          ...account,
+        })),
+    },
+    poolApiKey: { findMany: async () => [] },
+    poolUsage: { findMany: async () => [] },
+  };
+  return {
+    db,
+    queue: new QueueService(db as never, {} as never, { usageStanding: () => null, snapshot: () => null } as never),
+  };
+}
+
+// The pool's ordinary answer is `now` whenever another credential can run — that is the move. A rate limit
+// is the one failure a session is not moved for while the wait is short, because what a move costs is the
+// prompt cache: measured, the credential it moves to knows only the shared instruction prefix, so the whole
+// thread is billed once uncached (docs/codex-shared-pool-design.md §2.3). Everything else — spent, signed
+// out, refused — takes the move, which is what the default of no patience is for.
+test('a rate limit waits on the credential it is on while that is soon, and moves when it is not', async () => {
+  const { db, queue } = codexLoginPool([
+    { accountId: 'throttled-1', throttledUntil: new Date(Date.now() + 60_000) },
+    { accountId: 'ready-2' },
+  ]);
+  const session = { ownerId: OWNER_ID, provider: POOL, poolCodexAccountId: 'throttled-1', poolKeyId: null };
+  const soon = (await queue.loginPoolRetryAt(db as never, session, new Date(), POOL_RATE_LIMIT_WAIT_MS))!;
+
+  assert.ok(soon.getTime() - Date.now() > 30_000, 'a minute of waiting keeps the cache; the move can wait');
+  assert.ok(soon.getTime() - Date.now() <= 60_000, 'and it waits exactly as long as the mark, not a step');
+
+  // Past the patience, the wait is worse than the cache it costs, and the pool's own answer stands: the
+  // account that can run takes the session now.
+  const far = codexLoginPool([
+    { accountId: 'throttled-1', throttledUntil: new Date(Date.now() + 10 * 60_000) },
+    { accountId: 'ready-2' },
+  ]);
+  const moved = await far.queue.loginPoolRetryAt(far.db as never, session, new Date(), POOL_RATE_LIMIT_WAIT_MS);
+  assert.ok(moved !== null && moved.getTime() - Date.now() < 5_000, 'past it, another account takes the session');
+
+  // And with no patience — every other caller — the same credential gets the pool's answer, not a wait.
+  const plain = await far.queue.loginPoolRetryAt(far.db as never, session, new Date());
+  assert.ok(plain !== null && plain.getTime() - Date.now() < 5_000);
+});
 
 test('arms the first backoff step when the provider is overloaded', async () => {
   const before = Date.now();
@@ -135,8 +218,56 @@ test('arms the API key rate limit even though its status is mid-sentence', async
   );
 });
 
+// No pool answers here — a built-in Codex (or a configured provider that is not a pool) — so the fixed
+// ladder is all there is. That is the ordinary case, and the one the two below are told apart from.
+test('arms Codex after its 429 retries are exhausted', async () => {
+  const before = Date.now();
+  const plan = await planFor({ provider: 'codex', retryAttempts: 0 }, CODEX_RATE_LIMITED);
+  const delay = plan.retryAt!.getTime() - before;
+
+  assert.ok(
+    delay >= API_ERROR_RETRY_BACKOFF_MS[0] && delay <= API_ERROR_RETRY_BACKOFF_MS[0] * 1.3,
+    `expected the first step (+jitter), got ${delay}ms`,
+  );
+});
+
+test("a rate limit the pool can speak for is armed at the pool's own moment", async () => {
+  const at = new Date(Date.now() + 9 * 60_000);
+  const plan = await planFor({ provider: POOL, retryAttempts: 0 }, CODEX_RATE_LIMITED, poolArmsAt(at));
+
+  assert.deepEqual(plan.retryAt, at, 'the pool knows when the credential can run again; the ladder only guesses');
+  assert.equal(plan.retryAttempts, undefined, 'the sweeper owns the count; arming must not reset it');
+});
+
+// The pool says WHEN; the budget says WHETHER. The sweep spends an attempt per re-send whatever armed
+// it, so a pool answer that skipped the budget would be re-armed on every sweep for as long as the pool
+// kept being rate-limited — a bounded ladder made unbounded, which is the one shape this must not have.
+test('a pool-armed rate limit stops anyway once the run-failure budget is spent', async () => {
+  const at = new Date(Date.now() + 9 * 60_000);
+  const plan = await planFor({ provider: POOL, retryAttempts: MAX_API_ERROR_RETRIES }, CODEX_RATE_LIMITED, poolArmsAt(at));
+
+  assert.equal(plan.retryAt, null, 'the pool knowing when does not buy more attempts');
+});
+
+test('a rate limit on a credential the pool says can still run falls back to the ladder', async () => {
+  const before = Date.now();
+  const plan = await planFor({ provider: POOL, retryAttempts: 0 }, CODEX_RATE_LIMITED, poolArmsAt(null));
+  const delay = plan.retryAt!.getTime() - before;
+
+  assert.ok(
+    delay >= API_ERROR_RETRY_BACKOFF_MS[0] && delay <= API_ERROR_RETRY_BACKOFF_MS[0] * 1.3,
+    `expected the first step (+jitter), got ${delay}ms`,
+  );
+});
+
 test('hands back once the steps are spent instead of retrying forever', async () => {
   const plan = await planFor({ retryAttempts: MAX_API_ERROR_RETRIES }, OVERLOADED);
+
+  assert.equal(plan.retryAt, null);
+});
+
+test('hands back Codex 429 once the bounded retry budget is spent', async () => {
+  const plan = await planFor({ provider: 'codex', retryAttempts: MAX_API_ERROR_RETRIES }, CODEX_RATE_LIMITED);
 
   assert.equal(plan.retryAt, null);
 });
@@ -233,7 +364,7 @@ test('an account pool no member reports on is armed as any unreported quota: for
 // not the person's message failing: that message was answered before the turn began, and the retry
 // re-sends it. Production, 2026-09-25: four re-sends of an answered question after one 429.
 test('a failure in a turn nobody delivered arms nothing and leaves an earlier arm standing', async () => {
-  for (const text of [OVERLOADED, RATE_LIMITED, QUOTA]) {
+  for (const text of [OVERLOADED, RATE_LIMITED, CODEX_RATE_LIMITED, QUOTA]) {
     assert.deepEqual(await planFor({ retryAttempts: 1 }, text, {} as never, false), {}, text);
   }
 });

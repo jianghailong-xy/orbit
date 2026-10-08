@@ -13,6 +13,8 @@ import {
   type ProviderRow,
 } from '../lib/providerAdmin';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
+import { DeepSeekBalanceSection } from '../components/DeepSeekBalance';
+import { hasDeepSeekBalance } from '../lib/deepseekBalance';
 import { providerDisplayLabel, runtimeSummary } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 
@@ -191,7 +193,7 @@ function ProviderForm({
   // runtime back as it is, so every one of them has to survive the round trip.
   const [runtime, setRuntime] = useState<Runtime>(
     editing
-      ? editing.runtime === 'codex' || editing.runtime === 'kimi' || editing.runtime === 'antigravity'
+      ? editing.runtime === 'codex' || editing.runtime === 'kimi' || editing.runtime === 'antigravity' || editing.runtime === 'dsh'
         ? editing.runtime
         : 'claude'
       : (preset?.runtime ?? 'claude'),
@@ -379,7 +381,7 @@ function ProviderForm({
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 600 }}>{identity.label}</div>
             <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
-              {runtimeSummary(identity.runtime)} ·{' '}
+              {runtimeSummary(identity.runtime, identity.slug)} ·{' '}
               {/* Counting a shipped list would misstate what this offers — the runner's CLI
                   decides, and that list changes without us. */}
               {preset?.modelsFromRuntime
@@ -500,7 +502,20 @@ function ProviderForm({
             has no setting that turns them off.
           </div>
         )}
+        {/* What a Harness key does and doesn't prove at connect time (docs/deepseek-harness-
+            runtime-environment.md): nothing checks it until a session sends its first request. */}
+        {runtime === 'dsh' && (
+          <div className="ps-hint">
+            Sessions on DeepSeek Harness use this key — not the DeepSeek provider, which runs on Claude
+            Code. The key is checked by the first request a session sends; a rejected key shows in
+            that session with a link back here.
+          </div>
+        )}
       </Step>
+
+      {/* Right under the key: the balance is the account's that key belongs to. Only a saved key has
+          one — the server asks DeepSeek with what is stored, never with what is being typed. */}
+      {editing && hasDeepSeekBalance(editing) && <DeepSeekBalanceSection row={editing} />}
 
       <div className="provider-adv" style={{ marginTop: 20 }}>
         <div className={`provider-adv-head${advOpen ? ' open' : ''}`} onClick={() => setAdvOpen((v) => !v)}>
@@ -535,6 +550,8 @@ function ProviderForm({
                             ? `${preset.label}'s own API, which the Kimi CLI speaks natively.`
                             : preset.runtime === 'antigravity'
                               ? `${preset.label}'s own API, which the Antigravity CLI speaks natively.`
+                              : preset.runtime === 'dsh'
+                                ? `DeepSeek's Anthropic-compatible API, which DeepSeek Harness's API key adapter speaks.`
                               : `The endpoint ${preset.label} documents for Claude Code.`)}
                     </div>
                   </Field>
@@ -549,7 +566,7 @@ function ProviderForm({
                   preset!.modelsFromRuntime ? (
                     <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
                       Provided by the{' '}
-                      {runtime === 'codex' ? 'Codex' : runtime === 'antigravity' ? 'Antigravity' : 'Claude Code'}{' '}
+                      {runtime === 'codex' ? 'Codex' : runtime === 'antigravity' ? 'Antigravity' : runtime === 'dsh' ? 'DeepSeek Harness' : 'Claude Code'}{' '}
                       CLI on each runner, refreshed automatically — new models appear without any
                       change here.
                     </div>

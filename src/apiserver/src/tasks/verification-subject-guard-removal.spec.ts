@@ -278,6 +278,9 @@ const CORE_TRIGGERS_AFTER: Readonly<Record<string, readonly string[]>> = {
     'session_antigravity_runner_claim_guard',
     'session_completed_at_compat',
     'session_dispatch_dependency_check',
+    // 0377's: DeepSeek Harness claims and positive inbox acquisitions require the current
+    // request and persisted heartbeat declarations. Another SIBLING change.
+    'session_dsh_runner_acquisition_guard',
     'session_merge_projection_checkpoint_authority_trg',
     'session_opencode_runner_claim_guard',
     'session_project_capacity_serialize_insert_delete',
@@ -311,7 +314,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
   // `task` carries 24; naming all of them here would restate the inventory rather than check it.
   // What matters for it is the same two properties, stated directly.
   const core = TRIGGER_WRITE_SOURCES.filter((entry) => CENSUS_TABLES.includes(entry.table));
-  assert.equal(core.length, 46,
+  assert.equal(core.length, 47,
     'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
     + '`failure_successor_task_binding_immutable` from `task`, 38 once 0227 removed '
     + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime, 35 once 0228 '
@@ -327,7 +330,8 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + '`session_request_asker_stopped` to it, 46 once 0367 added '
     + '`session_antigravity_runner_claim_guard` with the Antigravity runtime, and 47 once 0370 '
     + 'added `task_owner_confirmation_review_reviewer_ended` to `session` — and 46 on this line, '
-    + 'where 0329 removed 0122\'s `task_dispatch_authority_derive` with the column it stamped');
+    + 'where 0329 removed 0122\'s `task_dispatch_authority_derive` with the column it stamped, '
+    + 'and 47 once 0377 added `session_dsh_runner_acquisition_guard` for DeepSeek Harness');
   assert.deepEqual(core.filter((entry) => entry.since.startsWith('0207_')), [],
     'no trigger attributed to 0207 may still be registered');
   // Every one of them installed BEFORE 0207 is still here. Derived from the inventory's own
@@ -342,6 +346,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     ['project_task_status_count_delete', 'project_task_status_count_insert',
       'project_task_status_count_move', 'run_event_ingestion_provenance_guard',
       'session_antigravity_runner_claim_guard',
+      'session_dsh_runner_acquisition_guard',
       'session_request_asker_stopped', 'session_request_recipient_ended', 'session_source_freeze_guard',
       'task_list_task_count_delete', 'task_list_task_count_insert', 'task_list_task_count_relist',
       'task_owner_confirmation_review_reviewer_ended', 'task_progress_epoch_advance'],
@@ -350,7 +355,8 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + '0271\'s `task_progress_epoch_advance`, 0280\'s three `task_list_task_count_*` and 0282\'s '
     + 'three `project_task_status_count_*`, 0350\'s `session_request_recipient_ended`, 0352\'s '
     + '`session_request_asker_stopped`, 0367\'s `session_antigravity_runner_claim_guard` and '
-    + '0370\'s `task_owner_confirmation_review_reviewer_ended`. '
+    + '0370\'s `task_owner_confirmation_review_reviewer_ended` and '
+    + '0377\'s `session_dsh_runner_acquisition_guard`. '
     + '0212\'s `failure_successor_task_binding_immutable` was another, and 0226 removed it',
   );
   assert.ok(
@@ -392,11 +398,14 @@ test('(i) this is subtraction: no new service, no new resident process, less ins
   const compose = read('docker-compose.yml');
   const services = [...(compose.match(/^services:\n([\s\S]*?)(?=^\S|\Z)/m)?.[1] ?? '')
     .matchAll(/^ {2}([a-z][a-z0-9_-]*):$/gm)].map((hit) => hit[1]).sort();
-  assert.deepEqual(services, ['apiserver', 'gateway', 'pgbackup', 'postgres', 'web'],
+  // wiki-worker and its start:wiki-worker are the wiki's server-side executor, which the account owner
+  // added on 2026-10-07 (docs/wiki-server-execution-design.md §4.1), not this removal;
+  // test/compose-topology.test.mjs (l) pins its whole definition.
+  assert.deepEqual(services, ['apiserver', 'gateway', 'pgbackup', 'postgres', 'web', 'wiki-worker'],
     'the removal may not add a Compose service');
   const apiScripts = JSON.parse(read('src/apiserver/package.json')).scripts as Record<string, string>;
   assert.deepEqual(Object.keys(apiScripts).filter((name) => name.startsWith('start:')).sort(),
-    ['start:dev'], 'the removal may not add a resident process');
+    ['start:dev', 'start:wiki-worker'], 'the removal may not add a resident process');
 
   // The SQL arithmetic, stated rather than implied. 0207 stays on disk as history; what this
   // compares is how much schema is INSTALLED before and after.

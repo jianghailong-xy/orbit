@@ -151,6 +151,15 @@ public enum TaskDetailCopy {
         "DENIED": "refusing is final for this crossing — file the work yourself if you change your mind",
         "APPLIED": "this answer has been spent; it authorises nothing further",
     ]
+    /// What each state means for a request to move this task (`MOVE_TASK_STATE_MEANING` in
+    /// `ProjectCrossingsCard.tsx`), where `crossingStateMeaning` speaks for a filing: the task is
+    /// already filed, so "not filed anywhere until you answer" would be false of it.
+    public static let moveTaskStateMeaning: [String: String] = [
+        "PENDING": "the task stays in its project until you answer, and confirming moves it",
+        "APPROVED": "the task has not moved: this yes was recorded without moving it",
+        "DENIED": "refusing is final for this request, and the task stays where it is",
+        "APPLIED": "the task was moved when this request was confirmed",
+    ]
 
     // MARK: followed by (`WatchRelations.tsx`, `WatchEditor.tsx`)
 
@@ -654,7 +663,9 @@ public enum TaskDetailLogic {
     static func crossing(_ view: TaskAttribution) -> TaskAttributionRow {
         guard let crossing = view.crossing else { return absent(TaskDetailCopy.crossingLabel, view.crossingAbsentReason) }
         var notes: [String] = []
-        if let meaning = TaskDetailCopy.crossingStateMeaning[crossing.state] { notes.append(meaning) }
+        // A request to move the task reads as a move, as the browser's card reads it.
+        let meanings = crossing.kind == "MOVE_TASK" ? TaskDetailCopy.moveTaskStateMeaning : TaskDetailCopy.crossingStateMeaning
+        if let meaning = meanings[crossing.state] { notes.append(meaning) }
         if let from = crossing.from, let to = crossing.to { notes.append("\(from.title) → \(to.title)") }
         if let code = crossing.code { notes.append([code, crossing.requiredAction].compactMap { $0 }.joined(separator: " ")) }
         return TaskAttributionRow(label: TaskDetailCopy.crossingLabel,
@@ -751,9 +762,10 @@ public enum TaskDetailLogic {
         UpdateTaskRequest(modelHint: level.map { .set($0) } ?? .clear, modelHintReason: .clear)
     }
 
-    /// The decision behind a run, when it named a tier. A route with no tier routed nothing.
-    public static func runRoute(_ session: SessionRef) -> TaskRunRoute? {
-        guard let route = session.route, let level = route.level, !level.isEmpty else { return nil }
+    /// The decision behind a run, when it named a tier. A route with no tier routed nothing, and
+    /// with the account's switch off (the default) there is none: runs read as before routing.
+    public static func runRoute(_ session: SessionRef, smartSelection: Bool) -> TaskRunRoute? {
+        guard smartSelection, let route = session.route, let level = route.level, !level.isEmpty else { return nil }
         return route
     }
 
@@ -781,8 +793,9 @@ public enum TaskDetailLogic {
 
     /// What the run ran on — `Sonnet 5.5 · medium` — from its own row, or from the pick for a run on
     /// it that has not been claimed yet; nil while neither says.
-    public static func runModelLine(_ session: SessionRef, modelLabel: (String) -> String) -> String? {
-        let applied = runRoute(session)?.applied == true
+    public static func runModelLine(_ session: SessionRef, smartSelection: Bool,
+                                    modelLabel: (String) -> String) -> String? {
+        let applied = runRoute(session, smartSelection: smartSelection)?.applied == true
         let ranOn = nonEmpty(session.model) ?? (applied ? nonEmpty(session.route?.model) : nil)
         guard let ranOn else { return nil }
         let ranAt = nonEmpty(session.effort) ?? (applied ? nonEmpty(session.route?.effort) : nil)

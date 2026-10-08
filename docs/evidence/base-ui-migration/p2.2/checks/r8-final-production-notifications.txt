@@ -1,0 +1,13 @@
+
+Running 8 tests using 1 worker
+
+  ✓  1 [chromium-light-desktop] › src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.3s)
+  ✓  2 [chromium-light-phone] › src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.4s)
+  ✓  3 [chromium-dark-desktop] › src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.4s)
+  ✓  4 [chromium-dark-phone] › src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.3s)
+  ✓  5 [webkit-light-desktop] › src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.0s)
+  ✓  6 [webkit-light-phone] › src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.9s)
+  ✓  7 [webkit-dark-desktop] › src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.8s)
+  ✓  8 [webkit-dark-phone] › src/web/ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.3s)
+
+  8 passed (25.7s)

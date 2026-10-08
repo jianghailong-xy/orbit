@@ -100,6 +100,30 @@ type HeartbeatRequest struct {
 	// for it here can only ever fail. A pointer so `false` is still sent — the control plane's
 	// NULL means "not reported", and a non-root runner has to be able to say so.
 	RunsAsRoot *bool `json:"runsAsRoot,omitempty"`
+	// SelfUpdate is where this runner's updates of itself stand (selfUpdateReport). Sent on every
+	// beat once the startup update has looked, so the control plane can tell a runner too old to
+	// report it — which omits it — from one that reports.
+	SelfUpdate *SelfUpdateReport `json:"selfUpdate,omitempty"`
+}
+
+// SelfUpdateReport mirrors @orbit/shared RunnerSelfUpdate: whether this runner can replace itself
+// with the release it is assigned, as the last look found it, and the last update it installed.
+// Before it, a runner pinned to an old release said so only in runner.log.
+type SelfUpdateReport struct {
+	// enabled | disabledByEnv | dirNotWritable | waitingForIdle | failed | heldByRollout — the
+	// selfUpdateState* constants.
+	State string `json:"state"`
+	// Why, in the runner's own words: set for failed, and for disabledByEnv (which of the things
+	// that turn self-update off it was).
+	Reason string `json:"reason,omitempty"`
+	// The directory holding the binary an update replaces, symlinks resolved: the one that has to
+	// be writable by this user.
+	InstallDir string `json:"installDir,omitempty"`
+	// The last update this runner installed into itself: RFC3339 time and the versions it moved
+	// between. Omitted until there has been one.
+	LastUpdatedAt   string `json:"lastUpdatedAt,omitempty"`
+	LastUpdatedFrom string `json:"lastUpdatedFrom,omitempty"`
+	LastUpdatedTo   string `json:"lastUpdatedTo,omitempty"`
 }
 
 // AgentDirProbe is what the runner found at one agent's working directory: whether the path is
@@ -131,13 +155,17 @@ type AgentDirTarget struct {
 // this machine, from the same probe `orbit doctor` prints. Auth is a word, not a bool, because
 // some CLIs won't answer — and an engine that won't say must never be shown as signed in.
 type EngineHealthReport struct {
-	Engine    string `json:"engine"`
-	Installed bool   `json:"installed"`
-	Version   string `json:"version,omitempty"`
-	Auth      string `json:"auth"` // "yes" | "no" | "unknown"
+	Engine            string `json:"engine"`
+	Installed         bool   `json:"installed"`
+	Version           string `json:"version,omitempty"`
+	InstallationError string `json:"installationError,omitempty"`
+	Auth              string `json:"auth"` // "yes" | "no" | "unknown"
 	// Antigravity only: selected credentials and the quota read made with its Google auth probe.
 	AuthSource string     `json:"authSource,omitempty"` // "google" | "env_key"
 	PlanUsage  *PlanUsage `json:"planUsage,omitempty"`
+	// Kimi only: the site its own login is on, "mainland-cn" (kimi.com) or "global" (kimi.ai).
+	// Omitted when it has none (kimi_region.go).
+	KimiRegion string `json:"kimiRegion,omitempty"`
 	// What the updater last did to this engine. Nil until it has run once — which the UI shows
 	// as "not reported yet", never as a problem.
 	Update *EngineUpdateReport `json:"update,omitempty"`
@@ -146,6 +174,9 @@ type EngineHealthReport struct {
 	// than accounts takes it for. Omitted for the other engines, and whenever the slots couldn't
 	// be listed — a report without it is read as one account, the way it was before accounts.
 	Accounts []EngineAccountReport `json:"accounts,omitempty"`
+	// DeepSeek Harness uses session-dispatched keys; the runner-wide probe never
+	// authenticates or claims a local login from the ACP handshake.
+	Dsh *DshRuntimeHealth `json:"dsh,omitempty"`
 }
 
 // EngineAccountReport mirrors @orbit/shared RunnerEngineAccount: one account slot and its own
@@ -169,6 +200,10 @@ type EngineAccountReport struct {
 	// cxa1_ and the first 8 hex digits of the account's fingerprint, when this runner has read
 	// one for it; omitted otherwise. Codex only.
 	FingerprintPrefix string `json:"fingerprintPrefix,omitempty"`
+	// When a signed-in account's login lapses, RFC 3339: the CLI's own expiry for it, which the
+	// clients warn about ahead of time as Claude Code does. Omitted where the CLI recorded none.
+	// Claude only.
+	LoginExpiresAt string `json:"loginExpiresAt,omitempty"`
 }
 
 // EngineUpdateReport is the updater's last word on one engine, carried alongside that engine's
@@ -267,6 +302,7 @@ type ModelCatalog struct {
 	Kimi        []ModelInfo `json:"kimi,omitempty"`
 	OpenCode    []ModelInfo `json:"opencode,omitempty"`
 	Antigravity []ModelInfo `json:"antigravity,omitempty"`
+	Dsh         []ModelInfo `json:"dsh,omitempty"`
 }
 
 type ModelInfo struct {
@@ -334,6 +370,12 @@ type HeartbeatResponse struct {
 	// Handed over once and cleared there, not redelivered: the refreshed catalog we report on a
 	// later heartbeat is the only outcome there is. False/absent on older control planes.
 	RefreshModelCatalog bool `json:"refreshModelCatalog,omitempty"`
+	// Check for a runner release now — the owner's "Update Runner Now" — instead of at the next
+	// periodic check. The same check behind the same turn gate: a turn in flight still defers the
+	// update, which SelfUpdate then reports as waitingForIdle. Handed over once and cleared, like
+	// RefreshModelCatalog: the outcome is what later heartbeats report. False/absent on older
+	// control planes.
+	CheckSelfUpdate bool `json:"checkSelfUpdate,omitempty"`
 	// A working directory to report local Claude Code history for, answered by POSTing
 	// /runner/claude-history-result. Handed over once rather than redelivered: the form that asked
 	// is waiting on a person, and a retype asks again. Nil on older control planes and whenever
@@ -541,6 +583,9 @@ type LoginCommand struct {
 	Account string `json:"account,omitempty"`
 	// Sign in a NEW Codex account: the runner adds a slot under this name and signs into that.
 	AccountName string `json:"accountName,omitempty"`
+	// Kimi only: the site to sign in on, "mainland-cn" (kimi.com) or "global" (kimi.ai). Empty is
+	// a bare `kimi login`, which goes wherever the CLI decides — what every start was before it.
+	Region string `json:"region,omitempty"`
 }
 
 // CodexAccountRemoveCommand mirrors @orbit/shared: the Codex account slot the control plane asked
@@ -708,6 +753,7 @@ type ArtifactCommand struct {
 	RequestID string `json:"requestId"`
 	SessionID string `json:"sessionId"`
 	Path      string `json:"path"`
+	Source    string `json:"source,omitempty"`
 }
 
 type ArtifactResultRequest struct {
@@ -715,6 +761,7 @@ type ArtifactResultRequest struct {
 	Status       string `json:"status"` // "uploaded" | "missing" | "error"
 	AttachmentID string `json:"attachmentId,omitempty"`
 	Message      string `json:"message,omitempty"`
+	ErrorCode    string `json:"errorCode,omitempty"`
 }
 
 // CommitResultRequest mirrors @orbit/shared SessionCommitResultRequest: the outcome of a
@@ -1116,6 +1163,9 @@ type TurnCompleteRequest struct {
 	CostUsd       float64                `json:"costUsd"`
 	Usage         *TokenUsage            `json:"usage,omitempty"`
 	ModelUsage    map[string]interface{} `json:"modelUsage,omitempty"`
+	// UsageUnknown: the runtime measured no cost or tokens for this turn (DeepSeek Harness reports
+	// neither). costUsd is then left off the wire instead of claiming a measured $0.
+	UsageUnknown bool `json:"-"`
 	// Provider-neutral runtime session/thread id discovered during this turn.
 	RuntimeSessionID string `json:"runtimeSessionId,omitempty"`
 	// Worktree isolation, reported each turn so the web can show a LIVE status bar (branch +
@@ -1201,7 +1251,7 @@ type RunFinalizeRequest struct {
 	RuntimeSessionID string                 `json:"runtimeSessionId,omitempty"`
 	NumTurns         int                    `json:"numTurns"`
 	DurationMs       int                    `json:"durationMs"`
-	CostUsd          float64                `json:"costUsd"`
+	CostUsd          *float64               `json:"costUsd,omitempty"` // nothing measures it at finalize: omitted, never a 0
 	Usage            *TokenUsage            `json:"usage,omitempty"`
 	ModelUsage       map[string]interface{} `json:"modelUsage,omitempty"`
 	// Worktree isolation outcome (see worktree.go): the branch the work was committed to,
@@ -1258,6 +1308,26 @@ type Manifest struct {
 	MinimumCapabilityRevision int    `json:"minimumCapabilityRevision,omitempty"`
 	MinimumSchemaRevision     int    `json:"minimumSchemaRevision,omitempty"`
 	ContractDigest            string `json:"contractDigest,omitempty"`
+	// Assets is keyed by platformKey ("linux-x64", "darwin-arm64", …). A control plane older than
+	// the field publishes none; downloadAndSwap then installs unverified, with a warning.
+	Assets map[string]ManifestAsset `json:"assets,omitempty"`
+	// RunsAssignedRelease says a runner of this release runs the release its control plane assigns
+	// it (assignedManifest) rather than whatever /dl/version.json names — so it is a release that can
+	// be rolled back to. Absent from releases built before assignment.
+	RunsAssignedRelease bool `json:"runsAssignedRelease,omitempty"`
+
+	// Not in version.json: where publishedManifest found it, and what the assignment said about it.
+	dir      string // the /dl subdirectory holding this release's assets: "" or "previous/"
+	rollback bool   // the control plane moved its release pointer back to this release
+}
+
+// ManifestAsset is one platform's download in /dl/version.json, as cmd/release-manifest writes it:
+// File is its name under <origin>/dl/ (orbit-<platform>.gz), and SHA256 the lowercase hex SHA-256
+// of that file's bytes exactly as served — the gzip stream, not the binary inside it — so a client
+// checks the download before it decompresses anything.
+type ManifestAsset struct {
+	File   string `json:"file,omitempty"`
+	SHA256 string `json:"sha256,omitempty"`
 }
 
 // PermissionRule mirrors @orbit/shared: a claude permission rule to add for the rest of

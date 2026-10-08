@@ -23,19 +23,9 @@ enum WikiContentsPick: Equatable {
     case doc(slug: String, section: String?)
 }
 
-/// Which page the Contents sheet was opened over: that row is lit, and a topic whose article is open
-/// lists its subtopic articles under it — a document that is open, its sections.
-enum WikiContentsAt: Equatable {
-    case home, browse, index, plan
-    case article(topic: String, part: Int)
-    case doc(slug: String)
-}
-
-/// The directory as a sheet (mock 12 ③; by the plan since criterion 10's second revision, mock 26 ②):
-/// Home, Browse by category, the A–Z index and the Plan — with the amber count of what of it waits on the
-/// owner — then the confirmed plan's categories and documents, or, before a plan is confirmed, every
-/// category's topics with the entries each one's article was written from. The web phone's left drawer,
-/// as a sheet — the left edge's swipe already opens the app's drawer.
+/// The directory as a sheet (mock 12 ③; by the plan since criterion 10's second revision, mock 26 ②): its
+/// rows (`WikiContentsRows`) over the page it was opened from, which is lit. The web phone's left drawer, as a
+/// sheet — the left edge's swipe already opens the app's drawer.
 struct WikiContentsSheet: View {
     let groups: [WikiArticleLogic.DirectoryGroup]
     let at: WikiContentsAt
@@ -50,29 +40,7 @@ struct WikiContentsSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    row(WikiArticleCopy.home, glyph: "house", lit: at == .home) { choose(.home) }
-                    row(WikiArticleCopy.browse, glyph: "square.grid.2x2", lit: at == .browse) { choose(.browse) }
-                    row(WikiArticleCopy.azIndex, glyph: "textformat.abc", lit: at == .index) { choose(.index) }
-                    planRow
-                }
-                if !docGroups.isEmpty {
-                    WikiDocContentsRows(groups: docGroups, open: openDoc) { destination in choose(destination) }
-                }
-                // The topic articles' groups, before a plan is confirmed; the screen passes none after.
-                ForEach(groups) { group in
-                    Section {
-                        // The category's name as the section's first row: a plain list pins its
-                        // headers, and on iOS 26 a pinned header has no backing.
-                        Text(group.title)
-                            .font(.orbitSubtext.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .listRowSeparator(.hidden)
-                        ForEach(group.topics) { topic in
-                            topicRow(topic)
-                        }
-                    }
-                }
+                WikiContentsRows(groups: groups, at: at, docGroups: docGroups, planPending: planPending, pick: choose)
             }
             .listStyle(.plain)
             .navigationTitle(WikiArticleCopy.contents)
@@ -92,16 +60,57 @@ struct WikiContentsSheet: View {
         dismiss()
         pick(destination)
     }
+}
 
-    /// The document whose page the sheet was opened over.
+/// The directory's rows: Home, Browse by category, the A–Z index and the Plan — with the amber count of what of
+/// it waits on the owner — then the confirmed plan's categories and documents, or, before a plan is confirmed,
+/// every category's topics with the entries each one's article was written from. The phone's Contents sheet
+/// lists them, and the iPad's and the Mac's middle column is them (design §12.3, mock 32).
+struct WikiContentsRows: View {
+    let groups: [WikiArticleLogic.DirectoryGroup]
+    /// The row of the page on show, lit; nil lights none (Activity, Review, the settings).
+    let at: WikiContentsAt?
+    /// The confirmed plan's categories and documents: when there are any, they are listed instead.
+    var docGroups: [WikiDocLogic.DirectoryGroup] = []
+    /// What of the plan waits on the owner (`WikiPlanLogic.pending`).
+    var planPending = 0
+    let pick: (WikiContentsPick) -> Void
+
+    var body: some View {
+        Section {
+            row(WikiArticleCopy.home, glyph: "house", lit: at == .home) { pick(.home) }
+            row(WikiArticleCopy.browse, glyph: "square.grid.2x2", lit: at == .browse) { pick(.browse) }
+            row(WikiArticleCopy.azIndex, glyph: "textformat.abc", lit: at == .index) { pick(.index) }
+            planRow
+        }
+        if !docGroups.isEmpty {
+            WikiDocContentsRows(groups: docGroups, open: openDoc) { destination in pick(destination) }
+        }
+        // The topic articles' groups, before a plan is confirmed; the screen passes none after.
+        ForEach(groups) { group in
+            Section {
+                // The category's name as the section's first row: a plain list pins its
+                // headers, and on iOS 26 a pinned header has no backing.
+                Text(group.title)
+                    .font(.orbitSubtext.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .listRowSeparator(.hidden)
+                ForEach(group.topics) { topic in
+                    topicRow(topic)
+                }
+            }
+        }
+    }
+
+    /// The document whose page is on show.
     private var openDoc: String? {
-        if case .doc(let slug) = at { return slug }
+        if case .doc(let slug)? = at { return slug }
         return nil
     }
 
     /// Plan, with the amber count of what of it waits on the owner — the system's badge style.
     private var planRow: some View {
-        Button { choose(.plan) } label: {
+        Button { pick(.plan) } label: {
             HStack(spacing: 12) {
                 Image(systemName: "list.bullet.rectangle")
                     .foregroundStyle(Color.accentColor)
@@ -128,10 +137,10 @@ struct WikiContentsSheet: View {
     @ViewBuilder
     private func topicRow(_ topic: WikiArticleLogic.DirectoryTopic) -> some View {
         let open: Int? = {
-            if case .article(let slug, let part) = at, slug == topic.slug { return part }
+            if case .article(let slug, let part)? = at, slug == topic.slug { return part }
             return nil
         }()
-        Button { choose(.article(topic: topic.slug, part: 0)) } label: {
+        Button { pick(.article(topic: topic.slug, part: 0)) } label: {
             HStack(spacing: 10) {
                 Text(topic.title)
                     .font(.orbitProse.weight(open != nil ? .semibold : .regular))
@@ -153,7 +162,7 @@ struct WikiContentsSheet: View {
         .listRowBackground(open == 0 ? Color.accentColor.opacity(0.10) : Color.clear)
         if let open {
             ForEach(topic.parts) { part in
-                Button { choose(.article(topic: topic.slug, part: part.part)) } label: {
+                Button { pick(.article(topic: topic.slug, part: part.part)) } label: {
                     Text(part.title)
                         .font(.orbitSubtext.weight(part.part == open ? .semibold : .regular))
                         .foregroundStyle(part.part == open ? Color.accentColor : Color.primary)

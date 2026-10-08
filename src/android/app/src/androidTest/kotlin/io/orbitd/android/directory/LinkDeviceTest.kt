@@ -49,6 +49,8 @@ class LinkDeviceTest {
                     val token = request.getHeader("Authorization")
                     requests += token to path
                     if (outage.get()) return MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST)
+                    // The login page asks the typed instance what it offers, with no credential; this one predates Google sign-in.
+                    if (path == "/api/auth/methods") return MockResponse().setResponseCode(404)
                     if (path !in listOf("/api/auth/login", "/api/auth/logout")) assertTrue(token in listOf("Bearer a05-fixture-access", "Bearer a05-fixture-access-2"))
                     val body = when {
                         path == "/api/auth/login" -> {

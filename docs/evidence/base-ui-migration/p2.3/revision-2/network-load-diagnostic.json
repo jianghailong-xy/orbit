@@ -1,0 +1,86 @@
+{
+  "failure": "The first Complete session click timed out before the notification or hover scenario began.",
+  "source": "ef1d367341a1ac080b74c323c0bf104bfc140cb6",
+  "traceSha256": "c0d1e71b7720d69ec2b488e66446e2904ea235d0fd30122ebf1cbc9e94239673",
+  "consoleErrors": [
+    {
+      "type": "console",
+      "messageType": "error",
+      "text": "Failed to load resource: net::ERR_NETWORK_CHANGED",
+      "args": [],
+      "location": {
+        "url": "http://127.0.0.1:14377/src/components/ToastViewport.tsx",
+        "lineNumber": 0,
+        "columnNumber": 0
+      },
+      "time": 96026.217,
+      "pageId": "page@6be95e8cc25f96338a9cca4067f8836c"
+    },
+    {
+      "type": "console",
+      "messageType": "error",
+      "text": "Failed to load resource: net::ERR_NETWORK_CHANGED",
+      "args": [],
+      "location": {
+        "url": "http://127.0.0.1:14377/src/components/ui/Button.tsx",
+        "lineNumber": 0,
+        "columnNumber": 0
+      },
+      "time": 96026.286,
+      "pageId": "page@6be95e8cc25f96338a9cca4067f8836c"
+    },
+    {
+      "type": "console",
+      "messageType": "error",
+      "text": "Failed to load resource: net::ERR_NETWORK_CHANGED",
+      "args": [],
+      "location": {
+        "url": "http://127.0.0.1:14377/src/components/ui/Dialog.tsx",
+        "lineNumber": 0,
+        "columnNumber": 0
+      },
+      "time": 96026.311,
+      "pageId": "page@6be95e8cc25f96338a9cca4067f8836c"
+    },
+    {
+      "type": "console",
+      "messageType": "error",
+      "text": "Failed to load resource: net::ERR_NETWORK_CHANGED",
+      "args": [],
+      "location": {
+        "url": "http://127.0.0.1:14377/src/components/ui/Drawer.tsx",
+        "lineNumber": 0,
+        "columnNumber": 0
+      },
+      "time": 96026.329,
+      "pageId": "page@6be95e8cc25f96338a9cca4067f8836c"
+    },
+    {
+      "type": "console",
+      "messageType": "error",
+      "text": "Failed to load resource: net::ERR_NETWORK_CHANGED",
+      "args": [],
+      "location": {
+        "url": "http://127.0.0.1:14377/src/components/ui/ConfirmDialog.tsx",
+        "lineNumber": 0,
+        "columnNumber": 0
+      },
+      "time": 96026.347,
+      "pageId": "page@6be95e8cc25f96338a9cca4067f8836c"
+    },
+    {
+      "type": "console",
+      "messageType": "error",
+      "text": "Failed to load resource: net::ERR_NETWORK_CHANGED",
+      "args": [],
+      "location": {
+        "url": "http://127.0.0.1:14377/node_modules/.vite/deps/react-dom.js?v=87c12d1d",
+        "lineNumber": 0,
+        "columnNumber": 0
+      },
+      "time": 96026.367,
+      "pageId": "page@6be95e8cc25f96338a9cca4067f8836c"
+    }
+  ],
+  "handling": "Preserve this run and trace, then rerun unchanged checks on the same commit; do not alter timeouts or assertions."
+}

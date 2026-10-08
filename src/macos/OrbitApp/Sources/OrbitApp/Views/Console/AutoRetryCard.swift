@@ -52,9 +52,10 @@ struct AutoRetryCardView: View {
                                      live: !notice.stale,
                                      retryAt: console.armedRetryAt,
                                      attempts: console.retryAttempts,
-                                     provider: console.provider,
+                                     provider: console.outageProvider,
                                      runnerName: console.runnerName,
                                      hasRetryText: !retryText.isEmpty,
+                                     nothingToResend: console.serverNothingToResend,
                                      now: now,
                                      takenOver: console.autoRetryTakenOver)
         VStack(alignment: .leading, spacing: 8) {
@@ -69,7 +70,7 @@ struct AutoRetryCardView: View {
             if let countdown = s.countdown { whenRow(s, countdown: countdown, now: now) }
             if s.showsAutoRow { autoRow(s) }
             if s.firing {
-                Label("Retrying — re-sending your message…", systemImage: "arrow.clockwise")
+                Label(s.firingText, systemImage: "arrow.clockwise")
                     .font(.orbitLabel).foregroundStyle(.secondary)
             }
             if let title = s.retryNowTitle { retryRow(s, title: title, retryText: retryText) }
@@ -89,13 +90,15 @@ struct AutoRetryCardView: View {
 
     /// A quota leads with the absolute moment its window resets — a time the reader may need to
     /// plan around — with the countdown beside it. A provider error's couple of minutes are the
-    /// whole story.
+    /// whole story. A continue says "Continues": the moment is when the platform will pick the
+    /// session back up, not when a window resets, and nothing of anybody's is being re-sent.
     private func whenRow(_ s: AutoRetryLogic.State, countdown: String, now: Date) -> some View {
         Group {
             if s.showsResetAt, let at = console.armedRetryAt {
-                Text("Resets ") + Text(Self.resetAt(at, now: now)).bold() + Text(" · \(countdown)")
+                Text(s.continues ? "Continues " : "Resets ")
+                    + Text(Self.resetAt(at, now: now)).bold() + Text(" · \(countdown)")
             } else {
-                Text("Retrying ") + Text(countdown).bold()
+                Text(s.continues ? "Continuing " : "Retrying ") + Text(countdown).bold()
             }
         }
         .font(.orbitLabel)

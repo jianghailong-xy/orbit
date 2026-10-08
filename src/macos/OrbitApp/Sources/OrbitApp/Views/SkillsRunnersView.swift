@@ -129,7 +129,7 @@ struct RunnersListView: View {
 /// A plain push list — each runner pushes its detail within the Settings navigation stack, reusing
 /// `RunnerRow`/`RunnerDetailContent` instead of the sidebar's split-view selection. The row pushes the
 /// same `NavNode.runnerDetail` frame the Runners section pushes, so the shape of a runner's record is
-/// one page in both places. Under the rows, Add Runner; Edit reorders and removes them.
+/// one page in both places. Under the rows, Add Runner.
 struct RunnersSettingsList: View {
     @Environment(AppModel.self) private var model
     @State private var addingRunner = false
@@ -242,8 +242,7 @@ private struct RunnerAddSection: View {
 }
 
 /// What both runners lists add around their rows: Add Runner's sheet; removing a runner, which asks
-/// first in the words its own page's Remove card says; and — on iOS — Edit, which puts the rows in
-/// the list's own reorder / delete mode (the web list's drag order, POST /runners/reorder).
+/// first in the words its own page's Remove card says.
 private struct RunnerListEditing: ViewModifier {
     let runners: RunnersModel
     @Binding var addingRunner: Bool
@@ -252,8 +251,8 @@ private struct RunnerListEditing: ViewModifier {
     func body(content: Content) -> some View {
         content
             .sheet(isPresented: $addingRunner) { AddRunnerSheet() }
-            .confirmationDialog(removalTitle, isPresented: removalAsked, titleVisibility: .visible,
-                                presenting: pendingRemoval) { runner in
+            .orbitConfirmation({ _ in removalTitle },
+                               isPresented: removalAsked, presenting: pendingRemoval) { runner in
                 Button(RunnerPageCopy.RUNNER_REMOVE, role: .destructive) {
                     Task { await remove(runner) }
                 }
@@ -261,11 +260,6 @@ private struct RunnerListEditing: ViewModifier {
             } message: { _ in
                 Text(RunnerPageCopy.RUNNER_REMOVE_FOOTER)
             }
-            #if os(iOS)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { EditButton() }
-            }
-            #endif
             .task { await runners.loadReleaseVersion() }
     }
 
@@ -471,29 +465,6 @@ struct RunnerDetailContent: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .confirmationDialog(RunnerPageCopy.RUNNER_KEEP_FREE, isPresented: $choosingReserve,
-                            titleVisibility: .visible) {
-            ForEach(RunnerAttention.KEEP_FREE_TIERS.filter { $0.mb != nil }, id: \.label) { tier in
-                Button(tier.label) { keepFree = tier.mb }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(RunnerPageCopy.RUNNER_CAPACITY_FOOTER)
-        }
-        .confirmationDialog("Rotate token for “\(RunnerPageFormat.displayName(runner))”?",
-                            isPresented: $confirmingRotate, titleVisibility: .visible) {
-            Button("Rotate Token", role: .destructive) { rotate() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(RunnerPageCopy.RUNNER_ROTATE_TOKEN_FOOTER)
-        }
-        .confirmationDialog("Remove “\(RunnerPageFormat.displayName(runner))”?",
-                            isPresented: $confirmingRemove, titleVisibility: .visible) {
-            Button(RunnerPageCopy.RUNNER_REMOVE, role: .destructive) { remove() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(RunnerPageCopy.RUNNER_REMOVE_FOOTER)
-        }
         .runnerNotice(notice)
         .onAppear(perform: seed)
         .onChange(of: runner.maxConcurrent) { _, value in
@@ -681,6 +652,10 @@ struct RunnerDetailContent: View {
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_HOSTNAME, runner.hostname)
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_VERSION,
                      RunnerPageFormat.versionValue(runner, latest: runners.latestVersion))
+            aboutRow(RunnerPageCopy.RUNNER_ABOUT_LAST_UPDATE, RunnerPageFormat.lastUpdate(runner))
+            if RunnerAttention.runnerCanUpdateNow(runner, nowMs: RunnerPageFormat.nowMs(now)) {
+                Button(RunnerPageCopy.RUNNER_UPDATE_RUNNER_NOW) { updateRunner() }
+            }
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_RUNS_AS, RunnerPageFormat.runsAsValue(runner))
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_REPOS_FOLDER, runner.reposRoot)
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_LAST_CHECK_IN, RunnerPageFormat.lastCheckIn(runner, now: now))
@@ -698,6 +673,13 @@ struct RunnerDetailContent: View {
     private var rotateSection: some View {
         Section {
             Button(RunnerPageCopy.RUNNER_ROTATE_TOKEN) { confirmingRotate = true }
+                .orbitConfirmation("Rotate token for “\(RunnerPageFormat.displayName(runner))”?",
+                                   isPresented: $confirmingRotate) {
+                    Button("Rotate Token", role: .destructive) { rotate() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text(RunnerPageCopy.RUNNER_ROTATE_TOKEN_FOOTER)
+                }
             if let token = rotatedToken {
                 Text(token)
                     .font(.orbitMono)
@@ -715,6 +697,13 @@ struct RunnerDetailContent: View {
             Button(role: .destructive) { confirmingRemove = true } label: {
                 Text(RunnerPageCopy.RUNNER_REMOVE)
                     .frame(maxWidth: .infinity)
+            }
+            .orbitConfirmation("Remove “\(RunnerPageFormat.displayName(runner))”?",
+                               isPresented: $confirmingRemove) {
+                Button(RunnerPageCopy.RUNNER_REMOVE, role: .destructive) { remove() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(RunnerPageCopy.RUNNER_REMOVE_FOOTER)
             }
         } footer: {
             Text(RunnerPageCopy.RUNNER_REMOVE_FOOTER)
@@ -753,6 +742,16 @@ struct RunnerDetailContent: View {
             Button(RunnerPageCopy.RUNNER_REPAIR) { repair(action.workspaceId) }
         case .setReserve:
             Button(RunnerPageCopy.RUNNER_SET_A_RESERVE) { choosingReserve = true }
+                // On the button that asks, so the panel opens against it rather than at the top of
+                // the page.
+                .orbitConfirmation(RunnerPageCopy.RUNNER_KEEP_FREE, isPresented: $choosingReserve) {
+                    ForEach(RunnerAttention.KEEP_FREE_TIERS.filter { $0.mb != nil }, id: \.label) { tier in
+                        Button(tier.label) { keepFree = tier.mb }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text(RunnerPageCopy.RUNNER_CAPACITY_FOOTER)
+                }
         case .copyCommand:
             Button { copy(action.command) } label: {
                 Label(RunnerPageCopy.RUNNER_COPY_COMMAND, systemImage: "doc.on.doc")
@@ -760,6 +759,8 @@ struct RunnerDetailContent: View {
         case .updateEngines:
             Button(RunnerPageCopy.RUNNER_UPDATE_ENGINES_NOW) { updateEngines() }
                 .disabled(RunnerPageFormat.engineUpdateInFlight(runner.install))
+        case .updateRunner:
+            Button(RunnerPageCopy.RUNNER_UPDATE_RUNNER_NOW) { updateRunner() }
         }
     }
 
@@ -847,6 +848,13 @@ struct RunnerDetailContent: View {
         Task {
             show(await runners.refreshModels(id)
                  ?? "Re-reading this machine’s model lists — the picker updates within a minute.")
+        }
+    }
+
+    private func updateRunner() {
+        let id = runner.id
+        Task {
+            show(await runners.updateRunner(id) ?? RunnerPageCopy.RUNNER_UPDATE_RUNNER_REQUESTED)
         }
     }
 

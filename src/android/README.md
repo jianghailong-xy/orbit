@@ -31,6 +31,7 @@ The iOS installed version is still being established by A01; no repository revis
 | Compose BOM | 2025.08.01 | Fixed stable UI family; no dynamic versions or automatic "latest" upgrades. |
 | Material 3 | 1.4.0 | Explicit stable override: 1.3.2's internal negative-anchor threshold closes a slowly dragged drawer even after its midpoint. The 1.4 drawer uses Foundation; the same slow-drag regression fails on 1.3.2 and passes on 1.4.0. |
 | Activity / Navigation Compose | 1.10.1 / 2.9.3 | Small stable activity and back-stack shell, compatible with this SDK/compiler. |
+| AndroidX Browser | 1.10.0 | Custom Tabs for Google sign-in (D1); needs compileSdk 36 and AGP 8.9.1+, both met. |
 | JUnit / Robolectric | 4.13.2 / 4.16.1 | Real JVM assertions and local execution of the Compose activity. |
 | Coroutines / serialization | 1.10.2 / 1.9.0 | Session-owned cancellation and JSON with the existing Kotlin 2.2.21 compiler. |
 | OkHttp | 4.12.0 | Cancellable JVM/Android HTTP and MockWebServer wire tests; no logging interceptor. |

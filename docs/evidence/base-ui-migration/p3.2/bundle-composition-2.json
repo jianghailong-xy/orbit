@@ -1,0 +1,851 @@
+{
+ "files": {
+  "tip": [
+   "assets/Transcript-BtITXXF3.css",
+   "assets/Transcript-Vzag2pKy.js",
+   "assets/index-CEnjz7lS.css",
+   "assets/index-CdtE5_gu.js",
+   "assets/projectDependencyGraph-C7Yj51jL.js",
+   "assets/rolldown-runtime-hePW80VL.js",
+   "assets/taskDependencyGraph-B91604km.js"
+  ],
+  "delivered": [
+   "assets/Transcript-BtITXXF3.css",
+   "assets/Transcript-DRDTosy7.js",
+   "assets/index-BIWyNeBZ.js",
+   "assets/index-CVcUO2xu.css",
+   "assets/projectDependencyGraph-DEwcr3kB.js",
+   "assets/rolldown-runtime-hePW80VL.js",
+   "assets/taskDependencyGraph-Bx_saetJ.js"
+  ]
+ },
+ "js": {
+  "totals": {
+   "tip": 3313504,
+   "delivered": 3481878
+  },
+  "groups": {
+   "@base-ui/react": {
+    "tip": 42126,
+    "delivered": 205358,
+    "difference": 163232
+   },
+   "antd": {
+    "tip": 531212,
+    "delivered": 501250,
+    "difference": -29962
+   },
+   "src/components/ui": {
+    "tip": 2550,
+    "delivered": 25139,
+    "difference": 22589
+   },
+   "@rc-component/upload": {
+    "tip": 7363,
+    "delivered": 0,
+    "difference": -7363
+   },
+   "@floating-ui/dom": {
+    "tip": 0,
+    "delivered": 7100,
+    "difference": 7100
+   },
+   "@floating-ui/core": {
+    "tip": 0,
+    "delivered": 6246,
+    "difference": 6246
+   },
+   "@rc-component/progress": {
+    "tip": 4074,
+    "delivered": 0,
+    "difference": -4074
+   },
+   "@floating-ui/react-dom": {
+    "tip": 0,
+    "delivered": 2746,
+    "difference": 2746
+   },
+   "@floating-ui/utils": {
+    "tip": 1023,
+    "delivered": 3726,
+    "difference": 2703
+   },
+   "src (rest)": {
+    "tip": 1381077,
+    "delivered": 1383721,
+    "difference": 2644
+   },
+   "@base-ui/utils": {
+    "tip": 12010,
+    "delivered": 13277,
+    "difference": 1267
+   },
+   "unmapped": {
+    "tip": 18773,
+    "delivered": 20012,
+    "difference": 1239
+   },
+   "@rc-component/select": {
+    "tip": 30637,
+    "delivered": 30586,
+    "difference": -51
+   },
+   "property-information": {
+    "tip": 18412,
+    "delivered": 18366,
+    "difference": -46
+   },
+   "@rc-component/tabs": {
+    "tip": 17611,
+    "delivered": 17647,
+    "difference": 36
+   },
+   "@rc-component/table": {
+    "tip": 37446,
+    "delivered": 37472,
+    "difference": 26
+   },
+   "@rc-component/notification": {
+    "tip": 9811,
+    "delivered": 9835,
+    "difference": 24
+   },
+   "@rc-component/virtual-list": {
+    "tip": 15748,
+    "delivered": 15726,
+    "difference": -22
+   },
+   "@rc-component/image": {
+    "tip": 14739,
+    "delivered": 14759,
+    "difference": 20
+   },
+   "@rc-component/menu": {
+    "tip": 19780,
+    "delivered": 19799,
+    "difference": 19
+   },
+   "@rc-component/pagination": {
+    "tip": 8020,
+    "delivered": 8031,
+    "difference": 11
+   },
+   "react-router": {
+    "tip": 39200,
+    "delivered": 39191,
+    "difference": -9
+   },
+   "@dnd-kit/core": {
+    "tip": 34239,
+    "delivered": 34231,
+    "difference": -8
+   },
+   "@rc-component/drawer": {
+    "tip": 6079,
+    "delivered": 6071,
+    "difference": -8
+   },
+   "@rc-component/overflow": {
+    "tip": 4146,
+    "delivered": 4140,
+    "difference": -6
+   },
+   "highlight.js": {
+    "tip": 262431,
+    "delivered": 262437,
+    "difference": 6
+   },
+   "@ant-design/icons": {
+    "tip": 41415,
+    "delivered": 41419,
+    "difference": 4
+   },
+   "@ant-design/icons-svg": {
+    "tip": 75574,
+    "delivered": 75578,
+    "difference": 4
+   },
+   "@dnd-kit/sortable": {
+    "tip": 6392,
+    "delivered": 6396,
+    "difference": 4
+   },
+   "@rc-component/tree": {
+    "tip": 34579,
+    "delivered": 34575,
+    "difference": -4
+   },
+   "@rc-component/input": {
+    "tip": 11365,
+    "delivered": 11368,
+    "difference": 3
+   },
+   "mdast-util-from-markdown": {
+    "tip": 10065,
+    "delivered": 10068,
+    "difference": 3
+   },
+   "@rc-component/dropdown": {
+    "tip": 2900,
+    "delivered": 2902,
+    "difference": 2
+   },
+   "@rc-component/mini-decimal": {
+    "tip": 5914,
+    "delivered": 5912,
+    "difference": -2
+   },
+   "@tanstack/query-core": {
+    "tip": 36145,
+    "delivered": 36143,
+    "difference": -2
+   },
+   "@babel/runtime": {
+    "tip": 4356,
+    "delivered": 4357,
+    "difference": 1
+   },
+   "@rc-component/segmented": {
+    "tip": 4587,
+    "delivered": 4588,
+    "difference": 1
+   },
+   "@rc-component/util": {
+    "tip": 13297,
+    "delivered": 13298,
+    "difference": 1
+   },
+   "@ant-design/colors": {
+    "tip": 4707,
+    "delivered": 4707,
+    "difference": 0
+   },
+   "@ant-design/cssinjs": {
+    "tip": 10175,
+    "delivered": 10175,
+    "difference": 0
+   },
+   "@ant-design/cssinjs-utils": {
+    "tip": 7868,
+    "delivered": 7868,
+    "difference": 0
+   },
+   "@ant-design/fast-color": {
+    "tip": 8465,
+    "delivered": 8465,
+    "difference": 0
+   },
+   "@dagrejs/dagre": {
+    "tip": 46594,
+    "delivered": 46594,
+    "difference": 0
+   },
+   "@dnd-kit/accessibility": {
+    "tip": 541,
+    "delivered": 541,
+    "difference": 0
+   },
+   "@dnd-kit/utilities": {
+    "tip": 2969,
+    "delivered": 2969,
+    "difference": 0
+   },
+   "@emotion/hash": {
+    "tip": 553,
+    "delivered": 553,
+    "difference": 0
+   },
+   "@emotion/unitless": {
+    "tip": 647,
+    "delivered": 647,
+    "difference": 0
+   },
+   "@rc-component/async-validator": {
+    "tip": 13874,
+    "delivered": 13874,
+    "difference": 0
+   },
+   "@rc-component/checkbox": {
+    "tip": 1018,
+    "delivered": 1018,
+    "difference": 0
+   },
+   "@rc-component/color-picker": {
+    "tip": 541,
+    "delivered": 541,
+    "difference": 0
+   },
+   "@rc-component/context": {
+    "tip": 1618,
+    "delivered": 1618,
+    "difference": 0
+   },
+   "@rc-component/dialog": {
+    "tip": 6606,
+    "delivered": 6606,
+    "difference": 0
+   },
+   "@rc-component/form": {
+    "tip": 27129,
+    "delivered": 27129,
+    "difference": 0
+   },
+   "@rc-component/input-number": {
+    "tip": 6548,
+    "delivered": 6548,
+    "difference": 0
+   },
+   "@rc-component/motion": {
+    "tip": 7582,
+    "delivered": 7582,
+    "difference": 0
+   },
+   "@rc-component/picker": {
+    "tip": 582,
+    "delivered": 582,
+    "difference": 0
+   },
+   "@rc-component/portal": {
+    "tip": 2165,
+    "delivered": 2165,
+    "difference": 0
+   },
+   "@rc-component/resize-observer": {
+    "tip": 2161,
+    "delivered": 2161,
+    "difference": 0
+   },
+   "@rc-component/switch": {
+    "tip": 1084,
+    "delivered": 1084,
+    "difference": 0
+   },
+   "@rc-component/tooltip": {
+    "tip": 2679,
+    "delivered": 2679,
+    "difference": 0
+   },
+   "@rc-component/trigger": {
+    "tip": 19078,
+    "delivered": 19078,
+    "difference": 0
+   },
+   "@tanstack/react-query": {
+    "tip": 4458,
+    "delivered": 4458,
+    "difference": 0
+   },
+   "@ungap/structured-clone": {
+    "tip": 2839,
+    "delivered": 2839,
+    "difference": 0
+   },
+   "bail": {
+    "tip": 48,
+    "delivered": 48,
+    "difference": 0
+   },
+   "ccount": {
+    "tip": 168,
+    "delivered": 168,
+    "difference": 0
+   },
+   "clsx": {
+    "tip": 362,
+    "delivered": 362,
+    "difference": 0
+   },
+   "comma-separated-tokens": {
+    "tip": 129,
+    "delivered": 129,
+    "difference": 0
+   },
+   "compute-scroll-into-view": {
+    "tip": 2794,
+    "delivered": 2794,
+    "difference": 0
+   },
+   "decode-named-character-reference": {
+    "tip": 163,
+    "delivered": 163,
+    "difference": 0
+   },
+   "escape-string-regexp": {
+    "tip": 143,
+    "delivered": 143,
+    "difference": 0
+   },
+   "estree-util-is-identifier-name": {
+    "tip": 184,
+    "delivered": 184,
+    "difference": 0
+   },
+   "extend": {
+    "tip": 1138,
+    "delivered": 1138,
+    "difference": 0
+   },
+   "hast-util-is-element": {
+    "tip": 740,
+    "delivered": 740,
+    "difference": 0
+   },
+   "hast-util-to-jsx-runtime": {
+    "tip": 5807,
+    "delivered": 5807,
+    "difference": 0
+   },
+   "hast-util-to-text": {
+    "tip": 2649,
+    "delivered": 2649,
+    "difference": 0
+   },
+   "hast-util-whitespace": {
+    "tip": 142,
+    "delivered": 142,
+    "difference": 0
+   },
+   "html-url-attributes": {
+    "tip": 301,
+    "delivered": 301,
+    "difference": 0
+   },
+   "inline-style-parser": {
+    "tip": 1547,
+    "delivered": 1547,
+    "difference": 0
+   },
+   "is-mobile": {
+    "tip": 853,
+    "delivered": 853,
+    "difference": 0
+   },
+   "is-plain-obj": {
+    "tip": 206,
+    "delivered": 206,
+    "difference": 0
+   },
+   "longest-streak": {
+    "tip": 195,
+    "delivered": 195,
+    "difference": 0
+   },
+   "lowlight": {
+    "tip": 2522,
+    "delivered": 2522,
+    "difference": 0
+   },
+   "markdown-table": {
+    "tip": 1568,
+    "delivered": 1568,
+    "difference": 0
+   },
+   "mdast-util-find-and-replace": {
+    "tip": 1170,
+    "delivered": 1170,
+    "difference": 0
+   },
+   "mdast-util-gfm": {
+    "tip": 110,
+    "delivered": 110,
+    "difference": 0
+   },
+   "mdast-util-gfm-autolink-literal": {
+    "tip": 2097,
+    "delivered": 2097,
+    "difference": 0
+   },
+   "mdast-util-gfm-footnote": {
+    "tip": 1644,
+    "delivered": 1644,
+    "difference": 0
+   },
+   "mdast-util-gfm-strikethrough": {
+    "tip": 606,
+    "delivered": 606,
+    "difference": 0
+   },
+   "mdast-util-gfm-table": {
+    "tip": 1765,
+    "delivered": 1765,
+    "difference": 0
+   },
+   "mdast-util-gfm-task-list-item": {
+    "tip": 1147,
+    "delivered": 1147,
+    "difference": 0
+   },
+   "mdast-util-phrasing": {
+    "tip": 218,
+    "delivered": 218,
+    "difference": 0
+   },
+   "mdast-util-to-hast": {
+    "tip": 10666,
+    "delivered": 10666,
+    "difference": 0
+   },
+   "mdast-util-to-markdown": {
+    "tip": 11405,
+    "delivered": 11405,
+    "difference": 0
+   },
+   "mdast-util-to-string": {
+    "tip": 484,
+    "delivered": 484,
+    "difference": 0
+   },
+   "micromark": {
+    "tip": 9299,
+    "delivered": 9299,
+    "difference": 0
+   },
+   "micromark-core-commonmark": {
+    "tip": 27318,
+    "delivered": 27318,
+    "difference": 0
+   },
+   "micromark-extension-gfm": {
+    "tip": 54,
+    "delivered": 54,
+    "difference": 0
+   },
+   "micromark-extension-gfm-autolink-literal": {
+    "tip": 3746,
+    "delivered": 3746,
+    "difference": 0
+   },
+   "micromark-extension-gfm-footnote": {
+    "tip": 4034,
+    "delivered": 4034,
+    "difference": 0
+   },
+   "micromark-extension-gfm-strikethrough": {
+    "tip": 1547,
+    "delivered": 1547,
+    "difference": 0
+   },
+   "micromark-extension-gfm-table": {
+    "tip": 5622,
+    "delivered": 5622,
+    "difference": 0
+   },
+   "micromark-extension-gfm-task-list-item": {
+    "tip": 830,
+    "delivered": 830,
+    "difference": 0
+   },
+   "micromark-factory-destination": {
+    "tip": 905,
+    "delivered": 905,
+    "difference": 0
+   },
+   "micromark-factory-label": {
+    "tip": 633,
+    "delivered": 633,
+    "difference": 0
+   },
+   "micromark-factory-space": {
+    "tip": 169,
+    "delivered": 169,
+    "difference": 0
+   },
+   "micromark-factory-title": {
+    "tip": 596,
+    "delivered": 596,
+    "difference": 0
+   },
+   "micromark-factory-whitespace": {
+    "tip": 174,
+    "delivered": 174,
+    "difference": 0
+   },
+   "micromark-util-character": {
+    "tip": 437,
+    "delivered": 437,
+    "difference": 0
+   },
+   "micromark-util-chunked": {
+    "tip": 300,
+    "delivered": 300,
+    "difference": 0
+   },
+   "micromark-util-classify-character": {
+    "tip": 68,
+    "delivered": 68,
+    "difference": 0
+   },
+   "micromark-util-combine-extensions": {
+    "tip": 370,
+    "delivered": 370,
+    "difference": 0
+   },
+   "micromark-util-decode-numeric-character-reference": {
+    "tip": 202,
+    "delivered": 202,
+    "difference": 0
+   },
+   "micromark-util-decode-string": {
+    "tip": 262,
+    "delivered": 262,
+    "difference": 0
+   },
+   "micromark-util-html-tag-name": {
+    "tip": 415,
+    "delivered": 415,
+    "difference": 0
+   },
+   "micromark-util-normalize-identifier": {
+    "tip": 100,
+    "delivered": 100,
+    "difference": 0
+   },
+   "micromark-util-resolve-all": {
+    "tip": 124,
+    "delivered": 124,
+    "difference": 0
+   },
+   "micromark-util-sanitize-uri": {
+    "tip": 484,
+    "delivered": 484,
+    "difference": 0
+   },
+   "micromark-util-subtokenize": {
+    "tip": 3361,
+    "delivered": 3361,
+    "difference": 0
+   },
+   "no source map": {
+    "tip": 716,
+    "delivered": 716,
+    "difference": 0
+   },
+   "react": {
+    "tip": 8186,
+    "delivered": 8186,
+    "difference": 0
+   },
+   "react-dom": {
+    "tip": 207344,
+    "delivered": 207344,
+    "difference": 0
+   },
+   "react-is": {
+    "tip": 780,
+    "delivered": 780,
+    "difference": 0
+   },
+   "react-markdown": {
+    "tip": 2663,
+    "delivered": 2663,
+    "difference": 0
+   },
+   "rehype-highlight": {
+    "tip": 1269,
+    "delivered": 1269,
+    "difference": 0
+   },
+   "remark-gfm": {
+    "tip": 187,
+    "delivered": 187,
+    "difference": 0
+   },
+   "remark-parse": {
+    "tip": 192,
+    "delivered": 192,
+    "difference": 0
+   },
+   "remark-rehype": {
+    "tip": 146,
+    "delivered": 146,
+    "difference": 0
+   },
+   "scheduler": {
+    "tip": 3499,
+    "delivered": 3499,
+    "difference": 0
+   },
+   "scroll-into-view-if-needed": {
+    "tip": 805,
+    "delivered": 805,
+    "difference": 0
+   },
+   "space-separated-tokens": {
+    "tip": 59,
+    "delivered": 59,
+    "difference": 0
+   },
+   "style-to-js": {
+    "tip": 682,
+    "delivered": 682,
+    "difference": 0
+   },
+   "style-to-object": {
+    "tip": 389,
+    "delivered": 389,
+    "difference": 0
+   },
+   "stylis": {
+    "tip": 8295,
+    "delivered": 8295,
+    "difference": 0
+   },
+   "throttle-debounce": {
+    "tip": 611,
+    "delivered": 611,
+    "difference": 0
+   },
+   "trim-lines": {
+    "tip": 429,
+    "delivered": 429,
+    "difference": 0
+   },
+   "trough": {
+    "tip": 759,
+    "delivered": 759,
+    "difference": 0
+   },
+   "unified": {
+    "tip": 4087,
+    "delivered": 4087,
+    "difference": 0
+   },
+   "unist-util-find-after": {
+    "tip": 350,
+    "delivered": 350,
+    "difference": 0
+   },
+   "unist-util-is": {
+    "tip": 757,
+    "delivered": 757,
+    "difference": 0
+   },
+   "unist-util-position": {
+    "tip": 345,
+    "delivered": 345,
+    "difference": 0
+   },
+   "unist-util-stringify-position": {
+    "tip": 310,
+    "delivered": 310,
+    "difference": 0
+   },
+   "unist-util-visit": {
+    "tip": 205,
+    "delivered": 205,
+    "difference": 0
+   },
+   "unist-util-visit-parents": {
+    "tip": 832,
+    "delivered": 832,
+    "difference": 0
+   },
+   "use-sync-external-store": {
+    "tip": 1551,
+    "delivered": 1551,
+    "difference": 0
+   },
+   "vfile": {
+    "tip": 5089,
+    "delivered": 5089,
+    "difference": 0
+   },
+   "vfile-message": {
+    "tip": 1369,
+    "delivered": 1369,
+    "difference": 0
+   }
+  }
+ },
+ "css": {
+  "totals": {
+   "tip": 392654,
+   "delivered": 428187
+  },
+  "groups": {
+   "no source map": {
+    "tip": 392654,
+    "delivered": 428187,
+    "difference": 35533
+   }
+  }
+ },
+ "uiModules": {
+  "Alert.tsx": {
+   "tip": 0,
+   "delivered": 497
+  },
+  "Avatar.tsx": {
+   "tip": 0,
+   "delivered": 234
+  },
+  "Button.tsx": {
+   "tip": 0,
+   "delivered": 1035
+  },
+  "Checkbox.tsx": {
+   "tip": 0,
+   "delivered": 459
+  },
+  "Combobox.tsx": {
+   "tip": 0,
+   "delivered": 3140
+  },
+  "ComboboxOption.tsx": {
+   "tip": 0,
+   "delivered": 312
+  },
+  "Dialog.tsx": {
+   "tip": 42,
+   "delivered": 42
+  },
+  "Floating.ts": {
+   "tip": 0,
+   "delivered": 2529
+  },
+  "Menu.tsx": {
+   "tip": 0,
+   "delivered": 2912
+  },
+  "Overlay.tsx": {
+   "tip": 2185,
+   "delivered": 2538
+  },
+  "Popconfirm.tsx": {
+   "tip": 0,
+   "delivered": 1767
+  },
+  "Segmented.tsx": {
+   "tip": 0,
+   "delivered": 1412
+  },
+  "Select.tsx": {
+   "tip": 0,
+   "delivered": 2887
+  },
+  "SelectEmpty.tsx": {
+   "tip": 0,
+   "delivered": 860
+  },
+  "Spinner.tsx": {
+   "tip": 0,
+   "delivered": 341
+  },
+  "Switch.tsx": {
+   "tip": 0,
+   "delivered": 479
+  },
+  "Textarea.tsx": {
+   "tip": 0,
+   "delivered": 2580
+  },
+  "Tooltip.tsx": {
+   "tip": 0,
+   "delivered": 792
+  },
+  "feedbackPortal.ts": {
+   "tip": 323,
+   "delivered": 323
+  }
+ }
+}

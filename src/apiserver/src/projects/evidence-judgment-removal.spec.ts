@@ -28,7 +28,7 @@ const REMOVAL_MIGRATION =
   'src/apiserver/prisma/migrations/0224_evidence_judgment_removal_of_human_signoff/migration.sql';
 
 function git(...args: string[]): string {
-  return execFileSync('git', args, { cwd: repoRoot(), encoding: 'utf8' }).trim();
+  return execFileSync('git', args, { cwd: repoRoot(), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim();
 }
 
 // ── (a) HUMAN_SIGNOFF is not a criterion any caller can declare ────────────────────────────────
@@ -193,15 +193,18 @@ test('(q) no compose service, no resident process, and the human step is gone fr
   const withoutExtensions = compose.replace(/^x-[^\n]*\n(?:[ \t][^\n]*\n|\n)*/gm, '');
   const services = [...withoutExtensions.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)]
     .map((match) => match[1]);
+  // wiki-worker and its start:wiki-worker are the wiki's server-side executor, which the account owner
+  // added on 2026-10-07 (docs/wiki-server-execution-design.md §4.1), not this removal;
+  // test/compose-topology.test.mjs (l) pins its whole definition.
   assert.deepEqual(services, [
-    'postgres', 'pgbackup', 'apiserver', 'web', 'gateway', 'pg-socket',
+    'postgres', 'pgbackup', 'apiserver', 'wiki-worker', 'web', 'gateway', 'pg-socket',
   ], 'the removal must not have added a service');
 
   const apiPackage = JSON.parse(read('src/apiserver/package.json')) as {
     scripts: Record<string, string>;
   };
   assert.deepEqual(Object.keys(apiPackage.scripts).filter((name) => name.startsWith('start:')),
-    ['start:dev'],
+    ['start:dev', 'start:wiki-worker'],
     'the removal must not have added a long-running entrypoint');
 
   const removal = read(REMOVAL_MIGRATION);

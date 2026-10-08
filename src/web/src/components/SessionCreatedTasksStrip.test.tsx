@@ -6,15 +6,15 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider, type Query } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SessionCreatedTaskRow, SessionCreatedTasks } from '@orbit/shared';
+import type { SessionCreatedTaskRow, SessionCreatedTasks, WatchTargetView, WatchView } from '@orbit/shared';
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
-import { sessionCreatedTasksQuery } from '../lib/queries';
+import { sessionCreatedTasksQuery, watchesQuery } from '../lib/queries';
 import { SessionCreatedTasksStrip } from './SessionCreatedTasksStrip';
 
 /**
- * The "Tasks created here" row above a session's composer: whether it is drawn at all, the one line
- * it folds to, and the list it opens to.
+ * The Tasks card above a session's composer — the tasks it created and the tasks its watches wait
+ * on: whether it is drawn at all, the one line it folds to, and the list it opens to.
  *
  * Its sentence and its fixed words are the ones `session-created-tasks.fixture.json` gives both
  * clients, so the cases below are read out of that file rather than written a second time here —
@@ -75,6 +75,8 @@ function created(over: Partial<SessionCreatedTasks> = {}): SessionCreatedTasks {
 }
 
 let answer: SessionCreatedTasks;
+/** The owner's watches, as `GET /watches` and its filtered reads answer them. */
+let watching: WatchView[] = [];
 let requested: string[];
 let container: HTMLDivElement;
 let root: Root | null = null;
@@ -84,6 +86,10 @@ beforeEach(() => {
   vi.mocked(api).mockImplementation(async (path: string) => {
     requested.push(path);
     if (path === `/sessions/${SESSION}/created-tasks`) return answer as never;
+    if (path === '/watches?needsAttention=true') return [] as never;
+    const state = /^\/watches\?state=([A-Z]+)$/.exec(path);
+    if (state) return watching.filter((w) => w.state === state[1]) as never;
+    if (path === '/watches') return watching as never;
     throw new Error(`unstubbed ${path}`);
   });
   container = document.createElement('div');
@@ -95,12 +101,14 @@ afterEach(() => {
   root = null;
   container.remove();
   vi.mocked(api).mockReset();
+  watching = [];
 });
 
 /** A fresh strip over `data`, once its one read has been answered and drawn. */
-async function mount(data: SessionCreatedTasks): Promise<void> {
+async function mount(data: SessionCreatedTasks, watches: WatchView[] = []): Promise<void> {
   if (root) act(() => root!.unmount());
   answer = data;
+  watching = watches;
   requested = [];
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   root = createRoot(container);
@@ -116,11 +124,12 @@ async function mount(data: SessionCreatedTasks): Promise<void> {
   const key = sessionCreatedTasksQuery(SESSION).queryKey;
   await act(async () => {
     await vi.waitFor(() => expect(client.getQueryState(key)?.status).toBe('success'));
+    await vi.waitFor(() => expect(client.getQueryState(watchesQuery().queryKey)?.status).toBe('success'));
     // The cache settles a tick before the observers hear of it.
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
-  expect(requested).toEqual([`/sessions/${SESSION}/created-tasks`]);
+  expect(requested.filter((path) => !path.startsWith('/watches'))).toEqual([`/sessions/${SESSION}/created-tasks`]);
 }
 
 async function click(el: Element | null): Promise<void> {
@@ -311,6 +320,104 @@ describe('the opened list', () => {
     await click(one('.bg-tray-row'));
     expect(link(fixture.copy.viewAll)).toBeDefined();
     expect(link(fixture.copy.openProject)).toBeUndefined();
+  });
+});
+
+describe('what the session waits on', () => {
+  const MINUTE = 60_000;
+  const target = (id: string, over: Partial<WatchTargetView> = {}): WatchTargetView => ({
+    targetKind: 'TASK',
+    targetResourceId: id,
+    state: 'OBSERVED',
+    targetEpoch: 0,
+    lastEvaluatedAt: null,
+    ...over,
+  });
+  /** A live watch that resumes this session when its targets finish. */
+  const waits = (id: string, targets: WatchTargetView[], over: Partial<WatchView> = {}): WatchView => ({
+    id,
+    observerType: 'SESSION',
+    observerSessionId: SESSION,
+    predicateVersion: 1,
+    predicate: { kind: 'ALL', over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' },
+    mode: 'ONE_SHOT',
+    action: 'RESUME_SESSION',
+    state: 'ACTIVE',
+    generation: 0,
+    expiresAt: new Date(Date.now() + 20 * HOUR).toISOString(),
+    nextEvaluateAt: null,
+    lastEvaluatedAt: new Date(Date.now() - MINUTE).toISOString(),
+    idempotencyKey: null,
+    createdAt: new Date(Date.now() - HOUR).toISOString(),
+    updatedAt: new Date(Date.now() - HOUR).toISOString(),
+    targets,
+    matches: [],
+    expiryDeliveries: [],
+    ...over,
+  });
+
+  it('counts the watched tasks on the folded line and marks each with an eye, first', async () => {
+    const items = [row(1, { running: true }), row(2, { running: true }), row(3, { status: 'DONE' })];
+    await mount(created({ total: 3, running: 2, done: 1, items }), [
+      waits('W', [target(items[1].id), target(items[2].id)]),
+    ]);
+    expect(one('.bg-tray-title')?.textContent).toBe('Tasks');
+    expect(one('.ct-watching')?.textContent?.trim()).toBe('2');
+    expect(one('.ct-count')?.textContent).toBe('2 running · 1/3 done');
+
+    await click(one('.bg-tray-row'));
+    // Watched first, in the server's order; then the rest.
+    expect(all('.ct-row .ct-title').map((t) => t.textContent)).toEqual(['Task 2', 'Task 3', 'Task 1']);
+    expect(all('.ct-row').map((r) => r.querySelector('.ct-eye .anticon-eye') !== null)).toEqual([true, true, false]);
+    // The eye has its own column, empty where nothing waits, so the titles start under each other.
+    expect(all('.ct-row .ct-eye')).toHaveLength(3);
+  });
+
+  it('adds a watched task created elsewhere as a row of its own, saying so where its age would be', async () => {
+    const elsewhere = encodeId('00000000-0000-7000-8000-0000000000ee');
+    await mount(created({ total: 1, done: 1, items: [row(1, { status: 'DONE' })] }), [
+      waits('W', [
+        target(elsewhere, {
+          targetTitle: 'Somebody else’s task',
+          targetStatus: { status: 'IN_PROGRESS', running: true, queued: false },
+        }),
+      ]),
+    ]);
+    expect(one('.ct-count')?.textContent).toBe('1 running · 1/2 done');
+    await click(one('.bg-tray-row'));
+    const rows = all('.ct-row');
+    expect(rows.map((r) => r.querySelector('.ct-title')?.textContent)).toEqual(['Somebody else’s task', 'Task 1']);
+    expect(rows[0].querySelector('.ct-age')?.textContent).toBe('elsewhere');
+    expect(rows[0].querySelector('.status-pill')?.textContent).toBe('Running');
+    expect(rows[0].getAttribute('href')).toBe(`/tasks/${elsewhere}`);
+  });
+
+  it('is drawn for a session that only waits on tasks, without the links to what it created', async () => {
+    await mount(created(), [waits('W', [target(encodeId('00000000-0000-7000-8000-0000000000e1'), { targetTitle: 'One' })])]);
+    // One task: named, with its eye, as a lone created task is named.
+    expect(one('.ct-one')?.textContent).toBe('One');
+    expect(one('.bg-tray-row .ct-eye-ico')).not.toBeNull();
+    await click(one('.bg-tray-row'));
+    expect(one('.ct-foot')).toBeNull();
+  });
+
+  it('turns the eye orange and says so while the watch goes unchecked', async () => {
+    const items = [row(1, { running: true }), row(2)];
+    await mount(created({ total: 2, running: 1, items }), [
+      waits('W', [target(items[0].id)], { lastEvaluatedAt: new Date(Date.now() - 12 * MINUTE).toISOString() }),
+    ]);
+    expect(one('.ct-watching')?.classList.contains('is-stale')).toBe(true);
+    await click(one('.bg-tray-row'));
+    expect(one('.watch-say-stale')?.textContent).toBe('Not checked for 12m — the resume may be late.');
+    expect(one('.ct-row .ct-eye-ico')?.classList.contains('is-stale')).toBe(true);
+  });
+
+  it('leaves out a watch that only notifies the person', async () => {
+    const items = [row(1), row(2)];
+    await mount(created({ total: 2, items }), [
+      waits('N', [target(items[0].id)], { action: 'NOTIFY_USER' }),
+    ]);
+    expect(one('.ct-watching')).toBeNull();
   });
 });
 

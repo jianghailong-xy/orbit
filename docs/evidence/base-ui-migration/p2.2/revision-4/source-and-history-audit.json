@@ -1,0 +1,20 @@
+{
+  "parent": "489941cf0942f71edad00ecbc14d5a53aeb5da0b",
+  "testedCommit": "2bd040fe3bc642cdb53460539146e25eb4e8aad2",
+  "testedWebTree": "a4758a381226a78b7a4d494a07e7fcf44f12e662",
+  "changedWebFiles": [
+    "src/web/ui-migration/choices-lifecycle.browser.mjs",
+    "src/web/ui-migration/choices-scroll-observation.mjs"
+  ],
+  "runtimeFilesUnchanged": 609,
+  "historicalEvidenceFilesUnchanged": 12586,
+  "packageLockBuildTypesVitePlaywrightConfigsUnchanged": true,
+  "baseUiScrollLockSha256": "8f0150cbc228d9a3733f455bb24817a521f58ddc477bbaaee6232bc7621bcd0c",
+  "testHelperMatchesSuccessfulUnmodifiedRuntimeProbe": true,
+  "reuse": [
+    "r3-build-and-test: 295 files / 3661 tests",
+    "r3-fixture-types: four checks",
+    "r3 toasts-entry 24/24 and production-entry 8/8",
+    "r2 visual/interaction evidence, with original limitations"
+  ]
+}

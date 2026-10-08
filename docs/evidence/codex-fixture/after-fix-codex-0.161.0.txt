@@ -1,0 +1,6 @@
+=== RUN   TestRealCodexOnAChatGPTLogin
+=== PAUSE TestRealCodexOnAChatGPTLogin
+=== CONT  TestRealCodexOnAChatGPTLogin
+--- PASS: TestRealCodexOnAChatGPTLogin (11.74s)
+PASS
+ok  	orbit	11.743s

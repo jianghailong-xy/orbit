@@ -1,0 +1,42 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T07:52:15.804Z",
+    "duration": 4022.969,
+    "expected": 2,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--original-confirmation-closes-by-unmounting-without-an-exit-animation",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--original-confirmation-closes-by-unmounting-without-an-exit-animation--original-confirmation-open.json",
+          "sha256": "0b9a6e8c21d71cec124f05f7f8dce868df0ab66079da5e2e5e64732185963947"
+        },
+        {
+          "file": "chromium-light-desktop--original-confirmation-closes-by-unmounting-without-an-exit-animation--original-confirmation-close.json",
+          "sha256": "6dbd85f3103d7bbc9ba6b66618c2c9960e66140e5bf84fe107346d7b1bb37505"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--original-confirmation-closes-by-unmounting-without-an-exit-animation",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--original-confirmation-closes-by-unmounting-without-an-exit-animation--original-confirmation-open.json",
+          "sha256": "0b9a6e8c21d71cec124f05f7f8dce868df0ab66079da5e2e5e64732185963947"
+        },
+        {
+          "file": "webkit-light-phone--original-confirmation-closes-by-unmounting-without-an-exit-animation--original-confirmation-close.json",
+          "sha256": "6dbd85f3103d7bbc9ba6b66618c2c9960e66140e5bf84fe107346d7b1bb37505"
+        }
+      ]
+    }
+  ]
+}

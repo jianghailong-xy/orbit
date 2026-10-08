@@ -18,13 +18,13 @@ import { pendingCriteriaDecisionsQuery } from '../lib/queries';
 import { ACCEPTANCE_PLAN_CHANGE_PREFIX } from './AcceptanceConfirmationCard';
 import { ENTER_HINT } from './CardHotkey';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
-import { SETTLEMENT_DELEGATE_ACTION } from './ProjectSettlementCard';
 import type { ProjectOpenItemRow } from '@orbit/shared';
 import {
   CRITERIA_CHANGE_TITLE,
   READY_TO_START,
   START_CHAT_PLACEHOLDER,
   START_PROJECT_ACTION,
+  START_PROJECT_TITLE,
   criteriaChangeConfirmLabel,
 } from '../lib/projectStart';
 
@@ -200,10 +200,6 @@ class FakeEventSource {
 /** Every path the page asked the api for, in order. */
 const requested: string[] = [];
 const unstubbed: string[] = [];
-/** Whether the coordinating conversation's project document carries a projection that is STILL
- *  withholding — the fourth read the settlement card turns on, and the state its second press is
- *  drawn in. Off by default: the card is not what most cases here are about. */
-let settlementHeld = false;
 /** The standing the confirmation door serves: `UNCONFIRMED` for most cases, and a case that is
  *  about the RECORD sets one with a confirmation on it. Reset per case like every other stub. */
 let confirmationStanding: StandardSetConfirmationStanding = STANDING;
@@ -215,18 +211,37 @@ let startRow: ProjectOpenItemRow | null = START_ROW;
 let proposalsHeld = true;
 /** Every start the page pressed, as its body. */
 const starts: Array<Record<string, unknown>> = [];
+/** Every write the page sent, as `METHOD path` — the doors a stray key press must never reach. */
+const writes: string[] = [];
 let confirmationReads = 0;
 let criteriaReads = 0;
 let navigateTo: NavigateFunction | null = null;
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
 let client: QueryClient | null = null;
+let narrow = false;
 
 const mounted = (): HTMLDivElement => {
   if (!container) throw new Error('WorkspaceView is not mounted');
   return container;
 };
 const count = (selector: string): number => mounted().querySelectorAll(selector).length;
+const settlementPreview = () => mounted().querySelector<HTMLButtonElement>('#settlement-preview .review-card-preview');
+const reviewDialog = () => document.querySelector<HTMLElement>('.review-card-dialog[data-open]');
+const reviewForm = () => reviewDialog() ?? mounted().querySelector<HTMLElement>('#settlement-preview');
+
+async function openSettlementReview(): Promise<void> {
+  if (!narrow) {
+    expect(settlementPreview()).toBeNull();
+    expect(reviewForm()?.querySelector('.settlement-card')).not.toBeNull();
+    return;
+  }
+  await act(async () => settlementPreview()!.click());
+  await waitForUi(() => {
+    expect(settlementPreview()?.getAttribute('aria-expanded')).toBe('true');
+    expect(reviewDialog()).not.toBeNull();
+  });
+}
 
 const waitForUi = async (assertion: () => void): Promise<void> => {
   // The act environment is off while the window is waited out, as RTL's own asyncWrapper does it:
@@ -251,16 +266,17 @@ const waitForUi = async (assertion: () => void): Promise<void> => {
 };
 
 beforeEach(() => {
+  narrow = false;
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   FakeEventSource.open = [];
   requested.length = 0;
-  settlementHeld = false;
   unstubbed.length = 0;
   confirmationStanding = STANDING;
   projectStartedAt = null;
   startRow = START_ROW;
   proposalsHeld = true;
   starts.length = 0;
+  writes.length = 0;
   confirmationReads = 0;
   criteriaReads = 0;
   navigateTo = null;
@@ -296,6 +312,9 @@ beforeEach(() => {
   apiMock.mockImplementation(((path: string, init?: { method?: string; body?: Record<string, unknown> }) => {
     const reply = (value: unknown) => Promise.resolve(value) as Promise<never>;
     requested.push(path);
+    if (init?.method && ['POST', 'PATCH', 'PUT', 'DELETE'].includes(init.method)) {
+      writes.push(`${init.method} ${path}`);
+    }
     // The start door: it confirms the set, starts the project and answers the request, and the
     // reads say so from then on — which is what the conversation draws the record from.
     if (init?.method === 'POST' && path === `/projects/${PROJECT_PUBLIC}/start`) {
@@ -360,28 +379,6 @@ beforeEach(() => {
         startedAt: projectStartedAt,
         _count: { tasks: 1 },
         acceptanceCriteriaItems: CRITERIA,
-        // A project LOOKING finished while the derivation still withholds: every criterion met,
-        // none with a merge receipt, and a set the owner has stood behind. Drawn only for the case
-        // that is about that card — the projection is the fourth read it turns on.
-        ...(settlementHeld
-          ? {
-              derivedDone: {
-                status: 'OPEN',
-                done: false,
-                withheld: ['CRITERION_UNLANDED'],
-                criteria: [{
-                  definitionId: 'c1',
-                  satisfied: true,
-                  landing: 'UNKNOWN',
-                  independence: 'INDEPENDENT',
-                  conflicts: [],
-                  remedy: null,
-                  withheld: ['CRITERION_UNLANDED'],
-                }],
-                confirmation: 'CONFIRMED',
-              },
-            }
-          : {}),
       });
     }
     // The open items the coordinator question card reads (§5.2): no question is open in any of these
@@ -389,7 +386,7 @@ beforeEach(() => {
     if (path === `/projects/${PROJECT_PUBLIC}/open-items`) {
       return reply({ needsYou: [], withCoordinator: [], startRequest: startRow });
     }
-    // The plan the start card sums up in a line: two tasks, the second after the first.
+    // The plan the start card lists by level: two tasks, the second after the first.
     if (path === `/projects/${PROJECT_PUBLIC}/dependency-graph`) {
       return reply({
         marks: [
@@ -445,7 +442,7 @@ beforeEach(() => {
     return reply([]);
   }) as unknown as typeof api);
   vi.stubGlobal('matchMedia', (query: string) => ({
-    matches: false, media: query, onchange: null,
+    matches: narrow && query === '(max-width: 960px)', media: query, onchange: null,
     addListener: () => {}, removeListener: () => {},
     addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false,
   }));
@@ -544,8 +541,9 @@ describe('the start card in WorkspaceView', { timeout: 60_000 }, () => {
   it('is drawn once in a coordinator conversation, beside the criteria card, through every re-read', async () => {
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
-      expect(count('.settlement-card.start-card')).toBeGreaterThan(0);
-      expect(count('.criteria-decision')).toBeGreaterThan(0);
+      expect(count('#settlement-preview')).toBeGreaterThan(0);
+      expect(reviewForm()?.querySelector('.settlement-card-heading')?.textContent).toBe(START_PROJECT_TITLE);
+      expect(count('.review-card[id^="criteria-decision-"]')).toBeGreaterThan(0);
     });
     expect([...new Set(unstubbed)], 'every endpoint the page reads is stubbed').toEqual([]);
 
@@ -555,7 +553,7 @@ describe('the start card in WorkspaceView', { timeout: 60_000 }, () => {
       await reread(pendingCriteriaDecisionsQuery(PROJECT_PUBLIC).queryKey, () => criteriaReads);
     }
     expect(
-      { settlement: count('.settlement-card'), criteria: count('.criteria-decision') },
+      { settlement: count('#settlement-preview'), criteria: count('.review-card[id^="criteria-decision-"]') },
       'a card in the pane is drawn more than once',
     ).toEqual({ settlement: 1, criteria: 1 });
   });
@@ -567,7 +565,7 @@ describe('the start card in WorkspaceView', { timeout: 60_000 }, () => {
     });
     for (const round of [1, 2]) await note(ORDINARY_PUBLIC, round);
 
-    expect(count('.settlement-card'), 'a conversation with no project was drawn the card').toBe(0);
+    expect(count('#settlement-preview'), 'a conversation with no project was drawn the card').toBe(0);
     expect(
       requested.filter((path) => path.startsWith('/projects/')),
       'a conversation with no project read one',
@@ -578,7 +576,7 @@ describe('the start card in WorkspaceView', { timeout: 60_000 }, () => {
       navigateTo!(`/sessions/${COORDINATOR_PUBLIC}`);
     });
     await waitForUi(() => {
-      expect(count('.settlement-card')).toBe(1);
+      expect(count('#settlement-preview')).toBe(1);
     });
   });
 
@@ -586,15 +584,16 @@ describe('the start card in WorkspaceView', { timeout: 60_000 }, () => {
     startRow = null;
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
-      expect(count('.criteria-decision')).toBeGreaterThan(0);
+      expect(count('.review-card[id^="criteria-decision-"]')).toBeGreaterThan(0);
     });
     await reread(['project', PROJECT_PUBLIC, 'open-items'], () => requested.filter((path) => path.endsWith('/open-items')).length);
-    expect(count('.settlement-card'), 'a card was inferred from the project holding a task').toBe(0);
+    expect(count('#settlement-preview'), 'a card was inferred from the project holding a task').toBe(0);
 
     startRow = START_ROW;
     await reread(['project', PROJECT_PUBLIC, 'open-items'], () => requested.filter((path) => path.endsWith('/open-items')).length);
     await waitForUi(() => {
-      expect(count('.settlement-card.start-card')).toBe(1);
+      expect(count('#settlement-preview')).toBe(1);
+      expect(reviewForm()?.querySelector('.settlement-card-heading')?.textContent).toBe(START_PROJECT_TITLE);
     });
   });
 
@@ -604,20 +603,24 @@ describe('the start card in WorkspaceView', { timeout: 60_000 }, () => {
     proposalsHeld = false;
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
-      expect(count('.settlement-card.start-card')).toBe(1);
+      expect(count('#settlement-preview')).toBe(1);
       expect(mounted().querySelector('.decision-strip-title')?.textContent).toBe(READY_TO_START);
     });
   });
 
-  it('starts the project with the settings on the card, and leaves the record — with them — where it happened', async () => {
+  it.each([false, true])('starts the project with the settings on the card and leaves its record (narrow: %s)', async (onNarrowScreen) => {
+    narrow = onNarrowScreen;
     proposalsHeld = false;
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
-      expect(count('.settlement-card.start-card')).toBe(1);
+      expect(count('#settlement-preview')).toBe(1);
     });
-    const card = (): HTMLElement => mounted().querySelector<HTMLElement>('.start-card')!;
-    // The plan in one line, off the dependency graph.
-    expect(card().querySelector('.start-card-plan')?.textContent).toContain('A starts now · B after A');
+    await openSettlementReview();
+    const card = (): HTMLElement => reviewForm()!.querySelector<HTMLElement>('.start-card')!;
+    expect(reviewForm()!.querySelectorAll('.settlement-card.start-card')).toHaveLength(1);
+    // The plan by level, off the dependency graph: A starts with the project, B after it.
+    expect([...card().querySelectorAll('.start-card-level')].map((level) => level.textContent))
+      .toEqual(['1Athe sealNow', '2Bthe card']);
     // One setting changed on the card before the press: at most 5 tasks, not the suggested 3.
     const count5 = card().querySelector<HTMLInputElement>('.start-card-count input')!;
     await act(async () => {
@@ -628,6 +631,16 @@ describe('the start card in WorkspaceView', { timeout: 60_000 }, () => {
     await waitForUi(() => {
       expect(card().querySelector<HTMLInputElement>('.start-card-count input')?.value).toBe('5');
     });
+    if (narrow) {
+      // Closing the narrow review preserves the edited settings for the eventual start.
+      await act(async () => reviewDialog()!.querySelector<HTMLButtonElement>('[aria-label="Close"]')!.click());
+      await waitForUi(() => {
+        expect(reviewDialog()).toBeNull();
+        expect(document.activeElement).toBe(settlementPreview());
+      });
+      await openSettlementReview();
+    }
+    expect(card().querySelector<HTMLInputElement>('.start-card-count input')?.value).toBe('5');
     const start = [...card().querySelectorAll<HTMLButtonElement>('.settlement-card-actions button')]
       .find((button) => labelOf(button) === START_PROJECT_ACTION)!;
     await act(async () => {
@@ -647,7 +660,7 @@ describe('the start card in WorkspaceView', { timeout: 60_000 }, () => {
     // The question is answered: the card goes, and the record of the start is drawn in the
     // conversation — "You started", and what it was started with.
     await waitForUi(() => {
-      expect(count('.settlement-card')).toBe(0);
+      expect(count('#settlement-preview')).toBe(0);
       expect(count('.settlement-receipt')).toBe(1);
     });
     const receipt = mounted().querySelector<HTMLElement>('.settlement-receipt')!;
@@ -692,18 +705,20 @@ describe('the change card in WorkspaceView', { timeout: 60_000 }, () => {
     };
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
-      expect(count('.criteria-change-card')).toBe(1);
+      expect(count('#settlement-preview')).toBe(1);
       expect(mounted().querySelector('.decision-strip-title')?.textContent).toBe(CRITERIA_CHANGE_TITLE);
     });
-    expect(count('.settlement-card'), 'the moved set was asked about by two cards').toBe(1);
+    expect(count('#settlement-preview'), 'the moved set was asked about by two cards').toBe(1);
 
-    const confirm = [...mounted().querySelectorAll<HTMLButtonElement>('.criteria-change-card .settlement-card-actions button')]
+    await openSettlementReview();
+    expect(reviewForm()!.querySelectorAll('.settlement-card.criteria-change-card')).toHaveLength(1);
+    const confirm = [...reviewForm()!.querySelectorAll<HTMLButtonElement>('.criteria-change-card .settlement-card-actions button')]
       .find((button) => labelOf(button) === criteriaChangeConfirmLabel(2))!;
     await act(async () => {
       confirm.click();
     });
     await waitForUi(() => {
-      expect(count('.settlement-card')).toBe(0);
+      expect(count('#settlement-preview')).toBe(0);
       expect(mounted().querySelector('.settlement-receipt .settlement-receipt-line')?.textContent)
         .toBe('You confirmed 2 criteria at seal 4fc57753a6ec — 1 new');
     });
@@ -765,7 +780,7 @@ describe('the record a confirmation leaves, in the conversation it was made in',
       expect(count('.settlement-receipt')).toBe(1);
     });
     // A signed set is not a question, so no card is drawn beside the record.
-    expect(count('.settlement-card')).toBe(0);
+    expect(count('#settlement-preview')).toBe(0);
 
     await note(COORDINATOR_PUBLIC, 2);
     const receipt = mounted().querySelector<HTMLElement>('.settlement-receipt')!;
@@ -851,9 +866,10 @@ describe('Chat about this on the start card', { timeout: 60_000 }, () => {
   it('arms the composer with this plan, keeps the card up with Start the project live, and reaches no door', async () => {
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
-      expect(count('.settlement-card')).toBe(1);
+      expect(count('#settlement-preview')).toBe(1);
     });
-    const card = (): HTMLElement => mounted().querySelector<HTMLElement>('.settlement-card')!;
+    await openSettlementReview();
+    const card = (): HTMLElement => reviewForm()!.querySelector<HTMLElement>('.settlement-card')!;
     const actions = (): HTMLButtonElement[] => [
       ...card().querySelectorAll<HTMLButtonElement>('.settlement-card-actions button'),
     ];
@@ -877,8 +893,14 @@ describe('Chat about this on the start card', { timeout: 60_000 }, () => {
       'the armed composer does not ask what should change before it starts',
     ).toContain(START_CHAT_PLACEHOLDER);
 
-    // The card is still there and its own way out is still live.
-    expect(count('.settlement-card'), 'the card went away when it handed the reply over').toBe(1);
+    // Handoff keeps the full card and its own way out live beside the composer.
+    expect(reviewDialog(), 'the handoff left the review over the composer').toBeNull();
+    expect(count('#settlement-preview'), 'the card went away when it handed the reply over').toBe(1);
+    expect(settlementPreview()).toBeNull();
+    await waitForUi(() => {
+      expect(document.activeElement).toBe(mounted().querySelector('.composer-box textarea'));
+    });
+    await openSettlementReview();
     expect(actions()[0]!.disabled, 'Start the project went dead with the handoff').toBe(false);
     // No text box grew inside the card — the sentence is typed in the one composer at the bottom —
     // and nothing was written anywhere.
@@ -895,14 +917,16 @@ describe('Chat about this on the start card', { timeout: 60_000 }, () => {
    * microtask it runs between the page's listener and the window's; jsdom runs none there, so the
    * document listener below commits it at that same point.
    */
-  it('sends what was typed on Enter without starting the project, and Enter on the emptied box starts it', async () => {
-    // The start card alone is asking, so it holds Enter — as it did on the owner's screen.
+  it.each([false, true])('sends what was typed on Enter without starting the project (narrow: %s)', async (onNarrowScreen) => {
+    narrow = onNarrowScreen;
+    // The start card alone is asking, so it holds Enter while its full form is visible.
     proposalsHeld = false;
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
-      expect(count('.settlement-card')).toBe(1);
+      expect(count('#settlement-preview')).toBe(1);
     });
-    const card = (): HTMLElement => mounted().querySelector<HTMLElement>('.settlement-card')!;
+    await openSettlementReview();
+    const card = (): HTMLElement => reviewForm()!.querySelector<HTMLElement>('.settlement-card')!;
     const actions = (): HTMLButtonElement[] => [
       ...card().querySelectorAll<HTMLButtonElement>('.settlement-card-actions button'),
     ];
@@ -940,58 +964,109 @@ describe('Chat about this on the start card', { timeout: 60_000 }, () => {
     });
     expect(sendTurnMock.mock.calls[0]![1]).toContain('move it to orbit-develop first?');
     expect(starts, 'the Enter that sent the message also pressed Start the project').toEqual([]);
-    expect(count('.settlement-card'), 'the card went away').toBe(1);
+    expect(count('#settlement-preview'), 'the card went away').toBe(1);
 
-    // With nothing left to send, Enter is the card's again.
+    expect(reviewDialog()).toBeNull();
     expect(box.value).toBe('');
+    if (narrow) {
+      // The closed narrow review cannot claim an empty composer's Enter.
+      await act(async () => {
+        box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      });
+      expect(starts, 'Enter on the empty composer reached a closed review').toEqual([]);
+      expect(sendTurnMock).toHaveBeenCalledTimes(1);
+      await openSettlementReview();
+    } else {
+      expect(settlementPreview()).toBeNull();
+      box.blur();
+    }
+    await waitForUi(() => {
+      expect(actions()[0]!.querySelector('.approval-kbd')?.textContent).toBe(ENTER_HINT);
+      if (narrow) expect(reviewDialog()!.contains(document.activeElement)).toBe(true);
+    });
     await act(async () => {
-      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     });
     await waitForUi(() => {
-      expect(starts, 'Enter on the empty composer no longer reaches the card').toHaveLength(1);
+      expect(starts, 'Enter no longer reaches the visible card').toHaveLength(1);
     });
     expect(sendTurnMock).toHaveBeenCalledTimes(1);
   });
 });
 
 /**
- * The OTHER settlement card's second press — the project's, not the criteria set's. It is the one
- * press on that card that is not a decision: the agent that owns the project is this conversation,
- * so the hand-over is a turn in it, and whether that turn is actually sent (rather than arming a
- * composer and waiting for a sentence) is a fact about the page the two live on.
+ * A focused row in the conversation that answers Enter itself — the failed-tool row's head, drawn
+ * `role="button"` — must not also answer the card whose Enter the page is holding. The card here is
+ * the start card, whose "Start the project" press holds the bare key on a wide screen. One press
+ * doing both would start the project while the reader only meant to open the failure's log.
  */
-describe('Ask the coordinator to handle it, on the project settlement card', { timeout: 60_000 }, () => {
-  it('sends the card’s own facts as a turn, and leaves the card where it stands', async () => {
-    settlementHeld = true;
+describe('a focused row that answers Enter itself, while the start card holds the bare key', { timeout: 60_000 }, () => {
+  it('expands the row and does not start the project', async () => {
+    proposalsHeld = false;
+    // The failed tool's row arrives in the loaded window, beside the opening note.
+    vi.mocked(getSessionEventPage).mockImplementation(async () => ({
+      events: [
+        { seq: 1, type: 'assistant', payload: { text: `${NOTE[COORDINATOR_PUBLIC]}, opening` }, turnId: 'turn-1', ts: '2026-09-11T03:10:00Z' },
+        { seq: 2, type: 'system', payload: { stderr: 'error=failed to parse function arguments: unknown field question' } },
+      ],
+      hasMore: false,
+    }));
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
-      expect(count('.project-settlement')).toBe(1);
+      expect(count('#settlement-preview')).toBe(1);
     });
-    const card = (): HTMLElement => mounted().querySelector<HTMLElement>('.project-settlement')!;
+    // The card is holding the bare key: its primary press draws the Enter hint.
+    const card = (): HTMLElement => reviewForm()!.querySelector<HTMLElement>('.settlement-card')!;
     const actions = (): HTMLButtonElement[] => [
-      ...card().querySelectorAll<HTMLButtonElement>('.project-settlement-actions button'),
+      ...card().querySelectorAll<HTMLButtonElement>('.settlement-card-actions button'),
     ];
-    // One press and it is not a question: this project's set is confirmed, so the only thing on the
-    // card that can move is the work, and the work is this conversation's.
-    expect(actions().map(labelOf)).toEqual([SETTLEMENT_DELEGATE_ACTION]);
-    expect(sendTurnMock, 'the page sent something before the press').not.toHaveBeenCalled();
-
-    await act(async () => {
-      actions()[0]!.click();
-    });
-
     await waitForUi(() => {
-      expect(sendTurnMock).toHaveBeenCalledTimes(1);
+      expect(actions()[0]!.querySelector('.approval-kbd')?.textContent).toBe(ENTER_HINT);
     });
-    const [session, content] = sendTurnMock.mock.calls[0]!;
-    // To this conversation, which is the one that coordinates the project the card is about.
-    expect(session).toBe(COORDINATOR_PUBLIC);
-    // The facts ARE the message: they name what is withheld and what would clear it, so the agent
-    // reads the card's own account of the project rather than a sentence about it.
-    expect(content).toContain('Orbit has not recorded it done');
-    expect(content).toContain('land the branch, or record the merge with merge_receipt');
-    // The card is not an answer to anything, so it stays where it was.
-    expect(count('.project-settlement'), 'the card went away when it handed the work over').toBe(1);
+
+    // The row's head, whose `role` promises Enter and whose own press expands the log.
+    const head = mounted().querySelector<HTMLElement>('.chat-error-card .chat-error-card-head');
+    expect(head, 'the failed tool drew no expandable row').toBeTruthy();
+    expect(head!.getAttribute('role')).toBe('button');
+    expect(head!.getAttribute('aria-expanded')).toBe('false');
+
+    head!.focus();
+    expect(document.activeElement).toBe(head);
+
+    const writesBefore = writes.length;
+    await act(async () => {
+      head!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    });
+
+    // The row's own action ran: the log is open.
+    expect(head!.getAttribute('aria-expanded'), 'the row did not expand on its own Enter').toBe('true');
+    expect(mounted().querySelector('.chat-error-card-log'), 'the expanded row hid the log').toBeTruthy();
+    // And nothing was written: the Enter that opened the log did not also start the project.
+    expect(starts, 'the Enter that expanded the row also started the project').toEqual([]);
+    expect(writes.slice(writesBefore), 'the Enter that expanded the row wrote to a door').toEqual([]);
+  });
+});
+
+/**
+ * The project settlement card's hand-over press is not drawn in a conversation any more.
+ *
+ * "Ask the coordinator to handle it" was the second press of the card the coordinator conversation
+ * drew while a project looked finished; the owner's ruling of 2026-10-07 04:20Z took that card —
+ * and so both its presses — out of the conversation. What the page draws for a project in that
+ * state is asserted in `ProjectDoneConversation.test.tsx` (and, for the condition itself, in
+ * `ProjectWhyNotDoneGate.test.tsx`); this file's case for it would have nothing to press.
+ */
+describe('the project settlement card is not drawn in a conversation', { timeout: 60_000 }, () => {
+  it('draws no settlement card for a project that looks finished, and sends nothing', async () => {
+    projectStartedAt = '2026-09-11T03:00:00.000Z';
+    await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    await waitForUi(() => {
+      expect(count('.project-settlement')).toBe(0);
+    });
+    expect(count('.project-why-not-done')).toBe(0);
+    expect(mounted().textContent, 'the old question is not on the page at all')
+      .not.toContain('Why is this project not done?');
+    expect(sendTurnMock, 'the page sent something on its own').not.toHaveBeenCalled();
   });
 });
 

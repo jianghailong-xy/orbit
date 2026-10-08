@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { PUBLIC_ID_FIELDS } from './codec';
 import { WIKI_IMPORT_RULES } from './wiki';
 import {
   KIND_SPECS,
@@ -43,6 +44,8 @@ import {
   WIKI_SEARCH_MATCHES,
   WIKI_SLUG_PATTERN,
   WIKI_SOURCE_KINDS,
+  WIKI_SOURCE_REFS,
+  WIKI_SOURCE_ROW_ID_KINDS,
   WIKI_SOURCE_STATES,
   WIKI_TRUST_LEVELS,
   WIKI_UNSET_REVIEW_MODE,
@@ -100,6 +103,7 @@ import {
   WIKI_DOC_CHECKERS,
   WIKI_DOC_DISPOSITION_ACTIONS,
   WIKI_DOC_FOOTNOTE_KINDS,
+  WIKI_DOC_LEAD_RULES,
   WIKI_DOC_MATERIAL_RULES,
   WIKI_DOC_MATERIAL_WEIGHTS,
   WIKI_DOC_RECORD_KINDS,
@@ -112,6 +116,30 @@ import {
   WIKI_DOC_WITHDRAW_REASONS,
   WIKI_DOCS_AFFECTED_RULES,
 } from './wikiDocs';
+import {
+  WIKI_SYSTEM_MODEL,
+  WIKI_SYSTEM_MODEL_ENV,
+  WIKI_SYSTEM_MODEL_ERROR_KINDS,
+  WIKI_SYSTEM_MODEL_READ_STATES,
+  WIKI_SYSTEM_MODEL_STATES,
+  wikiWorkerRunning,
+  type WikiSystemModelStatus,
+} from './wikiSystemModel';
+import {
+  WIKI_EXECUTOR_ENV,
+  WIKI_EXECUTOR_MODES,
+  WIKI_JOB,
+  WIKI_JOB_FAILURE_KINDS,
+  WIKI_JOB_KINDS,
+  WIKI_JOB_STATES,
+  WIKI_JOB_WAITING_FOR,
+  WIKI_MODEL_QUEUE,
+  WIKI_MODEL_REQUEST_STATES,
+  wikiJobRetryDelaySeconds,
+  wikiModelCallBudgetSeconds,
+  wikiModelRetryDelaySeconds,
+  wikiModelWaitLimitSeconds,
+} from './wikiJobs';
 import {
   WIKI_PLAN_FACT_KINDS,
   WIKI_PLAN_GATE_CHECKS,
@@ -203,6 +231,18 @@ describe('wiki contract', () => {
     expect(CONTRACT.effectPolicy.decide.actions).toEqual([...WIKI_DECIDE_ACTIONS]);
     expect(CONTRACT.refusals.map((r: { code: string }) => r.code)).toEqual([...WIKI_REFUSAL_CODES]);
     expect(CONTRACT.space.slug.pattern).toBe(WIKI_SLUG_PATTERN);
+  });
+
+  it('says what the spaces list adds to a row, and holds its plan count to the vectors the clients count by', () => {
+    const list = CONTRACT.space.list;
+    expect(CONTRACT.agentSurface.doors.user.routes).toContain(list.route);
+    for (const field of ['pendingOps', 'planWaiting', 'workspaceIds', 'docs']) expect(list.row).toContain(field);
+    expect(list.planWaiting).toMatch(/web wikiPlanPending and OrbitKit WikiPlanLogic\.pending/u);
+    expect(list.planWaiting).toMatch(/src\/shared\/src\/wiki-docs\.fixture\.json plan\.states/u);
+    expect(existsSync(path.join(ROOT, 'src/shared/src/wiki-docs.fixture.json'))).toBe(true);
+    // Public ids on the user door: the codec rewrites the field only because it is on its list.
+    expect(list.workspaceIds).toMatch(/public ids/u);
+    expect(PUBLIC_ID_FIELDS.has('workspaceIds')).toBe(true);
   });
 
   it('ships the limits the contract sets, and the design set the ones it names', () => {
@@ -1229,6 +1269,9 @@ describe('wiki contract', () => {
     expect(docs.withdrawReasons).toEqual([...WIKI_DOC_WITHDRAW_REASONS]);
     expect(keysOf(docs.blockKinds)).toEqual([...WIKI_DOC_BLOCK_KINDS]);
     expect(docs.rules).toEqual(WIKI_DOC_RULES);
+    // A written document's two lines on the home, which the directory carries.
+    expect(docs.lead.rules).toEqual(WIKI_DOC_LEAD_RULES);
+    expect(docs.reads.directory).toMatch(/\blead\b/u);
     expect(docs.schema).toEqual(Object.fromEntries(Object.entries(WIKI_DOC_SCHEMA).map(([level, keys]) => [level, [...keys]])));
     // What became of each piece of a section's material is written with it, and kept (migration 0337).
     expect(keysOf(docs.dispositionActions)).toEqual([...WIKI_DOC_DISPOSITION_ACTIONS]);
@@ -1386,6 +1429,38 @@ describe('wiki contract', () => {
     expect(CONTRACT.realtime.correctness).toMatch(/Nothing depends on it/u);
   });
 
+  it("says what each source kind takes as its ref, and refuses a row's ref that is no id by its path", () => {
+    // One phrase per kind, the words a refusal of a ref that names nothing says too (sourceInput.refs).
+    expect(keysOf(CONTRACT.sourceInput.refs)).toEqual([...WIKI_SOURCE_KINDS]);
+    expect(CONTRACT.sourceInput.refs).toEqual(WIKI_SOURCE_REFS);
+    // The kinds whose ref can only be a row's id: a tool_call takes a tool_use_id too, and a commit is a sha.
+    expect(CONTRACT.sourceInput.rowIdKinds).toEqual([...WIKI_SOURCE_ROW_ID_KINDS]);
+    for (const kind of WIKI_SOURCE_ROW_ID_KINDS) expect(WIKI_SOURCE_KINDS).toContain(kind);
+    expect(WIKI_SOURCE_ROW_ID_KINDS).not.toContain('tool_call');
+    expect(WIKI_SOURCE_ROW_ID_KINDS).not.toContain('commit');
+    expect(WIKI_SOURCE_REFS.tool_call).toMatch(/tool_use_id/u);
+    expect(CONTRACT.sourceInput.toolUseId).toMatch(/that two sessions carry, is unresolved/u);
+
+    // A tool_use_id where a task's id goes is refused by its path, saying what goes there instead. As a
+    // tool_call's ref it is a tool_use_id, which only the lookup can judge.
+    const toolUseId = 'toolu_0195URa2d9G6F4AKQoGfVprN';
+    const errors = validateWikiSources([{ kind: 'tool_call', ref: toolUseId }, { kind: 'task', ref: toolUseId }], 'ops[0].sources');
+    expect(errors.map((e) => e.path)).toEqual(['ops[0].sources[1].ref']);
+    expect(errors[0]!.message).toContain(WIKI_SOURCE_REFS.task);
+    expect(errors[0]!.message).toMatch(/the UUID, or the short public id/u);
+    // Both spellings of an id are one id.
+    expect(validateWikiSources([
+      { kind: 'task', ref: '0199aaaa-0000-7000-8000-000000000000' },
+      { kind: 'task', ref: '34UuAT0pwUgBln9yRlAZF' },
+    ])).toEqual([]);
+
+    // A dry run is answered with the status the request itself would be.
+    expect(CONTRACT.refusalRules.dryRun).toMatch(/under the status the request would be answered with/u);
+    const status = (code: string) => CONTRACT.refusals.find((r: { code: string }) => r.code === code)?.httpStatus;
+    expect(status('WIKI_SCHEMA')).toBe(400);
+    expect(status('WIKI_SOURCE_UNRESOLVED')).toBe(422);
+  });
+
   it('carries uniquely named vectors with reasons, a valid and an invalid one for every kind', () => {
     const vectors: Array<{ id: string; why: string; draft?: { kind: string }; sources?: unknown[]; expect: { errors: string[] } }> =
       CONTRACT.vectors;
@@ -1441,5 +1516,147 @@ describe('wiki contract', () => {
     expect(imports.cli.tool).toMatch(/^none/u);
     expect(imports.cli.precondition).toMatch(/never write an entry yourself/u);
     expect(CONTRACT.agentSurface.tools).not.toContain('wiki_import');
+  });
+
+  it('calls the System model from the wiki-worker alone, and reads back its name and state only (server execution P1a)', () => {
+    const model = CONTRACT.systemModel;
+    for (const file of [model.service.entry, model.status.migration]) {
+      expect(existsSync(path.join(ROOT, file)), `${file} does not exist`).toBe(true);
+    }
+    // The worker's four variables, and none of them a name an agent session's environment carries.
+    expect(model.env).toEqual({ ...WIKI_SYSTEM_MODEL_ENV });
+    for (const name of Object.values(WIKI_SYSTEM_MODEL_ENV)) expect(name).toMatch(/^ORBIT_WIKI_MODEL(_[A-Z]+)*$/u);
+    expect(model.envRules.defaultConcurrency).toBe(WIKI_SYSTEM_MODEL.defaultConcurrency);
+    // A call: the Messages API, streamed, the version pinned, the key as a Bearer, five events read.
+    expect(model.request.route).toBe(`POST {baseUrl}${WIKI_SYSTEM_MODEL.messagesPath}`);
+    expect(model.request.headers).toEqual({
+      authorization: 'Bearer {apiKey}',
+      'anthropic-version': WIKI_SYSTEM_MODEL.anthropicVersion,
+      'content-type': 'application/json',
+    });
+    expect(model.request.body).toMatch(/stream: true/u);
+    expect(model.request.body).toMatch(/no tools/u);
+    expect(model.request.events).toEqual(['message_start', 'content_block_delta', 'message_delta', 'message_stop', 'error']);
+    expect(model.request.idleTimeoutSeconds).toBe(WIKI_SYSTEM_MODEL.idleTimeoutSeconds);
+    expect(keysOf(model.request.errors)).toEqual([...WIKI_SYSTEM_MODEL_ERROR_KINDS]);
+    // The probe.
+    expect(model.health.route).toBe(`GET {baseUrl}${WIKI_SYSTEM_MODEL.healthPath}`);
+    expect(model.health.upStatuses).toEqual([...WIKI_SYSTEM_MODEL.healthUpStatuses]);
+    expect(model.health.authFailedStatuses).toEqual([401]);
+    expect(model.health.intervalSeconds).toBe(WIKI_SYSTEM_MODEL.probeIntervalSeconds);
+    expect(model.health.timeoutSeconds).toBe(WIKI_SYSTEM_MODEL.probeTimeoutSeconds);
+    // The one row, and the migration that makes it: every column, and the states as a CHECK.
+    expect(model.status.states).toEqual([...WIKI_SYSTEM_MODEL_STATES]);
+    expect(keysOf(model.status.meaning)).toEqual([...WIKI_SYSTEM_MODEL_STATES]);
+    expect(model.status.workerStaleSeconds).toBe(WIKI_SYSTEM_MODEL.workerStaleSeconds);
+    const sql = readFileSync(path.join(ROOT, model.status.migration), 'utf8');
+    expect(sql).toMatch(new RegExp(`CREATE TABLE IF NOT EXISTS "${model.status.table}"`, 'u'));
+    for (const column of model.status.columns) expect(sql).toContain(`"${column}"`);
+    expect(sql).toContain(`CHECK ("state" IN (${WIKI_SYSTEM_MODEL_STATES.map((state) => `'${state}'`).join(', ')}))`);
+    expect(sql).toContain('CHECK ("id" = 1)');
+    // The read: on the user door; the stored states and worker_not_running; its fields, and not the address or the key.
+    expect(CONTRACT.agentSurface.doors.user.routes).toContain(model.read.route);
+    expect(model.read.states).toEqual([...WIKI_SYSTEM_MODEL_READ_STATES]);
+    const status: WikiSystemModelStatus = { state: 'up', model: null, since: null, checkedAt: null, workerSeenAt: null };
+    expect(model.read.fields).toEqual(Object.keys(status));
+    expect(model.read.never).toMatch(/address, its key, and last_error/u);
+    // A heartbeat older than workerStaleSeconds, or none, is a worker that is not running.
+    const now = new Date('2026-10-07T12:00:00.000Z');
+    const ago = (seconds: number) => new Date(now.getTime() - seconds * 1000);
+    expect(wikiWorkerRunning(ago(WIKI_SYSTEM_MODEL.workerStaleSeconds), now)).toBe(true);
+    expect(wikiWorkerRunning(ago(WIKI_SYSTEM_MODEL.workerStaleSeconds + 1).toISOString(), now)).toBe(false);
+    expect(wikiWorkerRunning(null, now)).toBe(false);
+    // The metrics name the same states.
+    expect(keysOf(model.metrics.series)).toEqual([
+      'orbit_wiki_model_state',
+      'orbit_wiki_worker_heartbeat_age_seconds',
+      'orbit_wiki_model_calls_total',
+      'orbit_wiki_model_call_duration_seconds',
+    ]);
+  });
+
+  it('runs wiki jobs on the server: the table, the kinds, the lease, the retry and the switch (server execution P1b)', () => {
+    const jobs = CONTRACT.jobs;
+    expect(existsSync(path.join(ROOT, jobs.migration)), `${jobs.migration} does not exist`).toBe(true);
+    const sql = readFileSync(path.join(ROOT, jobs.migration), 'utf8').replace(/\s+/gu, ' ');
+    expect(sql).toContain(`CREATE TABLE IF NOT EXISTS "${jobs.table}"`);
+    for (const column of jobs.columns) expect(sql).toContain(`"${column}"`);
+    expect(jobs.kinds).toEqual([...WIKI_JOB_KINDS]);
+    expect(jobs.states).toEqual([...WIKI_JOB_STATES]);
+    expect(jobs.waitingFor).toEqual([...WIKI_JOB_WAITING_FOR]);
+    expect(jobs.failureKinds).toEqual([...WIKI_JOB_FAILURE_KINDS]);
+    for (const kind of Object.keys(jobs.kindRuns)) expect(jobs.kinds).toContain(kind);
+    expect(jobs.lease.seconds).toBe(WIKI_JOB.leaseSeconds);
+    expect(jobs.lease.renewSeconds).toBe(WIKI_JOB.renewSeconds);
+    expect(jobs.retry.backoffSeconds).toEqual([...WIKI_JOB.retryBackoffSeconds]);
+    expect(jobs.concurrencyPerWorker).toBe(WIKI_JOB.maxConcurrentPerWorker);
+    expect(jobs.pollSeconds).toBe(WIKI_JOB.pollSeconds);
+    // The one-job-per-space rule is the claim's and the database's: a partial unique index over space_id.
+    expect(sql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS "wiki_job_space_running_key" ON "wiki_job" ("space_id") WHERE "state" = \'running\'');
+    // The maker columns and the CHECKs that require exactly one of the two, per started row.
+    expect(sql).toContain('ALTER TABLE "wiki_maintenance_run" ALTER COLUMN "task_id" DROP NOT NULL');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS "job_id" UUID');
+    expect(sql).toContain('("task_id" IS NOT NULL) <> ("job_id" IS NOT NULL)');
+    expect(jobs.runRows.count).toMatch(/count the maintenance list's tasks made since midnight/u);
+    // The executor switch: the two variables, the three modes, and the default that changes nothing.
+    expect(jobs.executor.env).toEqual({ ...WIKI_EXECUTOR_ENV });
+    for (const name of Object.values(WIKI_EXECUTOR_ENV)) expect(name).toMatch(/^ORBIT_WIKI_EXECUTOR(_[A-Z]+)*$/u);
+    expect(jobs.executor.modes).toEqual([...WIKI_EXECUTOR_MODES]);
+    expect(jobs.executor.default).toBe('runner');
+    expect(keysOf(jobs.executor.rules)).toEqual([...WIKI_EXECUTOR_MODES]);
+    expect(jobs.executor.mistyped).toMatch(/read as runner/u);
+  });
+
+  it('queues every model call: the identity, the claim, the lease, the retry and the limits (server execution P1b)', () => {
+    const queue = CONTRACT.modelQueue;
+    expect(existsSync(path.join(ROOT, queue.migration)), `${queue.migration} does not exist`).toBe(true);
+    const sql = readFileSync(path.join(ROOT, queue.migration), 'utf8').replace(/\s+/gu, ' ');
+    expect(sql).toContain(`CREATE TABLE IF NOT EXISTS "${queue.table}"`);
+    for (const column of queue.columns) expect(sql).toContain(`"${column}"`);
+    expect(queue.identity).toMatch(/\(job_id, step, unit, attempt\) is unique/u);
+    expect(sql).toContain('CONSTRAINT "wiki_model_request_unit_key" UNIQUE ("job_id", "step", "unit", "attempt")');
+    // The claim's order and its lock are the statement's, in the worker; the queue's sets and numbers are here.
+    expect(queue.states).toEqual([...WIKI_MODEL_REQUEST_STATES]);
+    expect(queue.concurrency.env).toBe(WIKI_SYSTEM_MODEL_ENV.concurrency);
+    expect(queue.concurrency.default).toBe(WIKI_SYSTEM_MODEL.defaultConcurrency);
+    expect(queue.concurrency.claim).toMatch(/pg_advisory_xact_lock/u);
+    expect(queue.concurrency.claim).toMatch(/FOR UPDATE SKIP LOCKED/u);
+    expect(queue.concurrency.perJob).toBe(WIKI_MODEL_QUEUE.maxInFlightPerJob);
+    expect(queue.lease.seconds).toBe(WIKI_MODEL_QUEUE.leaseSeconds);
+    expect(queue.lease.renewSeconds).toBe(WIKI_MODEL_QUEUE.renewSeconds);
+    expect(queue.lease.partialSeconds).toBe(WIKI_MODEL_QUEUE.partialSeconds);
+    expect(queue.retry.backoffSeconds).toEqual([...WIKI_MODEL_QUEUE.retryBackoffSeconds]);
+    expect(queue.waitLimit.defaultSeconds).toBe(WIKI_MODEL_QUEUE.defaultWaitLimitSeconds);
+    expect(queue.waitLimit.byStep).toEqual({ ...WIKI_MODEL_QUEUE.waitLimitSeconds });
+    expect(queue.callBudget.defaultSeconds).toBe(WIKI_MODEL_QUEUE.defaultCallBudgetSeconds);
+    expect(queue.callBudget.byStep).toEqual({ ...WIKI_MODEL_QUEUE.callBudgetSeconds });
+    // The limits a step is looked up by, as the worker's own helpers read them.
+    for (const [key, seconds] of Object.entries(WIKI_MODEL_QUEUE.waitLimitSeconds)) {
+      expect(wikiModelWaitLimitSeconds(key)).toBe(seconds);
+      expect(wikiModelWaitLimitSeconds(`${key}_draft`)).toBe(seconds);
+    }
+    expect(wikiModelWaitLimitSeconds('verify')).toBe(WIKI_MODEL_QUEUE.defaultWaitLimitSeconds);
+    for (const [key, seconds] of Object.entries(WIKI_MODEL_QUEUE.callBudgetSeconds)) {
+      expect(wikiModelCallBudgetSeconds(key)).toBe(seconds);
+      expect(wikiModelCallBudgetSeconds(`${key}_draft`)).toBe(seconds);
+    }
+    expect(wikiModelCallBudgetSeconds('verify')).toBe(WIKI_MODEL_QUEUE.defaultCallBudgetSeconds);
+    // The retry schedule, as both the queue and the job read it.
+    expect([0, 1, 2, 9].map((attempts) => wikiModelRetryDelaySeconds(attempts))).toEqual([0, 10, 30, 30]);
+    expect([0, 1, 2, 9].map((attempts) => wikiJobRetryDelaySeconds(attempts))).toEqual([0, 10, 30, 30]);
+    // The pause, the shutdown and the wake-up are stated, and the metrics name the queue's series.
+    expect(queue.pause.when).toMatch(/not up/u);
+    expect(queue.shutdown.plan).toMatch(/^A, the owner's decision of 2026-10-07/u);
+    expect(queue.notify.channel).toBe('wiki_model_request');
+    expect(keysOf(queue.metrics.series)).toEqual([
+      'orbit_wiki_model_calls_total',
+      'orbit_wiki_model_call_duration_seconds',
+      'orbit_wiki_model_queue_depth',
+      'orbit_wiki_model_requests_in_flight',
+      'orbit_wiki_model_request_wait_seconds',
+      'orbit_wiki_model_request_run_seconds',
+      'orbit_wiki_model_request_tokens_total',
+      'orbit_wiki_model_request_errors_total',
+    ]);
   });
 });
