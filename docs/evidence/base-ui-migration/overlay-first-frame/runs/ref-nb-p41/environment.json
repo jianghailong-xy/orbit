@@ -1,0 +1,281 @@
+{
+  "platform": "linux",
+  "arch": "x64",
+  "os": "PRETTY_NAME=\"Debian GNU/Linux 13 (trixie)\"\nNAME=\"Debian GNU/Linux\"\nVERSION_ID=\"13\"\nVERSION=\"13 (trixie)\"\nVERSION_CODENAME=trixie\nDEBIAN_VERSION_FULL=13.7\nID=debian\nHOME_URL=\"https://www.debian.org/\"\nSUPPORT_URL=\"https://www.debian.org/support\"\nBUG_REPORT_URL=\"https://bugs.debian.org/\"\n",
+  "playwright": "1.63.0",
+  "browsers": [
+    {
+      "name": "chromium",
+      "revision": "1243",
+      "installByDefault": true,
+      "browserVersion": "153.0.8010.12",
+      "title": "Chrome for Testing"
+    },
+    {
+      "name": "chromium-headless-shell",
+      "revision": "1243",
+      "installByDefault": true,
+      "browserVersion": "153.0.8010.12",
+      "title": "Chrome Headless Shell"
+    },
+    {
+      "name": "firefox",
+      "revision": "1543",
+      "installByDefault": true,
+      "browserVersion": "155.0",
+      "title": "Firefox"
+    },
+    {
+      "name": "webkit",
+      "revision": "2359",
+      "installByDefault": true,
+      "revisionOverrides": {
+        "mac14": "2251",
+        "mac14-arm64": "2251"
+      },
+      "browserVersion": "26.6",
+      "title": "WebKit"
+    },
+    {
+      "name": "ffmpeg",
+      "revision": "1011",
+      "installByDefault": true
+    },
+    {
+      "name": "winldd",
+      "revision": "1007",
+      "installByDefault": false
+    },
+    {
+      "name": "android",
+      "revision": "1001",
+      "installByDefault": false
+    }
+  ],
+  "fonts": [
+    {
+      "path": "/usr/share/fonts/X11/Type1/c0419bt_.pfb",
+      "sha256": "0e15626ca60d95e49ac15352f5c7f1837eb6dc9b6a353357012ce54a5b37015c"
+    },
+    {
+      "path": "/usr/share/fonts/X11/Type1/c0582bt_.pfb",
+      "sha256": "9ecc1d370c5ee96c8b58d144d92a9fbeb416e2a33746f4ef86ed4e7490389dc6"
+    },
+    {
+      "path": "/usr/share/fonts/X11/Type1/c0583bt_.pfb",
+      "sha256": "708bbc1a259fbdf4f8c0fde683dd604f1e0677a72078567d70328f9a428248b7"
+    },
+    {
+      "path": "/usr/share/fonts/X11/Type1/c0611bt_.pfb",
+      "sha256": "69dd50c4078f8b7c3d50dedc85dec8e4316c0b4f86df1737c3af9b9b8aa51eef"
+    },
+    {
+      "path": "/usr/share/fonts/X11/Type1/c0632bt_.pfb",
+      "sha256": "c50fd6e717599f306b8b3261d309c56849f4366771c1983c875eabf46bc2b956"
+    },
+    {
+      "path": "/usr/share/fonts/X11/Type1/c0633bt_.pfb",
+      "sha256": "3e0c9ed37732c1ebcbed4e582fd70f5673ca415161396276097eca1cda87104b"
+    },
+    {
+      "path": "/usr/share/fonts/X11/Type1/c0648bt_.pfb",
+      "sha256": "8ac5bad34cad9b59b087eebfaf9087c16901b0761f7f9cc538f2f65567fc3959"
+    },
+    {
+      "path": "/usr/share/fonts/X11/Type1/c0649bt_.pfb",
+      "sha256": "0c3e189c6a52401c62c9fcde32f453a4dc95836d8c6e03fe8908100d854f3a83"
+    },
+    {
+      "path": "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf",
+      "sha256": "503af4a8b84d1079b8e2e358dc7f7a7fb8cb7a1f212f35eaef6782dbfc75a55e"
+    },
+    {
+      "path": "/usr/share/fonts/opentype/ipafont-gothic/ipagp.ttf",
+      "sha256": "a63f6153841e56ec9df1b31a54d98d3f41d8aaa1c3d8df30a33502296f5b8068"
+    },
+    {
+      "path": "/usr/share/fonts/opentype/tlwg/Loma-Bold.otf",
+      "sha256": "16f3cdd73f47abf8bde2aafd9569b36388f6ae388e98088a77c3312fbaa98b80"
+    },
+    {
+      "path": "/usr/share/fonts/opentype/tlwg/Loma-BoldOblique.otf",
+      "sha256": "d7e3ba82a6605b3e6f126d4a77b78cbf0694f17a5a79fb8e9709936234b04700"
+    },
+    {
+      "path": "/usr/share/fonts/opentype/tlwg/Loma-Oblique.otf",
+      "sha256": "133e6af2dcdfea629bc734f2bbbbd7d66cff2040ffb0b197571740c23d87e3c6"
+    },
+    {
+      "path": "/usr/share/fonts/opentype/tlwg/Loma.otf",
+      "sha256": "e14126fe603116a6da8fb54822e8521589983d17d78cae489e98faed4b2f4cd2"
+    },
+    {
+      "path": "/usr/share/fonts/opentype/unifont/unifont.otf",
+      "sha256": "2498b80f9664fef91e6988d7e082146a2082a7e7bb4a2deb2fbf9a365aa2970c"
+    },
+    {
+      "path": "/usr/share/fonts/opentype/unifont/unifont_csur.otf",
+      "sha256": "065b75985f258df8573371bd9bda0a37a39ac85a38b0062a37f15654c2eb7341"
+    },
+    {
+      "path": "/usr/share/fonts/opentype/unifont/unifont_jp.otf",
+      "sha256": "218eb241082aa4f47399f7c2058e25abffa8d081b312542bc91740681f006597"
+    },
+    {
+      "path": "/usr/share/fonts/opentype/unifont/unifont_jp_sample.otf",
+      "sha256": "80668b601ceffe8030eef4215e9148b9ddc5c3802e3dba86a306c76fc1f7f9d4"
+    },
+    {
+      "path": "/usr/share/fonts/opentype/unifont/unifont_sample.otf",
+      "sha256": "5b73116f46a3fc4726e4b2f0a51f9c163526444d55b8db88c4ab8ec9453fcb20"
+    },
+    {
+      "path": "/usr/share/fonts/opentype/unifont/unifont_upper.otf",
+      "sha256": "f9a49517cb5a06e02692b403bc21f96ea767128db52f089d31261a8968d3ace8"
+    },
+    {
+      "path": "/usr/share/fonts/opentype/unifont/unifont_upper_sample.otf",
+      "sha256": "68dfc1d34d533c8dada07a8dd84294635afdc4790904fa956ea735ca1d20c127"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+      "sha256": "a4c5bc453ca281d90ea079e596da7ae0dfeb5777497c29ec254e76d97ff6f890"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+      "sha256": "57f73e11f51999432bf7ab22ce55b6f945d5eca1bf824404cfa9ec2e3718c84e"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
+      "sha256": "0d3c03d1b667192f91223660a3163325cf83132662fe4d9f7d6e596bf7a995c2"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-BoldOblique.ttf",
+      "sha256": "2084995adab143b149258f5944b7f863804796b753014526bd7f7915b1b20770"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Oblique.ttf",
+      "sha256": "710323dd803666c37988df68e736c233d96efdf5c770c8ee28f4c4f4b84fb32d"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+      "sha256": "54bf827eb99404e8f430c330ad30f063334f637eba0109b6a18d4f566a8e9dd8"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
+      "sha256": "aac3f559445d23f0f567a243f91f3f6ad6cb4b5cafa1521a3479fffe0637f0bd"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
+      "sha256": "8cb29f7db250ebb2551a6ce2c1e0bfd5a0eb520e9e233370db0493e82e1f36f7"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/fonts-japanese-gothic.ttf",
+      "sha256": "503af4a8b84d1079b8e2e358dc7f7a7fb8cb7a1f212f35eaef6782dbfc75a55e"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/freefont/FreeMono.ttf",
+      "sha256": "442e54fab239e446832900393a88ce2fc4ca1ea1d7932c16f06f472b43991cc7"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/freefont/FreeMonoBold.ttf",
+      "sha256": "9cf17feb9688ee0c07a5b76ba3fc7ec82bc031ce3b4a980a8fba5bcd2153ec2d"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/freefont/FreeMonoBoldOblique.ttf",
+      "sha256": "089c92cec6f7280fef612c4ab11b1ba5a47e888f56cc958bb66a9c4da868e7c2"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/freefont/FreeMonoOblique.ttf",
+      "sha256": "47e515d234989163ff7bbcb64d70fa02b5cfd4b8f5d43399b98ae7e862d20749"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+      "sha256": "ad5b4b55537a7ef413aa7cbae8e6e9104030f4f1588db66d8907e3724298cb85"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+      "sha256": "4830701fbb9bef25af87dfb50ccaf4fb5ce65a0c26ccf9523e6d379799167d3d"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/freefont/FreeSansBoldOblique.ttf",
+      "sha256": "9aac9d46d52c75971ce1085bc97c98ea246bbd119e0835924af7d584cf3a58b8"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/freefont/FreeSansOblique.ttf",
+      "sha256": "fefc9e6a21bf4b79e6681d5db83d66f3845f69da2eb5f67f5895fc85d1b0f29b"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/freefont/FreeSerif.ttf",
+      "sha256": "c1dd2270ff624d66a7f1cd23075b5ce05a662f560be06a70a9599065ce008355"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/freefont/FreeSerifBold.ttf",
+      "sha256": "d0015b983458707f5c768e44d5c58c7985b9be331994a80b436419199d32d15f"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/freefont/FreeSerifBoldItalic.ttf",
+      "sha256": "ed68b0fe71343c5231765c606e06f521af0571e18522f6cc46a4cf7f22f29adf"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/freefont/FreeSerifItalic.ttf",
+      "sha256": "018871c93caaee79346d27e062e2e4cc6365f7732b57c10cd772f94bee96ff22"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/liberation/LiberationMono-Bold.ttf",
+      "sha256": "ddce09ee3483b2d5faf61f0baba8592e76e0ac6dd4ab36683e5334c288bf5eef"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/liberation/LiberationMono-BoldItalic.ttf",
+      "sha256": "2ec6f3e5bd9b24c7fb04c229a1ee64f600e4072c03a041c96c2d62974c2ede2c"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/liberation/LiberationMono-Italic.ttf",
+      "sha256": "016743fc425a1b61eb349c72c02f3da6a1349d1da7a5d9aded27321397eed955"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+      "sha256": "5883330d94debd992952cd8f0571b225f478c2d797d3f36c7521b0a5c9bde0f2"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+      "sha256": "1b5f2da6f4cadce4c05b9ecebe3a6fcd374eb95ae443605e799f4c3287978939"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/liberation/LiberationSans-BoldItalic.ttf",
+      "sha256": "352e9dc2be89f210dbd3c0fd5dfaf97135de70e0beb5f22378601861462493a7"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/liberation/LiberationSans-Italic.ttf",
+      "sha256": "93ff5260834141b6f9d8f2b846d427f3a5dc492dbdce8ebdad406e38a38f34bb"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+      "sha256": "bade59d822652f76e6941aa87b40a87c13d1cc70db98ededb5011127efafd1d3"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
+      "sha256": "443a4dbd694b6e4689925947b456e0532e10b19c90fa32eb39ea6c2cd9db9ebd"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/liberation/LiberationSerif-BoldItalic.ttf",
+      "sha256": "4b2635d2ec4d992373dcae577c742a98ecfd841ffc1b8a103b5f10db163dbc7a"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/liberation/LiberationSerif-Italic.ttf",
+      "sha256": "de18fe26337e03241952dca46398d5b66f3c5738d080bfd284f66e67b926f597"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
+      "sha256": "9caef765d2e891c10dd73658894f01e660fe0c1c83e0bda7d6edf561d8f623d4"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+      "sha256": "dac5c27651082d6c53dab5081f50d2022ddf6877d730fa919cf6a4fc2af22de0"
+    },
+    {
+      "path": "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+      "sha256": "79c18ebe7b811951e8311bad7103ebeae8c337ed9988ea69e8a78a66cfe029b9"
+    }
+  ]
+}

@@ -1,0 +1,434 @@
+[
+ {
+  "label": "ref",
+  "size": "phone",
+  "browser": "webkit",
+  "sample": "expiry",
+  "query": "owner=dialog&anchor=right",
+  "scrollEvents": 0,
+  "maxScrollLeft": 0,
+  "maxScrollTop": 0,
+  "lastScroll": {
+   "t": 0,
+   "event": "open",
+   "left": 0,
+   "top": 0,
+   "width": 390
+  },
+  "settled": [
+   128,
+   40,
+   250,
+   104
+  ],
+  "anchor": [
+   136,
+   13
+  ],
+  "log": [
+   {
+    "t": 0,
+    "event": "open",
+    "left": 0,
+    "top": 0,
+    "width": 390
+   }
+  ]
+ },
+ {
+  "label": "fix",
+  "size": "phone",
+  "browser": "webkit",
+  "sample": "expiry",
+  "query": "owner=dialog&anchor=right",
+  "scrollEvents": 0,
+  "maxScrollLeft": 0,
+  "maxScrollTop": 0,
+  "lastScroll": {
+   "t": 0,
+   "event": "open",
+   "left": 0,
+   "top": 0,
+   "width": 390
+  },
+  "settled": [
+   128,
+   40,
+   250,
+   104
+  ],
+  "anchor": [
+   136,
+   13
+  ],
+  "log": [
+   {
+    "t": 0,
+    "event": "open",
+    "left": 0,
+    "top": 0,
+    "width": 390
+   }
+  ]
+ },
+ {
+  "label": "ref",
+  "size": "phone",
+  "browser": "webkit",
+  "sample": "multiple",
+  "query": "owner=dialog&anchor=right",
+  "scrollEvents": 0,
+  "maxScrollLeft": 0,
+  "maxScrollTop": 0,
+  "lastScroll": {
+   "t": 0,
+   "event": "open",
+   "left": 0,
+   "top": 0,
+   "width": 390
+  },
+  "settled": [
+   128,
+   40,
+   250,
+   136
+  ],
+  "anchor": [
+   310.25,
+   14
+  ],
+  "log": [
+   {
+    "t": 0,
+    "event": "open",
+    "left": 0,
+    "top": 0,
+    "width": 390
+   }
+  ]
+ },
+ {
+  "label": "fix",
+  "size": "phone",
+  "browser": "webkit",
+  "sample": "multiple",
+  "query": "owner=dialog&anchor=right",
+  "scrollEvents": 0,
+  "maxScrollLeft": 0,
+  "maxScrollTop": 0,
+  "lastScroll": {
+   "t": 0,
+   "event": "open",
+   "left": 0,
+   "top": 0,
+   "width": 390
+  },
+  "settled": [
+   128,
+   40,
+   250,
+   136
+  ],
+  "anchor": [
+   310.25,
+   14
+  ],
+  "log": [
+   {
+    "t": 0,
+    "event": "open",
+    "left": 0,
+    "top": 0,
+    "width": 390
+   }
+  ]
+ },
+ {
+  "label": "ref",
+  "size": "phone",
+  "browser": "webkit",
+  "sample": "attachment",
+  "query": "owner=dialog&anchor=right",
+  "scrollEvents": 0,
+  "maxScrollLeft": 0,
+  "maxScrollTop": 0,
+  "lastScroll": {
+   "t": 0,
+   "event": "open",
+   "left": 0,
+   "top": 0,
+   "width": 390
+  },
+  "settled": [
+   128,
+   48,
+   250,
+   240.953
+  ],
+  "anchor": [
+   247.9375,
+   12
+  ],
+  "log": [
+   {
+    "t": 0,
+    "event": "open",
+    "left": 0,
+    "top": 0,
+    "width": 390
+   }
+  ]
+ },
+ {
+  "label": "fix",
+  "size": "phone",
+  "browser": "webkit",
+  "sample": "attachment",
+  "query": "owner=dialog&anchor=right",
+  "scrollEvents": 0,
+  "maxScrollLeft": 0,
+  "maxScrollTop": 0,
+  "lastScroll": {
+   "t": 0,
+   "event": "open",
+   "left": 0,
+   "top": 0,
+   "width": 390
+  },
+  "settled": [
+   128,
+   48,
+   250,
+   240.953
+  ],
+  "anchor": [
+   247.9375,
+   12
+  ],
+  "log": [
+   {
+    "t": 0,
+    "event": "open",
+    "left": 0,
+    "top": 0,
+    "width": 390
+   }
+  ]
+ },
+ {
+  "label": "ref",
+  "size": "phone",
+  "browser": "webkit",
+  "sample": "expiry",
+  "query": "owner=dialog",
+  "scrollEvents": 0,
+  "maxScrollLeft": 0,
+  "maxScrollTop": 0,
+  "lastScroll": {
+   "t": 0,
+   "event": "open",
+   "left": 0,
+   "top": 0,
+   "width": 390
+  },
+  "settled": [
+   32,
+   268,
+   250,
+   104
+  ],
+  "anchor": [
+   40,
+   241
+  ],
+  "log": [
+   {
+    "t": 0,
+    "event": "open",
+    "left": 0,
+    "top": 0,
+    "width": 390
+   }
+  ]
+ },
+ {
+  "label": "fix",
+  "size": "phone",
+  "browser": "webkit",
+  "sample": "expiry",
+  "query": "owner=dialog",
+  "scrollEvents": 0,
+  "maxScrollLeft": 0,
+  "maxScrollTop": 0,
+  "lastScroll": {
+   "t": 0,
+   "event": "open",
+   "left": 0,
+   "top": 0,
+   "width": 390
+  },
+  "settled": [
+   32,
+   268,
+   250,
+   104
+  ],
+  "anchor": [
+   40,
+   241
+  ],
+  "log": [
+   {
+    "t": 0,
+    "event": "open",
+    "left": 0,
+    "top": 0,
+    "width": 390
+   }
+  ]
+ },
+ {
+  "label": "ref",
+  "size": "phone",
+  "browser": "webkit",
+  "sample": "attachment",
+  "query": "owner=dialog",
+  "scrollEvents": 0,
+  "maxScrollLeft": 0,
+  "maxScrollTop": 0,
+  "lastScroll": {
+   "t": 0,
+   "event": "open",
+   "left": 0,
+   "top": 0,
+   "width": 390
+  },
+  "settled": [
+   32,
+   276,
+   250,
+   240.953
+  ],
+  "anchor": [
+   32,
+   240
+  ],
+  "log": [
+   {
+    "t": 0,
+    "event": "open",
+    "left": 0,
+    "top": 0,
+    "width": 390
+   }
+  ]
+ },
+ {
+  "label": "fix",
+  "size": "phone",
+  "browser": "webkit",
+  "sample": "attachment",
+  "query": "owner=dialog",
+  "scrollEvents": 0,
+  "maxScrollLeft": 0,
+  "maxScrollTop": 0,
+  "lastScroll": {
+   "t": 0,
+   "event": "open",
+   "left": 0,
+   "top": 0,
+   "width": 390
+  },
+  "settled": [
+   32,
+   276,
+   250,
+   240.953
+  ],
+  "anchor": [
+   32,
+   240
+  ],
+  "log": [
+   {
+    "t": 0,
+    "event": "open",
+    "left": 0,
+    "top": 0,
+    "width": 390
+   }
+  ]
+ },
+ {
+  "label": "ref",
+  "size": "phone",
+  "browser": "webkit",
+  "sample": "expiry",
+  "query": "owner=drawer",
+  "scrollEvents": 0,
+  "maxScrollLeft": 0,
+  "maxScrollTop": 0,
+  "lastScroll": {
+   "t": 0,
+   "event": "open",
+   "left": 0,
+   "top": 0,
+   "width": 390
+  },
+  "settled": [
+   36,
+   189,
+   250,
+   104
+  ],
+  "anchor": [
+   44,
+   162
+  ],
+  "log": [
+   {
+    "t": 0,
+    "event": "open",
+    "left": 0,
+    "top": 0,
+    "width": 390
+   }
+  ]
+ },
+ {
+  "label": "fix",
+  "size": "phone",
+  "browser": "webkit",
+  "sample": "expiry",
+  "query": "owner=drawer",
+  "scrollEvents": 0,
+  "maxScrollLeft": 0,
+  "maxScrollTop": 0,
+  "lastScroll": {
+   "t": 0,
+   "event": "open",
+   "left": 0,
+   "top": 0,
+   "width": 390
+  },
+  "settled": [
+   36,
+   189,
+   250,
+   104
+  ],
+  "anchor": [
+   44,
+   162
+  ],
+  "log": [
+   {
+    "t": 0,
+    "event": "open",
+    "left": 0,
+    "top": 0,
+    "width": 390
+   }
+  ]
+ }
+]
