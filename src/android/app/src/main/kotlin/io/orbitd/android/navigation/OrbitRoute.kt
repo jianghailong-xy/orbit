@@ -5,7 +5,8 @@ import java.net.URI
 import java.net.URLDecoder
 import kotlinx.serialization.Serializable
 
-enum class Destination { WORKSPACES, WORKSPACE, FOLDER, SEARCH, SESSION, DRAFT, PROJECTS, PROJECT, TASKS, TASK, LIST, WIKI, WIKI_ENTRY, WATCH, RUNNER, SETTINGS, BUILD }
+enum class Destination { WORKSPACES, WORKSPACE, FOLDER, SEARCH, SESSION, DRAFT, PROJECTS, PROJECT, TASKS, TASK, LIST, WIKI, WIKI_ENTRY, WATCH, RUNNER, SETTINGS, BUILD,
+    WIKI_BROWSE, WIKI_INDEX, WIKI_ARTICLE, WIKI_DOC, WIKI_REVIEW, WIKI_SETTINGS, WIKI_RUN, WIKI_PLAN, WIKI_PLAN_DOC, WIKI_PLAN_SECTION }
 enum class Origin { DRAWER, LIST, SEARCH, LINK, EXTERNAL }
 
 /** Object and source travel together; the preceding frame is the actual return destination. */
@@ -18,6 +19,12 @@ data class OrbitRoute(
     val recordId: String? = null,
     val origin: Origin = Origin.LIST,
     val sessionView: String = "open",
+    val wikiPart: Int = 0,
+    val wikiSection: String? = null,
+    val wikiVersion: Int? = null,
+    /** Which arrival of a link this frame is, for the Wiki and Watch pages a link opens: each arrival is a page of its
+     * own, whose state starts afresh even where an equal page is on the stack already. 0 for every other route. */
+    val entry: Long = 0,
 )
 
 @Serializable
@@ -36,7 +43,10 @@ data class OrbitNavigation(
     fun back(): OrbitNavigation = if (!canGoBack) this else copy(stacks = stacks + (section to frames.dropLast(1)))
     fun select(key: String, root: OrbitRoute): OrbitNavigation = copy(section = key,
         stacks = stacks + (key to (stacks[key] ?: listOf(root))))
-    fun receive(route: OrbitRoute): OrbitNavigation = if (account == null) copy(pending = route) else push(route)
+    fun receive(route: OrbitRoute): OrbitNavigation {
+        val arrived = route.arrived()
+        return if (account == null) copy(pending = arrived) else push(arrived)
+    }
 
     /** No previous account's paths survive logout/switch. Cold-start links survive the login screen. */
     fun bindAccount(key: String?): OrbitNavigation {
@@ -44,6 +54,17 @@ data class OrbitNavigation(
         val next = OrbitNavigation(account = key, pending = if (account == null) pending else null)
         return if (key != null && next.pending != null) next.copy(pending = null).push(next.pending) else next
     }
+}
+
+/** The Wiki and Watch pages, whose state is the frame's own (MainActivity drops it once the frame left every stack). */
+val OrbitRoute.isWikiOrWatch get() = destination == Destination.WATCH || destination.name.startsWith("WIKI")
+
+/** A link to a Wiki or Watch page arrives as a page of its own ([OrbitRoute.entry]); any other route as it is. */
+internal fun OrbitRoute.arrived(): OrbitRoute = if (isWikiOrWatch) copy(entry = OrbitArrivals.next()) else this
+
+internal object OrbitArrivals {
+    /** Distinct across process restarts too: a restored stack's entries are never handed out again. */
+    @Volatile var next: () -> Long = { kotlin.random.Random.nextLong(1, Long.MAX_VALUE) }
 }
 
 object ObjectId {
@@ -64,7 +85,7 @@ object OrbitLinks {
     private val references = mapOf("session" to Destination.SESSION, "task" to Destination.TASK,
         "project" to Destination.PROJECT, "wiki" to Destination.WIKI_ENTRY, "list" to Destination.LIST)
     private val deepLinks = references.filterKeys { it !in setOf("project", "wiki") } +
-        mapOf("watch" to Destination.WATCH, "runner" to Destination.RUNNER)
+        mapOf("watch" to Destination.WATCH, "runner" to Destination.RUNNER, "wiki" to Destination.WIKI)
 
     fun parse(raw: String, server: String? = null, origin: Origin = Origin.LINK): OrbitRoute? { return try {
         val uri = URI(raw)

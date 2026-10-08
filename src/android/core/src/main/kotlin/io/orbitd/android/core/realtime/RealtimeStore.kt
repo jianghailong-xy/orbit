@@ -194,13 +194,17 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
             try {
                 auth.stream(handle, ApiRequest(listOf("events")), onOpen = {
                     if (!active(handle, path)) throw CancellationException()
+                    publish(handle) { it.copy(controlConnects = it.controlConnects + 1) }
                     invalidate(handle)
                     publish(handle) { it.copy(controlConnection = ConnectionState.CONNECTED, controlError = null) }
                 }, onFrame = { frame ->
                     if (!active(handle, path)) throw CancellationException()
                     val event = Wire.decode(frame.data.encodeToByteArray(), ControlEvent.serializer())
                     policy.healthy()
-                    if (event.type != "ping") invalidate(handle)
+                    if (event.type != "ping") {
+                        publish(handle) { it.copy(accountEvents = it.accountEvents + (event.type to (it.accountEvents[event.type] ?: 0L) + 1)) }
+                        invalidate(handle)
+                    }
                 })
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) {

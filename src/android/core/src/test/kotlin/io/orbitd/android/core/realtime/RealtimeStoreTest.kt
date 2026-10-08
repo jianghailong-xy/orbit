@@ -278,6 +278,18 @@ class RealtimeStoreTest {
         assertEquals(connections + 1, rig.streams.all.size)
     }
 
+    @Test fun accountEventsAreCountedByTypeAndTheConnectIsCounted() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        assertEquals(1L, store.state.value.controlConnects)
+        assertEquals(emptyMap<String, Long>(), store.state.value.accountEvents)
+        listOf("wiki.changed", "session.updated", "wiki.changed", "ping").forEach { type ->
+            rig.streams.control().emit("""{"type":"$type","sessionId":"","data":{}}""")
+        }
+        runCurrent()
+        assertEquals("pings are not account events", mapOf("wiki.changed" to 2L, "session.updated" to 1L), store.state.value.accountEvents)
+    }
+
     @Test fun emptySessionIdNudgesRefetchAndDirectoryErrorRetainsRows() = runTest {
         val rig = Rig(this)
         val (_, store) = rig.start()
