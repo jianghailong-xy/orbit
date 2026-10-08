@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { WIKI_MAINTENANCE_LOOKS, type WikiSpaceHealth } from '@orbit/shared';
-import { wikiAgo, wikiLag, wikiMaintenanceParts, wikiStatusText, type WikiStatusPart } from './wikiHealth';
+import { wikiAgo, wikiLag, wikiMaintenanceParts, wikiServerReason, wikiStatusParts, wikiStatusText, type WikiStatusPart } from './wikiHealth';
 
 /**
  * The status line's maintenance part, proved against `src/shared/src/wiki-health.fixture.json` — the file
@@ -30,9 +30,11 @@ const now = Date.parse(shared.now);
 describe('the status line says the fixture’s words for every look', () => {
   for (const one of shared.cases) {
     it(one.name, () => {
-      const parts = wikiMaintenanceParts(one.health.maintenance, now);
+      const parts = wikiStatusParts(one.health, now);
       expect(parts).toEqual(one.parts);
       expect(wikiStatusText(parts)).toBe(one.text);
+      // A read with no server half says exactly what the look says (runner, or an older control plane).
+      if (!one.health.executor?.serverExecutes) expect(parts).toEqual(wikiMaintenanceParts(one.health.maintenance, now));
     });
   }
 
@@ -41,13 +43,32 @@ describe('the status line says the fixture’s words for every look', () => {
     expect([...looks].sort()).toEqual([...WIKI_MAINTENANCE_LOOKS].sort());
   });
 
-  it('links Set up only while maintenance is off, and View run only to a run that named its session', () => {
+  it('links Set up only while maintenance is off, and View run only to a run that named its session or its job', () => {
     for (const one of shared.cases) {
-      const links = wikiMaintenanceParts(one.health.maintenance, now).filter((part) => part.link !== 'none');
+      const links = wikiStatusParts(one.health, now).filter((part) => part.link !== 'none');
       const look = one.health.maintenance.look;
+      const lastRun = one.health.maintenance.lastRun;
       if (look === 'off') expect(links.map((part) => part.link)).toEqual(['settings']);
-      else if (look === 'failing' && one.health.maintenance.lastRun?.sessionId) expect(links.map((part) => part.link)).toEqual(['run']);
+      else if (look === 'failing' && (lastRun?.sessionId || lastRun?.jobId)) expect(links.map((part) => part.link)).toEqual(['run']);
       else expect(links).toEqual([]);
+    }
+  });
+
+  it('says one server reason, after the look and before its links, and only while the server runs the wiki', () => {
+    const reasons = shared.cases.map((one) => wikiServerReason(one.health)?.text ?? null).filter((text): text is string => text !== null);
+    expect(reasons).toEqual([
+      'Waiting for the runner to come online',
+      'System model unreachable',
+      'System model refused the key',
+      'System model not configured',
+      'wiki worker not running',
+      'Upgrade the runner to read the repository',
+    ]);
+    for (const one of shared.cases) {
+      const parts = wikiStatusParts(one.health, now);
+      const at = parts.findIndex((part) => part.text === wikiServerReason(one.health)?.text);
+      const link = parts.findIndex((part) => part.link !== 'none');
+      if (at >= 0 && link >= 0) expect(at).toBe(link - 1);
     }
   });
 });
