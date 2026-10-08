@@ -12,6 +12,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -38,6 +39,33 @@ var kimiHomeOverlayEntries = []string{
 	"migrations-effort.json",
 	"session_index.jsonl",
 	"workspaces.json",
+}
+
+// kimiHomeStores are the directories of the real home a session's lasting state goes into: its
+// conversation (sessions), the lock a token refresh takes so that no two processes rotate one
+// refresh token at once (oauth), and the login that refresh rewrites (credentials). The overlay
+// borrows only what already exists, so a store the home lacks is made by Kimi inside the overlay —
+// and deleted with it when the session ends: the conversation lost, the lock shared with nobody.
+var kimiHomeStores = []string{"credentials", "oauth", "sessions"}
+
+// ensureKimiHomeStores makes kimiHomeStores in realHome, private, before a session's overlay borrows
+// it — Default's home as much as an added account's. One already there is left as it is. A home
+// that is missing is made, as Kimi would make it on first use, unless it is an added account's: one
+// removed since the session was dispatched stays removed (account_slot.go).
+func ensureKimiHomeStores(realHome string) error {
+	if root, err := accountSlotsDir(kimiAccountKind); err == nil && filepath.Dir(realHome) == root {
+		if _, err := kimiAccountKind.home(filepath.Base(realHome)); err != nil {
+			return fmt.Errorf("this runner has no Kimi account at %s — sign it in again, or pick another account", realHome)
+		}
+	} else if err := os.MkdirAll(realHome, machineHomePerm); err != nil {
+		return err
+	}
+	for _, name := range kimiHomeStores {
+		if err := os.Mkdir(filepath.Join(realHome, name), machineHomePerm); err != nil && !errors.Is(err, os.ErrExist) {
+			return err
+		}
+	}
+	return nil
 }
 
 // effectiveKimiHome resolves the real Kimi data root the overlay borrows from,

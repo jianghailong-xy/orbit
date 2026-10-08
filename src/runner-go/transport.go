@@ -89,6 +89,8 @@ func init() {
 		antigravityAccountLoginCapabilityV1,
 		antigravityAccountRemoveCapabilityV1,
 		kimiLoginRegionCapabilityV1,
+		kimiAccountLoginCapabilityV1,
+		kimiAccountRemoveCapabilityV1,
 		sessionMoveCapabilityV1,
 		wikiMaintenanceRunV1,
 		wikiRepoOpCapabilityV1,

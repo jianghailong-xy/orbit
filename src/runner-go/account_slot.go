@@ -1,9 +1,10 @@
 package main
 
 // Account slots: one CLI account on this machine is one directory the CLI keeps its login state in
-// — Codex's CODEX_HOME, Claude Code's CLAUDE_CONFIG_DIR, Antigravity's Gemini directory — and the slot id is this runner's own name
-// for it. Everything else follows from that one fact: what the page lists, which directory a
-// session runs in, what a removal deletes, whose quota a read belongs to.
+// — Codex's CODEX_HOME, Claude Code's CLAUDE_CONFIG_DIR, Antigravity's Gemini directory, Kimi Code's
+// KIMI_CODE_HOME — and the slot id is this runner's own name for it. Everything else follows from
+// that one fact: what the page lists, which directory a session runs in, what a removal deletes,
+// whose quota a read belongs to.
 //
 // This file is the store every engine's accounts share, and it is the part that has to be right
 // rather than the part that is convenient: a slot is a private directory (0700) never adopted
@@ -89,7 +90,7 @@ type accountSlotKind struct {
 var accountSlotKinds []accountSlotKind
 
 // accountSlotKindFor finds the kind an engine name belongs to, or false: an engine whose CLI has
-// one login for the whole machine (Kimi, OpenCode today) simply has no accounts.
+// one login for the whole machine (OpenCode today) simply has no accounts.
 func accountSlotKindFor(engine string) (accountSlotKind, bool) {
 	for _, kind := range accountSlotKinds {
 		if kind.engine == engine {
@@ -272,8 +273,8 @@ func removeAccount(kind accountSlotKind, claudeUsage *claudeAccountUsage, codexU
 	case providerCodex:
 		return removeCodexAccount(codexUsage, id, liveDirs)
 	}
-	// Antigravity reads an account's quota with its status probe (usageStatus), so nothing outlives
-	// the directory here.
+	// Antigravity reads an account's quota with its status probe (usageStatus), and Kimi keeps no
+	// probe of an account's own, so nothing outlives the directory here.
 	return kind.remove(id, liveDirs)
 }
 
