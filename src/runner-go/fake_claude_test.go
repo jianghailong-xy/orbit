@@ -51,6 +51,11 @@ func TestMain(m *testing.M) {
 	if dir := os.Getenv(fakeVerifyClaudeDirEnv); dir != "" {
 		os.Exit(runFakeVerifyClaude(dir))
 	}
+	// A Kimi Code process refreshing its token under Kimi's lock, beside the runner's own refresh
+	// (kimi_refresh_lock_test.go).
+	if os.Getenv(fakeKimiCLIEnv) != "" {
+		os.Exit(runFakeKimiCLI())
+	}
 	// This binary as the real `orbit hook …`, when a real agy runs an Antigravity session's approval
 	// gate (antigravity_approval_contract_test.go): the hooks name the runner's own executable, which
 	// under test is this one. Ahead of the MCP stand-in, whose variable the hooks inherit through agy.
