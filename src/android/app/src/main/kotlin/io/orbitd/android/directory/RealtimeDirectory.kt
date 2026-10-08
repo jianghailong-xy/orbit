@@ -17,23 +17,24 @@ fun rememberDirectoryData(app: OrbitApplication, handle: SessionHandle): State<D
     // A streaming delta cannot change the directory. Avoid decoding every session on each one.
     val live by remember(app) { app.realtime.state.map { it.copy(session = null) }.distinctUntilChanged() }
         .collectAsState(RealtimeState())
-    return remember(live, handle) { mutableStateOf(
-        if (live.handle !== handle) DirectoryData() else {
-            val snapshot = live.directory
-            fun <T> decode(rows: List<JsonObject>, serializer: DeserializationStrategy<T>) = rows.map { Wire.json.decodeFromJsonElement(serializer, it) }
-            try {
-                DirectoryData(workspaces = decode(snapshot?.workspaces.orEmpty(), DirectoryWorkspace.serializer()),
-                    runners = decode(snapshot?.runners.orEmpty(), DirectoryRunner.serializer()),
-                    sessions = snapshot?.sessions.orEmpty().mapValues { decode(it.value, DirectorySession.serializer()) },
-                    folders = decode(snapshot?.folders.orEmpty(), Folder.serializer()), tags = decode(snapshot?.tags.orEmpty(), Tag.serializer()),
-                    waitingForConnection = snapshot == null && !live.directoryRefreshing && live.controlConnection == ConnectionState.STOPPED && live.directoryError == null,
-                    ready = snapshot != null, fresh = live.directoryFresh, refreshing = live.directoryRefreshing,
-                    error = live.directoryError?.let { when (it.httpStatus) {
-                        403 -> "You don't have permission to load this directory."
-                        401 -> "Your access changed. Please sign in again."
-                        else -> "Can't reach Orbit. Showing the last available directory."
-                    } })
-            } catch (_: Exception) { DirectoryData(error = "Orbit returned an unreadable directory. Please retry.") }
-        }
-    ) }
+    return remember(live, handle) { mutableStateOf(if (live.handle !== handle) DirectoryData() else directoryData(live)) }
+}
+
+/** One row that does not decode makes the whole directory unreadable. */
+internal fun directoryData(live: RealtimeState): DirectoryData {
+    val snapshot = live.directory
+    fun <T> decode(rows: List<JsonObject>, serializer: DeserializationStrategy<T>) = rows.map { Wire.json.decodeFromJsonElement(serializer, it) }
+    return try {
+        DirectoryData(workspaces = decode(snapshot?.workspaces.orEmpty(), DirectoryWorkspace.serializer()),
+            runners = decode(snapshot?.runners.orEmpty(), DirectoryRunner.serializer()),
+            sessions = snapshot?.sessions.orEmpty().mapValues { decode(it.value, DirectorySession.serializer()) },
+            folders = decode(snapshot?.folders.orEmpty(), Folder.serializer()), tags = decode(snapshot?.tags.orEmpty(), Tag.serializer()),
+            waitingForConnection = snapshot == null && !live.directoryRefreshing && live.controlConnection == ConnectionState.STOPPED && live.directoryError == null,
+            ready = snapshot != null, fresh = live.directoryFresh, refreshing = live.directoryRefreshing,
+            error = live.directoryError?.let { when (it.httpStatus) {
+                403 -> "You don't have permission to load this directory."
+                401 -> "Your access changed. Please sign in again."
+                else -> "Can't reach Orbit. Showing the last available directory."
+            } })
+    } catch (_: Exception) { DirectoryData(error = "Orbit returned an unreadable directory. Please retry.") }
 }

@@ -236,3 +236,10 @@ emulator behavior; it is not a deployed-server login, physical-phone or iOS comp
 Evidence must retain those distinctions, including any failing exploratory runs. Real
 TalkBack traversal and spoken feedback, agreed physical devices, same-data iOS captures and approved deployment
 accounts still require direct evidence before A05's alignment criterion can be confirmed.
+
+A real server sends `"position": null` for every workspace nobody has dragged into place, which the fixture above
+also does. `DirectoryRealStackDeviceTest` checks the same on the isolated stack (`scripts/a11-stack`): it reads
+`GET /workspaces` as the signed-in account, needs at least one null position, and expects the Workspaces page and the
+drawer in iOS's order (OrbitKit `AgentListLogic.ordered`: the server's order, runner-less workspaces last). Run it with
+`A11_TEST=io.orbitd.android.directory.DirectoryRealStackDeviceTest` through `tasks-projects-stack-device-test.sh`;
+its arguments are `a11Seed` (only `server` is read), `ownerEmail` and `ownerPassword`.
