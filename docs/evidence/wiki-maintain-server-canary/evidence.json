@@ -11,7 +11,7 @@
     {
       "what": "run 1: the cursor advanced",
       "ok": true,
-      "detail": "(none) -> ddb233ea-77ca-4805-a5d3-ac62b45de119"
+      "detail": "(none) -> 85a16c9a-ba78-430f-80d0-4e51357149d3"
     },
     {
       "what": "run 2: a maintain job succeeded",
@@ -24,7 +24,7 @@
     {
       "what": "run 2: the cursor advanced",
       "ok": true,
-      "detail": "ddb233ea-77ca-4805-a5d3-ac62b45de119 -> 46b04b86-0659-44f9-8be6-73470dab84f3"
+      "detail": "85a16c9a-ba78-430f-80d0-4e51357149d3 -> eb4ff8af-36d2-46ba-90dd-125140e9190d"
     },
     {
       "what": "run 3: a maintain job succeeded",
@@ -37,7 +37,7 @@
     {
       "what": "run 3: the cursor advanced",
       "ok": true,
-      "detail": "46b04b86-0659-44f9-8be6-73470dab84f3 -> a06d6b18-78df-4639-b5c7-d273f9442915"
+      "detail": "eb4ff8af-36d2-46ba-90dd-125140e9190d -> 4a0329cb-bc74-4fd9-a87c-224da0e7e1f8"
     },
     {
       "what": "account A: the three runs made no task",
@@ -62,12 +62,12 @@
     {
       "what": "a run succeeded, recorded ops and was not behind, and a queued articles job exists for the space",
       "ok": true,
-      "detail": "runs with ops 3, articles jobs 3: {\"id\":\"b5a43a8c-be60-4be8-8e4e-cc60ea33b260\",\"state\":\"succeeded\",\"input\":{},\"priority\":0,\"createdAt\":\"2026-10-08T12:12:14.471Z\",\"endedAt\":\"2026-10-08T12:12:15.864Z\",\"failureKind\":null,\"error\":null}"
+      "detail": "runs with ops 3, articles jobs 3: {\"id\":\"ab4709d1-4fcb-4192-a574-4700839e11eb\",\"state\":\"succeeded\",\"input\":{},\"priority\":0,\"createdAt\":\"2026-10-08T12:50:46.299Z\",\"endedAt\":\"2026-10-08T12:50:47.652Z\",\"failureKind\":null,\"error\":null}"
     },
     {
       "what": "account B (no provider row): the owner PATCH turns maintenance on",
       "ok": true,
-      "detail": "status 200, settings {\"listId\":\"01a11b6d-da8f-77cd-9d85-adbb87cc7d20\",\"enabled\":true,\"provider\":\"claude\",\"workspaceId\":\"cbe24134-8097-41d4-8d21-6bc84f71a339\",\"lookbackDays\":7,\"dailyRunLimit\":8}"
+      "detail": "status 200, settings {\"listId\":\"01a11b91-392e-708e-be93-38a9374110ff\",\"enabled\":true,\"provider\":\"claude\",\"workspaceId\":\"fb00dd00-6631-48e1-8ff4-117ce867d731\",\"lookbackDays\":7,\"dailyRunLimit\":8}"
     },
     {
       "what": "account B: its run succeeded with no provider row in the account",
@@ -105,25 +105,25 @@
     {
       "what": "the published runner's `orbit wiki maintain` was refused",
       "ok": true,
-      "detail": "exit 1: {\"spaceId\":\"2TfiY62ITML9FOdlqIJrBg\",\"outcome\":\"failed\",\"advanced\":false,\"report\":{\"sessions\":0,\"dossiers\":0,\"unchanged\":0,\"offTopic\":0,\"entries\":{\"extracted\":0,\"kept\":0,\"dropped\":0,\"foreign\":0,\"principles\":0},\"ops\":{\"proposed\":0,\"recorded\":0,\"refused\":0,\"selfCheckDropped\":0,\"heldBack\":0,\"heldBackByB"
+      "detail": "exit 1: {\"spaceId\":\"1414QrDa3auwuAktck2Ijw\",\"outcome\":\"failed\",\"advanced\":false,\"report\":{\"sessions\":0,\"dossiers\":0,\"unchanged\":0,\"offTopic\":0,\"entries\":{\"extracted\":0,\"kept\":0,\"dropped\":0,\"foreign\":0,\"principles\":0},\"ops\":{\"proposed\":0,\"recorded\":0,\"refused\":0,\"selfCheckDropped\":0,\"heldBack\":0,\"heldBackByB"
     },
     {
       "what": "three maintain jobs succeeded in a row",
       "ok": true,
-      "detail": "[[1,\"393ced82-3030-4d7c-9498-b8254cf73c61\",\"succeeded\"],[2,\"aee0e18a-ee82-4650-bd5f-192748be773a\",\"succeeded\"],[3,\"0c01a357-020e-4002-ba83-b4a7bf19ecdf\",\"succeeded\"]]"
+      "detail": "[[1,\"46cfb9a6-940e-4370-b0a9-15b2fad46c99\",\"succeeded\"],[2,\"14fb4b50-baf8-4cd6-81b3-9953d7dae5b9\",\"succeeded\"],[3,\"12010986-a827-4ba7-8e5a-40f1643bf080\",\"succeeded\"]]"
     }
   ],
   "runs": [
     {
       "run": 1,
-      "runId": "d1ba6e1e-3a8b-4989-aca7-f57e0befd8e6",
-      "jobId": "393ced82-3030-4d7c-9498-b8254cf73c61",
+      "runId": "3e6fdfc1-000b-45e5-b2b7-898681e4b5f7",
+      "jobId": "46cfb9a6-940e-4370-b0a9-15b2fad46c99",
       "jobState": "succeeded",
       "jobAttempts": 3,
       "taskId": null,
       "due": "backlog",
       "catchUp": null,
-      "expectAt": "2026-10-08T11:38:13.167Z",
+      "expectAt": "2026-10-08T12:16:51.101Z",
       "outcome": "succeeded",
       "opsRefused": 0,
       "failureKind": null,
@@ -192,7 +192,7 @@
           "extracted": 2,
           "principles": 0
         },
-        "seconds": 5,
+        "seconds": 3,
         "dossiers": 2,
         "offTopic": 0,
         "sessions": 2,
@@ -201,22 +201,22 @@
       },
       "cursorBefore": null,
       "cursorAfter": {
-        "at": "2026-10-08T11:38:13.167Z",
+        "at": "2026-10-08T12:16:51.101Z",
         "kind": "session_settled",
-        "ref": "ddb233ea-77ca-4805-a5d3-ac62b45de119",
+        "ref": "85a16c9a-ba78-430f-80d0-4e51357149d3",
         "failures": 0
       }
     },
     {
       "run": 2,
-      "runId": "6cfc46f4-409d-483b-99c7-c5fce78c575c",
-      "jobId": "aee0e18a-ee82-4650-bd5f-192748be773a",
+      "runId": "d2e55305-edbd-4eee-820e-bfe4bdc34463",
+      "jobId": "14fb4b50-baf8-4cd6-81b3-9953d7dae5b9",
       "jobState": "succeeded",
       "jobAttempts": 0,
       "taskId": null,
       "due": "backlog",
       "catchUp": null,
-      "expectAt": "2026-10-08T11:40:13.164Z",
+      "expectAt": "2026-10-08T12:18:51.099Z",
       "outcome": "succeeded",
       "opsRefused": 0,
       "failureKind": null,
@@ -293,28 +293,28 @@
         "cursorAdvanced": true
       },
       "cursorBefore": {
-        "at": "2026-10-08T11:38:13.167Z",
+        "at": "2026-10-08T12:16:51.101Z",
         "kind": "session_settled",
-        "ref": "ddb233ea-77ca-4805-a5d3-ac62b45de119",
+        "ref": "85a16c9a-ba78-430f-80d0-4e51357149d3",
         "failures": 0
       },
       "cursorAfter": {
-        "at": "2026-10-08T11:40:13.164Z",
+        "at": "2026-10-08T12:18:51.099Z",
         "kind": "session_settled",
-        "ref": "46b04b86-0659-44f9-8be6-73470dab84f3",
+        "ref": "eb4ff8af-36d2-46ba-90dd-125140e9190d",
         "failures": 0
       }
     },
     {
       "run": 3,
-      "runId": "fbd41cf8-829d-43c9-ae5e-57ab2a601599",
-      "jobId": "0c01a357-020e-4002-ba83-b4a7bf19ecdf",
+      "runId": "65b42dd8-759b-49fc-beb2-72a4202d0890",
+      "jobId": "12010986-a827-4ba7-8e5a-40f1643bf080",
       "jobState": "succeeded",
       "jobAttempts": 0,
       "taskId": null,
       "due": "backlog",
       "catchUp": null,
-      "expectAt": "2026-10-08T11:42:13.161Z",
+      "expectAt": "2026-10-08T12:20:51.096Z",
       "outcome": "succeeded",
       "opsRefused": 0,
       "failureKind": null,
@@ -391,429 +391,39 @@
         "cursorAdvanced": true
       },
       "cursorBefore": {
-        "at": "2026-10-08T11:40:13.164Z",
+        "at": "2026-10-08T12:18:51.099Z",
         "kind": "session_settled",
-        "ref": "46b04b86-0659-44f9-8be6-73470dab84f3",
+        "ref": "eb4ff8af-36d2-46ba-90dd-125140e9190d",
         "failures": 0
       },
       "cursorAfter": {
-        "at": "2026-10-08T11:42:13.161Z",
+        "at": "2026-10-08T12:20:51.096Z",
         "kind": "session_settled",
-        "ref": "a06d6b18-78df-4639-b5c7-d273f9442915",
+        "ref": "4a0329cb-bc74-4fd9-a87c-224da0e7e1f8",
         "failures": 0
       }
     }
   ],
   "jobs": [
     {
-      "id": "393ced82-3030-4d7c-9498-b8254cf73c61",
-      "owner_id": "54ad5025-a7c6-46a0-bc14-19c6e5a7d372",
-      "space_id": "51705757-6ef8-4913-841f-547047285ff0",
+      "id": "46cfb9a6-940e-4370-b0a9-15b2fad46c99",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
+      "space_id": "22fc5e25-16fc-4b75-800a-77010dd9ce38",
       "kind": "maintain",
       "state": "succeeded",
       "input": {
-        "runId": "d1ba6e1e-3a8b-4989-aca7-f57e0befd8e6"
+        "runId": "3e6fdfc1-000b-45e5-b2b7-898681e4b5f7"
       },
       "priority": 0,
       "attempts": 3,
       "failure_kind": null,
       "error": null,
-      "created_at": "2026-10-08T12:11:19.120Z",
-      "ended_at": "2026-10-08T12:12:14.474Z",
+      "created_at": "2026-10-08T12:49:56.489Z",
+      "ended_at": "2026-10-08T12:50:46.301Z",
       "report": {
         "kind": "maintain",
-        "runId": "d1ba6e1e-3a8b-4989-aca7-f57e0befd8e6",
-        "cursor": "wc1.eyJzIjoiNTE3MDU3NTctNmVmOC00OTEzLTg0MWYtNTQ3MDQ3Mjg1ZmYwIiwicCI6WyIyMDI2LTEwLTA4VDExOjM4OjEzLjE2N1oiLCJzZXNzaW9uX3NldHRsZWQiLCJkZGIyMzNlYS03N2NhLTQ4MDUtYTVkMy1hYzYyYjQ1ZGUxMTkiXX0",
-        "report": {
-          "ops": {
-            "applied": 0,
-            "refused": 0,
-            "waiting": 2,
-            "heldBack": 0,
-            "proposed": 2,
-            "recorded": 2,
-            "selfCheckDropped": 0,
-            "heldBackByBreaker": 0
-          },
-          "docs": {
-            "tokens": {
-              "calls": 0,
-              "input": 0,
-              "output": 0
-            },
-            "seconds": 0,
-            "skipped": "no_confirmed_plan",
-            "affected": {
-              "stale": 0,
-              "total": 0,
-              "byRepo": 0,
-              "byEntries": 0,
-              "unwritten": 0
-            },
-            "proposal": null,
-            "sections": {
-              "failed": 0,
-              "written": 0,
-              "unchanged": 0
-            },
-            "unplaced": {
-              "entries": 0,
-              "designDocs": 0
-            },
-            "withdrawn": {
-              "paths": 0,
-              "sentences": 0
-            },
-            "planVersion": null
-          },
-          "tokens": {
-            "calls": 2,
-            "input": 20,
-            "output": 80
-          },
-          "anchors": {
-            "changed": 0,
-            "entries": 0,
-            "missing": 0
-          },
-          "entries": {
-            "kept": 2,
-            "dropped": 0,
-            "foreign": 0,
-            "extracted": 2,
-            "principles": 0
-          },
-          "seconds": 5,
-          "dossiers": 2,
-          "offTopic": 0,
-          "sessions": 2,
-          "unchanged": 0,
-          "cursorAdvanced": true
-        },
-        "outcome": "succeeded",
-        "refused": [],
-        "advanced": true
-      }
-    },
-    {
-      "id": "b5a43a8c-be60-4be8-8e4e-cc60ea33b260",
-      "owner_id": "54ad5025-a7c6-46a0-bc14-19c6e5a7d372",
-      "space_id": "51705757-6ef8-4913-841f-547047285ff0",
-      "kind": "articles",
-      "state": "succeeded",
-      "input": {},
-      "priority": 0,
-      "attempts": 0,
-      "failure_kind": null,
-      "error": null,
-      "created_at": "2026-10-08T12:12:14.471Z",
-      "ended_at": "2026-10-08T12:12:15.864Z",
-      "report": {
-        "ref": null,
-        "kind": "articles",
-        "calls": 0,
-        "model": "p8-maintain-system-model",
-        "stats": {
-          "chars": 0,
-          "markers": 0,
-          "footnotes": 0,
-          "sentences": 0,
-          "markersStripped": 0,
-          "sentencesDeleted": 0,
-          "sentencesTrimmed": 0
-        },
-        "usage": {
-          "inputTokens": 0,
-          "outputTokens": 0
-        },
-        "failed": 0,
-        "refWhy": null,
-        "seeded": 22,
-        "topics": [],
-        "spaceId": "51705757-6ef8-4913-841f-547047285ff0",
-        "written": 0,
-        "unchanged": 0
-      }
-    },
-    {
-      "id": "aee0e18a-ee82-4650-bd5f-192748be773a",
-      "owner_id": "54ad5025-a7c6-46a0-bc14-19c6e5a7d372",
-      "space_id": "51705757-6ef8-4913-841f-547047285ff0",
-      "kind": "maintain",
-      "state": "succeeded",
-      "input": {
-        "runId": "6cfc46f4-409d-483b-99c7-c5fce78c575c"
-      },
-      "priority": 0,
-      "attempts": 0,
-      "failure_kind": null,
-      "error": null,
-      "created_at": "2026-10-08T12:12:14.968Z",
-      "ended_at": "2026-10-08T12:12:20.413Z",
-      "report": {
-        "kind": "maintain",
-        "runId": "6cfc46f4-409d-483b-99c7-c5fce78c575c",
-        "cursor": "wc1.eyJzIjoiNTE3MDU3NTctNmVmOC00OTEzLTg0MWYtNTQ3MDQ3Mjg1ZmYwIiwicCI6WyIyMDI2LTEwLTA4VDExOjQwOjEzLjE2NFoiLCJzZXNzaW9uX3NldHRsZWQiLCI0NmIwNGI4Ni0wNjU5LTQ0ZjktOGJlNi03MzQ3MGRhYjg0ZjMiXX0",
-        "report": {
-          "ops": {
-            "applied": 0,
-            "refused": 0,
-            "waiting": 2,
-            "heldBack": 0,
-            "proposed": 2,
-            "recorded": 2,
-            "selfCheckDropped": 0,
-            "heldBackByBreaker": 0
-          },
-          "docs": {
-            "tokens": {
-              "calls": 0,
-              "input": 0,
-              "output": 0
-            },
-            "seconds": 0,
-            "skipped": "no_confirmed_plan",
-            "affected": {
-              "stale": 0,
-              "total": 0,
-              "byRepo": 0,
-              "byEntries": 0,
-              "unwritten": 0
-            },
-            "proposal": null,
-            "sections": {
-              "failed": 0,
-              "written": 0,
-              "unchanged": 0
-            },
-            "unplaced": {
-              "entries": 0,
-              "designDocs": 0
-            },
-            "withdrawn": {
-              "paths": 0,
-              "sentences": 0
-            },
-            "planVersion": null
-          },
-          "tokens": {
-            "calls": 2,
-            "input": 20,
-            "output": 80
-          },
-          "anchors": {
-            "changed": 0,
-            "entries": 0,
-            "missing": 0
-          },
-          "entries": {
-            "kept": 2,
-            "dropped": 0,
-            "foreign": 0,
-            "extracted": 2,
-            "principles": 0
-          },
-          "seconds": 1,
-          "dossiers": 2,
-          "offTopic": 0,
-          "sessions": 2,
-          "unchanged": 0,
-          "cursorAdvanced": true
-        },
-        "outcome": "succeeded",
-        "refused": [],
-        "advanced": true
-      }
-    },
-    {
-      "id": "54ed513c-2914-4bfa-8288-f9f9f73f6624",
-      "owner_id": "54ad5025-a7c6-46a0-bc14-19c6e5a7d372",
-      "space_id": "51705757-6ef8-4913-841f-547047285ff0",
-      "kind": "articles",
-      "state": "succeeded",
-      "input": {},
-      "priority": 0,
-      "attempts": 0,
-      "failure_kind": null,
-      "error": null,
-      "created_at": "2026-10-08T12:12:20.412Z",
-      "ended_at": "2026-10-08T12:12:24.258Z",
-      "report": {
-        "ref": null,
-        "kind": "articles",
-        "calls": 0,
-        "model": "p8-maintain-system-model",
-        "stats": {
-          "chars": 0,
-          "markers": 0,
-          "footnotes": 0,
-          "sentences": 0,
-          "markersStripped": 0,
-          "sentencesDeleted": 0,
-          "sentencesTrimmed": 0
-        },
-        "usage": {
-          "inputTokens": 0,
-          "outputTokens": 0
-        },
-        "failed": 0,
-        "refWhy": null,
-        "seeded": 0,
-        "topics": [],
-        "spaceId": "51705757-6ef8-4913-841f-547047285ff0",
-        "written": 0,
-        "unchanged": 0
-      }
-    },
-    {
-      "id": "0c01a357-020e-4002-ba83-b4a7bf19ecdf",
-      "owner_id": "54ad5025-a7c6-46a0-bc14-19c6e5a7d372",
-      "space_id": "51705757-6ef8-4913-841f-547047285ff0",
-      "kind": "maintain",
-      "state": "succeeded",
-      "input": {
-        "runId": "fbd41cf8-829d-43c9-ae5e-57ab2a601599"
-      },
-      "priority": 0,
-      "attempts": 0,
-      "failure_kind": null,
-      "error": null,
-      "created_at": "2026-10-08T12:12:20.607Z",
-      "ended_at": "2026-10-08T12:12:26.456Z",
-      "report": {
-        "kind": "maintain",
-        "runId": "fbd41cf8-829d-43c9-ae5e-57ab2a601599",
-        "cursor": "wc1.eyJzIjoiNTE3MDU3NTctNmVmOC00OTEzLTg0MWYtNTQ3MDQ3Mjg1ZmYwIiwicCI6WyIyMDI2LTEwLTA4VDExOjQyOjEzLjE2MVoiLCJzZXNzaW9uX3NldHRsZWQiLCJhMDZkNmIxOC03OGRmLTQ2MzktYjVjNy1kMjczZjk0NDI5MTUiXX0",
-        "report": {
-          "ops": {
-            "applied": 0,
-            "refused": 0,
-            "waiting": 2,
-            "heldBack": 0,
-            "proposed": 2,
-            "recorded": 2,
-            "selfCheckDropped": 0,
-            "heldBackByBreaker": 0
-          },
-          "docs": {
-            "tokens": {
-              "calls": 0,
-              "input": 0,
-              "output": 0
-            },
-            "seconds": 0,
-            "skipped": "no_confirmed_plan",
-            "affected": {
-              "stale": 0,
-              "total": 0,
-              "byRepo": 0,
-              "byEntries": 0,
-              "unwritten": 0
-            },
-            "proposal": null,
-            "sections": {
-              "failed": 0,
-              "written": 0,
-              "unchanged": 0
-            },
-            "unplaced": {
-              "entries": 0,
-              "designDocs": 0
-            },
-            "withdrawn": {
-              "paths": 0,
-              "sentences": 0
-            },
-            "planVersion": null
-          },
-          "tokens": {
-            "calls": 2,
-            "input": 20,
-            "output": 80
-          },
-          "anchors": {
-            "changed": 0,
-            "entries": 0,
-            "missing": 0
-          },
-          "entries": {
-            "kept": 2,
-            "dropped": 0,
-            "foreign": 0,
-            "extracted": 2,
-            "principles": 0
-          },
-          "seconds": 1,
-          "dossiers": 2,
-          "offTopic": 0,
-          "sessions": 2,
-          "unchanged": 0,
-          "cursorAdvanced": true
-        },
-        "outcome": "succeeded",
-        "refused": [],
-        "advanced": true
-      }
-    },
-    {
-      "id": "2a04e935-d7a0-4917-b3b7-a0ea34fbad27",
-      "owner_id": "54ad5025-a7c6-46a0-bc14-19c6e5a7d372",
-      "space_id": "51705757-6ef8-4913-841f-547047285ff0",
-      "kind": "articles",
-      "state": "succeeded",
-      "input": {},
-      "priority": 0,
-      "attempts": 0,
-      "failure_kind": null,
-      "error": null,
-      "created_at": "2026-10-08T12:12:26.455Z",
-      "ended_at": "2026-10-08T12:12:29.270Z",
-      "report": {
-        "ref": null,
-        "kind": "articles",
-        "calls": 0,
-        "model": "p8-maintain-system-model",
-        "stats": {
-          "chars": 0,
-          "markers": 0,
-          "footnotes": 0,
-          "sentences": 0,
-          "markersStripped": 0,
-          "sentencesDeleted": 0,
-          "sentencesTrimmed": 0
-        },
-        "usage": {
-          "inputTokens": 0,
-          "outputTokens": 0
-        },
-        "failed": 0,
-        "refWhy": null,
-        "seeded": 0,
-        "topics": [],
-        "spaceId": "51705757-6ef8-4913-841f-547047285ff0",
-        "written": 0,
-        "unchanged": 0
-      }
-    },
-    {
-      "id": "3cddae8e-1584-4e3f-b876-1790ccea1c16",
-      "owner_id": "b48898e7-c85c-460b-9231-5c94f0584896",
-      "space_id": "d0e33797-811e-474c-a162-32d212221389",
-      "kind": "maintain",
-      "state": "succeeded",
-      "input": {
-        "runId": "e2ee697a-c242-42dd-b31c-c09d3c700fd4"
-      },
-      "priority": 0,
-      "attempts": 0,
-      "failure_kind": null,
-      "error": null,
-      "created_at": "2026-10-08T12:12:26.734Z",
-      "ended_at": "2026-10-08T12:12:33.062Z",
-      "report": {
-        "kind": "maintain",
-        "runId": "e2ee697a-c242-42dd-b31c-c09d3c700fd4",
-        "cursor": "wc1.eyJzIjoiZDBlMzM3OTctODExZS00NzRjLWExNjItMzJkMjEyMjIxMzg5IiwicCI6WyIyMDI2LTEwLTA4VDExOjM4OjE2LjE1NloiLCJzZXNzaW9uX3NldHRsZWQiLCIzZDZkYzhlYy1kODlhLTQ2MDMtYjRlMC1lYTRkNTdjN2E3ZWYiXX0",
+        "runId": "3e6fdfc1-000b-45e5-b2b7-898681e4b5f7",
+        "cursor": "wc1.eyJzIjoiMjJmYzVlMjUtMTZmYy00Yjc1LTgwMGEtNzcwMTBkZDljZTM4IiwicCI6WyIyMDI2LTEwLTA4VDEyOjE2OjUxLjEwMVoiLCJzZXNzaW9uX3NldHRsZWQiLCI4NWExNmM5YS1iYTc4LTQzMGYtODBkMC00ZTUxMzU3MTQ5ZDMiXX0",
         "report": {
           "ops": {
             "applied": 0,
@@ -886,9 +496,9 @@
       }
     },
     {
-      "id": "ca4d972b-b388-4946-868e-43ff9179b1aa",
-      "owner_id": "b48898e7-c85c-460b-9231-5c94f0584896",
-      "space_id": "d0e33797-811e-474c-a162-32d212221389",
+      "id": "ab4709d1-4fcb-4192-a574-4700839e11eb",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
+      "space_id": "22fc5e25-16fc-4b75-800a-77010dd9ce38",
       "kind": "articles",
       "state": "succeeded",
       "input": {},
@@ -896,8 +506,8 @@
       "attempts": 0,
       "failure_kind": null,
       "error": null,
-      "created_at": "2026-10-08T12:12:33.061Z",
-      "ended_at": "2026-10-08T12:12:34.383Z",
+      "created_at": "2026-10-08T12:50:46.299Z",
+      "ended_at": "2026-10-08T12:50:47.652Z",
       "report": {
         "ref": null,
         "kind": "articles",
@@ -920,132 +530,497 @@
         "refWhy": null,
         "seeded": 22,
         "topics": [],
-        "spaceId": "d0e33797-811e-474c-a162-32d212221389",
+        "spaceId": "22fc5e25-16fc-4b75-800a-77010dd9ce38",
         "written": 0,
         "unchanged": 0
       }
+    },
+    {
+      "id": "14fb4b50-baf8-4cd6-81b3-9953d7dae5b9",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
+      "space_id": "22fc5e25-16fc-4b75-800a-77010dd9ce38",
+      "kind": "maintain",
+      "state": "succeeded",
+      "input": {
+        "runId": "d2e55305-edbd-4eee-820e-bfe4bdc34463"
+      },
+      "priority": 0,
+      "attempts": 0,
+      "failure_kind": null,
+      "error": null,
+      "created_at": "2026-10-08T12:50:46.963Z",
+      "ended_at": "2026-10-08T12:50:54.123Z",
+      "report": {
+        "kind": "maintain",
+        "runId": "d2e55305-edbd-4eee-820e-bfe4bdc34463",
+        "cursor": "wc1.eyJzIjoiMjJmYzVlMjUtMTZmYy00Yjc1LTgwMGEtNzcwMTBkZDljZTM4IiwicCI6WyIyMDI2LTEwLTA4VDEyOjE4OjUxLjA5OVoiLCJzZXNzaW9uX3NldHRsZWQiLCJlYjRmZjhhZi0zNmQyLTQ2YmEtOTBkZC0xMjUxNDBlOTE5MGQiXX0",
+        "report": {
+          "ops": {
+            "applied": 0,
+            "refused": 0,
+            "waiting": 2,
+            "heldBack": 0,
+            "proposed": 2,
+            "recorded": 2,
+            "selfCheckDropped": 0,
+            "heldBackByBreaker": 0
+          },
+          "docs": {
+            "tokens": {
+              "calls": 0,
+              "input": 0,
+              "output": 0
+            },
+            "seconds": 0,
+            "skipped": "no_confirmed_plan",
+            "affected": {
+              "stale": 0,
+              "total": 0,
+              "byRepo": 0,
+              "byEntries": 0,
+              "unwritten": 0
+            },
+            "proposal": null,
+            "sections": {
+              "failed": 0,
+              "written": 0,
+              "unchanged": 0
+            },
+            "unplaced": {
+              "entries": 0,
+              "designDocs": 0
+            },
+            "withdrawn": {
+              "paths": 0,
+              "sentences": 0
+            },
+            "planVersion": null
+          },
+          "tokens": {
+            "calls": 2,
+            "input": 20,
+            "output": 80
+          },
+          "anchors": {
+            "changed": 0,
+            "entries": 0,
+            "missing": 0
+          },
+          "entries": {
+            "kept": 2,
+            "dropped": 0,
+            "foreign": 0,
+            "extracted": 2,
+            "principles": 0
+          },
+          "seconds": 1,
+          "dossiers": 2,
+          "offTopic": 0,
+          "sessions": 2,
+          "unchanged": 0,
+          "cursorAdvanced": true
+        },
+        "outcome": "succeeded",
+        "refused": [],
+        "advanced": true
+      }
+    },
+    {
+      "id": "e93ed091-ceac-42cf-8e16-30a8417fd2b2",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
+      "space_id": "22fc5e25-16fc-4b75-800a-77010dd9ce38",
+      "kind": "articles",
+      "state": "succeeded",
+      "input": {},
+      "priority": 0,
+      "attempts": 0,
+      "failure_kind": null,
+      "error": null,
+      "created_at": "2026-10-08T12:50:54.123Z",
+      "ended_at": "2026-10-08T12:50:57.638Z",
+      "report": {
+        "ref": null,
+        "kind": "articles",
+        "calls": 0,
+        "model": "p8-maintain-system-model",
+        "stats": {
+          "chars": 0,
+          "markers": 0,
+          "footnotes": 0,
+          "sentences": 0,
+          "markersStripped": 0,
+          "sentencesDeleted": 0,
+          "sentencesTrimmed": 0
+        },
+        "usage": {
+          "inputTokens": 0,
+          "outputTokens": 0
+        },
+        "failed": 0,
+        "refWhy": null,
+        "seeded": 0,
+        "topics": [],
+        "spaceId": "22fc5e25-16fc-4b75-800a-77010dd9ce38",
+        "written": 0,
+        "unchanged": 0
+      }
+    },
+    {
+      "id": "12010986-a827-4ba7-8e5a-40f1643bf080",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
+      "space_id": "22fc5e25-16fc-4b75-800a-77010dd9ce38",
+      "kind": "maintain",
+      "state": "succeeded",
+      "input": {
+        "runId": "65b42dd8-759b-49fc-beb2-72a4202d0890"
+      },
+      "priority": 0,
+      "attempts": 0,
+      "failure_kind": null,
+      "error": null,
+      "created_at": "2026-10-08T12:50:54.539Z",
+      "ended_at": "2026-10-08T12:51:04.165Z",
+      "report": {
+        "kind": "maintain",
+        "runId": "65b42dd8-759b-49fc-beb2-72a4202d0890",
+        "cursor": "wc1.eyJzIjoiMjJmYzVlMjUtMTZmYy00Yjc1LTgwMGEtNzcwMTBkZDljZTM4IiwicCI6WyIyMDI2LTEwLTA4VDEyOjIwOjUxLjA5NloiLCJzZXNzaW9uX3NldHRsZWQiLCI0YTAzMjljYi1iYzc0LTRmZDktYTg3Yy0yMjRkYTBlN2UxZjgiXX0",
+        "report": {
+          "ops": {
+            "applied": 0,
+            "refused": 0,
+            "waiting": 2,
+            "heldBack": 0,
+            "proposed": 2,
+            "recorded": 2,
+            "selfCheckDropped": 0,
+            "heldBackByBreaker": 0
+          },
+          "docs": {
+            "tokens": {
+              "calls": 0,
+              "input": 0,
+              "output": 0
+            },
+            "seconds": 0,
+            "skipped": "no_confirmed_plan",
+            "affected": {
+              "stale": 0,
+              "total": 0,
+              "byRepo": 0,
+              "byEntries": 0,
+              "unwritten": 0
+            },
+            "proposal": null,
+            "sections": {
+              "failed": 0,
+              "written": 0,
+              "unchanged": 0
+            },
+            "unplaced": {
+              "entries": 0,
+              "designDocs": 0
+            },
+            "withdrawn": {
+              "paths": 0,
+              "sentences": 0
+            },
+            "planVersion": null
+          },
+          "tokens": {
+            "calls": 2,
+            "input": 20,
+            "output": 80
+          },
+          "anchors": {
+            "changed": 0,
+            "entries": 0,
+            "missing": 0
+          },
+          "entries": {
+            "kept": 2,
+            "dropped": 0,
+            "foreign": 0,
+            "extracted": 2,
+            "principles": 0
+          },
+          "seconds": 1,
+          "dossiers": 2,
+          "offTopic": 0,
+          "sessions": 2,
+          "unchanged": 0,
+          "cursorAdvanced": true
+        },
+        "outcome": "succeeded",
+        "refused": [],
+        "advanced": true
+      }
+    },
+    {
+      "id": "7d1de98c-9831-48ae-8e48-166d0ab35f5b",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
+      "space_id": "22fc5e25-16fc-4b75-800a-77010dd9ce38",
+      "kind": "articles",
+      "state": "succeeded",
+      "input": {},
+      "priority": 0,
+      "attempts": 0,
+      "failure_kind": null,
+      "error": null,
+      "created_at": "2026-10-08T12:51:04.164Z",
+      "ended_at": "2026-10-08T12:51:07.647Z",
+      "report": {
+        "ref": null,
+        "kind": "articles",
+        "calls": 0,
+        "model": "p8-maintain-system-model",
+        "stats": {
+          "chars": 0,
+          "markers": 0,
+          "footnotes": 0,
+          "sentences": 0,
+          "markersStripped": 0,
+          "sentencesDeleted": 0,
+          "sentencesTrimmed": 0
+        },
+        "usage": {
+          "inputTokens": 0,
+          "outputTokens": 0
+        },
+        "failed": 0,
+        "refWhy": null,
+        "seeded": 0,
+        "topics": [],
+        "spaceId": "22fc5e25-16fc-4b75-800a-77010dd9ce38",
+        "written": 0,
+        "unchanged": 0
+      }
+    },
+    {
+      "id": "0620050e-355f-404a-87eb-69865e75819f",
+      "owner_id": "491d4c79-7f53-447a-9f3a-f1088199bebe",
+      "space_id": "1c86a156-558b-46e5-b6a9-f8a5e9c06ced",
+      "kind": "maintain",
+      "state": "succeeded",
+      "input": {
+        "runId": "75ddc23c-711e-461d-8811-3736716f4991"
+      },
+      "priority": 0,
+      "attempts": 0,
+      "failure_kind": null,
+      "error": null,
+      "created_at": "2026-10-08T12:51:04.784Z",
+      "ended_at": "2026-10-08T12:51:10.149Z",
+      "report": {
+        "kind": "maintain",
+        "runId": "75ddc23c-711e-461d-8811-3736716f4991",
+        "cursor": "wc1.eyJzIjoiMWM4NmExNTYtNTU4Yi00NmU1LWI2YTktZjhhNWU5YzA2Y2VkIiwicCI6WyIyMDI2LTEwLTA4VDEyOjE2OjU0LjQ3MFoiLCJzZXNzaW9uX3NldHRsZWQiLCIxMzcyYTYyOS03NDAxLTQ5NWQtYWUwZC01MGU4NzU5MjUwM2MiXX0",
+        "report": {
+          "ops": {
+            "applied": 0,
+            "refused": 0,
+            "waiting": 2,
+            "heldBack": 0,
+            "proposed": 2,
+            "recorded": 2,
+            "selfCheckDropped": 0,
+            "heldBackByBreaker": 0
+          },
+          "docs": {
+            "tokens": {
+              "calls": 0,
+              "input": 0,
+              "output": 0
+            },
+            "seconds": 0,
+            "skipped": "no_confirmed_plan",
+            "affected": {
+              "stale": 0,
+              "total": 0,
+              "byRepo": 0,
+              "byEntries": 0,
+              "unwritten": 0
+            },
+            "proposal": null,
+            "sections": {
+              "failed": 0,
+              "written": 0,
+              "unchanged": 0
+            },
+            "unplaced": {
+              "entries": 0,
+              "designDocs": 0
+            },
+            "withdrawn": {
+              "paths": 0,
+              "sentences": 0
+            },
+            "planVersion": null
+          },
+          "tokens": {
+            "calls": 2,
+            "input": 20,
+            "output": 80
+          },
+          "anchors": {
+            "changed": 0,
+            "entries": 0,
+            "missing": 0
+          },
+          "entries": {
+            "kept": 2,
+            "dropped": 0,
+            "foreign": 0,
+            "extracted": 2,
+            "principles": 0
+          },
+          "seconds": 2,
+          "dossiers": 2,
+          "offTopic": 0,
+          "sessions": 2,
+          "unchanged": 0,
+          "cursorAdvanced": true
+        },
+        "outcome": "succeeded",
+        "refused": [],
+        "advanced": true
+      }
+    },
+    {
+      "id": "d80b6fc8-cd51-4699-867b-9eb1553b4040",
+      "owner_id": "491d4c79-7f53-447a-9f3a-f1088199bebe",
+      "space_id": "1c86a156-558b-46e5-b6a9-f8a5e9c06ced",
+      "kind": "articles",
+      "state": "queued",
+      "input": {},
+      "priority": 0,
+      "attempts": 0,
+      "failure_kind": null,
+      "error": null,
+      "created_at": "2026-10-08T12:51:10.149Z",
+      "ended_at": null,
+      "report": null
     }
   ],
   "requests": [
     {
-      "id": "789e35fa-a389-420c-867d-3ab5b40d73c2",
-      "job_id": "393ced82-3030-4d7c-9498-b8254cf73c61",
-      "owner_id": "54ad5025-a7c6-46a0-bc14-19c6e5a7d372",
+      "id": "50e10743-4802-4c9f-a672-7470958600d6",
+      "job_id": "46cfb9a6-940e-4370-b0a9-15b2fad46c99",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
       "step": "extract",
-      "unit": "519fc354-32a1-4f6b-94ff-fa6589087000",
+      "unit": "a49250b0-6549-4441-a2fd-54b2f4570252",
       "state": "succeeded",
       "attempt": 1,
       "input_tokens": 10,
       "output_tokens": 40,
       "http_status": 200,
       "error": null,
-      "enqueued_at": "2026-10-08T12:12:13.000Z",
-      "ended_at": "2026-10-08T12:12:14.304Z"
+      "enqueued_at": "2026-10-08T12:50:44.834Z",
+      "ended_at": "2026-10-08T12:50:46.046Z"
     },
     {
-      "id": "89827b7e-4093-4aba-83a2-78b5c524c91c",
-      "job_id": "393ced82-3030-4d7c-9498-b8254cf73c61",
-      "owner_id": "54ad5025-a7c6-46a0-bc14-19c6e5a7d372",
+      "id": "d1a3fe2e-8de4-4947-9fe3-7ae08680b908",
+      "job_id": "46cfb9a6-940e-4370-b0a9-15b2fad46c99",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
       "step": "extract",
-      "unit": "ddb233ea-77ca-4805-a5d3-ac62b45de119",
+      "unit": "85a16c9a-ba78-430f-80d0-4e51357149d3",
       "state": "succeeded",
       "attempt": 1,
       "input_tokens": 10,
       "output_tokens": 40,
       "http_status": 200,
       "error": null,
-      "enqueued_at": "2026-10-08T12:12:13.002Z",
-      "ended_at": "2026-10-08T12:12:14.304Z"
+      "enqueued_at": "2026-10-08T12:50:44.845Z",
+      "ended_at": "2026-10-08T12:50:46.048Z"
     },
     {
-      "id": "07362143-feda-4a44-84ab-cfb522b8754e",
-      "job_id": "aee0e18a-ee82-4650-bd5f-192748be773a",
-      "owner_id": "54ad5025-a7c6-46a0-bc14-19c6e5a7d372",
+      "id": "dc7140a6-d49e-4f33-be25-6eb203d9b9f2",
+      "job_id": "14fb4b50-baf8-4cd6-81b3-9953d7dae5b9",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
       "step": "extract",
-      "unit": "46b04b86-0659-44f9-8be6-73470dab84f3",
+      "unit": "c6019860-d248-4fa8-8bd2-a1c6cb755af7",
       "state": "succeeded",
       "attempt": 1,
       "input_tokens": 10,
       "output_tokens": 40,
       "http_status": 200,
       "error": null,
-      "enqueued_at": "2026-10-08T12:12:19.477Z",
-      "ended_at": "2026-10-08T12:12:20.321Z"
+      "enqueued_at": "2026-10-08T12:50:53.020Z",
+      "ended_at": "2026-10-08T12:50:54.053Z"
     },
     {
-      "id": "16c3cccc-130f-492c-8f1a-ddc6ae2fee23",
-      "job_id": "aee0e18a-ee82-4650-bd5f-192748be773a",
-      "owner_id": "54ad5025-a7c6-46a0-bc14-19c6e5a7d372",
+      "id": "d38d0c49-6b94-4936-990e-67e208e7d4ac",
+      "job_id": "14fb4b50-baf8-4cd6-81b3-9953d7dae5b9",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
       "step": "extract",
-      "unit": "a23b4970-e895-4f69-b3f1-5e1c522afefc",
+      "unit": "eb4ff8af-36d2-46ba-90dd-125140e9190d",
       "state": "succeeded",
       "attempt": 1,
       "input_tokens": 10,
       "output_tokens": 40,
       "http_status": 200,
       "error": null,
-      "enqueued_at": "2026-10-08T12:12:19.477Z",
-      "ended_at": "2026-10-08T12:12:20.323Z"
+      "enqueued_at": "2026-10-08T12:50:53.021Z",
+      "ended_at": "2026-10-08T12:50:54.054Z"
     },
     {
-      "id": "68d816b4-7233-47ac-8605-5b1fb45aef7c",
-      "job_id": "0c01a357-020e-4002-ba83-b4a7bf19ecdf",
-      "owner_id": "54ad5025-a7c6-46a0-bc14-19c6e5a7d372",
+      "id": "7414a070-8ca5-42d4-95d7-76c7109ab143",
+      "job_id": "12010986-a827-4ba7-8e5a-40f1643bf080",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
       "step": "extract",
-      "unit": "6b0b7472-3424-44d3-87aa-31e634eda7d0",
+      "unit": "ad0de092-856b-4384-b733-e7042dda81b1",
       "state": "succeeded",
       "attempt": 1,
       "input_tokens": 10,
       "output_tokens": 40,
       "http_status": 200,
       "error": null,
-      "enqueued_at": "2026-10-08T12:12:25.579Z",
-      "ended_at": "2026-10-08T12:12:26.344Z"
+      "enqueued_at": "2026-10-08T12:51:02.895Z",
+      "ended_at": "2026-10-08T12:51:04.081Z"
     },
     {
-      "id": "d1632f34-767c-44c0-bdd8-739dc98d90cc",
-      "job_id": "0c01a357-020e-4002-ba83-b4a7bf19ecdf",
-      "owner_id": "54ad5025-a7c6-46a0-bc14-19c6e5a7d372",
+      "id": "dbf3602f-bccf-48c0-a79e-dee0f6f5dda7",
+      "job_id": "12010986-a827-4ba7-8e5a-40f1643bf080",
+      "owner_id": "de9f15d4-0305-47d6-8d85-1944be9180f9",
       "step": "extract",
-      "unit": "a06d6b18-78df-4639-b5c7-d273f9442915",
+      "unit": "4a0329cb-bc74-4fd9-a87c-224da0e7e1f8",
       "state": "succeeded",
       "attempt": 1,
       "input_tokens": 10,
       "output_tokens": 40,
       "http_status": 200,
       "error": null,
-      "enqueued_at": "2026-10-08T12:12:25.579Z",
-      "ended_at": "2026-10-08T12:12:26.345Z"
+      "enqueued_at": "2026-10-08T12:51:02.896Z",
+      "ended_at": "2026-10-08T12:51:04.082Z"
     },
     {
-      "id": "56dbbb12-feb7-4c7d-bff6-69c5623bc02a",
-      "job_id": "3cddae8e-1584-4e3f-b876-1790ccea1c16",
-      "owner_id": "b48898e7-c85c-460b-9231-5c94f0584896",
+      "id": "92d24bf6-547b-4555-936e-6e6f29b44af4",
+      "job_id": "0620050e-355f-404a-87eb-69865e75819f",
+      "owner_id": "491d4c79-7f53-447a-9f3a-f1088199bebe",
       "step": "extract",
-      "unit": "dfb6d71e-90a9-480b-aaa7-d29a5c271447",
+      "unit": "da18ad42-050b-43bf-8394-7eac50f988ae",
       "state": "succeeded",
       "attempt": 1,
       "input_tokens": 10,
       "output_tokens": 40,
       "http_status": 200,
       "error": null,
-      "enqueued_at": "2026-10-08T12:12:30.770Z",
-      "ended_at": "2026-10-08T12:12:32.580Z"
+      "enqueued_at": "2026-10-08T12:51:09.321Z",
+      "ended_at": "2026-10-08T12:51:10.098Z"
     },
     {
-      "id": "efcce971-7415-4ca8-ad1f-7c9eb329c418",
-      "job_id": "3cddae8e-1584-4e3f-b876-1790ccea1c16",
-      "owner_id": "b48898e7-c85c-460b-9231-5c94f0584896",
+      "id": "e244c92d-72dc-47ed-a2be-22413c0ded5a",
+      "job_id": "0620050e-355f-404a-87eb-69865e75819f",
+      "owner_id": "491d4c79-7f53-447a-9f3a-f1088199bebe",
       "step": "extract",
-      "unit": "3d6dc8ec-d89a-4603-b4e0-ea4d57c7a7ef",
+      "unit": "1372a629-7401-495d-ae0d-50e87592503c",
       "state": "succeeded",
       "attempt": 1,
       "input_tokens": 10,
       "output_tokens": 40,
       "http_status": 200,
       "error": null,
-      "enqueued_at": "2026-10-08T12:12:30.771Z",
-      "ended_at": "2026-10-08T12:12:32.606Z"
+      "enqueued_at": "2026-10-08T12:51:09.321Z",
+      "ended_at": "2026-10-08T12:51:10.099Z"
     }
   ],
   "counts": {
@@ -1095,14 +1070,14 @@
       "sessionsAddedByRun": 0,
       "tasksAddedByRun": 0
     },
-    "windowSeconds": 68
+    "windowSeconds": 69
   },
   "providerless": {
     "patch": {
       "status": 200,
       "body": {
-        "id": "6MAF2KubcRGeoXtdsHVG6z",
-        "slug": "maintain-d0e33797",
+        "id": "rpJImz8rG41L2lUJYl5y9",
+        "slug": "maintain-1c86a156",
         "title": "Providerless space (P8)",
         "repoUrlNorm": "/tmp/wiki-maintain-server-canary/origin",
         "rootCommitSha": "34ebf7ac97f6887838b146a66cac9adbb64ca61e",
@@ -1113,32 +1088,32 @@
           "automaticSpotChecks": false,
           "maintenance": {
             "enabled": true,
-            "workspaceId": "6Ciq94BaGREB9w1kNRzs65",
+            "workspaceId": "7ddT3HnmT9jndOpj26bruL",
             "provider": "claude",
             "dailyRunLimit": 8,
             "lookbackDays": 7,
-            "listId": "34cLVOdtufBhUB92yV9NY",
-            "workspacePublicId": "6Ciq94BaGREB9w1kNRzs65",
-            "listPublicId": "34cLVOdtufBhUB92yV9NY",
-            "agentId": "6Ciq94BaGREB9w1kNRzs65"
+            "listId": "34cMSB789LPf56S3Xytot",
+            "workspacePublicId": "7ddT3HnmT9jndOpj26bruL",
+            "listPublicId": "34cMSB789LPf56S3Xytot",
+            "agentId": "7ddT3HnmT9jndOpj26bruL"
           }
         },
-        "createdAt": "2026-10-08T12:11:16.129Z",
-        "updatedAt": "2026-10-08T12:12:26.646Z",
-        "publicId": "6MAF2KubcRGeoXtdsHVG6z"
+        "createdAt": "2026-10-08T12:49:54.386Z",
+        "updatedAt": "2026-10-08T12:51:04.635Z",
+        "publicId": "rpJImz8rG41L2lUJYl5y9"
       },
       "maintenance": {
-        "listId": "01a11b6d-da8f-77cd-9d85-adbb87cc7d20",
+        "listId": "01a11b91-392e-708e-be93-38a9374110ff",
         "enabled": true,
         "provider": "claude",
-        "workspaceId": "cbe24134-8097-41d4-8d21-6bc84f71a339",
+        "workspaceId": "fb00dd00-6631-48e1-8ff4-117ce867d731",
         "lookbackDays": 7,
         "dailyRunLimit": 8
       }
     },
     "run": {
-      "runId": "e2ee697a-c242-42dd-b31c-c09d3c700fd4",
-      "jobId": "3cddae8e-1584-4e3f-b876-1790ccea1c16",
+      "runId": "75ddc23c-711e-461d-8811-3736716f4991",
+      "jobId": "0620050e-355f-404a-87eb-69865e75819f",
       "jobState": "succeeded",
       "outcome": "succeeded",
       "opsRefused": 0,
@@ -1146,9 +1121,9 @@
       "error": null,
       "taskId": null,
       "cursor": {
-        "at": "2026-10-08T11:38:16.156Z",
+        "at": "2026-10-08T12:16:54.470Z",
         "kind": "session_settled",
-        "ref": "3d6dc8ec-d89a-4603-b4e0-ea4d57c7a7ef",
+        "ref": "1372a629-7401-495d-ae0d-50e87592503c",
         "failures": 0
       },
       "report": {
@@ -1210,7 +1185,7 @@
           "extracted": 2,
           "principles": 0
         },
-        "seconds": 3,
+        "seconds": 2,
         "dossiers": 2,
         "offTopic": 0,
         "sessions": 2,
@@ -1220,12 +1195,12 @@
     }
   },
   "door": {
-    "runner": "0.1.225",
+    "runner": "0.1.224+p8-merge.2865071b3",
     "maintain": {
-      "argv": "/tmp/p8maint/orbit wiki maintain --space 2TfiY62ITML9FOdlqIJrBg --json",
+      "argv": "/tmp/p8-orbit-merge wiki maintain --space 1414QrDa3auwuAktck2Ijw --json",
       "status": 1,
-      "stdout": "{\"spaceId\":\"2TfiY62ITML9FOdlqIJrBg\",\"outcome\":\"failed\",\"advanced\":false,\"report\":{\"sessions\":0,\"dossiers\":0,\"unchanged\":0,\"offTopic\":0,\"entries\":{\"extracted\":0,\"kept\":0,\"dropped\":0,\"foreign\":0,\"principles\":0},\"ops\":{\"proposed\":0,\"recorded\":0,\"refused\":0,\"selfCheckDropped\":0,\"heldBack\":0,\"heldBackByBreaker\":0,\"applied\":0,\"waiting\":0},\"tokens\":{\"input\":0,\"output\":0,\"calls\":0},\"seconds\":0}}",
-      "stderr": "orbit wiki: orbit wiki maintain: GET /runner/wiki/spaces/2TfiY62ITML9FOdlqIJrBg/maintenance/run -> 409\n  refused: WIKI_SERVER_EXECUTES\n  what:    this account's Wiki maintenance run is executed by the Orbit server (ORBIT_WIKI_EXECUTOR): its wiki worker reads the dossiers and calls the deployment's System model through the request queue, and no session's provider is asked. Nothing was read or proposed.\n{\"code\":\"WIKI_SERVER_EXECUTES\",\"message\":\"this account's Wiki maintenance run is executed by the Orbit server (ORBIT_WIKI_EXECUTOR): its wiki worker reads the dossiers and calls the deployment's System model through the request queue, and no session's provider is asked. Nothing was read or proposed.\"}"
+      "stdout": "{\"spaceId\":\"1414QrDa3auwuAktck2Ijw\",\"outcome\":\"failed\",\"advanced\":false,\"report\":{\"sessions\":0,\"dossiers\":0,\"unchanged\":0,\"offTopic\":0,\"entries\":{\"extracted\":0,\"kept\":0,\"dropped\":0,\"foreign\":0,\"principles\":0},\"ops\":{\"proposed\":0,\"recorded\":0,\"refused\":0,\"selfCheckDropped\":0,\"heldBack\":0,\"heldBackByBreaker\":0,\"applied\":0,\"waiting\":0},\"tokens\":{\"input\":0,\"output\":0,\"calls\":0},\"seconds\":0}}",
+      "stderr": "orbit wiki: orbit wiki maintain: GET /runner/wiki/spaces/1414QrDa3auwuAktck2Ijw/maintenance/run -> 409\n  refused: WIKI_SERVER_EXECUTES\n  what:    this account's Wiki maintenance run is executed by the Orbit server (ORBIT_WIKI_EXECUTOR): its wiki worker reads the dossiers and calls the deployment's System model through the request queue, and no session's provider is asked. Nothing was read or proposed.\n{\"code\":\"WIKI_SERVER_EXECUTES\",\"message\":\"this account's Wiki maintenance run is executed by the Orbit server (ORBIT_WIKI_EXECUTOR): its wiki worker reads the dossiers and calls the deployment's System model through the request queue, and no session's provider is asked. Nothing was read or proposed.\"}"
     },
     "runContext": {
       "status": 409,
@@ -1257,31 +1232,31 @@
   },
   "articlesJobs": [
     {
-      "id": "b5a43a8c-be60-4be8-8e4e-cc60ea33b260",
+      "id": "ab4709d1-4fcb-4192-a574-4700839e11eb",
       "state": "succeeded",
       "input": {},
       "priority": 0,
-      "createdAt": "2026-10-08T12:12:14.471Z",
-      "endedAt": "2026-10-08T12:12:15.864Z",
+      "createdAt": "2026-10-08T12:50:46.299Z",
+      "endedAt": "2026-10-08T12:50:47.652Z",
       "failureKind": null,
       "error": null
     },
     {
-      "id": "54ed513c-2914-4bfa-8288-f9f9f73f6624",
+      "id": "e93ed091-ceac-42cf-8e16-30a8417fd2b2",
       "state": "succeeded",
       "input": {},
       "priority": 0,
-      "createdAt": "2026-10-08T12:12:20.412Z",
-      "endedAt": "2026-10-08T12:12:24.258Z",
+      "createdAt": "2026-10-08T12:50:54.123Z",
+      "endedAt": "2026-10-08T12:50:57.638Z",
       "failureKind": null,
       "error": null
     },
     {
-      "id": "2a04e935-d7a0-4917-b3b7-a0ea34fbad27",
+      "id": "7d1de98c-9831-48ae-8e48-166d0ab35f5b",
       "state": "queued",
       "input": {},
       "priority": 0,
-      "createdAt": "2026-10-08T12:12:26.455Z",
+      "createdAt": "2026-10-08T12:51:04.164Z",
       "endedAt": null,
       "failureKind": null,
       "error": null
@@ -1296,15 +1271,15 @@
   },
   "cursor": {
     "accountA": {
-      "at": "2026-10-08T11:42:13.161Z",
+      "at": "2026-10-08T12:20:51.096Z",
       "kind": "session_settled",
-      "ref": "a06d6b18-78df-4639-b5c7-d273f9442915",
+      "ref": "4a0329cb-bc74-4fd9-a87c-224da0e7e1f8",
       "failures": 0
     },
     "accountB": {
-      "at": "2026-10-08T11:38:16.156Z",
+      "at": "2026-10-08T12:16:54.470Z",
       "kind": "session_settled",
-      "ref": "3d6dc8ec-d89a-4603-b4e0-ea4d57c7a7ef",
+      "ref": "1372a629-7401-495d-ae0d-50e87592503c",
       "failures": 0
     }
   },

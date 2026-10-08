@@ -7,7 +7,16 @@
 - 本分支的 `dist` 起的真 apiserver 与 wiki-worker 进程；
 - 真的 PostgreSQL（一次性容器，跑完迁移，最后一次是 `0407_wiki_maintain_job`）；
 - fake 的 System model（`fake-model.mjs`，只答抽取与核实）；
-- 本项目线的 runner 二进制 **0.1.225**（声明 `wiki-repo-op/v1`），两个账号各一台、各读自己的 checkout；
+- 一棵**指名提交**的 runner 二进制：`2865071b3`（本分支与项目线 5591b09a8 的合并提交）用
+  `cd src/runner-go && GOCACHE=… go build -trimpath -ldflags "-X main.version=0.1.224+p8-merge.2865071b3" -o /tmp/p8-orbit-merge .`
+  构建，`--version` 回 `0.1.224+p8-merge.2865071b3`；两个账号各一台、各读自己的 checkout。
+
+  > 版本号的来源：runner 的版本是构建时用 `-ldflags "-X main.version=…"` 打进去的（`src/runner-go/main.go` 里
+  > `var version = "dev"`），树里没有别处写死它。第 2 版证据用的是兄弟会话留在 `/tmp/p8canary/bin/orbit` 的预编译件
+  > （`--version` 回 `0.1.225`）：`go version -m` 显示它 `-trimpath`、`orbit (devel)`、没有 `vcs.revision`，所以
+  > **无法从二进制指认它出自哪棵树、哪个提交**——当时本分支与项目线（1cf7949fe）的 `package.json` 都是 0.1.224，
+  > 0.1.225 是后来整文件读取任务落地（5591b09a8）才进的树。本节记录的这次 canary 换成了上面这枚由合并提交构建的
+  > 二进制，provenance 可指名、可重建。
 - `ORBIT_WIKI_EXECUTOR=canary`，两个账号都在名单里。
 
 ## 怎么跑
@@ -27,11 +36,11 @@ bash docs/evidence/wiki-maintain-server-canary/run.sh
 
 | 次 | 运行行 `wiki_maintenance_run.id` | 作业行 `wiki_job.id` | 作业状态 | 记下的 op | 服务端拒绝 | 游标推进前 → 后 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `d1ba6e1e-3a8b-4989-aca7-f57e0befd8e6` | `393ced82-3030-4d7c-9498-b8254cf73c61` | succeeded（attempts 3，前两次是 infra：runner 还没上报能力，退避重试且**不计**连续失败） | 2 | 0 | （无） → `ddb233ea-77ca-4805-a5d3-ac62b45de119` |
-| 2 | `6cfc46f4-409d-483b-99c7-c5fce78c575c` | `aee0e18a-ee82-4650-bd5f-192748be773a` | succeeded | 2 | 0 | `ddb233ea…` → `46b04b86-0659-44f9-8be6-73470dab84f3` |
-| 3 | `fbd41cf8-829d-43c9-ae5e-57ab2a601599` | `0c01a357-020e-4002-ba83-b4a7bf19ecdf` | succeeded | 2 | 0 | `46b04b86…` → `a06d6b18-78df-4639-b5c7-d273f9442915` |
+| 1 | `3e6fdfc1-000b-45e5-b2b7-898681e4b5f7` | `46cfb9a6-940e-4370-b0a9-15b2fad46c99` | succeeded（attempts 3，前两次是 infra：runner 还没上报能力，退避重试且**不计**连续失败） | 2 | 0 | （无） → `85a16c9a-ba78-430f-80d0-4e51357149d3` |
+| 2 | `d2e55305-edbd-4eee-820e-bfe4bdc34463` | `14fb4b50-baf8-4cd6-81b3-9953d7dae5b9` | succeeded | 2 | 0 | `85a16c9a…` → `eb4ff8af-36d2-46ba-90dd-125140e9190d` |
+| 3 | `65b42dd8-759b-49fc-beb2-72a4202d0890` | `12010986-a827-4ba7-8e5a-40f1643bf080` | succeeded | 2 | 0 | `eb4ff8af…` → `4a0329cb-bc74-4fd9-a87c-224da0e7e1f8` |
 
-游标行最后：`{kind: session_settled, ref: a06d6b18…, consecutive_failures: 0}`（`evidence.json` 的 `cursor.accountA`）。
+游标行最后：`{kind: session_settled, ref: 4a0329cb…, consecutive_failures: 0}`（`evidence.json` 的 `cursor.accountA`）。
 三次运行的 `task_id` 都是 `null`，`catch_up` 都是 `null`。
 
 ### 2. 请求行：8 条，全部 `extract/succeeded`
@@ -58,9 +67,9 @@ bash docs/evidence/wiki-maintain-server-canary/run.sh
 
 | `wiki_job.id` | kind | state | created_at |
 | --- | --- | --- | --- |
-| `b5a43a8c-be60-4be8-8e4e-cc60ea33b260` | articles | succeeded | 2026-10-08T12:12:14.471Z |
-| `54ed513c-2914-4bfa-8288-f9f9f73f6624` | articles | succeeded | 2026-10-08T12:12:20.412Z |
-| `2a04e935-d7a0-4917-b3b7-a0ea34fbad27` | articles | **queued** | 2026-10-08T12:12:26.455Z |
+| `ab4709d1-4fcb-4192-a574-4700839e11eb` | articles | succeeded | 2026-10-08T12:50:46.299Z |
+| `e93ed091-ceac-42cf-8e16-30a8417fd2b2` | articles | succeeded | 2026-10-08T12:50:54.123Z |
+| `7d1de98c-9831-48ae-8e48-166d0ab35f5b` | articles | **queued** | 2026-10-08T12:51:04.164Z |
 
 （规则：`outcome succeeded && catchUp null && recordedOps`，`queueWikiArticlesAfterRun`；见 `articlesJobs` 与检查
 「a run succeeded, recorded ops and was not behind, and a queued articles job exists for the space」。）
@@ -71,18 +80,18 @@ bash docs/evidence/wiki-maintain-server-canary/run.sh
 空间里存的还是 `provider: "claude"`（内置引擎，维护会话起不了的那种）。`evidence.json` 的 `providerless`：
 
 - `patch`：owner 自己的 `PATCH /api/wiki/spaces/:id` 回 **200**，`settings.maintenance.enabled = true`、`provider: "claude"` 原样保留；
-- `run`：`runId e2ee697a-c242-42dd-b31c-c09d3c700fd4`、`jobId 3cddae8e-1584-4e3f-b876-1790ccea1c16`、
-  `jobState succeeded`、`outcome succeeded`、`opsRefused 0`、`taskId null`，游标 `3d6dc8ec…`。
+- `run`：`runId 75ddc23c-711e-461d-8811-3736716f4991`、`jobId 0620050e-355f-404a-87eb-69865e75819f`、
+  `jobState succeeded`、`outcome succeeded`、`opsRefused 0`、`taskId null`，游标 `1372a629…`。
 
 对照：runner 模式下同一份设置会被 `maintenance.provider` 拒绝（`wiki-maintain-trigger.pg.spec.ts` 的
 「the settings door asks no provider of an account the server executes, and the runner mode's refusal is unchanged」）。
 
 ### 6. 已发布 runner 的门：409，没有调模型
 
-`evidence.json` 的 `door`（runner 二进制 0.1.225）：
+`evidence.json` 的 `door`（runner 二进制 `0.1.224+p8-merge.2865071b3`，由合并提交构建）：
 
 ```
-$ orbit wiki maintain --space 2TfiY62ITML9FOdlqIJrBg --json      # exit 1
+$ orbit wiki maintain --space 1414QrDa3auwuAktck2Ijw --json      # exit 1
 orbit wiki maintain: GET /runner/wiki/spaces/…/maintenance/run -> 409
   refused: WIKI_SERVER_EXECUTES
   what:    this account's Wiki maintenance run is executed by the Orbit server (ORBIT_WIKI_EXECUTOR): its wiki
@@ -93,7 +102,7 @@ orbit wiki maintain: GET /runner/wiki/spaces/…/maintenance/run -> 409
 `GET …/maintenance/run`、`GET …/dossiers`、`POST …/cursor` 三条路由各自 `409 {"code":"WIKI_SERVER_EXECUTES"}`；
 `model.callsDuringDoorChecks = 0`（fake model 的调用条数在门检查前后都是 8，只有 8 条抽取）。
 
-## 二、测试（`tests.txt`，合并后的树 bd04eb510 + P8 提交）
+## 二、测试（`tests.txt`，合并后的树 2865071b3：项目线 5591b09a8 + P8 工作）
 
 | 命令 | 结果 |
 | --- | --- |
@@ -102,7 +111,7 @@ orbit wiki maintain: GET /runner/wiki/spaces/…/maintenance/run -> 409
 | `run-pg-spec.sh …/wiki-maintain-trigger.pg.spec.ts` | **5/5 通过** |
 | `run-pg-spec.sh …/wiki-maintenance.pg.spec.ts` | **38/38 通过**（runner 路径回归） |
 | `run-pg-spec.sh …/wiki-health.pg.spec.ts` | **5/5 通过** |
-| `cd src/apiserver && npm test` | **4970 通过、0 失败、0 跳过** |
+| `cd src/apiserver && npm test` | **4972 通过、0 失败、0 跳过** |
 | `cd src/shared && npx vitest run` | **24 文件、408 通过** |
 | `cd src/web && npx vitest run --maxWorkers=2` | 368 文件、4758 通过（`web.txt`） |
 | `npm run test:compose-topology` | 11 通过、0 失败（`topology.txt`） |
@@ -139,21 +148,62 @@ orbit wiki maintain: GET /runner/wiki/spaces/…/maintenance/run -> 409
    用 `dailyRunLimit: 1` 跑出 `daily_limit_reached`，再用 `catchUp=active + localEndpoint` 证明不计入——
    与 runner 路径的 `wiki-maintenance.pg.spec.ts`（38 例，同一批 held 理由）读同一条规则。
 4. **runner 路径逐字未变**：`wiki-maintenance.pg.spec.ts` 38/38、`wiki-health.pg.spec.ts` 5/5、
-   `wiki-maintenance-session.pg.spec.ts`、`wiki-plan.pg.spec.ts` 等既有 spec 全绿，`npm test` 4970 全过。
+   `wiki-maintenance-session.pg.spec.ts`、`wiki-plan.pg.spec.ts` 等既有 spec 全绿，`npm test` 4972 全过。
 
 ## 四、合并
 
-- 项目线已两次 **merge**（不是 rebase）进本分支：`d09019e2b`，随后 `1cf7949fe`（提交历史里两个
-  `Merge the project line …` 提交），都无冲突。合并后重跑：`npm test` 4970 全过、四个 pg spec
-  6/6、5/5、38/38、5/5，`src/shared` 408 全过。
-- 在本分支 HEAD 上的 merge-tree（`git merge-tree --write-tree <HEAD> <ref>`，exit 0 = 干净、无冲突）：
-  - `HEAD` + `origin/project/34bmzOkov3xN2yLPrnsCk`（`1cf7949fe`）→ exit 0；
-  - `HEAD` + `origin/main`（`6a58a9515`）→ exit 0；
-  两次运行的写入树哈希记在本次证据提交（`task_evidence_submit` 的 checks/说明）里——本文件在那之后只改了这一段文字。
-- 整文件读取任务（`34cIIF63cjJB1zDdbsbC4`）当时还没落到项目线上（项目线上没有 `0406_*` 迁移目录）。
-  它的迁移号是 `0406_wiki_repo_file`、本任务是 `0407_wiki_maintain_job`，**两个号不同、目录不同**，两边落地后可以并存，
-  不需要再让号；它落地后若与 `contracts/wiki.contract.json`、`docs/wiki-contract.md` 或迁移账本
-  （`task-judgment-data-preserved.spec.ts`）冲突，按项目线的合并结果两边都保留即可。
+### 4.1 排版：合同文件只多三个键
+
+第 2 版把 `contracts/wiki.contract.json` 整份重排了（2720 行 → 4387 行）。现在它逐字节回到项目线的写法，
+新键按文件原有写法加在各自对象的末尾（小的 map 与数组仍在同一行：`"steps": { "extract": "extract", "planProposal": "plan_proposal" }`、
+`"docsExcluded": ["docs/mocks/", "/docs/evidence/"]`）：
+
+```
+$ git diff --numstat 76740abaa -- contracts/wiki.contract.json      # 本任务的全部改动
+33      2       contracts/wiki.contract.json
+$ git diff --numstat origin/project/34bmzOkov3xN2yLPrnsCk -- contracts/wiki.contract.json
+33      2       contracts/wiki.contract.json
+```
+
+按解析后的 JSON 比较（把项目线的 JSON 与本文件的 JSON 各解析一遍，递归找「新增/删除/改值」的键）：
+
+```
+added (top-level of each parent): ['.maintenance.job.server', '.plan.proposals.author', '.jobs.kindRuns.maintain']
+removed: []
+merged == project line + my three keys: True
+```
+
+那 2 行「删除」是三个末端成员各加了一个逗号（`"cli"` 的闭括号、`"reject"`、`"docs_build"`）——git 按行计。
+
+### 4.2 合入整文件读取任务的落地（不 rebase）
+
+整文件读取任务（`34cIIF63cjJB1zDdbsbC4`）的落地 `5591b09a8` 已进项目线（含迁移目录 `0406_wiki_repo_file`），
+本分支 `git merge --no-ff origin/project/34bmzOkov3xN2yLPrnsCk` 合入，合并提交详见提交历史里的
+`Merge the project line (5591b09a8) …`。两处冲突都两边保留：
+
+- `contracts/wiki.contract.json`：项目线的原文 + 本任务三个键（上面 4.1 的 numstat 与解析比较）；
+- `docs/wiki-contract.md`：§26.6 的 `look` 一条用落地那版（`runner_upgrade` 盖两种机器、`capability` / `wholeFile`
+  分开），随后是完整的 §27（本任务的维护运行）；
+- `src/apiserver/src/tasks/task-judgment-data-preserved.spec.ts`：迁移账本 **0406 在前、0407 在后**，
+  两条注释都在，数组只在 0407 之后闭合。
+
+落地还改了仓库读取路径（`readWikiRepoFiles`，先查缓存、按 runner 是否声明 `wiki-repo-op-read/v1` 决定整份或
+22,000 字窗口）。本任务的文档步骤改走它，仓库闸门改用 `wikiRepoStepsCanRun`：只有 `wiki-repo-op/v1` 的机器照旧
+跑（有界读取），一点仓库能力都没有的照旧按 infra 拒绝。
+
+### 4.3 merge-tree 与重跑
+
+在 HEAD `383309af1`（本目录这次证据所在的提交；其后只改了本节文字）上测得，两条线都干净：
+
+```
+$ git merge-tree --write-tree HEAD origin/project/34bmzOkov3xN2yLPrnsCk
+b362cf28a58a77f2821b9b9c4d4594b6d2085813        # exit 0；项目线当时为 5591b09a8
+$ git merge-tree --write-tree HEAD origin/main
+b362cf28a58a77f2821b9b9c4d4594b6d2085813        # exit 0；main 当时为 58a3889ff（已含项目线 5591b09a8）
+```
+
+合并后重跑：`npm test` **4972 通过 / 0 失败**、`src/shared` **408 通过**、四个 pg spec
+**6/6、5/5、38/38、5/5**；canary 用**由合并提交构建**的 runner 重跑，**24/24 全过**（`evidence.json` 即这次运行）。
 
 ## 五、与本次改动无关的红 spec
 
