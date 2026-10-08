@@ -57,6 +57,26 @@ describe('planUsageRows', () => {
     });
   });
 
+  it("names Kimi Code's windows as its own /usage panel does, its monthly ones included", () => {
+    const rows = planUsageRows({
+      provider: 'kimi',
+      fiveHour: { utilization: 12 },
+      sevenDay: { utilization: 34 },
+      month: { utilization: 91.4 },
+      monthCode: { utilization: 30 },
+    });
+    expect(rows.map(({ key, label, percent, nearLimit }) => ({ key, label, percent, nearLimit }))).toEqual([
+      { key: 'fiveHour', label: '5h limit', percent: 12, nearLimit: false },
+      { key: 'sevenDay', label: 'Weekly limit', percent: 34, nearLimit: false },
+      { key: 'month', label: 'Monthly limit', percent: 91, nearLimit: true },
+      { key: 'monthCode', label: 'Monthly · code', percent: 30, nearLimit: false },
+    ]);
+    // What stops the login is its month, though its 5-hour window has room.
+    expect(bindingPlanUsageRow(rows)?.key).toBe('month');
+    // A window the runner did not read is not drawn.
+    expect(planUsageRows({ provider: 'kimi', sevenDay: { utilization: 7 } }).map((row) => row.label)).toEqual(['Weekly limit']);
+  });
+
   it('selects Kimi quota without leaking a flat Kimi snapshot into Claude', () => {
     const nested = {
       claude: { provider: 'claude', fiveHour: { utilization: 18 } },

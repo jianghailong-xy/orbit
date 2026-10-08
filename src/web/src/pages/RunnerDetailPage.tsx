@@ -146,6 +146,7 @@ interface Workspace {
   codexAccount?: string | null;
   claudeAccount?: string | null;
   antigravityAccount?: string | null;
+  kimiAccount?: string | null;
   runnerId?: string | null;
   enabled?: boolean;
   enableWorktree?: boolean;
@@ -356,6 +357,7 @@ export function RunnerDetailPage() {
   const [fCodexAccount, setFCodexAccount] = useState<string | null>(null);
   const [fClaudeAccount, setFClaudeAccount] = useState<string | null>(null);
   const [fAntigravityAccount, setFAntigravityAccount] = useState<string | null>(null);
+  const [fKimiAccount, setFKimiAccount] = useState<string | null>(null);
   // The Claude session id the Import section carries (edit mode only — importing needs the
   // workspace to exist). Reset with the rest of the form so a stale id can't leak across picks.
   const [importId, setImportId] = useState('');
@@ -386,6 +388,7 @@ export function RunnerDetailPage() {
         codexAccount: fCodexAccount,
         claudeAccount: fClaudeAccount,
         antigravityAccount: fAntigravityAccount,
+        kimiAccount: fKimiAccount,
       };
       return editing
         ? api<Workspace>(`/workspaces/${editing.id}`, { method: 'PATCH', body })
@@ -463,6 +466,7 @@ export function RunnerDetailPage() {
           codexAccount: a.codexAccount ?? null,
           claudeAccount: a.claudeAccount ?? null,
           antigravityAccount: a.antigravityAccount ?? null,
+          kimiAccount: a.kimiAccount ?? null,
           runnerId,
         },
       }),
@@ -578,6 +582,7 @@ export function RunnerDetailPage() {
     setFCodexAccount(a?.codexAccount ?? null);
     setFClaudeAccount(a?.claudeAccount ?? null);
     setFAntigravityAccount(a?.antigravityAccount ?? null);
+    setFKimiAccount(a?.kimiAccount ?? null);
     setImportId('');
     setHistory(null);
     setImportMode('none');
@@ -645,7 +650,8 @@ export function RunnerDetailPage() {
       (fAppend.trim() ? 1 : 0) +
       (fCodexAccount ? 1 : 0) +
       (fClaudeAccount ? 1 : 0) +
-      (fAntigravityAccount ? 1 : 0);
+      (fAntigravityAccount ? 1 : 0) +
+      (fKimiAccount ? 1 : 0);
     // What the runner last found at this path. It answers for the *saved* path, so an edited
     // field says so instead of showing a verdict about a directory that is no longer named
     // here — a stale ✓ against a typo would be worse than no answer at all.
@@ -908,6 +914,18 @@ export function RunnerDetailPage() {
                 setDirty(true);
               }}
               envDir={fEnv.find((r) => r.key.trim() === 'ORBIT_ANTIGRAVITY_GOOGLE_DIR')?.value}
+            />
+          )}
+          {runner && offersAccount(runner, 'kimi', fKimiAccount) && (
+            <AccountSelect
+              engine="kimi"
+              runner={runner}
+              value={fKimiAccount}
+              onChange={(next) => {
+                setFKimiAccount(next);
+                setDirty(true);
+              }}
+              envDir={fEnv.find((r) => r.key.trim() === 'KIMI_CODE_HOME')?.value}
             />
           )}
           <div className="rd-form-field">

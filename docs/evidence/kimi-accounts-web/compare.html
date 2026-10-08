@@ -1,0 +1,101 @@
+<!doctype html>
+<!-- Evidence for the web half of "Kimi Code 多账号" (task 34cM1TR1NHX2KUxthR6Sb): the design board's eight frames
+     (docs/mocks/kimi-accounts/01-web.png, left) beside the same frames captured from the real console (right) —
+     vite dev of this branch's src/web, shipped components and CSS, on the fake REST data the board was drawn
+     with (Claude accounts renamed to sample addresses) — and two frames of Kimi's quota, which the board did not
+     have yet. Same viewport (1440 px, 2x), clip and marks as the board. Captured by /var/tmp/kimi-web-real/shots.mjs
+     (server.mjs + serve.mjs + cdp.mjs beside it). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kimi Code accounts · web Providers · real console vs board</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../mocks/project-progress/mock.css">
+<style>
+  .m-sheet { width: 1976px; }
+  .cols { display: grid; grid-template-columns: 912px 912px; gap: 38px; align-items: start; }
+  .shot img { display: block; width: 912px; border-radius: 10px; box-shadow: 0 1px 4px rgba(15, 23, 42, .12); }
+  .m-cap { font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 8px 2px 0; }
+  .m-cap b { color: var(--text-1); }
+  .m-cap code, .m-sub code { font-size: 11.5px; padding: 0 4px; border-radius: 4px; background: #eef0f3; }
+  .lbl { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-2); margin: 0 0 10px; }
+  .gap { height: 26px; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">Kimi Code 多账号 · web Providers 页：真实控制台逐帧对照 01-web.png</h1>
+  <p class="m-sub zh">左边是设计图（<code>docs/mocks/kimi-accounts/01-web.png</code> 的八帧，原型截图），右边是同一帧在本分支真实 web 控制台上的截图：vite dev 跑 <code>src/web</code>，接口是同一份造的数据（Claude 账号换成示例地址），同样 1440 px 宽、2 倍、同样的裁切和标记。时间相关的字（checked … ago、resets …）随截图时刻不同。最后两帧是设计图还没有的 Kimi 额度。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① 旧 runner（没声明 <code>kimi-account-login/v1</code>）：Kimi 行没有「+ Add account」</div>
+    <div class="cols">
+      <div><div class="lbl zh"><span class="m-k">设计图</span>01a 现在</div><div class="shot"><img src="../../mocks/kimi-accounts/01a-today-card.png" alt=""></div></div>
+      <div><div class="lbl zh"><span class="m-k new">真实</span>01a 旧 runner 上的同一张卡</div><div class="shot"><img src="01a-today-card.png" alt=""></div>
+        <p class="m-cap zh"><b>A</b> 只有 ⋯；<b>B</b> Codex 照旧有 Add account。设计图左边是「现在」的 web；真实这边是新 web 遇到旧 runner，样子一样。</p></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 声明了 <code>kimi-account-login/v1</code> 的 runner：一个账号时也有「+ Add account」</div>
+    <div class="cols">
+      <div><div class="lbl zh"><span class="m-k">设计图</span>01b</div><div class="shot"><img src="../../mocks/kimi-accounts/01b-add-account.png" alt=""></div></div>
+      <div><div class="lbl zh"><span class="m-k new">真实</span>01b</div><div class="shot"><img src="01b-add-account.png" alt=""></div>
+        <p class="m-cap zh"><b>①</b> 位置、样式同 Codex / Antigravity；副标题照旧 <code>2.1.1 · kimi.ai</code>。</p></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">③ 加账号：先起名，再选站点；④ 设备码提示写站点</div>
+    <div class="cols">
+      <div><div class="lbl zh"><span class="m-k">设计图</span>01c</div><div class="shot"><img src="../../mocks/kimi-accounts/01c-pick-site.png" alt=""></div></div>
+      <div><div class="lbl zh"><span class="m-k new">真实</span>01c</div><div class="shot"><img src="01c-pick-site.png" alt=""></div>
+        <p class="m-cap zh"><b>②</b> 名字 Account 2；<b>③</b> 不自动开始，点站点才登录（名字为空时两个站点都按不动）。</p></div>
+    </div>
+    <div class="gap"></div>
+    <div class="cols">
+      <div><div class="lbl zh"><span class="m-k">设计图</span>01d</div><div class="shot"><img src="../../mocks/kimi-accounts/01d-device-kimi-com.png" alt=""></div></div>
+      <div><div class="lbl zh"><span class="m-k new">真实</span>01d</div><div class="shot"><img src="01d-device-kimi-com.png" alt=""></div>
+        <p class="m-cap zh"><b>④</b>「Sign in with the <b>kimi.com</b> account you are adding」；<b>⑤</b> 一键换到 kimi.ai，同一个名字重新开始。</p></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">⑤ 两个账号：展开、收起、Re-sign in、掉线</div>
+    <div class="cols">
+      <div><div class="lbl zh"><span class="m-k">设计图</span>01e</div><div class="shot"><img src="../../mocks/kimi-accounts/01e-two-open.png" alt=""></div></div>
+      <div><div class="lbl zh"><span class="m-k new">真实</span>01e</div><div class="shot"><img src="01e-two-open.png" alt=""></div>
+        <p class="m-cap zh"><b>⑥</b> 2 of 2 accounts available，头上不写站点；<b>⑦⑧</b> 每行「站点 · 目录」。</p></div>
+    </div>
+    <div class="gap"></div>
+    <div class="cols">
+      <div><div class="lbl zh"><span class="m-k">设计图</span>01f</div><div class="shot"><img src="../../mocks/kimi-accounts/01f-two-folded.png" alt=""></div></div>
+      <div><div class="lbl zh"><span class="m-k new">真实</span>01f</div><div class="shot"><img src="01f-two-folded.png" alt=""></div>
+        <p class="m-cap zh"><b>⑨</b> 收起时头上写下一个会话用的账号；没有额度读数时 No quota reported。</p></div>
+    </div>
+    <div class="gap"></div>
+    <div class="cols">
+      <div><div class="lbl zh"><span class="m-k">设计图</span>01g</div><div class="shot"><img src="../../mocks/kimi-accounts/01g-resign-current.png" alt=""></div></div>
+      <div><div class="lbl zh"><span class="m-k new">真实</span>01g</div><div class="shot"><img src="01g-resign-current.png" alt=""></div>
+        <p class="m-cap zh"><b>⑩</b> Work 的 Re-sign in：Current 是 Work 自己的 kimi.com。</p></div>
+    </div>
+    <div class="gap"></div>
+    <div class="cols">
+      <div><div class="lbl zh"><span class="m-k">设计图</span>01h</div><div class="shot"><img src="../../mocks/kimi-accounts/01h-signed-out.png" alt=""></div></div>
+      <div><div class="lbl zh"><span class="m-k new">真实</span>01h</div><div class="shot"><img src="01h-signed-out.png" alt=""></div>
+        <p class="m-cap zh"><b>⑪</b> 掉线只影响 Work：它自己的 Sign in，头上 1 of 2 accounts available。</p></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">⑥ 加的一帧：Kimi 额度（5 小时 / 7 天 / 月度），和 Claude / Codex 同一个额度列</div>
+    <div class="cols">
+      <div><div class="lbl zh"><span class="m-k new">真实</span>01i 展开</div><div class="shot"><img src="01i-quota-open.png" alt=""></div>
+        <p class="m-cap zh"><b>⑫</b> Default 的四个窗口：5h limit、Weekly limit、Monthly limit、Monthly · code（Kimi 自己 /usage 面板的叫法，code 是月度里编程的那一份）。<b>⑬</b> Work 的 5 小时窗口快用完，进度条变色，NEXT 落在 Default。</p></div>
+      <div><div class="lbl zh"><span class="m-k new">真实</span>01j 收起</div><div class="shot"><img src="01j-quota-folded.png" alt=""></div>
+        <p class="m-cap zh"><b>⑭</b> 收起时头上写 Next: Default 和它最接近上限的窗口（这里是月度 41%），规则同 Claude Code 的分组。</p></div>
+    </div>
+  </div>
+</section>
+</body>
+</html>

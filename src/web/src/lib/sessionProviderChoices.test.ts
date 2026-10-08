@@ -439,6 +439,58 @@ describe('the runner’s Antigravity (Google) accounts, under the Antigravity ch
   });
 });
 
+describe('the runner’s Kimi Code accounts, under the Kimi choice', () => {
+  const home = (id: string) => (id === 'default' ? '/root/.kimi-code' : `/root/.orbit/kimi-accounts/${id}`);
+  const kimi = (accounts: Array<{ id: string; name?: string; auth: 'yes' | 'no' | 'unknown' }>, auth: 'yes' | 'no' = 'yes') => [
+    { engine: 'claude' as const, installed: true, auth: 'yes' as const },
+    {
+      engine: 'kimi' as const,
+      installed: true,
+      auth,
+      kimiRegion: 'global' as const,
+      accounts: accounts.map((account) => ({ ...account, home: home(account.id) })),
+    },
+  ];
+  // Kimi's windows in the heartbeat's planUsage.kimi: Default's own, Work's under `accounts`.
+  const usage = {
+    kimi: {
+      provider: 'kimi',
+      fiveHour: { utilization: 12 },
+      sevenDay: { utilization: 34 },
+      month: { utilization: 41 },
+      monthCode: { utilization: 30 },
+      accounts: {
+        '5c2e91a0': { provider: 'kimi', fiveHour: { utilization: 97 }, sevenDay: { utilization: 20 }, month: { utilization: 10 } },
+      },
+    },
+  } as never;
+  const accountsOf = (choices: ReturnType<typeof providerChoices>) => choices.find((choice) => choice.slug === 'kimi')?.accounts;
+
+  it('lists each account by the window that stops it, its monthly ones included', () => {
+    const choices = providerChoices(
+      [],
+      catalog,
+      undefined,
+      kimi([{ id: 'default', auth: 'yes' }, { id: '5c2e91a0', name: 'Work', auth: 'yes' }, { id: 'c0ffee42', auth: 'no' }]),
+      [],
+      usage,
+    );
+    expect(accountsOf(choices)).toEqual([
+      // Its month is the fullest of its windows, though its 5-hour one has room.
+      { id: 'default', label: 'Default', quota: 'Monthly 41%' },
+      { id: '5c2e91a0', label: 'Work', quota: '5h 97%', nearLimit: true },
+      { id: 'c0ffee42', label: 'Account c0ffee42', unavailable: 'Not signed in' },
+    ]);
+  });
+
+  it('lists none for one account, or for an engine that cannot run', () => {
+    expect(accountsOf(providerChoices([], catalog, undefined, kimi([{ id: 'default', auth: 'yes' }]), [], usage))).toBeUndefined();
+    const blocked = providerChoices([], catalog, undefined, kimi([{ id: 'default', auth: 'no' }, { id: '5c2e91a0', auth: 'no' }], 'no'), [], usage);
+    expect(blocked.find((choice) => choice.slug === 'kimi')?.unavailable).toBe('Not signed in');
+    expect(accountsOf(blocked)).toBeUndefined();
+  });
+});
+
 describe('brandForProvider', () => {
   it('gives a built-in engine the same mark as its vendor', () => {
     expect(brandForProvider('claude', 'Claude').glyphKey).toBe('anthropic');
