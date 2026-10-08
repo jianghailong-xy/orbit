@@ -82,7 +82,7 @@ function Items({ items, container, zIndex }: { items: MenuItem[]; container: () 
     if (item.type === 'separator') return <BaseMenu.Separator key={item.key} className="orbit-menu-separator" />;
     if (item.type === 'group') return <BaseMenu.Group key={item.key}>
       <BaseMenu.GroupLabel className="orbit-menu-group-label">{item.label}</BaseMenu.GroupLabel>
-      <Items items={item.children ?? []} container={container} zIndex={zIndex} />
+      <div className="orbit-menu-group-list"><Items items={item.children ?? []} container={container} zIndex={zIndex} /></div>
     </BaseMenu.Group>;
     const contents = <>
       {item.icon != null && <span className="orbit-menu-icon" aria-hidden>{item.icon}</span>}

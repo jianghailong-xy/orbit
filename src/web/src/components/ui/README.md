@@ -65,7 +65,7 @@ P4.1（登录、初始化、个人资料、设置）按页面实际需要补齐�
 
 业务分别导入 `ui/Dialog`、`ui/Drawer`、`ui/ConfirmDialog`；`OverlaySurface` 是三者共享的实现，不是业务调用入口。全部要求受控 `open` 和可访问 `title`，正文为 children，简单说明可用 description（自动关联 aria-describedby）。
 
-- Dialog：`onClose` 是关闭请求，业务更新 open；默认宽度520px、顶部100px，宽度上限 100vw−32px；<=767px时保留旧弹窗108px顶部和8px边距（上限 100vw−16px）。宽度按视口宽度计，弹层视口出现滚动条时对话框宽度不变；滚动到底止于对话框下缘，与被替换对话框相同。footer 完全由调用方提供，原生表单使用 Button 的 type/form 属性。默认无自动 OK/Cancel。
+- Dialog：`onClose` 是关闭请求，业务更新 open；默认宽度520px、顶部100px，宽度上限 100vw−32px；<=767px时保留旧弹窗108px顶部和8px边距（上限 100vw−16px）。宽度按视口宽度计，弹层视口出现滚动条时对话框宽度不变；滚动到底止于对话框下缘，与被替换对话框相同。footer 完全由调用方提供，原生表单使用 Button 的 type/form 属性。默认无自动 OK/Cancel。放不下一行的按钮换到下一行，每行靠右、行间无间隙，同被替换对话框里行内排列的按钮（P4.3a：手机上的长确认按钮）。
 - Drawer：相同关闭和焦点约定，`placement="right"`（默认）或 `"bottom"`；width/height 支持 CSS 尺寸，默认378px，底部可用 height="auto"。headerActions 放置已有最大化等动作。复用 Base Dialog，因为现有 Drawer 没有滑动关闭或吸附点；不新增手势。
 - 默认支持 Esc、单击/单指轻点遮罩和 Close 按钮；内部按下、外部释放不关闭。`closeOnEscape`、`closeOnOutsideClick`、`closable` 分别控制三种关闭方式。busy 阻止关闭请求并禁用 Close；调用方负责自己的提交按钮。隐藏 Close 时应提供可访问的退出按钮。
 - 默认聚焦弹层容器，避免手机打开时自动弹出软键盘；initialFocus 可指定原生 ref。默认返回先前焦点；从菜单、触摸入口或会卸载的节点打开时，传 `returnFocus` 指向稳定的触发按钮。不能通过读取第三方 DOM 找触发器。
@@ -139,7 +139,7 @@ AntD `ConfigProvider` / `AntApp`、`theme.ts` 算法和 reset 保留到 P6。当
 
 P2.2 提供 `Menu`、`Popover`、`Tooltip`、`Select`、`Combobox` 和 `MultiSelect`。业务从具体文件导入；Base UI 的部件和事件类型不外泄。共同的 `open/onOpenChange` 可受控，也可省略；`side/align`、`popupClassName/popupStyle` 是公开定位/外观入口。默认 portal 归属当前 OverlayScope；在旧 Modal/Drawer 正文中包一层 Scope，沿用 P2.1 的共存约定。
 
-- `Menu` 接收可承接 ref 的按钮 `trigger` 和 `items`。动作含 key/label/icon、disabled/danger/selected/onSelect；separator/group/children 覆盖现有分隔、分组与子菜单。`checked/onCheckedChange` 提供 checkbox 语义，默认选中后保持打开；普通动作默认关闭，`closeOnSelect` 可覆盖。复杂 label 可给 `textValue` 支持文字导航。`variant="attachment"` 仅在 <=600px 使用42.4px行高、17px字号、26px圆角。菜单触发器和弹出内容拦截点击冒泡，避免触发行导航。菜单动作打开 Dialog 时给 Dialog `returnFocus` 指向稳定菜单按钮。打开后焦点在菜单内，按 Tab 离开并关闭菜单；这与旧 Dropdown（按 Tab 才进入菜单）不同，是协调者 2026-10-07 判定接受的约定，适用范围与测试依据见 [component-contracts](../../../../../docs/evidence/base-ui-migration/component-contracts.md)「Menu 打开后的焦点与 Tab」。
+- `Menu` 接收可承接 ref 的按钮 `trigger` 和 `items`。动作含 key/label/icon、disabled/danger/selected/onSelect；separator/group/children 覆盖现有分隔、分组与子菜单；分组内的项左右各缩进 8px，同被替换菜单（P4.3a）。`checked/onCheckedChange` 提供 checkbox 语义，默认选中后保持打开；普通动作默认关闭，`closeOnSelect` 可覆盖。复杂 label 可给 `textValue` 支持文字导航。`variant="attachment"` 仅在 <=600px 使用42.4px行高、17px字号、26px圆角。菜单触发器和弹出内容拦截点击冒泡，避免触发行导航。菜单动作打开 Dialog 时给 Dialog `returnFocus` 指向稳定菜单按钮。打开后焦点在菜单内，按 Tab 离开并关闭菜单；这与旧 Dropdown（按 Tab 才进入菜单）不同，是协调者 2026-10-07 判定接受的约定，适用范围与测试依据见 [component-contracts](../../../../../docs/evidence/base-ui-migration/component-contracts.md)「Menu 打开后的焦点与 Tab」。
 - `Popover` 用 `trigger/title/children`；无标题传 null。默认点击打开，可设 `openOnHover`；`initialFocus/returnFocus` 遵循弹层约定。内容内可直接放 Select/Combobox，Esc 逐层关闭。`Tooltip` 用 `children/content`，保留触发器原有 aria-describedby；disabled 原生按钮需用可聚焦 span 包裹，让提示可由键盘获得。
 - `Select` 与 `Combobox` 共用字符串 `value | null`、`options` 和 `onValueChange`。空字符串是有效选择（账号 Automatic）；null 表示未选择/显式清除。options 为 `{value,label,disabled?,title?}` 或 `{label,options}` 分组（`title`，P4.3a：可检索列表中选项的原生悬停提示）；label 为搜索/无障碍文本，复杂展示使用 `renderOption/renderValue`。支持 small/middle、outlined/borderless、disabled/loading、placeholder/clearable、emptyContent、showArrow 和 matchTriggerWidth。
 - 需要文本检索时使用 `Combobox`；默认按 label 忽略大小写匹配。修改查询和 Esc 不清掉已选值；显式清除才回调 null。远端搜索设置 `filter={false}` 与 `onSearch`，由业务处理请求/过期响应；`value={null}` 可用于选择后重置的动作入口。已选标签通过 aria-describedby 暴露给辅助技术。ref 分别指向 Select 按钮和 Combobox 输入框，name 支持原生表单值。
@@ -152,7 +152,7 @@ Combobox 的值、占位与搜索输入框放在同一个行盒 `.orbit-combobox
 
 浮层都放在页面坐标里，与旧组件挂在 body 上一样（`useFloating` 统一决定，各浮层的 Positioner 传 `positionMethod`）：挂进弹层（Dialog/Drawer/ConfirmDialog、Popover 内容、旧 Modal 里的 OverlayScope）的用 `fixed`，挂在 body 的保持 `absolute`（本身就是页面坐标，随页面滚动原生移动）。原因是 Base UI 在还没定位的浮层处于 `position: fixed` 时测量，再按指定方式套用第一次结果；挂进弹层的 `absolute` 浮层以弹层盒为定位参照，第一次定位会偏一个弹层原点，到下一次测量才回位。实际绘制的帧在下一次测量之后，但这一帧的 requestAnimationFrame 回调（Base UI 移动焦点、测量）读到的是偏移的位置；`fixed` 下从第一次起就在最终位置，也不被弹层宽度限制。逐帧检查是 `choices-first-frame.browser.mjs`，证据见 [overlay-first-frame](../../../../../docs/evidence/base-ui-migration/overlay-first-frame/README.md)。
 
-`MultiSelect` 使用字符串数组 value/onValueChange；搜索选项后保持列表打开，支持逐项移除、全清、分组和 maxTagCount。与被替换的多选一样，`mode="multiple"` 打开即高亮第一项（Enter 选它），打开期间箭头换成放大镜。`mode="tags"`、`open={false}`、`searchValue/onSearch`、`tokenSeparators={[',', ' ']}` 对应现有邮件输入：Enter 或失焦提交尾项，输入法组合期间不提交，值去重；格式校验和分享请求仍由业务负责。Backspace 删除数组末项，即使它在折叠计数内。
+`MultiSelect` 使用字符串数组 value/onValueChange；选项正文同被替换选项一样伸到选项内边距为止，已选项伸到 14px 的勾为止（P4.3a，`renderOption` 两端对齐的内容如标签名与计数因此与旧列表同位）；搜索选项后保持列表打开，支持逐项移除、全清、分组和 maxTagCount。与被替换的多选一样，`mode="multiple"` 打开即高亮第一项（Enter 选它），打开期间箭头换成放大镜。`mode="tags"`、`open={false}`、`searchValue/onSearch`、`tokenSeparators={[',', ' ']}` 对应现有邮件输入：Enter 或失焦提交尾项，输入法组合期间不提交，值去重；格式校验和分享请求仍由业务负责。Backspace 删除数组末项，即使它在折叠计数内。
 
 正常动效沿用旧实测：根菜单/选择列表200ms纵向展开，子菜单/Popover 200ms缩放，Tooltip 100ms缩放；入场/退场缓动与方向原点分别匹配旧组件。通过 Base UI 公开 data-open/data-closed/data-side/data-align/data-nested 设置 CSS 动画，由其生命周期等待退场完成，退场面不接收指针。入场结束不保留 transform，避免改变嵌套 portal 的定位参照。减少动态效果时与 P2.1 一样禁用缩放/渐隐。手机附件菜单除任务指定字号外保持旧实测布局：5px/12px行padding、4px行圆角、原分隔线、图标x=12px、总高240.953125px（本例5行）。
 
