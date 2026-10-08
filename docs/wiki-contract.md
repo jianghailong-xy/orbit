@@ -50,6 +50,13 @@ P1b。见新增的 §23，迁移 `0400_wiki_model_status`，JSON 里是 `systemM
 `ORBIT_WIKI_EXECUTOR`（默认 `runner`，行为不变）在这一期只由 worker 读；作业种类先只有端到端验证队列用的 `smoke`。见新增的 §24、§25，
 迁移 `0401_wiki_job`，JSON 里是 `jobs` 与 `modelQueue` 两节。
 
+**服务端执行 P4（2026-10-08）：文章**：执行器把账号交给服务端时（`server`，或 `canary` 名单内），主题文章由 wiki-worker 的
+`articles` 作业用 System model 写：维护运行成功结束、记下了 op、且不在追赶期时，服务端给该空间排一个文章作业（owner 2026-10-08 定），
+只重写指纹变了的主题；文章的 ref 取空间最近一份仓库快照的 sha，没有快照就先请求一次。runner 门对这样的账号回新拒绝码
+`WIKI_SERVER_EXECUTES`（409），`orbit wiki articles` 读到它就说明文章由服务端写、不调模型、以 0 退出。runner 模式下一切照旧：
+维护运行自判据 3 第 3 版起不再重写文章。见新增的 §18.8，JSON 里是 `articles.serverExecution`、`articles.job` 与
+`jobs.kindRuns.articles`。
+
 **权威来源**
 
 | 来源 | 位置 |
@@ -63,7 +70,7 @@ P1b。见新增的 §23，迁移 `0400_wiki_model_status`，JSON 里是 `systemM
 | 审阅模式的行为测试 | `src/apiserver/src/wiki/wiki-review-mode.pg.spec.ts`，经 `scripts/run-pg-spec.sh` 跑 |
 | Automatic 核实的行为测试 | `src/apiserver/src/wiki/wiki-verify.pg.spec.ts`（服务端），`src/runner-go/wiki_verify_test.go`（`orbit wiki verify`，假 vLLM 端点） |
 | 案卷与游标的行为测试 | `src/apiserver/src/wiki/wiki-dossier.pg.spec.ts`（服务端），`src/runner-go/wiki_dossier_test.go`（`orbit wiki dossier` / `orbit wiki cursor advance`） |
-| 文章的行为测试 | `src/apiserver/src/wiki/wiki-articles.pg.spec.ts`（服务端），`src/runner-go/wiki_articles_test.go`（`orbit wiki articles`，假 vLLM 端点），`WikiArticlesContractTests.swift`（OrbitKit） |
+| 文章的行为测试 | `src/apiserver/src/wiki/wiki-articles.pg.spec.ts`（服务端），`src/runner-go/wiki_articles_test.go`（`orbit wiki articles`，假 vLLM 端点），`WikiArticlesContractTests.swift`（OrbitKit）；服务端执行：`src/apiserver/src/wiki-worker/wiki-articles-writer.spec.ts`、`wiki-articles-job.spec.ts`、`wiki-articles-job.pg.spec.ts`，两条路径共用 `src/shared/src/wiki-article-writer.fixture.json` |
 | plan 的行为测试 | `src/apiserver/src/wiki/wiki-plan.pg.spec.ts`（服务端：检查闸、版本、确认、修改建议、跨租户），`src/runner-go/wiki_plan_test.go`（runner 门三条路由与检查闸的错误），`WikiPlanContractTests.swift`（OrbitKit） |
 | System model 的行为测试 | `src/apiserver/src/wiki-worker/wiki-model-status.pg.spec.ts`（状态行、读接口、心跳与 worker 启停），`wiki-model-client.spec.ts`（本地 http 服务模拟 SSE），`test/compose-topology.test.mjs`（compose 里的 `wiki-worker`） |
 
@@ -1062,7 +1069,11 @@ JSON 里是 `articles`；实现在 `src/apiserver/src/wiki/wiki-articles.ts`（�
 - **指纹**：主题条目的 `<id>:<当前修订号>` 按 id 排序、换行拼接后的 sha256。条目加入、离开或被 amend 都会改变它。
 - **不变不重写**：写入带上生成时依据的指纹；它等于已存 part 0 的指纹就什么都不写（`unchanged`）；它既不是已存的、也不是主题
   当前的，就回 `WIKI_ARTICLE_STALE`（409），什么都不写——条目在写作期间变了，下一次运行按新条目重写。所以已存的文章永远
-  准确说明它是依据哪些条目写的。重写只由维护作业在事实到达后触发，不用时钟。
+  准确说明它是依据哪些条目写的。
+- **谁来重写，不用时钟**：看执行器把账号交给谁（`jobs.executor`）。runner 模式（默认）下，维护运行自判据 3 第 3 版起不再重写主题文章，
+  也没有别的东西自动重写；维护会话里手动跑 `orbit wiki articles` 才写。服务端执行的账号（owner 2026-10-08 定）：该空间的一次维护运行
+  成功结束、记下了 op、且不是在落后时建的（追赶进行中或暂停时都不算，与文档那一步同一条规则），服务端就给它排一个文章作业（§18.8），
+  不管这次运行是 runner 跑的还是服务端跑的；作业只重写指纹变了的主题。
 - 一个主题的各行在一个事务里整体替换（先 `FOR NO KEY UPDATE` 锁主题行，再核一次指纹）。
 
 ### 18.4 代码校验
@@ -1086,9 +1097,12 @@ JSON 里是 `articles`；实现在 `src/apiserver/src/wiki/wiki-articles.ts`（�
 
 ### 18.6 谁能读写
 
-- **写**：只有该 space 的维护会话（`isWikiMaintenanceSession`）经 runner 门，以及 API 服务器容器里的一次性导入（principal 为
+- **写**：只有该 space 的维护会话（`isWikiMaintenanceSession`）经 runner 门、服务端自己的文章作业（principal 为
+  `origin: 'maintenance'`、无会话、无用户，修订署名 `system`，§18.8），以及 API 服务器容器里的一次性导入（principal 为
   `origin: 'import'`、无会话、无用户，给预览 space 用）。其余一律 `WIKI_NOT_MAINTENANCE_SESSION`；headless 400；别的 owner 的 space 404。
   user 门没有写文章的路由。
+- 执行器把账号交给服务端时，该 space 的维护会话调 runner 门的计划、输入、写入三条路由都回 `WIKI_SERVER_EXECUTES`（409）：文章由
+  wiki-worker 写，不交出材料、也不收写入，所以无论 runner 是哪个版本，都不会拿会话的 provider 调模型。
 - runner 门三条（都在 `maintenanceRoutes`）：`POST /api/runner/wiki/spaces/:id/article-plan`（计划；空 space 先写默认主题）、
   `GET …/articles/:slug/input`（主题的条目，按出处数、时间排好，带归组用的路径和指纹）、`POST …/articles/:slug`（写入）。
 - **读**：owner 经 user 门：`GET /api/wiki/spaces/:id/articles`（大类 → 主题 → 文章与子主题）、`GET …/articles/:slug`、
@@ -1106,6 +1120,42 @@ JSON 里是 `articles`；实现在 `src/apiserver/src/wiki/wiki-articles.ts`（�
   提交。模型只读条目，不读会话原文；每篇最多用组里出处最多的 30 条。
 - 干净调用照抄 `orbit wiki verify` 的启动参数、环境白名单和 apiKeyHelper，只换系统提示；thinking 默认关：`CLAUDE_CODE_EFFORT_LEVEL=unset`
   且 `MAX_THINKING_TOKENS=0`（只设前者仍会发 adaptive thinking）。碰到第一个 401 就停；有主题没写成就以非 0 退出。
+- 服务端执行的账号：服务端回 `WIKI_SERVER_EXECUTES`，命令打印「The Orbit server writes the articles of space …」，不调模型、不写任何东西，
+  以 0 退出；运行中途开关切过去（读输入或写入时才回这个码）也一样就此停下。这部分随下一次 runner 发版上线；旧版 runner 在这里报错退出，
+  同样不调模型。
+
+### 18.8 服务端执行（服务端执行 P4，2026-10-08）
+
+JSON 里是 `articles.serverExecution`、`articles.job` 与 `jobs.kindRuns.articles`；实现在 `src/apiserver/src/wiki-worker/`
+（作业 `wiki-articles-job.ts`、移植过来的写作与分组 `wiki-articles-writer.ts`）和 `src/apiserver/src/wiki/wiki-articles-jobs.ts`（排作业）。
+
+- **对谁**：执行器开关把账号交给服务端的（`server`，或 `canary` 名单内）。runner 模式下这一节都不发生。
+- **什么时候排**：服务端记下一次维护运行结束的地方（runner 路径是 finish 路由，`finishWikiMaintenanceRun`）判断：运行成功、记下了 op
+  （有这次会话的 `maintenance` 来源 changeset）、不是在落后时建的——满足就给空间排一个 `articles` 作业，优先级 0（后台，排在 owner 主动发起
+  的请求之后）。每个空间最多排一个：排队中的作业运行时才读计划，挂起等快照的作业重放时会重读，所以都能覆盖之后结束的运行；已经在跑的
+  作业可能读过计划了，下一次运行结束就在它后面再排一个。排作业失败只记日志，不影响运行本身的结束。P8 的服务端维护作业结束时调同一个入口。
+- **作业做什么**：
+  1. 以作业的身份（`origin: 'maintenance'`、无会话、无用户）读计划；空间没有主题时照常先写默认主题；只取指纹变了的主题，一个都没有就直接成功、
+     不调模型。
+  2. **ref**：取空间最近一份仓库快照（§26.4）的 sha，写进每篇文章的 `ref`。没有快照就向空间的 runner 请求一次 `snapshot`，作业挂起等它
+     （`waiting_for = 'repo'`，最多 `articles.job.snapshotWaitSeconds` = 900 秒），快照落地后作业回到队列、从头重放。请求过却没拿到（操作失败，
+     或没在时限内完成），或者空间没有可读的 checkout，就不带 ref 写，报告里写明原因——文章是从条目写的，不读仓库原文。
+  3. 每个主题：读输入；超过 45 条的主题用和 runner 逐步相同的分组（tf-idf 球面 k-means，锚点路径优先），算的时候分片让出事件循环
+     （设计 §4.5）；按组依次起名、每次告诉模型已用的名字；子主题文章和总览（或小主题的一篇文章）每次 4 个并行；保留字数不到 400 的稿子、
+     素材够 8 条时再要一次（字数用服务端自己的校验来数）。
+  4. 经 `WikiArticles.write` 写回，和 runner 门是同一个写入口：脚注只在指向本主题条目时保留，没有脚注的句子删掉，超长的从最长一段末尾删；
+     `model` 是 System model 的名字。
+- **提示词**：与 runner 逐字相同（系统提示、文章/子主题/总览提示、条目行、起名提示、再要一次的后缀）。两条路径由
+  `src/shared/src/wiki-article-writer.fixture.json` 钉成同一个答案：同一个主题的每一次调用逐字相同、大主题的分组逐条相同，
+  `wiki_articles_test.go` 和 `wiki-articles-job.spec.ts` 都读它。
+- **调用即断点**：每次调用是队列里的一条请求，step `articles`，unit 是 `<slug>@<指纹前 12 位>/name-<n>`、`/part-<n>` 或 `/part-<n>/again`；
+  作业被重放时答过的调用直接复用，主题条目在两次尝试之间变了就重新问。5xx、429、断连由队列退避重试；401 让整个队列停下（§25.6）。
+  `max_tokens`：文章、总览、子主题 4096，起名 512（`articles.job`）。
+- **怎么结束**：拿起的主题全部写成或无变化就成功，报告就是 runner 的 summary（seeded、ref 与 refWhy、各主题的结果、written / unchanged /
+  failed、调用数、token、校验统计）。有主题没写成（调用以作业自己的原因结束，或写入被拒，包括 `WIKI_ARTICLE_STALE`）：其余主题照常写完，
+  然后作业以 content 失败结束，报告留在作业行上——和命令以非 0 退出一样，下一个作业按当时的条目重写。平台的失败（请求等待超限、数据库、
+  worker 停机）按 infra 处理，重放时从计划重新开始。
+- **runner 门**：见 §18.6 与 §18.7。
 
 ## 19. 维护作业：由事实建任务、`orbit wiki maintain` 与 `orbit wiki check`（判据 3）
 

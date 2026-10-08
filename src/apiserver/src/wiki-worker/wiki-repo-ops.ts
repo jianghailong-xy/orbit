@@ -331,7 +331,9 @@ export class WikiRepoOps {
         },
         data: {
           state,
-          result: (result ?? null) as Prisma.InputJsonValue,
+          // No result is SQL NULL, never JSON null, which `wiki_repo_op_result_chk` refuses: the runner leaves
+          // `result` out of a failure (`omitempty`), so a JSON null here would make every failure unsettleable.
+          result: result == null ? Prisma.DbNull : (result as Prisma.InputJsonValue),
           error: state === 'failed' ? error : null,
           leaseOwner: null,
           claimedAt: null,
