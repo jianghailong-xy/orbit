@@ -3,7 +3,7 @@ import { App as AntApp, Tag as AntTag, Button as AntButton, Checkbox as AntCheck
   ConfigProvider, Input as AntInput, Radio as AntRadio, Spin as AntSpin, Switch as AntSwitch,
   Alert as AntAlert, Card as AntCard, Empty as AntEmpty, List as AntList, Skeleton as AntSkeleton,
   Typography as AntTypography } from 'antd';
-import { CopyOutlined, PlusOutlined, SearchOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { CopyOutlined, DownOutlined, PlusOutlined, SearchOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider, useThemeMode } from '../../../lib/theme';
 import { darkTheme, lightTheme } from '../../../theme';
@@ -99,6 +99,8 @@ function Content() {
         orbit={<Button variant={variant} danger>Delete</Button>} ant={<AntButton type={variant} danger>Delete</AntButton>} />)}
       <Pair name="button-icon" orbit={<Button icon={<PlusOutlined />}>Create</Button>} ant={<AntButton icon={<PlusOutlined />}>Create</AntButton>} />
       <Pair name="button-icon-only" orbit={<Button icon={<PlusOutlined />} aria-label="Create" />} ant={<AntButton icon={<PlusOutlined />} aria-label="Create" />} />
+      <Pair name="button-icon-end" orbit={<Button size="small" variant="text" icon={<DownOutlined />} iconPlacement="end">Expand</Button>}
+        ant={<AntButton size="small" type="text">Expand <DownOutlined /></AntButton>} />
       <Pair name="button-disabled" orbit={<Button variant="primary" disabled>Save changes</Button>} ant={<AntButton type="primary" disabled>Save changes</AntButton>} />
       {(['default', 'text', 'link'] as const).map((variant) => <Pair key={variant} name={`button-disabled-${variant}`}
         orbit={<Button variant={variant} disabled>Save changes</Button>} ant={<AntButton type={variant} disabled>Save changes</AntButton>} />)}
@@ -110,6 +112,7 @@ function Content() {
         orbit={<Input aria-label="Project" size={size} defaultValue="Orbit baseline" />} ant={<AntInput aria-label="Project" size={size} defaultValue="Orbit baseline" />} />)}
       <Pair name="input-affix" orbit={<Input aria-label="Search" prefix={<SearchOutlined />} suffix={<InfoCircleOutlined />} placeholder="Search projects" />} ant={<AntInput aria-label="Search" prefix={<SearchOutlined />} suffix={<InfoCircleOutlined />} placeholder="Search projects" />} />
       <Pair name="input-invalid" orbit={<Input aria-label="Invalid project" invalid defaultValue="Missing owner" />} ant={<AntInput aria-label="Invalid project" status="error" defaultValue="Missing owner" />} />
+      <Pair name="input-warning" orbit={<Input aria-label="Merge check" warning placeholder="npm test" />} ant={<AntInput aria-label="Merge check" status="warning" placeholder="npm test" />} />
       <Pair name="input-disabled" orbit={<Input aria-label="Disabled project" disabled defaultValue="Orbit baseline" />} ant={<AntInput aria-label="Disabled project" disabled defaultValue="Orbit baseline" />} />
       <Pair name="textarea" orbit={<Textarea aria-label="Description" rows={3} defaultValue={'First line\nSecond line'} />} ant={<AntInput.TextArea aria-label="Description" rows={3} defaultValue={'First line\nSecond line'} />} />
       <Pair name="textarea-invalid" orbit={<Textarea aria-label="Invalid description" invalid rows={2} defaultValue="Missing detail" />} ant={<AntInput.TextArea aria-label="Invalid description" status="error" rows={2} defaultValue="Missing detail" />} />

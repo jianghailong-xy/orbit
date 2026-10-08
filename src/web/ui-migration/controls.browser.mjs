@@ -215,7 +215,7 @@ test('hover and keyboard focus preserve visible control feedback', async ({ page
   const measured = {};
   for (const name of ['button-middle', 'button-primary', 'button-text', 'button-link', 'button-danger-default', 'button-danger-primary', 'button-danger-text',
     'button-disabled', 'button-disabled-default', 'button-disabled-text', 'button-disabled-link', 'button-disabled-danger', 'button-disabled-danger-text',
-    'input-middle', 'input-invalid', 'textarea']) {
+    'input-middle', 'input-invalid', 'input-warning', 'textarea']) {
     const { orbit, ant } = sides(page, name);
     await orbit.hover();
     // Let each library's normal transition settle; no injected CSS changes states.
@@ -233,7 +233,7 @@ test('hover and keyboard focus preserve visible control feedback', async ({ page
   const focusStyle = (locator) => locator.evaluate((element) => ({ visible: element.matches(':focus-visible'),
     outline: getComputedStyle(element).outline, offset: getComputedStyle(element).outlineOffset,
     borderColor: getComputedStyle(element).borderColor, boxShadow: getComputedStyle(element).boxShadow }));
-  for (const name of ['button-primary', 'input-middle', 'input-invalid', 'textarea']) {
+  for (const name of ['button-primary', 'input-middle', 'input-invalid', 'input-warning', 'textarea']) {
     const { orbit, ant } = sides(page, name);
     await orbit.focus();
     const actual = await focusStyle(orbit);

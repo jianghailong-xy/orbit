@@ -13,11 +13,11 @@
 
 | 导入 | 最小约定 |
 | --- | --- |
-| `Button` | `variant="default/primary/dashed/text/link"`（dashed：虚线边框的默认按钮，如“添加模型”“添加变量”），`size="small/middle/large"`，`danger`、`icon`、`loading`；其余为原生 button 属性，**`type` 是 button/submit/reset**，默认 button。ref 为 HTMLButtonElement。纯图标必须给可访问名称。loading 阻止再次激活，保留焦点并暴露 aria-busy；disabled 按原生规则退出 Tab 顺序。 |
+| `Button` | `variant="default/primary/dashed/text/link"`（dashed：虚线边框的默认按钮，如“添加模型”“添加变量”），`size="small/middle/large"`，`danger`、`icon`、`loading`、`iconPlacement="start/end"`（P4.3a：`end` 时图标在文字之后，如展开/收起的箭头，与文字间隔同样 8px）；其余为原生 button 属性，**`type` 是 button/submit/reset**，默认 button。ref 为 HTMLButtonElement。纯图标必须给可访问名称。loading 阻止再次激活，保留焦点并暴露 aria-busy；disabled 按原生规则退出 Tab 顺序。 |
 | `LinkButton`（同 Button 文件） | 同一外观的原生 anchor，使用 href/target/rel/download 等原生属性和 HTMLAnchorElement ref；链接与操作按钮分别保持导航和提交语义。 |
-| `Input` | 原生 input 属性/ref，`size="small/middle/large"`、`invalid`、`prefix/suffix`。有装饰时 className/style 指向外壳，其他原生属性与 ref 仍指向 input；装饰区点击聚焦。标签和错误说明由调用方使用 label/aria-describedby 关联。`allowClear` 加 `onClear`（P4.3a，受控字段的清除）：末尾一个名为 Clear 的按钮，12px 图标、第四级文字色，悬停与按下加深，同被替换字段；字段为空、禁用或只读时占位但不可见（被替换字段的 suffix 同样占位）；指针按下不夺焦点，点击后焦点回到字段，再由 `onClear` 清空调用方的值。 |
+| `Input` | 原生 input 属性/ref，`size="small/middle/large"`、`invalid`、`warning`（P4.3a：被替换字段的 warning 状态——警告色边框、较浅的悬停色、聚焦时警告色外圈；与 `invalid` 同给时 `invalid` 优先）、`prefix/suffix`。有装饰时 className/style 指向外壳，其他原生属性与 ref 仍指向 input；装饰区点击聚焦。标签和错误说明由调用方使用 label/aria-describedby 关联。`allowClear` 加 `onClear`（P4.3a，受控字段的清除）：末尾一个名为 Clear 的按钮，12px 图标、第四级文字色，悬停与按下加深，同被替换字段；字段为空、禁用或只读时占位但不可见（被替换字段的 suffix 同样占位）；指针按下不夺焦点，点击后焦点回到字段，再由 `onClear` 清空调用方的值。 |
 | `Textarea` | 原生 textarea 属性，ref 即 HTMLTextAreaElement；`invalid`、rows、`variant="outlined/borderless"`、`autoSize`（`true` 或 `{minRows,maxRows}`）。保留选区、输入与拖拽调整尺寸；自动增高与会话输入约定见下文。 |
-| `Checkbox` | 必填 checked，onCheckedChange(boolean)、indeterminate、disabled、invalid；支持 name/value/form 和原生 input ref。文字作为 children，点击标签与 Space 切换。 |
+| `Checkbox` | 必填 checked，onCheckedChange(boolean, event)（event 是引起变化的按下或按键，P4.3a 供需要读取 Shift 等修饰键的调用方）、indeterminate、disabled、invalid；支持 name/value/form 和原生 input ref。文字作为 children，点击标签与 Space 切换。 |
 | `Radio` / `RadioGroup` | 组提供必填 value、onValueChange(value)、name、disabled；子项提供 value/children/disabled。组使用 aria-label 或 aria-labelledby 命名；箭头键跳过禁用项。variant="default/button"，size="small/middle"；按钮形态可设 `buttonStyle="outline/solid"`（默认 outline，solid 时选中项以主色填充，如暂停时长）。 |
 | `Switch` | 必填 checked、onCheckedChange(boolean)，size="small/middle"、disabled、loading；使用 aria-label 或 aria-labelledby 命名，支持 name/value/form 和原生 input ref。宽 44px（small 28px），且同被替换开关的 min-width 不会更窄：flex 行里旁边的长文字挤不窄它（P4.2）。 |
 | `Badge` | 原生 span 状态标签（替代 Tag），tone="default/info/success/warning/error/blue/green/orange/red/gold/purple"（blue 起的六种是被替换标签的同名预设色，明暗主题各取其色板；purple 由 P4.3a 为“等待核验”补上）、icon、children，其余为 span 属性（如 title）。使用可读文字表达状态；没有 ARIA 角色，测试按所在区域与文字定位。 |
@@ -59,7 +59,7 @@ P4.1（登录、初始化、个人资料、设置）按页面实际需要补齐�
 - `Typography.css`：`.orbit-typography` 是文字（`span`）、段落（`div`，下方 1em）或标题（`h2`/`h4`/`h5`：30/38px、20/28px、16/24px，半粗，下方 0.5em，紧跟另一个排版元素时上方 1.2em）；`.orbit-typography-secondary`（次要文字色）、`.orbit-typography-warning`（警告文字色）。强调与代码用内层 `<strong>`（600）与 `<code>`（85% 等宽、浅底细边框、3px 圆角），与被替换组件的结构相同。复制按键是 `.orbit-typography-actions > button.orbit-typography-copy`，放在 `<code>` 之内、正文之后 4px，链接色，已复制时为成功色；文案与计时（Copy / Copied，3 秒）由调用方给出。
 - `List.css`：`div.orbit-list.orbit-list-split[.orbit-list-sm] > ul.orbit-list-items > li.orbit-list-item`，行 12px（small 8px/16px）、行间 1px 分隔线、末行无线，≤576px 时行内换行；标题加说明的行用 `.orbit-list-item-meta > .orbit-list-item-meta-content > h4.orbit-list-item-meta-title + div.orbit-list-item-meta-description`。与被替换列表一样，列表内的元素不画 outline，行自己的焦点标记由页面样式给出。
 
-两份样式与 Empty、Skeleton、Card 的 extra/small、Alert 的 action、Badge 的 purple、Input 的 allowClear 都在 `ui-migration/controls.html` 中与被替换组件逐部件对照（`npm run test:ui-controls -w @orbit/web`：盒、外边距、文字、颜色、部件在根内的位置、插图各形状的填充与描边，以及每个字形与图标的位置）。
+两份样式与 Empty、Skeleton、Card 的 extra/small、Alert 的 action、Badge 的 purple、Input 的 allowClear 与 warning、Button 的 iconPlacement 都在 `ui-migration/controls.html` 中与被替换组件逐部件对照（`npm run test:ui-controls -w @orbit/web`：盒、外边距、文字、颜色、部件在根内的位置、插图各形状的填充与描边，以及每个字形与图标的位置）。
 
 ## Dialog、Drawer 和异步确认
 
@@ -70,7 +70,7 @@ P4.1（登录、初始化、个人资料、设置）按页面实际需要补齐�
 - 默认支持 Esc、单击/单指轻点遮罩和 Close 按钮；内部按下、外部释放不关闭。`closeOnEscape`、`closeOnOutsideClick`、`closable` 分别控制三种关闭方式。busy 阻止关闭请求并禁用 Close；调用方负责自己的提交按钮。隐藏 Close 时应提供可访问的退出按钮。
 - 默认聚焦弹层容器，避免手机打开时自动弹出软键盘；initialFocus 可指定原生 ref。默认返回先前焦点；从菜单、触摸入口或会卸载的节点打开时，传 `returnFocus` 指向稳定的触发按钮。不能通过读取第三方 DOM 找触发器。
 - 默认关闭后卸载正文；`keepMounted` 适用于需保留未提交表单值的场景，关闭时隐藏且退出可访问树。业务页面迁移时明确选择其现有生命周期。
-- ConfirmDialog：`kind="success"`（P4.2）是只需确认的通知：成功图标、只有确认键并默认聚焦它（管理员新建用户后显示一次性密码）；默认 `kind="confirm"`。`onConfirm` 返回 Promise 时自动 pending，成功调用 `onClose(true)`；取消/Esc 调用 `onClose(false)`；遮罩不关闭。默认聚焦 Cancel。提交期间按钮/取消/Esc均被锁住，同一事件轮内的重复提交也会被阻止。throw/reject 会保留弹窗，以 role=alert 显示错误并恢复重试/取消；业务已经有 toast 时仍由业务保留。必须返回 mutateAsync/请求 Promise，不能用返回 void 的 mutate 冒充可等待提交。
+- ConfirmDialog：`width`（P4.3a，默认 416，协调者“开始新的协调者”提问用 480，让两个较长的回答留在一行）；`kind="success"`（P4.2）是只需确认的通知：成功图标、只有确认键并默认聚焦它（管理员新建用户后显示一次性密码）；默认 `kind="confirm"`。`onConfirm` 返回 Promise 时自动 pending，成功调用 `onClose(true)`；取消/Esc 调用 `onClose(false)`；遮罩不关闭。默认聚焦 Cancel。提交期间按钮/取消/Esc均被锁住，同一事件轮内的重复提交也会被阻止。throw/reject 会保留弹窗，以 role=alert 显示错误并恢复重试/取消；业务已经有 toast 时仍由业务保留。必须返回 mutateAsync/请求 Promise，不能用返回 void 的 mutate 冒充可等待提交。
 
 `Popconfirm` 是锚定的小确认浮层（替代旧 Popconfirm，与模态 ConfirmDialog 并存）：`trigger` 为触发按钮；没有按钮时（如分享弹窗从菜单项发起的“关闭链接”）传 `anchor` 并受控 `open/onOpenChange`。`title`、`description`、`confirmText`/`cancelText`、`danger`、`confirmLoading`。`onConfirm` 返回 Promise 时确认键 loading，resolve 后关闭、reject 时保持打开；返回其它值时立即关闭（与旧组件的 onConfirm 约定相同）。定位、箭头、阴影与 Popover 相同，打开时聚焦浮层，Esc/外部点击关闭，`returnFocus` 指定关闭后的焦点；内容保留旧样式：警告图标、粗体标题、4px 间隔的说明、右对齐 8px 间距的小号按钮。
 
@@ -141,7 +141,7 @@ P2.2 提供 `Menu`、`Popover`、`Tooltip`、`Select`、`Combobox` 和 `MultiSel
 
 - `Menu` 接收可承接 ref 的按钮 `trigger` 和 `items`。动作含 key/label/icon、disabled/danger/selected/onSelect；separator/group/children 覆盖现有分隔、分组与子菜单。`checked/onCheckedChange` 提供 checkbox 语义，默认选中后保持打开；普通动作默认关闭，`closeOnSelect` 可覆盖。复杂 label 可给 `textValue` 支持文字导航。`variant="attachment"` 仅在 <=600px 使用42.4px行高、17px字号、26px圆角。菜单触发器和弹出内容拦截点击冒泡，避免触发行导航。菜单动作打开 Dialog 时给 Dialog `returnFocus` 指向稳定菜单按钮。打开后焦点在菜单内，按 Tab 离开并关闭菜单；这与旧 Dropdown（按 Tab 才进入菜单）不同，是协调者 2026-10-07 判定接受的约定，适用范围与测试依据见 [component-contracts](../../../../../docs/evidence/base-ui-migration/component-contracts.md)「Menu 打开后的焦点与 Tab」。
 - `Popover` 用 `trigger/title/children`；无标题传 null。默认点击打开，可设 `openOnHover`；`initialFocus/returnFocus` 遵循弹层约定。内容内可直接放 Select/Combobox，Esc 逐层关闭。`Tooltip` 用 `children/content`，保留触发器原有 aria-describedby；disabled 原生按钮需用可聚焦 span 包裹，让提示可由键盘获得。
-- `Select` 与 `Combobox` 共用字符串 `value | null`、`options` 和 `onValueChange`。空字符串是有效选择（账号 Automatic）；null 表示未选择/显式清除。options 为 `{value,label,disabled?}` 或 `{label,options}` 分组；label 为搜索/无障碍文本，复杂展示使用 `renderOption/renderValue`。支持 small/middle、outlined/borderless、disabled/loading、placeholder/clearable、emptyContent、showArrow 和 matchTriggerWidth。
+- `Select` 与 `Combobox` 共用字符串 `value | null`、`options` 和 `onValueChange`。空字符串是有效选择（账号 Automatic）；null 表示未选择/显式清除。options 为 `{value,label,disabled?,title?}` 或 `{label,options}` 分组（`title`，P4.3a：可检索列表中选项的原生悬停提示）；label 为搜索/无障碍文本，复杂展示使用 `renderOption/renderValue`。支持 small/middle、outlined/borderless、disabled/loading、placeholder/clearable、emptyContent、showArrow 和 matchTriggerWidth。
 - 需要文本检索时使用 `Combobox`；默认按 label 忽略大小写匹配。修改查询和 Esc 不清掉已选值；显式清除才回调 null。远端搜索设置 `filter={false}` 与 `onSearch`，由业务处理请求/过期响应；`value={null}` 可用于选择后重置的动作入口。已选标签通过 aria-describedby 暴露给辅助技术。ref 分别指向 Select 按钮和 Combobox 输入框，name 支持原生表单值。
 
 P3.2 试点据真实页面补齐：Select 家族根类名为 `.orbit-select`（原 `.orbit-choice` 与 Checkbox/Radio 的标签类同名，两份样式同时加载时互相套用边框与内边距）；loading 时在箭头位置显示旋转弧形图标，可搜索的 Combobox 打开时显示放大镜，与被替换的选择器一致；Combobox 的占位文字画在输入框旁（按文字宽度裁切），输入框在 ≤960px 提为 16px 时占位仍保持字段字号；Select 只在值真正改变时回调 `onValueChange`，重选当前项只关闭列表。

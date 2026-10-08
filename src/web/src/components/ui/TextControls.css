@@ -53,6 +53,21 @@
   box-shadow: var(--orbit-input-invalid-shadow);
 }
 
+/* Warning, as the replaced field's warning status: the warning colour, a lighter one under the
+   pointer, and its own outline when focused. */
+.orbit-text-control[data-warning] {
+  border-color: var(--orbit-badge-warning);
+}
+
+.orbit-text-control[data-warning]:hover:not([data-disabled]) {
+  border-color: var(--orbit-input-warning-hover);
+}
+
+.orbit-text-control[data-warning]:is(:focus, :focus-within):not([data-disabled]) {
+  border-color: var(--orbit-badge-warning);
+  box-shadow: 0 0 0 2px var(--orbit-input-warning-outline);
+}
+
 .orbit-text-control[data-disabled] {
   color: var(--orbit-control-disabled-text);
   background: var(--orbit-control-disabled-bg);
@@ -138,6 +153,11 @@
 .orbit-input[data-invalid]:not([data-disabled]) .orbit-input-prefix,
 .orbit-input[data-invalid]:not([data-disabled]) .orbit-input-suffix {
   color: var(--orbit-control-error);
+}
+
+.orbit-input[data-warning]:not([data-disabled]) .orbit-input-prefix,
+.orbit-input[data-warning]:not([data-disabled]) .orbit-input-suffix {
+  color: var(--orbit-badge-warning);
 }
 
 .orbit-textarea {

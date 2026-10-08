@@ -30,6 +30,8 @@
   --orbit-control-error-outline: rgba(255, 55, 5, 0.06);
   --orbit-input-error-hover: #ffa399;
   --orbit-input-focus-shadow: 0 0 0 2px rgba(5, 122, 255, 0.06);
+  --orbit-input-warning-hover: #ffba52;
+  --orbit-input-warning-outline: rgba(255, 175, 5, 0.1);
   --orbit-input-invalid-shadow: 0 0 0 2px var(--orbit-control-error-outline);
   --orbit-badge-default-bg: #f5f5f5;
   --orbit-badge-info-bg: #f0f7ff;
@@ -100,6 +102,8 @@
   --orbit-control-error-outline: rgba(38, 4, 0, 0.41);
   --orbit-input-error-hover: #774642;
   --orbit-input-focus-shadow: 0 0 0 2px rgba(1, 58, 182, 0.33);
+  --orbit-input-warning-hover: #705426;
+  --orbit-input-warning-outline: rgba(36, 21, 0, 0.54);
   --orbit-badge-default-bg: #3c3c3f;
   --orbit-badge-info-bg: #14192c;
   --orbit-badge-success: #399c50;

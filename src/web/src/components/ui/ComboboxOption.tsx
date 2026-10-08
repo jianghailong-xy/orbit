@@ -9,7 +9,7 @@ export function ComboboxOption({ option, children, className = 'orbit-select-opt
   option: SelectOption; children: ReactNode; className?: string;
 }) {
   const touch = useRef(false);
-  return <BaseCombobox.Item value={option} disabled={option.disabled} className={className}
+  return <BaseCombobox.Item value={option} disabled={option.disabled} className={className} title={option.title}
     onPointerDownCapture={(event) => {
       touch.current = event.pointerType === 'touch';
       if (touch.current) event.preventBaseUIHandler();

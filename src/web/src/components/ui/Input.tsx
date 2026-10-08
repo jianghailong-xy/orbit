@@ -5,6 +5,8 @@ import './TextControls.css';
 export interface InputProps extends Omit<ComponentPropsWithRef<'input'>, 'size' | 'prefix'> {
   size?: 'small' | 'middle' | 'large';
   invalid?: boolean;
+  /** A value that is allowed but worth a second look (the replaced field's warning status). */
+  warning?: boolean;
   prefix?: ReactNode;
   suffix?: ReactNode;
   /** A Clear button at the end while the field holds text (it keeps its place, unseen, while empty).
@@ -14,7 +16,7 @@ export interface InputProps extends Omit<ComponentPropsWithRef<'input'>, 'size' 
 }
 
 export function Input({
-  size = 'middle', invalid = false, prefix, suffix, allowClear = false, onClear, className, style, disabled,
+  size = 'middle', invalid = false, warning = false, prefix, suffix, allowClear = false, onClear, className, style, disabled,
   ...props
 }: InputProps) {
   const hasPrefix = prefix != null && typeof prefix !== 'boolean' && prefix !== '';
@@ -25,6 +27,7 @@ export function Input({
   const state = {
     'data-size': size,
     'data-invalid': invalid ? '' : undefined,
+    'data-warning': warning && !invalid ? '' : undefined,
     'data-disabled': disabled ? '' : undefined,
   };
   const input = (
