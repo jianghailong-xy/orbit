@@ -291,8 +291,10 @@ const integration = (over: Partial<ProjectIntegrationView> = {}): ProjectIntegra
   integratingCount: 1,
   queuedCount: 0,
   mergeCheckOnTip: 'PASSING',
-  // The report this card was specified against: T2, claimed at 13:58:00.
-  inFlight: { taskTitle: 'T2 wiki 契約、迁移与共享类型', state: 'RUNNING', kind: 'LAND_TASK', phase: 'CHECK', startedAt: '2026-09-25T13:58:00Z' },
+  // The report this card was specified against: T2, claimed at 13:58:00, reporting as it works —
+  // the claim is the runner's first report, which is what a claimed job looks like on the wire.
+  inFlight: { taskTitle: 'T2 wiki 契約、迁移与共享类型', state: 'RUNNING', kind: 'LAND_TASK', phase: 'CHECK',
+    startedAt: '2026-09-25T13:58:00Z', heartbeatAt: '2026-09-25T13:58:00Z' },
   ...over,
 });
 
@@ -370,7 +372,8 @@ describe('the landing row', () => {
 
   it('counts a job the server cannot date from zero rather than printing NaN', () => {
     const html = renderAt(
-      seeded(integration({ inFlight: { taskTitle: null, state: 'RUNNING', startedAt: 'not a date' } })),
+      seeded(integration({ inFlight: { taskTitle: null, state: 'RUNNING', startedAt: 'not a date',
+        heartbeatAt: '2026-09-25T13:59:00Z' } })),
       '2026-09-25T13:59:20Z',
     );
     expect(html).toContain('>0m 0s<');
@@ -408,7 +411,7 @@ describe('landingLine', () => {
       running: true,
       state: 'checking',
       clock: '1m 20s',
-      clockLabel: 'Elapsed', updated: null,
+      clockLabel: 'Elapsed', updated: 'Updated 1m ago', wait: null,
     });
     expect(
       landingLine(
@@ -416,7 +419,23 @@ describe('landingLine', () => {
         now,
       ),
     ).toEqual({ word: 'Integration', what: 'T1', running: false, state: 'queued', clock: '0m 40s',
-      clockLabel: 'Queued for', updated: null });
+      clockLabel: 'Queued for', updated: null, wait: null });
+  });
+
+  it('writes the queue wait beside the elapsed time when the job waited for a runner', () => {
+    // The real one, 2026-10-08: claimed 2m 24s after it was queued, and 4m 41s into the work.
+    const now = Date.parse('2026-10-08T04:11:05Z');
+    const line = landingLine(integration({ inFlight: {
+      taskTitle: 'C5', state: 'RUNNING', kind: 'LAND_TASK', phase: 'FETCH',
+      startedAt: '2026-10-08T04:06:24Z', heartbeatAt: '2026-10-08T04:11:00Z', waitMs: 143_600,
+    } }), now, { updatedAt: now });
+    expect(line).toMatchObject({ state: 'fetching', clock: '4m 41s', clockLabel: 'Elapsed', wait: '2m 23s' });
+    // A queued job's whole clock IS the wait, and it is already said: `Queued for`.
+    expect(landingLine(integration({ inFlight: {
+      taskTitle: 'C5', state: 'QUEUED', kind: 'LAND_TASK', startedAt: '2026-10-08T04:06:24Z', waitMs: 143_600,
+    } }), now)).toMatchObject({ clockLabel: 'Queued for', wait: null });
+    // And a job that never waited has nothing to say about waiting.
+    expect(landingLine(integration(), now, { updatedAt: now })?.wait).toBeNull();
   });
 
   it.each([
@@ -430,6 +449,7 @@ describe('landingLine', () => {
   ] as const)('describes %s at %s from its actual job facts', (kind, phase, word, state) => {
     expect(landingLine(integration({ inFlight: {
       taskTitle: null, state: 'RUNNING', kind, phase, startedAt: '2026-09-25T13:58:00Z',
+      heartbeatAt: '2026-09-25T13:58:30Z',
     } }), Date.parse('2026-09-25T13:59:20Z'))).toMatchObject({ word, state, running: true });
   });
 
@@ -447,18 +467,42 @@ describe('landingLine', () => {
       clockLabel: 'Elapsed', updated: 'Updated 1m ago' });
     expect(landingLine(integration(), readAt + 120_000, failed)?.clock).toBe(line?.clock);
     expect(landingLine(integration(), readAt + 91_000, { updatedAt: readAt })?.running).toBe(false);
+    // The read being fresh does not make the JOB fresh: the row follows the runner's last report.
     expect(landingLine(integration(), readAt + 120_000, { updatedAt: readAt + 120_000 }))
-      .toMatchObject({ running: true, state: 'checking', updated: 'Updated just now' });
+      .toMatchObject({ running: true, state: 'checking', updated: 'Updated 3m ago' });
   });
 
   it('uses the runner heartbeat so a successful API refresh cannot make an offline job look active', () => {
     const now = Date.parse('2026-09-25T14:10:00Z');
     const view = integration({ inFlight: { ...integration().inFlight!, heartbeatAt: '2026-09-25T13:59:00Z' } });
     expect(landingLine(view, now, { updatedAt: now })).toMatchObject({
-      running: false, state: 'Update unavailable', clock: '1m 0s', updated: 'Updated 11m ago',
+      running: false, state: 'No report', clock: '1m 0s', updated: 'No report for 11m',
     });
     expect(landingLine({ ...view, inFlight: { ...view.inFlight!, heartbeatAt: '2026-09-25T14:09:50Z' } }, now,
       { updatedAt: now })).toMatchObject({ running: true, state: 'checking', updated: 'Updated just now' });
+  });
+
+  /**
+   * The one thing this row must never do: call a silent runner a timed-out job. "No report" is a
+   * fact about the reports; a timeout is the job's own verdict, arrives as the server's
+   * `blockingReason`, and is worded by whoever prints that (see `TaskDetailPanel`'s landing block).
+   */
+  it('never words a silent runner as a timeout', () => {
+    const now = Date.parse('2026-10-08T06:00:00Z');
+    const silent = landingLine(integration({ inFlight: {
+      taskTitle: 'C5', state: 'RUNNING', kind: 'LAND_TASK', phase: 'FETCH',
+      startedAt: '2026-10-08T04:06:24Z', heartbeatAt: '2026-10-08T04:08:00Z',
+    } }), now, { updatedAt: now })!;
+    expect(silent.state).toBe('No report');
+    expect(silent.updated).toBe('No report for 112m');
+    expect(`${silent.state} ${silent.updated}`).not.toMatch(/timed? ?out/i);
+    // A job claimed whose runner has not reported once, since the claim.
+    const never = landingLine(integration({ inFlight: {
+      taskTitle: 'C5', state: 'RUNNING', kind: 'LAND_TASK', phase: null,
+      startedAt: '2026-10-08T04:06:24Z', heartbeatAt: null,
+    } }), now, { updatedAt: now })!;
+    expect(never.state).toBe('No report');
+    expect(never.updated).toBe('No report yet');
   });
 });
 

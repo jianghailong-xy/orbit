@@ -121,6 +121,16 @@ export interface ProjectIntegrationInFlight<Instant = string> {
   startedAt: Instant;
   /** Last report from the runner; absent on older servers and null before a claim. */
   heartbeatAt?: Instant | null;
+  /**
+   * How long the job waited its turn before the claim, in ms — the same measurement the task row's
+   * landing carries (`LandTaskIntegrationView.waitMs`).
+   *
+   * The clock counts from the claim, so the minutes a reader watches are the minutes of WORK, and a
+   * job that sat in the queue for two and a half of them having run for four is a different story
+   * from one that has been running for six and a half. Absent on older servers and on a job still
+   * queued, whose whole elapsed time IS the wait.
+   */
+  waitMs?: number | null;
 }
 
 /** The integration claim's existing lease window, also used to stop stale activity indicators. */

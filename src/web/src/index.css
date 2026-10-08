@@ -5207,6 +5207,10 @@ html[data-theme='dark'] .session-tag-chip {
 .session-project-merge-foot {
   color: var(--text-3);
 }
+/* Who is in front of a blocked merge: the landing holding the branch, and what holds it. */
+.session-project-merge-blocked-by {
+  color: var(--text-2);
+}
 .session-project-merge-counts {
   color: var(--text-1);
   font-weight: 600;
@@ -16837,6 +16841,12 @@ button.chat-jump-start:hover {
 .land-task-generation,
 .land-task-step {
   color: var(--text-3);
+}
+/* A runner that has stopped reporting: a fact about the reports, said in the amber of "look at
+   this" rather than the red of a failure nobody has judged. */
+.land-task-no-report {
+  color: var(--warning);
+  font-variant-numeric: tabular-nums;
 }
 .land-task-reason {
   margin-top: 5px;

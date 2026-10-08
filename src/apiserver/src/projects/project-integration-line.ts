@@ -173,6 +173,7 @@ export async function readProjectIntegrationLines(
           state: lead.state === 'RUNNING' ? 'RUNNING' : 'QUEUED',
           startedAt: lead.claimedAt ?? lead.createdAt,
           heartbeatAt: lead.heartbeatAt,
+          waitMs: claimedWaitMs({ state: lead.state, queuedAt: lead.createdAt, claimedAt: lead.claimedAt }),
         },
       } : {}),
     });
@@ -306,11 +307,14 @@ export async function readProjectIntegrationView(
   const [oldest] = await prisma.$queryRaw<Array<{
     state: string; kind: IntegrationJobKind; phase: IntegrationJobPhase | null;
     taskTitle: string | null; startedAt: Date; heartbeatAt: Date | null;
+    queuedAt: Date; claimedAt: Date | null;
   }>>(Prisma.sql`
     SELECT j."state", j."kind", j."phase",
            t."title" AS "taskTitle",
            COALESCE(j."claimed_at", j."created_at") AS "startedAt",
-           j."heartbeat_at" AS "heartbeatAt"
+           j."heartbeat_at" AS "heartbeatAt",
+           j."created_at" AS "queuedAt",
+           j."claimed_at" AS "claimedAt"
       FROM "project_integration_job" j
       LEFT JOIN "task" t ON t."id" = j."task_id"
      WHERE j."project_id" = ${projectId}::uuid
@@ -341,9 +345,23 @@ export async function readProjectIntegrationView(
         state: oldest.state === 'RUNNING' ? 'RUNNING' : 'QUEUED',
         startedAt: oldest.startedAt,
         heartbeatAt: oldest.heartbeatAt,
+        waitMs: claimedWaitMs(oldest),
       }
       : null,
   };
+}
+
+/**
+ * What a claimed job waited its turn, for the row's "Waited …"; null for one still queued, whose
+ * whole elapsed time is that wait (its `startedAt` is the enqueue).
+ *
+ * The same measurement the task's own landing carries (`LandTaskIntegrationView.waitMs`), taken
+ * from the same two instants: the clock a reader watches on this line counts from the claim, so
+ * without this the minutes a job spent waiting for a runner read as minutes of work.
+ */
+function claimedWaitMs(job: { state: string; queuedAt: Date; claimedAt: Date | null }): number | null {
+  if (job.state !== 'RUNNING' || !job.claimedAt) return null;
+  return Math.max(0, job.claimedAt.getTime() - job.queuedAt.getTime());
 }
 
 /** The last attempt's check evidence, not the success of its push or the state of the current tip.

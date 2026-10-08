@@ -133,9 +133,13 @@ public enum ProjectPage {
         public let clock: String
         public let clockLabel: String
         public let updated: String?
+        /// "2m 24s" — what the job waited for a runner before the claim, or nil when it never waited,
+        /// the read does not say, or it has not been claimed at all (a queued job's whole clock is
+        /// that wait, which `clockLabel` says).
+        public let wait: String?
 
         public init(what: String?, running: Bool, state: String, clock: String, word: String = "Integration",
-                    clockLabel: String = "Elapsed", updated: String? = nil) {
+                    clockLabel: String = "Elapsed", updated: String? = nil, wait: String? = nil) {
             self.word = word
             self.what = what
             self.running = running
@@ -143,6 +147,7 @@ public enum ProjectPage {
             self.clock = clock
             self.clockLabel = clockLabel
             self.updated = updated
+            self.wait = wait
         }
     }
 
@@ -153,6 +158,20 @@ public enum ProjectPage {
         "FETCH": "fetching", "MAIN_SYNC": "syncing main", "REBASE": "rebasing", "MERGE": "merging",
         "CHECK": "checking", "VERIFY": "verifying", "PUSH": "pushing",
     ]
+
+    /// The state word for a job whose runner has stopped reporting — web's `LANDING_NO_REPORT`.
+    ///
+    /// A fact about the REPORTS and nothing else: the runner is silent, which is not "this job is
+    /// broken" and is not "this job timed out". A timeout is the job's own verdict, and the only
+    /// thing that ever words one is the server's `blockingReason` (`LandTaskStatus` prints it).
+    public static let landingNoReport = "No report"
+    /// The same fact with its age, for the row's right-hand slot.
+    public static func landingNoReportFor(_ minutes: Int) -> String { "No report for \(minutes)m" }
+    /// And for a job claimed whose runner has never reported at all.
+    public static let landingNoReportYet = "No report yet"
+    /// The landing row's label for what a claimed job waited before its clock began — web's
+    /// `LandingRow`, `landingLine`'s own `wait`.
+    public static let landingWaitLabel = "Waited"
 
     /// "1m 20s" — the landing clock, minutes and seconds ALWAYS, at every length.
     ///
@@ -182,23 +201,42 @@ public enum ProjectPage {
         let running = inFlight.state == "RUNNING"
         let jobs = view.integratingCount + view.queuedCount
         let heartbeatAt = inFlight.heartbeatAt.flatMap(RelativeTime.parse)
-        let heartbeatStale = running && heartbeatAt.map { now.timeIntervalSince($0) > 600 } == true
+        let reported = heartbeatAt != nil
+        // A claimed job whose runner has gone quiet: no report at all, or none since the claim lease
+        // the server itself uses. This is what the row used to call "Update unavailable", which said
+        // the wrong thing twice — the read was fine, and the job had judged nothing about itself.
+        let heartbeatStale = running && (heartbeatAt.map { now.timeIntervalSince($0) > 600 } ?? true)
         let readStale = updatedAt.map { now.timeIntervalSince($0) > 90 } == true
-        let unavailable = refreshFailed || readStale || heartbeatStale
-        let lastUpdate = running ? (heartbeatAt ?? updatedAt) : updatedAt
-        let elapsedAt = unavailable ? min(now, lastUpdate ?? now) : now
-        let age = lastUpdate.map { Int(max(0, now.timeIntervalSince($0)) / 60) }
+        // `Update unavailable` is only ever about THIS CLIENT's own read of the server.
+        let unavailable = refreshFailed || readStale
+        // The last moment this row has evidence for, which is what its clock freezes at and what
+        // "Updated …" counts from: a read that failed is evidence only of itself, while a read that
+        // worked carries the runner's own last report.
+        let seenAt = unavailable ? updatedAt : (running && reported ? heartbeatAt : updatedAt)
+        let elapsedAt = unavailable || heartbeatStale ? min(now, seenAt ?? now) : now
+        let age = seenAt.map { Int(max(0, now.timeIntervalSince($0)) / 60) }
         // An instant this clock cannot read is no elapsed time rather than a wrong one: the row
         // stays up and counts from zero, which is the one thing it can still say truthfully.
         let elapsed = RelativeTime.parse(inFlight.startedAt).map { elapsedAt.timeIntervalSince($0) } ?? 0
+        // The right-hand slot says where the reports stand, which is the whole difference between
+        // a job that is working and one nobody has heard from: the age of the last report, or that
+        // there has never been one.
+        let report: String?
+        if heartbeatStale && !unavailable {
+            report = (reported ? age.map(landingNoReportFor) : nil) ?? landingNoReportYet
+        } else {
+            report = age.map { $0 == 0 ? "Updated just now" : "Updated \($0)m ago" }
+        }
         return LandingLine(what: jobs > 1 ? "\(jobs) jobs" : inFlight.taskTitle,
-                           running: running && !unavailable,
+                           running: running && !unavailable && !heartbeatStale,
                            state: unavailable ? "Update unavailable"
-                               : running ? (integrationPhaseWords[inFlight.phase ?? ""] ?? "running") : "queued",
+                               : heartbeatStale ? landingNoReport
+                                   : running ? (integrationPhaseWords[inFlight.phase ?? ""] ?? "running") : "queued",
                            clock: landingClock(elapsed),
                            word: integrationJobWords[inFlight.kind ?? ""] ?? "Integration",
                            clockLabel: running ? "Elapsed" : "Queued for",
-                           updated: age.map { $0 == 0 ? "Updated just now" : "Updated \($0)m ago" })
+                           updated: report,
+                           wait: running ? inFlight.waitMs.flatMap { $0 > 0 ? landingClock(Double($0) / 1000) : nil } : nil)
     }
 
     // MARK: - Acceptance criteria

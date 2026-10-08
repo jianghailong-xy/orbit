@@ -24,6 +24,7 @@ import {
   isMergeJob,
   mergeCardShape,
   moreTasks,
+  promotionBlockedBy,
   promotionBlockedLine,
   promotionBranchLine,
   promotionChecksSummary,
@@ -122,6 +123,7 @@ export function ProjectMergeStrip({
     : null;
   const rows = [...(items.data?.needsYou ?? []), ...(items.data?.withCoordinator ?? [])];
   const item = current ? rows.find((row) => row.promotionId === current.promotionId) ?? null : null;
+  const inFront = current ? promotionBlockedBy(current, integration.data?.landTasks ?? null) : null;
   const press = (door: 'confirm' | 'decline' | 'cancel'): void => {
     if (current) decide.mutate({ door, candidate: current });
   };
@@ -181,6 +183,8 @@ export function ProjectMergeStrip({
             <span className="session-project-merge-title">{promotionPageTitle(current)}</span>
           </div>
           <div className="session-project-merge-status">{promotionBlockedLine(current)}</div>
+          {/* Who is in front of it, off the same project read this strip already holds. */}
+          {inFront ? <div className="session-project-merge-blocked-by">{inFront}</div> : null}
           <div className={`session-project-merge-press${item && item.assignee !== 'COORDINATOR' ? ' is-yours' : ''}`}>
             {resolvingPress(item, now).spinning ? <span className="promotion-spin" aria-hidden="true" /> : null}
             {resolvingPress(item, now).label}

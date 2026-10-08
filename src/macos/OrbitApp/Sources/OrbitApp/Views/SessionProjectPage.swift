@@ -588,6 +588,11 @@ struct SessionProjectPage: View {
                                                           updatedAt: app.projectSessionsIntegrationReadAt,
                                                           refreshFailed: app.projectSessionsIntegrationReadFailed)
                     },
+                    blockedBy: merge.current.flatMap { view in
+                        app.projectSessionsIntegration.flatMap {
+                            PromotionCards.blockedByLine(view, landings: $0.landTasks)
+                        }
+                    },
                     now: context.date,
                     onDetails: { promotionReview = PromotionReviewTarget(id: $0) },
                     onCoordinator: coordinator.map { coordinator in
@@ -644,6 +649,9 @@ private struct ProjectMergeCardView: View {
     let shape: ProjectMergeCard.Shape
     /// The merge job's live line, drawn inside the card while one is in flight.
     let landing: ProjectPage.LandingLine?
+    /// Who is in front of a blocked candidate (`PromotionCards.blockedByLine`), off the project's
+    /// own landings; nil when the line is doing nothing on this candidate's branches.
+    let blockedBy: String?
     let now: Date
     let onDetails: (String) -> Void
     /// Opens the coordinator, for a blocked candidate; nil when the page has no coordinator row.
@@ -777,6 +785,16 @@ private struct ProjectMergeCardView: View {
         let item = merge.promotionItems.first { $0.promotionId == view.promotionId }
         header(PromotionCards.pageTitle(view), symbol: "exclamationmark.triangle.fill")
         Text(PromotionCards.blockedLine(view)).font(.orbitLabel)
+        // Who is in front of it, when the project's own line is busy: the landing holding this
+        // branch, and what is holding that one. Absent when the line is doing nothing here.
+        if let inFront = blockedBy {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text("\(PromotionCards.blockedByLabel): ").foregroundStyle(.secondary)
+                Text(inFront)
+            }
+            .font(.orbitMeta)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
         HStack(spacing: 6) {
             if PromotionCards.resolvingSpins(item) { ProgressView().controlSize(.mini) }
             Text(PromotionCards.resolvingLine(item, now: now))

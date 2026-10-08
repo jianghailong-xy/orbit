@@ -341,6 +341,39 @@ public enum PromotionCards {
         return merged.revert
     }
 
+    /// The word the card prints before `blockedByLine`'s sentence. Web's `BLOCKED_BY`.
+    public static let blockedByLabel = "Blocked by"
+
+    /// WHO IS IN FRONT OF THIS MERGE, when the project's own line is busy — the sentence that turns
+    /// "Coordinator is resolving it" into an answer.
+    ///
+    /// A blocked candidate says why IT cannot merge (`blockedLine`); this says what the platform is
+    /// doing about the branch until it can. The landings a project has in flight are the project's own
+    /// read (`ProjectIntegrationView.landTasks`), and one of them is holding the line this merge has
+    /// to go through — it targets either the branch the candidate merges FROM or the branch it merges
+    /// INTO. Its `blockingReason` is the server's sentence about what holds THAT landing, and it names
+    /// the job or the task in front of it, so the chain is read off two rows rather than inferred
+    /// here: nothing in this function looks at a clock, a heartbeat or a task status.
+    ///
+    /// Nil when the line is doing nothing on those branches: a card with nothing to name says
+    /// nothing, rather than inventing a step to point at. Web's `promotionBlockedBy`.
+    public static func blockedByLine(_ view: ProjectPromotionView, landings: [ProjectLandTask]) -> String? {
+        guard let holding = landings.first(where: { landing in
+            guard let job = landing.landTask, job.state == "QUEUED" || job.state == "RUNNING" else {
+                return false
+            }
+            // `refs/heads/x` and `x` are the same branch, and which spelling arrives is the server's.
+            return shortRef(job.targetRef) == shortRef(view.sourceRef)
+                || shortRef(job.targetRef) == shortRef(view.upstreamRef)
+        }), let job = holding.landTask else { return nil }
+        let state = job.state == "RUNNING"
+            ? (job.phase.flatMap { ProjectPage.integrationPhaseWords[$0] } ?? "running")
+            : "queued"
+        let parts = ["“\(holding.taskTitle)” is landing on the project line", state,
+                     job.blockingReason?.summary].compactMap { $0 }
+        return parts.joined(separator: " · ")
+    }
+
     /// D's first row: why it cannot merge, in the files that say so.
     public static func blockedLine(_ view: ProjectPromotionView) -> String {
         guard !view.conflicts.isEmpty else { return "the checks on the combined tree did not pass" }

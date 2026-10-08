@@ -75,6 +75,15 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
         for word in ["Elapsed", "Queued for", "Updated just now", "Update unavailable"] {
             assertSays(web, "'\(word)'", in: Self.panorama)
         }
+        // A runner that stopped reporting says so — a fact about the REPORTS, worded apart from
+        // `Update unavailable` (the app failing to read the server) and from any timeout (the job's
+        // own verdict, which only the server's `blockingReason` words).
+        assertSays(web, "export const LANDING_NO_REPORT = '\(ProjectPage.landingNoReport)';", in: Self.panorama)
+        assertSays(web, "export const landingNoReportFor = (minutes: number): string => `No report for ${minutes}m`;",
+                   in: Self.panorama)
+        assertSays(web, "export const LANDING_NO_REPORT_YET = '\(ProjectPage.landingNoReportYet)';", in: Self.panorama)
+        assertSays(web, ">\(ProjectPage.landingWaitLabel) <span className=\"project-landing-wait\">", in: Self.panorama)
+        XCTAssertEqual(ProjectPage.landingNoReportFor(11), "No report for 11m")
     }
 
     func testTheCoordinatorCardsWords() throws {

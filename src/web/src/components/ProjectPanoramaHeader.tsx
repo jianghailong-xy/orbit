@@ -251,6 +251,10 @@ export interface LandingLine {
   clock: string;
   clockLabel: string;
   updated: string | null;
+  /** "2m 24s" — what the job waited for a runner before it was claimed, or null when it never
+   *  waited, the read does not say, or it has not been claimed at all (a queued job's whole clock
+   *  is that wait, said by `clockLabel`). */
+  wait: string | null;
 }
 
 export const JOB_WORDS = {
@@ -258,6 +262,19 @@ export const JOB_WORDS = {
   CHECK_PROMOTION: 'Merge check',
   LAND_PROMOTION: 'Merge to main',
 };
+
+/**
+ * The state word for a job whose runner has stopped reporting.
+ *
+ * A fact about the REPORTS and nothing else: the runner is silent, which is not the same claim as
+ * "this job is broken", and emphatically not the same claim as "this job timed out" — a timeout is
+ * the job's own verdict, and only the server's `blockingReason` ever words one.
+ */
+export const LANDING_NO_REPORT = 'No report';
+/** The same fact with its age, for the row's right-hand slot: `No report for 11m`. */
+export const landingNoReportFor = (minutes: number): string => `No report for ${minutes}m`;
+/** And for a job claimed whose runner has never reported at all — the report that never came. */
+export const LANDING_NO_REPORT_YET = 'No report yet';
 
 export const JOB_PHASES = {
   FETCH: 'fetching',
@@ -306,24 +323,40 @@ export function landingLine(
   const jobs = view.integratingCount + view.queuedCount;
   const startedAt = Date.parse(inFlight.startedAt);
   const heartbeatAt = Date.parse(inFlight.heartbeatAt ?? '');
-  const heartbeatStale = running && Number.isFinite(heartbeatAt)
-    && now - heartbeatAt > INTEGRATION_CLAIM_STALE_MS;
+  const reported = Number.isFinite(heartbeatAt);
+  // A claimed job whose runner has gone quiet: no report at all, or none since the claim lease the
+  // server itself uses (`INTEGRATION_CLAIM_STALE_MS`). This is what the row used to call "Update
+  // unavailable", which said the wrong thing twice — the app was reading the server fine, and the
+  // job had not judged anything about itself.
+  const silent = running && (!reported || now - heartbeatAt > INTEGRATION_CLAIM_STALE_MS);
   const readStale = observation.updatedAt !== undefined && now - observation.updatedAt > 90_000;
-  const unavailable = observation.failed === true || readStale || heartbeatStale;
-  const updatedAt = running && Number.isFinite(heartbeatAt) ? heartbeatAt : observation.updatedAt;
-  const elapsedAt = unavailable ? Math.min(now, updatedAt ?? now) : now;
-  const age = updatedAt === undefined ? null : Math.max(0, Math.floor((now - updatedAt) / 60_000));
+  // `Update unavailable` is only ever about THIS CLIENT's read of the server.
+  const unavailable = observation.failed === true || readStale;
+  // The last moment this row has evidence for, which is what its clock freezes at and what
+  // "Updated …" counts from: a read that failed is evidence only of itself, while a read that
+  // worked carries the runner's own last report.
+  const seenAt = unavailable ? observation.updatedAt
+    : running && reported ? heartbeatAt : observation.updatedAt;
+  const elapsedAt = unavailable || silent ? Math.min(now, seenAt ?? now) : now;
+  const age = seenAt === undefined ? null : Math.max(0, Math.floor((now - seenAt) / 60_000));
   return {
     word: inFlight.kind ? JOB_WORDS[inFlight.kind] ?? 'Integration' : 'Integration',
     what: jobs > 1 ? `${jobs} jobs` : inFlight.taskTitle,
-    running: running && !unavailable,
+    running: running && !unavailable && !silent,
     state: unavailable ? 'Update unavailable'
-      : running ? (inFlight.phase ? JOB_PHASES[inFlight.phase] ?? 'running' : 'running') : 'queued',
+      : silent ? LANDING_NO_REPORT
+        : running ? (inFlight.phase ? JOB_PHASES[inFlight.phase] ?? 'running' : 'running') : 'queued',
     // An instant this clock cannot read is no elapsed time rather than `NaN` on the page: the row
     // stays up and counts from zero, which is the one thing it can still say truthfully.
     clock: landingClock(Number.isFinite(startedAt) ? elapsedAt - startedAt : 0),
     clockLabel: running ? 'Elapsed' : 'Queued for',
-    updated: age === null ? null : age === 0 ? 'Updated just now' : `Updated ${age}m ago`,
+    // A read that failed or went stale says how old the read is; only a read that WORKED can say
+    // anything about the reports, and then a silent job says where they stand instead of pretending
+    // to have been updated.
+    updated: silent && !unavailable
+      ? (reported && age !== null ? landingNoReportFor(age) : LANDING_NO_REPORT_YET)
+      : age === null ? null : age === 0 ? 'Updated just now' : `Updated ${age}m ago`,
+    wait: running && inFlight.waitMs ? landingClock(inFlight.waitMs) : null,
   };
 }
 
@@ -348,6 +381,9 @@ export function LandingRow({ line }: { line: LandingLine }) {
       {line.what ? <div className="project-landing-what">{line.what}</div> : null}
       <div className="project-landing-meta">
         <span>{line.clockLabel} <span className="project-landing-clock">{line.clock}</span></span>
+        {/* The other half of "how long is this taking": what it waited for a runner before any of
+            the elapsed time began. */}
+        {line.wait ? <span>Waited <span className="project-landing-wait">{line.wait}</span></span> : null}
         {line.updated ? <span>{line.updated}</span> : null}
       </div>
     </div>

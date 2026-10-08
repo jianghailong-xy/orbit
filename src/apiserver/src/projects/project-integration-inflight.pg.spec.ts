@@ -210,6 +210,8 @@ test('the landing line describes running work before the queue, on real PostgreS
           state: 'RUNNING',
           startedAt: at(60),
           heartbeatAt: at(65),
+          // The wait it paid: enqueued at :30, claimed at :60.
+          waitMs: 30_000,
         });
         assert.equal(view.integratingCount, 1);
         assert.equal(view.queuedCount, 1);
@@ -236,6 +238,7 @@ test('the landing line describes running work before the queue, on real PostgreS
           state: 'RUNNING',
           startedAt: at(10),
           heartbeatAt: null,
+          waitMs: 10_000,
         });        assert.deepEqual(await listInFlight(db, f), view.inFlight);
       });
 
@@ -250,7 +253,7 @@ test('the landing line describes running work before the queue, on real PostgreS
 
         assert.deepEqual(view.inFlight, {
           taskTitle: null, kind: 'LAND_PROMOTION', phase: null,
-          state: 'RUNNING', startedAt: at(10), heartbeatAt: null,
+          state: 'RUNNING', startedAt: at(10), heartbeatAt: null, waitMs: 10_000,
         });        assert.deepEqual(await listInFlight(db, f), view.inFlight);
       });
 
@@ -261,8 +264,9 @@ test('the landing line describes running work before the queue, on real PostgreS
         await job(db, f, { at: at(0), state: 'QUEUED', taskId, idempotency: 'older' });
 
         assert.deepEqual((await read(db, f)).inFlight, {
+          // A queued job's whole clock is the wait, so it carries no separate measurement of one.
           taskTitle: 'Oldest queued task', kind: 'LAND_TASK', phase: null,
-          state: 'QUEUED', startedAt: at(0), heartbeatAt: null,
+          state: 'QUEUED', startedAt: at(0), heartbeatAt: null, waitMs: null,
         });
         assert.deepEqual(await listInFlight(db, f), (await read(db, f)).inFlight);
       });
@@ -277,7 +281,7 @@ test('the landing line describes running work before the queue, on real PostgreS
           await db.projectIntegrationJob.update({ where: { id }, data: { phase } });
           assert.deepEqual((await read(db, f)).inFlight, {
             taskTitle: null, kind: 'CHECK_PROMOTION', phase,
-            state: 'RUNNING', startedAt: at(10), heartbeatAt: null,
+            state: 'RUNNING', startedAt: at(10), heartbeatAt: null, waitMs: 10_000,
           });
         }
       });

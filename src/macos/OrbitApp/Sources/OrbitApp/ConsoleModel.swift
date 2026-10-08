@@ -3404,6 +3404,10 @@ final class ConsoleModel {
     /// different things: the property is nil while unread, and the read answers nil when this
     /// project is asking nothing — which is the ordinary case and draws no card.
     private(set) var promotion: ProjectPromotionView?
+    /// What the project's line is landing, for the row that names what is in front of a blocked
+    /// candidate (`PromotionCards.blockedByLine`). Kept as last read, and read only while one is
+    /// blocked: the three states that are not blocked have nothing to look past.
+    private(set) var promotionLandings: [ProjectLandTask] = []
     /// The criteria themselves, carried on the confirmation card: confirming a set the reader
     /// cannot read is the "signed unread" the whole path exists to prevent.
     private(set) var projectCriteria: [ProjectCriteriaDocument.Item] = []
@@ -3760,6 +3764,15 @@ final class ConsoleModel {
         do {
             let current = try await api.currentPromotion(projectID: projectID)
             promotion = current
+            // And, for a candidate a check BLOCKED, what the line is doing about the branch: one of
+            // the project's current landings is holding the merge, and its own `blockingReason` names
+            // what holds THAT — which is the answer "Coordinator is resolving it" never gave (owner
+            // report, 2026-10-08). Independent of the read above, and failing leaves the last answer
+            // standing, like every other read here.
+            if PromotionCards.stage(current) == .blocked,
+               let integration = try? await api.projectIntegration(projectID) {
+                promotionLandings = integration.landTasks
+            }
             if let current, let stage = PromotionCards.stage(current) {
                 // A merge that has HAPPENED is neither asking nor telling anything now: it is a
                 // record, and the conversation draws it where it happened (`adoptPromotionReceipts`
