@@ -159,7 +159,7 @@ table.mx td:first-child { white-space: nowrap; }
     <li><b>切换中显示去向</b>：下一条会换引擎时，标题写成 <span class="mono">Claude Code → Codex</span>；两端同引擎（同一 CLI 的两个 provider）不画箭头。</li>
     <li><b>额度不进标题</b>：<span class="mono">claude-2 · weekly 62%</span> 这类信息留在 Provider 子菜单里，标题只有引擎名。</li>
   </ul>
-  <p class="hint" style="margin:12px 0 0">实现落点：<span class="mono">lib/sessionProviderChoices.ts</span> 的 <span class="mono">engineTitleFor()</span>（纯函数，含箭头规则）＋ <span class="mono">WorkspaceView.tsx</span> 的 <span class="mono">modelMenuItems</span> 第一项 ＋ <span class="mono">index.css</span> 的 <span class="mono">.composer-engine-title</span>；单测在 <span class="mono">sessionProviderChoices.test.ts</span>（引擎名/品牌标/箭头规则）与 <span class="mono">WorkspaceView.modelControl.test.tsx</span>（菜单真的以它为标题、点了不发 PATCH）。</p>
+  <p class="hint" style="margin:12px 0 0">实现落点 —— Web：<span class="mono">lib/sessionProviderChoices.ts</span> 的 <span class="mono">engineTitleFor()</span>（纯函数，含箭头规则）＋ <span class="mono">WorkspaceView.tsx</span> 的 <span class="mono">modelMenuItems</span> 第一项 ＋ <span class="mono">index.css</span> 的 <span class="mono">.composer-engine-title</span>；单测在 <span class="mono">sessionProviderChoices.test.ts</span> 与 <span class="mono">WorkspaceView.modelControl.test.tsx</span>。<br>iOS / macOS（同一个 <span class="mono">ComposerView.modelMenu</span>，原生菜单没有品牌标列，标题就是菜单最上的一行文字）：<span class="mono">OrbitKit</span> 的 <span class="mono">SessionProviderChoices.engineTitle()</span> ＋ <span class="mono">ConsoleModel.pendingResumeFrom</span>（持有中意的 pick 会先改掉 <span class="mono">provider</span>）＋ <span class="mono">ComposerView</span> 的标题 Section；单测在 <span class="mono">SessionProviderChoicesTests.swift</span>。</p>
 </div>
 
 </body>
