@@ -255,7 +255,8 @@ export interface WikiMaintenanceCheck {
   position: string | null;
   reached: boolean;
   run: {
-    taskId: string;
+    /** The task that ran it; null for a run a wiki job ran (the server path, migration 0401). */
+    taskId: string | null;
     sessionId: string | null;
     outcome: WikiCursorOutcome | null;
     opsRefused: number | null;

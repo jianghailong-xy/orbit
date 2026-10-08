@@ -12,6 +12,7 @@ import {
   UpdateModelProviderDto,
 } from './dto';
 import { CodexLoginService } from './codex-login.service';
+import { DeepSeekBalanceService } from './deepseek-balance.service';
 import { ProvidersService } from './providers.service';
 
 /**
@@ -26,6 +27,7 @@ export class ProvidersController {
   constructor(
     private readonly providers: ProvidersService,
     private readonly codexLogin: CodexLoginService,
+    private readonly balances: DeepSeekBalanceService,
   ) {}
 
   @PatScope('workspaces:read', { workspaceConfinable: false })
@@ -46,6 +48,19 @@ export class ProvidersController {
   @Get('mine/:id/key')
   revealMineKey(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.providers.revealKey(user.userId, id);
+  }
+
+  // The DeepSeek account balance behind one of the caller's own DeepSeek keys. This server asks
+  // DeepSeek with the stored key, which never leaves it; providers holding the same key share one
+  // read, and `?refresh=1` asks again (at most once per 10 s for a key).
+  @PatScope('workspaces:read', { workspaceConfinable: false })
+  @Get('mine/:id/balance')
+  balanceMine(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('refresh') refresh?: string,
+  ) {
+    return this.balances.balance(user.userId, id, refresh === '1');
   }
 
   // The vendor presets' current model lists, for the connect form. Public catalogue data (no key,

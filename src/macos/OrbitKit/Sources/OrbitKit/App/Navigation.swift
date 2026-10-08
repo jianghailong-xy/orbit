@@ -69,6 +69,9 @@ public enum NavNode: Hashable, Sendable {
     /// subscriptions, read-only here, or a shared pool of OpenAI API keys, which is run from its page.
     case accountPool(poolID: String)
     case sharedPool(poolID: String)
+    /// One of the account's own API keys, read-only, pushed from Settings → Providers: a DeepSeek
+    /// key's page, its account balance first (`DeepSeekBalance`). Changing a key happens on the web.
+    case providerDetail(providerID: String)
     case userDetail(userID: String)
     /// One project's page, pushed from the Projects list — or over a phone's conversation or a
     /// project's sessions page, so the back swipe returns there.

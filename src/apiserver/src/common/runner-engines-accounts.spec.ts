@@ -234,3 +234,20 @@ test('a runner that never reported stays unreported, whatever its accounts were 
   const [engine] = namedRunnerEngines({ engines: [codex(undefined)], accountNames: { codex: { default: 'Main' } } })!;
   assert.equal('accounts' in engine, false);
 });
+
+test('a signed-in account says when its login lapses, as an instant and nothing else', () => {
+  const claude = (accounts: unknown) => sanitizeRunnerEngines([{ engine: 'claude', installed: true, auth: 'yes', accounts }])?.[0]?.accounts;
+  const own = { id: 'default', home: '/home/ada/.claude', auth: 'yes' as const };
+  // What the runner sends (RFC 3339) comes back as ISO, and reads back unchanged from the row.
+  const [kept] = claude([{ ...own, loginExpiresAt: '2026-10-30T08:00:00Z' }])!;
+  assert.equal(kept.loginExpiresAt, '2026-10-30T08:00:00.000Z');
+  assert.deepEqual(claude(JSON.parse(JSON.stringify([kept]))), [kept]);
+  // Anything that isn't a time is no expiry, and the account stays.
+  for (const junk of ['soon', 1792483200000, '', 'x'.repeat(41), ['2026-10-30T08:00:00Z'], { at: '2026' }, null]) {
+    assert.deepEqual(claude([{ ...own, loginExpiresAt: junk }]), [own], `loginExpiresAt ${JSON.stringify(junk)}`);
+  }
+  // An account that isn't signed in has no login to lapse.
+  for (const auth of ['no', 'unknown'] as const) {
+    assert.deepEqual(claude([{ ...own, auth, loginExpiresAt: '2026-10-30T08:00:00Z' }]), [{ ...own, auth }]);
+  }
+});

@@ -151,7 +151,7 @@ afterEach(async () => {
 describe('Admin → Users · Google sign-in', { timeout: 60_000 }, () => {
   it('the list says how each account signs in and when it was opened', async () => {
     await open();
-    expect(headers()).toEqual(['Email', 'Name', 'Role', 'Sign-in', 'Created', '']);
+    expect(headers()).toEqual(['Email', 'Name', 'Role', 'Status', 'Sign-in', 'Created', '']);
     expect(cell('admin@example.test', 'Sign-in')).toBe('Password');
     expect(cell('dev@example.test', 'Sign-in')).toBe('PasswordGoogle');
     expect(cell('gina@gmail.com', 'Sign-in')).toBe('Google');

@@ -1,0 +1,27 @@
+21 pictures in docs/evidence/deepseek-harness/balance/web, 21 in /var/tmp/ds-balance-web-v2
+same web-01-providers-dark.png
+same web-01-providers-light.png
+same web-02-providers-states-dark.png
+same web-02-providers-states-light.png
+same web-03-edit-deepseek-dark.png
+same web-03-edit-deepseek-light.png
+same web-04-edit-deepseek-harness-dark.png
+same web-04-edit-deepseek-harness-light.png
+same web-05a-section-multi-currency-dark.png
+same web-05a-section-multi-currency-light.png
+same web-05b-section-low-dark.png
+same web-05b-section-low-light.png
+same web-05c-section-key-rejected-dark.png
+same web-05c-section-key-rejected-light.png
+same web-05d-section-network-dark.png
+same web-05d-section-network-light.png
+same web-05e-section-upstream-dark.png
+same web-05e-section-upstream-light.png
+same web-05f-section-loading-dark.png
+same web-05f-section-loading-light.png
+same web-06-edit-refreshed-light.png
+21 of 21 pictures pixel-identical
+docs/evidence/deepseek-harness/balance/web/checks-light.json: 34/34 passed
+/var/tmp/ds-balance-web-v2/checks-light.json: 34/34 passed
+docs/evidence/deepseek-harness/balance/web/checks-dark.json: 33/33 passed
+/var/tmp/ds-balance-web-v2/checks-dark.json: 33/33 passed

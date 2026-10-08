@@ -43,11 +43,20 @@ export function buildTaskExecutionPrompt(task: {
     `请按以下步骤进行：\n` +
     `1. 先用 task_get 查看该任务的完整信息与历史评论。\n` +
     `2. 执行任务。\n` +
+    // Where the result goes is said as the platform writes it: the comparison writes task.status and
+    // nothing else (runner-api.controller.ts turnComplete, held there by
+    // executable-exit-code-judgment.spec.ts at the account owner's direction), so the brief must not
+    // promise a comment carrying the output.
     (executableAcceptance
       ? `3. 完成本次回复后，系统会在本执行会话的工作区自动运行任务声明的唯一 EXECUTABLE 验收命令` +
-        `（期望退出码 ${task.acceptanceExpectedExitCode}），并把命令、原始输出和实际退出码写入` +
-        `任务评论；退出码相等则推导 DONE，否则推导 FAILED。不要自行写 status，也不要让` +
-        ` coordinator 审批这个机械结论。\n`
+        `（期望退出码 ${task.acceptanceExpectedExitCode}）；退出码相等则推导 DONE，否则推导 FAILED。` +
+        `原始输出和实际退出码不会写入任务评论，结果记在这几处：推导出的状态写在任务上（task_get 可见）；` +
+        `命令和原始输出在本会话的记录里，是其中一次 Bash 调用（要再看输出，就在工作区重跑同一条命令）；` +
+        `FAILED 时本会话以失败结束，error 写着 \`acceptance command exited <实际退出码>; expected ` +
+        `${task.acceptanceExpectedExitCode}\`（可用 session_get 读本会话，会话 id 在环境变量 ORBIT_SESSION_ID 里），` +
+        `任务若属于项目，项目里还会多一条记下这两个退出码的 TASK_FAILED 异常。验收本身只在命令没能返回` +
+        `可比较的结果时写一条任务评论（EXECUTABLE_ACCEPTANCE_UNAVAILABLE），任务状态保持不变。` +
+        `不要自行写 status，也不要让 coordinator 审批这个机械结论。\n`
       : ownerConfirmed
         ? `3. 完成后，先用 task_request_confirmation（MCP；CLI 是 \`orbit task request-confirmation\`）`
           + `声明本次运行已经做完，再在本会话里用一两句话说明做了什么，然后结束本轮。`

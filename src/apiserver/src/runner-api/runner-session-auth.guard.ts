@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { sha256 } from '../common/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
+import { RUNNER_OWNER_STATE, admitRunner } from './runner-auth.guard';
 import { ServiceTokenAuthorizer, ServiceTokenGrant } from './service-token.authorizer';
 
 /**
@@ -34,9 +35,9 @@ export class RunnerSessionAuthGuard implements CanActivate {
 
     if (!token) throw new UnauthorizedException('missing runner token');
 
-    const runner = await this.prisma.runner.findFirst({ where: { tokenHash: sha256(token) } });
+    const runner = await this.prisma.runner.findFirst({ where: { tokenHash: sha256(token) }, include: RUNNER_OWNER_STATE });
     if (runner) {
-      req.runner = runner;
+      req.runner = admitRunner(runner);
       return true;
     }
 

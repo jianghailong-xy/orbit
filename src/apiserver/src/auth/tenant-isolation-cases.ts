@@ -214,6 +214,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   },
   'DELETE /admin/users/:id': { request: (of) => ({ params: { id: of.spare.adminSubjectId } }) },
   'PATCH /admin/users/:id/role': { request: (of) => ({ params: { id: of.adminSubjectId }, body: { role: 'ADMIN' } }) },
+  // The subject is enabled, and an administrator besides it is too: the administrator disables it.
+  'PATCH /admin/users/:id/disabled': { request: (of) => ({ params: { id: of.adminSubjectId }, body: { disabled: true } }) },
   // The subject has no Google account linked: the administrator is answered its sign-in methods as they are.
   'DELETE /admin/users/:id/identities/google': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
   'PATCH /admin/providers/:id': { request: (of) => ({ params: { id: of.adminProviderId }, body: { label: 'renamed by the census' } }) },
@@ -362,6 +364,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
 
   // ── providers: the account's own, its pools, and the pools it shares with others ───────────────
   'GET /providers/mine/:id/key': { request: (of) => ({ params: { id: of.providerId } }) },
+  'GET /providers/mine/:id/balance': { request: (of) => ({ params: { id: of.providerId } }) },
   'PATCH /providers/mine/:id': { request: (of) => ({ params: { id: of.providerId }, body: { label: 'renamed by the census' } }) },
   'DELETE /providers/mine/:id': { request: (of) => ({ params: { id: of.spare.providerId } }) },
   'GET /providers/pools/:id': { request: (of) => ({ params: { id: of.poolId } }) },

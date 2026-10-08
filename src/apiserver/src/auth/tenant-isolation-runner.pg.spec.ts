@@ -202,14 +202,35 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     // ── jobs and operations the machine holds the claim of ──
     const codebase = await db.projectCodebase.findFirstOrThrow({ where: { projectId: of.projectId }, select: { id: true } });
     const integrationJobId = randomUUID();
+    // A task of the project's own for this landing: the first half's fixture already holds a QUEUED
+    // landing of the project's task, and `project_integration_job_task_inflight_key` allows one live
+    // LAND_TASK a task (0281 J3) — the two were the same task until this line, which made this spec red
+    // before it ran a single case (a4c1b1f8f).
+    const landingTaskId = await task('task whose landing the machine holds', { projectId: of.projectId });
     await db.projectIntegrationJob.create({
       data: {
-        id: integrationJobId, projectId: of.projectId, ownerId, codebaseId: codebase.id, kind: 'LAND_TASK', taskId: of.projectTaskId,
+        id: integrationJobId, projectId: of.projectId, ownerId, codebaseId: codebase.id, kind: 'LAND_TASK', taskId: landingTaskId,
         serialKey: `census:${integrationJobId}`, targetRef: `refs/heads/project/${of.projectId}`, upstreamRef: 'refs/heads/main',
         sourceRef: 'refs/heads/census', state: 'RUNNING', runnerId: of.runnerId, claimLeaseOwner: leaseOwner, claimGeneration: 1n,
         claimedAt: new Date(), heartbeatAt: new Date(), startedAt: new Date(), idempotencyKey: `census:${integrationJobId}`,
       },
     });
+    // A wiki repository operation of the machine's, claimed by it: the job it answers, and the row the
+    // three repo-op doors name (migration 0402). Claimed as the integration job above is, so a case on it
+    // carries the claim rather than an id alone.
+    const wikiRepoOpId = randomUUID();
+    const wikiRepoJobId = randomUUID();
+    await sql.query(
+      `INSERT INTO "wiki_job" ("id","owner_id","space_id","kind","state") VALUES ($1,$2,$3,'maintain','queued')`,
+      [wikiRepoJobId, ownerId, of.wikiSpaceId],
+    );
+    await sql.query(
+      `INSERT INTO "wiki_repo_op"
+         ("id","job_id","owner_id","space_id","workspace_id","runner_id","kind","input","state",
+          "lease_owner","claim_generation","claimed_at","heartbeat_at")
+       VALUES ($1,$2,$3,$4,$5,$6,'snapshot','{}','running',$7,1,now(),now())`,
+      [wikiRepoOpId, wikiRepoJobId, ownerId, of.wikiSpaceId, of.workspaceId, of.runnerId, leaseOwner],
+    );
     const codexOperationId = randomUUID();
     await sql.query(
       `INSERT INTO "codex_rate_limit_reset_operation"
@@ -350,7 +371,7 @@ test('tenant isolation: past the runner gate and through the share links, anothe
       callingSessionId, coordinatorSessionId, newCoordinatorSessionId, machineSessionId, runtimeSessionId, orphanSessionId,
       takeoverSessionId, activateSessionId, leaseOwner, leaseGeneration, inboxSessionId, turnSessionId, shellTurnId,
       finalizeSessionId, completeSessionId, sessionAttachmentId, allowedApprovalId, artifactRequestId, integrationJobId,
-      codexOperationId, spareServiceTokenId, replyRequestId, interruptSessionId, endSessionId, completedSessionId,
+      codexOperationId, wikiRepoOpId, spareServiceTokenId, replyRequestId, interruptSessionId, endSessionId, completedSessionId,
       deletedSessionId, archivedSessionId, coordinatorItemId, handOverItemId, watchId, verifierTaskId, verifiedTaskId,
       providerSlug: await slugOf(of.providerId), spareProviderSlug: await slugOf(of.spare.providerId), listTaskId,
       confirmTaskId, confirmRunSessionId, confirmRequestId, reviewerSessionId, wikiSessionId, wikiMaintainerSessionId,

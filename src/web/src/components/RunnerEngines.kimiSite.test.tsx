@@ -162,7 +162,7 @@ describe('signing Kimi in from its row', () => {
     });
     await click(button(kimiRow(page), 'Sign in'));
     const open = kimiRow(page).querySelector<HTMLAnchorElement>('.rsi-open');
-    expect(open?.textContent?.trim()).toBe('Open the kimi.ai sign-in page');
+    expect(open?.textContent?.trim()).toBe('Copy Code & Open kimi.ai');
     expect(open?.getAttribute('href')).toBe('https://www.kimi.ai/code/authorize_device?user_code=7K06-QP86');
     await click(button(kimiRow(page), 'Use kimi.com instead'));
     expect(loginPosts()).toEqual([{ engine: 'kimi', region: 'mainland-cn' }]);

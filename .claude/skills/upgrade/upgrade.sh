@@ -163,16 +163,19 @@ else
   echo "warning: no orbit-web image to carry the runner release over from — the new web image keeps no previous one" >&2
 fi
 
-echo "==> Building images from source (apiserver, web)"
+# wiki-worker runs the apiserver's image with another command, so naming it builds nothing twice: it
+# keeps this list and the recreate list below the same services.
+echo "==> Building images from source (apiserver and wiki-worker, web)"
 if [ "$NO_CACHE" -eq 1 ]; then
-  $DC build --no-cache ${PREVIOUS_RELEASE_ARG:+--build-arg "$PREVIOUS_RELEASE_ARG"} apiserver web
+  $DC build --no-cache ${PREVIOUS_RELEASE_ARG:+--build-arg "$PREVIOUS_RELEASE_ARG"} apiserver wiki-worker web
 else
-  $DC build ${PREVIOUS_RELEASE_ARG:+--build-arg "$PREVIOUS_RELEASE_ARG"} apiserver web
+  $DC build ${PREVIOUS_RELEASE_ARG:+--build-arg "$PREVIOUS_RELEASE_ARG"} apiserver wiki-worker web
 fi
 
 # `up -d` only recreates containers whose image or config changed. The locally
-# built images (apiserver, web) change here; gateway changes only when its image
-# or mounted nginx.conf does. Scoping `up` to those services means an unchanged
+# built images (apiserver, web) change here, and wiki-worker with apiserver's,
+# whose image it runs; gateway changes only when its image or mounted nginx.conf
+# does. Scoping `up` to those services means an unchanged
 # postgres is never recreated (nor polled by --wait). Refreshing the base images —
 # the only thing that could mark postgres/gateway "changed" — is opt-in via
 # --pull-base, which then needs a full recreate to apply.
@@ -183,7 +186,7 @@ if [ "$PULL_BASE" -eq 1 ]; then
   $DC up -d --wait
 else
   echo "==> Recreating changed services (apiserver applies DB migrations on boot)"
-  $DC up -d --wait apiserver web gateway
+  $DC up -d --wait apiserver wiki-worker web gateway
 fi
 
 echo "==> Stack status"

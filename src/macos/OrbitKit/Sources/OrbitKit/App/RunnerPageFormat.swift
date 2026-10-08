@@ -430,6 +430,8 @@ public enum RunnerPageFormat {
         /// the runner's own login, as every sign-in was before accounts — when it doesn't.
         public let signInAccount: String?
         public let pausedUntil: String?
+        /// When its login lapses, as the runner read it (`RunnerEngineAccount.loginExpiresAt`).
+        public let loginExpiresAt: String?
         /// Kimi only: the site its login is on, `kimi.com` or `kimi.ai` (`KimiSite`).
         public var site: String? = nil
     }
@@ -447,15 +449,42 @@ public enum RunnerPageFormat {
                                 home: (own?.home ?? own?.codexHome).map(tildePath),
                                 auth: envKey ? nil : health.auth, envKey: envKey,
                                 signInAccount: nil, pausedUntil: own?.pausedUntil,
-                                site: engineSite(health))]
+                                loginExpiresAt: own?.loginExpiresAt, site: engineSite(health))]
         }
         return accounts.map { account in
             let envKey = runsOnEnvKey(health, account: account.id, auth: account.auth)
             return AccountLine(id: account.id, name: CodexAccounts.label(account.id, accounts: accounts),
                                home: (account.home ?? account.codexHome).map(tildePath),
                                auth: envKey ? nil : account.auth, envKey: envKey,
-                               signInAccount: account.id, pausedUntil: account.pausedUntil)
+                               signInAccount: account.id, pausedUntil: account.pausedUntil,
+                               loginExpiresAt: account.loginExpiresAt)
         }
+    }
+
+    /// How far ahead of a login lapsing its line warns: Claude Code's own lead ("Your login expires in
+    /// 3 days · run /login to renew"), so the page says it when the CLI would.
+    public static let loginWarningLead: TimeInterval = 3 * 86_400
+
+    /// The warning under a signed-in account whose login lapses within `loginWarningLead`, in whole
+    /// days rounded up the way Claude Code counts them. Nil for an account not signed in, one whose
+    /// login records no lapse, one further off — and one already past it, which the runner reports
+    /// signed out.
+    public static func loginExpiresLine(_ line: AccountLine, now: Date) -> String? {
+        guard line.auth == "yes", let lapses = line.loginExpiresAt.flatMap(RelativeTime.parse) else { return nil }
+        let left = lapses.timeIntervalSince(now)
+        guard left > 0, left <= loginWarningLead else { return nil }
+        let days = Int((left / 86_400).rounded(.up))
+        return RunnerPageCopy.runnerEngineLoginExpires(
+            count: days, unit: days == 1 ? RunnerPageCopy.RUNNER_UNIT_DAY : RunnerPageCopy.RUNNER_UNIT_DAYS)
+    }
+
+    /// What a signed-out account costs, under its Signed out: nothing runs on it until it is signed in
+    /// again — and when it is the engine's only account on that machine, nothing runs on the engine
+    /// there at all. Nil for any account not signed out.
+    public static func signedOutNote(_ line: AccountLine, alone: Bool, engine: String) -> String? {
+        guard line.auth == "no" else { return nil }
+        return alone ? RunnerPageCopy.runnerEngineSignedOutAlone(engine: engineName(engine))
+                     : RunnerPageCopy.RUNNER_ENGINE_ACCOUNT_SIGNED_OUT_NOTE
     }
 
     /// What Add Account calls a new account until the user names it: its number on the machine,
