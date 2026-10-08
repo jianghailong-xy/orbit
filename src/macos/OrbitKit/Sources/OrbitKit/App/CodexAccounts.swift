@@ -23,6 +23,11 @@ public enum CodexAccounts {
     /// Antigravity's: the Gemini directory of an account of its own (shared `ACCOUNT_DIR_VAR`, which
     /// the runner reads to pick the sign-in a session runs on), or a Gemini key of its own.
     private static let antigravityDecidingEnvKeys = ["ORBIT_ANTIGRAVITY_GOOGLE_DIR", "GEMINI_API_KEY"]
+    /// Kimi Code's: a KIMI_CODE_HOME of its own.
+    private static let kimiDecidingEnvKeys = ["KIMI_CODE_HOME"]
+    /// …or a model of its own, which only both of these together are (shared `OWN_CREDENTIAL_NEEDS_ALL`,
+    /// runner `kimiUsesEnvModel`): either one alone still runs on the account's login.
+    private static let kimiOwnModelEnvKeys = ["KIMI_MODEL_NAME", "KIMI_MODEL_API_KEY"]
 
     /// The snapshot `engine`'s accounts' quota is read from: the runner's own report for Codex and
     /// Claude Code (`Runner.planUsage`). Antigravity's never rides there — it travels with the engine's
@@ -35,11 +40,12 @@ public enum CodexAccounts {
     }
 
     /// The account a workspace picked for its sessions on `engine` (`Agent.codexAccount`,
-    /// `.claudeAccount`, `.antigravityAccount`); nil leaves it to Automatic.
+    /// `.claudeAccount`, `.antigravityAccount`, `.kimiAccount`); nil leaves it to Automatic.
     public static func workspaceAccount(_ engine: String, of agent: Agent?) -> String? {
         switch engine {
         case "claude": return agent?.claudeAccount
         case "antigravity": return agent?.antigravityAccount
+        case "kimi": return agent?.kimiAccount
         default: return agent?.codexAccount
         }
     }
@@ -47,17 +53,21 @@ public enum CodexAccounts {
     /// What a runner declares once it signs an Antigravity account Orbit names into that account's own
     /// Gemini directory, rather than signing the runner's one Google sign-in in again.
     public static let antigravityAccountLoginCapability = "antigravity-account-login/v1"
+    /// The same for Kimi Code: an account Orbit names signs in, on the site the sign-in names, into a
+    /// KIMI_CODE_HOME of its own rather than Default's.
+    public static let kimiAccountLoginCapability = "kimi-account-login/v1"
 
     /// What a runner declares when a session there can move to another of its accounts of `engine`:
-    /// Codex and Claude Code carry the conversation from one account's directory to the other's
-    /// (`codex-account-move/v1`, `claude-account-move/v1`). An Antigravity conversation lives in the
-    /// session's own directory whichever account it runs on, so there is nothing to carry: a runner that
-    /// keeps Antigravity accounts at all — one that signs them in (`antigravityAccountLoginCapability`)
-    /// — moves a session between them.
+    /// Codex, Claude Code and Kimi Code carry the conversation from one account's directory to the
+    /// other's (`codex-account-move/v1`, `claude-account-move/v1`, `kimi-account-move/v1`). An
+    /// Antigravity conversation lives in the session's own directory whichever account it runs on, so
+    /// there is nothing to carry: a runner that keeps Antigravity accounts at all — one that signs them
+    /// in (`antigravityAccountLoginCapability`) — moves a session between them.
     public static func moveCapability(_ engine: String) -> String {
         switch engine {
         case "claude": return "claude-account-move/v1"
         case "antigravity": return antigravityAccountLoginCapability
+        case "kimi": return "kimi-account-move/v1"
         default: return "codex-account-move/v1"
         }
     }
@@ -89,8 +99,8 @@ public enum CodexAccounts {
         return wanted
     }
 
-    /// Whether a new session of `engine` (`codex`, `claude` or `antigravity`) on `agent` starts on
-    /// Automatic: its workspace picked no account of that engine, its env selects no other config
+    /// Whether a new session of `engine` (`codex`, `claude`, `antigravity` or `kimi`) on `agent` starts
+    /// on Automatic: its workspace picked no account of that engine, its env selects no other config
     /// directory and no key of its own, and the runner has more than one account to choose between (the
     /// server's `automaticAccount`). The same answer says whether a session there is on Automatic unless
     /// an account was picked for it by hand.
@@ -106,11 +116,16 @@ public enum CodexAccounts {
                                         accounts: [RunnerEngineAccount]?) -> Bool {
         guard (accounts?.count ?? 0) >= 2, pick?.isEmpty ?? true else { return false }
         let env = env ?? [:]
-        let deciding = engine == "claude" ? claudeDecidingEnvKeys
-            : engine == "antigravity" ? antigravityDecidingEnvKeys : decidingEnvKeys
-        return !deciding.contains { key in
-            !(env[key]?.trimmingCharacters(in: .whitespaces).isEmpty ?? true)
+        let set = { (key: String) in !(env[key]?.trimmingCharacters(in: .whitespaces).isEmpty ?? true) }
+        if engine == "kimi" && kimiOwnModelEnvKeys.allSatisfy(set) { return false }
+        let deciding: [String]
+        switch engine {
+        case "claude": deciding = claudeDecidingEnvKeys
+        case "antigravity": deciding = antigravityDecidingEnvKeys
+        case "kimi": deciding = kimiDecidingEnvKeys
+        default: deciding = decidingEnvKeys
         }
+        return !deciding.contains(where: set)
     }
 
     /// Which account a new session with none picked starts on: the one whose quota would otherwise go
@@ -203,13 +218,18 @@ public enum CodexAccounts {
         return pick.map(\.at).max() ?? .infinity
     }
 
+    /// How long a Kimi Code monthly window is, for weighing it against the others (shared `MONTH_MINS`):
+    /// longer than any week, which is all its length decides here.
+    static let monthMins = 30 * 24 * 60
+
     /// Every window of one snapshot with its length in minutes (shared `windowsWithLength`): Claude's
-    /// named ones by their names, Codex's as it reports them — nil when one does not say — and
-    /// Antigravity's buckets as the windows they are (`bucketWindow`).
+    /// and Kimi Code's named ones by their names, Codex's as it reports them — nil when one does not
+    /// say — and Antigravity's buckets as the windows they are (`bucketWindow`).
     static func withLength(_ s: PlanUsageSnapshot) -> [(window: PlanUsageWindow, mins: Int?)] {
         let week = 7 * 24 * 60
         let named: [(PlanUsageWindow?, Int)] = [(s.fiveHour, 5 * 60), (s.sevenDay, week), (s.sevenDayOpus, week),
-                                                (s.sevenDaySonnet, week)]
+                                                (s.sevenDaySonnet, week), (s.month, monthMins),
+                                                (s.monthCode, monthMins)]
         let buckets: [PlanUsageWindow?] = (s.buckets ?? []).map(bucketWindow)
         let reported = [s.primary, s.secondary] + (s.rateLimits ?? []).flatMap { [$0.primary, $0.secondary] }
             + buckets
@@ -219,10 +239,12 @@ public enum CodexAccounts {
         return all
     }
 
-    /// Every window one snapshot reports: Claude's named ones, Codex's primary/secondary pair, the
-    /// per-bucket windows Codex reports under `rateLimits`, and Antigravity's buckets (`bucketWindow`).
+    /// Every window one snapshot reports: Claude's named ones, Kimi Code's monthly pair, Codex's
+    /// primary/secondary pair, the per-bucket windows Codex reports under `rateLimits`, and
+    /// Antigravity's buckets (`bucketWindow`).
     static func windows(_ s: PlanUsageSnapshot) -> [PlanUsageWindow] {
-        [s.fiveHour, s.sevenDay, s.sevenDayOpus, s.sevenDaySonnet, s.primary, s.secondary].compactMap { $0 }
+        [s.fiveHour, s.sevenDay, s.sevenDayOpus, s.sevenDaySonnet, s.month, s.monthCode, s.primary,
+         s.secondary].compactMap { $0 }
             + (s.rateLimits ?? []).flatMap { [$0.primary, $0.secondary].compactMap { $0 } }
             + (s.buckets ?? []).map(bucketWindow)
     }
