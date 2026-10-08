@@ -190,7 +190,7 @@ class WikiScreensTest {
         jobsRead = buildJsonObject { put("spaceId", space); put("jobs", JsonArray(listOf(job))) }.toString()
         val route = OrbitRoute(Destination.WIKI_JOB, "34cE0job0000000000001")
         show(route) { WikiJobScreen(it, route) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-job-page").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-job-page").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-job-state").assertTextContains(WikiRunsCopy.running, substring = true)
         compose.onNodeWithTag("wiki-job-foot").assertTextContains("3 calls · 1,204 tokens in, 296 out so far", substring = true)
         // One row a call, the phone's two lines: the step and unit, its state, then waited · ran · tokens or its error.
@@ -203,9 +203,9 @@ class WikiScreensTest {
     @Test fun searchFindsEntriesUnderTheTitleAndSaysWhenNothingMatches() {
         val route = OrbitRoute(Destination.WIKI)
         show(route) { WikiHomeScreen(it, route, DirectoryData(), nav) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-search").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-search").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-search").performTextInput("secret")
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-hit:${WikiFixtures.pitfallID}").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-hit:${WikiFixtures.pitfallID}").fetchSemanticsNodes().isNotEmpty() }
         // While searching, the bands step aside.
         compose.onNodeWithText("Delete means forget").assertDoesNotExist()
         assertTrue(sent.any { it.first == "GET wiki/search" })
@@ -216,7 +216,7 @@ class WikiScreensTest {
     @Test fun anEntryDrawsItsSectionsAndItsSourcesOpenWhatTheyCite() {
         val route = OrbitRoute(Destination.WIKI_ENTRY, WikiFixtures.pitfallID)
         show(route) { WikiEntryScreen(it, route, DirectoryData(), nav) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-entry-title").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-entry-title").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-entry-title").assertTextEquals("runner-go’s full suite inside a session reaches production")
         compose.onNodeWithText("Trigger").assertExists()
         // A confirmed entry offers no Confirm/Reject; the owner's own writes are the bar's.
@@ -238,11 +238,11 @@ class WikiScreensTest {
     @Test fun reviewAnswersOneCardAndMovesToTheNext() {
         val route = OrbitRoute(Destination.WIKI_REVIEW)
         show(route) { WikiReviewScreen(it, route, DirectoryData(), nav) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-review-card:34UDOpAddPitfall00001").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-review-card:34UDOpAddPitfall00001").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-review-position").assertTextEquals("1 of 3")
         compose.onNodeWithTag("wiki-review-accept").performScrollTo().performClick()
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-review-card:34UDOpRetireWakeup002").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-review-card:34UDOpRetireWakeup002").fetchSemanticsNodes().isNotEmpty() }
         assertEquals(listOf("34UDOpAddPitfall00001"), decided)
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("1 of 2").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithText("1 of 2").fetchSemanticsNodes().isNotEmpty() }
     }
 }

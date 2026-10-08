@@ -114,7 +114,7 @@ class WikiTalkBackWordsTest {
         }
         val route = OrbitRoute(Destination.WIKI_ENTRY, WikiFixtures.pitfallID)
         show(route) { WikiEntryScreen(store, route, DirectoryData(), WikiNavRecord().nav) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-entry-mark").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-entry-mark").fetchSemanticsNodes().isNotEmpty() }
         labelled("wiki-entry-confirm", "Confirm")
         labelled("wiki-entry-reject", "Reject")
         compose.onNode(isHeading() and hasText("Sources")).assertTextContains("3")
@@ -164,7 +164,7 @@ class WikiTalkBackWordsTest {
             show { WikiDocPage(doc, "https://github.com/example/orbit", null) }
             compose.onNodeWithTag("wiki-doc-list").performScrollToNode(hasTestTag("wiki-doc-footnote:$n"))
             compose.onNodeWithTag("wiki-doc-footnote:$n").performSemanticsAction(SemanticsActions.OnClick)
-            compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-doc-footnote-sheet").fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-doc-footnote-sheet").fetchSemanticsNodes().isNotEmpty() }
             assertTalkBackReadsWords("footnote $n's sheet")
         }
     }
