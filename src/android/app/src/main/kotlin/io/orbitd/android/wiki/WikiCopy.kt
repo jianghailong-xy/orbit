@@ -11,12 +11,32 @@ internal object WikiCopy {
     const val title = "Wiki"
     const val searchPlaceholder = "Search the wiki"
     const val reviewTitle = "Review"
-    fun proposalsToReview(count: Int) = "$count proposals to review"
+    fun proposalsToReview(count: Int) = "$count proposal${if (count == 1) "" else "s"} to review"
     fun proposalsFrom(count: Int, sessions: Int) =
         "$count proposal${if (count == 1) "" else "s"} from $sessions session${if (sessions == 1) "" else "s"}"
     fun oldest(`when`: String) = "oldest $`when`"
 
+    /** Activity and the number waiting on the owner (design §12.3.2–§12.3.4, §12.3.7): every space's proposals and the
+     * things each plan waits on the owner for; the drawer's Wiki row and the bar's Activity badge show it, and say it the
+     * way the Projects row says its own. */
+    const val activity = "Activity"
+    fun waitingOnYou(count: Int) = "$count waiting on you"
+    /** Beside Recently changed: how many of its rows came after the reader last looked. */
+    fun newSinceLastLooked(count: Int) = "$count new since you last looked"
+    /** The share of Activity's first banner that is another space's: `3 proposals to review · 2 in wikova`. */
+    fun countInSpace(count: Int, space: String) = "· $count in $space"
+    /** After another space's plan banner, which space it is: `Plan draft ready to confirm · in wikova`. */
+    fun inSpace(space: String) = "· in $space"
+    /** After a space's name in the picker, what waits on the owner in it: `wikova · 2 waiting`. */
+    fun spaceWaiting(count: Int) = "· $count waiting"
+    /** The picker's words (mock 31 ④): the way into Wiki settings under the spaces, and each space's documents. */
+    const val manageSpaces = "Manage spaces"
+    fun documentCount(count: Int) = "${WikiArticleCopy.count(count)} ${if (count == 1) "document" else "documents"}"
+    const val noDocuments = "No documents yet"
+
     const val principles = "Principles"
+    /** After the home's first three principles, the way to all of them: `All 6 ›` (`wikiAllPrinciples`). */
+    fun allPrinciples(count: Int) = "All $count ›"
     const val recentDecisions = "Recent decisions"
     const val recentlyChanged = "Recently changed"
     const val agentsUsed = "Agents used the wiki"
@@ -26,6 +46,8 @@ internal object WikiCopy {
     fun anchorsVerified(ref: String, ago: String) = if (ago.isEmpty()) "Anchors verified at $ref" else "Anchors verified at $ref $ago"
 
     const val noSpaces = "No wiki space yet. A space is a codebase, and the first one is made when a session proposes into it."
+    /** What the Wiki section says to an account the server has not switched the wiki on for. */
+    const val disabledNote = "The wiki is not switched on for this account."
     const val spacePickerHint = "The codebase this wiki describes"
     const val sessionsReceived = "sessions received wiki context"
     const val searches = "searches"
@@ -138,7 +160,6 @@ internal object WikiCopy {
     const val tabAmend = "Amend"
     const val tabRetire = "Retire"
 
-    const val noEntries = "Nothing has been recorded in this space yet."
     const val noReview = "Nothing is waiting for you."
     const val noChanges = "Nothing has changed yet."
     const val noDecisions = "No decision has been recorded yet."
@@ -417,4 +438,15 @@ internal object WikiDocCopy {
     }
     fun monthDayTime(iso: String?, zone: ZoneId = ZoneId.systemDefault()): String? =
         iso?.let { WikiModeLogic.runWhen(it, zone).ifEmpty { null } }
+
+    // The home, by the confirmed plan (design §12.3.1, mocks 30 ③, 31 ① ⑥).
+
+    /** The line under the home's head once a plan is confirmed: `35 documents · 5 written` (`wikiDocsWritten`). */
+    fun docsWritten(total: Int, written: Int) = "${plural(total, "document", "documents")} · ${WikiArticleCopy.count(written)} written"
+    /** A new space's one card (mock 31 ⑥): why it has nothing, over Set up maintenance (`WIKI_NO_DOCUMENTS_NOTE`). */
+    const val noDocumentsNote = "This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space."
+    /** A category's documents not written yet, folded into one row under its written ones (`wikiNotWrittenYet`). */
+    fun notWrittenYet(n: Int) = "+${WikiArticleCopy.count(n)} not written yet"
+    /** A category none of whose documents is written yet, as its one row (`wikiDocsNotWrittenYet`). */
+    fun docsNotWrittenYet(n: Int) = "${plural(n, "document", "documents")} · $notWrittenShort"
 }

@@ -1,7 +1,9 @@
 package io.orbitd.android.storage
 
 import android.content.Context
+import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.util.AtomicFile
 import io.orbitd.android.core.auth.AccountKey
@@ -12,11 +14,13 @@ import io.orbitd.android.core.auth.InstanceStore
 import io.orbitd.android.core.auth.SecureStorageException
 import io.orbitd.android.core.auth.SessionDataStore
 import io.orbitd.android.core.auth.StoredSession
+import io.orbitd.android.core.protocol.ProtocolException
 import io.orbitd.android.core.protocol.Wire
 import java.io.File
 import java.io.FileNotFoundException
 import java.security.KeyStore
 import java.security.MessageDigest
+import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -98,16 +102,26 @@ private class EncryptedRecord(context: Context, name: String) {
         atomicWrite(file, byteArrayOf(1) + cipher.iv + encrypted)
     }
 
-    /** The decrypted record handed to [decode] and wiped after; null when there is none. Fails closed on anything else. */
+    /**
+     * The decrypted record handed to [decode] and wiped after; null when there is none. Fails closed on anything else, and
+     * says which are unrecoverable: a record of another format, a key that is gone, or authenticated bytes that do not decode.
+     */
     fun <T> read(decode: (ByteArray) -> T): T? {
         val bytes = readOrNull(file) ?: return null
-        if (bytes.size < 29 || bytes[0] != 1.toByte()) throw SecureStorageException()
-        val key = keyStore().getKey(alias, null) as? SecretKey ?: throw SecureStorageException()
+        if (bytes.size < 29 || bytes[0] != 1.toByte()) throw SecureStorageException(unrecoverable = true)
+        // Keystore2 (Android 12+) answers null only for a key that does not exist. Android 10–11's keystore answers null
+        // as well when its daemon cannot be reached, so there a missing key may come back.
+        val key = keyStore().getKey(alias, null) as? SecretKey
+            ?: throw SecureStorageException(unrecoverable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, bytes.copyOfRange(1, 13)))
         cipher.updateAAD(aad)
         val plaintext = cipher.doFinal(bytes.copyOfRange(13, bytes.size))
-        return try { decode(plaintext) } finally { plaintext.fill(0) }
+        return try {
+            decode(plaintext)
+        } catch (error: ProtocolException) {
+            throw SecureStorageException(error, unrecoverable = true)
+        } finally { plaintext.fill(0) }
     }
 
     fun delete() {
@@ -181,5 +195,14 @@ private fun readOrNull(file: AtomicFile): ByteArray? = try {
 }
 
 private suspend fun <T> storageIO(block: () -> T): T = withContext(Dispatchers.IO) {
-    try { block() } catch (_: Exception) { throw SecureStorageException() }
+    try { block() } catch (error: Exception) { throw storageFailure(error) }
 }
+
+/**
+ * [error] as the stores report it, with the original failure as its cause. A key the Keystore has permanently invalidated,
+ * and a record that fails GCM authentication, can never be read again; any other failure (I/O, a busy or restarting
+ * Keystore) may pass, and restoring keeps what is stored.
+ */
+internal fun storageFailure(error: Exception): SecureStorageException = error as? SecureStorageException
+    ?: SecureStorageException(error, unrecoverable = generateSequence<Throwable>(error) { it.cause }.take(8)
+        .any { it is KeyPermanentlyInvalidatedException || it is AEADBadTagException })

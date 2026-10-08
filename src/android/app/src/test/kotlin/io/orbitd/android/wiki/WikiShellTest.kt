@@ -79,7 +79,7 @@ class WikiShellTest {
         compose.waitForIdle()
         // A notification's link takes the reader to the Wiki home while the save is still on its way.
         open("orbit://wiki/${WikiShell.SPACE}")
-        awaitTag("wiki-status-line")
+        awaitTag("wiki-home-list")
         gate.complete(Unit)
         compose.waitUntil(10_000) { shell.ended.containsKey("POST wiki/spaces/${WikiShell.SPACE}/changesets") }
         assertEquals("the write went on to its answer", "answered", shell.ended["POST wiki/spaces/${WikiShell.SPACE}/changesets"])
@@ -93,9 +93,7 @@ class WikiShellTest {
         shell.decision = "conflict"
         signIn()
         open("orbit://wiki/${WikiShell.SPACE}")
-        awaitTag("wiki-review-banner")
-        compose.onNodeWithTag("wiki-review-banner").performClick()
-        awaitTag("wiki-review-page")
+        openReviewFromActivity()
         compose.onNodeWithTag("wiki-review-tab:amend").performClick()
         awaitTag("wiki-review-card:${WikiShell.AMEND_OP}")
         compose.onNodeWithTag("wiki-review-accept").performScrollTo().performClick()
@@ -111,7 +109,7 @@ class WikiShellTest {
     @Test fun aDocumentOpenedAgainAtTheSameSectionScrollsThereAgain() {
         signIn()
         open("orbit://wiki/${WikiShell.SPACE}")
-        awaitTag("wiki-status-line")
+        awaitTag("wiki-home-list")
         compose.onNodeWithTag("wiki-bar-contents").performClick()
         awaitTag("wiki-contents-index")
         compose.onNodeWithTag("wiki-contents-index").performClick()
@@ -148,7 +146,7 @@ class WikiShellTest {
         signIn()
         open("orbit://wiki/${WikiShell.GONE_SPACE}")
         compose.waitUntil(10_000) { compose.onAllNodesWithText("That space is not available.").fetchSemanticsNodes().isNotEmpty() }
-        assertTrue("no other space's home stands in for it", compose.onAllNodesWithTag("wiki-status-line").fetchSemanticsNodes().isEmpty())
+        assertTrue("no other space's home stands in for it", compose.onAllNodesWithTag("wiki-home-list").fetchSemanticsNodes().isEmpty())
     }
 
     @Test fun aWatchsRefusedControlIsNotShownWhenTheWatchIsOpenedAgain() {
@@ -198,7 +196,7 @@ class WikiShellTest {
     @Test fun theWikiReReadsOnWikiChangedAndNotOnOtherAccountEvents() {
         signIn()
         open("orbit://wiki/${WikiShell.SPACE}")
-        awaitTag("wiki-status-line")
+        awaitTag("wiki-home-list")
         settle(2_000)
         val entries = "GET wiki/spaces/${WikiShell.SPACE}/entries"
         val before = shell.count(entries)
@@ -227,9 +225,7 @@ class WikiShellTest {
     @Test fun aReviewReadThatAnswersLateNeverBringsBackAnAnsweredCard() {
         signIn()
         open("orbit://wiki/${WikiShell.SPACE}")
-        awaitTag("wiki-review-banner")
-        compose.onNodeWithTag("wiki-review-banner").performClick()
-        awaitTag("wiki-review-page")
+        openReviewFromActivity()
         compose.onNodeWithTag("wiki-review-tab:amend").performClick()
         awaitTag("wiki-review-card:${WikiShell.AMEND_OP}")
         // A re-read of the queue goes out and is slow to answer; it was asked while the op still waited.
@@ -245,6 +241,15 @@ class WikiShellTest {
     }
 
     // MARK: helpers
+
+    /** Review is reached from Activity's first banner: the bar's Activity, then the banner. */
+    private fun openReviewFromActivity() {
+        awaitTag("wiki-bar-activity")
+        compose.onNodeWithTag("wiki-bar-activity").performClick()
+        awaitTag("wiki-review-banner")
+        compose.onNodeWithTag("wiki-review-banner").performClick()
+        awaitTag("wiki-review-page")
+    }
 
     private fun app() = compose.activity.application as OrbitApplication
     private fun signIn() {

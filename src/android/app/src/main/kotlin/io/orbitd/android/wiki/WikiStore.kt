@@ -42,7 +42,22 @@ internal data class WikiNotice(val text: String, val refused: Boolean, val seria
 /** Everything the Wiki pages draw from — iOS `WikiModel`'s stored properties, as one value. */
 internal data class WikiState(
     val spaces: List<WikiSpace> = emptyList(), val spacesState: LoadState = LoadState(),
-    val home: WikiHomeContent? = null, val homeState: LoadState = LoadState(),
+    /** The server said the wiki is not switched on for this account (404 WIKI_DISABLED): an answer, not a failure — the
+     * drawer draws no Wiki row, and the section says why. */
+    val disabled: Boolean = false,
+    /** The home's content (design §12.3.1): every principle of the space on screen, read by kind, and the space it was
+     * read for. Until that is the space on screen the home has none of its own reads to draw ([homeLoading]). */
+    val principles: List<WikiEntry> = emptyList(), val homeSpaceId: String? = null, val homeState: LoadState = LoadState(),
+    /** What Activity draws of the space on screen (design §12.3.2), once its five reads are in. */
+    val activity: WikiHomeContent? = null, val activityState: LoadState = LoadState(),
+    /** The plans of the other spaces where something waits on the owner (`planWaiting`), by space id: Activity's banners
+     * for them (design §12.3.3). Read for Activity, and only those. */
+    val otherPlans: Map<String, WikiPlanState> = emptyMap(),
+    /** The space's newest entries, as many as one read answers (200): the summaries a document's page shows under the
+     * entries its quotes came through. */
+    val entries: List<WikiEntry> = emptyList(),
+    /** The workspace the reader was in when they last came into the Wiki (design §12.3.4). */
+    val fromWorkspaceId: String? = null,
     val review: List<WikiChangeset> = emptyList(), val reviewState: LoadState = LoadState(), val answered: Set<String> = emptySet(),
     val details: Map<String, WikiEntryDetail> = emptyMap(), val missing: Set<String> = emptySet(), val failed: Set<String> = emptySet(),
     val busy: Boolean = false,
@@ -66,14 +81,22 @@ internal data class WikiState(
     val notice: WikiNotice? = null,
 ) {
     fun linkTitle(kind: String, id: String): String? = linkTitles["$kind:${wikiKey(id)}"]
-    /** The space the home page is about: the one picked, else the first by slug. */
-    val currentSpace: WikiSpace? get() = spaces.firstOrNull { it.slug == selectedSlug } ?: spaces.firstOrNull()
-    val proposalsToReview: Int get() = WikiLogic.proposalsToReview(spaces)
+    /** The space the pages are about: the one picked or opened, else the one the Wiki opens by its rule
+     * ([WikiSpaceLogic.defaultSpace]). */
+    val currentSpace: WikiSpace? get() = spaces.firstOrNull { it.slug == selectedSlug } ?: WikiSpaceLogic.defaultSpace(spaces, fromWorkspaceId, null)
+    /** What waits on the owner across every space, each space's proposals and what its plan waits for: the drawer's
+     * amber number and the bar's Activity badge. */
+    val waiting: Int get() = WikiSpaceLogic.waiting(spaces)
+    /** Whether the home's content is still on its first read for the space on screen: its head is drawn from the spaces
+     * list at once, its own reads once they answer. A read the home already has stays drawn while it is read again. */
+    val homeLoading: Boolean get() = homeSpaceId == null || !sameWikiId(homeSpaceId, currentSpace?.id)
+    /** Whether the drawer draws the Wiki row at all. */
+    val shown: Boolean get() = WikiLogic.shown(spacesState, disabled)
     val reviewCards: List<WikiLogic.ReviewCard> get() = WikiLogic.reviewCards(review).filter { it.op.id !in answered }
     fun detail(id: String) = details[wikiKey(id)]
     fun isMissing(id: String) = wikiKey(id) in missing
     fun loadFailed(id: String) = wikiKey(id) in failed
-    fun run(id: String): WikiChangesetView? = runs[wikiKey(id)] ?: home?.run(id)
+    fun run(id: String): WikiChangesetView? = runs[wikiKey(id)] ?: activity?.run(id)
     fun isMissingRun(id: String) = wikiKey(id) in missingRuns
     /** Whether the server runs this account's wiki (contract `jobs.executor.read`): nil/absent reads as runner. */
     val serverExecutes: Boolean get() = systemModel?.executor?.serverExecutes == true
@@ -102,10 +125,23 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
     /** Nudges waiting: one re-read at a time, and a nudge that comes while one runs gets one more after it. */
     private val nudges = Channel<Unit>(Channel.CONFLATED)
 
+    /** The space last looked at has been read back from the account's cache (or there was none). */
+    private val restored = CompletableDeferred<Unit>()
+    /** A space to choose by the rule, once the spaces are in ([open]). */
+    @Volatile private var choosing: Choice? = null
+    private class Choice(val workspaceId: String?, val ready: Boolean)
+    /** Whether Activity has read the other spaces' plans, so a nudge reads them again. */
+    @Volatile private var otherPlansRead = false
+    /** What each space's seen stamp said before this run moved it, and the stamps as this run knows them. */
+    private val seenLog = WikiSeenLog()
+    private val stamps = ConcurrentHashMap<String, Double>()
+
     init {
         scope.launch {
-            val saved = optional { auth.readData(handle, DataKind.CACHE, SPACE_KEY)?.decodeToString() }
-            if (saved != null && current.selectedSlug == null) set { it.copy(selectedSlug = saved) }
+            try {
+                val saved = optional { auth.readData(handle, DataKind.CACHE, SPACE_KEY)?.decodeToString() }
+                if (saved != null && current.selectedSlug == null) set { it.copy(selectedSlug = saved) }
+            } finally { restored.complete(Unit) }
         }
         scope.launch {
             for (signal in nudges) {
@@ -126,10 +162,69 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
     /** Whether this store still speaks for the signed-in account; another account's pages are never drawn. */
     fun live() = (auth.state.value as? AuthState.SignedIn)?.handle === handle
 
+    /** The space the pages show, by slug — picked, or opened by a link or by the rule — kept across launches as the one
+     * last looked at. An explicit pick settles a choice the rule was still to make. */
     fun select(slug: String) {
+        choosing = null
         if (current.selectedSlug == slug) return
         set { it.copy(selectedSlug = slug) }
         scope.launch { optional { auth.writeData(handle, DataKind.CACHE, SPACE_KEY, slug.encodeToByteArray()) } }
+    }
+
+    /** The reader comes into the Wiki [from] where they were (iOS `open(fromWorkspace:)`, design §12.3.4): it opens the
+     * space bound to that workspace, else the one last looked at, else the one with the most documents written
+     * ([WikiSpaceLogic.defaultSpace]) — chosen now, or once the spaces read answers. A project's page speaks for the
+     * workspace its coordinator runs in, which the project's own read says. */
+    fun open(from: WikiFrom) {
+        if (from.projectId == null || from.workspaceId != null) {
+            choosing = Choice(from.workspaceId, ready = true)
+            set { it.copy(fromWorkspaceId = from.workspaceId) }
+            scope.launch { chooseSpace() }
+            return
+        }
+        val choice = Choice(null, ready = false)
+        choosing = choice
+        scope.launch {
+            val workspace = optional { client.coordinatorWorkspace(from.projectId) }
+            if (choosing !== choice) return@launch
+            choosing = Choice(workspace, ready = true)
+            set { it.copy(fromWorkspaceId = workspace) }
+            chooseSpace()
+        }
+    }
+
+    private suspend fun chooseSpace() {
+        val choice = choosing ?: return
+        if (!choice.ready || !current.spacesState.hasLoaded) return
+        restored.await()
+        if (choosing !== choice) return
+        choosing = null
+        WikiSpaceLogic.defaultSpace(current.spaces, choice.workspaceId, current.selectedSlug)?.let { select(it.slug) }
+    }
+
+    // MARK: since the reader last looked
+
+    /** When the reader last looked at the space [slug] (seconds since 1970, 0 for never), as the home reads it as it opens
+     * — before its own look moves it (the web home's `readWikiSeen`). Kept in the account's own cache. */
+    suspend fun seen(slug: String): Double = stamp(WikiSeenLog.key(slug))
+
+    /** When the reader last looked at the space [slug], as Activity reads it: from before the home moved it as it opened
+     * ([WikiSeenLog], the web's `readWikiSeenBefore`). */
+    suspend fun seenBefore(slug: String): Double = WikiSeenLog.key(slug).let { seenLog.seenBefore(it, stamp(it)) }
+
+    /** The reader looks at the space [slug] now — the home as it opens, and Activity (`moveWikiSeen`). */
+    suspend fun moveSeen(slug: String, at: java.time.Instant = java.time.Instant.now()) {
+        val key = WikiSeenLog.key(slug)
+        val now = at.toEpochMilli() / 1000.0
+        seenLog.move(key, now, stamp(key))
+        stamps[key] = now
+        optional { auth.writeData(handle, DataKind.CACHE, key, now.toString().encodeToByteArray()) }
+    }
+
+    private suspend fun stamp(key: String): Double {
+        stamps[key]?.let { return it }
+        val stored = optional { auth.readData(handle, DataKind.CACHE, key)?.decodeToString()?.toDoubleOrNull() } ?: 0.0
+        return stamps.putIfAbsent(key, stored) ?: stored
     }
 
     fun entryAppeared(id: String) { onScreen[wikiKey(id)] = (onScreen[wikiKey(id)] ?: 0) + 1 }
@@ -145,38 +240,96 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
         set { it.copy(spacesState = it.spacesState.begin()) }
         try {
             val list = client.spaces()
-            if (newest(SPACES, ticket)) set { it.copy(spaces = list, spacesState = it.spacesState.succeed()) }
-        } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) {
-            if (newest(SPACES, ticket)) set { it.copy(spacesState = it.spacesState.fail()) }
+            if (newest(SPACES, ticket)) {
+                set { it.copy(spaces = list, disabled = false, spacesState = it.spacesState.succeed()) }
+                chooseSpace()
+            }
+        } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) {
+            if (!newest(SPACES, ticket)) return
+            if (WikiLogic.isDisabled(error)) set { it.copy(spaces = emptyList(), disabled = true, spacesState = it.spacesState.succeed()) }
+            else set { it.copy(spacesState = it.spacesState.fail()) }
         }
     }
 
-    /** The spaces, then the four reads the home page is drawn from, side by side — and each run Recently changed folds. */
+    /** The home's content (design §12.3.1), side by side: the principles by kind, the confirmed plan's documents and the
+     * topic articles the home lists before a plan — and the spaces list again, for the head's numbers. The head needs none
+     * of them: it is the spaces list the drawer has already read, and only a page opened before that read waits for it
+     * here. The principles read their own kind: out of the newest 200 entries of every kind, a space of thousands had none
+     * of them left to show. */
     suspend fun loadHome() = supervisorScope {
+        if (!current.spacesState.hasLoaded) loadSpaces()
+        val space = articlesSpace()
+        if (space == null) {
+            set { it.copy(homeState = if (it.spacesState.lastLoadFailed) it.homeState.fail() else it.homeState.succeed()) }
+            return@supervisorScope
+        }
         val ticket = ask(HOME)
         set { it.copy(homeState = it.homeState.begin()) }
+        // The head's numbers, read beside the content and never cut short by it.
+        val spacesRead = launch { loadSpaces() }
+        val principlesRead = async { client.entries(space.id, "principle", WikiLogic.PRINCIPLES_READ) }
+        val docsRead = async { client.docs(space.id) }
+        val articlesRead = async { client.articleDirectory(space.id) }
+        try {
+            val docs = docsRead.await()
+            // The topic articles are what the home lists only before a plan is confirmed.
+            val articles = if (WikiDocLogic.readsByDocs(docs)) optional { articlesRead.await() } else articlesRead.await()
+            // Without its principles the home still draws its documents; the ones it had stay.
+            val principles = optional { principlesRead.await() }
+            // Another space was picked while this one was reading: its own read owns the page.
+            if (articlesSpaceId == space.id && newest(HOME, ticket)) set {
+                it.copy(docsDirectory = docs, directory = articles ?: it.directory,
+                    directoryState = if (articles != null) it.directoryState.succeed() else it.directoryState,
+                    principles = principles ?: it.principles, homeSpaceId = space.id, homeState = it.homeState.succeed())
+            }
+        } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) {
+            principlesRead.cancel(); docsRead.cancel(); articlesRead.cancel()
+            if (articlesSpaceId == space.id && newest(HOME, ticket)) set { it.copy(homeState = it.homeState.fail()) }
+        }
+        spacesRead.join()
+    }
+
+    /** What Activity draws (design §12.3.2): the space with its usage window, its newest entries, its newest decisions by
+     * kind, the timeline and its health, side by side — and then each run Recently changed folds, by its own read. Recent
+     * decisions read their own kind: out of the newest 200 entries of every kind, a space of thousands had none left. */
+    suspend fun loadActivity() = supervisorScope {
+        val ticket = ask(ACTIVITY)
+        set { it.copy(activityState = it.activityState.begin()) }
         loadSpaces()
         val space = current.currentSpace
         if (space == null) {
-            set { it.copy(home = null, homeState = if (it.spacesState.lastLoadFailed) it.homeState.fail() else it.homeState.succeed()) }
+            set { it.copy(activity = null, activityState = if (it.spacesState.lastLoadFailed) it.activityState.fail() else it.activityState.succeed()) }
             return@supervisorScope
         }
         val document = async { client.space(space.id) }
         val entries = async { client.entries(space.id) }
+        val decisions = async { client.entries(space.id, "decision", WikiHomeContent.RECENT_DECISIONS) }
         val timeline = async { optional { client.timeline(space.id) } }
         val health = async { optional { client.health(space.id) } }
         val jobs = async { optional { client.jobs(space.id) } }
         try {
-            val base = WikiHomeContent(document.await(), current.spaces, entries.await(), timeline.await()?.items.orEmpty(), space.pendingOps ?: 0)
+            val base = WikiHomeContent(document.await(), current.spaces, entries.await(), timeline.await()?.items.orEmpty(),
+                decisionEntries = decisions.await())
             val runs = base.recentRunIds.map { id -> async { optional { client.changeset(id) } } }.mapNotNull { it.await() }
             val healthRead = health.await()
             val jobsRead = jobs.await()?.takeIf { sameWikiId(it.spaceId, space.id) }
-            if (current.currentSpace?.id != space.id || !newest(HOME, ticket)) return@supervisorScope
-            set { it.copy(home = base.copy(runs = runs, health = healthRead), jobs = jobsRead, homeState = it.homeState.succeed()) }
+            if (current.currentSpace?.id != space.id || !newest(ACTIVITY, ticket)) return@supervisorScope
+            set { it.copy(activity = base.copy(runs = runs, health = healthRead), jobs = jobsRead, activityState = it.activityState.succeed()) }
         } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) {
-            document.cancel(); entries.cancel(); timeline.cancel(); health.cancel(); jobs.cancel()
-            if (current.currentSpace?.id == space.id && newest(HOME, ticket)) set { it.copy(homeState = it.homeState.fail()) }
+            document.cancel(); entries.cancel(); decisions.cancel(); timeline.cancel(); health.cancel(); jobs.cancel()
+            if (current.currentSpace?.id == space.id && newest(ACTIVITY, ticket)) set { it.copy(activityState = it.activityState.fail()) }
         }
+    }
+
+    /** The plans of the other spaces where something waits (`planWaiting`), side by side: Activity says what waits in
+     * each. A read that fails leaves that space's banners out. */
+    suspend fun loadOtherPlans() = supervisorScope {
+        if (current.spaces.isEmpty()) loadSpaces()
+        val currentId = current.currentSpace?.id
+        val read = current.spaces.filter { it.id != currentId && (it.planWaiting ?: 0) > 0 }
+            .map { space -> async { optional { client.plan(space.id) }?.let { space.id to it } } }.mapNotNull { it.await() }.toMap()
+        otherPlansRead = true
+        set { it.copy(otherPlans = read) }
     }
 
     /** The deployment's System model and the executor switch as it stands for this account (contract `systemModel.read`,
@@ -230,8 +383,9 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
             if (!newest("$ENTRY$key", ticket)) return
             // A 404 is an entry the server will not show — deleted, or not this account's: what was shown of it goes;
             // any other failure keeps what is on screen, and says so only when there is nothing on screen
-            // (`WikiModel.loadEntry`).
-            if (error is ApiError && error.status == 404) set { it.copy(missing = it.missing + key, details = it.details - key) }
+            // (`WikiModel.loadEntry`). A 404 WIKI_DISABLED is the wiki off for this account, which a link can land on.
+            if (WikiLogic.isDisabled(error)) set { it.copy(disabled = true) }
+            else if (error is ApiError && error.status == 404) set { it.copy(missing = it.missing + key, details = it.details - key) }
             else set { it.copy(failed = it.failed + key) }
         }
     }
@@ -261,6 +415,7 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
             set { it.copy(directory = null, directoryState = LoadState(), articleIndex = null, articleIndexState = LoadState(),
                 articles = emptyMap(), missingArticles = emptySet(), failedArticles = emptySet(), topicEntries = emptyMap(),
                 docsDirectory = null, docs = emptyMap(), missingDocs = emptySet(), failedDocs = emptySet(), docIndex = null,
+                entries = emptyList(), principles = emptyList(), homeSpaceId = null, homeState = LoadState(),
                 plan = null, planState = LoadState(), planMissing = false, planVersions = emptyList(), planVersionReads = emptyMap()) }
         }
         return space
@@ -315,14 +470,17 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
 
     suspend fun reloadLoaded() {
         val s = current
-        if (s.home != null || s.homeState.hasLoaded) loadHome() else loadSpaces()
+        if (s.homeSpaceId != null || s.homeState.hasLoaded) loadHome() else loadSpaces()
+        if (current.activity != null || current.activityState.hasLoaded) loadActivity()
         if (current.directory != null) loadDirectory()
         if (current.articleIndex != null) loadArticleIndex()
         current.articles.keys.toList().forEach { loadArticle(it) }
         if (current.docsDirectory != null) loadDocsDirectory()
         if (current.docIndex != null) loadDocIndex()
+        if (current.entries.isNotEmpty()) loadEntries()
         current.docs.keys.toList().forEach { loadDoc(it) }
         if (current.plan != null || current.planState.hasLoaded) loadPlan()
+        if (otherPlansRead) loadOtherPlans()
         if (current.jobs != null) loadJobs()
         current.runs.keys.toList().forEach { loadRun(it) }
         if (current.reviewState.hasLoaded) loadReview()
@@ -357,6 +515,14 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
         val space = articlesSpace() ?: return
         val read = optional { client.docIndex(space.id) } ?: return
         if (articlesSpaceId == space.id) set { it.copy(docIndex = read) }
+    }
+
+    /** The space's newest entries, for the summaries a document's page shows under its entries. */
+    suspend fun loadEntries() {
+        if (current.spaces.isEmpty()) loadSpaces()
+        val space = articlesSpace() ?: return
+        val read = optional { client.entries(space.id) } ?: return
+        if (articlesSpaceId == space.id) set { it.copy(entries = read) }
     }
 
     // MARK: the plan — the owner's door only
@@ -461,7 +627,7 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
         return owned({ refusal -> notice(refusal, WikiLogic.decidedToast(card.op.op, action), subject) }) {
             val refusal = try {
                 val answer = client.decide(card.changeset.id, card.op.id, action, edited, reason)
-                outdate(REVIEW, SPACES, HOME)
+                outdate(REVIEW, SPACES, HOME, ACTIVITY)
                 WikiLogic.decisionRefusal(WikiLogic.recordedDecision(answer, card.op.id), card.op.op, action)
             } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { reloadAfterWrite(); return@owned wikiRefusal(error) }
             if (refusal != null) { reloadAfterWrite(); return@owned refusal }
@@ -487,7 +653,7 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
     // MARK: Wiki settings
 
     suspend fun updateSpace(space: WikiSpace, update: JsonObject): String? = owned({ refusal -> notice(refusal, WikiCopy.settingsSaved, space.slug) }) {
-        try { client.updateSpace(space.id, update); outdate(SPACES, HOME); reloadAfterWrite(); null }
+        try { client.updateSpace(space.id, update); outdate(SPACES, HOME, ACTIVITY); reloadAfterWrite(); null }
         catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { loadSpaces(); wikiRefusal(error) }
     }
 
@@ -500,7 +666,7 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
     }
     private suspend fun answer(entryId: String, done: String, subject: String?, write: suspend () -> Unit): String? =
         owned({ refusal -> notice(refusal, done, subject) }) {
-            try { write(); outdate("$ENTRY${wikiKey(entryId)}", SPACES, HOME, REVIEW); reloadAfterWrite(); loadEntry(entryId); null }
+            try { write(); outdate("$ENTRY${wikiKey(entryId)}", SPACES, HOME, ACTIVITY, REVIEW); reloadAfterWrite(); loadEntry(entryId); null }
             catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { loadEntry(entryId); wikiRefusal(error) }
         }
 
@@ -517,7 +683,7 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
         }
     }
     suspend fun revert(run: WikiChangesetView): String? = owned({ refusal -> notice(refusal, WikiModeCopy.reverted, WikiModeCopy.maintenanceName) }) {
-        try { client.revert(run.id); outdate("$RUN${wikiKey(run.id)}", SPACES, HOME, REVIEW); reloadAfterWrite(); loadRun(run.id); null }
+        try { client.revert(run.id); outdate("$RUN${wikiKey(run.id)}", SPACES, HOME, ACTIVITY, REVIEW); reloadAfterWrite(); loadRun(run.id); null }
         catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { wikiRefusal(error) }
     }
 
@@ -545,7 +711,7 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
         return owned({ refusal -> notice(refusal, done, entry.displayTitle) }) {
             try {
                 val result = client.submit(spaceId, op, rationale, "$key:${UUID.randomUUID().toString().lowercase()}")
-                outdate("$ENTRY${wikiKey(entry.id)}", SPACES, HOME, REVIEW)
+                outdate("$ENTRY${wikiKey(entry.id)}", SPACES, HOME, ACTIVITY, REVIEW)
                 reloadAfterWrite(); loadEntry(entry.id)
                 result.ops?.firstNotNullOfOrNull { it.reasons?.firstOrNull()?.message }
             } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { loadEntry(entry.id); wikiRefusal(error) }
@@ -556,6 +722,7 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
         loadSpaces()
         if (current.reviewState.hasLoaded) loadReview()
         if (current.homeState.hasLoaded) loadHome()
+        if (current.activityState.hasLoaded) loadActivity()
     }
 
     /** A write in flight, so its controls do not take a second press. */
@@ -585,6 +752,7 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
         const val NUDGE_DELAY_MS = 500L
         private const val SPACES = "spaces"
         private const val HOME = "home"
+        private const val ACTIVITY = "activity"
         private const val REVIEW = "review"
         private const val PLAN = "plan"
         private const val DOCS = "docs"

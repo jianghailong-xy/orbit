@@ -21,7 +21,16 @@ DOCS, ARTICLES, HEALTH, REVIEW, STRIP = map(corpus, ['wiki-docs', 'wiki-articles
 def uid(suffix):
     return '01a0cca7-8609-70ed-a0e2-d4b55b832b' + suffix
 SPACE, ENTRY, WATCH, CHANGESET, OP = map(uid, ['70', '72', '80', '90', '93'])
-IDS = dict(space=SPACE, entry=ENTRY, session=BASE.SESSION, record=BASE.RECORD, watch=WATCH, changeset=CHANGESET, op=OP, task=BASE.TASK, source=uid('a1'))
+# A12c: a second space, unbound and with no confirmed plan, whose draft plan waits on the owner — Activity names it.
+NOTES = uid('7a')
+# A12c: principles and decisions the home and Activity read by kind (the run's entries are all pitfalls).
+PRINCIPLES = [(uid('c%d' % i), title, '2026-09-%02dT08:00:00.000Z' % (10 + i)) for i, title in enumerate([
+    'Agent-writable data never becomes a system instruction', 'A clock never starts agent work',
+    'Completion is adjudicated, not claimed', 'Delete means forget'])]
+DECISIONS = [(uid('d%d' % i), title, '2026-09-%02dT08:00:00.000Z' % (20 + i)) for i, title in enumerate([
+    'Wakeups are held by the server', 'Task priority is a field on the task'])]
+IDS = dict(space=SPACE, entry=ENTRY, session=BASE.SESSION, record=BASE.RECORD, watch=WATCH, changeset=CHANGESET, op=OP, task=BASE.TASK, source=uid('a1'),
+           notes=NOTES, principle=PRINCIPLES[0][0], decision=DECISIONS[0][0])
 AT = '2026-10-05T00:00:00.000Z'
 LOCK = threading.RLock()
 state = {}
@@ -37,7 +46,7 @@ def remap(value):
 
 def normalize(path):
     # The real client canonicalizes UUID URLs to public IDs. Match both spellings.
-    for value in list(IDS.values()) + list(REMAP.values()) + [uid('81'), uid('82')]:
+    for value in list(IDS.values()) + list(REMAP.values()) + [uid('81'), uid('82')] + [e[0] for e in PRINCIPLES + DECISIONS]:
         number, public = uuid.UUID(value).int, ''
         while number:
             number, digit = divmod(number, 62)
@@ -92,6 +101,13 @@ def reset():
             footnote.update(sessionId=BASE.SESSION, recordId=BASE.RECORD, sessionTitle='Long conversation')
     versions = remap(copy.deepcopy(DOCS['plan']['versions']))
     plan = {'spaceId': SPACE, 'confirmed': versions['v1'], 'draft': None, 'proposals': [], 'job': None}
+    for id_, title, at in PRINCIPLES:
+        entries[id_] = {'id': id_, 'spaceId': SPACE, 'kind': 'principle', 'status': 'active', 'trust': 'owner', 'currentRevision': 1,
+                        'title': title, 'summary': title + ', the owner wrote.', 'pinned': True, 'validFrom': at, 'recordedAt': at}
+    for id_, title, at in DECISIONS:
+        entries[id_] = {'id': id_, 'spaceId': SPACE, 'kind': 'decision', 'status': 'active', 'trust': 'confirmed', 'currentRevision': 1,
+                        'title': title, 'summary': title + '.', 'validFrom': at, 'recordedAt': at}
+    notes_draft = copy.deepcopy(versions['v1']); notes_draft.update(id=uid('7b'), spaceId=NOTES, version=1, status='draft', confirmedAt=None)
     state.clear()
     state.update(journal=[], denial=0, conflict=False, offline=False, prefix='/api/wiki', empty=False,
                  entries=entries, run=run, doc=doc, plan=plan, versions={'v1': versions['v1']},
@@ -100,7 +116,12 @@ def reset():
                  space={'id': SPACE, 'slug': 'a12-fixture', 'title': 'A12 controlled Wiki', 'repoUrlNorm': 'github.com/example/orbit',
                         'rootCommitSha': 'a' * 40, 'pendingOps': 1, 'settings': {'reviewMode': 'tiered', 'automaticSpotChecks': False,
                         'maintenance': {'enabled': False, 'workspaceId': BASE.WORKSPACE, 'provider': 'local-vllm', 'dailyRunLimit': 4, 'lookbackDays': 14}}},
-                 docsPlan=True, idempotency={}, lostResponse=False)
+                 notes={'id': NOTES, 'slug': 'a12-notes', 'title': 'A12 notes', 'repoUrlNorm': 'github.com/example/notes', 'rootCommitSha': None,
+                        'pendingOps': 0, 'settings': {'reviewMode': 'manual', 'automaticSpotChecks': False,
+                        'maintenance': {'enabled': False, 'workspaceId': None, 'provider': 'local-vllm', 'dailyRunLimit': 4, 'lookbackDays': 14}}},
+                 notesPlan={'spaceId': NOTES, 'confirmed': None, 'draft': notes_draft, 'proposals': [], 'job': None},
+                 docsPlan=True, idempotency={}, lostResponse=False, wikiDisabled=False)
+    state['space']['pendingOps'] = sum(o['decision'] == 'pending' for o in run['ops'])
     BASE.state.mode = 'REVIEW'
     BASE.state.record_denial = BASE.state.denial = BASE.state.page_denial = BASE.state.snapshot_status = 0
     BASE.state.extra = []
@@ -126,6 +147,10 @@ class Handler(BASE.Handler):
     def refusal(self, path, write=False):
         if self.headers.get('Authorization') != 'Bearer a06-fixture-access':
             self.reply({'message': 'Fixture login required'}, 401); return True
+        if state['wikiDisabled'] and path.startswith('/api/wiki'):
+            # The server's ORBIT_WIKI rollout: every wiki route answers an account it is off for 404 WIKI_DISABLED.
+            self.reply({'code': 'WIKI_DISABLED', 'message': 'The Orbit wiki is not on for this account on this Orbit server (ORBIT_WIKI=canary), '
+                        'so nothing was read from it or written to it.'}, 404); return True
         if path.startswith(state['prefix']):
             if state['offline']:
                 self.drop(); return True
@@ -158,20 +183,31 @@ class Handler(BASE.Handler):
             if 'needsAttention' in query: watches = [w for w in watches if w['state'] in ('EXPIRED', 'REVOKED', 'UNRESOLVABLE')]
             return watches
         if path.startswith('/api/watches/'): return state['watches'].get(path.rsplit('/', 1)[-1])
-        if path == '/api/wiki/spaces': return [] if state['empty'] else [state['space']]
+        if path == '/api/wiki/spaces': return [] if state['empty'] else [self.space_row(), self.notes_row()]
         if path == '/api/wiki/search':
             q = query.get('q', [''])[0].lower()
             return {'q': q, 'hits': [dict({k: e.get(k) for k in ('id', 'kind', 'title', 'summary', 'trust', 'anchorState')}, match=['keyword'], score=1.0) for e in state['entries'].values()
                              if not state['empty'] and e['status'] == 'active' and q in (e['title'] + e['summary']).lower()]}
         if path == '/api/wiki/review':
-            return [state['run']] if not state['empty'] and any(op['decision'] == 'pending' for op in state['run']['ops']) else []
+            # Review's read names each op's entry (`entryTitle`), as the server's listReview does.
+            run = copy.deepcopy(state['run'])
+            for op in run['ops']:
+                op['entryTitle'] = (state['entries'].get(op.get('entryId')) or {}).get('title') if op.get('entryId') else None
+            return [run] if not state['empty'] and any(op['decision'] == 'pending' for op in state['run']['ops']) else []
         if path == '/api/wiki/changesets/' + CHANGESET: return state['run']
         if path.startswith('/api/wiki/entries/'): return state['entries'].get(path.rsplit('/', 1)[-1])
+        if path == '/api/wiki/spaces/' + NOTES: return self.notes_row()
+        if path == '/api/wiki/spaces/' + NOTES + '/plan': return state['notesPlan']
+        if path.startswith('/api/wiki/spaces/' + NOTES + '/'): return None
         prefix = '/api/wiki/spaces/' + SPACE
-        if path == prefix: return state['space']
+        if path == prefix: return self.space_row()
         tail = path.removeprefix(prefix)
         if path == tail: return None
-        if tail == '/entries': return list(state['entries'].values())
+        if tail == '/entries':
+            # WikiService.listEntries: of the kind asked, newest recorded first, 200 at most (50 unasked).
+            kind = query.get('kind', [None])[0]; limit = min(max(int(query.get('limit', ['50'])[0]), 1), 200)
+            rows = [e for e in state['entries'].values() if kind is None or e.get('kind') == kind]
+            return sorted(rows, key=lambda e: (e.get('recordedAt') or '', e['id']), reverse=True)[:limit]
         if tail == '/timeline':
             # One owner edit (an op row) over the maintenance run's applied ops (one run row).
             items = [{'opId': uid('a3'), 'op': 'amend', 'decision': 'auto_applied', 'origin': 'owner', 'at': AT, 'entryId': ENTRY,
@@ -187,6 +223,10 @@ class Handler(BASE.Handler):
         if tail == '/health': return {**copy.deepcopy(HEALTH['cases'][0]['health']), 'spaceId': SPACE, 'entries': len(state['entries'])}
         if tail == '/docs':
             directory = remap(copy.deepcopy(DOCS['docs']['directory']['read']))
+            # Each written document's lead, as the server derives it from its first section (contract `docs.lead`).
+            for category in directory['categories']:
+                for doc in category.get('docs') or []:
+                    doc['lead'] = doc['title'] + '：第一节的头两句。它们说明这篇文档回答什么问题。' if doc.get('written') else None
             if not state['docsPlan']: directory.update(plan=None, categories=[])
             return directory
         if tail.startswith('/docs/'):
@@ -208,6 +248,18 @@ class Handler(BASE.Handler):
         if tail.startswith('/plan/versions/'): return next((v for v in state['versions'].values() if str(v['version']) == tail.rsplit('/', 1)[-1]), None)
         return None
 
+    def space_row(self):
+        """The space as `GET /wiki/spaces` lists it: what of its plan waits on the owner (planWaiting), the workspaces bound to
+        it and its documents (c6e66aaef)."""
+        plan = state['plan']
+        waiting = (1 if plan.get('draft') else 0) + sum(p.get('status') == 'pending' for p in plan.get('proposals') or []) \
+            + (1 if (plan.get('job') or {}).get('state') == 'held' else 0)
+        docs = DOCS['docs']['directory']['read']['docs'] if state['docsPlan'] else None
+        return {**state['space'], 'planWaiting': waiting, 'workspaceIds': [BASE.WORKSPACE], 'docs': copy.deepcopy(docs)}
+
+    def notes_row(self):
+        return {**state['notes'], 'planWaiting': 1 if state['notesPlan'].get('draft') else 0, 'workspaceIds': [], 'docs': None}
+
     def do_POST(self):
         path = normalize(urlparse(self.path).path)
         body = json.loads(self.rfile.read(int(self.headers.get('Content-Length', 0))) or '{}')
@@ -215,7 +267,7 @@ class Handler(BASE.Handler):
         if path == '/__control':
             with LOCK:
                 if body.get('reset'): reset()
-                for key in ('denial', 'conflict', 'offline', 'prefix', 'empty', 'docsPlan', 'lostResponse'):
+                for key in ('denial', 'conflict', 'offline', 'prefix', 'empty', 'docsPlan', 'lostResponse', 'wikiDisabled'):
                     if key in body: state[key] = body[key]
                 for key in ('record_denial', 'page_denial', 'snapshot_status'):
                     if key in body: setattr(BASE.state, key, body[key])
