@@ -101,7 +101,7 @@ class Device:
 
     def visible(self, texts, attempts=8):
         """The node, swiped into the upper part of the screen first when the page has to scroll."""
-        width, height = map(int, re.search(r'(\d+)x(\d+)', self.shell('wm size'))[1:3])
+        width, height = map(int, re.search(r'(\d+)x(\d+)', self.shell('wm size')).groups())
         for _ in range(attempts):
             node = self.find(texts=texts, timeout=30)
             left, top, right, bottom = map(int, re.findall(r'\d+', node.get('bounds')))
