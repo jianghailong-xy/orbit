@@ -1,0 +1,2380 @@
+{
+ "targets": [
+  "chromium-dark-desktop/breakpoint-959-wiki.png",
+  "chromium-dark-desktop/breakpoint-961-wiki.png",
+  "chromium-dark-desktop/settings-saved.png",
+  "chromium-dark-desktop/settings.png",
+  "chromium-dark-desktop/task-action-menu.png",
+  "chromium-dark-desktop/wiki-home.png",
+  "chromium-dark-desktop/wiki-new-entry.png",
+  "chromium-dark-phone/settings-saved.png",
+  "chromium-dark-phone/settings.png",
+  "chromium-dark-phone/task-action-menu.png",
+  "chromium-dark-phone/wiki-contents.png",
+  "chromium-dark-phone/wiki-home.png",
+  "chromium-dark-phone/wiki-new-entry.png",
+  "chromium-light-desktop/breakpoint-959-wiki.png",
+  "chromium-light-desktop/breakpoint-961-wiki.png",
+  "chromium-light-desktop/settings-saved.png",
+  "chromium-light-desktop/settings.png",
+  "chromium-light-desktop/wiki-home.png",
+  "chromium-light-desktop/wiki-new-entry.png",
+  "chromium-light-phone/settings-saved.png",
+  "chromium-light-phone/settings.png",
+  "chromium-light-phone/wiki-contents.png",
+  "chromium-light-phone/wiki-home.png",
+  "chromium-light-phone/wiki-new-entry.png",
+  "webkit-dark-desktop/breakpoint-599-dialog.png",
+  "webkit-dark-desktop/breakpoint-601-dialog.png",
+  "webkit-dark-desktop/breakpoint-959-wiki.png",
+  "webkit-dark-desktop/breakpoint-961-wiki.png",
+  "webkit-dark-desktop/settings-saved.png",
+  "webkit-dark-desktop/settings.png",
+  "webkit-dark-desktop/task-action-menu.png",
+  "webkit-dark-desktop/wiki-home.png",
+  "webkit-dark-desktop/wiki-new-entry.png",
+  "webkit-dark-phone/settings-saved.png",
+  "webkit-dark-phone/settings.png",
+  "webkit-dark-phone/task-action-focus.png",
+  "webkit-dark-phone/task-action-hover.png",
+  "webkit-dark-phone/task-action-menu.png",
+  "webkit-dark-phone/task-detail.png",
+  "webkit-dark-phone/wiki-contents.png",
+  "webkit-dark-phone/wiki-home.png",
+  "webkit-dark-phone/wiki-new-entry.png",
+  "webkit-light-desktop/breakpoint-599-dialog.png",
+  "webkit-light-desktop/breakpoint-601-dialog.png",
+  "webkit-light-desktop/breakpoint-959-wiki.png",
+  "webkit-light-desktop/breakpoint-961-wiki.png",
+  "webkit-light-desktop/settings-saved.png",
+  "webkit-light-desktop/settings.png",
+  "webkit-light-desktop/wiki-home.png",
+  "webkit-light-desktop/wiki-new-entry.png",
+  "webkit-light-phone/settings-saved.png",
+  "webkit-light-phone/settings.png",
+  "webkit-light-phone/wiki-contents.png",
+  "webkit-light-phone/wiki-home.png",
+  "webkit-light-phone/wiki-new-entry.png"
+ ],
+ "failing": [
+  "chromium-dark-desktop/breakpoint-959-wiki.png",
+  "chromium-dark-desktop/breakpoint-961-wiki.png",
+  "chromium-dark-desktop/settings-saved.png",
+  "chromium-dark-desktop/settings.png",
+  "chromium-dark-desktop/wiki-home.png",
+  "chromium-dark-desktop/wiki-new-entry.png",
+  "chromium-dark-phone/settings-saved.png",
+  "chromium-dark-phone/settings.png",
+  "chromium-dark-phone/wiki-contents.png",
+  "chromium-dark-phone/wiki-home.png",
+  "chromium-dark-phone/wiki-new-entry.png",
+  "chromium-light-desktop/breakpoint-959-wiki.png",
+  "chromium-light-desktop/breakpoint-961-wiki.png",
+  "chromium-light-desktop/settings-saved.png",
+  "chromium-light-desktop/settings.png",
+  "chromium-light-desktop/wiki-home.png",
+  "chromium-light-desktop/wiki-new-entry.png",
+  "chromium-light-phone/settings-saved.png",
+  "chromium-light-phone/settings.png",
+  "chromium-light-phone/wiki-contents.png",
+  "chromium-light-phone/wiki-home.png",
+  "chromium-light-phone/wiki-new-entry.png",
+  "webkit-dark-desktop/breakpoint-959-wiki.png",
+  "webkit-dark-desktop/breakpoint-961-wiki.png",
+  "webkit-dark-desktop/settings-saved.png",
+  "webkit-dark-desktop/settings.png",
+  "webkit-dark-desktop/wiki-home.png",
+  "webkit-dark-desktop/wiki-new-entry.png",
+  "webkit-dark-phone/settings-saved.png",
+  "webkit-dark-phone/settings.png",
+  "webkit-dark-phone/wiki-contents.png",
+  "webkit-dark-phone/wiki-home.png",
+  "webkit-dark-phone/wiki-new-entry.png",
+  "webkit-light-desktop/breakpoint-959-wiki.png",
+  "webkit-light-desktop/breakpoint-961-wiki.png",
+  "webkit-light-desktop/settings-saved.png",
+  "webkit-light-desktop/settings.png",
+  "webkit-light-desktop/wiki-home.png",
+  "webkit-light-desktop/wiki-new-entry.png",
+  "webkit-light-phone/settings-saved.png",
+  "webkit-light-phone/settings.png",
+  "webkit-light-phone/wiki-contents.png",
+  "webkit-light-phone/wiki-home.png",
+  "webkit-light-phone/wiki-new-entry.png"
+ ],
+ "belowThresholdChanged": [
+  "chromium-dark-desktop/task-action-menu.png",
+  "chromium-dark-phone/task-action-menu.png",
+  "webkit-dark-desktop/breakpoint-599-dialog.png",
+  "webkit-dark-desktop/breakpoint-601-dialog.png",
+  "webkit-dark-desktop/task-action-menu.png",
+  "webkit-dark-phone/task-action-focus.png",
+  "webkit-dark-phone/task-action-hover.png",
+  "webkit-dark-phone/task-action-menu.png",
+  "webkit-dark-phone/task-detail.png",
+  "webkit-light-desktop/breakpoint-599-dialog.png",
+  "webkit-light-desktop/breakpoint-601-dialog.png"
+ ],
+ "unattributed": [],
+ "documentedNotThisBatch": [
+  "chromium-dark-desktop/task-action-menu.png",
+  "chromium-dark-phone/task-action-menu.png",
+  "webkit-dark-desktop/breakpoint-599-dialog.png",
+  "webkit-dark-desktop/breakpoint-601-dialog.png",
+  "webkit-dark-desktop/task-action-menu.png",
+  "webkit-dark-phone/task-action-focus.png",
+  "webkit-dark-phone/task-action-hover.png",
+  "webkit-dark-phone/task-action-menu.png",
+  "webkit-dark-phone/task-detail.png",
+  "webkit-light-desktop/breakpoint-599-dialog.png",
+  "webkit-light-desktop/breakpoint-601-dialog.png"
+ ],
+ "facts": {
+  "A10": {
+   "X": "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+   "subject": "docs(mocks): add wiki share mock for share-links",
+   "parents": [
+    "7cc52e0cf0b1952563c3558f01444d5e158a500c"
+   ],
+   "X^1": "7cc52e0cf0b1952563c3558f01444d5e158a500c",
+   "onOriginMain": true,
+   "onMainFirstParent": true,
+   "webFiles": [
+    "src/shared/src/codec.ts",
+    "src/web/src/App.tsx",
+    "src/web/src/api.test.ts",
+    "src/web/src/api.ts",
+    "src/web/src/components/ShareModal.tsx",
+    "src/web/src/components/WikiDocPage.tsx",
+    "src/web/src/components/WikiShareButton.test.tsx",
+    "src/web/src/components/WikiShareButton.tsx",
+    "src/web/src/index.css",
+    "src/web/src/lib/shareLinks.ts",
+    "src/web/src/lib/wikiDocs.ts",
+    "src/web/src/pages/SharedLinkPage.tsx",
+    "src/web/src/pages/SharedLinksPage.test.tsx",
+    "src/web/src/pages/SharedLinksPage.tsx",
+    "src/web/src/pages/SharedWikiPage.test.tsx",
+    "src/web/src/pages/SharedWikiPage.tsx",
+    "src/web/src/pages/WikiPage.tsx"
+   ],
+   "projectLineMerge": {
+    "commit": "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6",
+    "parents": [
+     "f991d24213a33a35b10bc94ff757a6ec65503981",
+     "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+    ],
+    "subject": "Merge refs/heads/main into refs/heads/orbit/p2-2-popconfirm-dialog-antd-018e48",
+    "mainInterval": [
+     "2ba6765d9 docs(mocks): add wiki share mock for share-links",
+     "7cc52e0cf Merge refs/heads/project/34ZZn8fmemArxvl2CsCFp into refs/heads/main",
+     "bc99a8d39 fix(web): the runner card's fold chevron keeps its own glyph",
+     "7e4655bc2 Update worktree.go, worktree_test.go"
+    ]
+   }
+  },
+  "A11": {
+   "X": "def134095f8031d3a2498dbfc9677e684bca0e67",
+   "subject": "feat(sessions): offer Claude Code's guess at the next message in the empty composer",
+   "parents": [
+    "ebf5e64419c1575bf3019fd0c188e26bdcdc8390"
+   ],
+   "X^1": "ebf5e64419c1575bf3019fd0c188e26bdcdc8390",
+   "onOriginMain": true,
+   "onMainFirstParent": true,
+   "webFiles": [
+    "src/shared/src/dto.ts",
+    "src/shared/src/enums.ts",
+    "src/shared/src/realtime.spec.ts",
+    "src/web/src/components/WorkspaceView.promptSuggestion.test.tsx",
+    "src/web/src/components/WorkspaceView.tsx",
+    "src/web/src/index.css",
+    "src/web/src/lib/promptSuggestion.test.ts",
+    "src/web/src/lib/promptSuggestion.ts",
+    "src/web/src/lib/queries.ts",
+    "src/web/src/pages/SettingsPage.tsx"
+   ],
+   "mainInterval": [
+    "4d77d69b7 Merge refs/heads/project/34bmzOkov3xN2yLPrnsCk into refs/heads/main",
+    "bcc89c7af fix(web): Providers fold heads fold from a press anywhere on them",
+    "0dd4b0d83 docs(mocks): Providers fold heads fold from a press anywhere on them",
+    "2567e7388 Merge refs/heads/project/34ZZn8fmemArxvl2CsCFp into refs/heads/main",
+    "f699bc292 Merge refs/heads/project/34bmzOkov3xN2yLPrnsCk into refs/heads/main",
+    "def134095 feat(sessions): offer Claude Code's guess at the next message in the empty composer",
+    "ebf5e6441 fix(projects): exceptions the coordinator took up are not escalated on a clock",
+    "5b960dafd docs(contract): integration-line revision 13 — an item the coordinator took up stays its own",
+    "e2882dbcf Merge refs/heads/project/34bmzOkov3xN2yLPrnsCk into refs/heads/main",
+    "a10804c91 Merge refs/heads/project/34ZZn8fmemArxvl2CsCFp into refs/heads/main",
+    "01e794977 Merge refs/heads/project/34b9KDmnRzopeuF1enIN6 into refs/heads/main",
+    "8cfd718c9 Merge refs/heads/project/34b9KDmnRzopeuF1enIN6 into refs/heads/main",
+    "c9ed8836c fix(web): the runner card's leading marks ride the name's line",
+    "3e25635e5 Merge refs/heads/project/34ZZeq0e3IR65GVm2kAs7 into refs/heads/main"
+   ],
+   "promotion": {
+    "commit": "3e25635e502029ae62282745e7fd14b66c9383aa",
+    "parents": [
+     "a80f050519b1755b8bf3477f38d87bb92c67194a",
+     "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6"
+    ],
+    "srcWebEqualsProjectTip": true,
+    "distEqualsProjectTip": true
+   }
+  }
+ },
+ "rows": {
+  "chromium-dark-desktop/breakpoint-959-wiki.png": {
+   "baseVsExpectation": {
+    "differentPixels": 6738,
+    "maxChannelDelta": 178,
+    "p0Comparator": "864 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 411,
+     "y": 64,
+     "width": 391,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "noise",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "noise"
+   },
+   "fixture": {
+    "X orig vs X fix": "noise",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "noise"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "chromium-dark-desktop/breakpoint-961-wiki.png": {
+   "baseVsExpectation": {
+    "differentPixels": 5411,
+    "maxChannelDelta": 178,
+    "p0Comparator": "695 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 494,
+     "y": 24,
+     "width": 294,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "noise"
+   },
+   "fixture": {
+    "X orig vs X fix": "noise",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "noise",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "noise",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "noise",
+    "registered expectation vs 075b7a6c8": "noise"
+   },
+   "attributed": true
+  },
+  "chromium-dark-desktop/settings-saved.png": {
+   "baseVsExpectation": {
+    "differentPixels": 94001,
+    "maxChannelDelta": 223,
+    "p0Comparator": "14811 pixels (ratio 0.02 of all image pixels) are different.",
+    "box": {
+     "x": 500,
+     "y": 329,
+     "width": 560,
+     "height": 571
+    }
+   },
+   "change": "A11",
+   "projectLine": {
+    "expected vs project tip 1d3cd4c70": "same",
+    "project tip 1d3cd4c70 -> new base 4d77d69b7": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 ebf5e6441": "same",
+    "X^1 ebf5e6441 -> X def134095": "changed (fails P0 comparator)",
+    "X def134095 vs interval end 4d77d69b7": "same"
+   },
+   "fixture": {
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-def134095",
+    "vs new base 4d77d69b7": "same"
+   },
+   "mainCommits": [
+    "def134095"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "chromium-dark-desktop/settings.png": {
+   "baseVsExpectation": {
+    "differentPixels": 94001,
+    "maxChannelDelta": 223,
+    "p0Comparator": "14811 pixels (ratio 0.02 of all image pixels) are different.",
+    "box": {
+     "x": 500,
+     "y": 329,
+     "width": 560,
+     "height": 571
+    }
+   },
+   "change": "A11",
+   "projectLine": {
+    "expected vs project tip 1d3cd4c70": "same",
+    "project tip 1d3cd4c70 -> new base 4d77d69b7": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 ebf5e6441": "same",
+    "X^1 ebf5e6441 -> X def134095": "changed (fails P0 comparator)",
+    "X def134095 vs interval end 4d77d69b7": "same"
+   },
+   "fixture": {
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-def134095",
+    "vs new base 4d77d69b7": "same"
+   },
+   "mainCommits": [
+    "def134095"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "chromium-dark-desktop/task-action-menu.png": {
+   "baseVsExpectation": {
+    "differentPixels": 466,
+    "maxChannelDelta": 45,
+    "p0Comparator": "match",
+    "box": {
+     "x": 312,
+     "y": 14,
+     "width": 920,
+     "height": 163
+    }
+   },
+   "change": null,
+   "documentedBelowThreshold": {
+    "change": "P3.2 accepted below-threshold difference (p3.2-accepted), not this batch",
+    "X^1 7cc52e0cf": "changed",
+    "base": "changed"
+   },
+   "attributed": null
+  },
+  "chromium-dark-desktop/wiki-home.png": {
+   "baseVsExpectation": {
+    "differentPixels": 5410,
+    "maxChannelDelta": 178,
+    "p0Comparator": "695 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 813,
+     "y": 24,
+     "width": 294,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "same"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "chromium-dark-desktop/wiki-new-entry.png": {
+   "baseVsExpectation": {
+    "differentPixels": 5407,
+    "maxChannelDelta": 98,
+    "p0Comparator": "477 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 813,
+     "y": 24,
+     "width": 294,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "same"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "chromium-dark-phone/settings-saved.png": {
+   "baseVsExpectation": {
+    "differentPixels": 25406,
+    "maxChannelDelta": 212,
+    "p0Comparator": "5431 pixels (ratio 0.02 of all image pixels) are different.",
+    "box": {
+     "x": 16,
+     "y": 601,
+     "width": 358,
+     "height": 243
+    }
+   },
+   "change": "A11",
+   "projectLine": {
+    "expected vs project tip 1d3cd4c70": "noise",
+    "project tip 1d3cd4c70 -> new base 4d77d69b7": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 ebf5e6441": "noise",
+    "X^1 ebf5e6441 -> X def134095": "changed (fails P0 comparator)",
+    "X def134095 vs interval end 4d77d69b7": "same"
+   },
+   "fixture": {
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-def134095",
+    "vs new base 4d77d69b7": "same"
+   },
+   "mainCommits": [
+    "def134095"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "chromium-dark-phone/settings.png": {
+   "baseVsExpectation": {
+    "differentPixels": 25406,
+    "maxChannelDelta": 212,
+    "p0Comparator": "5431 pixels (ratio 0.02 of all image pixels) are different.",
+    "box": {
+     "x": 16,
+     "y": 601,
+     "width": 358,
+     "height": 243
+    }
+   },
+   "change": "A11",
+   "projectLine": {
+    "expected vs project tip 1d3cd4c70": "same",
+    "project tip 1d3cd4c70 -> new base 4d77d69b7": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 ebf5e6441": "same",
+    "X^1 ebf5e6441 -> X def134095": "changed (fails P0 comparator)",
+    "X def134095 vs interval end 4d77d69b7": "same"
+   },
+   "fixture": {
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-def134095",
+    "vs new base 4d77d69b7": "same"
+   },
+   "mainCommits": [
+    "def134095"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "chromium-dark-phone/task-action-menu.png": {
+   "baseVsExpectation": {
+    "differentPixels": 627,
+    "maxChannelDelta": 45,
+    "p0Comparator": "match",
+    "box": {
+     "x": 156,
+     "y": 14,
+     "width": 202,
+     "height": 277
+    }
+   },
+   "change": null,
+   "documentedBelowThreshold": {
+    "change": "P3.2 accepted below-threshold difference (p3.2-accepted), not this batch",
+    "X^1 7cc52e0cf": "changed",
+    "base": "changed"
+   },
+   "attributed": null
+  },
+  "chromium-dark-phone/wiki-contents.png": {
+   "baseVsExpectation": {
+    "differentPixels": 54,
+    "maxChannelDelta": 89,
+    "p0Comparator": "9 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 320,
+     "y": 73,
+     "width": 5,
+     "height": 14
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "same"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "chromium-dark-phone/wiki-home.png": {
+   "baseVsExpectation": {
+    "differentPixels": 3571,
+    "maxChannelDelta": 167,
+    "p0Comparator": "313 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 112,
+     "y": 64,
+     "width": 213,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "same"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "chromium-dark-phone/wiki-new-entry.png": {
+   "baseVsExpectation": {
+    "differentPixels": 3564,
+    "maxChannelDelta": 92,
+    "p0Comparator": "176 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 112,
+     "y": 64,
+     "width": 213,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "same"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "chromium-light-desktop/breakpoint-959-wiki.png": {
+   "baseVsExpectation": {
+    "differentPixels": 4531,
+    "maxChannelDelta": 224,
+    "p0Comparator": "926 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 411,
+     "y": 64,
+     "width": 391,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "same"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "chromium-light-desktop/breakpoint-961-wiki.png": {
+   "baseVsExpectation": {
+    "differentPixels": 2302,
+    "maxChannelDelta": 224,
+    "p0Comparator": "749 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 494,
+     "y": 24,
+     "width": 294,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "noise"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "noise",
+    "vs project tip 1d3cd4c70": "noise"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "noise",
+    "93ab20b8c vs 075b7a6c8": "noise",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "chromium-light-desktop/settings-saved.png": {
+   "baseVsExpectation": {
+    "differentPixels": 43942,
+    "maxChannelDelta": 224,
+    "p0Comparator": "14015 pixels (ratio 0.02 of all image pixels) are different.",
+    "box": {
+     "x": 500,
+     "y": 329,
+     "width": 560,
+     "height": 571
+    }
+   },
+   "change": "A11",
+   "projectLine": {
+    "expected vs project tip 1d3cd4c70": "same",
+    "project tip 1d3cd4c70 -> new base 4d77d69b7": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 ebf5e6441": "same",
+    "X^1 ebf5e6441 -> X def134095": "changed (fails P0 comparator)",
+    "X def134095 vs interval end 4d77d69b7": "same"
+   },
+   "fixture": {
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-def134095",
+    "vs new base 4d77d69b7": "same"
+   },
+   "mainCommits": [
+    "def134095"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "chromium-light-desktop/settings.png": {
+   "baseVsExpectation": {
+    "differentPixels": 43942,
+    "maxChannelDelta": 224,
+    "p0Comparator": "14015 pixels (ratio 0.02 of all image pixels) are different.",
+    "box": {
+     "x": 500,
+     "y": 329,
+     "width": 560,
+     "height": 571
+    }
+   },
+   "change": "A11",
+   "projectLine": {
+    "expected vs project tip 1d3cd4c70": "same",
+    "project tip 1d3cd4c70 -> new base 4d77d69b7": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 ebf5e6441": "same",
+    "X^1 ebf5e6441 -> X def134095": "changed (fails P0 comparator)",
+    "X def134095 vs interval end 4d77d69b7": "same"
+   },
+   "fixture": {
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-def134095",
+    "vs new base 4d77d69b7": "same"
+   },
+   "mainCommits": [
+    "def134095"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "chromium-light-desktop/wiki-home.png": {
+   "baseVsExpectation": {
+    "differentPixels": 2302,
+    "maxChannelDelta": 224,
+    "p0Comparator": "749 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 813,
+     "y": 24,
+     "width": 294,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "same"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "chromium-light-desktop/wiki-new-entry.png": {
+   "baseVsExpectation": {
+    "differentPixels": 2301,
+    "maxChannelDelta": 123,
+    "p0Comparator": "582 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 813,
+     "y": 24,
+     "width": 294,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "same"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "chromium-light-phone/settings-saved.png": {
+   "baseVsExpectation": {
+    "differentPixels": 14786,
+    "maxChannelDelta": 224,
+    "p0Comparator": "5182 pixels (ratio 0.02 of all image pixels) are different.",
+    "box": {
+     "x": 16,
+     "y": 520,
+     "width": 358,
+     "height": 324
+    }
+   },
+   "change": "A11",
+   "projectLine": {
+    "expected vs project tip 1d3cd4c70": "noise",
+    "project tip 1d3cd4c70 -> new base 4d77d69b7": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 ebf5e6441": "noise",
+    "X^1 ebf5e6441 -> X def134095": "changed (fails P0 comparator)",
+    "X def134095 vs interval end 4d77d69b7": "same"
+   },
+   "fixture": {
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-def134095",
+    "vs new base 4d77d69b7": "same"
+   },
+   "mainCommits": [
+    "def134095"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "chromium-light-phone/settings.png": {
+   "baseVsExpectation": {
+    "differentPixels": 14782,
+    "maxChannelDelta": 224,
+    "p0Comparator": "5182 pixels (ratio 0.02 of all image pixels) are different.",
+    "box": {
+     "x": 16,
+     "y": 601,
+     "width": 358,
+     "height": 243
+    }
+   },
+   "change": "A11",
+   "projectLine": {
+    "expected vs project tip 1d3cd4c70": "same",
+    "project tip 1d3cd4c70 -> new base 4d77d69b7": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 ebf5e6441": "same",
+    "X^1 ebf5e6441 -> X def134095": "changed (fails P0 comparator)",
+    "X def134095 vs interval end 4d77d69b7": "same"
+   },
+   "fixture": {
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-def134095",
+    "vs new base 4d77d69b7": "same"
+   },
+   "mainCommits": [
+    "def134095"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "chromium-light-phone/wiki-contents.png": {
+   "baseVsExpectation": {
+    "differentPixels": 54,
+    "maxChannelDelta": 121,
+    "p0Comparator": "14 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 320,
+     "y": 73,
+     "width": 5,
+     "height": 14
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "noise"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "noise",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "chromium-light-phone/wiki-home.png": {
+   "baseVsExpectation": {
+    "differentPixels": 2861,
+    "maxChannelDelta": 224,
+    "p0Comparator": "323 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 112,
+     "y": 64,
+     "width": 213,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "noise"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "noise",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "chromium-light-phone/wiki-new-entry.png": {
+   "baseVsExpectation": {
+    "differentPixels": 2859,
+    "maxChannelDelta": 123,
+    "p0Comparator": "259 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 112,
+     "y": 64,
+     "width": 213,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "same"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "webkit-dark-desktop/breakpoint-599-dialog.png": {
+   "baseVsExpectation": {
+    "differentPixels": 11,
+    "maxChannelDelta": 1,
+    "p0Comparator": "match",
+    "box": {
+     "x": 40,
+     "y": 113,
+     "width": 520,
+     "height": 493
+    }
+   },
+   "change": null,
+   "documentedBelowThreshold": {
+    "change": "P3.2 accepted below-threshold difference (p3.2-accepted), not this batch",
+    "X^1 7cc52e0cf": "changed",
+    "base": "changed"
+   },
+   "attributed": null
+  },
+  "webkit-dark-desktop/breakpoint-601-dialog.png": {
+   "baseVsExpectation": {
+    "differentPixels": 11,
+    "maxChannelDelta": 1,
+    "p0Comparator": "match",
+    "box": {
+     "x": 41,
+     "y": 113,
+     "width": 520,
+     "height": 493
+    }
+   },
+   "change": null,
+   "documentedBelowThreshold": {
+    "change": "P3.2 accepted below-threshold difference (p3.2-accepted), not this batch",
+    "X^1 7cc52e0cf": "changed",
+    "base": "changed"
+   },
+   "attributed": null
+  },
+  "webkit-dark-desktop/breakpoint-959-wiki.png": {
+   "baseVsExpectation": {
+    "differentPixels": 6781,
+    "maxChannelDelta": 178,
+    "p0Comparator": "858 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 411,
+     "y": 64,
+     "width": 407,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "same"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "webkit-dark-desktop/breakpoint-961-wiki.png": {
+   "baseVsExpectation": {
+    "differentPixels": 5456,
+    "maxChannelDelta": 178,
+    "p0Comparator": "686 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 494,
+     "y": 24,
+     "width": 310,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "same"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "webkit-dark-desktop/settings-saved.png": {
+   "baseVsExpectation": {
+    "differentPixels": 95551,
+    "maxChannelDelta": 223,
+    "p0Comparator": "14813 pixels (ratio 0.02 of all image pixels) are different.",
+    "box": {
+     "x": 492,
+     "y": 329,
+     "width": 780,
+     "height": 571
+    }
+   },
+   "change": "A11",
+   "projectLine": {
+    "expected vs project tip 1d3cd4c70": "changed",
+    "project tip 1d3cd4c70 -> new base 4d77d69b7": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 ebf5e6441": "changed",
+    "X^1 ebf5e6441 -> X def134095": "changed (fails P0 comparator)",
+    "X def134095 vs interval end 4d77d69b7": "same"
+   },
+   "fixture": {
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-def134095",
+    "vs new base 4d77d69b7": "same"
+   },
+   "mainCommits": [
+    "d233a6cd0",
+    "def134095"
+   ],
+   "documentedBelowThreshold": {
+    "change": "A6 d233a6cd0 (p0-drift-2): WebKit 8px scrollbar strip",
+    "expected vs X^1": {
+     "differentPixels": 780,
+     "maxChannelDelta": 35,
+     "p0Comparator": "match",
+     "box": {
+      "x": 1264,
+      "y": 571,
+      "width": 8,
+      "height": 100
+     }
+    }
+   },
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "webkit-dark-desktop/settings.png": {
+   "baseVsExpectation": {
+    "differentPixels": 95551,
+    "maxChannelDelta": 223,
+    "p0Comparator": "14813 pixels (ratio 0.02 of all image pixels) are different.",
+    "box": {
+     "x": 496,
+     "y": 329,
+     "width": 784,
+     "height": 571
+    }
+   },
+   "change": "A11",
+   "projectLine": {
+    "expected vs project tip 1d3cd4c70": "changed",
+    "project tip 1d3cd4c70 -> new base 4d77d69b7": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 ebf5e6441": "changed",
+    "X^1 ebf5e6441 -> X def134095": "changed (fails P0 comparator)",
+    "X def134095 vs interval end 4d77d69b7": "same"
+   },
+   "fixture": {
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-def134095",
+    "vs new base 4d77d69b7": "same"
+   },
+   "mainCommits": [
+    "d233a6cd0",
+    "def134095"
+   ],
+   "documentedBelowThreshold": {
+    "change": "A6 d233a6cd0 (p0-drift-2): WebKit 8px scrollbar strip",
+    "expected vs X^1": {
+     "differentPixels": 780,
+     "maxChannelDelta": 35,
+     "p0Comparator": "match",
+     "box": {
+      "x": 1272,
+      "y": 571,
+      "width": 8,
+      "height": 100
+     }
+    }
+   },
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "webkit-dark-desktop/task-action-menu.png": {
+   "baseVsExpectation": {
+    "differentPixels": 489,
+    "maxChannelDelta": 45,
+    "p0Comparator": "match",
+    "box": {
+     "x": 1054,
+     "y": 14,
+     "width": 178,
+     "height": 142
+    }
+   },
+   "change": null,
+   "documentedBelowThreshold": {
+    "change": "P3.2 accepted below-threshold difference (p3.2-accepted), not this batch",
+    "X^1 7cc52e0cf": "changed",
+    "base": "changed"
+   },
+   "attributed": null
+  },
+  "webkit-dark-desktop/wiki-home.png": {
+   "baseVsExpectation": {
+    "differentPixels": 5456,
+    "maxChannelDelta": 178,
+    "p0Comparator": "686 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 813,
+     "y": 24,
+     "width": 310,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "same"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "webkit-dark-desktop/wiki-new-entry.png": {
+   "baseVsExpectation": {
+    "differentPixels": 5447,
+    "maxChannelDelta": 98,
+    "p0Comparator": "467 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 813,
+     "y": 24,
+     "width": 310,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "same"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "webkit-dark-phone/settings-saved.png": {
+   "baseVsExpectation": {
+    "differentPixels": 25404,
+    "maxChannelDelta": 212,
+    "p0Comparator": "5389 pixels (ratio 0.02 of all image pixels) are different.",
+    "box": {
+     "x": 16,
+     "y": 601,
+     "width": 350,
+     "height": 243
+    }
+   },
+   "change": "A11",
+   "projectLine": {
+    "expected vs project tip 1d3cd4c70": "same",
+    "project tip 1d3cd4c70 -> new base 4d77d69b7": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 ebf5e6441": "same",
+    "X^1 ebf5e6441 -> X def134095": "changed (fails P0 comparator)",
+    "X def134095 vs interval end 4d77d69b7": "same"
+   },
+   "fixture": {
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-def134095",
+    "vs new base 4d77d69b7": "same"
+   },
+   "mainCommits": [
+    "def134095"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "webkit-dark-phone/settings.png": {
+   "baseVsExpectation": {
+    "differentPixels": 26000,
+    "maxChannelDelta": 212,
+    "p0Comparator": "5389 pixels (ratio 0.02 of all image pixels) are different.",
+    "box": {
+     "x": 16,
+     "y": 369,
+     "width": 374,
+     "height": 475
+    }
+   },
+   "change": "A11",
+   "projectLine": {
+    "expected vs project tip 1d3cd4c70": "changed",
+    "project tip 1d3cd4c70 -> new base 4d77d69b7": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 ebf5e6441": "changed",
+    "X^1 ebf5e6441 -> X def134095": "changed (fails P0 comparator)",
+    "X def134095 vs interval end 4d77d69b7": "same"
+   },
+   "fixture": {
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-def134095",
+    "vs new base 4d77d69b7": "same"
+   },
+   "mainCommits": [
+    "d233a6cd0",
+    "def134095"
+   ],
+   "documentedBelowThreshold": {
+    "change": "A6 d233a6cd0 (p0-drift-2): WebKit 8px scrollbar strip",
+    "expected vs X^1": {
+     "differentPixels": 428,
+     "maxChannelDelta": 35,
+     "p0Comparator": "match",
+     "box": {
+      "x": 382,
+      "y": 390,
+      "width": 8,
+      "height": 56
+     }
+    }
+   },
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "webkit-dark-phone/task-action-focus.png": {
+   "baseVsExpectation": {
+    "differentPixels": 66,
+    "maxChannelDelta": 1,
+    "p0Comparator": "match",
+    "box": {
+     "x": 338,
+     "y": 246,
+     "width": 12,
+     "height": 45
+    }
+   },
+   "change": null,
+   "documentedBelowThreshold": {
+    "change": "P3.2 accepted below-threshold difference (p3.2-accepted), not this batch",
+    "X^1 7cc52e0cf": "changed",
+    "base": "changed"
+   },
+   "attributed": null
+  },
+  "webkit-dark-phone/task-action-hover.png": {
+   "baseVsExpectation": {
+    "differentPixels": 66,
+    "maxChannelDelta": 1,
+    "p0Comparator": "match",
+    "box": {
+     "x": 338,
+     "y": 246,
+     "width": 12,
+     "height": 45
+    }
+   },
+   "change": null,
+   "documentedBelowThreshold": {
+    "change": "P3.2 accepted below-threshold difference (p3.2-accepted), not this batch",
+    "X^1 7cc52e0cf": "changed",
+    "base": "changed"
+   },
+   "attributed": null
+  },
+  "webkit-dark-phone/task-action-menu.png": {
+   "baseVsExpectation": {
+    "differentPixels": 655,
+    "maxChannelDelta": 45,
+    "p0Comparator": "match",
+    "box": {
+     "x": 156,
+     "y": 14,
+     "width": 194,
+     "height": 277
+    }
+   },
+   "change": null,
+   "documentedBelowThreshold": {
+    "change": "P3.2 accepted below-threshold difference (p3.2-accepted), not this batch",
+    "X^1 7cc52e0cf": "changed",
+    "base": "changed"
+   },
+   "attributed": null
+  },
+  "webkit-dark-phone/task-detail.png": {
+   "baseVsExpectation": {
+    "differentPixels": 66,
+    "maxChannelDelta": 1,
+    "p0Comparator": "match",
+    "box": {
+     "x": 338,
+     "y": 246,
+     "width": 12,
+     "height": 45
+    }
+   },
+   "change": null,
+   "documentedBelowThreshold": {
+    "change": "P3.2 accepted below-threshold difference (p3.2-accepted), not this batch",
+    "X^1 7cc52e0cf": "changed",
+    "base": "changed"
+   },
+   "attributed": null
+  },
+  "webkit-dark-phone/wiki-contents.png": {
+   "baseVsExpectation": {
+    "differentPixels": 54,
+    "maxChannelDelta": 89,
+    "p0Comparator": "9 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 320,
+     "y": 73,
+     "width": 5,
+     "height": 14
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "same"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "webkit-dark-phone/wiki-home.png": {
+   "baseVsExpectation": {
+    "differentPixels": 3577,
+    "maxChannelDelta": 167,
+    "p0Comparator": "316 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 112,
+     "y": 64,
+     "width": 213,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "same"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "webkit-dark-phone/wiki-new-entry.png": {
+   "baseVsExpectation": {
+    "differentPixels": 3576,
+    "maxChannelDelta": 92,
+    "p0Comparator": "177 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 112,
+     "y": 64,
+     "width": 213,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "same"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "webkit-light-desktop/breakpoint-599-dialog.png": {
+   "baseVsExpectation": {
+    "differentPixels": 8,
+    "maxChannelDelta": 1,
+    "p0Comparator": "match",
+    "box": {
+     "x": 42,
+     "y": 109,
+     "width": 518,
+     "height": 497
+    }
+   },
+   "change": null,
+   "documentedBelowThreshold": {
+    "change": "P3.2 accepted below-threshold difference (p3.2-accepted), not this batch",
+    "X^1 7cc52e0cf": "changed",
+    "base": "changed"
+   },
+   "attributed": null
+  },
+  "webkit-light-desktop/breakpoint-601-dialog.png": {
+   "baseVsExpectation": {
+    "differentPixels": 8,
+    "maxChannelDelta": 1,
+    "p0Comparator": "match",
+    "box": {
+     "x": 43,
+     "y": 109,
+     "width": 518,
+     "height": 497
+    }
+   },
+   "change": null,
+   "documentedBelowThreshold": {
+    "change": "P3.2 accepted below-threshold difference (p3.2-accepted), not this batch",
+    "X^1 7cc52e0cf": "changed",
+    "base": "changed"
+   },
+   "attributed": null
+  },
+  "webkit-light-desktop/breakpoint-959-wiki.png": {
+   "baseVsExpectation": {
+    "differentPixels": 4578,
+    "maxChannelDelta": 224,
+    "p0Comparator": "932 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 411,
+     "y": 64,
+     "width": 407,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "same"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "webkit-light-desktop/breakpoint-961-wiki.png": {
+   "baseVsExpectation": {
+    "differentPixels": 2352,
+    "maxChannelDelta": 224,
+    "p0Comparator": "751 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 494,
+     "y": 24,
+     "width": 310,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "same"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "webkit-light-desktop/settings-saved.png": {
+   "baseVsExpectation": {
+    "differentPixels": 45806,
+    "maxChannelDelta": 224,
+    "p0Comparator": "14130 pixels (ratio 0.02 of all image pixels) are different.",
+    "box": {
+     "x": 492,
+     "y": 329,
+     "width": 780,
+     "height": 571
+    }
+   },
+   "change": "A11",
+   "projectLine": {
+    "expected vs project tip 1d3cd4c70": "changed",
+    "project tip 1d3cd4c70 -> new base 4d77d69b7": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 ebf5e6441": "changed",
+    "X^1 ebf5e6441 -> X def134095": "changed (fails P0 comparator)",
+    "X def134095 vs interval end 4d77d69b7": "same"
+   },
+   "fixture": {
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-def134095",
+    "vs new base 4d77d69b7": "same"
+   },
+   "mainCommits": [
+    "d233a6cd0",
+    "def134095"
+   ],
+   "documentedBelowThreshold": {
+    "change": "A6 d233a6cd0 (p0-drift-2): WebKit 8px scrollbar strip",
+    "expected vs X^1": {
+     "differentPixels": 780,
+     "maxChannelDelta": 33,
+     "p0Comparator": "match",
+     "box": {
+      "x": 1264,
+      "y": 571,
+      "width": 8,
+      "height": 100
+     }
+    }
+   },
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "webkit-light-desktop/settings.png": {
+   "baseVsExpectation": {
+    "differentPixels": 45806,
+    "maxChannelDelta": 224,
+    "p0Comparator": "14130 pixels (ratio 0.02 of all image pixels) are different.",
+    "box": {
+     "x": 496,
+     "y": 329,
+     "width": 784,
+     "height": 571
+    }
+   },
+   "change": "A11",
+   "projectLine": {
+    "expected vs project tip 1d3cd4c70": "changed",
+    "project tip 1d3cd4c70 -> new base 4d77d69b7": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 ebf5e6441": "changed",
+    "X^1 ebf5e6441 -> X def134095": "changed (fails P0 comparator)",
+    "X def134095 vs interval end 4d77d69b7": "same"
+   },
+   "fixture": {
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-def134095",
+    "vs new base 4d77d69b7": "same"
+   },
+   "mainCommits": [
+    "d233a6cd0",
+    "def134095"
+   ],
+   "documentedBelowThreshold": {
+    "change": "A6 d233a6cd0 (p0-drift-2): WebKit 8px scrollbar strip",
+    "expected vs X^1": {
+     "differentPixels": 780,
+     "maxChannelDelta": 33,
+     "p0Comparator": "match",
+     "box": {
+      "x": 1272,
+      "y": 571,
+      "width": 8,
+      "height": 100
+     }
+    }
+   },
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "webkit-light-desktop/wiki-home.png": {
+   "baseVsExpectation": {
+    "differentPixels": 2352,
+    "maxChannelDelta": 224,
+    "p0Comparator": "751 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 813,
+     "y": 24,
+     "width": 310,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "same"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "webkit-light-desktop/wiki-new-entry.png": {
+   "baseVsExpectation": {
+    "differentPixels": 2344,
+    "maxChannelDelta": 123,
+    "p0Comparator": "590 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 813,
+     "y": 24,
+     "width": 310,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "same"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "webkit-light-phone/settings-saved.png": {
+   "baseVsExpectation": {
+    "differentPixels": 15004,
+    "maxChannelDelta": 224,
+    "p0Comparator": "5153 pixels (ratio 0.02 of all image pixels) are different.",
+    "box": {
+     "x": 16,
+     "y": 601,
+     "width": 350,
+     "height": 243
+    }
+   },
+   "change": "A11",
+   "projectLine": {
+    "expected vs project tip 1d3cd4c70": "same",
+    "project tip 1d3cd4c70 -> new base 4d77d69b7": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 ebf5e6441": "same",
+    "X^1 ebf5e6441 -> X def134095": "changed (fails P0 comparator)",
+    "X def134095 vs interval end 4d77d69b7": "same"
+   },
+   "fixture": {
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-def134095",
+    "vs new base 4d77d69b7": "same"
+   },
+   "mainCommits": [
+    "def134095"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "webkit-light-phone/settings.png": {
+   "baseVsExpectation": {
+    "differentPixels": 15600,
+    "maxChannelDelta": 224,
+    "p0Comparator": "5153 pixels (ratio 0.02 of all image pixels) are different.",
+    "box": {
+     "x": 16,
+     "y": 369,
+     "width": 374,
+     "height": 475
+    }
+   },
+   "change": "A11",
+   "projectLine": {
+    "expected vs project tip 1d3cd4c70": "changed",
+    "project tip 1d3cd4c70 -> new base 4d77d69b7": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 ebf5e6441": "changed",
+    "X^1 ebf5e6441 -> X def134095": "changed (fails P0 comparator)",
+    "X def134095 vs interval end 4d77d69b7": "same"
+   },
+   "fixture": {
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-def134095",
+    "vs new base 4d77d69b7": "same"
+   },
+   "mainCommits": [
+    "d233a6cd0",
+    "def134095"
+   ],
+   "documentedBelowThreshold": {
+    "change": "A6 d233a6cd0 (p0-drift-2): WebKit 8px scrollbar strip",
+    "expected vs X^1": {
+     "differentPixels": 428,
+     "maxChannelDelta": 33,
+     "p0Comparator": "match",
+     "box": {
+      "x": 382,
+      "y": 390,
+      "width": 8,
+      "height": 56
+     }
+    }
+   },
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "webkit-light-phone/wiki-contents.png": {
+   "baseVsExpectation": {
+    "differentPixels": 55,
+    "maxChannelDelta": 121,
+    "p0Comparator": "14 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 320,
+     "y": 73,
+     "width": 5,
+     "height": 14
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "same"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "webkit-light-phone/wiki-home.png": {
+   "baseVsExpectation": {
+    "differentPixels": 2877,
+    "maxChannelDelta": 224,
+    "p0Comparator": "324 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 112,
+     "y": 64,
+     "width": 213,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "same"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  },
+  "webkit-light-phone/wiki-new-entry.png": {
+   "baseVsExpectation": {
+    "differentPixels": 2874,
+    "maxChannelDelta": 123,
+    "p0Comparator": "268 pixels (ratio 0.01 of all image pixels) are different.",
+    "box": {
+     "x": 112,
+     "y": 64,
+     "width": 213,
+     "height": 32
+    }
+   },
+   "change": "A10",
+   "projectLine": {
+    "expected vs f991d2421": "same",
+    "f991d2421 -> 1d3cd4c70": "changed (fails P0 comparator)"
+   },
+   "mainLine": {
+    "expected vs X^1 7cc52e0cf": "same",
+    "X^1 7cc52e0cf -> X 2ba6765d9": "changed (fails P0 comparator)",
+    "X 2ba6765d9 vs project line 1d3cd4c70": "same"
+   },
+   "fixture": {
+    "X orig vs X fix": "same",
+    "1d3cd4c70 orig vs fix": "same",
+    "base orig vs fix": "same"
+   },
+   "generation": {
+    "run": "full-fix-2ba6765d9",
+    "vs new base 4d77d69b7": "same",
+    "vs project tip 1d3cd4c70": "same"
+   },
+   "mainCommits": [
+    "2ba6765d9"
+   ],
+   "rebasedBase": {
+    "4d77d69b7 vs 93ab20b8c": "same",
+    "registered expectation vs 93ab20b8c": "same",
+    "93ab20b8c vs 075b7a6c8": "same",
+    "registered expectation vs 075b7a6c8": "same"
+   },
+   "attributed": true
+  }
+ }
+}

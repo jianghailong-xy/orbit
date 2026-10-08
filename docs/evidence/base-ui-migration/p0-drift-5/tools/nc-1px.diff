@@ -1,0 +1,24 @@
+diff -ru a/src/web/src/components/WikiShareButton.tsx b/src/web/src/components/WikiShareButton.tsx
+--- a/src/web/src/components/WikiShareButton.tsx	2026-10-08 16:36:25.331054816 +0800
++++ b/src/web/src/components/WikiShareButton.tsx	2026-10-08 16:36:25.339054850 +0800
+@@ -34,7 +34,7 @@
+           {phone ? null : ' Shared · Live'}
+         </button>
+       ) : (
+-        <Button icon={<GlobalOutlined />} aria-label="Share" onClick={() => setOpen(true)}>
++        <Button icon={<GlobalOutlined />} aria-label="Share" style={{ marginLeft: 1 }} onClick={() => setOpen(true)}>
+           {phone ? null : 'Share'}
+         </Button>
+       )}
+diff -ru a/src/web/src/pages/SettingsPage.tsx b/src/web/src/pages/SettingsPage.tsx
+--- a/src/web/src/pages/SettingsPage.tsx	2026-10-08 16:36:25.335054835 +0800
++++ b/src/web/src/pages/SettingsPage.tsx	2026-10-08 16:36:25.339054850 +0800
+@@ -62,7 +62,7 @@
+ 
+       {/* The same order as Settings on iOS: how sessions start, then the alerts and the look, then
+           what the account has shared. iOS lays these out as one list (SettingsHome in OrbitKit). */}
+-      <Card title="Session defaults" style={{ marginBottom: 16 }}>
++      <Card title="Session defaults" style={{ marginBottom: 17 }}>
+         <Field
+           label="Default permission mode"
+           hint="The mode a new session starts in, unless the composer picks another. Account-wide: the mode is a property of the run, not of the workspace it runs in."
