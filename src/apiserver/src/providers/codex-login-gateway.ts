@@ -1,4 +1,5 @@
 import type { IncomingHttpHeaders, OutgoingHttpHeaders } from 'node:http';
+import { zstdCompressSync } from 'node:zlib';
 import { AgentProvider, type PlanUsageSnapshot, type PlanUsageWindow } from '@orbit/shared';
 import { forwardedHeaders } from './pool-gateway.service';
 
@@ -45,20 +46,22 @@ const UNNAMED_RESET_MS = 5 * 60 * 60_000;
  * What codex sent, with the login as its credential: `Authorization: Bearer <access token>` and
  * `ChatGPT-Account-ID: <account id>` — the pair the official CLI authenticates to the Codex backend with
  * (codex-rs model-provider auth.rs; recorded, lower-cased as HTTP carries it, as `chatgpt-account-id`).
- * Nothing else is added: the CLI's own `version`, `x-codex-routing-hint` and zstd body are what it sends
- * as the built-in provider, and a session's codex, on a configured provider, sends none of them. An
- * incoming account header is not codex's to send, and is replaced like the credential.
+ * `extra` carries the headers the CLI's built-in provider adds and a configured provider does not —
+ * `version`, `x-codex-routing-hint`, `content-encoding` (loginProviderRequest) — and overrides any the
+ * incoming request happened to send. An incoming account header is not codex's to send, and is replaced
+ * like the credential.
  */
 export function loginForwardedHeaders(
   incoming: IncomingHttpHeaders,
   accessToken: string,
   accountId: string,
   length: number,
+  extra: OutgoingHttpHeaders = {},
 ): OutgoingHttpHeaders {
   const own = Object.fromEntries(
     Object.entries(incoming).filter(([name]) => name.toLowerCase() !== 'chatgpt-account-id'),
   ) as IncomingHttpHeaders;
-  return { ...forwardedHeaders(own, accessToken, length), 'chatgpt-account-id': accountId };
+  return { ...forwardedHeaders(own, accessToken, length), ...extra, 'chatgpt-account-id': accountId };
 }
 
 const header = (headers: IncomingHttpHeaders, name: string): string | undefined => {
@@ -71,6 +74,52 @@ const number = (value: string | undefined): number | undefined => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
 };
+
+/**
+ * The codex version a CLI's User-Agent announces — `<originator>/<version> ...`, e.g.
+ * `codex_cli_rs/0.162.0 (Debian 13.0.0; x86_64) ...` — which the built-in provider sends as its
+ * `version` header but which codex does not add on a configured provider. undefined when the agent
+ * names no version.
+ */
+export function codexVersionFromUserAgent(userAgent: string | undefined): string | undefined {
+  const first = userAgent?.trim().split(/\s+/)[0] ?? '';
+  const slash = first.indexOf('/');
+  if (slash < 0) return undefined;
+  const version = first.slice(slash + 1);
+  return /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version) ? version : undefined;
+}
+
+/**
+ * The request body and the headers the official CLI's built-in ChatGPT provider adds, which a session's
+ * codex on a configured provider does not: the body's `client_metadata.guardian_credits_requested`, the
+ * body zstd-compressed, `x-codex-routing-hint` naming the turn's own model, and `version` naming the
+ * codex that sent it (its User-Agent). `body` is codex's own request as it arrived — a configured
+ * provider sends it as plain JSON; a body that is not codex's JSON object is passed through with nothing
+ * added. The result's `body` and the `content-length` loginForwardedHeaders derives from it go together.
+ */
+export function loginProviderRequest(
+  incoming: IncomingHttpHeaders,
+  body: Buffer,
+): { body: Buffer; extra: OutgoingHttpHeaders } {
+  let request: Record<string, unknown>;
+  try {
+    const parsed: unknown = JSON.parse(body.toString('utf8'));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { body, extra: {} };
+    request = parsed as Record<string, unknown>;
+  } catch {
+    return { body, extra: {} };
+  }
+  const metadata = request.client_metadata;
+  if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
+    (metadata as Record<string, unknown>).guardian_credits_requested = 'true';
+  }
+  const extra: OutgoingHttpHeaders = { 'content-encoding': 'zstd' };
+  const model = request.model;
+  if (typeof model === 'string' && model) extra['x-codex-routing-hint'] = `model=${model}`;
+  const version = codexVersionFromUserAgent(header(incoming, 'user-agent'));
+  if (version) extra.version = version;
+  return { body: zstdCompressSync(Buffer.from(JSON.stringify(request))), extra };
+}
 
 /** One x-codex-* window, as codex-api rate_limits.rs parse_rate_limit_window reads it. */
 function codexWindow(headers: IncomingHttpHeaders, which: 'primary' | 'secondary'): PlanUsageWindow | undefined {

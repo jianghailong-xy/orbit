@@ -9,11 +9,12 @@
  *      (fixtures/codex-gateway-recording.json) reaches the backend in the shape the official codex CLI
  *      sends a ChatGPT login's turn there (fixtures/codex-chatgpt-backend-recording.json, recorded by
  *      runner-go codex_chatgpt_backend_recording_test.go): the same path, the login as
- *      `Authorization: Bearer` and `ChatGPT-Account-ID`, codex's body byte for byte and in the CLI's own
- *      shape, every other header as codex sent it. The backend's recorded stream comes back byte for byte,
- *      window headers and all; its usage goes into the ledger for that session and hour, and its window
- *      reading onto the account. The claim hands the runner the gateway and a token, and nothing of the
- *      login.
+ *      `Authorization: Bearer` and `ChatGPT-Account-ID`, and codex's body in the CLI's own shape — the
+ *      built-in provider's `guardian_credits_requested` field added and the body zstd-compressed, plus
+ *      its `version` and `x-codex-routing-hint` headers — with every other header as codex sent it. The
+ *      backend's recorded stream comes back byte for byte, window headers and all; its usage goes into
+ *      the ledger for that session and hour, and its window reading onto the account. The claim hands the
+ *      runner the gateway and a token, and nothing of the login.
  *  (2) A token is refused (401) once its session ended, moved to another provider or is not its person's,
  *      it expired or was revoked, or its pool was deleted; a good one reaches nothing but POST /responses
  *      (403) — and none of it reaches the backend. A session whose account the pool no longer holds keeps
@@ -448,29 +449,40 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
     assert.equal(sent.headers.authorization, `Bearer ${pool.login.access}`);
     assert.equal(cliHeaders['chatgpt-account-id'], CLI.account);
     assert.equal(sent.headers['chatgpt-account-id'], pool.accountId);
-    // Codex's body as it sent it — and that body is the CLI's own request, field for field.
-    assert.ok(sent.body.equals(SESSION_BODY), 'the body the backend got is not the body codex sent');
+    // The backend body: codex's own, in the CLI's built-in-provider shape — zstd-compressed, and carrying
+    // the metadata field a configured provider omits.
     assert.equal(cliHeaders['content-encoding'], 'zstd');
+    assert.equal(sent.headers['content-encoding'], 'zstd');
+    const backendBody = JSON.parse(zstdDecompressSync(sent.body).toString('utf8')) as Record<string, unknown>;
     const cliBody = JSON.parse(zstdDecompressSync(Buffer.from(cli.bodyBase64, 'base64')).toString('utf8')) as Record<string, unknown>;
-    const sessionBody = JSON.parse(SESSION_BODY.toString('utf8')) as Record<string, unknown>;
-    assert.deepEqual(Object.keys(sessionBody).sort(), Object.keys(cliBody).sort());
+    assert.deepEqual(Object.keys(backendBody).sort(), Object.keys(cliBody).sort());
     for (const field of ['model', 'instructions', 'store', 'stream', 'include', 'tool_choice', 'parallel_tool_calls', 'reasoning']) {
-      assert.deepEqual(sessionBody[field], cliBody[field], `the request's ${field} is not the CLI's`);
+      assert.deepEqual(backendBody[field], cliBody[field], `the request's ${field} is not the CLI's`);
     }
-    // Every other header as codex sent it, none added — and, against the CLI's: only what the CLI adds as
-    // the built-in provider (its version, its routing hint, its compression) is not there.
+    assert.equal(
+      (backendBody.client_metadata as Record<string, unknown>).guardian_credits_requested,
+      (cliBody.client_metadata as Record<string, unknown>).guardian_credits_requested,
+      "the backend body does not carry the CLI's guardian_credits_requested",
+    );
+    // Every other header as codex sent it, plus the three the built-in provider adds — which now match the
+    // CLI's own, so nothing separates the two requests but the credential and the account.
     for (const [name, value] of Object.entries(codexHeaders(null))) {
       assert.equal(sent.headers[name], value, `codex's ${name} header did not arrive as sent`);
     }
+    const builtin = ['content-encoding', 'version', 'x-codex-routing-hint'].sort();
     const transport = new Set(['host', 'connection', 'content-length', 'authorization', 'chatgpt-account-id']);
     assert.deepEqual(
-      Object.keys(sent.headers).filter((name) => !(name in codexHeaders(null)) && !transport.has(name)),
-      [],
-      'the gateway added headers codex did not send',
+      Object.keys(sent.headers).filter((name) => !(name in codexHeaders(null)) && !transport.has(name)).sort(),
+      builtin,
+      'the gateway added headers that are not the built-in provider\'s',
     );
+    for (const name of ['version', 'x-codex-routing-hint']) {
+      assert.equal(sent.headers[name], cliHeaders[name], `the gateway's ${name} is not the CLI's`);
+    }
     assert.deepEqual(
       Object.keys(cliHeaders).filter((name) => !(name in sent.headers)).sort(),
-      ['content-encoding', 'version', 'x-codex-routing-hint'],
+      [],
+      'a header the CLI sends the backend is missing from what the gateway sent',
     );
     assert.ok(!JSON.stringify(sent.headers).includes(token), 'the session token went on to the backend');
 
@@ -700,7 +712,11 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
     assert.equal(refused.headers.authorization, `Bearer ${pool.login.access}`);
     assert.equal(resent.headers.authorization, `Bearer ${fresh.access}`);
     assert.equal(resent.headers['chatgpt-account-id'], pool.accountId);
-    assert.ok(resent.body.equals(SESSION_BODY));
+    // The retry carries the same built-in-provider shape the first attempt did: the gateway's own body.
+    assert.equal(refused.headers['content-encoding'], 'zstd');
+    assert.ok(resent.body.equals(refused.body), 'the retry body is not the one the first attempt sent');
+    const resentBody = JSON.parse(zstdDecompressSync(resent.body).toString('utf8')) as Record<string, unknown>;
+    assert.equal((resentBody.client_metadata as Record<string, unknown>).guardian_credits_requested, 'true');
 
     // The refresh is the CLI's, field for field, on the stored refresh token.
     const [refresh, ...moreRefreshes] = tokenRequests();

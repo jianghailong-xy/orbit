@@ -15,6 +15,7 @@ import {
   codexUsageSnapshot,
   loginForwardedHeaders,
   loginMissingReason,
+  loginProviderRequest,
   loginSignedOutNotice,
   loginSpentNotice,
   POOL_LOGIN_TOKEN_ENDPOINT,
@@ -191,8 +192,15 @@ export class PoolLoginGatewayService {
     const now = new Date();
     let access = decryptSecret(login.accessTokenEnc);
     const url = `${this.upstream}${target.path}${target.query}`;
+    // The CLI's own built-in-provider shape: a session's codex omits what only that provider adds, and the
+    // backend reads those fields, so the gateway builds them once and every send reuses the same body.
+    const prepared = loginProviderRequest(req.headers, body);
     const send = (credential: string) =>
-      sendUpstream(this.agent, req.method, url, loginForwardedHeaders(req.headers, credential, login.accountId, body.length), body, res);
+      sendUpstream(
+        this.agent, req.method, url,
+        loginForwardedHeaders(req.headers, credential, login.accountId, prepared.body.length, prepared.extra),
+        prepared.body, res,
+      );
     let answer: Answer;
     try {
       // Refreshed ahead of its own expiry, as the codex CLI does. A token endpoint that cannot be reached
