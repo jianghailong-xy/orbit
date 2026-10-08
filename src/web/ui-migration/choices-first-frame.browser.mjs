@@ -17,6 +17,7 @@ const places = [
   { name: 'page', query: '', antd: true, motion: true },
   { name: 'page, flipped above', query: '&anchor=bottom', antd: true },
   { name: 'page, right edge', query: '&anchor=right', antd: true },
+  { name: 'page, scrolled', query: '&pagescroll', antd: true },
   { name: 'page, scrolled box', query: '&scroll' },
   { name: 'page, moved box', query: '&transform' },
   { name: 'dialog', query: '&owner=dialog', antd: true, motion: true },
@@ -110,6 +111,7 @@ async function arm(page, selector, anchorSelector, scroll, observe) {
       return { when, shown: box.width > 0 && opacity > 0 && getComputedStyle(surface).visibility === 'visible',
         x: round(box.x), y: round(box.y), width: round(box.width), height: round(box.height), opacity: round(opacity),
         anchor: { x: round(anchor.x), y: round(anchor.y) }, scrolled: scrolled(),
+        viewport: [round(visualViewport.width), document.documentElement.clientWidth],
         root: { position: getComputedStyle(root).position, opacity: Number(getComputedStyle(root).opacity), x: round(at.x), y: round(at.y) } };
     };
     const state = { frames: [], scrolled: scrolled() };
@@ -154,6 +156,11 @@ const fromAnchor = (frame, keys = ['x', 'y', 'width', 'height']) => frame?.shown
   [key, Math.round((key === 'x' || key === 'y' ? frame[key] - frame.anchor[key] : frame[key]) * 1000) / 1000]));
 const within = (actual, expected) => actual && expected && Object.fromEntries(Object.entries(actual).map(([key, value]) =>
   [key, Math.abs(value - expected[key]) < 0.5 ? expected[key] : value]));
+// Linux WebKit's phone emulation narrows the visual viewport by the page's classic scrollbar once the page
+// overflows (382 of 390px, see p4.1): Floating UI keeps a popup within the visual viewport and rc-trigger within
+// the layout viewport, and a fixed sample section laid out after the overflow uses the narrower width. A page in
+// that state does not share a viewport with the other page, so its boxes are recorded, not compared.
+const narrowed = (frame) => frame?.viewport && frame.viewport[0] !== frame.viewport[1];
 
 for (const [name, kind] of Object.entries(kinds)) {
   test(`${name} is drawn where it settles from its first frame, at the replaced popup's place`, async ({ page }, info) => {
@@ -173,6 +180,11 @@ for (const [name, kind] of Object.entries(kinds)) {
       const antd = await sample(page, info, kind, 'antd', place, opening);
       entry.antd = antd.settled;
       expect.soft(antd.settled.shown, `${place.name}: AntD shown`).toBe(true);
+      if (narrowed(settled) || narrowed(antd.settled)) {
+        entry.antdNotCompared = { orbitViewport: settled.viewport, antdViewport: antd.settled.viewport };
+        info.annotations.push({ type: 'not compared with AntD', description: `${place.name}, ${opening}: visual viewport ${settled.viewport} / ${antd.settled.viewport}` });
+        continue;
+      }
       const expected = fromAnchor(antd.settled, kind.compared);
       expect.soft(within(fromAnchor(settled, kind.compared), expected), `${place.name}, ${opening}: AntD's box`).toEqual(expected);
     }

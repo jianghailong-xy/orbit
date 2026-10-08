@@ -114,13 +114,15 @@ function Samples() {
  * Where a sample is mounted, for the first-frame checks: on the page (default), or in an open dialog
  * or drawer (owner=dialog/drawer: Orbit's for Orbit samples, the replaced one for legacy samples, at
  * the same place). scroll puts a screen of content before and after the sample, in a scrolling box
- * on the page or in the owner; transform moves the owner (a box around the sample on the page).
+ * on the page or in the owner, and pagescroll in the page itself; transform moves the owner (a box
+ * around the sample on the page).
  */
 function SampleOwner({ legacy, children }: { legacy: boolean; children: ReactNode }) {
   const params = new URLSearchParams(location.search);
   const owner = params.get('owner');
   const moved = params.has('transform') ? { transform: 'translate(16px, 8px)' } : undefined;
-  const content = params.has('scroll') ? <><div className="fixture-scroll-spacer" />{children}<div className="fixture-scroll-spacer" /></> : children;
+  const content = params.has('scroll') || params.has('pagescroll')
+    ? <><div className="fixture-scroll-spacer" />{children}<div className="fixture-scroll-spacer" /></> : children;
   if (owner === 'dialog') return legacy
     ? <Modal open title="Sample owner" footer={null} closable={false} keyboard={false} maskClosable={false} style={moved}>{content}</Modal>
     : <Dialog open onClose={() => {}} title="Sample owner" closable={false} closeOnEscape={false} closeOnOutsideClick={false} style={moved}>{content}</Dialog>;
