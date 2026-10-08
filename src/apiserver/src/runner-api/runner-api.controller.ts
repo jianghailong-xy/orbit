@@ -360,7 +360,7 @@ import {
   runnerAdvertisesProvider,
   withProviderDeclarations,
 } from './runner-provider-support';
-import { START_CARD_REVIEWS_MESSAGE, startCardReviewsCreate } from './unstarted-project-create';
+import { coordinatorCreateAllowedBy } from './unstarted-project-create';
 import {
   freezeSessionSourcePin,
   hasResolvedSource,
@@ -4060,13 +4060,14 @@ export class RunnerApiController {
     // to re-answer a settled question. Recorded as a decided approval with no decider, which is
     // what makes an automatic allow tellable from a human one afterwards.
     const autoAllowed = existing ? false : await this.standingGrantCovers(session, dto);
-    // The same shape for a coordinator's task creates in a project nobody has started: the start
-    // card reviews them, so none of them is a question on its own (`unstarted-project-create.ts`).
+    // The same shape for a coordinator's task creates in its own project when nobody has started it
+    // (the start card reviews them) or its Automatic is on (the coordinator decides them): none of
+    // them is a question on its own (`unstarted-project-create.ts`).
     const allowedMessage = autoAllowed
       ? AUTO_ALLOWED_MESSAGE
-      : !existing && (await startCardReviewsCreate(this.prisma, session, dto.toolName, dto.input))
-        ? START_CARD_REVIEWS_MESSAGE
-        : null;
+      : existing
+        ? null
+        : await coordinatorCreateAllowedBy(this.prisma, session, dto.toolName, dto.input);
     // Which turn is asking. Derived here rather than sent by the runner: the MCP server knows only
     // its session, and the server already knows which turn it leased to that session — the runner
     // has been polling inside it since the dequeue. It is what makes an abandoned call provable

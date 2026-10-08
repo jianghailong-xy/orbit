@@ -1,0 +1,96 @@
+{
+  "source": "Merge exceptionAssignmentChanges into snapshot.standing.openItems.needsYou[x1] of interaction-cards.fixture.json to form complete ProjectOpenItemRow values; waitingSince is public, assignedAt is not. Preview matches src/apiserver/src/runner-api/approval-create-preview.spec.ts PREVIEW. Questions follow owner-confirmation-review-contract Q2.",
+  "exceptionAssignmentChanges": [
+    {
+      "assignee": "OWNER",
+      "assigneeReason": "ESCALATED",
+      "waitingSince": "2026-10-04T00:00:00.000Z",
+      "escalateAt": null,
+      "escalatedAt": "2026-10-04T00:01:00.000Z"
+    },
+    {
+      "assignee": "COORDINATOR",
+      "assigneeReason": "DEFAULT",
+      "waitingSince": "2026-10-04T00:05:00.000Z",
+      "escalateAt": "2026-10-04T00:10:00.000Z",
+      "escalatedAt": null,
+      "actions": [
+        "OPEN_COORDINATOR"
+      ]
+    },
+    {
+      "assignee": "OWNER",
+      "assigneeReason": "ESCALATED",
+      "waitingSince": "2026-10-04T00:05:00.000Z",
+      "escalateAt": null,
+      "escalatedAt": "2026-10-04T00:10:00.000Z"
+    },
+    {
+      "assignee": "COORDINATOR",
+      "assigneeReason": "DEFAULT",
+      "waitingSince": "2026-10-04T00:15:00.000Z",
+      "escalateAt": "2026-10-04T00:20:00.000Z",
+      "escalatedAt": null,
+      "actions": [
+        "OPEN_COORDINATOR"
+      ]
+    },
+    {
+      "assignee": "OWNER",
+      "assigneeReason": "ESCALATED",
+      "waitingSince": "2026-10-04T00:15:00.000Z",
+      "escalateAt": null,
+      "escalatedAt": "2026-10-04T00:20:00.000Z"
+    }
+  ],
+  "reviewQuestions": [
+    {
+      "key": "n1",
+      "text": "Accept the device gap?",
+      "options": [
+        {
+          "label": "Keep open",
+          "description": "Wait for device evidence"
+        },
+        {
+          "label": "Accept gap",
+          "description": "Record a deliberate gap"
+        }
+      ],
+      "recommendedOption": 0,
+      "evidenceRefs": [
+        "exec-device-review",
+        "artifact-device-capture"
+      ]
+    },
+    {
+      "key": "n2",
+      "text": "Accept the rollout plan?",
+      "options": [
+        {
+          "label": "Keep the plan",
+          "description": "Use the reviewed rollout"
+        },
+        {
+          "label": "Change the plan",
+          "description": "Ask for a revision"
+        }
+      ],
+      "recommendedOption": 0,
+      "evidenceRefs": [
+        "commit-rollout-review",
+        "artifact-rollout-plan"
+      ]
+    }
+  ],
+  "taskCreatePreview": {
+    "taskCount": 1,
+    "startingNow": 1,
+    "lists": [
+      {
+        "id": "l1",
+        "title": "Backlog"
+      }
+    ]
+  }
+}

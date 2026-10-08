@@ -1,0 +1,171 @@
+#!/usr/bin/python3 -I
+"""Fake `claude` CLI for the isolated A11 stack runner (NOT Claude Code; no model, account or network).
+
+It speaks just enough of Claude Code's stream-json protocol (as the runner's own fake_claude_test.go
+does) for the d621e29aa runner to run real sessions against the stack:
+  * `--version` / `auth status` answer like a signed-in CLI, so the runner reports the engine usable;
+  * a stream-json session answers every control_request with success and, per user message:
+    replay the user frame, system/init, one assistant text, one result.
+Turn outcome is chosen by the prompt text:
+  * contains A11-FAIL (task runs only, i.e. ORBIT_TASK_ID set) -> marks the current task IN_PROGRESS via `orbit task update` (as an agent starting
+                         work does), then the turn FAILS (result is_error=true): the server fails the
+                         task and, for a project task, opens a real TASK_FAILED exception;
+  * otherwise         -> succeeds; inside a task worktree (cwd under …/worktrees/) it first appends one line
+                         to A11_STACK_NOTES.md there (so `test -f A11_STACK_NOTES.md` acceptance passes).
+Every invocation is logged to $A11_FAKE_CLAUDE_LOG (if set).
+"""
+import datetime
+import json
+import os
+import subprocess
+import sys
+import uuid
+
+VERSION = '2.1.292'
+ARGS = sys.argv[1:]
+
+
+def arg(flag):
+    for i, a in enumerate(ARGS):
+        if a == flag and i + 1 < len(ARGS):
+            return ARGS[i + 1]
+        if a.startswith(flag + '='):
+            return a.split('=', 1)[1]
+    return ''
+
+
+def log(kind, **extra):
+    path = os.environ.get('A11_FAKE_CLAUDE_LOG')
+    if not path:
+        return
+    rec = {'at': datetime.datetime.now().isoformat(timespec='seconds'), 'pid': os.getpid(), 'kind': kind,
+           'cwd': os.getcwd(), 'argv': ARGS[:12], **extra}
+    with open(path, 'a') as f:
+        f.write(json.dumps(rec) + '\n')
+
+
+def out(obj):
+    sys.stdout.write(json.dumps(obj) + '\n')
+    sys.stdout.flush()
+
+
+def text_of(message):
+    content = (message or {}).get('content')
+    if isinstance(content, str):
+        return content
+    parts = []
+    for block in content or []:
+        if isinstance(block, dict) and block.get('type') == 'text':
+            parts.append(block.get('text') or '')
+    return '\n'.join(parts)
+
+
+def result(sid, text, is_error):
+    return {'type': 'result', 'subtype': 'success', 'is_error': is_error, 'num_turns': 1, 'result': text,
+            'session_id': sid, 'duration_ms': 50, 'duration_api_ms': 0, 'total_cost_usd': 0,
+            'usage': {'input_tokens': 0, 'output_tokens': 0, 'cache_creation_input_tokens': 0,
+                      'cache_read_input_tokens': 0}}
+
+
+def assistant(sid, text):
+    return {'type': 'assistant', 'session_id': sid, 'parent_tool_use_id': None,
+            'message': {'role': 'assistant', 'model': arg('--model') or 'a11-fake', 'content': [{'type': 'text', 'text': text}]}}
+
+
+def mark_in_progress():
+    task = os.environ.get('ORBIT_TASK_ID', '')
+    if not task:
+        return 'no current task'
+    try:
+        r = subprocess.run(['orbit', 'task', 'update', task, '--status', 'IN_PROGRESS'],
+                           capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
+        log('mark_in_progress', task=task, exit=r.returncode, out=(r.stdout + r.stderr)[-300:])
+        return f'task marked IN_PROGRESS first (orbit task update exit {r.returncode})'
+    except Exception as e:  # noqa: BLE001 - report, never crash the turn
+        log('mark_in_progress', task=task, error=str(e))
+        return f'could not mark the task IN_PROGRESS ({e})'
+
+
+def turn(sid, prompt):
+    """Returns (assistant text, is_error)."""
+    first = (prompt.strip().splitlines() or [''])[0][:160]
+    if 'A11-FAIL' in prompt and os.environ.get('ORBIT_TASK_ID'):
+        # Only a task's own run fails (a coordinator reading about the task must not). Like an agent starting work: mark the current task IN_PROGRESS through the runner's own CLI
+        # (the server fails a task, and opens its project's TASK_FAILED item, only from IN_PROGRESS).
+        marked = mark_in_progress()
+        return ('a11-stack fake engine: this run fails on purpose (the prompt carries A11-FAIL; '
+                f'{marked}). No model was called.', True)
+    if '/worktrees/' not in os.getcwd():
+        # not a task worktree (e.g. a coordinator in the workspace root): touch nothing on disk
+        return ('a11-stack fake engine: acknowledged. No model was called.', False)
+    try:
+        with open('A11_STACK_NOTES.md', 'a') as f:
+            f.write(f'- {datetime.datetime.now().isoformat(timespec="seconds")} fake run: {first}\n')
+        did = 'appended a line to A11_STACK_NOTES.md'
+    except OSError as e:
+        did = f'could not write A11_STACK_NOTES.md ({e})'
+    return (f'a11-stack fake engine: {did}. No model was called.', False)
+
+
+def main():
+    if '--version' in ARGS or '-v' in ARGS[:1]:
+        print(f'{VERSION} (Claude Code)')
+        return 0
+    if ARGS[:1] == ['auth']:
+        log('auth', sub=ARGS[1:2])
+        if ARGS[1:2] == ['status']:
+            print(json.dumps({'loggedIn': True, 'authMethod': 'a11-stack-fake', 'apiProvider': 'firstParty'}))
+        else:
+            print('[]' if ARGS[1:2] == ['list'] else '{}')
+        return 0
+    sid = arg('--session-id') or arg('--resume') or str(uuid.uuid4())
+    if arg('--input-format') != 'stream-json':
+        # one-shot `claude -p …` (commit messages, reviews, naming): a short canned answer
+        prompt = ARGS[-1] if ARGS and not ARGS[-1].startswith('-') else ''
+        if prompt.startswith('/model '):
+            alias = prompt.split(None, 1)[1].strip()
+            print(f'Set model to {alias.capitalize()} (a11 fake) for this session only')
+            return 0
+        text, is_error = turn(sid, prompt) if 'A11-FAIL' in prompt else ('a11-stack fake engine reply.', False)
+        log('oneshot', isError=is_error)
+        fmt = arg('--output-format')
+        if fmt == 'json':
+            print(json.dumps(result(sid, text, is_error)))
+        elif fmt == 'stream-json':
+            out({'type': 'system', 'subtype': 'init', 'session_id': sid, 'model': arg('--model') or 'a11-fake',
+                 'claude_code_version': VERSION, 'slash_commands': [], 'skills': [], 'tools': [], 'mcp_servers': []})
+            out(assistant(sid, text))
+            out(result(sid, text, is_error))
+        else:
+            print(text)
+        return 1 if is_error else 0
+    log('session', sessionId=sid)
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            continue
+        kind = msg.get('type')
+        if kind == 'control_request':
+            req = msg.get('request') or {}
+            log('control_request', subtype=req.get('subtype'))
+            out({'type': 'control_response',
+                 'response': {'subtype': 'success', 'request_id': msg.get('request_id'), 'response': {}}})
+        elif kind == 'user':
+            out(msg)  # --replay-user-messages: the echo is the delivery acknowledgement
+            prompt = text_of(msg.get('message'))
+            text, is_error = turn(sid, prompt)
+            log('turn', isError=is_error, prompt=prompt[:200])
+            out({'type': 'system', 'subtype': 'init', 'session_id': sid, 'model': arg('--model') or 'a11-fake',
+                 'claude_code_version': VERSION, 'slash_commands': [], 'skills': [], 'tools': [], 'mcp_servers': []})
+            out(assistant(sid, text))
+            out(result(sid, text, is_error))
+    log('stdin-closed')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

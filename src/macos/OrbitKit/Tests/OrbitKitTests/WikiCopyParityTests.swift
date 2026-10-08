@@ -136,6 +136,9 @@ final class WikiCopyParityTests: XCTestCase {
             ("WIKI_DECIDED_RECONFIRMED", WikiCopy.decidedReconfirmed),
             ("WIKI_DECIDED_AMENDED", WikiCopy.decidedAmended),
             ("WIKI_DECIDE_FAILED", WikiCopy.decideFailed),
+            ("WIKI_DECIDE_CONFLICT", WikiCopy.conflictRefused),
+            ("WIKI_DECIDE_INACTIVE", WikiCopy.inactiveRefused),
+            ("WIKI_DECIDE_WITHDRAWN", WikiCopy.withdrawnRefused),
             ("WIKI_SETTINGS_SAVED", WikiCopy.settingsSaved),
             ("WIKI_ACCEPT_NOTE", WikiCopy.acceptNote),
             ("WIKI_WEB_DERIVED_NOTE", WikiCopy.webDerivedNote),
@@ -190,6 +193,26 @@ final class WikiCopyParityTests: XCTestCase {
         XCTAssertEqual(WikiLogic.decidedToast(op: .challenge, action: .reconfirm), "Re-confirmed")
         XCTAssertEqual(WikiLogic.decidedToast(op: .challenge, action: .amend), "Amended")
         XCTAssertEqual(WikiLogic.decidedToast(op: .challenge, action: .retire), "Retired")
+    }
+
+    /// An answer the server recorded without applying it is a refusal, by the same rule at both ends —
+    /// the web's `wikiDecisionRefusal` case by case — and Review says it where it says a refusal.
+    func testARefusedAnswerIsTheWebsRefusal() throws {
+        let web = try source(Self.lib)
+        for line in ["return answer?.ops?.find((one) => one.id === opId)?.decision ?? null;",
+                     "case 'conflict': return op === 'challenge' ? WIKI_DECIDE_INACTIVE : WIKI_DECIDE_CONFLICT;",
+                     "case 'withdrawn': return op === 'challenge' && action === 'retire' ? null : WIKI_DECIDE_WITHDRAWN;"] {
+            assertSays(web, line, in: Self.lib)
+        }
+        XCTAssertEqual(WikiLogic.decisionRefusal(.conflict, op: .amend, action: .accept), WikiCopy.conflictRefused)
+        XCTAssertEqual(WikiLogic.decisionRefusal(.conflict, op: .challenge, action: .reconfirm), WikiCopy.inactiveRefused)
+        XCTAssertEqual(WikiLogic.decisionRefusal(.withdrawn, op: .add, action: .accept), WikiCopy.withdrawnRefused)
+        XCTAssertNil(WikiLogic.decisionRefusal(.withdrawn, op: .challenge, action: .retire))
+        XCTAssertNil(WikiLogic.decisionRefusal(.accepted, op: .amend, action: .accept))
+        let review = try source(Self.review)
+        assertSays(review, "const refusal = wikiDecisionRefusal(wikiRecordedDecision(answer, op.id), op.op, action);",
+                   in: Self.review)
+        assertSays(review, "if (refusal) toast.error(WIKI_DECIDE_FAILED, refusal);", in: Self.review)
     }
 
     /// The sentences built around a value, each the same expression at both ends.
@@ -734,8 +757,8 @@ final class WikiCopyParityTests: XCTestCase {
         assertSays(review, "op === 'supersede' ? 'AMEND' : op.toUpperCase()", in: Self.review)
         // The toast a landed answer floats: its outcome in the answer's words, the entry under it.
         assertSays(review, "toast.success(wikiDecidedToast(op.op, action), about ?? undefined);", in: Self.review)
-        assertSays(review, "decided(decision.action);", in: Self.review)
-        assertSays(review, "decided('edit', edited.title ?? title);", in: Self.review)
+        assertSays(review, "decided(decision.action, answer);", in: Self.review)
+        assertSays(review, "decided('edit', answer, edited.title ?? title);", in: Self.review)
         assertSays(review, "toast.error(WIKI_DECIDE_FAILED, error instanceof Error ? error.message : undefined);",
                    in: Self.review)
         // What a card is about, and the anchors it lists: the draft's, else the named entry's.

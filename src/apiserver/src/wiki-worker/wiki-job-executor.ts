@@ -15,12 +15,14 @@ import {
 } from './wiki-jobs';
 import {
   enqueueWikiModelRequest,
+  wikiModelRequestAttempt,
   wikiModelRequestFailedOnWaitLimit,
   wikiModelRequestSha256,
   type WikiModelRequestCall,
   type WikiModelRequestRead,
 } from './wiki-model-queue';
 import { WIKI_MODEL_QUEUE_OPTIONS, WikiModelRequestQueue, WikiModelWaitCancelled, type WikiModelQueueOptions } from './wiki-model-queue.service';
+import { WikiRepoOpWaitCancelled } from './wiki-repo-ops';
 import { runWikiSmokeJob } from './wiki-smoke-job';
 
 /**
@@ -241,7 +243,7 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
       this.log.log(`job ${job.id} (${job.kind}): ${error.message}`);
       return;
     }
-    if (error instanceof WikiModelWaitCancelled) {
+    if (error instanceof WikiModelWaitCancelled || error instanceof WikiRepoOpWaitCancelled) {
       // SIGTERM: the job was cancelled with us. Let its lease out to now so the next process takes it over
       // at once (design §5.4); its requests were let go the same way by the queue's own shutdown.
       await releaseWikiJobLease(this.prisma, { id: job.id, generation: job.leaseGeneration });
@@ -288,6 +290,7 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
       spaceId: job.spaceId,
       step,
       unit,
+      attempt: await wikiModelRequestAttempt(this.prisma, { jobId: job.id, step, unit }),
       priority: job.priority,
       request: call,
     });

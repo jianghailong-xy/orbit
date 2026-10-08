@@ -146,6 +146,21 @@ export async function reclaimExpiredWikiJobs(prisma: PrismaService, limit: numbe
   return reclaimed.map((row) => row.id);
 }
 
+/**
+ * Where a running job's pipeline is (contract `jobs.progress`): its own step and counts, written under the
+ * claim's generation so a holder whose lease was taken over writes nothing. False means a takeover holds it.
+ */
+export async function writeWikiJobProgress(
+  prisma: PrismaService,
+  input: { id: string; generation: string; progress: Record<string, unknown> },
+): Promise<boolean> {
+  const updated = await prisma.$executeRaw`
+    UPDATE "wiki_job"
+    SET "progress" = ${JSON.stringify(input.progress)}::jsonb, "updated_at" = now()
+    WHERE "id" = ${input.id}::uuid AND "state" = 'running' AND "lease_generation" = ${input.generation}::uuid`;
+  return updated > 0;
+}
+
 /** What a job that ran to its end reported. */
 export interface WikiJobOutcomeReport {
   report?: Record<string, unknown> | null;
