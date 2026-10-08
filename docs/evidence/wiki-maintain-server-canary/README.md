@@ -143,11 +143,13 @@ orbit wiki maintain: GET /runner/wiki/spaces/…/maintenance/run -> 409
 
 ## 四、合并
 
-- 项目线已 **merge**（不是 rebase）进本分支：`git merge origin/project/34bmzOkov3xN2yLPrnsCk` → 合并提交
-  （见提交历史里的 `Merge the project line …`），无冲突。
-- merge-tree（`git merge-tree --write-tree <HEAD> <ref>`，exit 0 = 干净）：
-  - `HEAD` + `origin/project/34bmzOkov3xN2yLPrnsCk`（`d09019e2b`）→ 写入树 `dff066c17d06c81f0d5d205b2c3fe11e9bd918fb`，exit 0；
-  - `HEAD` + `origin/main`（`6a58a9515`）→ 写入树 `76826467df00763ff08eef78b41362aad949ddc3`，exit 0。
+- 项目线已两次 **merge**（不是 rebase）进本分支：`d09019e2b`，随后 `1cf7949fe`（提交历史里两个
+  `Merge the project line …` 提交），都无冲突。合并后重跑：`npm test` 4970 全过、四个 pg spec
+  6/6、5/5、38/38、5/5，`src/shared` 408 全过。
+- 在本分支 HEAD 上的 merge-tree（`git merge-tree --write-tree <HEAD> <ref>`，exit 0 = 干净、无冲突）：
+  - `HEAD` + `origin/project/34bmzOkov3xN2yLPrnsCk`（`1cf7949fe`）→ exit 0；
+  - `HEAD` + `origin/main`（`6a58a9515`）→ exit 0；
+  两次运行的写入树哈希记在本次证据提交（`task_evidence_submit` 的 checks/说明）里——本文件在那之后只改了这一段文字。
 - 整文件读取任务（`34cIIF63cjJB1zDdbsbC4`）当时还没落到项目线上（项目线上没有 `0406_*` 迁移目录）。
   它的迁移号是 `0406_wiki_repo_file`、本任务是 `0407_wiki_maintain_job`，**两个号不同、目录不同**，两边落地后可以并存，
   不需要再让号；它落地后若与 `contracts/wiki.contract.json`、`docs/wiki-contract.md` 或迁移账本
