@@ -126,6 +126,21 @@ import {
   type WikiSystemModelStatus,
 } from './wikiSystemModel';
 import {
+  WIKI_EXECUTOR_ENV,
+  WIKI_EXECUTOR_MODES,
+  WIKI_JOB,
+  WIKI_JOB_FAILURE_KINDS,
+  WIKI_JOB_KINDS,
+  WIKI_JOB_STATES,
+  WIKI_JOB_WAITING_FOR,
+  WIKI_MODEL_QUEUE,
+  WIKI_MODEL_REQUEST_STATES,
+  wikiJobRetryDelaySeconds,
+  wikiModelCallBudgetSeconds,
+  wikiModelRetryDelaySeconds,
+  wikiModelWaitLimitSeconds,
+} from './wikiJobs';
+import {
   WIKI_PLAN_FACT_KINDS,
   WIKI_PLAN_GATE_CHECKS,
   WIKI_PLAN_JOB_HELD_REASONS,
@@ -1557,6 +1572,91 @@ describe('wiki contract', () => {
       'orbit_wiki_worker_heartbeat_age_seconds',
       'orbit_wiki_model_calls_total',
       'orbit_wiki_model_call_duration_seconds',
+    ]);
+  });
+
+  it('runs wiki jobs on the server: the table, the kinds, the lease, the retry and the switch (server execution P1b)', () => {
+    const jobs = CONTRACT.jobs;
+    expect(existsSync(path.join(ROOT, jobs.migration)), `${jobs.migration} does not exist`).toBe(true);
+    const sql = readFileSync(path.join(ROOT, jobs.migration), 'utf8').replace(/\s+/gu, ' ');
+    expect(sql).toContain(`CREATE TABLE IF NOT EXISTS "${jobs.table}"`);
+    for (const column of jobs.columns) expect(sql).toContain(`"${column}"`);
+    expect(jobs.kinds).toEqual([...WIKI_JOB_KINDS]);
+    expect(jobs.states).toEqual([...WIKI_JOB_STATES]);
+    expect(jobs.waitingFor).toEqual([...WIKI_JOB_WAITING_FOR]);
+    expect(jobs.failureKinds).toEqual([...WIKI_JOB_FAILURE_KINDS]);
+    for (const kind of Object.keys(jobs.kindRuns)) expect(jobs.kinds).toContain(kind);
+    expect(jobs.lease.seconds).toBe(WIKI_JOB.leaseSeconds);
+    expect(jobs.lease.renewSeconds).toBe(WIKI_JOB.renewSeconds);
+    expect(jobs.retry.backoffSeconds).toEqual([...WIKI_JOB.retryBackoffSeconds]);
+    expect(jobs.concurrencyPerWorker).toBe(WIKI_JOB.maxConcurrentPerWorker);
+    expect(jobs.pollSeconds).toBe(WIKI_JOB.pollSeconds);
+    // The one-job-per-space rule is the claim's and the database's: a partial unique index over space_id.
+    expect(sql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS "wiki_job_space_running_key" ON "wiki_job" ("space_id") WHERE "state" = \'running\'');
+    // The maker columns and the CHECKs that require exactly one of the two, per started row.
+    expect(sql).toContain('ALTER TABLE "wiki_maintenance_run" ALTER COLUMN "task_id" DROP NOT NULL');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS "job_id" UUID');
+    expect(sql).toContain('("task_id" IS NOT NULL) <> ("job_id" IS NOT NULL)');
+    expect(jobs.runRows.count).toMatch(/count the maintenance list's tasks made since midnight/u);
+    // The executor switch: the two variables, the three modes, and the default that changes nothing.
+    expect(jobs.executor.env).toEqual({ ...WIKI_EXECUTOR_ENV });
+    for (const name of Object.values(WIKI_EXECUTOR_ENV)) expect(name).toMatch(/^ORBIT_WIKI_EXECUTOR(_[A-Z]+)*$/u);
+    expect(jobs.executor.modes).toEqual([...WIKI_EXECUTOR_MODES]);
+    expect(jobs.executor.default).toBe('runner');
+    expect(keysOf(jobs.executor.rules)).toEqual([...WIKI_EXECUTOR_MODES]);
+    expect(jobs.executor.mistyped).toMatch(/read as runner/u);
+  });
+
+  it('queues every model call: the identity, the claim, the lease, the retry and the limits (server execution P1b)', () => {
+    const queue = CONTRACT.modelQueue;
+    expect(existsSync(path.join(ROOT, queue.migration)), `${queue.migration} does not exist`).toBe(true);
+    const sql = readFileSync(path.join(ROOT, queue.migration), 'utf8').replace(/\s+/gu, ' ');
+    expect(sql).toContain(`CREATE TABLE IF NOT EXISTS "${queue.table}"`);
+    for (const column of queue.columns) expect(sql).toContain(`"${column}"`);
+    expect(queue.identity).toMatch(/\(job_id, step, unit, attempt\) is unique/u);
+    expect(sql).toContain('CONSTRAINT "wiki_model_request_unit_key" UNIQUE ("job_id", "step", "unit", "attempt")');
+    // The claim's order and its lock are the statement's, in the worker; the queue's sets and numbers are here.
+    expect(queue.states).toEqual([...WIKI_MODEL_REQUEST_STATES]);
+    expect(queue.concurrency.env).toBe(WIKI_SYSTEM_MODEL_ENV.concurrency);
+    expect(queue.concurrency.default).toBe(WIKI_SYSTEM_MODEL.defaultConcurrency);
+    expect(queue.concurrency.claim).toMatch(/pg_advisory_xact_lock/u);
+    expect(queue.concurrency.claim).toMatch(/FOR UPDATE SKIP LOCKED/u);
+    expect(queue.concurrency.perJob).toBe(WIKI_MODEL_QUEUE.maxInFlightPerJob);
+    expect(queue.lease.seconds).toBe(WIKI_MODEL_QUEUE.leaseSeconds);
+    expect(queue.lease.renewSeconds).toBe(WIKI_MODEL_QUEUE.renewSeconds);
+    expect(queue.lease.partialSeconds).toBe(WIKI_MODEL_QUEUE.partialSeconds);
+    expect(queue.retry.backoffSeconds).toEqual([...WIKI_MODEL_QUEUE.retryBackoffSeconds]);
+    expect(queue.waitLimit.defaultSeconds).toBe(WIKI_MODEL_QUEUE.defaultWaitLimitSeconds);
+    expect(queue.waitLimit.byStep).toEqual({ ...WIKI_MODEL_QUEUE.waitLimitSeconds });
+    expect(queue.callBudget.defaultSeconds).toBe(WIKI_MODEL_QUEUE.defaultCallBudgetSeconds);
+    expect(queue.callBudget.byStep).toEqual({ ...WIKI_MODEL_QUEUE.callBudgetSeconds });
+    // The limits a step is looked up by, as the worker's own helpers read them.
+    for (const [key, seconds] of Object.entries(WIKI_MODEL_QUEUE.waitLimitSeconds)) {
+      expect(wikiModelWaitLimitSeconds(key)).toBe(seconds);
+      expect(wikiModelWaitLimitSeconds(`${key}_draft`)).toBe(seconds);
+    }
+    expect(wikiModelWaitLimitSeconds('verify')).toBe(WIKI_MODEL_QUEUE.defaultWaitLimitSeconds);
+    for (const [key, seconds] of Object.entries(WIKI_MODEL_QUEUE.callBudgetSeconds)) {
+      expect(wikiModelCallBudgetSeconds(key)).toBe(seconds);
+      expect(wikiModelCallBudgetSeconds(`${key}_draft`)).toBe(seconds);
+    }
+    expect(wikiModelCallBudgetSeconds('verify')).toBe(WIKI_MODEL_QUEUE.defaultCallBudgetSeconds);
+    // The retry schedule, as both the queue and the job read it.
+    expect([0, 1, 2, 9].map((attempts) => wikiModelRetryDelaySeconds(attempts))).toEqual([0, 10, 30, 30]);
+    expect([0, 1, 2, 9].map((attempts) => wikiJobRetryDelaySeconds(attempts))).toEqual([0, 10, 30, 30]);
+    // The pause, the shutdown and the wake-up are stated, and the metrics name the queue's series.
+    expect(queue.pause.when).toMatch(/not up/u);
+    expect(queue.shutdown.plan).toMatch(/^A, the owner's decision of 2026-10-07/u);
+    expect(queue.notify.channel).toBe('wiki_model_request');
+    expect(keysOf(queue.metrics.series)).toEqual([
+      'orbit_wiki_model_calls_total',
+      'orbit_wiki_model_call_duration_seconds',
+      'orbit_wiki_model_queue_depth',
+      'orbit_wiki_model_requests_in_flight',
+      'orbit_wiki_model_request_wait_seconds',
+      'orbit_wiki_model_request_run_seconds',
+      'orbit_wiki_model_request_tokens_total',
+      'orbit_wiki_model_request_errors_total',
     ]);
   });
 });

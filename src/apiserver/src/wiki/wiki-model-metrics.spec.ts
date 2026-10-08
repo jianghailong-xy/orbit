@@ -12,6 +12,7 @@ import { NO_WIKI_MODEL_CALLS, renderWikiModelMetrics, WIKI_MODEL_CALL_OUTCOMES }
  */
 
 const NOW = new Date('2026-10-07T12:00:00.000Z');
+const MODEL = 'qwen3-coder-spec';
 const ago = (seconds: number) => new Date(NOW.getTime() - seconds * 1000);
 
 /** A database holding `row` as wiki_model_status's one row (or none). */
@@ -74,6 +75,41 @@ test('what the request queue will count is rendered as given', async () => {
   assert.equal(found.get('orbit_wiki_model_call_duration_seconds{quantile="0.95"}'), '610');
   assert.equal(found.get('orbit_wiki_model_call_duration_seconds_sum'), '1234.5');
   assert.equal(found.get('orbit_wiki_model_call_duration_seconds_count'), '18');
+});
+
+test('the queue\'s own rows answer for the calls and the queue series', async () => {
+  // A stand-in for wiki_model_request: the first $queryRaw is the aggregate, the second the status breakdown.
+  const aggregate = {
+    depth: 3, inFlight: 2, succeeded: 12, retryable: 2, unauthorized: 1, other: 1,
+    waitP50: 0.5, waitP95: 4, waitSum: 9, waitCount: 16,
+    runP50: 41.5, runP95: 610, runSum: 1234.5, runCount: 16,
+    inputTokens: 400, outputTokens: 900,
+  };
+  let call = 0;
+  const queue = {
+    wikiModelStatus: { findUnique: async () => ({ state: 'up', model: MODEL, since: NOW, lastError: null, checkedAt: NOW, workerSeenAt: NOW }) },
+    $queryRaw: async () => {
+      call += 1;
+      return call === 1 ? [aggregate] : [{ status: '500', count: 2 }, { status: 'none', count: 1 }];
+    },
+  } as unknown as PrismaService;
+  const found = samples(await renderWikiModelMetrics(queue, NO_WIKI_MODEL_CALLS, NOW));
+  // The calls and their duration come from the rows, not from the caller's tally.
+  assert.equal(found.get('orbit_wiki_model_calls_total{outcome="succeeded"}'), '12');
+  assert.equal(found.get('orbit_wiki_model_calls_total{outcome="retryable"}'), '2');
+  assert.equal(found.get('orbit_wiki_model_calls_total{outcome="unauthorized"}'), '1');
+  assert.equal(found.get('orbit_wiki_model_call_duration_seconds{quantile="0.95"}'), '610');
+  assert.equal(found.get('orbit_wiki_model_call_duration_seconds_count'), '16');
+  // The queue's own series.
+  assert.equal(found.get('orbit_wiki_model_queue_depth'), '3');
+  assert.equal(found.get('orbit_wiki_model_requests_in_flight'), '2');
+  assert.equal(found.get('orbit_wiki_model_request_wait_seconds{quantile="0.5"}'), '0.5');
+  assert.equal(found.get('orbit_wiki_model_request_wait_seconds_sum'), '9');
+  assert.equal(found.get('orbit_wiki_model_request_run_seconds_sum'), '1234.5');
+  assert.equal(found.get('orbit_wiki_model_request_tokens_total{direction="input"}'), '400');
+  assert.equal(found.get('orbit_wiki_model_request_tokens_total{direction="output"}'), '900');
+  assert.equal(found.get('orbit_wiki_model_request_errors_total{status="500"}'), '2');
+  assert.equal(found.get('orbit_wiki_model_request_errors_total{status="none"}'), '1');
 });
 
 test('a database that cannot be read leaves the state out, and the rest is still served', async () => {

@@ -44,6 +44,12 @@ JSON 里是 `plan` 一节。
 `worker_not_running`。流式客户端（`/v1/messages`、SSE、单次超时、空闲断开、取消、错误分三类）也在这一期；作业表、请求队列和执行器开关在
 P1b。见新增的 §23，迁移 `0400_wiki_model_status`，JSON 里是 `systemModel` 一节。
 
+**服务端执行 P1b（2026-10-08）：作业与模型请求队列**：新增 `wiki_job`（服务端作业的领取、租约、代数、重试，同一空间同时只跑一个）
+与 `wiki_model_request`（所有模型调用的持久化队列：`(job_id, step, unit, attempt)` 唯一即断点，advisory 锁里数在途数再按并发上限
+领取，中断的请求带着 partial 重排队）；`wiki_maintenance_run` 与 `wiki_plan_job` 增加 `job_id`、`task_id` 改为可空；执行器开关
+`ORBIT_WIKI_EXECUTOR`（默认 `runner`，行为不变）在这一期只由 worker 读；作业种类先只有端到端验证队列用的 `smoke`。见新增的 §24、§25，
+迁移 `0401_wiki_job`，JSON 里是 `jobs` 与 `modelQueue` 两节。
+
 **权威来源**
 
 | 来源 | 位置 |
@@ -1780,7 +1786,7 @@ worker 在 `src/apiserver/src/wiki-worker/`（入口 `main.ts`、配置 `wiki-sy
 - 用量取流里最后报出的值：有 `message_delta` 的就用它的，否则用 `message_start` 的。
 - 中断：一个 `AbortController` 管三件事——单次调用的预算（各步骤的上限）、空闲断开（`idleTimeoutSeconds` = 300 秒没收到任何字节，
   从发出请求起就开始计）、调用方的取消。
-- 部分文本：每个 delta 之后，把目前收到的全文交给 `onPartial`；失败时，错误也带着 `partial`。P1b 用它写请求的 partial。
+- 部分文本：每个 delta 之后，把目前收到的全文交给 `onPartial`；失败时，错误也带着 `partial`。§25 的队列用它写请求的 partial。
 - 错误分三类（`WikiModelError.kind`）：
 
 | 类 | 包括 |
@@ -1810,7 +1816,7 @@ worker 在 `src/apiserver/src/wiki-worker/`（入口 `main.ts`、配置 `wiki-sy
 
 - `auth_failed` 一直保持到 worker 重启：`/health` 通常不校验 key，它恢复 200 并不说明 key 已经改好；重启时才会读到改好的 key。调用遇到 401
   时，由请求队列（P1b）调 `WikiModelStatusProbe.keyRefused` 报告。
-- down 时请求留在队列里（P1b），探测继续，下一次 up 就恢复。
+- down 时请求留在队列里不动（§25.6），探测继续，下一次 up 就恢复。
 - 只有 worker 写这一行（db-write inventory 里是一条 `ONE_ROW_BY_KEY` 语句），apiserver 只读。
 
 ### 23.5 读：`GET /api/wiki/system-model`（`systemModel.read`）
@@ -1826,7 +1832,156 @@ worker 在 `src/apiserver/src/wiki-worker/`（入口 `main.ts`、配置 `wiki-sy
 |---|---|---|
 | `orbit_wiki_model_state{state}` | gauge | 读接口给出的那个状态为 1，其余为 0 |
 | `orbit_wiki_worker_heartbeat_age_seconds` | gauge | 距最后一次心跳的秒数；还没有心跳时不输出 |
-| `orbit_wiki_model_calls_total{outcome}` | counter | `succeeded` / `retryable` / `unauthorized` / `other`；由 P1b 的请求队列填，在那之前都是 0 |
-| `orbit_wiki_model_call_duration_seconds` | summary | 0.5 与 0.95 分位、sum、count；由 P1b 填，在那之前没有观测 |
+| `orbit_wiki_model_calls_total{outcome}` | counter | `succeeded` / `retryable` / `unauthorized` / `other`；读请求队列的行（§25.8）|
+| `orbit_wiki_model_call_duration_seconds` | summary | 0.5 与 0.95 分位、sum、count，取自结束的行（§25.8）|
 
 - 调用都发生在不监听端口的 worker 里，所以这些数都在读 metrics 时从库里取，每个副本给出的都一样；标签值只来自闭集。
+
+## 24. 服务端作业 `wiki_job`（服务端执行 P1b）
+
+JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5.1、§5.4、§10。迁移 `0401_wiki_job`；实现在
+`src/apiserver/src/wiki-worker/`（表访问与领取 `wiki-jobs.ts`、执行循环与种类注册 `wiki-job-executor.ts`、冒烟作业 `wiki-smoke-job.ts`、
+执行器开关 `../wiki/wiki-executor-switch.ts`）；共享常量在 `src/shared/src/wikiJobs.ts`。
+
+### 24.1 表与状态
+
+- `wiki_job`：`id`、`owner_id`、`space_id`（复合外键到 `wiki_space`，随空间删除而删）、`kind`、`input`（JSONB，作业自己的材料，
+  从不含地址和 key）、`priority`（默认 0，owner 主动发起的高于后台维护）、`state`、`waiting_for`、`attempts`、`next_attempt_at`、
+  租约三列（`lease_owner` / `lease_generation` / `lease_deadline_at`）、`progress`、`report`、`error`、`failure_kind`、
+  `created_at` / `updated_at` / `started_at` / `ended_at`。
+- `state`：`queued` / `running` / `waiting` / `succeeded` / `failed` / `cancelled`；`waiting_for`：`repo` / `model`（只在 waiting 时非空，
+  且此时不占租约）；`failure_kind`：`infra` / `content`。本期还没有代码把作业置为 `waiting`：作业在等模型请求时保持 `running` 并续租，
+  由请求的等待上限收尾；把作业停在仓库操作上（P2）或停在模型不在时的那套转换，随需要它的阶段到来。
+- CHECK：租约三列与 `running` 互为条件；只有结束态有 `ended_at`；`succeeded` 没有 `error`；`report` / `progress` 是对象。
+- `kind` 闭集：`verify` / `articles` / `import` / `plan_draft` / `plan_revise` / `docs_build` / `maintain`，加上本期的 `smoke`——
+  只调一次模型、把答案和用量写进 `report`，是队列最短的一条端到端路径（`wiki-jobs.pg.spec.ts` 对 fake 端点跑通它）。还没落地的种类
+  留在队列里：领取只取本 build 认识的种类，不会被交给一个只能失败的 worker。
+
+### 24.2 领取、租约、回收
+
+- 领取照 `watch_delivery`：一条 `UPDATE "wiki_job" … FROM (SELECT … FOR UPDATE SKIP LOCKED)`，候选是
+  `state = 'queued' AND (next_attempt_at IS NULL OR next_attempt_at <= now())`、本 build 认识的种类、本 worker 服务的账号（§24.5）、
+  且**同一空间没有在跑的作业**；顺序是 `priority DESC, created_at, id`；每条给一个新的 `lease_generation`，`started_at` 取第一次领取。
+- 每次领取 `lease_deadline_at = now + 60s`，执行中每 20 秒续租一次；回写（成功、infra 重试、content 失败）都按代数比较并交换，
+  被接管的旧进程写不进任何一行。
+- 过期回收：`running` 且租约过期的行回到 `queued`，`attempts + 1`，`next_attempt_at = now + 退避`（§24.4），`failure_kind = 'infra'`；
+  接管者从头跑这个作业，已经发出过的请求由请求行本身回答重放（§25.3）。
+- 同一空间同时只跑一个作业：领取的谓词跳过一个在跑作业的空间，`wiki_job_space_running_key`（`space_id` 上的部分唯一索引）是数据库里
+  同一条规则；两个调度器同时读表时，输的一方拿到的是空领取，不是错误。
+- 一个 worker 同时执行 `maxConcurrentPerWorker` = 4 个作业。
+
+### 24.3 开机与停机
+
+- 开机先补跑一轮：worker 启动时立刻做一遍「回收 → 领取」，把上次死掉的 worker 留下的作业接起来。
+- SIGTERM（docker 30 秒宽限，设计 §5.4，owner 2026-10-07 定的方案 A：不等在途请求）：停止领取；取消在跑的作业，每个作业把自己的
+  租约截止时间设为现在并退出，让新进程的回收立刻接手；请求那一侧同理（§25.7）。
+
+### 24.4 失败与退避
+
+| 失败 | 处理 |
+| --- | --- |
+| infra（端点不可达、5xx、429、runner 离线、worker 重启、等待超限）| 回到 `queued`，`attempts + 1`，`next_attempt_at = now + backoffSeconds[attempts]`（0 / 10 / 30 秒；`attempts` 是这次失败之前已有的次数），不计入连续失败 |
+| content（模型给不出可解析的结果、服务端拒绝）| 结束：`state = 'failed'`、`failure_kind = 'content'`、`ended_at`，计入连续失败 |
+| 作业的请求等待超过步骤上限 | 请求以 `other` 失败（§25.5），作业读到后按 infra 处理 |
+
+- 本 build 不认识的错误（不是作业自己抛的两类）按 infra 处理：宁可重试，不拿它去计空间的连续失败。
+
+### 24.5 执行器开关 `jobs.executor`
+
+| 变量 | 说明 |
+|---|---|
+| `ORBIT_WIKI_EXECUTOR` | `runner`（默认）/ `canary` / `server` |
+| `ORBIT_WIKI_EXECUTOR_CANARY_OWNERS` | 只在 `canary` 下读：逗号分隔的账号 uuid |
+
+- 纯函数 `readWikiExecutorSwitch(env)`（`src/apiserver/src/wiki/wiki-executor-switch.ts`，照 `wiki-rollout.ts` 的形状）由 apiserver 与
+  worker 共用；`wikiExecutorServes` / `wikiExecutorClaimOwners` 把模式变成领取时的账号过滤：`server` 不过滤，`canary` 只取名单内，
+  `runner` 是空集合——默认值下没有 worker 领取任何作业。
+- 误拼的值读作 `runner` 并记一条 problem：拿不准时落在已经在跑的旧路径上，而不是落在一个没人部署 worker 的新路径上。
+- 开关只管执行，不删历史；改回 `runner` 只是停止新的领取。
+- 两个变量进服务环境的方式和 System model 的一样：由本部署的 compose 从 `.env` 传入（owner 确认的那一类改动），都没设就是 `runner`。
+
+### 24.6 运行行与计数
+
+- `wiki_maintenance_run.job_id` 与 `wiki_plan_job.job_id` 记下跑出这一行的作业；两个表的 `task_id` 自 0401 起可空，CHECK 要求已开始的行
+  恰好有一个来源（plan job 在 `queued` / `held` 时豁免——它两个都还没有）。
+- 健康行与每日计数按运行行统计：`wiki_maintenance_run` 里由作业跑的运行（`job_id` 非空）按自己的行计数，与旧路径一样排除
+  本地端点上的追赶运行和失败的运行；任务那条路径的计数一字未改，所以同一个部署今天算出的数和昨天一样。
+- 服务端运行不建任务、不建会话：不占 `runnerActiveTurns`，runner 在服务端路径里只做 P2 的仓库操作。
+
+## 25. 模型请求队列 `wiki_model_request`（服务端执行 P1b）
+
+JSON 里是 `modelQueue` 一节；设计见 `docs/wiki-server-execution-design.md` §5.2、§5.4、§5.5、§6。迁移 `0401_wiki_job`；实现在
+`src/apiserver/src/wiki-worker/`（表访问与领取 `wiki-model-queue.ts`、调度与执行循环 `wiki-model-queue.service.ts`、`pg_notify` 监听
+`wiki-model-notify.ts`）；共享常量在 `src/shared/src/wikiJobs.ts`。
+
+### 25.1 表与身份
+
+- `wiki_model_request`：`id`、`job_id`（外键到 `wiki_job`，随作业删除而删）、`owner_id`、`space_id`、`step`、`unit`、`attempt`、
+  `attempts`、`priority`、`request`（`{ system, prompt, maxTokens }`）与 `request_sha256`、`state`、租约三列、`enqueued_at`、
+  `not_before`、`started_at`、`ended_at`、`answer`、`partial`、`input_tokens`、`output_tokens`、`http_status`、`error`、`error_kind`。
+- `(job_id, step, unit, attempt)` 唯一，`(step, unit)` 是这次调用在作业里的地址；`attempt` 是这一单元的第几次（真重做才 +1），
+  `attempts` 是这一行被跑过几次（租约过期和可重试失败各记一次，退避读它）。
+- `state`：`queued` / `running` / `succeeded` / `failed` / `cancelled`；`error_kind`：`retryable` / `unauthorized` / `other`。
+- CHECK：租约三列与 `running` 互为条件；`succeeded` 当且仅当有 `answer` 和 `ended_at`；`partial` 只在非 `cancelled` 的行上。
+
+### 25.2 全局并发与公平（`modelQueue.concurrency`）
+
+- `ORBIT_WIKI_MODEL_CONCURRENCY`（默认 4）是整个部署在途请求的上限，与有几个 worker 无关。
+- 调度器在一个事务里领取（`claimWikiModelRequests`）：先 `pg_advisory_xact_lock` 拿全队列一把锁；数出 `state = 'running' AND
+  lease_deadline_at > now()` 的行数 r；只领 `N − r` 条（哪次领取都不会越过上限）；候选按 `priority DESC, enqueued_at, id`，
+  `FOR UPDATE SKIP LOCKED`，每条给一个新的 `lease_generation`。
+- 同一优先级先来先得；每个作业最多 `maxInFlightPerJob` = 4 条在途，避免一个作业占满队列。
+
+### 25.3 请求即断点
+
+- 流水线对 `(step, unit)` 只发一次：重发同一次调用会「撞上」那一行（`enqueueWikiModelRequest` 的 `ON CONFLICT` 返回已有行的 id），
+  再等它（`WikiModelRequestQueue.whenSettled`）——已成功的直接用它的答案，还在排队或执行中的继续等。作业被回收后重跑，已经答过的
+  调用不会再发一次。
+- 同一单元带着不同的调用再次出现（`request_sha256` 不同）是错误：答案不是这次问的问题，作业按 content 失败。
+
+### 25.4 执行与租约（`modelQueue.lease`）
+
+- 领取时 `lease_deadline_at = now + 60s`；执行中每 20 秒续租；每 5 秒把目前收到的文本写回 `partial`（只有变长了才写）。
+- 结束按代数比较并交换：成功写 `answer` 和两组 token（`state = 'succeeded'`）；失败按类处理（§25.5）。被接管后迟到的写不进任何一行，
+  接管者重发这次调用。
+- 租约过期的 `running` 行回到 `queued`，`attempts + 1`，**保留 partial**；下一次领取带着已经收到的部分重发。
+
+### 25.5 失败、退避与等待上限
+
+| 情况 | 处理 |
+| --- | --- |
+| `retryable`（5xx、429、连接失败、空闲断开、流提前结束）| 回到 `queued`，`attempts + 1`，`not_before = now + backoffSeconds[attempts]`（0 / 10 / 30 秒；`attempts` 是这次失败之前已有的次数）|
+| `unauthorized`（401、authentication_error）| 回到 `queued`（等部署方改 key，不是这条请求的错），并把拒绝报给状态探测：状态转 `auth_failed`，队列停领（§25.6）|
+| `other`（预算用完、不是事件流、其它错误）| 结束：`state = 'failed'`、`error_kind = 'other'`；作业读到后按 content 处理 |
+
+- 等待上限（`waitLimit`，从 `enqueued_at` 起算，重试不重新计时）：`extract*` / `docs*` 180 秒、`import*` 600 秒、`plan*` 1200 秒，
+  其余 900 秒。排队超过它的请求以 `other` 失败，错误文案以「the request waited past its step's limit」开头；作业读到这个前缀就按
+  infra 失败处理（稍后重试），所以模型长时间不在时是以一次失败的作业收场，而不是永远挂着。
+- 单次调用的预算（`callBudget`，设计 §6）：`docs*` 20 分钟、`plan*` 60 分钟，其余 15 分钟；另加合同里的空闲断开。
+
+### 25.6 暂停与恢复
+
+- 每一轮领取前读一次 `wiki_model_status`（§23.4）：状态不是 `up` 就不领——`down` 和 `auth_failed` 期间请求留在队列里不动。
+- `down` 会自愈：探测继续，下一次 `up` 之后的领取自动继续；`auth_failed` 保持到 worker 重启（那时才读到改好的 key）。
+
+### 25.7 停机与唤醒
+
+- SIGTERM：停止领取；取消在途的调用，每个把已收到的文本写进 `partial`、把租约截止时间设为现在，让新进程的回收立刻接手并带着 partial
+  重发（方案 A，不等在途请求）。
+- 结束的请求用 `pg_notify` 在 `wiki_model_request` 频道上广播自己的 id；worker 用一条专用的 LISTEN 连接（照
+  `realtime/realtime.service.ts`）唤醒等待的作业，另有 2 秒一次的轮询兜底——通知丢了只丢延迟，不丢答案。
+
+### 25.8 `/api/metrics`（`modelQueue.metrics`）
+
+| 序列 | 类型 | 说明 |
+|---|---|---|
+| `orbit_wiki_model_calls_total{outcome}` | counter | 按行的现状读：成功行是 `succeeded`，失败行是它 `error_kind` 的类，失败后重排队的行在成功或超限之前算在失败的那一类 |
+| `orbit_wiki_model_call_duration_seconds` | summary | 结束的行从 `started_at` 到 `ended_at` 的耗时（0.5 / 0.95 分位、sum、count）|
+| `orbit_wiki_model_queue_depth` | gauge | 排队中的请求数 |
+| `orbit_wiki_model_requests_in_flight` | gauge | 当下在途（租约未过期）的请求数，不会超过并发上限 |
+| `orbit_wiki_model_request_wait_seconds` | summary | 结束的行从 `enqueued_at` 到 `started_at` 的排队时长 |
+| `orbit_wiki_model_request_run_seconds` | summary | 结束的行从 `started_at` 到 `ended_at` 的执行时长 |
+| `orbit_wiki_model_request_tokens_total{direction}` | counter | 成功调用花掉的 token（input / output）|
+| `orbit_wiki_model_request_errors_total{status}` | counter | 失败的调用按 HTTP 状态分；没有回答的失败（连接、超时）是 `none` |
+
+- 与 §23.6 同理：全部在读 metrics 时从库里取，每个副本一致；标签值来自闭集，状态标签是行里的状态码（这条序列本来就是讲状态码的）。

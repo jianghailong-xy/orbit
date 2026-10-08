@@ -2046,7 +2046,22 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // names none of the six preserved objects, neither 0177 relation, no `task`, `session` or
       // `project` object and no `project_acceptance_*` one. No INSERT, UPDATE or DELETE: the
       // wiki-worker writes the row on its first probe.
-      '0400_wiki_model_status'],
+      '0400_wiki_model_status',
+      // The server-executed wiki (0401): two new tables, `wiki_job` (a unit of server work, claimed
+      // like watch_delivery: a lease generation per claim, a compare-and-set per settle, one running
+      // job per space through a partial unique index) and `wiki_model_request` (the persisted model
+      // call queue: the unique `(job_id, step, unit, attempt)` identity, its own lease columns and a
+      // partial claim index), each with its CHECKs, foreign keys and indexes; `wiki_maintenance_run`
+      // loses NOT NULL on `task_id` and gains a nullable `job_id` with a CHECK that exactly one of
+      // the two is set, and `wiki_plan_job` gains the same nullable `job_id` with a CHECK that holds
+      // it to one maker once it is past queued/held. Read against every claim above: no function,
+      // trigger, type or enum is created, replaced or dropped — no CREATE OR REPLACE FUNCTION — so
+      // it is not another writer of the DONE fence and names none of the six preserved objects; no
+      // 0177 relation is altered (the DROP NOT NULL is on `wiki_maintenance_run`, which is not one,
+      // and it rewrites no stored row), and no `task`, `session`, `project` or `project_acceptance_*`
+      // object is named. No INSERT, UPDATE or DELETE: every statement is DDL, and the two CHECKs hold
+      // for every stored row as it stands.
+      '0401_wiki_job'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
