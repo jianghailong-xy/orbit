@@ -97,6 +97,8 @@ struct SettingsHomeView: View {
     @State private var orchestration = true
     /// The account's switch for smart model selection. Absent on the server means off.
     @State private var modelRouting = false
+    /// The account's switch for suggested replies. Absent on the server means on.
+    @State private var promptSuggestions = true
     @State private var seeded = false
     /// This device's own answer to "may Orbit alert you" — nil until asked.
     @State private var alertsAllowed: Bool?
@@ -159,6 +161,10 @@ struct SettingsHomeView: View {
         .onChange(of: modelRouting) { _, value in
             guard (model.user?.preferences?.smartModelSelection ?? false) != value else { return }
             Task { await model.savePreferences(UpdatePreferencesRequest(modelRouting: value)) }
+        }
+        .onChange(of: promptSuggestions) { _, value in
+            guard (model.user?.preferences?.suggestedReplies ?? true) != value else { return }
+            Task { await model.savePreferences(UpdatePreferencesRequest(promptSuggestions: value)) }
         }
         .onAppear(perform: seed)
         // Each row's value is its own read, so they are asked for side by side.
@@ -253,6 +259,20 @@ struct SettingsHomeView: View {
                     Image(systemName: SettingsHome.systemImage(row)).foregroundStyle(Color.primary)
                 }
             }
+        case .promptSuggestions:
+            // The same shape: what it does, and what each one costs, goes under the name.
+            Toggle(isOn: $promptSuggestions) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(SettingsHome.title(row)).foregroundStyle(Color.primary)
+                        Text(SettingsCopy.suggestedRepliesHint)
+                            .font(.orbitListSubtitle)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: SettingsHome.systemImage(row)).foregroundStyle(Color.primary)
+                }
+            }
         case .appearance:
             Picker(selection: $theme) {
                 Text("System").tag("system")
@@ -327,6 +347,7 @@ struct SettingsHomeView: View {
         permMode = PermissionMode(rawValue: p?.defaultPermissionMode ?? "") ?? AgentDefaults.defaultPermissionMode
         orchestration = p?.enableOrchestration ?? true
         modelRouting = p?.smartModelSelection ?? false
+        promptSuggestions = p?.suggestedReplies ?? true
     }
 }
 

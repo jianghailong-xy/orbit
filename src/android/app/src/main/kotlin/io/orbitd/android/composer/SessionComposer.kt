@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -21,12 +22,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.attachments.*
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.realtime.SessionState
+import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.serialization.json.*
 
 @Composable
@@ -67,6 +70,16 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
     val detail = session?.snapshot?.detail ?: JsonObject(emptyMap())
     val effective = JsonObject(detail + draft.resumeConfig)
     val running = detail.text("runState") == "RUNNING" || detail.text("status") == "RUNNING"
+    // The engine's guess at the next message, offered in the empty box with Use, which fills the box
+    // and sends nothing (docs/prompt-suggestions-design.md §4). A message just sent answers it before its
+    // `user` event arrives, so the one standing at the send is held back until the transcript moves on.
+    val standing = session?.transcript?.promptSuggestion
+    var spent by remember(model) { mutableStateOf<String?>(null) }
+    LaunchedEffect(standing) { if (standing == null) spent = null }
+    val suggestion = if (target != null || standing == spent) null else offeredPromptSuggestion(standing, detail,
+        draftEmpty = draft.text.isEmpty() && draft.attachments.isEmpty() && draft.pending == null,
+        usable = usable && !state.busy && !state.waiting)
+    val send = { spent = standing; model.send() }
     Surface(tonalElevation = 2.dp) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).testTag("session-composer")) {
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
@@ -110,9 +123,20 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
             OutlinedTextField(field, onValueChange = { field = it; model.edit(it.text, it.selection.start, it.selection.end) },
                 modifier = Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged { inputFocusChanged(it.isFocused) }.testTag("composer-input").onPreviewKeyEvent {
                     if (it.type == KeyEventType.KeyDown && it.key == Key.Enter && (it.isCtrlPressed || it.isMetaPressed) && field.composition == null && usable) {
-                        model.send(); true
+                        send(); true
                     } else false
-                }, enabled = state.loaded, placeholder = { Text("Message…") }, minLines = 1, maxLines = 4,
+                }, enabled = state.loaded,
+                placeholder = { Text(suggestion ?: "Message…", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                trailingIcon = if (suggestion != null) {
+                    {
+                        TextButton(onClick = {
+                            field = TextFieldValue(suggestion, TextRange(suggestion.length))
+                            model.edit(suggestion, suggestion.length, suggestion.length)
+                            focus.requestFocus(); keyboard?.show()
+                        }, modifier = Modifier.testTag("composer-suggestion-use")) { Text("Use") }
+                    }
+                } else null,
+                minLines = 1, maxLines = 4,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default))
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -144,7 +168,7 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
                 }
                 val hasDraft = draft.text.isNotBlank() || draft.attachments.isNotEmpty()
                 Button(enabled = usable && !state.busy && !state.waiting && draft.createdSessionId == null && (if (running && !hasDraft) true else hasDraft && draft.pending == null),
-                    onClick = { if (running && !hasDraft) model.control("interrupt") else model.send() }, modifier = Modifier.testTag("composer-send")) {
+                    onClick = { if (running && !hasDraft) model.control("interrupt") else send() }, modifier = Modifier.testTag("composer-send")) {
                     Text(if (state.waiting) "Uploading…" else if (state.busy) "Sending…" else if (running && !hasDraft) "Stop" else "Send")
                 }
             }
@@ -236,15 +260,18 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
                     })
                 }) { Text(option.label + (option.unavailable?.let { " · $it" } ?: "")) }
             }
-            val accounts = catalog?.accounts(provider).orEmpty().takeIf {
-                model.target != null || "$provider-account-move/v1" in catalog?.runner?.strings("capabilities").orEmpty()
-            }.orEmpty()
+            // A draft starts on any of the runner's accounts; a session moves only where the runner carries it across.
+            val accounts = catalog?.takeIf { model.target != null || it.movesAccounts(provider) }?.accountChoices(provider).orEmpty()
             if (accounts.isNotEmpty()) {
                 Text("Account")
                 TextButton(enabled = enabled, onClick = { model.config(buildJsonObject { put("account", "automatic") }, true) }) { Text("Automatic") }
-                accounts.forEach { account -> TextButton(enabled = enabled && account.text("auth") != "no", onClick = {
-                    account.text("id")?.let { model.config(buildJsonObject { put("account", it) }, true) }
-                }) { Text((account.text("name") ?: account.text("id").orEmpty()) + if (account.text("auth") == "no") " · Not signed in" else "") } }
+                accounts.forEach { account -> TextButton(enabled = enabled && account.unavailable == null, onClick = {
+                    model.config(buildJsonObject { put("account", account.id) }, true)
+                }) {
+                    Text(account.label + (account.unavailable?.let { " · $it" } ?: ""))
+                    // Its own quota beside it: "5h 12%", or what an Antigravity bucket has left, "gemini-5h 4% left".
+                    account.quota?.let { Text(" · $it", color = if (account.nearLimit) LocalOrbitColors.current.needsYou else Color.Unspecified) }
+                } }
             }
         }
     }, confirmButton = { TextButton(onClick = close) { Text("Close") } })

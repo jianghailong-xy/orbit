@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { ProjectPromotionView } from '@orbit/shared';
+import type { ProjectLandTask, ProjectPromotionView } from '@orbit/shared';
 import {
   NO_LONGER_ON_OFFER,
   isMergeJob,
   mergeCardShape,
   moreTasks,
   projectTimelineSections,
+  promotionBlockedBy,
   promotionBlockedLine,
   promotionBlockedReason,
   promotionBranchLine,
@@ -115,6 +116,68 @@ describe('the page card’s lines', () => {
       .toBe('main moved since the check — re-checking the combined tree');
     expect(promotionMergingStatus(candidate({ state: 'CONFIRMED', execution: { state: 'QUEUED', phase: null, startedAt: 'x' } })))
       .toBe('confirmed — queued to merge into main');
+  });
+});
+
+describe('who is in front of a blocked merge', () => {
+  const branch = 'refs/heads/project/34ZurCP3bv9yLXGVyUGnx';
+  /** One of the project's current landings, as `ProjectIntegrationView.landTasks` serves it. */
+  const landing = (over: {
+    taskId?: string;
+    taskTitle?: string;
+    state?: string;
+    phase?: string | null;
+    targetRef?: string;
+    reason?: { code: string; summary: string; jobId?: string } | null;
+  } = {}): ProjectLandTask => ({
+    taskId: over.taskId ?? 't9',
+    taskTitle: over.taskTitle ?? '同步项目线与 main：解开迁移台账冲突',
+    integration: {
+      state: 'QUEUED' as const,
+      since: null, handler: null, openItemId: null, jobId: 'j9', checksRunningForMs: null,
+      landTask: {
+        jobId: 'j9',
+        state: (over.state ?? 'QUEUED') as 'QUEUED' | 'RUNNING' | 'CONFLICT',
+        phase: over.phase ?? null,
+        generation: '2',
+        queuedAt: '2026-10-08T04:04:01.133Z',
+        startedAt: '2026-10-08T04:06:24.770Z',
+        heartbeatAt: '2026-10-08T04:06:24.770Z',
+        finishedAt: null,
+        targetRef: over.targetRef ?? branch,
+        waitMs: 143_637,
+        blockingReason: over.reason === undefined
+          ? { code: 'WAITING_SERIAL_SLOT', jobId: 'j8',
+            summary: 'Waiting to land: the landing of “修合并树上的 11 个 Swift 失败” is running on this branch first' }
+          : over.reason,
+      },
+    },
+  });
+
+  it('names the landing holding the branch, and what the server says holds THAT landing', () => {
+    expect(promotionBlockedBy(candidate({ state: 'BLOCKED', conflicts: ['a.go'] }), [landing()]))
+      .toBe('“同步项目线与 main：解开迁移台账冲突” is landing on the project line · queued · '
+        + 'Waiting to land: the landing of “修合并树上的 11 个 Swift 失败” is running on this branch first');
+    // Running says which step it is at, from the phase the runner reported.
+    expect(promotionBlockedBy(candidate({ state: 'BLOCKED' }),
+      [landing({ state: 'RUNNING', phase: 'MAIN_SYNC' })]))
+      .toBe('“同步项目线与 main：解开迁移台账冲突” is landing on the project line · syncing main · '
+        + 'Waiting to land: the landing of “修合并树上的 11 个 Swift 失败” is running on this branch first');
+  });
+
+  it('says nothing when the line is doing nothing on the branches this merge goes through', () => {
+    expect(promotionBlockedBy(candidate({ state: 'BLOCKED' }), [])).toBeNull();
+    expect(promotionBlockedBy(candidate({ state: 'BLOCKED' }), null)).toBeNull();
+    // Another task's landing, on a branch this candidate neither merges from nor into.
+    expect(promotionBlockedBy(candidate({ state: 'BLOCKED' }),
+      [landing({ targetRef: 'refs/heads/orbit/somewhere-else' })])).toBeNull();
+    // A landing that has stopped holds nothing: the line is idle, and this row is not where its
+    // failure is reported (its own landing row and the exception item say that).
+    expect(promotionBlockedBy(candidate({ state: 'BLOCKED' }), [landing({ state: 'CONFLICT' })])).toBeNull();
+    // And with no reason from the server, the sentence stops at what it does know.
+    expect(promotionBlockedBy(candidate({ state: 'BLOCKED', sourceKind: 'TASK_BRANCH', sourceRef: 'refs/heads/task' }),
+      [landing({ targetRef: 'refs/heads/main', reason: null })]))
+      .toBe('“同步项目线与 main：解开迁移台账冲突” is landing on the project line · queued');
   });
 });
 

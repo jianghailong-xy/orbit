@@ -450,6 +450,21 @@ describe('Account pools on /providers', { timeout: 30_000 }, () => {
     expect(JSON.parse(storage.get('orbit:providers-pool-fold') ?? '{}')).toEqual({ [POOL_ID]: false });
   });
 
+  // docs/mocks/providers-group-row-click
+  it('folds from anywhere on its head — the gauge, the space after the name — and Manage stays a link', async () => {
+    keys = [WORK, HOME];
+    pools = [pool([member(WORK, { state: 'AVAILABLE', next: true }), member(HOME, { state: 'AVAILABLE' })])];
+    await mount('/providers');
+    expect(section()!.querySelectorAll('.pool-row')).toHaveLength(2);
+    await click(section()!.querySelector('.pool-gauge'));
+    expect(section()!.querySelectorAll('.pool-row')).toHaveLength(0);
+    await click(section()!.querySelector('.re-head-sp'));
+    expect(section()!.querySelectorAll('.pool-row')).toHaveLength(2);
+    await click(section()!.querySelector('.re-manage'));
+    expect(path).toMatch(/^\/providers\/pools\//);
+    expect(JSON.parse(storage.get('orbit:providers-pool-fold') ?? '{}')).toEqual({ [POOL_ID]: true });
+  });
+
   it('creates a pool from the hint with every key that can join, and none that cannot', async () => {
     keys = [WORK, METERED, HOME, GATEWAY];
     pools = [];

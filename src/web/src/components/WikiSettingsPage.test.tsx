@@ -4,8 +4,10 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { App as AntApp } from 'antd';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { WIKI_DEFAULT_SPACE_SETTINGS, type WikiSpaceSettings } from '@orbit/shared';
+import { WIKI_DEFAULT_SPACE_SETTINGS, type WikiSpaceSettings, type WikiSystemModelRead, type WikiSystemModelReadState } from '@orbit/shared';
 import type { WikiSpaceRow } from '../lib/wiki';
 import { WikiSettingsPage } from './WikiSettingsPage';
 
@@ -36,6 +38,40 @@ function space(settings: Partial<WikiSpaceSettings> = {}): WikiSpaceRow {
 }
 
 let patches: Array<Record<string, unknown>> = [];
+/** What `GET /api/wiki/system-model` answers; null is a control plane from before the read (a 404). */
+let systemModel: WikiSystemModelRead | null = null;
+
+/** The server's words and the model's five states (`src/shared/src/wiki-server-execution.fixture.json`). */
+interface ServerFixture {
+  settings: {
+    rows: string[];
+    form: { fields: Array<{ label: string; note: string }> };
+    maintenanceNote: string;
+    privacy: string;
+    automaticNote: string;
+    models: Array<{ status: { state: WikiSystemModelReadState; model: string | null }; label: string; state: string; tone: string }>;
+  };
+}
+
+function serverFixture(): ServerFixture {
+  const candidates = [
+    resolve(process.cwd(), '../shared/src/wiki-server-execution.fixture.json'),
+    resolve(process.cwd(), 'src/shared/src/wiki-server-execution.fixture.json'),
+  ];
+  const path = candidates.find((candidate) => existsSync(candidate));
+  if (!path) throw new Error(`wiki-server-execution.fixture.json not found from ${process.cwd()}`);
+  return JSON.parse(readFileSync(path, 'utf8')) as ServerFixture;
+}
+
+const SERVER = serverFixture();
+
+/** The System model as the read answers it while the server executes this account's wiki. */
+function servedBy(state: WikiSystemModelReadState = 'up', model: string | null = 'qwen3.8-27b-fp8'): WikiSystemModelRead {
+  return {
+    state, model, since: '2026-10-08T06:00:00.000Z', checkedAt: '2026-10-08T06:29:55.000Z', workerSeenAt: '2026-10-08T06:29:55.000Z',
+    executor: { mode: 'canary', serverExecutes: true },
+  };
+}
 
 const reply = (status: number, body: unknown): Response =>
   ({ ok: status < 400, status, statusText: '', text: async () => JSON.stringify(body), json: async () => body }) as unknown as Response;
@@ -50,6 +86,9 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
       { id: WORKSPACE_ID, name: 'orbit', runner: { id: 'r', name: 'wikova', displayName: null } },
       { id: 'other', name: 'wikids', runner: { id: 'r2', name: 'workstation', displayName: null } },
     ]);
+  }
+  if (url === '/api/wiki/system-model') {
+    return systemModel ? reply(200, systemModel) : reply(404, { message: 'Cannot GET /api/wiki/system-model' });
   }
   if (url === '/api/providers') {
     return reply(200, [
@@ -72,6 +111,7 @@ beforeEach(() => {
   }));
   vi.stubGlobal('fetch', vi.fn(serve));
   patches = [];
+  systemModel = null;
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -251,5 +291,70 @@ describe('Wiki settings', () => {
     await act(async () => button('Turn off', container).click());
     await settle();
     expect(patches).toEqual([{ maintenance: { enabled: false } }]);
+  });
+});
+
+describe('Wiki settings while the server executes the account’s wiki (mock 35 ①②)', () => {
+  const ON = { enabled: true, workspaceId: WORKSPACE_ID, provider: 'local-vllm', dailyRunLimit: 6, lookbackDays: 30, listId: 'list' };
+
+  it('names the System model and its state instead of a provider, reads the repository from the workspace, and says where the material goes', async () => {
+    systemModel = servedBy();
+    await mount(space({ reviewMode: 'automatic', maintenance: ON }));
+    const rows = [...container.querySelectorAll('.wk-maint-rows > .k')].map((node) => node.textContent);
+    expect(rows).toEqual(SERVER.settings.rows);
+    const page = text();
+    expect(page).toContain('orbit · wikova');
+    expect(container.querySelector('.wk-maint-rows .wk-model-line')?.textContent).toBe('System model · qwen3.8-27b-fp8Up');
+    expect(container.querySelector('.wk-maint-rows .wk-model-state')?.className).toBe('wk-model-state up');
+    expect(page).not.toContain('pinned, no fallback');
+    expect(page).not.toContain('local-vllm');
+    expect(container.querySelector('.wk-privacy')?.textContent).toBe(SERVER.settings.privacy);
+    // Automatic's sentence names who checks: the System model.
+    expect(container.querySelector('.wk-mode.on .wk-mode-d')?.textContent).toBe(SERVER.settings.automaticNote);
+  });
+
+  it('says each of the model’s five states in its words and colour', async () => {
+    for (const one of SERVER.settings.models) {
+      systemModel = servedBy(one.status.state, one.status.model);
+      await mount(space({ maintenance: ON }));
+      const line = container.querySelector('.wk-maint-rows .wk-model-line');
+      expect(line?.textContent, one.status.state).toBe(`${one.label}${one.state}`);
+      expect(line?.querySelector('.wk-model-state')?.className, one.status.state).toBe(`wk-model-state ${one.tone}`);
+      act(() => root.unmount());
+      root = createRoot(container);
+    }
+  });
+
+  it('sets maintenance up with no provider to pick, and writes none', async () => {
+    systemModel = servedBy();
+    await mount(space());
+    expect(container.querySelector('.wk-maint-d')?.textContent).toBe(SERVER.settings.maintenanceNote);
+    expect(container.querySelector('.wk-privacy')?.textContent).toBe(SERVER.settings.privacy);
+    await act(async () => button('Set up…', container).click());
+    await settle();
+    const dialog = document.querySelector<HTMLElement>('.ant-modal')!;
+    expect(dialog.querySelector('.wk-modal-note')?.textContent).toBe(SERVER.settings.maintenanceNote);
+    expect([...dialog.querySelectorAll('.wk-setup-k')].map((node) => node.textContent)).toEqual(SERVER.settings.form.fields.map((field) => field.label));
+    expect([...dialog.querySelectorAll('.wk-setup-d')].map((node) => node.textContent)).toEqual(SERVER.settings.form.fields.map((field) => field.note));
+    expect(dialog.querySelector('#wk-setup-provider'), 'no provider picker').toBeNull();
+    expect(dialog.querySelector('.wk-setup-model')?.textContent).toBe('System model · qwen3.8-27b-fp8Up');
+    expect(dialog.querySelector('.wk-privacy')?.textContent).toBe(SERVER.settings.privacy);
+    await act(async () => button('Turn on', dialog).click());
+    await settle();
+    expect(patches).toEqual([{ maintenance: { enabled: true, workspaceId: WORKSPACE_ID, dailyRunLimit: 8, lookbackDays: 14 } }]);
+  });
+
+  it('is what it always was under runner, and for a control plane that predates the read', async () => {
+    for (const read of [{ ...servedBy(), executor: { mode: 'runner' as const, serverExecutes: false } }, null]) {
+      systemModel = read;
+      await mount(space({ reviewMode: 'automatic', maintenance: ON }));
+      expect([...container.querySelectorAll('.wk-maint-rows > .k')].map((node) => node.textContent))
+        .toEqual(['Status', 'Workspace', 'Provider', 'Daily limit', 'Look back']);
+      expect(text()).toContain('local-vllm · pinned, no fallback');
+      expect(container.querySelector('.wk-privacy')).toBeNull();
+      expect(container.querySelector('.wk-mode.on .wk-mode-d')?.textContent).toContain('local-vllm checks each change');
+      act(() => root.unmount());
+      root = createRoot(container);
+    }
   });
 });

@@ -4,6 +4,8 @@
 // process never holds its address or key; it reads the model's name and state from the one row the
 // worker writes. wikiContract.spec.ts holds every constant below to the contract JSON.
 
+import type { WikiExecutorView } from './wikiJobs';
+
 /**
  * The worker's environment (contract `systemModel.env`). The first three together are the System model:
  * with any of them missing it is `unconfigured`. None is an `ANTHROPIC_*` name, which an agent session's
@@ -66,6 +68,14 @@ export interface WikiSystemModelStatus {
   since: string | null;
   checkedAt: string | null;
   workerSeenAt: string | null;
+}
+
+/**
+ * The user door's answer (contract `systemModel.read`): the state above, and what the executor switch says for
+ * the account that asks — the deployment's mode, and whether the server executes this account's wiki.
+ */
+export interface WikiSystemModelRead extends WikiSystemModelStatus {
+  executor: WikiExecutorView;
 }
 
 /** Whether a worker wrote its heartbeat within `workerStaleSeconds` of `now`. */

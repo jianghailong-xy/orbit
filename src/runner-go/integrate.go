@@ -927,12 +927,19 @@ func removeIntegrationWorktree(repoRoot, scratch string) {
 // on by going to look at the branch — and the promotion it was a step of went BLOCKED over a race
 // it would have won a moment later.
 func integrationFetch(repoRoot, remote, ref string) error {
+	return fetchRetryingRefLock(repoRoot, remote, ref)
+}
+
+// fetchRetryingRefLock runs `git fetch <args>` in dir, trying again while the only thing in the way
+// was another process holding a ref this fetch writes. Shared with the SOURCE resolution
+// (source.go), whose fetch moves the same remote-tracking refs.
+func fetchRetryingRefLock(dir string, args ...string) error {
 	var err error
 	for attempt := 0; attempt < integrationFetchLockAttempts; attempt++ {
 		if attempt > 0 {
 			integrationFetchLockPause(integrationFetchLockWait << (attempt - 1))
 		}
-		if _, err = git(repoRoot, "fetch", remote, ref); err == nil || !isRefLockConflict(err) {
+		if _, err = git(dir, append([]string{"fetch"}, args...)...); err == nil || !isRefLockConflict(err) {
 			return err
 		}
 	}

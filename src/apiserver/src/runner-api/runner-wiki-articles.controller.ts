@@ -17,7 +17,9 @@ import { RunnerAuthGuard } from './runner-auth.guard';
  * ONLY A MAINTENANCE RUN OF THE SPACE. The calling session (`X-Orbit-Session-Id`, one this runner
  * hosts for its owner) is the principal, and `WikiArticles.assertWriter` asks it the one test
  * criterion 2 exported (`isWikiMaintenanceSession`): any other session of the owner is refused
- * WIKI_NOT_MAINTENANCE_SESSION, a headless call 400, and another owner's space is the plain 404.
+ * WIKI_NOT_MAINTENANCE_SESSION, a headless call 400, and another owner's space is the plain 404. For an
+ * account the executor switch gives the server, the maintenance run is refused too, WIKI_SERVER_EXECUTES:
+ * the wiki worker writes those articles (contract `articles.serverExecution`).
  *
  * A controller of its own beside the maintenance one, so that neither injects anything it did not.
  */

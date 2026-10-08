@@ -191,6 +191,7 @@ export const WIKI_REFUSAL_CODES = [
   'WIKI_CURSOR_BEHIND',
   'WIKI_CURSOR_INVALID',
   'WIKI_ARTICLE_STALE',
+  'WIKI_SERVER_EXECUTES',
   'WIKI_PLAN_GATE',
   'WIKI_PLAN_STALE',
   'WIKI_PLAN_UNCONFIRMED',
@@ -1495,6 +1496,15 @@ export interface WikiVerificationList {
   items: WikiVerificationItem[];
   /** Pass as `after` for the next page; null when this page is the last. */
   next: string | null;
+  /**
+   * Who verifies the ops this list would carry (contract `reviewModes.verification.servedBy`): `server`
+   * where the executor switch says the server runs for this account, in which case `items` is empty
+   * because the server's own job (`jobs.kindRuns.verify`) is the verifier and a session must not ask a
+   * model of its provider about them. Absent under the default `runner` mode, where the caller verifies.
+   */
+  servedBy?: 'server';
+  /** With `servedBy`: how many of the caller's ops are waiting, so a caller can wait for it to reach zero. */
+  waiting?: number;
 }
 
 /** One verdict, as `POST /api/runner/wiki/spaces/:id/verifications` takes it. */

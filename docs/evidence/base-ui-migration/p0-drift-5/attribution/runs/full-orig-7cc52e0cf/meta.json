@@ -1,0 +1,24 @@
+{
+ "app": "/mnt/data/tmp/34cFgyWHIYDslABFPloEM/trees/7cc52e0cf",
+ "commit": "7cc52e0cf0b1952563c3558f01444d5e158a500c",
+ "runner": "/mnt/data/tmp/34cFgyWHIYDslABFPloEM/runners/orig",
+ "runnerCommit": "4d77d69b78a0e49ec9e7d6f61435cf3b4339f09c",
+ "args": "pages.browser.mjs states.browser.mjs breakpoints.browser.mjs",
+ "started": "2026-10-08T08:28:50Z",
+ "finished": "2026-10-08T08:33:43Z",
+ "exit": 0,
+ "environment": "p0.2",
+ "stats": {
+  "expected": 76,
+  "unexpected": 0,
+  "flaky": 0,
+  "skipped": 4
+ },
+ "screenshots": 252,
+ "evidence": {
+  "tests": 80,
+  "withUnhandled": 0,
+  "unhandled": {},
+  "withPageErrors": 0
+ }
+}

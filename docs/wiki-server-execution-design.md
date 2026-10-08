@@ -224,6 +224,7 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
   - 所有回写都按代数做比较并交换；
   - 租约 60 秒，执行中定期续租；
   - 过期回收：租约已过期的作业放回 queued。
+- 文章作业（`articles`）由维护运行的结束触发，规则见 §8（owner 2026-10-08 定）。
 - 同一个空间同一时间只跑一个作业，沿用隐藏列表 `maxConcurrent 1` 的语义。一个 worker 同时执行的作业数另有上限。作业大部分时间在等模型，真正压在 GPU 上的量由 §5.2 的队列决定。
 - `wiki_maintenance_run`、`wiki_plan_job`：增加 `job_id`，`task_id` 改为可空，用 CHECK 约束二者必有其一。健康状态和每日计数改为读运行行，不再读 Task 和 Session。
 
@@ -333,6 +334,13 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
 | plan 起草/修订 | 约 5,200 行 | plan 材料；聚类要移植 | 快照（索引）+ read | P6 |
 | 文档构建 docs build | 2,679 行 | 文档材料 | 快照 + read（片段、脚注） | P7 |
 | 维护 maintain | 3,252 行（含文档步骤） | 案卷 | 快照、diff、anchors | P8 |
+
+- **文章的触发（owner 2026-10-08 定）**：
+  - runner 模式下不变：维护运行自判据 3 第 3 版起不再重写主题文章，也没有别的东西自动重写。
+  - 服务端执行的账号（`server`，或 `canary` 名单内）：一次维护运行成功结束、记下了 op、且不在追赶期（追赶进行中或暂停时都不建）时，服务端给这个空间排一个 `articles` 作业。runner 跑的维护运行也算，触发点在服务端记录运行结束的地方（finish 路由）；P8 的服务端维护作业结束时调用同一个入口。
+  - 每个空间最多排一个，后台优先级 0，排在 owner 主动发起的请求之后；作业只重写指纹变了的主题。
+  - 文章的 ref 取该空间最近一份仓库快照的 sha；还没有快照时先请求一次，作业挂起等它。
+  - 对这样的账号，runner 门的文章三条路由回 `WIKI_SERVER_EXECUTES`，会话不再拿自己的 provider 写文章。
 
 agent 会话用的 wiki 工具（`wiki_search` / `wiki_get` / `wiki_propose`，见 `src/runner-go/wiki_tools.go`）不在本次范围内，保持不变。
 

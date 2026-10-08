@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
 import { AgentProvider } from '@orbit/shared';
+import { ACCOUNT_DISABLED } from '../auth/disabled-accounts';
 import { sha256 } from '../common/crypto.util';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { PrismaService } from '../prisma/prisma.service';
@@ -87,7 +88,8 @@ type Refreshed =
  * What it decides, and nothing more:
  * - WHO (`caller`, for a login pool's token, `orbit-gwl-`): the token's hash names one (pool, owner,
  *   session). A token revoked or expired, a session no longer open, moved to another provider or not its
- *   token's person's, or the pool deleted — the last deletes the token row itself — is 401. The token names
+ *   token's person's, or the pool deleted — the last deletes the token row itself — is 401; a good token of
+ *   an owner an administrator disabled is 403 ACCOUNT_DISABLED, as their runner credential is. The token names
  *   no account (migration 0355), so no account's leaving the pool refuses it here. It authenticates and
  *   nothing more: which upstream a request goes to is the session's (PoolGatewayController) — an owner's
  *   session the claim put on one of the pool's API keys (migration 0358) goes to OpenAI's API on that key,
@@ -274,11 +276,13 @@ export class PoolLoginGatewayService {
 
   /**
    * A login pool's token's (pool, owner, session) and what the session runs on, when the token may still
-   * be used; null otherwise. The token names no account, so no account's leaving the pool refuses it here:
-   * a session whose account the pool no longer holds — or which has none — is answered by `forward` as the
-   * pool having no account, unless it runs on one of the pool's API keys.
+   * be used; ACCOUNT_DISABLED when it may but for the owner's account, which an administrator disabled
+   * (docs/google-sign-in-design.md §5.5); null otherwise. The token names no account, so no account's
+   * leaving the pool refuses it here: a session whose account the pool no longer holds — or which has
+   * none — is answered by `forward` as the pool having no account, unless it runs on one of the pool's API
+   * keys.
    */
-  async caller(token: string): Promise<GatewayCaller | null> {
+  async caller(token: string): Promise<GatewayCaller | typeof ACCOUNT_DISABLED | null> {
     const row = await this.prisma.poolLoginToken.findUnique({
       where: { tokenHash: sha256(token) },
       select: {
@@ -291,7 +295,7 @@ export class PoolLoginGatewayService {
         session: {
           select: {
             status: true, ownerId: true, provider: true, poolCodexAccountId: true, poolKeyId: true,
-            completedAt: true, deletedAt: true,
+            completedAt: true, deletedAt: true, owner: { select: { disabledAt: true } },
           },
         },
       },
@@ -309,6 +313,9 @@ export class PoolLoginGatewayService {
       // A session moved onto another provider since: its old tokens name a pool it no longer runs on.
       session.provider === pool.slug;
     if (!current) return null;
+    // Asked last, as the runner credential asks it: the token itself is good, and works again once the
+    // account is enabled.
+    if (session.owner.disabledAt) return ACCOUNT_DISABLED;
     return {
       poolId: row.poolId,
       poolLabel: pool.label,

@@ -21,6 +21,16 @@ interface InstanceStore {
     suspend fun save(server: String)
 }
 
+/**
+ * The email of the last successful password sign-in on each server, which that server's login page prefills (iOS fdeb033ad).
+ * A deliberate change to A03's "no email on disk": the coordinator's A03c decision follows iOS, which keeps the email through
+ * sign-out and session expiry. A store must encrypt it, keep it out of backups and device transfer, and never hold a password.
+ */
+interface EmailStore {
+    suspend fun load(server: String): String?
+    suspend fun save(server: String, email: String)
+}
+
 data class AccountKey(val server: String, val userId: String)
 enum class DataKind { DRAFT, CACHE }
 

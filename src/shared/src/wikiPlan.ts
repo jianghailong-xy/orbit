@@ -332,6 +332,8 @@ export interface WikiPlanVersion {
   repoCheck: WikiPlanRepoCheck | null;
   model: string | null;
   authorSessionId: string | null;
+  /** The wiki_job that drafted it, when the server ran the plan job (contract `plan.jobs.server`); null otherwise. */
+  authorJobId: string | null;
   authorUserId: string | null;
   confirmedByUserId: string | null;
   confirmedAt: string | null;
@@ -453,6 +455,52 @@ export const WIKI_PLAN_JOB_RULES = {
   /** The most sessions and projects the materials list. */
   materialsSessionsMax: 5_000,
   materialsProjectsMax: 500,
+} as const;
+
+/**
+ * A draft or a revision run by the wiki-worker (contract `plan.jobs.server`, design §8, P6): when the executor
+ * switch gives the account to the server (`jobs.executor`), the plan job is made as a `wiki_job` instead of a
+ * task of the hidden list, and the worker drafts with the System model through the request queue — the runner's
+ * pipeline (`orbit wiki plan draft | revise`), ported, its repository read from the space's snapshot.
+ */
+export const WIKI_PLAN_SERVER_JOB = {
+  /** The wiki_job a draft and a revision run as (contract `jobs.kinds`). */
+  kinds: { draft: 'plan_draft', revise: 'plan_revise' },
+  /** Owner-initiated: the space's creation and the owner's redraft are both the owner's (contract `jobs.priority`). */
+  priority: 1,
+  /** One call's max_tokens: a catalogue of forty documents in the line format, with room (the runner's 32,000). */
+  maxTokens: 32_000,
+  /** The calls one unit gets: the first, and two more with the format said again when its answer does not read. */
+  formatTries: 3,
+  /** The units in flight at once: the runner's --concurrency default, and the queue's own cap on one job. */
+  concurrency: 4,
+  /** How long the job waits for the space's runner to snapshot origin/main, and for a read of the texts the snapshot does not carry. */
+  snapshotWaitSeconds: 300,
+  readWaitSeconds: 300,
+  /** Every call's whole system prompt, word for word the runner's (wikiPlanSystemPrompt). */
+  systemPrompt: '你是这个仓库的文档主编。你根据给你的材料规划产品与技术文档。只使用材料里出现的文件路径、'
+    + '章节标题、符号、项目名，不编造。用中文写，代码名、路径、命令保留原文。只输出要求的内容。',
+  /**
+   * The repository's materials, cut to the runner's caps, in characters: the overview a catalogue, a category's
+   * details and a document's outline read; the structure and the documents' heading tree a catalogue and the
+   * details read; one document's code symbols.
+   */
+  materialCaps: {
+    overview: { full: 14_000, detail: 10_000, doc: 8_000 },
+    layout: { full: 32_000, detail: 26_000 },
+    docsTree: { full: 45_000, detail: 30_000 },
+    codeExcerpt: 16_000,
+  },
+  /** Each kind of call's step in the queue: `plan_*`, so the plan's wait limit and call budget apply (modelQueue). */
+  steps: {
+    skeleton: 'plan_skeleton',
+    details: 'plan_details',
+    outline: 'plan_outline',
+    rules: 'plan_rules',
+    reviseCatalogue: 'plan_revise_catalogue',
+    reviseDoc: 'plan_revise_doc',
+    redoDoc: 'plan_redo_doc',
+  },
 } as const;
 
 /** What a draft's or a revision's run reports when it ends (contract `plan.jobs.report`), kept as it was said. */

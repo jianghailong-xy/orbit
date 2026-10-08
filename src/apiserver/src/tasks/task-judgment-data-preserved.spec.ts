@@ -2023,6 +2023,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // INSERT, UPDATE or DELETE: the build reads every task row once and writes none, and the DROP
       // takes the index away inside the migration's own transaction, so no reader sees it missing.
       '0395_project_rollup_covering_idx_columns',
+      // Disabled accounts (0396): one ADD COLUMN of a nullable TIMESTAMP(3) `disabled_at` on `user`,
+      // with no default, so the ALTER is catalog-only, and nothing else — no index, constraint,
+      // function, trigger or type. `user` is not a preserved relation; no task, project, acceptance
+      // or DONE fence object is named, and no row is written or backfilled: every account reads NULL,
+      // enabled. 0394 was held by a branch not yet on main when it was numbered.
+      '0396_user_disabled_at',
       // `runner.login_region` (0397): one nullable TEXT column, no default, on `runner`, beside the
       // sign-in relay's `login_account` (0296) — which of Kimi Code's two sites the relay signs in
       // on. Read against every claim above: one `ADD COLUMN` statement and nothing else — no
@@ -2080,7 +2086,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // (ON DELETE CASCADE) and one partial unique index. `share_link` is the only table altered and
       // `wiki_space` is named only as the table the key references; no task, project, acceptance or
       // DONE fence object, function, trigger or type is named, and no row is written or backfilled.
-      '0403_share_link_wiki_space'],
+      '0403_share_link_wiki_space',
+      // The plan drafted by the wiki-worker (0404): one nullable `author_job_id` on `wiki_plan` with 0325's
+      // `wiki_plan_author_chk` replaced by the same rule over one more column (a maintenance version names its
+      // session or its job, exactly one), one nullable JSONB `materials` on `wiki_plan_job` with its object CHECK,
+      // and 0338's `wiki_plan_job_made_chk` replaced by the same rule over the job a server-made one names. Only
+      // `wiki_plan` and `wiki_plan_job` are altered; no function, trigger, type, index or foreign key is created,
+      // replaced or dropped, so it is not another writer of the DONE fence and names none of the six preserved
+      // objects; no 0177 relation is altered and no `task`, `session`, `project` or `project_acceptance_*` object
+      // is named. No INSERT, UPDATE or DELETE: every stored row holds the new CHECKs as it held the old ones.
+      '0404_wiki_plan_server_draft'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

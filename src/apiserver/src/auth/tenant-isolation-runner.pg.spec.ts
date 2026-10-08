@@ -206,6 +206,11 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     // landing of the project's task, and `project_integration_job_task_inflight_key` allows one live
     // LAND_TASK a task (0281 J3) — the two were the same task until this line, which made this spec red
     // before it ran a single case (a4c1b1f8f).
+    // Nothing either census holds is lost by it: each still stands up a landing of its own. The first
+    // half's queued job stays on the project's task, where its Retry case names it. The two cases here
+    // name this job by its id and its claim (lease owner, generation), never by its task, and the task
+    // is made as `projectTaskId` is, OPEN in the same project. And it is returned with the rest
+    // (`landingTaskId`), so a write naming it is still one of A's to the write trap.
     const landingTaskId = await task('task whose landing the machine holds', { projectId: of.projectId });
     await db.projectIntegrationJob.create({
       data: {
@@ -326,6 +331,10 @@ test('tenant isolation: past the runner gate and through the share links, anothe
       update: { state: 'made', taskId: maintenanceTaskId, madeAt: new Date(), heldReason: null, heldAt: null },
       create: { id: wikiPlanJobId, spaceId: of.wikiSpaceId, ownerId, kind: 'draft', trigger: 'owner', state: 'made', taskId: maintenanceTaskId, madeAt: new Date() },
     });
+    const wikiImportJobId = randomUUID();
+    await db.wikiJob.create({
+      data: { id: wikiImportJobId, ownerId, spaceId: of.wikiSpaceId, kind: 'import', input: {}, state: 'succeeded', report: {}, endedAt: new Date() },
+    });
     const confirmedDoc = await db.wikiPlanDoc.findFirstOrThrow({ where: { ownerId, slug: of.wikiDocSlug, plan: { status: 'confirmed' } }, select: { id: true } });
     await db.wikiPlanSection.create({
       data: {
@@ -370,12 +379,12 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     return {
       callingSessionId, coordinatorSessionId, newCoordinatorSessionId, machineSessionId, runtimeSessionId, orphanSessionId,
       takeoverSessionId, activateSessionId, leaseOwner, leaseGeneration, inboxSessionId, turnSessionId, shellTurnId,
-      finalizeSessionId, completeSessionId, sessionAttachmentId, allowedApprovalId, artifactRequestId, integrationJobId,
+      finalizeSessionId, completeSessionId, sessionAttachmentId, allowedApprovalId, artifactRequestId, integrationJobId, landingTaskId,
       codexOperationId, wikiRepoOpId, spareServiceTokenId, replyRequestId, interruptSessionId, endSessionId, completedSessionId,
       deletedSessionId, archivedSessionId, coordinatorItemId, handOverItemId, watchId, verifierTaskId, verifiedTaskId,
       providerSlug: await slugOf(of.providerId), spareProviderSlug: await slugOf(of.spare.providerId), listTaskId,
       confirmTaskId, confirmRunSessionId, confirmRequestId, reviewerSessionId, wikiSessionId, wikiMaintainerSessionId,
-      wikiPlanJobId, wikiVerifyingOpId, wikiAdoptableOpId, sharedSessionId, sharedSessionAttachmentId, sharedTaskId,
+      wikiPlanJobId, wikiImportJobId, wikiVerifyingOpId, wikiAdoptableOpId, sharedSessionId, sharedSessionAttachmentId, sharedTaskId,
       sharedTaskRunSessionId, sharedTaskAttachmentId, sharedProjectId, sharedProjectTaskId, sharedProjectRunSessionId,
       sharedProjectAttachmentId,
     };

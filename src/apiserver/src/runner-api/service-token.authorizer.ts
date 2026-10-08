@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Runner } from '@prisma/client';
 import { createHmac } from 'node:crypto';
+import { accountDisabled } from '../auth/disabled-accounts';
 import { PrismaService } from '../prisma/prisma.service';
 
 const SERVICE_TOKEN_AUDIENCE = 'orbit-service-token';
@@ -152,7 +153,7 @@ export class ServiceTokenAuthorizer {
     }
     const row = await this.prisma.serviceToken.findFirst({
       where: { id: claims.jti, revokedAt: null, expiresAt: { gt: new Date() } },
-      include: { runner: true },
+      include: { runner: true, owner: { select: { disabledAt: true } } },
     });
     // Revoked, expired server-side, or deleted along with its runner/workspace: the signature is
     // valid but the grant is gone, and the row is the authority on that.
@@ -165,6 +166,9 @@ export class ServiceTokenAuthorizer {
     if ((row.workspaceId ?? null) !== (claims.workspaceId ?? null)) {
       throw new UnauthorizedException('invalid service token');
     }
+    // A disabled account's token (docs/google-sign-in-design.md §5.5) is refused 403, and its use is
+    // not recorded: the grant is not gone, and it works again once the account is enabled.
+    if (row.owner.disabledAt) throw accountDisabled();
     // Not awaited: recording use must never make a valid request fail or wait on a write.
     void this.prisma.serviceToken
       .update({ where: { id: row.id }, data: { lastUsedAt: new Date() } })
