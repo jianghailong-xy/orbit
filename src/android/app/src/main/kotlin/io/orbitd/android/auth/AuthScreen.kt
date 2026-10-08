@@ -76,6 +76,7 @@ fun AuthScreen(
             AuthMessage.NETWORK -> R.string.auth_network_error
             AuthMessage.STORAGE -> R.string.auth_storage_error
             AuthMessage.SERVER -> R.string.auth_server_error
+            AuthMessage.UNEXPECTED -> R.string.auth_unexpected_error
             AuthMessage.GOOGLE_FAILED -> R.string.auth_google_failed
             AuthMessage.GOOGLE_UNAVAILABLE -> R.string.auth_google_unavailable
             AuthMessage.GOOGLE_INTERRUPTED -> R.string.auth_google_interrupted

@@ -11,10 +11,11 @@
     <string name="password">Password</string>
     <string name="session_expired">Your session expired. Sign in again.</string>
     <string name="auth_address_error">Enter an HTTPS instance address without credentials, query or fragment.</string>
-    <string name="auth_credentials_error">Check your email and password.</string>
-    <string name="auth_network_error">Could not reach the server. Check your connection and try again.</string>
+    <string name="auth_credentials_error">Incorrect email or password.</string>
+    <string name="auth_network_error">Couldn\'t reach the server — check the instance URL and your network connection.</string>
     <string name="auth_storage_error">Could not access secure storage. Sign in again.</string>
-    <string name="auth_server_error">The server could not complete sign in. Try again.</string>
+    <string name="auth_server_error">The server ran into an error. Try again in a moment.</string>
+    <string name="auth_unexpected_error">Sign-in failed — the server\'s answer wasn\'t an Orbit sign-in. Check the instance URL.</string>
     <string name="continue_with_google">Continue with Google</string>
     <string name="google_signup_hint">New to Orbit? Continue with Google to create an account.</string>
     <string name="auth_google_failed">Couldn\'t sign in with Google. Continue with Google to try again, or sign in with your password.</string>

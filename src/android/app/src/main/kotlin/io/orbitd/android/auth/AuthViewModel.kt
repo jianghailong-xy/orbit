@@ -20,7 +20,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 enum class AuthMessage {
-    INVALID_ADDRESS, INVALID_CREDENTIALS, NETWORK, STORAGE, SERVER,
+    INVALID_ADDRESS, INVALID_CREDENTIALS, NETWORK, STORAGE, SERVER, UNEXPECTED,
     GOOGLE_FAILED, GOOGLE_UNAVAILABLE, GOOGLE_INTERRUPTED, GOOGLE_STATE_MISMATCH,
     // Refusals the server names by code (docs/google-sign-in-design.md §4.1–4.3, §5.2, §5.5).
     ACCOUNT_DISABLED, SETUP_REQUIRED, GOOGLE_NOT_CONFIGURED, GOOGLE_RATE_LIMITED, GOOGLE_SIGN_IN_BUSY,
@@ -122,13 +122,22 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 }
 
-/** Why signing in or restoring failed: a code the server names comes first, so no refusal reads as a wrong password. */
+/**
+ * Why signing in or restoring failed: a code the server names comes first, so no refusal reads as a wrong password; then, as
+ * iOS LoginFailure.message says it (40a70be24), the server turning the form down, the server out of reach, the server broken,
+ * or an answer that is no Orbit sign-in.
+ */
 internal fun messageFor(error: Exception): AuthMessage = when (error) {
     is InvalidServerAddress -> AuthMessage.INVALID_ADDRESS
     is SecureStorageException -> AuthMessage.STORAGE
-    is ApiError -> refusalMessage(error.code) ?: if (error.status == 401) AuthMessage.INVALID_CREDENTIALS else AuthMessage.SERVER
+    is ApiError -> refusalMessage(error.code) ?: when (error.status) {
+        // 400 is the server refusing the form itself, such as an email it can't read as one.
+        400, 401, 403, 422 -> AuthMessage.INVALID_CREDENTIALS
+        in 500..599 -> AuthMessage.SERVER
+        else -> AuthMessage.UNEXPECTED
+    }
     is NetworkException -> AuthMessage.NETWORK
-    else -> AuthMessage.SERVER
+    else -> AuthMessage.UNEXPECTED
 }
 
 /** Why a Google ticket's exchange failed (§4.3). Never that the password is wrong: none was asked for. */
