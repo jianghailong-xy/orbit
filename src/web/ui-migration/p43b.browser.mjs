@@ -3,17 +3,18 @@ import {
   ANSWER_REFUSAL, CROSSING_REFUSAL, CROSSINGS_ERROR, DECLINE_REFUSAL, DONE_REFUSAL, EMPTY_GRAPH, GRAPH_ERROR,
   MERGE_REFUSAL, P43B_PATHS, RICH_GRAPH, START_REFUSAL, TRUNCATED_GRAPH, gate, installP43bFixtures,
 } from './p43b-fixtures.mjs';
-import { PILOT_PATHS, installPilotFixtures } from './pilot-fixtures.mjs';
-import { attachTrace, button, dialog, fill, frames, observe, phone, popup, top } from './p43b-helpers.mjs';
+import { PILOT_IDS, PILOT_PATHS, installPilotFixtures } from './pilot-fixtures.mjs';
+import { attachTrace, button, dialog, fill, frames, observe, phone, popup, settled, top } from './p43b-helpers.mjs';
 
 // P4.3b states on real routes, none of which the P0 matrix reaches: the project page's dependency
 // graph with every kind of mark (a finished block, a run, a repeated motif, a parent's box, tasks
-// ready, blocked, running and failed), a motif's tasks, a run and a finished block opened, its full
-// screen and a task opened from it; the graph's loading, failed-and-retried, empty and truncated
-// reads; its geometry at 639, 641 and 1280px, where the P0 baseline recorded the existing layout
-// defects; a task's own dependency graph (the remove question, its full screen); and the project
-// page's decision cards: crossings, a coordinator question, a merge into main, the done question and
-// the owner's own start.
+// ready, blocked, running and failed), a motif's tasks, a run and a finished block opened, a drag on
+// it and on its full screen, and a task opened from the full screen; the graph's loading,
+// failed-and-retried, empty and truncated reads; its geometry at 639, 641 and 1280px, where the P0
+// baseline recorded the existing layout defects; a task's own dependency graph (the remove question,
+// a drag in the panel and in its full screen, a node opening its task); and the project page's
+// decision cards: crossings, a coordinator question, a merge into main, the done question and the
+// owner's own start.
 // Locators are roles, accessible names, labels and the pages' own classes, so the same file drives the
 // replaced controls (same-commit reference tree) and the Orbit ones; a painted box is named by both
 // class names. Screenshots, computed styles and each step's observation (`trace`: address, focus, open
@@ -68,6 +69,54 @@ const graphGeometry = (page) => page.evaluate(() => {
     overlapsControls: overlaps,
   };
 });
+
+/** Drag a graph's canvas by (60, 40) from a spot of its pane that nothing is drawn over, 24px around
+ *  (nothing on the graph is draggable, so a drag can only pan it): its viewport's transform before and
+ *  after. The spot is the first whose pointer the pane itself takes once the mouse is over it. A dialog
+ *  that has just opened is let finish first (the replaced modal zooms in whatever motion is asked for,
+ *  and the canvas places its view once its size settles)... */
+async function pan(page, scope) {
+  const viewport = scope.locator('.react-flow__viewport');
+  const pane = scope.locator('.react-flow__pane');
+  await settled(page);
+  // ...and its view has stood still for ten frames.
+  await viewport.evaluate((el) => new Promise((resolve) => {
+    let last = el.style.transform;
+    let still = 0;
+    let count = 0;
+    const tick = () => {
+      still = el.style.transform === last ? still + 1 : 0;
+      last = el.style.transform;
+      if (still >= 10 || ++count > 240) resolve(); else requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }));
+  const before = await viewport.evaluate((el) => el.style.transform);
+  const spots = await pane.evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    const clear = (x, y) => [[0, 0], [-24, -24], [24, -24], [-24, 24], [24, 24]].every(([dx, dy]) => document.elementFromPoint(x + dx, y + dy) === el);
+    const found = [];
+    for (let y = box.top + 32; y < box.bottom - 32 && found.length < 8; y += 16) {
+      for (let x = box.left + 32; x < box.right - 32 && found.length < 8; x += 16) {
+        if (clear(x, y)) found.push({ x, y });
+      }
+    }
+    return found;
+  });
+  let start = null;
+  for (const spot of spots) {
+    await page.mouse.move(spot.x, spot.y);
+    if (await pane.evaluate((el) => [...document.querySelectorAll(':hover')].pop() === el)) { start = spot; break; }
+  }
+  expect(start, 'a spot of the pane nothing is drawn over').not.toBeNull();
+  await page.mouse.down();
+  await page.mouse.move(start.x + 30, start.y + 20, { steps: 4 });
+  await page.mouse.move(start.x + 60, start.y + 40, { steps: 4 });
+  await page.mouse.up();
+  await frames(page);
+  const after = await viewport.evaluate((el) => el.style.transform);
+  return { before, after, moved: before !== after };
+}
 
 test.describe('P4.3b dependency graphs', () => {
   test('the project graph: its marks, a motif’s tasks, a run opened, the full screen, a task opened', async ({ evidence }, testInfo) => {
@@ -153,11 +202,19 @@ test.describe('P4.3b dependency graphs', () => {
     trace.push(await observe(page, fixtures, 'finished block opened'));
     await capture('p43b-graph-settled-open', { strip });
 
+    // A drag on the canvas pans it and opens nothing, on the page and in the full screen.
+    const stripPanned = await pan(page, strip);
+    expect(stripPanned.moved).toBe(true);
+    trace.push({ ...(await observe(page, fixtures, 'strip dragged')), panned: stripPanned.moved });
+
     // A task opened from the full screen opens over the project page, and the full screen gets out of its way.
     // The canvas re-opens centred on the last mark toggled, which can leave this one outside it: the whole
     // project is fitted first, on every environment and on both trees.
     await maximize.click();
     await expect(full).toBeVisible();
+    const fullPanned = await pan(page, full);
+    expect(fullPanned.moved).toBe(true);
+    trace.push({ ...(await observe(page, fixtures, 'full screen dragged')), panned: fullPanned.moved });
     await full.getByRole('button', { name: 'Fit whole project in view' }).click();
     await frames(page);
     await full.getByRole('link', { name: /^Capture browser baselines,/ }).click();
@@ -247,6 +304,10 @@ test.describe('P4.3b dependency graphs', () => {
     await frames(page);
     trace.push(await observeTask('graph'));
     await capture('p43b-task-graph', { canvas, node: canvas.locator('.tdg-node').first() });
+    // In the panel the graph is drawn top to bottom and leaves a drag to the page (TaskDependencyGraph's
+    // canPan): recorded, the same on both trees. The full screen pans (below).
+    const inlinePanned = await pan(page, canvas);
+    trace.push({ ...(await observeTask('graph dragged')), panned: inlinePanned.moved });
 
     const maximize = page.getByRole('button', { name: 'Open dependency graph full screen' });
     if (!phone(testInfo)) {
@@ -295,9 +356,25 @@ test.describe('P4.3b dependency graphs', () => {
     await frames(page);
     trace.push(await observeTask('full screen'));
     await capture('p43b-task-graph-full', { surface: page.locator(DIALOG_SURFACE).filter({ visible: true }).last() });
+    const fullPanned = await pan(page, full);
+    expect(fullPanned.moved).toBe(true);
+    trace.push({ ...(await observeTask('full screen dragged')), panned: fullPanned.moved });
     await page.keyboard.press('Escape');
     await expect(full).toHaveCount(0);
     trace.push(await observeTask('Escape closed the full screen'));
+
+    // A node opens its task (the panel's own onOpenTask), here from the full screen, fitted first. The
+    // task is opened afresh: on the reference tree the full screen's Escape also closed the task panel
+    // under it (see the README's pre-existing behaviour).
+    await page.goto(PILOT_PATHS.task);
+    await expect(canvas.locator('.tdg-node').first()).toBeVisible();
+    await maximize.click();
+    await expect(full).toBeVisible();
+    await full.getByRole('button', { name: 'Fit dependency graph to view' }).click();
+    await frames(page);
+    await full.getByRole('button', { name: /^Migrate shared controls, / }).click();
+    await expect(page).toHaveURL(new RegExp(`/tasks/${PILOT_IDS.dependent}$`));
+    trace.push(await observeTask('a node opened its task'));
     await attachTrace(testInfo, trace);
   });
 });
