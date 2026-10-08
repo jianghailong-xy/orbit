@@ -352,6 +352,11 @@ entry of the topic, deletes a sentence left without one, cuts what passes ` + fm
 writes nothing for a topic whose entries did not change. The command stops at the first 401 from
 the model's endpoint, and exits non-zero when any topic it took up was left unwritten. Any session
 but a maintenance run of the space is refused WIKI_NOT_MAINTENANCE_SESSION.
+
+For an account the Orbit server runs the wiki for (ORBIT_WIKI_EXECUTOR server, or canary with the
+account on its list) the server answers WIKI_SERVER_EXECUTES instead: its wiki worker writes the
+articles after a maintenance run, with the deployment's System model. The command then asks no model,
+says so and exits 0.
 `,
 }
 

@@ -14204,6 +14204,18 @@ button.chat-jump-start:hover {
 .share-inner.is-wide {
   max-width: 1040px;
 }
+/* A wiki link's pages (SharedWikiPage, mock 09): the app's home rows and document page at the app's
+   own reading widths. A «Not covered» target the link does not open is its number, not a link. */
+.share-wiki .wk-home {
+  margin-top: 16px;
+}
+.share-wiki-doc {
+  max-width: 880px;
+  margin: 0 auto;
+}
+.wk-dc-scope > .v .see.off {
+  color: var(--text-3);
+}
 .share-project-meta::before {
   content: '·';
   margin-right: 9px;
@@ -15045,13 +15057,19 @@ button.chat-jump-start:hover {
 }
 .re-dot {
   flex: none;
-  width: 7px;
-  height: 7px;
+  /* Onto the name's line rather than the middle of the two-line block it heads (see
+     .re-runner-card .re-toggle), and 9px with a ring of its own so it holds its own beside the
+     chevron instead of reading as a speck of dust. */
+  width: 9px;
+  height: 9px;
+  margin-top: 7px;
   border-radius: 50%;
   background: var(--dot-idle);
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--dot-idle) 20%, transparent);
 }
 .re-dot.on {
   background: var(--success-solid);
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--success-solid) 20%, transparent);
 }
 .re-runner {
   font-size: 13px;
@@ -15082,6 +15100,9 @@ button.chat-jump-start:hover {
 .re-runner-card .re-toggle {
   flex: 1;
   align-self: stretch;
+  /* The chevron and the dot lead the identity, which stacks a name over a host and version: a
+     mark centred on that block lands in the gap between the two lines, belonging to neither. */
+  align-items: flex-start;
   gap: 10px;
   min-height: 64px;
   padding: 10px 14px;
@@ -15171,9 +15192,6 @@ button.chat-jump-start:hover {
     min-height: 54px;
     padding: 10px 0 0;
     border-radius: 11px;
-  }
-  .re-runner-card .re-toggle > .re-dot {
-    margin-top: 8px;
   }
   /* Under 600px the chevron stays where it has always been: the top-right of the row, beside
      the name. Only the wide card leads with it. */
@@ -21503,6 +21521,8 @@ button.project-open-item-action:disabled {
                 background: var(--fill-muted); font-size: 12.5px; color: var(--text-2); white-space: nowrap;
                 max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 .wk-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+/* The space's public link, as the head's buttons are sized (mock share-links 08 ②). */
+.wk-actions > .session-shared-pill { height: 32px; padding: 0 12px; font-size: 13px; }
 /* Activity's button carries the collapsed sidebar's amber badge in its corner, and is pressed on Activity. */
 .wk-activity-btn.ant-btn { position: relative; overflow: visible; }
 .wk-activity-btn .tp-rail-badge { top: -7px; right: -7px; box-shadow: 0 0 0 2px var(--bg-base); }

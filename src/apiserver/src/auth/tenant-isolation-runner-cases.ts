@@ -88,6 +88,12 @@ export interface RunnerObjects {
   /** An integration job, and a Codex reset operation, the machine holds the claim of (`leaseOwner`, generation 1). */
   integrationJobId: string;
   codexOperationId: string;
+  /**
+   * The task that integration job lands: one of the project's own, not `projectTaskId`, whose one
+   * in-flight landing is the first half's queued job. No case names it; it is here so that the write
+   * trap counts it among A's ids, as it counted `projectTaskId` while the job landed that.
+   */
+  landingTaskId: string;
   /** A wiki repository operation of the machine's, claimed by it the same way (migration 0402). */
   wikiRepoOpId: string;
   /** A service token of the machine's, to be revoked. */
@@ -1553,6 +1559,10 @@ export const SHARED_BY_HAND: Readonly<Record<string, string>> = {
   'GET /shared/:token/events/:seq':
     'a position in the link\'s own session\'s transcript, not an object: read WHERE session_id = the link\'s '
     + '(sessions.service.ts:3719)',
+  'GET /shared/:token/docs/:slug':
+    'a document slug of the link\'s own wiki space, not an object a caller can name: the space is the link\'s '
+    + '(share-links.service.ts:378), and the slug is looked up among that space\'s own written documents — any '
+    + 'other is the one 404 (public-wiki.ts:155)',
 };
 
 /**

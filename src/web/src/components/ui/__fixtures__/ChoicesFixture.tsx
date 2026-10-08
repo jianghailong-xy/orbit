@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { App as AntApp, Button as AntButton, ConfigProvider, Dropdown, Modal, Popover as AntPopover, Select as AntSelect, Tooltip as AntTooltip } from 'antd';
+import { App as AntApp, Button as AntButton, ConfigProvider, Dropdown, Modal, Popconfirm as AntPopconfirm, Popover as AntPopover, Select as AntSelect, Tooltip as AntTooltip } from 'antd';
 import { CodeOutlined, GlobalOutlined, LockOutlined, PaperClipOutlined, PictureOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider, useThemeMode } from '../../../lib/theme';
@@ -9,6 +9,7 @@ import { Input } from '../Input';
 import { Dialog } from '../Dialog';
 import { OverlayScope } from '../Overlay';
 import { Menu, type MenuItem } from '../Menu';
+import { Popconfirm } from '../Popconfirm';
 import { Popover } from '../Popover';
 import { Tooltip } from '../Tooltip';
 import { Select, type SelectOption, type SelectOptions } from '../Select';
@@ -45,6 +46,8 @@ function Samples() {
   const [value, setValue] = useState<string | null>(kind === 'account' ? '' : 'never');
   const [open, setOpen] = useState(false);
   const [many, setMany] = useState(kind === 'tags' ? ['a@b.test', 'c@d.test'] : ['bug', 'docs', 'ops']);
+  const [answer, setAnswer] = useState('none');
+  const [picked, setPicked] = useState('none');
   const disabled = state === 'disabled';
   const accessItems: MenuItem[] = [
     { key: 'private', label: <div>Only you<div className="fixture-detail">Turns the link off.</div></div>, icon: <LockOutlined />, selected: true },
@@ -60,6 +63,24 @@ function Samples() {
     <div tabIndex={-1} data-testid="neutral">{['attachment', 'access', 'submenu'].includes(kind) ? legacy
       ? <Dropdown open={open} onOpenChange={setOpen} placement={calloutPlacement} trigger={['click']} disabled={disabled} menu={{ className: `sample-surface ${menuClass}`, selectedKeys: kind === 'access' ? ['private'] : [], items: kind === 'submenu' ? submenuItems : (items as MenuItem[]).map((entry) => entry.type === 'separator' ? { key: entry.key, type: 'divider' } : entry.type === 'group' ? null : { key: entry.key, label: entry.label, icon: entry.icon, disabled: entry.disabled }) }}>{trigger}</Dropdown>
       : <Menu open={open} onOpenChange={setOpen} side={side} align={align} trigger={trigger} disabled={disabled} items={items} variant={kind === 'attachment' ? 'attachment' : 'default'} popupClassName={`sample-surface ${menuClass}`} />
+      // A workspace menu's shape: items around a submenu, one dangerous; same items and trigger for both systems.
+      : kind === 'session' ? <>{legacy
+        ? <Dropdown trigger={['click']} menu={{ onClick: ({ key }) => setPicked(key), items: [{ key: 'default', label: 'Default model' },
+          { key: 'provider', label: 'Provider', children: [{ key: 'codex', label: 'Codex' }, { key: 'claude', label: 'Claude' }] },
+          { key: 'separator', type: 'divider' }, { key: 'group', label: 'Group by tag' }, { key: 'delete', label: 'Delete', danger: true }] }}>
+          <Button>Session actions</Button></Dropdown>
+        : <Menu trigger={<Button>Session actions</Button>} items={[{ key: 'default', label: 'Default model', onSelect: () => setPicked('default') },
+          { key: 'provider', label: 'Provider', children: [{ key: 'codex', label: 'Codex', onSelect: () => setPicked('codex') }, { key: 'claude', label: 'Claude', onSelect: () => setPicked('claude') }] },
+          { key: 'separator', type: 'separator' }, { key: 'group', label: 'Group by tag', onSelect: () => setPicked('group') },
+          { key: 'delete', label: 'Delete', danger: true, onSelect: () => setPicked('delete') }]} />}
+        <output aria-label="Picked">{picked}</output></>
+      // The task panel's delete question, on the same trigger for both systems.
+      : kind === 'popconfirm' ? <>{legacy
+        ? <AntPopconfirm title="Delete this task?" description="A run still in flight is stopped. This action cannot be undone." okText="Delete" cancelText="Cancel"
+          okButtonProps={{ danger: true }} onConfirm={() => setAnswer('confirmed')} onCancel={() => setAnswer('cancelled')}><Button>Delete task</Button></AntPopconfirm>
+        : <Popconfirm trigger={<Button>Delete task</Button>} title="Delete this task?" description="A run still in flight is stopped. This action cannot be undone."
+          confirmText="Delete" cancelText="Cancel" danger onConfirm={() => setAnswer('confirmed')} onCancel={() => setAnswer('cancelled')} />}
+        <output aria-label="Answer">{answer}</output></>
       : kind === 'popover' ? legacy
         ? <AntPopover title="Context" content={<div>12,800 of 128,000 tokens</div>} trigger="click" placement={calloutPlacement} classNames={{ root: 'sample-floating-root', arrow: 'sample-arrow', container: 'sample-surface', title: 'sample-title' }}><Button>Context</Button></AntPopover>
         : <Popover trigger={<Button>Context</Button>} title="Context" side={side} align={align} popupClassName="sample-surface"><div>12,800 of 128,000 tokens</div></Popover>
