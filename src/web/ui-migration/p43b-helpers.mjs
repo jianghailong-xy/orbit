@@ -48,8 +48,14 @@ export async function observe(page, fixtures, step) {
   return { step, ...state, requests: fixtures.requests.splice(0).map(({ method, path, body }) => ({ method, path, body })) };
 }
 
-/** Type into a field the way a person does: focus, select what is there, type. */
+/** Type into a field the way a person does: once it has stopped moving, focus, select what is there,
+ *  type. A replaced text area that has just appeared still animates its min-height (0.3s), and
+ *  Playwright retries a click on a moving field, scrolling it to a different edge on each retry, so
+ *  the dialog would end up scrolled by however many retries it took. */
 export async function fill(locator, value) {
+  await locator.waitFor();
+  await frames(locator.page());
+  await settled(locator.page());
   await locator.click();
   await locator.press('ControlOrMeta+a');
   if (value) await locator.pressSequentially(value);
