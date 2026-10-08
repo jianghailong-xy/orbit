@@ -17,16 +17,18 @@
 -- WHAT IS NOT TOUCHED
 -- -------------------
 -- No row is written, backfilled or locked beyond what the CHECK's validation reads. Every stored row satisfies
--- the restated CHECK: none names a job yet (job_id is 0401's and nothing has written it), so for each it reads
--- exactly as 0338's did. wiki_plan_job_maker_chk stays as 0401 wrote it. No table, column, index, trigger,
+-- the restated CHECK: where 0404 has not restated it already, none names a job yet (job_id is 0401's and only a
+-- server's maker writes it), so for each it reads exactly as 0338's did. wiki_plan_job_maker_chk stays as 0401
+-- wrote it. No table, column, index, trigger,
 -- function or type is created, replaced or dropped; `task`, `session`, `project` and the DONE fence are named
 -- nowhere below.
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
 -- 0405: main stood at 0403_share_link_wiki_space and this project's line at 0403 when this was written
--- (2026-10-08); P6's branch holds 0404_wiki_plan_server_draft in its worktree, and no other branch, worktree
--- or stash on this host held 0404 or above. The statement can run twice: the CHECK is replaced only while it
+-- (2026-10-08), and P6 held 0404_wiki_plan_server_draft, which has since landed on this line first. 0404
+-- restates this same CHECK word for word, so on a database that ran it the block below finds the CHECK
+-- reading the new way and changes nothing. The statement can run twice: the CHECK is replaced only while it
 -- still reads 0338's way.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 

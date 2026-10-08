@@ -782,7 +782,7 @@ test('a space whose maintenance names no workspace holds the build on the server
   await confirm(h, s, v3);
   const rows = await builds(h, s.spaceId);
   assert.deepEqual([rows[0].state, rows[0].outcome], ['ended', 'failed']);
-  assert.match(rows[0].error ?? '', /no longer runs this account's wiki jobs/u);
+  assert.match(rows[0].error ?? '', /no longer executes this account's wiki/u);
   assert.equal((await job(h, row.job_id!)).state, 'cancelled');
   assert.equal(rows[1].job_id, null, 'the new build is the runner\'s');
 });

@@ -6,6 +6,7 @@ import {
   uuidToBase62,
   WIKI_DOCS_BUILD_JOB,
   WIKI_PLAN_JOB_RULES,
+  WIKI_PLAN_SERVER_JOB,
   wikiMaintenanceSettings,
   type NormalizedRunEvent,
   type WikiMaintenanceSettings,
@@ -28,10 +29,10 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { TASK_COMPLETION_FENCE_REVISION } from '../tasks/task-completion-criterion';
-import { currentWikiExecutorSwitch, wikiExecutorServes } from './wiki-executor-switch';
 import { spaceScope } from './wiki-maintenance';
 import { WIKI_RUN_BASH_TIMEOUT, wikiRunCutOff } from './wiki-maintenance-session';
 import { ensureWikiMaintenanceList, wikiMaintenanceProviderProblem } from './wiki-maintenance-settings';
+import { currentWikiExecutorSwitch, wikiExecutorServes } from './wiki-executor-switch';
 
 /**
  * The plan's jobs (criterion 11; contracts/wiki.contract.json `plan.jobs`, migrations 0338 and 0340): a
@@ -211,7 +212,7 @@ export async function requestWikiPlanJob(prisma: Db, ask: WikiPlanJobAsk, now: D
 export async function requestWikiPlanBuild(prisma: Db, ask: WikiPlanBuildAsk, now: Date = new Date()): Promise<WikiPlanJobAnswer> {
   const made = await prisma.wikiPlanJob.findMany({
     where: { ownerId: ask.ownerId, spaceId: ask.spaceId, kind: 'build', state: 'made' },
-    select: { id: true, ownerId: true, taskId: true, jobId: true },
+    select: { id: true, taskId: true, jobId: true, ownerId: true },
   });
   for (const job of made) await endJobWhoseTaskIsOver(prisma, job, now);
   const waiting = await waitingBuildJob(prisma, ask.ownerId, ask.spaceId);
@@ -257,6 +258,12 @@ export async function requestWikiPlanBuild(prisma: Db, ask: WikiPlanBuildAsk, no
 export async function advanceWikiPlanJob(prisma: Db, ownerId: string, jobId: string, now: Date = new Date()): Promise<string | null> {
   const job = await prisma.wikiPlanJob.findFirst({ where: { id: jobId, ownerId }, select: JOB_SELECT });
   if (!job || (job.state !== 'queued' && job.state !== 'held')) return null;
+  // The account's wiki is the server's (contract `plan.jobs.server`): the job is a wiki_job, and no task is made.
+  const server = wikiExecutorServes(currentWikiExecutorSwitch(), ownerId) ? wikiPlanServerJobOf(job) : null;
+  if (server) {
+    await makeWikiPlanJobOnServer(prisma, job, server, now);
+    return null;
+  }
   const space = await prisma.wikiSpace.findFirst({ where: { id: job.spaceId, ownerId }, select: { id: true, title: true, settings: true } });
   if (!space) return null;
   const settings = storedMaintenance(space.settings);
@@ -265,16 +272,6 @@ export async function advanceWikiPlanJob(prisma: Db, ownerId: string, jobId: str
     : null;
   if (!workspace) {
     await holdJob(prisma, job, 'no_maintenance_workspace', now);
-    return null;
-  }
-  // An account the executor switch gives the server has the job run by the wiki worker with the deployment's
-  // System model (contract `docs.build.server`): no task of the hidden list is made, so no session's provider is
-  // asked, and neither the provider nor the list's unfinished task holds it back — the worker reads the
-  // repository through the workspace's runner, which is why it still needs one. Under the default runner this is
-  // never true, and the job is made below exactly as it always has been.
-  const onServer = WIKI_PLAN_JOBS_ON_SERVER[job.kind as WikiPlanJobKind];
-  if (onServer && wikiExecutorServes(currentWikiExecutorSwitch(), ownerId)) {
-    await makeWikiPlanJobOnServer(prisma, job, { ...onServer, input: { planJobId: job.id } }, now);
     return null;
   }
   if (await wikiMaintenanceProviderProblem(prisma, ownerId, settings.provider)) {
@@ -316,32 +313,84 @@ export async function advanceWikiPlanJob(prisma: Db, ownerId: string, jobId: str
   return made.taskId;
 }
 
-/**
- * The plan jobs the wiki worker runs for an account the executor switch gives the server, and as which job kind
- * (contract `jobs.kinds`): a build is `docs_build` (P7). A kind that is not here is made as a task, as it always was.
- */
-const WIKI_PLAN_JOBS_ON_SERVER: Partial<Record<WikiPlanJobKind, { kind: string; priority: number }>> = {
-  build: { kind: WIKI_DOCS_BUILD_JOB.kind, priority: WIKI_DOCS_BUILD_JOB.priority },
-};
-
-/**
- * Make a plan job on the server (contract `jobs.make`): its `wiki_job` enqueued and the plan job made with it, in
- * one transaction, only while the plan job still waits — of two facts asking together one makes it and the other
- * finds it moved. Answers whether this call made it. The worker's runner of the kind reports how far it got and how
- * it ended on the plan job (`progressWikiPlanBuildOfJob`, `finishWikiPlanJob`), as a task's run does.
- */
-export async function makeWikiPlanJobOnServer(
-  prisma: Db,
-  job: Pick<WikiPlanJobRow, 'id' | 'ownerId' | 'spaceId'>,
-  make: { kind: string; priority: number; input: Record<string, unknown> },
-  now: Date = new Date(),
-): Promise<boolean> {
-  return new PlanJobTaskWriter(prisma).makeOnServer(job, make, now);
-}
-
 /** The acceptance command a job's task is made with: its run is judged by what it reported. */
 export function wikiPlanCheckCommand(spaceRef: string, jobRef: string): string {
   return `orbit wiki plan check --space ${spaceRef} --job ${jobRef}`;
+}
+
+/** What a plan job is made as when the server executes it: its wiki_job's kind, priority and input. */
+export interface WikiPlanServerJob {
+  kind: string;
+  priority: number;
+  input: Record<string, unknown>;
+}
+
+/**
+ * The wiki_job a plan job runs as when the server executes the account's wiki (contract `plan.jobs.server`): a draft
+ * as `plan_draft`, a revision as `plan_revise`, a build as `docs_build` (P7, `docs.build.server`), all at the owner's
+ * priority. Null for a kind the server does not run, which keeps the runner's path.
+ */
+function wikiPlanServerJobOf(job: Pick<WikiPlanJobRow, 'id' | 'kind'>): WikiPlanServerJob | null {
+  if (job.kind === 'draft' || job.kind === 'revise') {
+    return { kind: WIKI_PLAN_SERVER_JOB.kinds[job.kind], priority: WIKI_PLAN_SERVER_JOB.priority, input: { planJobId: job.id } };
+  }
+  if (job.kind === 'build') {
+    return { kind: WIKI_DOCS_BUILD_JOB.kind, priority: WIKI_DOCS_BUILD_JOB.priority, input: { planJobId: job.id } };
+  }
+  return null;
+}
+
+/**
+ * Make a plan job the server's (contract `plan.jobs.server`): its wiki_job enqueued in the same transaction that
+ * marks it made with it. The space's maintenance workspace is still what the job needs — the worker reads the
+ * repository through that workspace's runner — so a space without one holds the job as the runner's path does;
+ * the provider is not asked, since no session's model is, and nothing waits for the hidden list. Answers the
+ * wiki_job made, or null.
+ */
+export async function makeWikiPlanJobOnServer(
+  prisma: Db,
+  job: WikiPlanJobRow,
+  server: WikiPlanServerJob,
+  now: Date = new Date(),
+): Promise<string | null> {
+  const space = await prisma.wikiSpace.findFirst({ where: { id: job.spaceId, ownerId: job.ownerId }, select: { settings: true } });
+  if (!space) return null;
+  const settings = storedMaintenance(space.settings);
+  const workspace = settings.workspaceId
+    ? await prisma.workspace.findFirst({ where: { id: settings.workspaceId, ownerId: job.ownerId, deletedAt: null }, select: { id: true } })
+    : null;
+  if (!workspace) {
+    await holdJob(prisma, job, 'no_maintenance_workspace', now);
+    return null;
+  }
+  return new PlanJobServerWriter(prisma).makeOnServer({ ownerId: job.ownerId, spaceId: job.spaceId, planJobId: job.id, now, server });
+}
+
+/** The one writer of a server-made plan job: a class only so that its retry is labelled like every other. */
+class PlanJobServerWriter {
+  private readonly logger = new Logger('WikiPlanJobs');
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  async makeOnServer(input: { ownerId: string; spaceId: string; planJobId: string; now: Date; server: WikiPlanServerJob }): Promise<string | null> {
+    return withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        const wikiJobId = randomUUID();
+        const made = await tx.$executeRaw`
+          UPDATE "wiki_plan_job"
+             SET "state" = 'made', "job_id" = ${wikiJobId}::uuid, "made_at" = ${input.now}, "held_reason" = NULL, "held_at" = NULL, "updated_at" = now()
+           WHERE "id" = ${input.planJobId}::uuid AND "owner_id" = ${input.ownerId}::uuid AND "state" IN ('queued', 'held')`;
+        if (made === 0) return null;
+        await tx.$executeRaw`
+          INSERT INTO "wiki_job" ("id", "owner_id", "space_id", "kind", "input", "priority", "state")
+          VALUES (${wikiJobId}::uuid, ${input.ownerId}::uuid, ${input.spaceId}::uuid, ${input.server.kind},
+                  ${JSON.stringify(input.server.input)}::jsonb, ${input.server.priority}, 'queued')`;
+        return wikiJobId;
+      },
+      loggedRetry(this.logger, 'wiki.planJobOnServer'),
+    );
+  }
 }
 
 /** Say on the job why it was not made; the reason it first held for keeps its time. */
@@ -363,10 +412,9 @@ async function queueJob(prisma: Db, job: WikiPlanJobRow): Promise<void> {
 }
 
 /**
- * The one writer of a job's maker — its task, or on the server its wiki job: a class only so that its retries are
- * labelled like every other. A task's maker locks the list row first (rank 20, as the maintenance trigger locks it),
- * then reads the list and the job again under it: of a job and a maintenance run asking together, one finds the
- * other's task.
+ * The one writer of a job's task: a class only so that its retry is labelled like every other. The list
+ * row is locked first (rank 20, as the maintenance trigger locks it), then the list and the job are read
+ * again under it: of a job and a maintenance run asking together, one finds the other's task.
  */
 class PlanJobTaskWriter {
   private readonly logger = new Logger('WikiPlanJobs');
@@ -422,34 +470,6 @@ class PlanJobTaskWriter {
         return { taskId: task.id } as const;
       },
       loggedRetry(this.logger, 'wiki.planJobTask'),
-    );
-  }
-
-  /**
-   * The server's maker instead of a task (`makeWikiPlanJobOnServer`): the plan job made with the wiki job's id while
-   * it still waits, and the wiki job queued with it. Nothing of the list is read or written — no session runs it.
-   */
-  async makeOnServer(
-    job: Pick<WikiPlanJobRow, 'id' | 'ownerId' | 'spaceId'>,
-    make: { kind: string; priority: number; input: Record<string, unknown> },
-    now: Date,
-  ): Promise<boolean> {
-    const wikiJobId = randomUUID();
-    return withTransactionRetry(
-      this.prisma,
-      async (tx) => {
-        const made = await tx.wikiPlanJob.updateMany({
-          where: { id: job.id, ownerId: job.ownerId, state: { in: [...WAITING_STATES] } },
-          data: { state: 'made', jobId: wikiJobId, madeAt: now, heldReason: null, heldAt: null },
-        });
-        if (made.count === 0) return false;
-        await tx.$executeRaw`
-          INSERT INTO "wiki_job" ("id", "owner_id", "space_id", "kind", "input", "priority", "state")
-          VALUES (${wikiJobId}::uuid, ${job.ownerId}::uuid, ${job.spaceId}::uuid, ${make.kind},
-                  ${JSON.stringify(make.input)}::jsonb, ${make.priority}, 'queued')`;
-        return true;
-      },
-      loggedRetry(this.logger, 'wiki.planJobOnServer'),
     );
   }
 }
@@ -544,8 +564,8 @@ export async function resumeWikiPlanJobs(
  * A made job whose task ended, or is gone, before its run said how it ended: failed, with why. Answers
  * whether the job is ended now. A job its run reported on is ended already and is left as it said.
  */
-async function endJobWhoseTaskIsOver(prisma: Db, job: Pick<WikiPlanJobRow, 'id' | 'ownerId' | 'taskId' | 'jobId'>, now: Date): Promise<boolean> {
-  if (job.jobId !== null) return endJobWhoseServerJobIsOver(prisma, { ...job, jobId: job.jobId }, now);
+async function endJobWhoseTaskIsOver(prisma: Db, job: Pick<WikiPlanJobRow, 'id' | 'taskId' | 'jobId' | 'ownerId'>, now: Date): Promise<boolean> {
+  if (job.jobId) return endJobWhoseServerJobIsOver(prisma, { id: job.id, jobId: job.jobId, ownerId: job.ownerId }, now);
   const task = job.taskId ? await prisma.task.findFirst({ where: { id: job.taskId }, select: { status: true } }) : null;
   if (task && (UNFINISHED_TASK as readonly string[]).includes(task.status)) return false;
   const why = task
@@ -555,28 +575,28 @@ async function endJobWhoseTaskIsOver(prisma: Db, job: Pick<WikiPlanJobRow, 'id' 
   return true;
 }
 
+const UNSETTLED_SERVER_JOB = ['queued', 'running', 'waiting'] as const;
+
 /**
- * A made job the wiki worker runs (`job_id`), over when its wiki job ended without the run having said how the plan
- * job went — failed, with why — and, once the executor switch no longer gives the account to the server, when its
- * wiki job never started: cancelled, so a switch back to runner leaves no build that reads as running for ever.
- * A wiki job still queued for an account the server runs, or running, is not over.
+ * A made job of the server's (contract `plan.jobs.server`) whose wiki_job ended, or is gone, before the run said how
+ * the plan job went: failed, with why. One that never started while the server no longer executes the account's
+ * wiki (ORBIT_WIKI_EXECUTOR moved back) would wait for ever: it is cancelled, and the plan job ended with why, so the
+ * owner's next request is made on the path that runs now. Answers whether the plan job is ended now.
  */
-async function endJobWhoseServerJobIsOver(prisma: Db, job: Pick<WikiPlanJobRow, 'id' | 'ownerId'> & { jobId: string }, now: Date): Promise<boolean> {
-  const run = await prisma.wikiJob.findFirst({ where: { id: job.jobId, ownerId: job.ownerId }, select: { state: true, error: true } });
+async function endJobWhoseServerJobIsOver(prisma: Db, job: { id: string; jobId: string; ownerId: string }, now: Date): Promise<boolean> {
+  const run = await prisma.wikiJob.findFirst({ where: { id: job.jobId }, select: { state: true, startedAt: true } });
   let why: string;
-  if (!run) {
-    why = 'its server job is gone';
-  } else if (run.state === 'succeeded' || run.state === 'failed' || run.state === 'cancelled') {
-    why = `its server job ended ${run.state} before it said how it went${run.error ? `: ${run.error}` : ''}`;
-  } else if (run.state === 'queued' && !wikiExecutorServes(currentWikiExecutorSwitch(), job.ownerId)) {
-    why = "the server no longer runs this account's wiki jobs (ORBIT_WIKI_EXECUTOR): its job was cancelled before it started";
+  if (run && (UNSETTLED_SERVER_JOB as readonly string[]).includes(run.state)) {
+    if (run.state !== 'queued' || run.startedAt !== null || wikiExecutorServes(currentWikiExecutorSwitch(), job.ownerId)) return false;
     const cancelled = await prisma.$executeRaw`
       UPDATE "wiki_job"
-         SET "state" = 'cancelled', "error" = ${why}, "ended_at" = now(), "updated_at" = now()
-       WHERE "id" = ${job.jobId}::uuid AND "state" = 'queued'`;
+         SET "state" = 'cancelled', "ended_at" = now(), "updated_at" = now(),
+             "error" = 'the server no longer executes this account''s wiki (ORBIT_WIKI_EXECUTOR) and the job had not started'
+       WHERE "id" = ${job.jobId}::uuid AND "state" = 'queued' AND "started_at" IS NULL`;
     if (cancelled === 0) return false;
+    why = "the server no longer executes this account's wiki, and its job there had not started";
   } else {
-    return false;
+    why = run ? `its server job ended ${run.state} before it said how it went` : 'its server job was deleted before it said how it went';
   }
   await prisma.wikiPlanJob.updateMany({ where: { id: job.id, state: 'made' }, data: { state: 'ended', outcome: 'failed', endedAt: now, error: why } });
   return true;
@@ -587,7 +607,7 @@ export async function settleWikiPlanJobsOfTasks(prisma: Db, ownerId: string, tas
   if (taskIds.length === 0) return 0;
   const jobs = await prisma.wikiPlanJob.findMany({
     where: { ownerId, state: 'made', taskId: { in: [...taskIds] } },
-    select: { id: true, ownerId: true, taskId: true, jobId: true },
+    select: { id: true, taskId: true, jobId: true, ownerId: true },
   });
   let ended = 0;
   for (const job of jobs) if (await endJobWhoseTaskIsOver(prisma, job, now)) ended += 1;
@@ -1005,6 +1025,38 @@ export async function progressWikiPlanBuildOfJob(
   return moved > 0;
 }
 
+/**
+ * A server-run job's start and the gate round it is on (contract `plan.jobs.server`): the time it first started
+ * (coalesce) and, when given, its round, on its row by id while it is made by this wiki_job. It has no session.
+ * Answers whether it was.
+ */
+export async function progressWikiPlanJobOfJob(
+  prisma: Db,
+  input: { planJobId: string; wikiJobId: string; attempt: number | null },
+  now: Date = new Date(),
+): Promise<boolean> {
+  const moved = await prisma.$executeRaw`
+    UPDATE "wiki_plan_job"
+       SET "started_at" = coalesce("started_at", ${now}), "attempt" = coalesce(${input.attempt}::int, "attempt"), "updated_at" = now()
+     WHERE "id" = ${input.planJobId}::uuid AND "state" = 'made' AND "job_id" = ${input.wikiJobId}::uuid`;
+  return moved > 0;
+}
+
+/**
+ * The materials a server-run job drafts from, kept on it at its first run (contract `plan.jobs.server.materials`):
+ * the snapshot's sha, what Orbit said of the space, and the texts the snapshot does not carry. A replay reads these
+ * instead of reading again, so it asks the model the same questions. Only while it is made by this wiki_job.
+ */
+export async function saveWikiPlanJobMaterials(
+  prisma: Db,
+  input: { planJobId: string; wikiJobId: string; materials: Record<string, unknown> },
+): Promise<boolean> {
+  const moved = await prisma.$executeRaw`
+    UPDATE "wiki_plan_job" SET "materials" = ${JSON.stringify(input.materials)}::jsonb, "updated_at" = now()
+     WHERE "id" = ${input.planJobId}::uuid AND "state" = 'made' AND "job_id" = ${input.wikiJobId}::uuid`;
+  return moved > 0;
+}
+
 /** How a run ended, as it said it, checked by the door before it is kept. */
 export interface WikiPlanJobEnd {
   outcome: WikiPlanJobOutcome;
@@ -1019,8 +1071,7 @@ export interface WikiPlanJobEnd {
 /**
  * The run ended (contract `plan.jobs.finish`): its made job is ended with what it said. Answers whether
  * it was — a job ended already, by its run or by its task, is left as it is. A build keeps the version it
- * was made for when it failed, and names the one it wrote when it succeeded. A run of the wiki worker has no
- * session (null) and names its wiki job, which the plan job must still be made by.
+ * was made for when it failed, and names the one it wrote when it succeeded.
  */
 export async function finishWikiPlanJob(
   prisma: Db,
@@ -1029,13 +1080,14 @@ export async function finishWikiPlanJob(
   end: WikiPlanJobEnd,
   now: Date = new Date(),
   kind: WikiPlanJobKind = 'draft',
-  wikiJobId?: string,
+  wikiJobId: string | null = null,
 ): Promise<boolean> {
   const version = kind === 'build'
     ? (end.outcome === 'succeeded' && end.version !== null ? { version: end.version } : {})
     : { version: end.outcome === 'succeeded' ? end.version : null };
   const ended = await prisma.wikiPlanJob.updateMany({
-    where: { id: jobId, state: 'made', ...(wikiJobId !== undefined ? { jobId: wikiJobId } : {}) },
+    // A server-run job (contract `plan.jobs.server`) is ended only by the wiki_job it was made with, and has no session.
+    where: { id: jobId, state: 'made', ...(wikiJobId !== null ? { jobId: wikiJobId } : {}) },
     data: {
       state: 'ended',
       outcome: end.outcome,
