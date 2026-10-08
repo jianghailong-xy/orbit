@@ -11,6 +11,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.orbitd.android.auth.chooseServer
 import io.orbitd.android.*
 import io.orbitd.android.core.auth.AuthState
 import java.io.File
@@ -394,10 +395,10 @@ class TranscriptDeviceTest {
         compose.waitUntil(10_000) { app.session.state.value !is AuthState.Restoring }
         assertTrue(app.session.state.value is AuthState.SignedOut)
         control("{\"reset\":true}")
-        compose.onNodeWithText("Instance address").performTextReplacement(server)
-        compose.onNodeWithText("Email").performTextInput("a06@example.test")
-        compose.onNodeWithText("Password").performTextInput("a06-fixture-password")
-        compose.onAllNodesWithText("Sign in")[1].performScrollTo().performClick()
+        compose.chooseServer(server)
+        compose.onNodeWithText("Email").performTextReplacement("a06@example.test")
+        compose.onNodeWithText("Password").performTextReplacement("a06-fixture-password")
+        compose.onNodeWithText("Sign In").performScrollTo().performClick()
         compose.waitUntil(15_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
     }
     private fun openSession() {
