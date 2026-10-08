@@ -8,6 +8,6 @@ import (
 	"os/exec"
 )
 
-func startAntigravityGooglePTY(cmd *exec.Cmd, out io.Writer) (io.WriteCloser, error) {
-	return nil, errors.New("Antigravity 的 Google 登录暂时只支持 Linux runner")
+func startAntigravityGooglePTY(cmd *exec.Cmd, out io.Writer) (io.WriteCloser, <-chan struct{}, error) {
+	return nil, nil, errors.New("Antigravity 的 Google 登录暂时只支持 Linux runner")
 }
