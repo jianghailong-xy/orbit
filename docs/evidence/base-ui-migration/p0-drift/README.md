@@ -368,11 +368,24 @@ main 给 P0 页面新增了请求，固定数据没有对应的响应，用例�
 | 提交 | 请求 | 固定响应 | 新增该请求的 main 提交 | 截图 |
 | --- | --- | --- | --- | --- |
 | `5d7801e47` | `GET /api/auth/methods`：资料页的 `SignInMethodsCard` 经 `lib/googleLink.ts` 的 `authMethodsQuery` 读取 | `{ password: true, google: false, googleSignup: false }` | `558a8ba1f` feat(auth): link and unlink Google from the profile page, admin unlink, signInMethods, Sign-in settings (S4)。经 Google 登录项目的合并 `98cdd37d0`、main 的合并 `eee179f5d` 和项目线吸收 main 的 `09cc5760d` 进入项目线 | 没有变化，不需要登记。补固定响应前后，tip 的 252 张截图 248 张逐字节相同，4 张是 Chromium 噪声；资料页 profile 8 张逐字节相同，profile-validation 6 张相同、2 张是 Chromium 噪声（9 和 90 像素，差 1）。吸收 main 的 `09cc5760d` 前后同样没有截图变化。见 [p0-drift-3](../p0-drift-3/README.md) |
+| `82247962c` | `GET /api/wiki/spaces/<id>/share`：每个 Wiki 页面页头的 `WikiShareButton`（`components/WikiShareButton.tsx`）经 `api.ts` 的 `getShareLink('WIKI', …)` 读取 | `{ link: null, counts: { documents: 0, footnotes: 0 } }` | `2ba6765d9` docs(mocks): add wiki share mock for share-links。提交标题只提设计稿，提交里同时有 Wiki 分享的服务端和客户端实现，Web 在 `WikiPage.tsx` 的页头挂上 `WikiShareButton`。它是 main 的 first-parent 提交，是项目线吸收 main 的 `1d3cd4c70` 的第二父 | 补固定响应本身不改变截图。同一棵树上，原测试与补了固定响应的测试相比，0 张变化，WebKit 126 张全部逐字节相同：`2ba6765d9` 上 240 张逐字节相同、12 张 Chromium 噪声；项目 tip `1d3cd4c70` 上 235 张、17 张；新基础 `4d77d69b7` 上 246 张、6 张（≤15 像素，单通道差 ≤2）。Wiki 截图的变化来自 `2ba6765d9` 在页头加的 Share 按钮，按 main 漂移参考登记为 A10（28 张），见 [p0-drift-5](../p0-drift-5/README.md) |
 
 `5d7801e47` 的取值依据：
 - **服务端的默认回答**：`GET /auth/methods` 由 `SignInProvidersService.methods()`（`src/apiserver/src/auth/sign-in-providers.service.ts`）回答。没有 `sign_in_provider` 记录，或记录没开启、缺 client ID 或密钥时，回答就是 `{ password: true, google: false, googleSignup: false }`。Google 登录要管理员在 Admin → Sign-in 里打开才有（`7bb096cad` feat(auth): store Google sign-in settings, off until an administrator turns it on）。
 - **与已有固定数据一致**：P0 账号（`/users/me` 的固定数据）是普通成员，没有 `signInMethods` 字段。按 `lib/queries.ts` 的说明，这表示早于 Google 登录的服务端，账号只有密码。只能用密码登录、没有绑定 Google，与服务端没开 Google 登录相符。
 - **页面因此显示什么**：`SignInMethodsCard` 只在 Google 登录开着、账号已绑定 Google 或账号没有密码时才画出。真实产品里，一个只有密码的账号在没开 Google 的服务端上看不到这张卡片，资料页与 `558a8ba1f` 之前相同，Change password 卡片照常显示。P0 账号没有 `signInMethods`，卡片同样不画。反过来，如果取 `google: true`，真实产品会给这个账号显示带 Connect Google 的卡片，而 P0 页面不会，截图就不再是真实产品在这一状态下的样子。所以只有 `google: false` 同时符合服务端默认和已有固定数据。
+
+`82247962c` 的取值依据：
+- **服务端的默认回答**：`GET /wiki/spaces/:id/share` 由 `ShareLinksService.current(ownerId, 'WIKI', spaceId)`（`src/apiserver/src/share-links/share-links.service.ts`）回答 `{ link, counts }`。
+  - `link` 是这个空间还没结束的链接。链接只在所有者打开分享时建立（Share 对话框发 `PUT /wiki/spaces/:id/share`；`put()` 调用的 `insert()` 是服务端唯一新建链接的地方），服务端不会自动建，所以没人分享过的空间回答 `link: null`。
+  - `counts` 由 `wikiShareCounts`（`src/apiserver/src/share-links/public-wiki.ts`）算：`documents` 是 `WikiDocs.directory` 里已写好的文档数，`footnotes` 是这些文档已写好的段落里可以公开的脚注数。没有已写好的段落时，直接回答 `footnotes: 0`。
+- **与已有固定数据一致**：
+  - `counts` 读的目录，就是 `GET /api/wiki/spaces/<id>/docs` 回答的那份（`WikiDocs.directory`）。已有固定数据是 `{ plan: null, docs: { total: 0, written: 0 }, categories: [] }`，没有确认的计划，也就没有写好的文档。按同一份数据，服务端回答 `documents: 0, footnotes: 0`。
+  - 已有固定数据里，项目的 `GET /api/projects/<id>/share` 也是没分享的状态 `{ link: null, counts: … }`，形状相同。P0 账号唯一的分享链接是任务那条（`SHARE_TOKEN`），没有 Wiki 链接。
+- **页面因此显示什么**：
+  - `WikiShareButton` 在没有链接、或链接已结束时画 Share 按钮（手机只有图标），有打开的链接时画「Shared · Live」胶囊。`counts` 只在 Share 对话框里显示，P0 场景不打开它。
+  - 真实产品里，没分享过的空间页头显示 Share，P0 页面也是。如果取一个打开的链接，页头就成了 Shared · Live，这不是 P0 账号的空间该有的状态。
+  - 补固定响应之前，请求得到 501，查询没有数据，按钮同样是 Share。所以补固定响应不改变截图；页头多出的 Share 按钮是 `2ba6765d9` 本身的改动，按 main 漂移参考第 4 条归因、登记（第 5 批的 A10）。
 
 ### 已接受的迁移差异（`accepted/`）
 
