@@ -32,6 +32,10 @@ import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.reader.SessionReader
 import io.orbitd.android.tasks.TasksScreen
 import io.orbitd.android.projects.ProjectsScreen
+import io.orbitd.android.wiki.PageBar
+import io.orbitd.android.wiki.WikiDrawerCount
+import io.orbitd.android.wiki.WikiDestination
+import io.orbitd.android.watch.WatchDestination
 import io.orbitd.android.composer.NewSessionComposer
 import io.orbitd.android.text.LocalReaderResources
 import io.orbitd.android.text.ReaderResources
@@ -142,6 +146,16 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             held.retainAll(kept)
             held += kept.filter { it.destination == Destination.SETTINGS || it.destination == Destination.RUNNER }
         }
+        // A12's Wiki and Watch pages start afresh each time they are pushed, as on iOS: once such a route has left every
+        // stack its saved state goes too, so a document opened again at a section scrolls there and an old refusal is
+        // not shown on the next visit. (A link's arrival is a route of its own: OrbitRoute.entry.)
+        val wikiHeld = remember { mutableSetOf<OrbitRoute>() }
+        LaunchedEffect(navigation.stacks) {
+            val kept = navigation.stacks.values.flatten().toSet()
+            wikiHeld.filterNot(kept::contains).forEach { holder.removeState(Wire.json.encodeToString(it)) }
+            wikiHeld.retainAll(kept)
+            wikiHeld += kept.filter { it.isWikiOrWatch }
+        }
         val route = navigation.current
         fun open(next: OrbitRoute) { keyboard?.hide(); focus.clearFocus(); navigation = navigation.push(next) }
         fun select(key: String, root: OrbitRoute) {
@@ -164,7 +178,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         listOf(Triple("Projects", Destination.PROJECTS, R.drawable.ic_project), Triple("Tasks", Destination.TASKS, R.drawable.ic_task),
                             Triple("Wiki", Destination.WIKI, R.drawable.ic_wiki)).forEach { (name, dest, icon) ->
                             NavigationDrawerItem(label = { Text(name) }, selected = navigation.section == name,
-                                icon = { Icon(painterResource(icon), null) }, onClick = { select(name, OrbitRoute(dest, origin = Origin.DRAWER)) })
+                                icon = { Icon(painterResource(icon), null) }, onClick = { select(name, OrbitRoute(dest, origin = Origin.DRAWER)) },
+                                badge = if (dest == Destination.WIKI) ({ WikiDrawerCount(app, signedIn.handle, drawer.isOpen) }) else null)
                         }
                         SectionHeading("Workspaces")
                         DirectoryStatus(data) { app.realtime.refreshDirectory() }
@@ -193,7 +208,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                 }
             }) {
             Scaffold(topBar = {
-                TopAppBar(title = { Text(routeTitle(route, data), maxLines = 2, style = MaterialTheme.typography.titleMedium) },
+                TopAppBar(title = { PageBar.Title(route) { Text(routeTitle(route, data), maxLines = 2, style = MaterialTheme.typography.titleMedium) } },
                     navigationIcon = {
                         IconButton(onClick = { if (navigation.canGoBack) navigation = navigation.back() else scope.launch { focus.clearFocus(); drawer.open() } }) {
                             Icon(painterResource(if (navigation.canGoBack) R.drawable.ic_back else R.drawable.ic_menu), if (navigation.canGoBack) "Back" else "Open navigation")
@@ -205,6 +220,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         if (route.destination == Destination.SESSION && route.id != null) IconButton(onClick = {
                             open(OrbitRoute(Destination.SETTINGS, id = "share", recordId = "SESSION:${route.id}"))
                         }) { Icon(painterResource(R.drawable.ic_share), "Share session") }
+                        PageBar.Actions(route, this)
                         if (navigation.canGoBack) IconButton(onClick = { scope.launch { focus.clearFocus(); drawer.open() } }) { Icon(painterResource(R.drawable.ic_menu), "Open navigation") }
                         IconButton(onClick = { app.realtime.refreshDirectory() }) { Icon(painterResource(R.drawable.ic_refresh), "Refresh directory") }
                     })
@@ -221,6 +237,12 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.DRAFT -> NewSessionComposer(app, signedIn.handle, route, data, ::open)
                                 Destination.TASKS, Destination.TASK, Destination.LIST -> TasksScreen(app, signedIn.handle, route, revision, ::open) { navigation = navigation.back() }
                                 Destination.PROJECTS, Destination.PROJECT -> ProjectsScreen(app, signedIn.handle, route, revision, ::open) { navigation = navigation.back() }
+                                Destination.WIKI, Destination.WIKI_ENTRY, Destination.WIKI_BROWSE, Destination.WIKI_INDEX,
+                                Destination.WIKI_ARTICLE, Destination.WIKI_DOC, Destination.WIKI_REVIEW, Destination.WIKI_SETTINGS,
+                                Destination.WIKI_RUN, Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION ->
+                                    WikiDestination(app, signedIn.handle, route, data, ::open) { change -> navigation = change(navigation) }
+                                Destination.WATCH -> WatchDestination(app, signedIn.handle, route,
+                                    navigate = { change -> navigation = change(navigation) }, open = ::open)
                                 Destination.SETTINGS -> SettingsScreen(management, route, revision, ::open, { navigation = navigation.back() }, auth::logout,
                                     changed = { app.realtime.refreshDirectory() },
                                     workspaceDeleted = { select("workspaces", OrbitRoute(Destination.WORKSPACES)) },
@@ -247,7 +269,16 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     Destination.FOLDER -> data.folders.firstOrNull { ObjectId.same(it.id, route.id) }?.name ?: "Folder unavailable"
     Destination.SEARCH -> "Search sessions"
     Destination.DRAFT -> "New session"
-    Destination.WIKI_ENTRY -> "Wiki"
+    Destination.WIKI, Destination.WIKI_ENTRY -> "Wiki"
+    Destination.WIKI_BROWSE -> "Browse"
+    Destination.WIKI_INDEX -> "Index"
+    Destination.WIKI_ARTICLE -> "Article"
+    Destination.WIKI_DOC -> "Document"
+    Destination.WIKI_REVIEW -> "Review"
+    Destination.WIKI_SETTINGS -> "Wiki settings"
+    Destination.WIKI_RUN -> "Maintenance"
+    Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION -> "Wiki plan"
+    Destination.WATCH -> if (route.id == null) "Following" else "Watch"
     Destination.SETTINGS -> if (route.id == "workspace") data.workspaces.firstOrNull { ObjectId.same(it.id, route.workspaceId) }?.name
         ?.let { "$it settings" } ?: settingsTitle(route.id) else settingsTitle(route.id, route.recordId)
     Destination.RUNNER -> runnerTitle(route.recordId, route.id, data.runners.firstOrNull { ObjectId.same(it.id, route.id) }?.name)
