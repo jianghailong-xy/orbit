@@ -21,7 +21,7 @@ public enum LoginFailure {
     public static let googleUnavailable = "Couldn't open Google sign-in on this device. Try again, or sign in with your password."
     /// The answer that came back was to another sign-in: its ticket wasn't used.
     public static let googleStateMismatch = "That Google sign-in didn't match the one this app started, so it wasn't used. Continue with Google again."
-    /// The exchange's rate limit, which answers 429 with no code.
+    /// The per-address budget: the exchange's 429, which has no code, and /start's GOOGLE_RATE_LIMITED.
     public static let googleTooMany = "Too many Google sign-ins from your network. Wait a minute, then continue with Google again."
 
     /// The refusals the server names by `code` (docs/google-sign-in-design.md §4.1–4.3, §5.2, §5.5),
@@ -30,6 +30,9 @@ public enum LoginFailure {
     public static let refusals: [String: String] = [
         "ACCOUNT_DISABLED": "This Orbit account is disabled. Ask an administrator to enable it again.",
         "GOOGLE_NOT_CONFIGURED": "Google sign-in is turned off on this server. Sign in with your email and password, or ask an administrator to turn it on.",
+        "GOOGLE_RATE_LIMITED": googleTooMany,
+        "GOOGLE_SIGN_IN_BUSY": "Too many Google sign-ins are in progress on this Orbit server. Wait a few minutes, then continue with Google again, or sign in with your password.",
+        "GOOGLE_BAD_REQUEST": "Orbit couldn't start Google sign-in from this app. Continue with Google to try again; if it keeps failing, sign in with your password.",
         "GOOGLE_FLOW_EXPIRED": "That Google sign-in expired before it finished. Continue with Google to try again.",
         "GOOGLE_CANCELLED": googleCancelled,
         "GOOGLE_EXCHANGE_FAILED": "Orbit couldn't confirm your sign-in with Google. Try again in a moment; if it keeps failing, ask an administrator to check this server's Google sign-in settings.",

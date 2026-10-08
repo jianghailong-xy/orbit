@@ -313,10 +313,14 @@ public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
     public let fingerprintPrefix: String?
     /// Temporarily skipped until this time, without changing authentication or quota.
     public let pausedUntil: String?
+    /// When this signed-in account's login lapses (ISO 8601): the CLI's own expiry for it, Claude Code
+    /// only. Absent where the CLI recorded none.
+    public let loginExpiresAt: String?
 
     public init(id: String, name: String? = nil, auth: String? = nil,
                 home: String? = nil, codexHome: String? = nil,
-                fingerprintPrefix: String? = nil, pausedUntil: String? = nil) {
+                fingerprintPrefix: String? = nil, pausedUntil: String? = nil,
+                loginExpiresAt: String? = nil) {
         self.id = id
         self.name = name
         self.auth = auth
@@ -324,6 +328,7 @@ public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
         self.codexHome = codexHome
         self.fingerprintPrefix = fingerprintPrefix
         self.pausedUntil = pausedUntil
+        self.loginExpiresAt = loginExpiresAt
     }
 }
 

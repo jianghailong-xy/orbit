@@ -1273,6 +1273,10 @@ export interface RunnerEngineAccount {
    *  read one for this account, and for engines that report none. Two accounts showing the same one
    *  are the same account. */
   fingerprintPrefix?: string;
+  /** When this signed-in account's login lapses, ISO 8601: the CLI's own expiry for it (Claude Code's
+   *  refreshTokenExpiresAt, which the CLI warns about three days ahead). Absent where the CLI recorded
+   *  none, for an account not signed in, and for every engine but Claude Code. */
+  loginExpiresAt?: string;
 }
 
 /**

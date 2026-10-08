@@ -422,6 +422,39 @@ public enum SessionProviderChoices {
                             brandKey: slug == "dsh" ? DshRuntime.presetSlug : enginePreset[slug], provider: provider)
     }
 
+    /// The composer menu's own title: the engine this session runs on, and — while a standing pick
+    /// will carry the next turn to a different engine — where it is going (web `engineTitleFor`).
+    /// Every row under the title picks something for the next turn; this is the one fact none of
+    /// them states, and nothing here can move it.
+    public struct EngineTitle: Equatable, Sendable {
+        /// The CLI's own product name (`RunnerPageFormat.engineName`): `Claude Code`, not `Claude`,
+        /// because a BYOK session writes DeepSeek's models while Claude Code executes them.
+        public let name: String
+        /// The engine a held pick is taking the next turn to; nil when that is the engine already
+        /// running — two providers of one CLI read as the same title, and `A → A` says nothing.
+        public let nextName: String?
+
+        public init(name: String, nextName: String?) {
+            self.name = name
+            self.nextName = nextName
+        }
+
+        /// The whole title as one line — `Claude Code`, or `Claude Code → Codex` while a held pick
+        /// stands on another engine. Built here rather than in the composer so both clients (and the
+        /// tests) spell the arrow the same way.
+        public var label: String { [name, nextName].compactMap { $0 }.joined(separator: " → ") }
+    }
+
+    public static func engineTitle(provider: String,
+                                   configured: [ConfiguredProvider],
+                                   nextProvider: String? = nil) -> EngineTitle {
+        let runtime = executingRuntime(provider, configured: configured)
+        let name = RunnerPageFormat.engineName(runtime)
+        guard let nextProvider else { return EngineTitle(name: name, nextName: nil) }
+        let next = executingRuntime(nextProvider, configured: configured)
+        return EngineTitle(name: name, nextName: next == runtime ? nil : RunnerPageFormat.engineName(next))
+    }
+
     /// `choices` grouped by the engine that runs them, in the order the engines first appear there
     /// (web `engineChoices`). Each engine lands on the first of `preferred` it holds that can run (the
     /// draft's pick, then what the workspace last ran on), else its own sign-in, else the first of its

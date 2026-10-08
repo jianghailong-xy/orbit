@@ -249,9 +249,13 @@ comment carrying the command's output. Two consequences follow and are accepted:
   command that ran and returned the wrong code. The runner reports `-1` for all of them and it is
   compared like any other integer, so every one of them derives `FAILED`. Declaring
   `acceptanceTimeoutSeconds` changes when the timeout fires, never what it derives.
-- The reason a task failed is **not recorded**. Diagnosis is reading the session: the run's own
-  `error` carries `acceptance command exited N; expected M`, and the command's output is in the
-  session transcript where the shell turn ran.
+- The reason a task failed is **not recorded on the task**. Diagnosis is reading the session: the
+  run's own `error` carries `acceptance command exited N; expected M`, and the command's output is
+  in the session transcript where the shell turn ran. A task in a project also gets a `TASK_FAILED`
+  exception carrying the two codes, opened in the transaction that writes the `FAILED`
+  (`docs/project-integration-line-contract.md` §4.3 A). The run's brief
+  (`src/apiserver/src/tasks/task-execution-prompt.ts`) names these same places and says that no
+  comment carries the output.
 
 If the reserved turn cannot return a comparable result at all (an old runner omits the shell
 fields, the turn never reports one, or the declaration changes while the command runs), there is

@@ -283,6 +283,9 @@ function sanitizeEngineAccounts(value: unknown): RunnerEngineAccount[] | undefin
     // reader older than `home` still sees it.
     const codexHome =
       typeof entry.codexHome === 'string' ? entry.codexHome.trim().slice(0, ACCOUNT_PATH_MAX) : '';
+    // When a signed-in account's login lapses (src/runner-go claudeLoginExpiry): only a real instant,
+    // re-written as ISO, so nothing but a time rides on it.
+    const loginExpiresAt = auth === 'yes' ? isoInstant(entry.loginExpiresAt) : undefined;
     out.push({
       id: entry.id,
       ...(name ? { name } : {}),
@@ -290,9 +293,17 @@ function sanitizeEngineAccounts(value: unknown): RunnerEngineAccount[] | undefin
       ...(codexHome ? { codexHome } : {}),
       auth,
       ...(fingerprintPrefix ? { fingerprintPrefix } : {}),
+      ...(loginExpiresAt ? { loginExpiresAt } : {}),
     });
   }
   return out.length ? out : undefined;
+}
+
+/** An instant a runner reported (RFC 3339), as ISO 8601 — or undefined for anything that isn't one. */
+function isoInstant(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value.length > 40) return undefined;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : undefined;
 }
 
 /** The names the user gave a runner's accounts in Orbit, by engine and then account id. */

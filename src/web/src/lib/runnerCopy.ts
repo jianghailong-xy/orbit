@@ -91,6 +91,20 @@ export const RUNNER_ENGINES_FOOTER =
   'that subscription, nothing to paste.';
 export const RUNNER_ENGINES_OFFLINE_FOOTER = 'Signing in and updating need the runner online.';
 
+/** Under a signed-in account whose login lapses within three days — when Claude Code itself starts
+ *  warning ("Your login expires in 3 days · run /login to renew") — with the button that signs it in
+ *  again before it does. */
+export const RUNNER_ENGINE_RENEW = 'Renew';
+export function runnerEngineLoginExpires(count: number, unit: string): string {
+  return `Login expires in ${count} ${unit}`;
+}
+/** Under a signed-out account: what its being signed out costs. */
+export const RUNNER_ENGINE_ACCOUNT_SIGNED_OUT_NOTE = 'Sessions can’t use this account until you sign in again.';
+/** The same, for an engine's only account on that machine. */
+export function runnerEngineSignedOutAlone(engine: string): string {
+  return `Sessions on this runner can’t use ${engine} until you sign in again.`;
+}
+
 export function runnerEnginesChecked(when: string): string {
   return `Checked ${when}`;
 }

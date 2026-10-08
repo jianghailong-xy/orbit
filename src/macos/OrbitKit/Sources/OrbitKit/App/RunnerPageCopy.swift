@@ -51,6 +51,15 @@ public enum RunnerPageCopy {
         + "that subscription, nothing to paste."
     public static let RUNNER_ENGINES_OFFLINE_FOOTER = "Signing in and updating need the runner online."
 
+    public static let RUNNER_ENGINE_RENEW = "Renew"
+    public static func runnerEngineLoginExpires(count: Int, unit: String) -> String {
+        "Login expires in \(count) \(unit)"
+    }
+    public static let RUNNER_ENGINE_ACCOUNT_SIGNED_OUT_NOTE = "Sessions can’t use this account until you sign in again."
+    public static func runnerEngineSignedOutAlone(engine: String) -> String {
+        "Sessions on this runner can’t use \(engine) until you sign in again."
+    }
+
     public static func runnerEnginesChecked(when: String) -> String { "Checked \(when)" }
     public static func runnerEnginesReported(when: String) -> String { "Reported \(when)" }
     public static func runnerEngineAccountsSignedIn(count: Int) -> String { "\(count) accounts signed in" }
