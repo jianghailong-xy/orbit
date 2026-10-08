@@ -1,10 +1,11 @@
-import { CheckCircleFilled, ExclamationCircleFilled, WarningFilled } from '@ant-design/icons';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { approveCliLogin, denyCliLogin, getCliLoginRequest, type CliLoginRequest } from '../api';
 import { Alert } from '../components/ui/Alert';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
+import { Descriptions } from '../components/ui/Descriptions';
+import { Result } from '../components/ui/Result';
 import { Spinner } from '../components/ui/Spinner';
 import { NEVER_EXPIRES, NEVER_EXPIRES_WARNING, fullDate, scopeSummary } from '../lib/accessTokens';
 import { useToast } from '../lib/toast';
@@ -19,57 +20,38 @@ export function lifetimeLine(expiresInDays: number | null, now: number): string 
 
 /** The token being asked for, and from where: everything a person approves it on. */
 export function CliLoginDetails({ request, now }: { request: CliLoginRequest; now: number }) {
-  const rows: [string, ReactNode][] = [
-    ['Token name', request.name],
-    [
-      'Scopes',
-      <>
-        <div>{scopeSummary(request.scopes)}</div>
-        <div style={{ marginTop: 6 }}>
-          {request.scopes.map((scope) => (
-            <Badge key={scope} style={{ marginBottom: 4 }}>
-              {scope}
-            </Badge>
-          ))}
-        </div>
-      </>,
-    ],
-    [
-      'Expires',
-      request.expiresInDays === null ? <Badge tone="warning">{NEVER_EXPIRES}</Badge> : lifetimeLine(request.expiresInDays, now),
-    ],
-    ['Requested from', request.hostname ?? 'Unknown host'],
-    ['Code', request.userCode],
-  ];
   return (
-    <div className="cli-login-details">
-      <table>
-        <tbody>
-          {rows.map(([label, value]) => (
-            <tr key={label}>
-              <th scope="row">{label}</th>
-              <td>{value}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// The replaced result's icons: info is the exclamation circle, warning the triangle.
-const RESULT_ICONS = { success: <CheckCircleFilled />, info: <ExclamationCircleFilled />, warning: <WarningFilled /> };
-
-/** Where the request ended up, centred under a large status icon. */
-function CliLoginResult({ status, title, subTitle }: { status: keyof typeof RESULT_ICONS; title: string; subTitle: string }) {
-  return (
-    <div className="cli-login-result" data-status={status}>
-      <div className="cli-login-result-icon" aria-hidden>
-        {RESULT_ICONS[status]}
-      </div>
-      <div className="cli-login-result-title">{title}</div>
-      <div className="cli-login-result-subtitle">{subTitle}</div>
-    </div>
+    <Descriptions
+      labelWidth={136}
+      style={{ marginBottom: 16 }}
+      items={[
+        { key: 'name', label: 'Token name', children: request.name },
+        {
+          key: 'scopes',
+          label: 'Scopes',
+          children: (
+            <>
+              <div>{scopeSummary(request.scopes)}</div>
+              <div style={{ marginTop: 6 }}>
+                {request.scopes.map((scope) => (
+                  <Badge key={scope} style={{ marginBottom: 4 }}>
+                    {scope}
+                  </Badge>
+                ))}
+              </div>
+            </>
+          ),
+        },
+        {
+          key: 'expires',
+          label: 'Expires',
+          children:
+            request.expiresInDays === null ? <Badge tone="warning">{NEVER_EXPIRES}</Badge> : lifetimeLine(request.expiresInDays, now),
+        },
+        { key: 'host', label: 'Requested from', children: request.hostname ?? 'Unknown host' },
+        { key: 'code', label: 'Code', children: request.userCode },
+      ]}
+    />
   );
 }
 
@@ -130,15 +112,15 @@ export function CliLoginPage() {
             <Spinner />
           </div>
         ) : error ? (
-          <CliLoginResult status="warning" title="Cannot approve this login" subTitle={error} />
+          <Result status="warning" title="Cannot approve this login" subTitle={error} />
         ) : decision === 'APPROVED' ? (
-          <CliLoginResult
+          <Result
             status="success"
             title="Login approved"
             subTitle={`Return to your terminal — orbit login collects the token "${request?.name}" and finishes by itself.`}
           />
         ) : decision === 'DENIED' ? (
-          <CliLoginResult
+          <Result
             status="info"
             title="Login denied"
             subTitle="No token was issued. orbit login in that terminal stops and says the request was denied."
