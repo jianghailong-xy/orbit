@@ -294,6 +294,35 @@ describe('Activity', () => {
     expect(html).not.toContain('>Principles<');
   });
 
+  it('draws the server’s runs after Review and Plan while the server runs the wiki, and nothing of them under runner (mock 35 ④)', () => {
+    const cache = client();
+    const maintenance = {
+      look: 'off', enabled: false, lastOkAt: null, lastRunAt: null, consecutiveFailures: 0, backlog: 0, oldestPendingAt: null,
+      lagSeconds: 0, dailyLimitReached: false, held: null, running: null, lastRun: null, lastFailure: null,
+    };
+    cache.setQueryData(['wiki', 'space', ORBIT, 'health'], {
+      spaceId: ORBIT, entries: 3, maintenance,
+      executor: { mode: 'canary', serverExecutes: true },
+      systemModel: { state: 'up', model: 'qwen3.8-27b-fp8', since: null, checkedAt: null, workerSeenAt: null },
+    });
+    cache.setQueryData(['wiki', 'space', ORBIT, 'jobs'], {
+      spaceId: ORBIT,
+      jobs: [{
+        id: 'job-1', kind: 'verify', state: 'succeeded', waitingFor: null, priority: 1, attempts: 0, createdAt: new Date(NOW - HOUR).toISOString(),
+        updatedAt: new Date(NOW - HOUR).toISOString(), startedAt: new Date(NOW - HOUR).toISOString(), endedAt: new Date(NOW - HOUR + 48_000).toISOString(),
+        nextAttemptAt: null, failureKind: null, error: null, ahead: null, progress: null,
+        calls: { total: 4, queued: 0, running: 0, succeeded: 4, failed: 0, cancelled: 0, inputTokens: 5000, outputTokens: 1120 }, nextCall: null, requests: [],
+      }],
+    });
+    const html = wiki('/wiki/orbit/activity', cache);
+    const order = ['wk-review-card', 'wk-plan-card', 'wk-jobs-card', '>Runs<', '>Verification<', '>Recent decisions<', '>Recently changed<']
+      .map((needle) => at(html, needle));
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(html).toContain('<b>Done</b> · 4 calls · 6,120 tokens · took 48s');
+    // Under runner: no card at all.
+    expect(wiki('/wiki/orbit/activity')).not.toContain('wk-jobs-card');
+  });
+
   it('stands under the home’s head on a desktop: the title, the line saying what the space holds, the search (mock 33 ④)', () => {
     const cache = client();
     cache.setQueryData(['wiki', 'space', ORBIT, 'docs'], {

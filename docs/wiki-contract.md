@@ -1379,7 +1379,12 @@ JSON 里是 `maintenance.health`；服务端在 `src/apiserver/src/wiki/wiki-hea
   - `lastRun`：最后结束的那次运行 `{sessionId, outcome, endedAt}`，或 null——状态行的 View run 打开它的会话；
   - `lastFailure`：最近一次尝试失败（failed / truncated）的运行里最后结束的那个 `{kind, reason, at, sessionId}`，或 null；
     `kind` 是 `infra` 或 `content`（19.7），`reason` 是它的 error。客户端据此区分「平台挂了」与「运行本身失败」；本契约版本客户端尚未使用。
+  - `running`、`lastRun`、`lastFailure` 自 P9 起各多一个 `jobId`：服务端作业跑的运行（§24.6 的 `job_id`）没有会话，View run 改为打开
+    Activity 里这次运行的那一行（§24.8），不再去 `/sessions/…`；维护会话跑的运行 `jobId` 为 null，View run 照旧打开它的会话。
   - `look`：状态行画哪一种（20.2）。
+- `executor`（P9）：执行器开关对这个 owner 怎么说，`{ mode, serverExecutes }`（§24.5 的「读」）。
+- `systemModel`（P9）：`serverExecutes` 为真时是 §23.5 读到的 System model 状态（`{ state, model, since, checkedAt, workerSeenAt }`，
+  不含地址和 key）；`runner` 下为 null，也不去读。状态行的服务端原因就从它和 `repo` 说出来。
 
 ### 20.2 四种样子（另加「正在跑」）
 
@@ -1950,6 +1955,8 @@ worker 在 `src/apiserver/src/wiki-worker/`（入口 `main.ts`、配置 `wiki-sy
 - 回答 `{ state, model, since, checkedAt, workerSeenAt }`（`WikiSystemModelStatus`）。`state` 比状态行多一个 `worker_not_running`：没有这一行，
   或 `worker_seen_at` 已超过 `workerStaleSeconds` = 60 秒，就是它，设置页和健康行显示「wiki worker 未运行」；这时 `since` 是最后一次心跳。
 - 不返回地址和 key，也不返回 `last_error`。
+- P9 起多一个 `executor`：执行器开关对**提问的这个账号**怎么说，`{ mode, serverExecutes }`（§24.5 的「读」）。设置页据此在服务端执行时
+  画 System model、不画 provider；其余五个字段是部署的，每个账号读到的都一样。
 
 ### 23.6 `/api/metrics`（`systemModel.metrics`）
 
@@ -2034,6 +2041,10 @@ JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5
 - 两个变量进服务环境的方式和 System model 的一样：compose 从部署的 `.env` 传给 **apiserver 与 wiki-worker 两个服务**（P3 接上；
   `test/compose-topology.test.mjs` 逐行钉住这两行，`wiki-compose-env.spec.ts` 确认它们读的是宿主同名变量），都没设就是 `runner`。
   把开关改成 `canary` 或 `server` 是 owner 的事：生产上停在 `runner` 直到 P10。
+- **读（`jobs.executor.read`，P9）**：读接口只告诉提问的账号两件事——`mode`（部署的开关）和 `serverExecutes`（服务端是否执行这个账号的
+  wiki：`server`，或 `canary` 且名单里有它）。名单本身、别的账号在不在名单里，都不出读接口（`wikiExecutorView`）。
+  `GET /api/wiki/system-model` 和 `GET /api/wiki/spaces/:id/health` 都带它；客户端只在 `serverExecutes` 为真时画服务端的设置、
+  Runs 卡和状态行的服务端原因，`runner` 下（或读不到这个字段的旧控制面）一切照旧。
 
 ### 24.6 运行行与计数
 
@@ -2098,6 +2109,34 @@ op 在等），于是旧版 `orbit wiki verify` 读到空列表就正常退出�
   默认 `runner`）：一个建作业、一个领作业，两个进程对同一账号必须给出同一个答案。`test/compose-topology.test.mjs` 逐行钉住这两行，
   `src/apiserver/src/wiki/wiki-compose-env.spec.ts` 确认它们读的是宿主同名变量（不是会话会带进来的 `ORBIT_*` 名字）。
 - 生产上把开关改成 `canary` 或 `server` 是 owner 的事（设计 §10，P10）。
+
+### 24.8 Activity 的读：`GET /api/wiki/spaces/:id/jobs`（`jobs.read`，服务端执行 P9）
+
+服务端的运行没有任务、也没有会话可打开（设计 §2.2）：它在做什么——步骤、调用、在哪里排队——都在 Activity 里，Runs 卡和运行页读的就是
+这条。实现在 `src/apiserver/src/wiki/wiki-job-reads.ts`，用户门在 `wiki/wiki-jobs.controller.ts`；共享类型 `WikiJobsRead` 在
+`src/shared/src/wikiJobs.ts`。
+
+- 只给 space 的 owner（JWT 门加 `WikiRolloutGuard`；个人访问令牌要有 `wiki:read`）；别的账号的 space 是普通的 404。只读。
+- 回答 `{ spaceId, jobs }`：这个空间最新的 `limits.jobs` = 10 行 `wiki_job`，按 `created_at` 新的在前。每行：
+
+| 字段 | 含义 |
+|---|---|
+| `id`、`kind`、`state`、`waitingFor`、`priority`、`attempts` | 作业行本身 |
+| `createdAt`、`updatedAt`、`startedAt`、`endedAt`、`nextAttemptAt` | 时间；`nextAttemptAt` 是 infra 失败后下一次重试的时间 |
+| `failureKind`、`error` | 失败的类别和原因 |
+| `ahead` | 排队（`queued`）时：部署里按领取顺序（`priority DESC, created_at, id`）排在它前面的排队作业数；其余状态为 null |
+| `progress` | 流水线自己写的进度（§24.1）读成 `{ step, done, total }`：写了 `done` / `total` 的照读；导入的形状（`notes`、`read`、`failed`）读成「读完或放弃的 note / 交来的 note」；没写为 null |
+| `calls` | 它的调用按状态计数（`total`、`queued`、`running`、`succeeded`、`failed`、`cancelled`），加上报出的输入、输出 token 合计 |
+| `nextCall` | 它排队的调用里队列最先轮到的那个：`{ ahead, enqueuedAt }`；没有排队的为 null |
+| `requests` | 按 `enqueued_at` 最新的 `limits.callsPerJob` = 40 个调用，旧的在前；没列出的由 `calls.total` 计着 |
+
+- 每个调用只有元数据：`id`、`step`、`unit`、`attempt`、`attempts`、`state`、`enqueuedAt`、`startedAt`、`endedAt`、`inputTokens`、
+  `outputTokens`、`httpStatus`、`error`、`errorKind`，排队时再加 `ahead`——部署里按队列的领取顺序（`priority DESC, enqueued_at, id`）
+  排在它前面的排队请求数，不论是谁的。排队时长从 `enqueuedAt` 到 `startedAt`（排队中到现在），耗时从 `startedAt` 到 `endedAt`
+  （执行中到现在）；`startedAt` 是第一次领取的，所以重试花的时间算在这个调用自己身上。
+- **不出这条读的**：调用本身（system prompt、prompt、`max_tokens`）、`request_sha256`、`answer` 和 `partial`；两张表的租约列；作业的
+  `input` 和 `report`；队列里排在前面的是谁；System model 的地址和 key——两张表的任何一行都不含它们（§23.3：队列的错误消息不写
+  key、地址和主机名）。
 
 ## 25. 模型请求队列 `wiki_model_request`（服务端执行 P1b）
 

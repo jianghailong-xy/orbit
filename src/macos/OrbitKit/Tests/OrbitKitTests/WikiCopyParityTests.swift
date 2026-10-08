@@ -382,9 +382,10 @@ final class WikiCopyParityTests: XCTestCase {
     // MARK: Activity
 
     /// Activity's blocks are the web's, in its order (mock 31 ②): the status line under the title, the
-    /// proposals' banner into Review, the space's plan banners, the other spaces' that wait, then Recent
-    /// decisions, Recently changed and Agents used the wiki — the desktop's Review and Plan cards, which a
-    /// phone hides, aside. The native page iterates `WikiLogic.ActivityBand`.
+    /// proposals' banner into Review, the space's plan banners, the other spaces' that wait, the server's
+    /// runs after Review and Plan (mock 35 ④), then Recent decisions, Recently changed and Agents used the
+    /// wiki — the desktop's Review and Plan cards, which a phone hides, aside. The native page iterates
+    /// `WikiLogic.ActivityBand`.
     func testActivityIsTheWebsInItsOrder() throws {
         let page = try source(Self.activity)
         let body = try slice(page, from: "<div className=\"wk-act\">", to: "export function WikiActivityButton")
@@ -392,17 +393,20 @@ final class WikiCopyParityTests: XCTestCase {
                            "<Link className=\"wk-banner\" to={WIKI_REVIEW_PATH} data-waiting={wikiProposalsWaiting(spaces)}>",
                            "<WikiPlanBanners space={space} />",
                            "<WikiPlanBanners key={row.id} space={row} elsewhere={names.get(row.id) ?? row.title} />",
+                           "<WikiPlanCard space={space} />", "<WikiRunsCard space={space} />",
                            "title={WIKI_RECENT_DECISIONS}", "title={WIKI_RECENTLY_CHANGED}", "<UsageCard space={detail.data} />"],
                     "Activity's blocks")
-        XCTAssertEqual(WikiLogic.ActivityBand.allCases, [.status, .reviewBanner, .planBanners, .otherPlanBanners,
+        XCTAssertEqual(WikiLogic.ActivityBand.allCases, [.status, .reviewBanner, .planBanners, .otherPlanBanners, .runs,
                                                          .recentDecisions, .recentlyChanged, .agentsUsed])
         XCTAssertEqual(WikiLogic.ActivityBand.allCases.compactMap(\.title),
-                       [WikiCopy.recentDecisions, WikiCopy.recentlyChanged, WikiCopy.agentsUsed])
+                       [WikiRunsCopy.runs, WikiCopy.recentDecisions, WikiCopy.recentlyChanged, WikiCopy.agentsUsed])
         // A phone draws the banners and hides the desktop's two cards.
         let css = try source(Self.css)
         for rule in [".wk-banner { display: flex; }", ".wk-review-card { display: none; }", ".wk-plan-card { display: none; }"] {
             assertSays(css, rule, in: Self.css)
         }
+        // The Runs card is no desktop card: a phone draws it as the native band is drawn.
+        XCTAssertFalse(css.contains(".wk-jobs-card { display: none; }"), "a phone keeps the Runs card")
         // The first banner: every space's proposals, the others' shares on its line; the other spaces' plans
         // that wait come after the space's own.
         assertSays(page, "const proposals = wikiProposalsBanner(spaces, space.id, names);", in: Self.activity)

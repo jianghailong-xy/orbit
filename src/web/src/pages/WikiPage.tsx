@@ -426,7 +426,7 @@ function WikiStatusRow({ space }: { space: SpaceRow | null }) {
               )}
               {/* The maintenance run's part of this line, after the anchors, on every width (mocks 11 ②,
                   12 ④): `Maintained 2h ago ✓ · 6 to catch up` and its other looks. */}
-              {health.data && <WikiMaintenanceStatus health={health.data.maintenance} spaceSlug={space.slug} />}
+              {health.data && <WikiMaintenanceStatus health={health.data} spaceSlug={space.slug} />}
             </span>
           </div>
         </div>

@@ -370,6 +370,7 @@ private struct CompactSections: View {
                         case .wikiActivity:           WikiActivityView()
                         case .wikiSettings:           WikiSettingsView()
                         case .wikiRun(let changesetID): WikiRunView(changesetID: changesetID)
+                        case .wikiJob(let jobID):     WikiJobView(jobID: jobID)
                         case .wikiArticle(let topic, let part):
                             WikiArticleScreen(address: WikiArticleAddress(topic: topic, part: part))
                         case .wikiBrowse:             WikiBrowseScreen()
