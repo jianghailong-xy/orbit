@@ -464,10 +464,11 @@ final class KimiAccountsTests: XCTestCase {
         return ""
     }
 
-    /// The gates and keys are the ones web and the server read — Add Account's capability (web
+    /// The gates, keys and words are the ones web and the server read — Add Account's capability (web
     /// `KIMI_ACCOUNT_LOGIN_CAPABILITY`), the move's (web `ACCOUNT_MOVE_CAPABILITY`), the engines that keep
     /// accounts, the variables that decide a session's account and the month's length (shared
-    /// planUsage.ts) — looked up in their source: a missing counterpart is a failure.
+    /// planUsage.ts), and the windows' names (web planUsage.ts) — looked up in their source: a missing
+    /// counterpart is a failure.
     func testTheGatesAndKeysAreTheWebsAndTheServers() throws {
         XCTAssertTrue(try source("src/web/src/lib/engineAccounts.ts")
             .contains("KIMI_ACCOUNT_LOGIN_CAPABILITY = '\(CodexAccounts.kimiAccountLoginCapability)'"))
@@ -482,6 +483,16 @@ final class KimiAccountsTests: XCTestCase {
                         "const MONTH_MINS = 30 * 24 * 60;", "[snapshot.month, MONTH_MINS]", "[snapshot.monthCode, MONTH_MINS]"] {
             XCTAssertTrue(shared.contains(literal), "@orbit/shared no longer says \(literal)")
         }
+        // Each window's name is the web's (lib/planUsage.ts KIMI_ROWS), the month's coding share a row in
+        // neither.
+        let every = PlanUsageWindow(utilization: 1)
+        let rows = PlanUsageSnapshot(provider: "kimi", fiveHour: every, sevenDay: every, month: every, monthCode: every).rows
+        XCTAssertEqual(rows.map(\.key), ["fiveHour", "sevenDay", "month"])
+        let web = try source("src/web/src/lib/planUsage.ts")
+        for row in rows {
+            XCTAssertTrue(web.contains("{ key: '\(row.key)', label: '\(row.label)' }"), "web no longer calls \(row.key) \(row.label)")
+        }
+        XCTAssertFalse(web.contains("{ key: 'monthCode'"), "web draws the month's coding share")
     }
 
     /// The console can't be built on Linux, so its source is read: a Kimi session's own account, its pin
