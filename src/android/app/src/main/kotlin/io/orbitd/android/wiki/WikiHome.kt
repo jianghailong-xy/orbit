@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -25,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
 import io.orbitd.android.directory.DirectoryData
@@ -449,8 +451,12 @@ internal fun WikiActivityButton(waiting: Int, onClick: () -> Unit) {
     IconButton(onClick = onClick, modifier = Modifier.testTag("wiki-bar-activity")
         .semantics { if (waiting > 0) stateDescription = WikiCopy.waitingOnYou(waiting) }) {
         BadgedBox(badge = {
-            if (waiting > 0) Badge(Modifier.testTag("wiki-bar-activity-badge").clearAndSetSemantics {}, containerColor = Color(0xFFFF9500),
-                contentColor = Color.White) { Text("$waiting") }
+            // The number keeps the size it has at the default type size, as the bar's icons do: grown with the type, the
+            // badge passed the button's round clip and was cut in half (dark, 200 %). TalkBack says it as words.
+            if (waiting > 0) CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale = 1f)) {
+                Badge(Modifier.testTag("wiki-bar-activity-badge").clearAndSetSemantics {}, containerColor = Color(0xFFFF9500),
+                    contentColor = Color.White) { Text("$waiting") }
+            }
         }) { Icon(painterResource(R.drawable.ic_history), WikiCopy.activity) }
     }
 }
