@@ -374,6 +374,8 @@ export const createInteractiveSession = (body: {
   claudeAccount?: string;
   /** The same again for the built-in Antigravity engine: one of the runner's Google accounts. */
   antigravityAccount?: string;
+  /** The same again for the built-in Kimi engine: one of the runner's Kimi Code accounts. */
+  kimiAccount?: string;
   /** Ids of images uploaded unscoped on the compose page; the server scopes them to the
    *  new session and links them to its seeded first turn. */
   attachmentIds?: string[];
@@ -795,7 +797,7 @@ export const updateSessionConfig = (
   },
 ) => api(`/sessions/${sessionId}/config`, { method: 'PATCH', body: config });
 
-/** Move a session on the built-in Codex, Claude or Antigravity engine to another of its runner's
+/** Move a session on the built-in Codex, Claude, Antigravity or Kimi engine to another of its runner's
  *  accounts — which pins it there — or back onto `automatic`. Spawn-only, like a provider: a live
  *  session's engine re-spawns on the new account once no turn is in flight, and an ended one takes it
  *  on its next resume. */
@@ -1633,6 +1635,10 @@ export interface SessionDetail {
   antigravityAccount?: string | null;
   /** See codexAccountPinned. */
   antigravityAccountPinned?: boolean;
+  /** The Kimi Code account picked or chosen for this session; null follows the workspace's. */
+  kimiAccount?: string | null;
+  /** See codexAccountPinned. */
+  kimiAccountPinned?: boolean;
   // When the armed auto-retry fires (null = nothing armed), and how many attempts this run of
   // failures has already spent. Drives the transcript's quota / provider-error card.
   retryAt?: string | null;
@@ -1654,6 +1660,8 @@ export interface SessionDetail {
     claudeAccount?: string | null;
     /** The Antigravity Google account this workspace's sessions run on; null is Default. */
     antigravityAccount?: string | null;
+    /** The Kimi Code account this workspace's sessions run on; null is Default. */
+    kimiAccount?: string | null;
   } | null;
   branch?: string | null;
   baseSha?: string | null;

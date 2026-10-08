@@ -40,6 +40,7 @@
 .orbit-drawer > .orbit-overlay-footer { display: block; flex: none; margin: 0; padding: 8px 16px; border-top: 1px solid var(--orbit-border-split); }
 .orbit-confirm > .orbit-overlay-header, .orbit-confirm > .orbit-overlay-body { padding-left: 34px; }
 .orbit-confirm-icon { position: absolute; left: 24px; top: 21px; font-size: 22px; color: var(--orbit-badge-warning); }
+.orbit-confirm-icon-success { color: var(--orbit-badge-success); }
 .orbit-confirm-error { margin-top: 8px; color: var(--error); }
 /* On a narrow screen 8px a side and 8px more above: the widths are viewport widths, so when the
    viewport's box scrolls (a dialog taller than the screen, where scrollbars take room) the dialog keeps

@@ -1,0 +1,77 @@
+{
+ "baseline": {
+  "commit": "a794459b14424e0fbc239a6947d589fa4852e946",
+  "scopeHash": "44e84ef10ae4c9721686195d83bea888062e465cb598a2d7775b256dee3098cc"
+ },
+ "records": [
+  "2026-10-07.json",
+  "2026-10-07b.json",
+  "2026-10-07d.json"
+ ],
+ "unowned": [
+  {
+   "path": "src/web/src/components/ProjectDoneConversation.test.tsx",
+   "reason": "no owner"
+  },
+  {
+   "path": "src/web/src/components/StartProjectCard.test.tsx",
+   "reason": "new since P0.1, not in a delta record: antd-reference, ant-selector, ant-class"
+  },
+  {
+   "path": "src/web/src/components/WikiReviewPage.decided.test.tsx",
+   "reason": "no owner"
+  },
+  {
+   "path": "src/web/src/components/WikiShareButton.tsx",
+   "reason": "no owner"
+  },
+  {
+   "path": "src/web/src/components/WorkspaceView.neverStarted.test.tsx",
+   "reason": "no owner"
+  },
+  {
+   "path": "src/web/src/components/WorkspaceView.promptSuggestion.test.tsx",
+   "reason": "no owner"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "line": 6698,
+   "kind": "ant-class",
+   "text": ".ant-dropdown-menu-item.composer-engine-title,",
+   "reason": "no owner"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "line": 6699,
+   "kind": "ant-class",
+   "text": ".ant-dropdown-menu-item.composer-engine-title:hover {",
+   "reason": "no owner"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "line": 10700,
+   "kind": "ant-class",
+   "text": "`.ant-radio-group` / `.ant-radio-wrapper` ones, which would otherwise win on order. */",
+   "reason": "no owner"
+  },
+  {
+   "path": "src/web/src/pages/SharedWikiPage.test.tsx",
+   "reason": "no owner"
+  },
+  {
+   "path": "src/web/src/pages/SharedWikiPage.tsx",
+   "reason": "no owner"
+  }
+ ],
+ "pending": [],
+ "owners": {
+  "KEEP": 1,
+  "P4.3a": 82,
+  "P4.3b": 30,
+  "P4.4": 50,
+  "P5.1": 28,
+  "P5.2": 11,
+  "P5.3": 90,
+  "P6": 36
+ }
+}

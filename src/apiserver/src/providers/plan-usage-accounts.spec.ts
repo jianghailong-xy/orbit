@@ -22,6 +22,7 @@ import { transactionDouble } from '../test-support/prisma-transaction-double';
 import { resolveProviderExec } from './custom-provider';
 import {
   accountAfterUsageLimit,
+  accountBeforeDispatch,
   accountLabel,
   accountSwitchNotice,
   automaticAccount,
@@ -378,8 +379,8 @@ test("the gates' question — which account does this run spend — is its works
   assert.equal(runAccount('claude', { CLAUDE_CONFIG_DIR: WORK_HOME }, {}, ENGINES), WORK);
   assert.equal(runAccount('claude', { CLAUDE_CONFIG_DIR: '/srv/elsewhere' }, {}, ENGINES), null);
   assert.equal(runAccount('claude', { ANTHROPIC_AUTH_TOKEN: 'tok' }, { claudeAccount: WORK }, ENGINES), null);
-  // Kimi keeps one login for the whole machine: there is no account to judge a run by.
-  assert.equal(runAccount('kimi', { KIMI_CODE_HOME: WORK_HOME }, { claudeAccount: WORK }, ENGINES), undefined);
+  // OpenCode keeps no login of the machine's to choose: there is no account to judge a run by.
+  assert.equal(runAccount('opencode', { HOME: '/root' }, { claudeAccount: WORK }, ENGINES), undefined);
 
   const usage: PlanUsage = { provider: AgentProvider.CODEX, primary: window(100, DEFAULT_RESET), accounts: { [WORK]: work(8) } };
   const spent = (env: Record<string, string> | null) =>
@@ -547,6 +548,68 @@ test("a Claude session is picked and moved by its own accounts' quota, as a Code
     accountSwitchNotice('claude', { from: 'default', to: WORK }, { engines: ENGINES, accountNames: null }),
     'Switched to Work — the usage limit on Default is reached',
   );
+});
+
+test("a Kimi session is picked, moved and dispatched by its own accounts' quota, as a Claude one is", () => {
+  const now = new Date();
+  const KIMI_WORK_HOME = '/root/.orbit/kimi-accounts/3fa91c2e';
+  const engines: RunnerEngineHealth[] = [...ENGINES, {
+    engine: 'kimi',
+    installed: true,
+    auth: 'yes',
+    kimiRegion: 'mainland-cn',
+    accounts: [
+      { id: 'default', home: '/root/.kimi-code', auth: 'yes', kimiRegion: 'mainland-cn' },
+      { id: WORK, name: 'Work', home: KIMI_WORK_HOME, auth: 'yes', kimiRegion: 'global' },
+    ],
+  }];
+  // Default's coding month spent while its 5 hours read 0%: Work, with room, is where it goes.
+  const kimiUsage: PlanUsage = {
+    kimi: {
+      provider: AgentProvider.KIMI,
+      fiveHour: { utilization: 0, resetsAt: DEFAULT_RESET },
+      monthCode: { utilization: 100, resetsAt: DEFAULT_RESET },
+      accounts: {
+        [WORK]: { provider: AgentProvider.KIMI, fiveHour: { utilization: 19, resetsAt: WORK_RESET }, month: { utilization: 28, resetsAt: WORK_RESET } },
+      },
+    },
+  };
+  const automatic = { env: null, kimiAccount: null };
+  assert.equal(automaticAccount('kimi', automatic, engines, kimiUsage, now), WORK);
+  assert.deepEqual(accountBeforeDispatch('kimi', { account: 'default' }, automatic, engines, kimiUsage, now), { from: 'default', to: WORK });
+  assert.deepEqual(accountAfterUsageLimit('kimi', { account: 'default' }, automatic, engines, kimiUsage, now), { from: 'default', to: WORK });
+  assert.equal(accountAfterUsageLimit('kimi', { account: 'default', pinned: true }, automatic, engines, kimiUsage, now), null);
+  // The workspace's Kimi pick decides for its Kimi sessions, and its Claude pick does not.
+  assert.equal(automaticAccount('kimi', { ...automatic, kimiAccount: 'default' }, engines, kimiUsage, now), null);
+  assert.equal(automaticAccount('kimi', { ...automatic, claudeAccount: 'default' }, engines, kimiUsage, now), WORK);
+  // A workspace naming a model and key of its own spends no account: Orbit neither picks nor moves.
+  const ownModel = { KIMI_MODEL_NAME: 'kimi-for-coding', KIMI_MODEL_API_KEY: 'sk-test' };
+  assert.equal(automaticAccount('kimi', { env: ownModel }, engines, kimiUsage, now), null);
+
+  // What a gate judges is the account dispatch runs the session on, which it hands over as KIMI_CODE_HOME.
+  assert.equal(runAccount('kimi', null, { kimiAccount: WORK }, engines), WORK);
+  assert.equal(runAccount('kimi', { KIMI_CODE_HOME: KIMI_WORK_HOME }, {}, engines), WORK);
+  assert.equal(runAccount('kimi', null, { kimiAccount: GONE }, engines), 'default');
+  assert.equal(runAccount('kimi', ownModel, { kimiAccount: WORK }, engines), null);
+  assert.equal(runAccount('kimi', { KIMI_MODEL_API_KEY: 'sk-test' }, { kimiAccount: WORK }, engines), WORK);
+  const exec = resolveProviderExec({
+    declaredProvider: AgentProvider.KIMI,
+    declaredProviderBuiltin: true,
+    customRow: null,
+    workspaceEnv: { KIMI_CODE_HOME: '/srv/hand-typed', ORBIT_TEST: '1' },
+    kimiAccount: WORK,
+    runnerEngines: engines,
+  });
+  assert.deepEqual(exec.env, { KIMI_CODE_HOME: KIMI_WORK_HOME, ORBIT_TEST: '1' });
+  assert.deepEqual(planUsageBlockedUntil(kimiUsage, 'kimi', now, 'default'), new Date(DEFAULT_RESET));
+  assert.equal(planUsageBlockedUntil(kimiUsage, 'kimi', now, WORK), null);
+
+  // Stored the way Codex's and Claude's accounts are: each under an id a runner could have added.
+  const stored = sanitizePlanUsageAccounts({
+    kimi: { ...kimiUsage.kimi!, accounts: { ...kimiUsage.kimi!.accounts, default: work(1), '../x': work(2) } },
+  });
+  assert.deepEqual(Object.keys(stored.kimi!.accounts!), [WORK]);
+  assert.equal(stored.kimi!.monthCode!.utilization, 100, "Default's own window is untouched");
 });
 
 test('the line a moved session carries names both accounts the way the picker names them', () => {

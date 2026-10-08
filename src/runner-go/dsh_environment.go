@@ -260,38 +260,91 @@ export function apply(ctx, config) {
 }
 `
 
+// dshToolGatePlugin asks before a call acts on another system — a shell command that meets one of
+// the runner's rules, or a third-party MCP tool — in every permission mode. Its ask reaches the
+// runner as session/request_permission, which answers it for the mode (dshPermissionBridge):
+// measured on 0.2.0-rc.2, a denied or refused call never runs. An escalation is left to the
+// sandbox's own approval, which already asks once. The patterns are the runner's
+// (dshToolGateRules, dshToolGateMatch), passed in as config, so both read a command the same way.
+const dshToolGatePlugin = `// Orbit: ask before a call acts on another system, in every permission mode.
+export const name = 'orbit-tool-gate';
+export const inject = ['tools'];
+export function apply(ctx, config) {
+  const rules = config.rules.map((rule) => ({ name: rule.name, pattern: new RegExp(rule.pattern) }));
+  const heredoc = new RegExp(config.heredoc);
+  const interpreter = new RegExp(config.interpreter);
+  const message = new RegExp(config.message, 'g');
+  const gateText = (command) => {
+    const lines = command.split('\n');
+    const kept = [];
+    for (let i = 0; i < lines.length; i++) {
+      kept.push(lines[i]);
+      const match = heredoc.exec(lines[i]);
+      if (match === null || interpreter.test(lines[i].slice(0, match.index))) continue;
+      let end = i + 1;
+      while (end < lines.length && lines[end].replace(/^\t+/, '') !== match[1]) end++;
+      if (end < lines.length) i = end;
+    }
+    return kept.join('\n').replace(message, (whole, quoted) => whole.slice(0, whole.length - quoted.length) + "''");
+  };
+  ctx.on('tools/pre-execute', async (exec, next) => {
+    const decision = await next();
+    if (decision.kind !== 'allow' || exec.agent === undefined) return decision;
+    if (exec.name.startsWith('mcp__') && !exec.name.startsWith('mcp__orbit__')) {
+      return { kind: 'ask', reason: 'Orbit asks before the MCP tool ' + exec.name };
+    }
+    const args = exec.arguments ?? {};
+    if (exec.name !== 'bash' || typeof args.command !== 'string' || args.sandbox_permissions !== undefined) return decision;
+    const text = gateText(args.command);
+    const rule = rules.find((candidate) => candidate.pattern.test(text));
+    return rule === undefined ? decision : { kind: 'ask', reason: 'Orbit asks before ' + rule.name };
+  }, { prepend: true });
+}
+`
+
 // Tools whose work runs in a child agent. A child's escalation never reaches ACP and its tool
 // calls are not projected (P4 evidence), so Orbit could neither ask about nor show them.
 var dshDisabledAgentTools = []string{"tool-subagent", "tool-subagent-fork", "tool-subagent-control",
 	"tool-subagent-list-agents", "tool-workflow"}
 
-// dshAgentOverlayPatch writes the prompt plugin with its versioned manifest (dsh refuses a named
-// package without a version) under a directory named for its code hash, and returns the patch.
+// dshAgentOverlayPatch writes Orbit's plugins with their versioned manifests (dsh refuses a named
+// package without a version) under directories named for their code hash, and returns the patch:
+// the tool gate in every session, the prompt section when there is one.
 func dshAgentOverlayPatch(home string, agent DshAgentOverlay) ([]byte, error) {
 	rows := []interface{}{}
 	for _, id := range dshDisabledAgentTools {
 		rows = append(rows, map[string]interface{}{"id": id, "disabled": true})
 	}
-	if strings.TrimSpace(agent.AppendSystemPrompt) != "" {
-		digest := sha256.Sum256([]byte(dshAppendPromptPlugin))
-		dir := filepath.Join(home, "orbit-plugins", "append-system-prompt-"+hex.EncodeToString(digest[:6]))
+	insert := func(id, kind, source string, config map[string]interface{}) error {
+		digest := sha256.Sum256([]byte(source))
+		dir := filepath.Join(home, "orbit-plugins", kind+"-"+hex.EncodeToString(digest[:6]))
 		for _, path := range []string{filepath.Dir(dir), dir} {
 			if err := privateDshDir(path); err != nil {
-				return nil, err
+				return err
 			}
 		}
-		manifest, _ := json.Marshal(map[string]interface{}{"name": "orbit-dsh-append-system-prompt", "version": "1.0.0", "private": true, "type": "module"})
+		manifest, _ := json.Marshal(map[string]interface{}{"name": "orbit-dsh-" + kind, "version": "1.0.0", "private": true, "type": "module"})
 		if err := writeDshConfigFile(filepath.Join(dir, "package.json"), manifest); err != nil {
-			return nil, err
+			return err
 		}
 		entry := filepath.Join(dir, "index.mjs")
-		if err := writeDshConfigFile(entry, []byte(dshAppendPromptPlugin)); err != nil {
-			return nil, err
+		if err := writeDshConfigFile(entry, []byte(source)); err != nil {
+			return err
 		}
 		rows = append(rows, map[string]interface{}{"insert": []interface{}{map[string]interface{}{
-			"id": "orbit-append-system-prompt", "name": (&url.URL{Scheme: "file", Path: entry}).String(),
-			"config": map[string]interface{}{"text": agent.AppendSystemPrompt},
+			"id": id, "name": (&url.URL{Scheme: "file", Path: entry}).String(), "config": config,
 		}}})
+		return nil
+	}
+	if err := insert("orbit-tool-gate", "tool-gate", dshToolGatePlugin, map[string]interface{}{"rules": dshToolGateRules,
+		"heredoc": dshHeredoc.String(), "interpreter": dshHeredocInterpreter.String(), "message": dshGitMessage.String()}); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(agent.AppendSystemPrompt) != "" {
+		if err := insert("orbit-append-system-prompt", "append-system-prompt", dshAppendPromptPlugin,
+			map[string]interface{}{"text": agent.AppendSystemPrompt}); err != nil {
+			return nil, err
+		}
 	}
 	return json.Marshal(rows)
 }

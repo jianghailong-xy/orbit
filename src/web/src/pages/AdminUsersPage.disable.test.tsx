@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntdApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SignInMethods } from '../lib/queries';
@@ -65,22 +64,22 @@ async function open(): Promise<void> {
     root!.render(
       <MemoryRouter initialEntries={['/admin']}>
         <QueryClientProvider client={client}>
-          <AntdApp>
-            <AdminUsersPage />
-          </AntdApp>
+          <AdminUsersPage />
         </QueryClientProvider>
       </MemoryRouter>,
     );
   });
-  await vi.waitFor(() => expect(container!.querySelectorAll('.ant-table-row').length).toBe(users.length));
+  await vi.waitFor(() => expect(userRows().length).toBe(users.length));
   await settle();
 }
 
 const button = (within: ParentNode | null | undefined, label: string) =>
   [...(within?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((b) => b.textContent?.trim() === label);
-const rowOf = (email: string) =>
-  [...container!.querySelectorAll<HTMLElement>('.ant-table-row')].find((row) => row.querySelector('td')?.textContent === email);
-const headers = () => [...container!.querySelectorAll('.ant-table-thead th')].map((th) => th.textContent?.trim() ?? '');
+/** The users table's rows (its body's rows, less the one that says it is empty). */
+const userRows = () =>
+  [...container!.querySelectorAll<HTMLTableRowElement>('tbody tr')].filter((row) => row.cells.length > 1);
+const rowOf = (email: string) => userRows().find((row) => row.querySelector('td')?.textContent === email);
+const headers = () => [...container!.querySelectorAll('thead th')].map((th) => th.textContent?.trim() ?? '');
 /** `email`'s cell under the column headed `title`. */
 const cellOf = (email: string, title: string) => rowOf(email)?.querySelectorAll('td')[headers().indexOf(title)];
 const status = (email: string) => cellOf(email, 'Status')?.textContent?.trim();

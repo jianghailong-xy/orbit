@@ -90,8 +90,18 @@ The complete `StoredSession` (instance, account, access + refresh) is one AES-25
 using an AndroidKeyStore key, a new random 96-bit IV and 128-bit tag. Associated data binds
 the record format/key alias to the application package. `AtomicFile` commits the encrypted
 record and the store decrypts/read-verifies it. A save error prevents authenticated state.
-Corruption, unavailable/lost keys, malformed records or mismatched selected instances fail
-closed. Logout deletes both key and file, and purges account data. No password is persisted.
+Reads fail closed, and restoring at launch tells two kinds of failure apart (A03d). A stored
+session that can never be read again (an unknown record format, authenticated bytes that do
+not decode, a GCM tag that does not verify, a Keystore key permanently invalidated, a key
+keystore2 on Android 12+ reports missing, or a record for another selected instance) signs
+out and purges credentials and account data. Anything else may pass: I/O errors, a busy or
+restarting Keystore, and on Android 10–11 a missing key, which that keystore also reports
+when its daemon cannot be reached. Restore reads again, three attempts 200 ms apart; if all
+fail, this launch starts signed out (`SignOutReason.STORAGE`) but deletes nothing, and the
+next launch restores the session, as iOS's Keychain read that fails only returns nil.
+`SecureStorageException` keeps the store's original failure as its cause. The `OrbitAuth`
+log line says which way restore went and names the failure's classes, never a message or
+value. Logout deletes both key and file, and purges account data. No password is persisted.
 Debug and release use separate package identities and Keystore aliases.
 
 The login page prefills the email of the last successful **password** sign-in on its server.
@@ -126,9 +136,10 @@ Keystore/private storage replaces Keychain. UI alignment and additional account-
 flows are outside this slice. HTTPS-only production address policy must be included in
 the final supported-server matrix.
 
-The current server `ClientVersionInterceptor` only records web/ios/macos; it ignores the
-correctly emitted Android header. Backend Android version observability is an integration
-follow-up for A14/the coordinator, not evidence that this slice's header is missing.
+The server `ClientVersionInterceptor` records authenticated Android requests alongside
+web/ios/macos in `client_version`, keyed by user and client kind. An unchanged version
+is written at most hourly; a changed version is recorded immediately. Login requests
+are unauthenticated, so version observation begins with the next authenticated request.
 
 Primary implementation references:
 [AndroidKeyStore](https://developer.android.com/privacy-and-security/keystore),
@@ -215,7 +226,10 @@ python3 src/android/scripts/check-test-results.py src/android
 Core tests barrier 20 requests at 401 and require exactly one refresh, then verify the next
 rotation presents the new token. They cover late old-token 401s, waiter cancellation,
 eight failure cases, repeated 401, late login/read/refresh across logout or switches,
-same-account re-login, server/user isolation, persistence failures, and corrupt restore.
+same-account re-login, server/user isolation, persistence failures, corrupt restore, and
+restore through storage failures that may pass (read again; still failing, kept for the next
+launch) or not (a permanently invalidated key: cleared). `AndroidSessionStorageTest` pins which
+platform failures are unrecoverable and that each keeps its cause.
 Real HTTP tests check paths, bearer/client headers, exact replay body, redirects, 503 and
 socket cancellation. UI tests cover usable login/logout and activity recreation.
 `GoogleSignInTest` covers the start URL, the RFC 7636 challenge and callback parsing (ticket, error,
@@ -241,8 +255,9 @@ and synthetic accounts. It does not uninstall or clear a user's existing app. Th
 refuses to run over an authenticated account; APK signature mismatches fail instead of
 uninstalling. The loopback MockWebServer never sends credentials to a real deployment.
 
-Eleven device checks execute: actual AES-GCM/Keystore read/write, random IV and deletion;
-tamper/key-loss cleanup; four server/user namespaces; the encrypted per-server email record,
+Twelve device checks execute: actual AES-GCM/Keystore read/write, random IV and deletion;
+tamper/key-loss cleanup (a lost key is kept on Android 10–11); a record the app cannot read for
+now, kept for the next launch; four server/user namespaces; the encrypted per-server email record,
 which outlives cleared credentials; four separate process phases
 (seed, restart/rotate, restart/logout, restart/assert cleared); actual login UI → HTTP
 401/rotation → activity recreation → logout; and the A03c login page once with the system light

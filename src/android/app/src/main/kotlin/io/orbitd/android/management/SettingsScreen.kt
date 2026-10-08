@@ -38,7 +38,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 @Composable
 fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: (OrbitRoute) -> Unit, back: () -> Unit,
     logout: () -> Unit, changed: () -> Unit, workspaceDeleted: () -> Unit, deviceAlerts: () -> Boolean?,
-    notifications: @Composable () -> Unit) {
+    notifications: @Composable () -> Unit, about: @Composable () -> Unit) {
     val runner: (String) -> Unit = { open(OrbitRoute(Destination.RUNNER, it)) }
     when (route.id) {
         "profile" -> EditProfile(api, revision, back)
@@ -54,6 +54,8 @@ fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: 
             notifications()
             NotificationsPreferences(api, revision)
         }
+        // Android only: the installed version and its updates from GitHub (iOS updates through TestFlight).
+        "about" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) { about() }
         else -> SettingsHome(api, revision, open, logout, deviceAlerts)
     }
 }
@@ -62,7 +64,7 @@ fun settingsTitle(page: String?, record: String? = null): String = when (page) {
     "share" -> ShareCopy.title(record?.substringBefore(':') ?: "SESSION")
     "profile" -> "Edit profile"; "password" -> "Change password"; "providers" -> "Providers"
     "workspace" -> "Workspace settings"; "runners" -> "Runners"; "sharing" -> "Shared links"
-    "admin" -> "Admin"; "notifications" -> "Notifications"; else -> "Settings"
+    "admin" -> "Admin"; "notifications" -> "Notifications"; "about" -> "About"; else -> "Settings"
 }
 
 /** SettingsHome: "3 of 4 online" — how many of the account's machines can take work right now. */
@@ -170,6 +172,10 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             SettingsLink("Shared links", R.drawable.ic_link, sharedLinks) { page("sharing") }
             SettingsLink("Change password", R.drawable.ic_password) { page("password") }
             if (user?.text("role") == "ADMIN") SettingsLink("Admin", R.drawable.ic_admin) { page("admin") }
+        }
+        Spacer(Modifier.height(20.dp))
+        Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
+            SettingsLink("About", R.drawable.ic_info, BuildConfig.VERSION_NAME) { page("about") }
         }
         Spacer(Modifier.height(20.dp))
         Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {

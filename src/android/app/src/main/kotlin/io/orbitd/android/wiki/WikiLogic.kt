@@ -1,5 +1,6 @@
 package io.orbitd.android.wiki
 
+import io.orbitd.android.core.net.ApiError
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -136,7 +137,85 @@ internal data class WikiDiffHunk(val label: String, val lines: List<Line>) {
 }
 
 internal object WikiLogic {
-    fun proposalsToReview(spaces: List<WikiSpace>) = spaces.sumOf { maxOf(0, it.pendingOps ?: 0) }
+    // MARK: the home's principles
+
+    /** How many principles the home reads: the most one read answers, far above any space's own rules (`PRINCIPLES_READ`). */
+    const val PRINCIPLES_READ = 200
+
+    /** The home's principles, from their own read (`?kind=principle`): every one, of any status, oldest recorded first —
+     * the owner's rules do not reshuffle as the space fills up. Never picked out of the newest 200 entries of every kind:
+     * a space holds thousands, and its principles are among the oldest of them. */
+    fun principles(entries: List<WikiEntry>): List<WikiEntry> = entries.filter { it.kind == "principle" }
+        .sortedBy { RelativeTime.parse(it.recordedAt) ?: Instant.MIN }
+
+    /** The principles the home lists before `All N ›` (`PRINCIPLES_SHOWN`, mock 31 ③). */
+    const val PRINCIPLES_SHOWN = 3
+
+    /** The home's bands under its head (the title and the space), top to bottom (design §12.3.1, mocks 30 ③, 31 ① ③): the
+     * line that says what the space holds, the search, the principles — only when there are any — the documents by
+     * category, then Browse by category · A–Z index. The web phone's order (OrbitKit `WikiLogic.HomeBand`), and the order
+     * the home lays its rows out in. Nothing here says how the wiki is kept: that is Activity's ([ActivityBand]). */
+    enum class HomeBand(val title: String?) { STATE(null), SEARCH(null), PRINCIPLES(WikiCopy.principles), DOCUMENTS(null), MORE(null) }
+
+    /** What the home's documents band draws (`WikiHome.tsx`'s branches; design §12.3.1). */
+    sealed interface HomeDocuments {
+        /** The first read is out: grey bars in the rows' shape (mock 31 ⑦). */
+        data object Loading : HomeDocuments
+        /** The confirmed plan's documents, a category a group (mock 30 ③). */
+        data class Categories(val categories: List<WikiDocLogic.HomeCategory>) : HomeDocuments
+        /** Before a plan is confirmed: the topic articles, as the directory groups them, a title a row. */
+        data class Topics(val groups: List<WikiArticleLogic.DirectoryGroup>) : HomeDocuments
+        /** Neither, and maintenance not set up: the one card that says how a space comes to have documents (mock 31 ⑥). */
+        data object NewSpace : HomeDocuments
+        /** Neither, with maintenance set up: nothing, the line under the head saying `No documents yet`. */
+        data object NothingListed : HomeDocuments
+        /** Whether the home ends on Browse by category · A–Z index: once its first read is in, with something listed. */
+        val listed: Boolean get() = this is Categories || this is Topics
+    }
+
+    /** The home's documents: the confirmed plan's, by category; before one, the topic articles; else a new space's card, or
+     * nothing once maintenance is set up. [loading] is the first read alone — a read the page already has stays drawn
+     * while it is read again. */
+    fun homeDocuments(docs: WikiDocsDirectory?, articles: WikiArticleDirectory?, loading: Boolean, maintenance: Boolean, seen: Double?): HomeDocuments {
+        if (loading) return HomeDocuments.Loading
+        if (docs != null && WikiDocLogic.readsByDocs(docs)) return HomeDocuments.Categories(WikiDocLogic.homeCategories(docs, seen))
+        val groups = articles?.let(WikiArticleLogic::directoryGroups).orEmpty()
+        if (groups.any { it.topics.isNotEmpty() }) return HomeDocuments.Topics(groups)
+        return if (maintenance) HomeDocuments.NothingListed else HomeDocuments.NewSpace
+    }
+
+    /** The line under the home's head (`WikiHomeState`): what [WikiDocLogic.homeLine] says of the reads the documents band
+     * lists — the topics before a plan — or null, a grey bar, while the first read is out. */
+    fun homeLine(docs: WikiDocsDirectory?, articles: WikiArticleDirectory?, loading: Boolean): String? {
+        if (loading) return null
+        val topics = articles?.let(WikiArticleLogic::directoryGroups).orEmpty().sumOf { it.topics.size }
+        return WikiDocLogic.homeLine(if (WikiDocLogic.readsByDocs(docs)) docs else null, topics)
+    }
+
+    // MARK: Activity
+
+    /** Activity's blocks, top to bottom (design §12.3.2, mock 31 ②) — the home's management blocks, moved in their order,
+     * as the web's `WikiActivityPage.tsx` draws them: the status line, the proposals' banner, the space's plan banners,
+     * the other spaces' plan banners that wait on the owner, Recent decisions, Recently changed and Agents used the wiki
+     * (OrbitKit `WikiLogic.ActivityBand`). The page lays its rows out in this order. */
+    enum class ActivityBand(val title: String?) {
+        STATUS(null), REVIEW_BANNER(null), PLAN_BANNERS(null), OTHER_PLAN_BANNERS(null),
+        // The server's runs (mock 35 ④, P9): after Review and Plan, drawn only while the server executes the account's
+        // wiki or once it ran something for the space (iOS's `.runs`, the web's `WikiRunsCard`).
+        RUNS(WikiRunsCopy.runs),
+        RECENT_DECISIONS(WikiCopy.recentDecisions), RECENTLY_CHANGED(WikiCopy.recentlyChanged), AGENTS_USED(WikiCopy.agentsUsed)
+    }
+
+    // MARK: whether the account has the wiki
+
+    /** The refusal every wiki route answers an account the server has not switched the wiki on for (`WIKI_DISABLED`). */
+    const val disabledCode = "WIKI_DISABLED"
+    /** A 404 carrying WIKI_DISABLED: the wiki is off, not a read that failed (`isWikiDisabled`). */
+    fun isDisabled(error: Throwable) = error is ApiError && error.status == 404 && error.code == disabledCode
+    /** Whether the drawer draws the Wiki row (`wikiShown`): once the spaces read has answered anything but WIKI_DISABLED,
+     * and when it failed for any other reason; not while it is on its way, so an account the wiki is off for is never
+     * offered a row to press. */
+    fun shown(spaces: LoadState, disabled: Boolean) = if (spaces.hasLoaded) !disabled else spaces.lastLoadFailed
 
     /** A 40-character sha as its short form; any other ref as it is. */
     fun shortSha(ref: String): String =
@@ -315,9 +394,12 @@ internal object WikiLogic {
         else -> null
     }
     fun cardTitle(card: ReviewCard, entry: WikiEntry?) = knownTitle(card, entry) ?: WikiCopy.entryWord
+    /** The draft's title, else the named entry's — as its own read has it, or until that read lands, as Review's read
+     * carries it (`entryTitle`). Null rather than the placeholder word. */
     fun knownTitle(card: ReviewCard, entry: WikiEntry?): String? {
         card.op.payload["entry"]["title"].text()?.let { return it }
-        return entry?.title?.takeIf { it.isNotEmpty() }
+        entry?.title?.takeIf { it.isNotEmpty() }?.let { return it }
+        return card.op.entryTitle?.takeIf { it.isNotEmpty() }
     }
     fun reviewAnchorLines(draft: JsonElement?, fallback: List<WikiAnchor>?): List<String> {
         fun line(path: String?, symbol: String?, sha: String?, command: String?, ref: String?): String? =
@@ -353,17 +435,21 @@ internal object WikiLogic {
     fun clampedIndex(index: Int, count: Int): Int? = if (count <= 0) null else minOf(maxOf(0, index), count - 1)
 }
 
-/** One space's home page: the reads it is drawn from, and each band's rows as the web derives them. */
+/** What one space's Activity is drawn from (design §12.3.2): the home's management blocks as they stood until the home
+ * became content — the status line, Recent decisions, Recently changed, Agents used the wiki — and each band's rows as the
+ * web derives them (OrbitKit `WikiHomeContent`). [entries] is the newest entries of every kind, as many as one read
+ * answers (200): what the status line counts until the health read is in; never the bands' rows — a space holds thousands
+ * of entries, and its decisions are among the oldest of them, so they read their own kind ([decisionEntries]). */
 internal data class WikiHomeContent(val space: WikiSpace, val spaces: List<WikiSpace>, val entries: List<WikiEntry>,
-    val timeline: List<WikiTimelineItem>, val proposals: Int, val runs: List<WikiChangesetView> = emptyList(),
-    val health: WikiSpaceHealth? = null) {
-    /** Every principle, of any status, oldest recorded first. */
-    val principles: List<WikiEntry> get() = entries.filter { it.kind == "principle" }
-        .sortedBy { RelativeTime.parse(it.recordedAt) ?: Instant.MIN }
-    val principlesAllOwner: Boolean get() = principles.let { it.isNotEmpty() && it.all { e -> e.trust == "owner" } }
-    val recentDecisions: List<WikiEntry> get() = WikiLogic.entries(entries, "decision").take(4)
+    val timeline: List<WikiTimelineItem>, val runs: List<WikiChangesetView> = emptyList(), val health: WikiSpaceHealth? = null,
+    val decisionEntries: List<WikiEntry> = emptyList()) {
+    /** The four newest decisions, of any status, from their own read (`?kind=decision`). */
+    val recentDecisions: List<WikiEntry> get() = WikiLogic.entries(decisionEntries, "decision").take(RECENT_DECISIONS)
     val recentRows: List<WikiModeLogic.RecentRow> get() = WikiModeLogic.recentRows(timeline).take(5)
     val recentRunIds: List<String> get() = recentRows.mapNotNull { (it as? WikiModeLogic.RecentRow.Run)?.changesetId }
+    /** How many of those rows came after the reader last looked ([seen], [WikiSeenLog]): what Activity says beside
+     * Recently changed (`N new since you last looked`), the rows that wear its blue dot. */
+    fun newRows(seen: Double): Int = recentRows.count { WikiSeenLog.isNew(time(it), seen) }
     fun run(id: String) = runs.firstOrNull { sameWikiId(it.id, id) }
     val mostUsed: List<WikiUsageEntry> get() = space.usage?.entries.orEmpty().filter { (it.total ?: 0) > 0 }.take(3)
     val usedThisWeek: Boolean get() = space.usage?.entries.orEmpty().any { (it.total ?: 0) > 0 }
@@ -376,6 +462,16 @@ internal data class WikiHomeContent(val space: WikiSpace, val spaces: List<WikiS
         return parts
     }
     fun statusLine(now: Instant) = WikiHealthLogic.text(statusParts(now))
+
+    companion object {
+        /** The decision log's rows: the newest four. */
+        const val RECENT_DECISIONS = 4
+        /** When one of Recently changed's rows happened: the change's own time, or the newest of a run's. */
+        fun time(row: WikiModeLogic.RecentRow): String? = when (row) {
+            is WikiModeLogic.RecentRow.Op -> row.item.at
+            is WikiModeLogic.RecentRow.Run -> row.at
+        }
+    }
 }
 
 internal object WikiModeLogic {

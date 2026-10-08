@@ -659,6 +659,7 @@ const ACCOUNT_MOVE_CAPABILITY: Record<AccountEngine, string> = {
   codex: 'codex-account-move/v1',
   claude: 'claude-account-move/v1',
   antigravity: ANTIGRAVITY_ACCOUNT_LOGIN_CAPABILITY,
+  kimi: 'kimi-account-move/v1',
 };
 /** Where a session, and its workspace, keep the account each engine runs on — and whether a session's
  *  was picked by hand. */
@@ -666,11 +667,13 @@ const ACCOUNT_FIELD = {
   codex: 'codexAccount',
   claude: 'claudeAccount',
   antigravity: 'antigravityAccount',
+  kimi: 'kimiAccount',
 } as const satisfies Record<AccountEngine, string>;
 const ACCOUNT_PINNED_FIELD = {
   codex: 'codexAccountPinned',
   claude: 'claudeAccountPinned',
   antigravity: 'antigravityAccountPinned',
+  kimi: 'kimiAccountPinned',
 } as const satisfies Record<AccountEngine, string>;
 /** What the composer sends to put a session back on Automatic (PATCH /sessions/:id/account). */
 const AUTOMATIC_ACCOUNT = 'automatic';
@@ -3344,9 +3347,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const pickedProvider: string = draftProvider ?? lastWorkspaceProvider;
   // The Provider-menu identity of that pick: the model space, the model seed and the menu's tick.
   const pickedChoice: string = draftChoice ?? lastWorkspaceProvider;
-  // The Codex, Claude or Antigravity account picked for the draft on the New Session hero, scoped to its
-  // workspace like the provider pick. Without one a new session starts where Automatic or its workspace
-  // says.
+  // The Codex, Claude, Antigravity or Kimi account picked for the draft on the New Session hero, scoped to
+  // its workspace like the provider pick. Without one a new session starts where Automatic or its
+  // workspace says.
   const [draftAccountPick, setDraftAccountPick] = useState<{
     workspaceId?: string;
     engine: string;
@@ -3356,6 +3359,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const draftCodexAccount = draftPickHere?.engine === 'codex' ? draftPickHere.account : null;
   const draftClaudeAccount = draftPickHere?.engine === 'claude' ? draftPickHere.account : null;
   const draftAntigravityAccount = draftPickHere?.engine === 'antigravity' ? draftPickHere.account : null;
+  const draftKimiAccount = draftPickHere?.engine === 'kimi' ? draftPickHere.account : null;
   /** The draft's pick for one engine's account. */
   const draftAccountOf = (engine: AccountEngine): string | null =>
     draftPickHere?.engine === engine ? draftPickHere.account : null;
@@ -5736,6 +5740,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         ...(draftAntigravityAccount && pickedProvider === 'antigravity'
           ? { antigravityAccount: draftAntigravityAccount }
           : {}),
+        ...(draftKimiAccount && pickedProvider === 'kimi' ? { kimiAccount: draftKimiAccount } : {}),
         attachmentIds,
         // A `!cmd` draft seeds the session's first turn as a shell command, not a message.
         shell,
@@ -7461,9 +7466,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         ? poolSessionLoginMember(shownPool, detailForSelected.poolCodexLogin)
         : sessionPoolAccount(shownPool, selectedId ? shownPoolMemberId : null)
       : null;
-  // Which of the runner's accounts a built-in Codex, Claude or Antigravity session spends — the draft's
-  // pick, or the one picked for the session, else its workspace's — and Default for an id this runner
-  // does not report, as dispatch resolves it (providers/account.ts accountOnRunner).
+  // Which of the runner's accounts a built-in Codex, Claude, Antigravity or Kimi session spends — the
+  // draft's pick, or the one picked for the session, else its workspace's — and Default for an id this
+  // runner does not report, as dispatch resolves it (providers/account.ts accountOnRunner).
   const accountOnThisRunner = (engine: AccountEngine, wanted: string | null | undefined): string =>
     wanted && accountsOf(runner, engine).some((account) => account.id === wanted) ? wanted : 'default';
   // The runner's quota, Antigravity's included: its accounts' travels with that engine's health.
@@ -7480,6 +7485,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           codexAccount?: string | null;
           claudeAccount?: string | null;
           antigravityAccount?: string | null;
+          kimiAccount?: string | null;
         }
       | null
       | undefined,
@@ -7491,12 +7497,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const codexAutoOffered = automaticOfferedOn('codex', pickedWorkspace);
   const claudeAutoOffered = automaticOfferedOn('claude', pickedWorkspace);
   const antigravityAutoOffered = automaticOfferedOn('antigravity', pickedWorkspace);
+  const kimiAutoOffered = automaticOfferedOn('kimi', pickedWorkspace);
   const codexAutoAccount = codexAutoOffered ? accountToStartOn('codex', codexAccountsHere, runner.planUsage, new Date()) : null;
   const claudeAutoAccount = claudeAutoOffered
     ? accountToStartOn('claude', accountsOf(runner, 'claude'), runner.planUsage, new Date())
     : null;
   const antigravityAutoAccount = antigravityAutoOffered
     ? accountToStartOn('antigravity', accountsOf(runner, 'antigravity'), runnerUsage, new Date())
+    : null;
+  const kimiAutoAccount = kimiAutoOffered
+    ? accountToStartOn('kimi', accountsOf(runner, 'kimi'), runnerUsage, new Date())
     : null;
   // Where an ended session's held switch onto `engine` resumes, as the server decides it
   // (accountOnProviderSwitch): the account it names; else, unless the session is pinned there,
@@ -7535,6 +7545,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         : (detailForSelected?.antigravityAccount ?? detailForSelected?.workspace?.antigravityAccount)
       : (draftAntigravityAccount ?? pickedWorkspace?.antigravityAccount ?? antigravityAutoAccount),
   );
+  const shownKimiAccount = accountOnThisRunner(
+    'kimi',
+    selectedId
+      ? pendingResumeProvider === 'kimi'
+        ? pendingEngineAccount('kimi')
+        : (detailForSelected?.kimiAccount ?? detailForSelected?.workspace?.kimiAccount)
+      : (draftKimiAccount ?? pickedWorkspace?.kimiAccount ?? kimiAutoAccount),
+  );
   const shownAccount =
     shownProvider === 'codex'
       ? shownCodexAccount
@@ -7542,10 +7560,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         ? shownClaudeAccount
         : shownProvider === 'antigravity'
           ? shownAntigravityAccount
-          : 'default';
-  // The engine whose account the composer names — built-in Codex, Claude or Antigravity, not an account
-  // pool — and the account it names in the quota gauge's popover, once the runner has more than one to
-  // tell apart.
+          : shownProvider === 'kimi'
+            ? shownKimiAccount
+            : 'default';
+  // The engine whose account the composer names — built-in Codex, Claude, Antigravity or Kimi, not an
+  // account pool — and the account it names in the quota gauge's popover, once the runner has more than
+  // one to tell apart.
   const shownAccountEngine: AccountEngine | null = !shownPool && isAccountEngine(shownProvider) ? shownProvider : null;
   const shownAccountsHere = shownAccountEngine ? accountsOf(runner, shownAccountEngine) : [];
   const shownAccountRow =
@@ -8472,8 +8492,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     </span>
   );
   // The runner's accounts of the session's engine, listed under it in the Provider submenu for a
-  // session on built-in Codex, Claude or Antigravity to move between — each with its own quota, as the
-  // New Session picker lists them. Only with two or more (one is nothing to choose), and for a session
+  // session on built-in Codex, Claude, Antigravity or Kimi to move between — each with its own quota, as
+  // the New Session picker lists them. Only with two or more (one is nothing to choose), and for a session
   // only on a runner that carries a conversation from one account to another: an older one would resume
   // it where it was. A draft has no conversation to carry, so it starts on any of them.
   const accountRows =
@@ -10985,9 +11005,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             {shownPlanUsage && (
               <PlanUsageIndicator
                 usage={shownPlanUsage}
-                // Which of the runner's Codex, Claude or Antigravity accounts this quota is, named inside
-                // the popover rather than beside the gauge, where a phone's toolbar has no room for an
-                // email. A draft names the one it would start on.
+                // Which of the runner's Codex, Claude, Antigravity or Kimi accounts this quota is, named
+                // inside the popover rather than beside the gauge, where a phone's toolbar has no room for
+                // an email. A draft names the one it would start on.
                 account={
                   shownAccountEngine && shownAccountLabel
                     ? {

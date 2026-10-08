@@ -57,6 +57,13 @@ P1b。见新增的 §23，迁移 `0400_wiki_model_status`，JSON 里是 `systemM
 维护运行自判据 3 第 3 版起不再重写文章。见新增的 §18.8，JSON 里是 `articles.serverExecution`、`articles.job` 与
 `jobs.kindRuns.articles`。
 
+**服务端执行 · 回退收尾（2026-10-09）：`jobs.executor.rollback`**：执行器改回 `runner`（或账号离开 `canary` 名单）时，服务端在途的
+作业和请求此前没有任何代码收尾，留在 `running` 的 `maintain` 作业还会堵住维护触发器、让空间两条路径都没有维护（2026-10-08 生产事故）。
+现 apiserver 启动时清扫一遍：作业与它的模型请求、仓库操作置为 `cancelled`（按 0401 约束清错与租约列），maintain 的运行记为
+`failed` / `infra` 且不计连续失败，plan 作业随之以失败结束并保留来源，verify 留下的 `verifying` op 由下一次维护运行收养；触发器
+只在服务端执行该账号时才查 `unfinishedMaintainJob`。见新增的 §24.9，JSON 里是 `jobs.executor.rollback`，实现在
+`src/apiserver/src/wiki/wiki-executor-sweep.ts`，pg spec 是 `wiki-executor-sweep.pg.spec.ts`。
+
 **权威来源**
 
 | 来源 | 位置 |
@@ -2096,7 +2103,8 @@ JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5
   worker 共用；`wikiExecutorServes` / `wikiExecutorClaimOwners` 把模式变成领取时的账号过滤：`server` 不过滤，`canary` 只取名单内，
   `runner` 是空集合——默认值下没有 worker 领取任何作业。
 - 误拼的值读作 `runner` 并记一条 problem：拿不准时落在已经在跑的旧路径上，而不是落在一个没人部署 worker 的新路径上。
-- 开关只管执行，不删历史；改回 `runner` 只是停止新的领取。
+- 开关只管执行，不删历史；改回 `runner` 停止新的领取，而在途的作业和请求由 apiserver 启动时的清扫收尾——逐种作业怎么收尾见 §24.9
+  （`jobs.executor.rollback`，2026-10-08 回退事故的修复）。
 - 两个变量进服务环境的方式和 System model 的一样：compose 从部署的 `.env` 传给 **apiserver 与 wiki-worker 两个服务**（P3 接上；
   `test/compose-topology.test.mjs` 逐行钉住这两行，`wiki-compose-env.spec.ts` 确认它们读的是宿主同名变量），都没设就是 `runner`。
   把开关改成 `canary` 或 `server` 是 owner 的事：生产上停在 `runner` 直到 P10。
@@ -2196,6 +2204,37 @@ op 在等），于是旧版 `orbit wiki verify` 读到空列表就正常退出�
 - **不出这条读的**：调用本身（system prompt、prompt、`max_tokens`）、`request_sha256`、`answer` 和 `partial`；两张表的租约列；作业的
   `input` 和 `report`；队列里排在前面的是谁；System model 的地址和 key——两张表的任何一行都不含它们（§23.3：队列的错误消息不写
   key、地址和主机名）。
+
+### 24.9 回退：不再服务的账号，在途作业由 apiserver 启动清扫收尾（`jobs.executor.rollback`）
+
+把开关改回 `runner`，或把账号从 `canary` 名单去掉，之后服务端在途的作业和请求没有一个会自然结束：worker 的领取按开关过滤名单，
+不会再碰这个账号的任何行。2026-10-08 的生产事故就是这样——回退时 owner 空间的 `maintain` 作业还在抽取，作业和 3 条 extract 请求
+一直停在在途；而维护触发器不分模式都查 `unfinishedMaintainJob`，这一个作业把 runner 路径的维护任务也堵死了（作业由 owner 批准后
+手工取消，SQL 记在 P10 的评论里）。设计 §10 写的「回退……服务端在途的作业和请求会被取消，游标保证下一次会重新读取这些内容」
+由这一节实现。实现在 `src/apiserver/src/wiki/wiki-executor-sweep.ts`（`cancelUnservedWikiJobs`，由 `WikiExecutorSweep` 在
+`OnModuleInit` 时跑一遍），pg spec 是 `wiki-executor-sweep.pg.spec.ts`。
+
+- **时机与位置**：改执行器要重建 apiserver 和 wiki-worker（`docs/configuration.md`），所以 apiserver 启动时扫一遍就够。清扫放在
+  apiserver 而不是 worker：被堵住的触发器在 apiserver 这边；worker 是停止服务的一侧，而且不重建它时它本来也不会再领这些作业。
+  每个写入都只匹配仍在途的行，所以清扫跑两遍、或者和正在收尾的 worker 撞上，都不会改动一次运行已经写下的话。
+- **作业本身**：`queued`、`running`、`waiting` 的 `wiki_job` 置为 `cancelled`，`ended_at` 记下，`waiting_for` 与租约三列清空，
+  `error` 写明原因（开关不再服务这个账号、作业在 apiserver 启动时被取消）。
+- **模型请求**：它名下 `queued`、`running` 的 `wiki_model_request` 置为 `cancelled`，`ended_at` 记下；按 0401 迁移的约束，
+  `error`、`error_kind`、`partial` 连同退避的 `not_before` 和租约三列都清空（这些列是排队或在跑的行才有的）；已成功的行不动。
+- **仓库操作**：它名下 `queued`、`running` 的 `wiki_repo_op` 同样置为 `cancelled`、带上原因，认领（`lease_owner`、`claimed_at`、
+  `heartbeat_at`、`runner_id`）清空——没有 runner 会再去执行一个没人读的结果。
+- **maintain 作业**：`input.runId` 记的运行行，只要还没写结局，就记为 `failed` / `infra`，原因写清。失败是平台的（回退），不是流水线的：
+  连续失败计数在游标行上、只有运行推进游标时才写，清扫不碰它；游标也没动，所以下一次运行（回退后是 runner 路径的）会重读这次没读完的
+  内容——这正是设计 §10 说的游标语义。
+- **plan_draft / plan_revise / docs_build 作业**：`input.planJobId` 记的 plan job 置为 `ended` / `failed`，原因写清，
+  **仍保留 `job_id`**（`made` 或 `ended` 的 plan job 必须记着自己的来源，0405）——owner 的下次请求会在现在运行的那条路径上重新生成。
+- **verify 作业**：不再写别的。留在 `verifying` 的 op 按设计等着：空间的下一次维护运行会收养它们给出结论
+  （`reviewModes.verification.adoption.who`），回退后那就是 runner 路径的运行。
+- **articles / import / smoke 作业**：不再写别的。文章按 `articles.regeneration` 的规则由后续运行重写；导入提议的 op 同样等下一次
+  核实的结论，轮询的命令读作业的结束；smoke 作业没有自己的行。
+- **触发器的双保险**：清扫跑完之前，以及在清扫失败（数据库抖动，清扫是尽力而为的启动动作，不挡住启动）的情况下，维护触发器只在
+  `onServer` 为真时才查 `unfinishedMaintainJob`（`wiki-maintenance-run.ts`）：一个再也没人执行的服务端作业，不得堵住空间的
+  runner 路径任务。这是事故的另一半——只取消作业不改触发器，回退后空间可能在一段时间里两条路径都没有维护。
 
 ## 25. 模型请求队列 `wiki_model_request`（服务端执行 P1b）
 

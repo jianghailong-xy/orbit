@@ -105,7 +105,7 @@ PY
     exit 1
   fi
 }
-run_test secure-store io.orbitd.android.auth.CredentialStoreDeviceTest 4
+run_test secure-store io.orbitd.android.auth.CredentialStoreDeviceTest 5
 for phase in seed rotate logout verify-cleared; do
   run_test "persistence-$phase" io.orbitd.android.auth.PersistenceDeviceTest 1 -e a03_phase "$phase"
 done

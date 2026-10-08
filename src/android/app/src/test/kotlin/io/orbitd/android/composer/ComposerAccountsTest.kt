@@ -39,6 +39,25 @@ class ComposerAccountsTest {
         assertEquals(emptyList<AccountChoice>(), catalog.accountChoices("kimi"))
     }
 
+    /** Kimi Code's accounts are rows too, each by its own tightest window — the month drawn once, so its coding share never
+     * names one — and a Kimi session moves on kimi-account-move/v1, never on Codex's. A session's quota is its account's. */
+    @Test fun kimiAccountsAreRowsAndMoveOnKimisOwnCapability() {
+        fun catalog(capabilities: String) = ComposerCatalog(obj("""{"id":"r","capabilities":[$capabilities],"engines":[{"engine":"kimi","installed":true,"auth":"yes",
+            "accounts":[{"id":"default","auth":"yes","kimiRegion":"global"},{"id":"5c2e91a0","name":"Work","auth":"yes","kimiRegion":"mainland-cn"},
+              {"id":"deadbeef","name":"Old","auth":"no"}]}],
+            "planUsage":{"kimi":{"provider":"kimi","fiveHour":{"utilization":12},"sevenDay":{"utilization":34},"month":{"utilization":8},"monthCode":{"utilization":50},
+              "accounts":{"5c2e91a0":{"provider":"kimi","fiveHour":{"utilization":91},"sevenDay":{"utilization":61},"month":{"utilization":22}}}}}}"""), emptyList())
+        val kimi = catalog("\"kimi-account-move/v1\"")
+        assertEquals(listOf(AccountChoice("default", "Default", "Weekly 34%"), AccountChoice("5c2e91a0", "Work", "5h 91%", nearLimit = true),
+            AccountChoice("deadbeef", "Old", unavailable = "Not signed in")), kimi.accountChoices("kimi"))
+        assertTrue(kimi.movesAccounts("kimi"))
+        assertFalse("Codex's capability carries no Kimi conversation", catalog("\"codex-account-move/v1\"").movesAccounts("kimi"))
+        fun fiveHours(detail: String) = kimi.usage(obj(detail))?.get("fiveHour")?.jsonObject?.get("utilization")?.jsonPrimitive?.int
+        assertEquals(91, fiveHours("""{"provider":"kimi","kimiAccount":"5c2e91a0"}"""))
+        assertEquals(12, fiveHours("""{"provider":"kimi","kimiAccount":"default"}"""))
+        assertNull("Automatic has not chosen the account yet", kimi.usage(obj("""{"provider":"kimi","kimiAccount":"automatic"}""")))
+    }
+
     /** A session moves between Google accounts on a runner that keeps them (antigravity-account-login/v1); Codex's and Claude
      * Code's carry the conversation across (…-account-move/v1). */
     @Test fun aSessionMovesWhereTheRunnerSaysItCan() {

@@ -187,8 +187,8 @@ export class QueueService {
       select: {
         id: true, ownerId: true, provider: true, providerBuiltin: true, error: true, model: true,
         codexAccount: true, codexAccountPinned: true, claudeAccount: true, claudeAccountPinned: true,
-        antigravityAccount: true, antigravityAccountPinned: true,
-        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true } },
+        antigravityAccount: true, antigravityAccountPinned: true, kimiAccount: true, kimiAccountPinned: true,
+        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
         assignedRunner: { select: { engines: true, accountPauses: true, planUsage: true, capabilities: true } },
       },
     });
@@ -567,6 +567,8 @@ export class QueueService {
     claudeAccountPinned: boolean;
     antigravityAccount: string | null;
     antigravityAccountPinned: boolean;
+    kimiAccount: string | null;
+    kimiAccountPinned: boolean;
     workspace: ({ env: unknown } & WorkspaceAccountChoices) | null;
     assignedRunner: { engines: unknown; accountNames: unknown; accountPauses?: unknown; planUsage: unknown; capabilities: string[] } | null;
   }): Promise<WorkspaceAccountChoices> {
@@ -575,6 +577,7 @@ export class QueueService {
       codexAccount: session.codexAccount ?? workspace?.codexAccount,
       claudeAccount: session.claudeAccount ?? workspace?.claudeAccount,
       antigravityAccount: session.antigravityAccount ?? workspace?.antigravityAccount,
+      kimiAccount: session.kimiAccount ?? workspace?.kimiAccount,
     };
     const engine = isAccountEngine(session.provider) ? session.provider : null;
     const runner = session.assignedRunner;
@@ -787,6 +790,7 @@ export class QueueService {
         codexAccount: accounts.codexAccount,
         claudeAccount: accounts.claudeAccount,
         antigravityAccount: accounts.antigravityAccount,
+        kimiAccount: accounts.kimiAccount,
         runnerEngines: session.assignedRunner?.engines,
       });
     let exec = resolveExec(session.model);
