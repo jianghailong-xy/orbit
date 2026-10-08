@@ -15383,9 +15383,11 @@ button.chat-jump-start:hover {
 @media (max-width: 700px) {
   /* Keep the name and its actions together. Status and quota get their own lines so Add account
      and Sign in can both remain visible without squeezing the account's state. Reserve room for
-     the engine name and let the action column shrink so its buttons can wrap on a small phone. */
+     the engine name — 120px keeps Claude Code's on one line (a 28px tile, 10px gap and 81px of
+     name) beside two buttons and More's place — and let the action column shrink so its buttons
+     can wrap on a small phone. */
   .re-runner-card .re-row {
-    grid-template-columns: minmax(112px, 1fr) minmax(0, max-content);
+    grid-template-columns: minmax(120px, 1fr) minmax(0, max-content);
     gap: 8px 10px;
   }
   .re-runner-card .re-row > .re-act {
@@ -15495,6 +15497,13 @@ button.chat-jump-start:hover {
   flex-wrap: wrap;
   gap: 6px;
   min-height: 30px;
+}
+/* More keeps its place at the end of every row, there or not: a row without one leaves its 30px and
+   the gap before it empty, so Add account, Sign in and Install stand in one column down the card and
+   More in another beside it. A group's head has no More, and its Add account sat 36px right of the
+   one on a row that has. */
+.re-runner-card .re-act:not(:has(.re-more)) {
+  padding-right: 36px;
 }
 .re-action.orbit-button {
   height: 30px;

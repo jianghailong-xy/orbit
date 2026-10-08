@@ -551,7 +551,7 @@ function EngineRow({
     if (engine === 'antigravity' && kind !== 'missing' && kind !== 'installing' && kind !== 'install-failed') {
       if (googleLogin !== 'available') return null;
       if (kind === 'in' && !envKey) return null;
-      return <Button size="small" variant="primary" disabled={offline} onClick={() => onSignIn(signIn === engine ? null : engine)}>Sign in with Google</Button>;
+      return <Button size="small" variant="primary" className="re-action" disabled={offline} onClick={() => onSignIn(signIn === engine ? null : engine)}>Sign in with Google</Button>;
     }
     if (offline) {
       // Nothing on an offline machine can be pressed. An engine with a sign-in still shows where
