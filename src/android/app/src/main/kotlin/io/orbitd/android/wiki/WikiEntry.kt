@@ -89,6 +89,7 @@ internal fun WikiEntryScreen(store: WikiStore, route: OrbitRoute, data: Director
         scope.launch { refreshing = true; try { store.loadEntry(entryId) } finally { refreshing = false } }
     }, modifier = Modifier.fillMaxSize().testTag("wiki-entry")) {
         when {
+            state.disabled -> WikiDisabledNote()
             detail != null -> WikiEntryPage(detail, now, state.busy, sessionTitle = { id ->
                 state.linkTitle("session", id) ?: data.sessions.values.flatten().firstOrNull { ObjectId.same(it.id, id) }?.name
             }, sourceTitle = { source -> wikiSourceCard(source)?.let { (kind, id) -> state.linkTitle(kind, id) } },
