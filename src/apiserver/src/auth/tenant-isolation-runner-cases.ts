@@ -537,6 +537,10 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
       body: { verdicts: [{ opId: of.runner.wikiVerifyingOpId, verdict: 'supported', reason: 'the census', model: 'census' }] },
     }),
   },
+  'POST /runner/wiki/spaces/:id/verifications/request': {
+    as: RUNNER,
+    request: (of, mine) => ({ params: { id: of.wikiSpaceId }, headers: calling(mine.runner.wikiSessionId) }),
+  },
   'POST /runner/wiki/spaces/:id/notes': {
     as: RUNNER,
     request: (of, mine) => ({ params: { id: of.wikiSpaceId }, headers: calling(mine.runner.wikiSessionId), body: { path: 'census.md', text: 'A census note.' } }),
