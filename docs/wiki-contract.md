@@ -1636,10 +1636,11 @@ JSON 里是 `plan.jobs.server`；迁移 `0404_wiki_plan_server_draft`；实现�
   失败——请求等待超限、space 的 runner 不在、worker 停机——不算草稿的失败：`wiki_job` 重试（24.4），plan 作业保持 running。`wiki_job`
   结束了而 plan 作业没结束的，记为失败；开关不再把账号交给服务端时，还没开始的 `wiki_job` 被取消，plan 作业随之结束。
 - **runner 门归服务端**（`WIKI_SERVER_EXECUTES`，409）：找到 space 之后，不论谁来问，起草用的路由——`GET …/plan/job`、
-  `POST …/plan/job/progress`、`POST …/plan/job/finish`、`GET …/plan/materials`、`POST …/plan/drafts`——一律拒绝。所以会话里的
-  `orbit wiki plan draft` 或 `revise`，包括本期之前的版本，在第一次调用时就停下，没问过任何模型；新版命令（随下一个 runner 版本发布）
-  说明 plan 由服务端用 System model 起草、这里什么也没读也没问模型、要起草请 owner 在 plan 页要求。维护运行读 plan（`GET …/plan`）、
-  提修改建议、`plan check` 都不变。`runner` 下每条路由照 21.7。
+  `POST …/plan/job/progress`、`POST …/plan/job/finish`、`GET …/plan/materials`、`POST …/plan/drafts`——一律拒绝；只有生成作业
+  （`build`）自己的会话例外：文档的流水线移到服务端之前（P7），生成仍是那个任务的会话来写，它的 `GET …/plan/job`、`progress`、`finish`
+  照 21.7 不变。所以会话里的 `orbit wiki plan draft` 或 `revise`，包括本期之前的版本，在第一次调用时就停下，没问过任何模型；
+  新版命令（随下一个 runner 版本发布）说明 plan 由服务端用 System model 起草、这里什么也没读也没问模型、要起草请 owner 在 plan
+  页要求。维护运行读 plan（`GET …/plan`）、提修改建议、`plan check` 都不变。`runner` 下每条路由照 21.7。
 - **迁移 0404**：加 `wiki_plan.author_job_id`，`wiki_plan_author_chk` 改为维护来源的版本恰好记会话或作业之一；加 `wiki_plan_job.materials`；
   `wiki_plan_job_made_chk` 改为 made / ended 时恰好有一个来源（任务或作业），与文档构建的 0405（P7）逐字相同，谁先跑另一条就什么也不做。
 - **两边同一个答案**：`src/shared/src/wiki-plan.fixture.json` 由 `src/runner-go/wiki_plan_fixture_test.go` 从一个真实的 checkout 按 runner 的
