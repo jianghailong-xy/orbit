@@ -86,11 +86,14 @@ internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: Directory
     val space = state.currentSpace
     // The space on screen, read and looked at: as the home opens, and again when another is picked. What came after the
     // reader's last look is new, and this look moves the stamp (design §12.3.2, the web home's `readWikiSeen`, then
-    // `moveWikiSeen`).
-    LaunchedEffect(store, space?.slug, linkedSpaceApplied) {
+    // `moveWikiSeen`). The effect acts on its keys as they were when it was launched, never on the link's state as it
+    // stands when the effect gets to run: read live, an effect launched before the link was settled ran too, the stamp
+    // moved twice, and the second look saw nothing new.
+    val linkSettled = linkedSpaceApplied && !linkedSpaceMissing
+    LaunchedEffect(store, space?.slug, linkSettled) {
         // Opened before the drawer read the spaces: the head waits for them, then this runs again.
         if (space == null) { store.loadSpaces(); return@LaunchedEffect }
-        if (!linkedSpaceApplied || linkedSpaceMissing) return@LaunchedEffect
+        if (!linkSettled) return@LaunchedEffect
         seen = store.seen(space.slug); store.moveSeen(space.slug)
         wikiHomeLoad(store)
     }
@@ -160,12 +163,22 @@ private fun WikiHomePlaceholder(state: WikiState, retry: () -> Unit) {
     }
 }
 
+/** One space's home (design §12.3.1, mocks 30 ③, 31 ① ③ ⑥ ⑦; iOS `WikiHomePage`): the large title with the space beside
+ * it, the line that says what the space holds, the search, the principles when there are any, then the documents — each
+ * category a card, each written document its number, title and two lines of lead, what is not written yet folded into one
+ * row — and Browse by category · A–Z index at the foot. Its bands are [WikiLogic.HomeBand]'s, in their order. What is known
+ * is drawn at once: the head is the spaces list the drawer has already read; the line and the documents are grey bars
+ * until the home's own first read is in. */
 @Composable
 private fun WikiHomePage(space: WikiSpace, state: WikiState, seen: Double?, store: WikiStore, nav: WikiNav,
     listState: androidx.compose.foundation.lazy.LazyListState, retry: () -> Unit, pickSpace: (String) -> Unit, manageSpaces: () -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     var hits by remember { mutableStateOf<List<WikiSearchHit>>(emptyList()) }
     var searched by rememberSaveable { mutableStateOf("") }
+    /** Every principle, past the first three (`All N ›`). */
+    var allPrinciples by rememberSaveable { mutableStateOf(false) }
+    /** The categories whose documents not written yet are listed, their folded row opened. */
+    var unfolded by rememberSaveable { mutableStateOf(emptyList<String>()) }
     val searching = query.trim { it == ' ' }.isNotEmpty()
     LaunchedEffect(query) {
         val text = query
@@ -175,40 +188,194 @@ private fun WikiHomePage(space: WikiSpace, state: WikiState, seen: Double?, stor
         val found = try { store.search(text) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { emptyList() }
         hits = found; searched = text
     }
-    fun openEntry(id: String) = nav.entry(id)
+    val loading = state.homeLoading
     val principles = WikiLogic.principles(state.principles)
-    val now = rememberMinuteClock()
+    val line = WikiLogic.homeLine(state.docsDirectory, state.directory, loading)
+    val documents = WikiLogic.homeDocuments(state.docsDirectory, state.directory, loading, space.settings?.maintenance?.enabled == true, seen)
     LazyColumn(Modifier.fillMaxSize().testTag("wiki-home-list"), state = listState) {
         item(key = "header") { HomeHeader(space, state.spaces, pickSpace, manageSpaces) }
-        item(key = "search") { SearchField(query) { query = it } }
-        if (!searching) {
-            if (state.homeLoading) {
-                if (state.homeState.lastLoadFailed) item(key = "failed") {
-                    StatusMessage("The wiki couldn't be loaded", "Check the connection, then try again.", retry)
-                }
-            } else {
-                item(key = "principles") {
-                    WikiBandHeader(WikiCopy.principles, principles.size,
-                        badge = if (principles.isNotEmpty() && principles.all { it.trust == "owner" }) WikiCopy.trustLabel("owner") else null)
-                }
-                if (principles.isEmpty()) item(key = "principles-empty") { WikiEmptyLine(WikiCopy.noPrinciples) }
-                items(principles, key = { "principle:${it.id}" }) { entry ->
-                    WikiRowButton("wiki-entry:${entry.id}", onClick = { openEntry(entry.id) }) {
-                        WikiRowLabel(entry.displayTitle, WikiDate.relative(entry.validFrom, now), entry.summary, struck = entry.isEnded,
-                            dot = seen?.let { if (WikiSeenLog.isNew(entry.validFrom, it)) wikiNewDot(true) else null })
-                    }
+        WikiLogic.HomeBand.entries.forEach { band ->
+            when (band) {
+                WikiLogic.HomeBand.STATE -> item(key = "state") { HomeLine(line) }
+                WikiLogic.HomeBand.SEARCH -> item(key = "search") { SearchField(query) { query = it } }
+                WikiLogic.HomeBand.PRINCIPLES -> if (!searching && principles.isNotEmpty())
+                    principlesBand(principles, allPrinciples, seen, showAll = { allPrinciples = true }, open = nav::entry)
+                WikiLogic.HomeBand.DOCUMENTS -> if (!searching) documentsBand(documents, failed = loading && state.homeState.lastLoadFailed,
+                    unfolded = unfolded, fold = { key -> unfolded = if (key in unfolded) unfolded - key else unfolded + key }, retry = retry,
+                    openDoc = { slug -> nav.open(OrbitRoute(Destination.WIKI_DOC, slug)) },
+                    openArticle = { topic -> nav.open(OrbitRoute(Destination.WIKI_ARTICLE, topic, wikiPart = 0)) },
+                    openSettings = manageSpaces)
+                WikiLogic.HomeBand.MORE -> if (!searching && documents.listed) item(key = "more") {
+                    HomeMore(browse = { nav.open(OrbitRoute(Destination.WIKI_BROWSE)) }, index = { nav.open(OrbitRoute(Destination.WIKI_INDEX)) })
                 }
             }
-            item(key = "end") { Spacer(Modifier.height(24.dp)) }
-        } else {
+        }
+        if (searching) {
             if (hits.isEmpty() && searched == query && query.isNotEmpty()) item(key = "no-results") {
                 // iOS's system `ContentUnavailableView.search(text:)`, in its English words.
                 StatusMessage("No Results for “$query”", "Check the spelling or try a new search.")
             } else items(hits, key = { "hit:${it.id}" }) { hit ->
-                WikiRowButton("wiki-hit:${hit.id}", onClick = { openEntry(hit.id) }) {
+                WikiRowButton("wiki-hit:${hit.id}", onClick = { nav.entry(hit.id) }) {
                     WikiRowLabel(hit.title ?: hit.id, detail = listOf(WikiCopy.kindLabel(hit.kind), hit.summary ?: "").filter { it.isNotEmpty() }.joinToString(" · "))
                 }
             }
+        }
+        item(key = "end") { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+/** A category's (and the principles') head over its card: a dark grey, absolute, as the mock's. */
+private val wikiHomeHeadColor @Composable get() = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f)
+
+/** What the space holds (`35 documents · 5 written`), or a grey bar in its place while the first read is out — placeholder
+ * shapes, never numbers that could be read as the space's. */
+@Composable
+private fun HomeLine(line: String?) {
+    if (line != null) Text(line, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp).testTag("wiki-home-line"),
+        style = WikiType.subtext, color = WikiPalette.secondary)
+    else Box(Modifier.padding(horizontal = 16.dp, vertical = 6.dp).fillMaxWidth(0.55f).height(12.dp)
+        .background(wikiPlaceholder(), RoundedCornerShape(4.dp)).testTag("wiki-home-line-loading").clearAndSetSemantics {})
+}
+
+@Composable
+private fun wikiPlaceholder(): Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
+
+/** The principles (mock 31 ③): the owner's, the first three a title a row with its day, then `All N ›`. */
+private fun androidx.compose.foundation.lazy.LazyListScope.principlesBand(principles: List<WikiEntry>, all: Boolean, seen: Double?,
+    showAll: () -> Unit, open: (String) -> Unit) {
+    item(key = "principles-head") {
+        Row(Modifier.fillMaxWidth().padding(start = 32.dp, end = 20.dp, top = 14.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(WikiCopy.principles, Modifier.semantics { heading() }, style = WikiType.subtext.copy(fontWeight = FontWeight.SemiBold), color = wikiHomeHeadColor)
+            Text("${principles.size}", style = WikiType.subtext.copy(fontFeatureSettings = "tnum"), color = WikiPalette.secondary)
+            WikiBadge(WikiCopy.trustLabel("owner"), WikiTone.OWNER)
+            Spacer(Modifier.weight(1f))
+            if (!all && principles.size > WikiLogic.PRINCIPLES_SHOWN) TextButton(onClick = showAll,
+                // Said without its chevron: TalkBack reads the words.
+                modifier = Modifier.testTag("wiki-home-principles-all").semantics { contentDescription = "All ${principles.size}" }) {
+                Text(WikiCopy.allPrinciples(principles.size), style = WikiType.subtext)
+            }
+        }
+    }
+    item(key = "principles") {
+        WikiCard(Modifier.testTag("wiki-home-principles")) {
+            (if (all) principles else principles.take(WikiLogic.PRINCIPLES_SHOWN)).forEachIndexed { i, entry ->
+                if (i > 0) WikiDocDivider()
+                WikiDocRow(WikiDocMark.Pin, entry.displayTitle, "wiki-home-principle:${entry.id}",
+                    fresh = seen?.let { WikiSeenLog.isNew(entry.validFrom, it) } ?: false, end = WikiDate.monthDay(entry.validFrom) ?: "",
+                    onClick = { open(entry.id) })
+            }
+        }
+    }
+}
+
+/** The documents by category (mock 30 ③), the topic articles before a plan, a new space's card (mock 31 ⑥), or grey bars
+ * while the first read is out (mock 31 ⑦) — the reason it failed, with Retry, when it did. */
+private fun androidx.compose.foundation.lazy.LazyListScope.documentsBand(documents: WikiLogic.HomeDocuments, failed: Boolean,
+    unfolded: List<String>, fold: (String) -> Unit, retry: () -> Unit, openDoc: (String) -> Unit, openArticle: (String) -> Unit,
+    openSettings: () -> Unit) {
+    when (documents) {
+        WikiLogic.HomeDocuments.Loading -> if (failed) item(key = "documents-failed") {
+            WikiCard(Modifier.testTag("wiki-home-failed")) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("The wiki couldn't be loaded", style = WikiType.subtext.copy(fontWeight = FontWeight.SemiBold))
+                    Text("Check the connection, then try again.", style = WikiType.label, color = WikiPalette.secondary)
+                    TextButton(onClick = retry, modifier = Modifier.testTag("wiki-home-retry")) { Text("Retry") }
+                }
+            }
+        } else item(key = "documents-skeleton") { HomeSkeleton() }
+        is WikiLogic.HomeDocuments.Categories -> documents.categories.forEach { category ->
+            item(key = "category:${category.key}") { HomeGroupHead(category.title, number = category.number, tag = "wiki-home-category:${category.key}") }
+            item(key = "documents:${category.key}") {
+                WikiCard {
+                    category.written.forEachIndexed { i, doc ->
+                        if (i > 0) WikiDocDivider()
+                        WikiDocRow(WikiDocMark.Number(doc.number), doc.title, "wiki-home-doc:${doc.slug}", line = doc.lead, lead = true,
+                            fresh = doc.fresh, onClick = { openDoc(doc.slug) })
+                    }
+                    WikiDocLogic.notWrittenRow(category)?.let { text ->
+                        val open = category.key in unfolded
+                        if (category.written.isNotEmpty()) WikiDocDivider()
+                        WikiDocFoldedRow(text, open, "wiki-home-fold:${category.key}") { fold(category.key) }
+                        if (open) category.notWritten.forEach { doc ->
+                            WikiDocDivider()
+                            WikiDocRow(WikiDocMark.Number(doc.number), doc.title, "wiki-home-doc:${doc.slug}", line = WikiDocCopy.notWrittenShort,
+                                muted = true, onClick = { openDoc(doc.slug) })
+                        }
+                    }
+                }
+            }
+        }
+        is WikiLogic.HomeDocuments.Topics -> documents.groups.forEach { group ->
+            item(key = "topics-head:${group.key}") { HomeGroupHead(group.title, tag = "wiki-home-topics:${group.key}") }
+            item(key = "topics:${group.key}") {
+                WikiCard {
+                    group.topics.forEachIndexed { i, topic ->
+                        if (i > 0) WikiDocDivider(numbered = false)
+                        WikiDocRow(null, topic.title, "wiki-home-topic:${topic.slug}", onClick = { openArticle(topic.slug) })
+                    }
+                }
+            }
+        }
+        WikiLogic.HomeDocuments.NewSpace -> item(key = "new-space") {
+            WikiCard(Modifier.padding(top = 8.dp).testTag("wiki-home-new-space")) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(WikiDocCopy.noDocumentsNote, style = WikiType.subtext, color = WikiPalette.secondary)
+                    TextButton(onClick = openSettings, modifier = Modifier.testTag("wiki-home-set-up"), contentPadding = PaddingValues(horizontal = 0.dp)) {
+                        Text(WikiPlanCopy.setUp, style = WikiType.subtext.copy(fontWeight = FontWeight.SemiBold))
+                    }
+                }
+            }
+        }
+        WikiLogic.HomeDocuments.NothingListed -> Unit
+    }
+}
+
+/** A category's head over its card — its number and title — or a topic group's title. */
+@Composable
+private fun HomeGroupHead(title: String, number: Int? = null, tag: String) {
+    Row(Modifier.fillMaxWidth().padding(start = 32.dp, end = 32.dp, top = 18.dp, bottom = 2.dp).semantics(mergeDescendants = true) { heading() }
+        .testTag(tag), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (number != null) Text("$number", style = WikiType.subtext.copy(fontFeatureSettings = "tnum"), color = WikiPalette.secondary)
+        Text(title, style = WikiType.subtext.copy(fontWeight = FontWeight.SemiBold), color = wikiHomeHeadColor)
+    }
+}
+
+/** The documents' first read (mock 31 ⑦): a category's bar, then four documents' — number, title, two lines — in grey.
+ * Hidden from TalkBack: it holds no words. */
+@Composable
+private fun HomeSkeleton() {
+    val bar = wikiPlaceholder()
+    Column(Modifier.fillMaxWidth().testTag("wiki-home-skeleton").clearAndSetSemantics {}) {
+        Box(Modifier.padding(start = 32.dp, top = 22.dp, bottom = 6.dp).width(140.dp).height(12.dp).background(bar, RoundedCornerShape(4.dp)))
+        WikiCard {
+            repeat(4) { i ->
+                if (i > 0) WikiDocDivider()
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.width(wikiDocNumberWidth()).padding(end = 8.dp).height(12.dp).background(bar, RoundedCornerShape(4.dp)))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Box(Modifier.fillMaxWidth(0.62f).height(14.dp).background(bar, RoundedCornerShape(4.dp)))
+                        Box(Modifier.fillMaxWidth(0.95f).height(10.dp).background(bar, RoundedCornerShape(4.dp)))
+                        Box(Modifier.fillMaxWidth(0.7f).height(10.dp).background(bar, RoundedCornerShape(4.dp)))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The ways to everything else (mock 31 ①): Browse by category · A–Z index, wrapping at a large type size. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun HomeMore(browse: () -> Unit, index: () -> Unit) {
+    FlowRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        TextButton(onClick = browse, modifier = Modifier.testTag("wiki-home-browse")) {
+            Icon(painterResource(R.drawable.ic_grid), null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp))
+            Text(WikiArticleCopy.browse, style = WikiType.subtext)
+        }
+        TextButton(onClick = index, modifier = Modifier.testTag("wiki-home-index")) {
+            Icon(painterResource(R.drawable.ic_index), null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp))
+            Text(WikiArticleCopy.azIndex, style = WikiType.subtext)
         }
     }
 }

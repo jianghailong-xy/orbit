@@ -35,6 +35,8 @@ internal object WikiCopy {
     const val noDocuments = "No documents yet"
 
     const val principles = "Principles"
+    /** After the home's first three principles, the way to all of them: `All 6 ›` (`wikiAllPrinciples`). */
+    fun allPrinciples(count: Int) = "All $count ›"
     const val recentDecisions = "Recent decisions"
     const val recentlyChanged = "Recently changed"
     const val agentsUsed = "Agents used the wiki"
@@ -158,8 +160,6 @@ internal object WikiCopy {
     const val tabAmend = "Amend"
     const val tabRetire = "Retire"
 
-    /** The home's Principles with none to list — about the principles, not the whole space. */
-    const val noPrinciples = "No principle has been recorded yet."
     const val noReview = "Nothing is waiting for you."
     const val noChanges = "Nothing has changed yet."
     const val noDecisions = "No decision has been recorded yet."
@@ -414,4 +414,15 @@ internal object WikiDocCopy {
     }
     fun monthDayTime(iso: String?, zone: ZoneId = ZoneId.systemDefault()): String? =
         iso?.let { WikiModeLogic.runWhen(it, zone).ifEmpty { null } }
+
+    // The home, by the confirmed plan (design §12.3.1, mocks 30 ③, 31 ① ⑥).
+
+    /** The line under the home's head once a plan is confirmed: `35 documents · 5 written` (`wikiDocsWritten`). */
+    fun docsWritten(total: Int, written: Int) = "${plural(total, "document", "documents")} · ${WikiArticleCopy.count(written)} written"
+    /** A new space's one card (mock 31 ⑥): why it has nothing, over Set up maintenance (`WIKI_NO_DOCUMENTS_NOTE`). */
+    const val noDocumentsNote = "This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space."
+    /** A category's documents not written yet, folded into one row under its written ones (`wikiNotWrittenYet`). */
+    fun notWrittenYet(n: Int) = "+${WikiArticleCopy.count(n)} not written yet"
+    /** A category none of whose documents is written yet, as its one row (`wikiDocsNotWrittenYet`). */
+    fun docsNotWrittenYet(n: Int) = "${plural(n, "document", "documents")} · $notWrittenShort"
 }

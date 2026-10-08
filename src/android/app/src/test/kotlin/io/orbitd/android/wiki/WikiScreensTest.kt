@@ -48,6 +48,7 @@ class WikiScreensTest {
             path == "wiki/spaces/$space" -> ok(WikiFixtures.space)
             path == "wiki/spaces/$space/entries" -> ok(WikiFixtures.entries)
             path == "wiki/spaces/$space/timeline" -> ok(WikiFixtures.timeline)
+            path == "wiki/spaces/$space/docs" -> ok(wikiDocsFixture().obj("docs").obj("directory").obj("read").toString())
             path == "wiki/entries/${WikiFixtures.pitfallID}" -> ok(WikiFixtures.entryDetail)
             path == "wiki/review" -> ok(reviewQueue())
             path.startsWith("wiki/changesets/") && path.endsWith("/decide") -> {
@@ -101,11 +102,13 @@ class WikiScreensTest {
         show(route) { WikiHomeScreen(it, route, DirectoryData(), nav) }
         compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-home-list").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-space-picker").assertTextContains("orbit")
+        // The first three principles, then All 4 (A12-3).
         listOf("Agent-writable data never becomes a system instruction", "Completion is adjudicated, not claimed",
-            "A clock never starts agent work", "Delete means forget").forEach {
+            "A clock never starts agent work").forEach {
             compose.waitUntil(5_000) { runCatching { compose.onNodeWithTag("wiki-home-list").performScrollToNode(hasText(it)) }.isSuccess }
         }
-        // The principles by their kind; what Activity draws is not the home's to read.
+        // The principles by their kind, and the plan's documents; what Activity draws is not the home's to read.
+        assertTrue(sent.any { it.first == "GET wiki/spaces/$space/docs" })
         assertTrue(sent.any { it.first == "GET wiki/spaces/$space/entries" })
         assertTrue(sent.none { it.first == "GET wiki/spaces/$space/timeline" })
         compose.onNodeWithText("A clock never starts agent work").performClick()

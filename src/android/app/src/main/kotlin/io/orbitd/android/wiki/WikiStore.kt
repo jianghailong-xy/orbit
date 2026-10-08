@@ -239,10 +239,11 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
         }
     }
 
-    /** The home's content (design §12.3.1): the principles by kind, and the spaces list again, for the head's numbers. The
-     * head needs neither: it is the spaces list the drawer has already read, and only a page opened before that read waits
-     * for it here. The principles read their own kind: out of the newest 200 entries of every kind, a space of thousands
-     * had none of them left to show. */
+    /** The home's content (design §12.3.1), side by side: the principles by kind, the confirmed plan's documents and the
+     * topic articles the home lists before a plan — and the spaces list again, for the head's numbers. The head needs none
+     * of them: it is the spaces list the drawer has already read, and only a page opened before that read waits for it
+     * here. The principles read their own kind: out of the newest 200 entries of every kind, a space of thousands had none
+     * of them left to show. */
     suspend fun loadHome() = supervisorScope {
         if (!current.spacesState.hasLoaded) loadSpaces()
         val space = articlesSpace()
@@ -254,10 +255,23 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
         set { it.copy(homeState = it.homeState.begin()) }
         // The head's numbers, read beside the content and never cut short by it.
         val spacesRead = launch { loadSpaces() }
+        val principlesRead = async { client.entries(space.id, "principle", WikiLogic.PRINCIPLES_READ) }
+        val docsRead = async { client.docs(space.id) }
+        val articlesRead = async { client.articleDirectory(space.id) }
         try {
-            val principles = client.entries(space.id, "principle", WikiLogic.PRINCIPLES_READ)
-            if (articlesSpaceId == space.id && newest(HOME, ticket)) set { it.copy(principles = principles, homeSpaceId = space.id, homeState = it.homeState.succeed()) }
+            val docs = docsRead.await()
+            // The topic articles are what the home lists only before a plan is confirmed.
+            val articles = if (WikiDocLogic.readsByDocs(docs)) optional { articlesRead.await() } else articlesRead.await()
+            // Without its principles the home still draws its documents; the ones it had stay.
+            val principles = optional { principlesRead.await() }
+            // Another space was picked while this one was reading: its own read owns the page.
+            if (articlesSpaceId == space.id && newest(HOME, ticket)) set {
+                it.copy(docsDirectory = docs, directory = articles ?: it.directory,
+                    directoryState = if (articles != null) it.directoryState.succeed() else it.directoryState,
+                    principles = principles ?: it.principles, homeSpaceId = space.id, homeState = it.homeState.succeed())
+            }
         } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) {
+            principlesRead.cancel(); docsRead.cancel(); articlesRead.cancel()
             if (articlesSpaceId == space.id && newest(HOME, ticket)) set { it.copy(homeState = it.homeState.fail()) }
         }
         spacesRead.join()

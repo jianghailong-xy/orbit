@@ -30,8 +30,11 @@ import org.robolectric.annotation.Config
  * principles and Activity's decisions read by their own kind out of a space thousands of entries deep, one proposal said
  * in the singular, Review naming an entry no other read holds, an account the wiki is off for. A12-2 (iOS 42d12db2b):
  * the bar's Activity and the drawer saying one number waiting on the owner, Activity's bands and banners adding up to it,
- * what is new since the reader last looked, the space by its repository's name, and the space a workspace opens. Every
- * check goes through the production Activity by links, tags and the words on screen. */
+ * what is new since the reader last looked, the space by its repository's name, and the space a workspace opens. A12-3
+ * (iOS 712c92e10): the home is the documents — the line that says what the space holds, the principles, the confirmed
+ * plan's documents by category with their leads and the dots of what is new, the folded rows of what is not written yet,
+ * Browse · A–Z at the foot; before a plan the topic articles; a new space's card; grey bars until the first read is in.
+ * Every check goes through the production Activity by links, tags and the words on screen. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = WikiShellApplication::class, qualifiers = "w411dp-h891dp")
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -229,7 +232,121 @@ class WikiIncrementShellTest {
         assertTrue(picker().contains("wikova"))
     }
 
+    // MARK: A12-3 — the home is the documents
+
+    /** The confirmed plan's documents by category (mock 30 ③): the line under the head, a card per category with a
+     * document — the empty one left out — each written document its number, title and lead with the blue dot of what is
+     * new to a reader who never looked, the rest folded into one row that opens to their titles, Browse · A–Z at the foot;
+     * the principles, the first three and All 4. */
+    @Test fun theHomeIsTheSpacesDocumentsByCategory() {
+        shell.docs = docsWithLeads()
+        signIn()
+        open("orbit://wiki/${WikiShell.SPACE}")
+        awaitTag("wiki-home-line")
+        compose.onNodeWithTag("wiki-home-line").assertTextEquals("5 documents · 3 written")
+        // The principles, oldest recorded first: three, then All 4.
+        listOf("Agent-writable data never becomes a system instruction", "Completion is adjudicated, not claimed", "A clock never starts agent work")
+            .forEach { scrollTo("wiki-home-list", it) }
+        assertTrue("the fourth waits behind All 4", compose.onAllNodesWithText("Delete means forget").fetchSemanticsNodes().isEmpty())
+        // The categories with a document, in the plan's order; 2 (部署与运维) has none.
+        listOf("product", "session-runtime", "session-state").forEach { scrollToTag("wiki-home-list", "wiki-home-doc:$it") }
+        compose.onNodeWithTag("wiki-home-doc:session-runtime").assertTextContains("3.1").assertTextContains("会话运行模型与长连接")
+            .assertTextContains("会话运行模型与长连接 的头两句。")
+        assertTrue("a reader who never looked: every written document is new",
+            listOf("product", "session-runtime", "session-state").all { compose.onAllNodesWithTag("wiki-home-doc:$it-new", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() })
+        assertTrue(compose.onAllNodesWithTag("wiki-home-category:ops").fetchSemanticsNodes().isEmpty())
+        // What is not written yet folds into one row, which opens to the titles.
+        scrollToTag("wiki-home-list", "wiki-home-fold:sessions")
+        compose.onNodeWithTag("wiki-home-fold:sessions").assertTextEquals("+1 not written yet").assert(hasStateDescription("Collapsed"))
+        assertTrue(compose.onAllNodesWithTag("wiki-home-doc:session-search").fetchSemanticsNodes().isEmpty())
+        press("wiki-home-fold:sessions")
+        compose.onNodeWithTag("wiki-home-fold:sessions").assert(hasStateDescription("Expanded"))
+        scrollToTag("wiki-home-list", "wiki-home-doc:session-search")
+        compose.onNodeWithTag("wiki-home-doc:session-search").assertTextContains("会话搜索").assertTextContains("Not written yet")
+        scrollToTag("wiki-home-list", "wiki-home-fold:agents")
+        compose.onNodeWithTag("wiki-home-fold:agents").assertTextEquals("1 document · Not written yet")
+        // The foot, then a document's row into its page.
+        scrollToTag("wiki-home-list", "wiki-home-browse")
+        compose.onNodeWithTag("wiki-home-index").assertExists()
+        scrollToTag("wiki-home-list", "wiki-home-doc:session-runtime")
+        press("wiki-home-doc:session-runtime")
+        awaitTag("wiki-doc")
+        back()
+        awaitTag("wiki-home-list")
+        scrollTo("wiki-home-list", "Principles")
+        press("wiki-home-principles-all")
+        scrollTo("wiki-home-list", "Delete means forget")
+        scrollToTag("wiki-home-list", "wiki-home-browse")
+        press("wiki-home-browse")
+        awaitTag("wiki-browse")
+    }
+
+    /** A new space — no confirmed plan, no topic article, maintenance not set up — says how a space comes to have documents,
+     * over Set up maintenance, which opens its Wiki settings; the line says "No documents yet" and nothing is to browse. */
+    @Test fun aNewSpaceShowsOneCardAndSetUpMaintenance() {
+        shell.docs = """{"spaceId":"${WikiShell.SPACE}","plan":null,"docs":null,"categories":[]}"""
+        shell.articles = """{"spaceId":"${WikiShell.SPACE}","categories":[],"uncategorized":[]}"""
+        signIn()
+        open("orbit://wiki/${WikiShell.SPACE}")
+        awaitTag("wiki-home-line")
+        compose.onNodeWithTag("wiki-home-line").assertTextEquals("No documents yet")
+        scrollToTag("wiki-home-list", "wiki-home-new-space")
+        compose.onNodeWithText("This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space.").assertExists()
+        assertTrue("nothing to browse", compose.onAllNodesWithTag("wiki-home-browse").fetchSemanticsNodes().isEmpty())
+        press("wiki-home-set-up")
+        awaitTag("wiki-settings-page")
+    }
+
+    /** Before a plan is confirmed the home lists the topic articles, as the directory groups them, a title a row. */
+    @Test fun beforeAPlanTheHomeListsTheTopicArticles() {
+        shell.docs = """{"spaceId":"${WikiShell.SPACE}","plan":null,"docs":null,"categories":[]}"""
+        shell.articles = wikiArticlesFixture().obj("directory").obj("read").toString()
+        signIn()
+        open("orbit://wiki/${WikiShell.SPACE}")
+        awaitTag("wiki-home-line")
+        val topics = wikiArticlesFixture().obj("directory").obj("read").decode(WikiArticleDirectory.serializer())
+            .let(WikiArticleLogic::directoryGroups).flatMap { it.topics }
+        compose.onNodeWithTag("wiki-home-line").assertTextEquals("${topics.size} articles")
+        scrollToTag("wiki-home-list", "wiki-home-topic:${topics.first().slug}")
+        press("wiki-home-topic:${topics.first().slug}")
+        awaitTag("wiki-article")
+    }
+
+    /** What the head needs is drawn at once; the line and the documents are grey bars until the home's own read is in — and,
+     * when that read failed, the documents say so with Retry. */
+    @Test fun theHomeDrawsGreyBarsUntilItsFirstReadIsInAndSaysWhenItFailed() {
+        // The documents' first read fails — the answer is the one the server held when the request came — and is held
+        // until the grey bars have been looked at.
+        shell.docsStatus = 503
+        val gate = shell.hold("GET", "wiki/spaces/${WikiShell.SPACE}/docs")
+        signIn()
+        open("orbit://wiki/${WikiShell.SPACE}")
+        awaitThat("the grey bars") { compose.onAllNodesWithTag("wiki-home-skeleton", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("wiki-space-picker").assertExists()
+        assertTrue(compose.onAllNodesWithTag("wiki-home-line-loading", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+        assertTrue(compose.onAllNodesWithTag("wiki-home-line").fetchSemanticsNodes().isEmpty())
+        gate.complete(Unit)
+        awaitTag("wiki-home-failed")
+        shell.docsStatus = 200
+        press("wiki-home-retry")
+        awaitTag("wiki-home-line")
+        compose.onNodeWithTag("wiki-home-line").assertTextEquals("5 documents · 3 written")
+    }
+
     // MARK: fixtures
+
+    /** The shared directory read with each written document given its lead, as a server that writes them answers. */
+    private fun docsWithLeads(): String {
+        val read = wikiDocsFixture().obj("docs").obj("directory").obj("read")
+        val categories = read.getValue("categories").jsonArray.map { category ->
+            val docs = (category.jsonObject["docs"] as? JsonArray).orEmpty().map { doc ->
+                val o = doc.jsonObject
+                if (o["written"]?.jsonPrimitive?.booleanOrNull == true) JsonObject(o + ("lead" to JsonPrimitive("${o.getValue("title").jsonPrimitive.content} 的头两句。"))) else o
+            }
+            JsonObject(category.jsonObject + ("docs" to JsonArray(docs)))
+        }
+        return JsonObject(read + ("categories" to JsonArray(categories))).toString()
+    }
 
     /** WikiHomeWindowTests' space: three principles (one retired), six decisions, and 250 entries newer than all of them. */
     private object Window {
@@ -310,6 +427,10 @@ class WikiIncrementShellTest {
         ?.let { node -> node.config.getOrNull(SemanticsProperties.Text)?.joinToString(" ") { text -> text.text } }.orEmpty()
     private fun awaitTag(tag: String) = awaitThat(tag) { compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty() }
     private fun awaitText(text: String) = awaitThat(text) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
+    /** A lazy list's row tagged [tag], scrolled into view once the list holds it. */
+    private fun scrollToTag(list: String, tag: String) = awaitThat("$tag in $list") {
+        runCatching { compose.onNodeWithTag(list).performScrollToNode(hasTestTag(tag)) }.isSuccess
+    }
     /** A lazy list's row with [text], scrolled into view once the list holds it. */
     private fun scrollTo(list: String, text: String) = awaitThat("“$text” in $list") {
         runCatching { compose.onNodeWithTag(list).performScrollToNode(hasText(text)) }.isSuccess
@@ -317,7 +438,8 @@ class WikiIncrementShellTest {
     private fun awaitThat(what: String, condition: () -> Boolean) {
         try { compose.waitUntil(10_000, condition) }
         catch (timeout: androidx.compose.ui.test.ComposeTimeoutException) {
-            throw AssertionError("waited for $what; on screen: '${screenText()}'; last calls=${shell.calls.takeLast(12)}", timeout)
+            throw AssertionError("waited for $what; on screen: '${screenText()}'; held requests ended=${shell.ended}; " +
+                "last calls=${shell.calls.takeLast(30)}", timeout)
         }
     }
     /** What the screen says, for a wait that ran out. */

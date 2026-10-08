@@ -116,6 +116,50 @@ internal object WikiLogic {
     fun principles(entries: List<WikiEntry>): List<WikiEntry> = entries.filter { it.kind == "principle" }
         .sortedBy { RelativeTime.parse(it.recordedAt) ?: Instant.MIN }
 
+    /** The principles the home lists before `All N ›` (`PRINCIPLES_SHOWN`, mock 31 ③). */
+    const val PRINCIPLES_SHOWN = 3
+
+    /** The home's bands under its head (the title and the space), top to bottom (design §12.3.1, mocks 30 ③, 31 ① ③): the
+     * line that says what the space holds, the search, the principles — only when there are any — the documents by
+     * category, then Browse by category · A–Z index. The web phone's order (OrbitKit `WikiLogic.HomeBand`), and the order
+     * the home lays its rows out in. Nothing here says how the wiki is kept: that is Activity's ([ActivityBand]). */
+    enum class HomeBand(val title: String?) { STATE(null), SEARCH(null), PRINCIPLES(WikiCopy.principles), DOCUMENTS(null), MORE(null) }
+
+    /** What the home's documents band draws (`WikiHome.tsx`'s branches; design §12.3.1). */
+    sealed interface HomeDocuments {
+        /** The first read is out: grey bars in the rows' shape (mock 31 ⑦). */
+        data object Loading : HomeDocuments
+        /** The confirmed plan's documents, a category a group (mock 30 ③). */
+        data class Categories(val categories: List<WikiDocLogic.HomeCategory>) : HomeDocuments
+        /** Before a plan is confirmed: the topic articles, as the directory groups them, a title a row. */
+        data class Topics(val groups: List<WikiArticleLogic.DirectoryGroup>) : HomeDocuments
+        /** Neither, and maintenance not set up: the one card that says how a space comes to have documents (mock 31 ⑥). */
+        data object NewSpace : HomeDocuments
+        /** Neither, with maintenance set up: nothing, the line under the head saying `No documents yet`. */
+        data object NothingListed : HomeDocuments
+        /** Whether the home ends on Browse by category · A–Z index: once its first read is in, with something listed. */
+        val listed: Boolean get() = this is Categories || this is Topics
+    }
+
+    /** The home's documents: the confirmed plan's, by category; before one, the topic articles; else a new space's card, or
+     * nothing once maintenance is set up. [loading] is the first read alone — a read the page already has stays drawn
+     * while it is read again. */
+    fun homeDocuments(docs: WikiDocsDirectory?, articles: WikiArticleDirectory?, loading: Boolean, maintenance: Boolean, seen: Double?): HomeDocuments {
+        if (loading) return HomeDocuments.Loading
+        if (docs != null && WikiDocLogic.readsByDocs(docs)) return HomeDocuments.Categories(WikiDocLogic.homeCategories(docs, seen))
+        val groups = articles?.let(WikiArticleLogic::directoryGroups).orEmpty()
+        if (groups.any { it.topics.isNotEmpty() }) return HomeDocuments.Topics(groups)
+        return if (maintenance) HomeDocuments.NothingListed else HomeDocuments.NewSpace
+    }
+
+    /** The line under the home's head (`WikiHomeState`): what [WikiDocLogic.homeLine] says of the reads the documents band
+     * lists — the topics before a plan — or null, a grey bar, while the first read is out. */
+    fun homeLine(docs: WikiDocsDirectory?, articles: WikiArticleDirectory?, loading: Boolean): String? {
+        if (loading) return null
+        val topics = articles?.let(WikiArticleLogic::directoryGroups).orEmpty().sumOf { it.topics.size }
+        return WikiDocLogic.homeLine(if (WikiDocLogic.readsByDocs(docs)) docs else null, topics)
+    }
+
     // MARK: Activity
 
     /** Activity's blocks, top to bottom (design §12.3.2, mock 31 ②) — the home's management blocks, moved in their order,

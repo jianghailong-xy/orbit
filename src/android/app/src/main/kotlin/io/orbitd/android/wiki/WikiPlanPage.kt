@@ -13,7 +13,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.*
@@ -26,6 +28,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.orbitd.android.R
 import io.orbitd.android.navigation.OrbitRoute
 import io.orbitd.android.ui.LocalOrbitColors
@@ -157,7 +160,7 @@ internal fun WikiPlanPage(route: OrbitRoute, state: WikiPlanState, shown: WikiPl
                     if (category.docs.isNotEmpty()) item(key = "docs:${category.number}") {
                         WikiCard {
                             category.docs.forEachIndexed { i, doc ->
-                                if (i > 0) HorizontalDivider(Modifier.padding(start = 16.dp))
+                                if (i > 0) WikiDocDivider()
                                 PlanDocRow(doc, shown, actions.openDoc)
                             }
                         }
@@ -215,30 +218,88 @@ private fun PlanEmpty(whereItRuns: String?, provider: String?, busy: Boolean, dr
     }
 }
 
-/** `1.3  安全模型与密钥信任` over the reader's question and `2 errors · 7 sections · 1,500–2,400 chars`. */
+/** `1.3  安全模型与密钥信任` over the reader's question and `2 errors · 7 sections · 1,500–2,400 chars`: the document row
+ * the home draws too ([WikiDocRow]), with the plan's counts under the question. */
 @Composable
 private fun PlanDocRow(doc: WikiPlanLogic.ShownDoc, shown: WikiPlanLogic.Shown, open: (String) -> Unit) {
     val errors = WikiPlanLogic.docErrors(shown, doc).size
     val error = MaterialTheme.colorScheme.error
-    Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { open(doc.slug) }.heightIn(min = 48.dp)
-        .padding(horizontal = 16.dp, vertical = 10.dp).testTag("wiki-plan-doc:${doc.slug}"), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(doc.number, Modifier.alignByBaseline(), style = WikiType.subtext.copy(fontFeatureSettings = "tnum"), color = WikiPalette.secondary)
+    WikiDocRow(WikiDocMark.Number(doc.number), doc.title, "wiki-plan-doc:${doc.slug}", line = doc.question, locked = doc.protected,
+        onClick = { open(doc.slug) }) {
+        Text(buildAnnotatedString {
+            if (errors > 0) {
+                withStyle(SpanStyle(color = error, fontWeight = FontWeight.Bold)) { append(WikiPlanCopy.errorCount(errors)) }
+                append(" · ")
+            }
+            append(WikiPlanLogic.docLine(doc))
+        }, style = WikiType.label, color = WikiPalette.secondary)
+    }
+}
+
+/** What stands in a document row's number column: `3.1`, or a principle's pin. None leaves the row no such column (a topic). */
+internal sealed interface WikiDocMark {
+    data class Number(val number: String) : WikiDocMark
+    data object Pin : WikiDocMark
+}
+
+/** The number column, as wide as `10.3` (the web's 34 px), growing with the type size as iOS's `@ScaledMetric` does. */
+@Composable
+internal fun wikiDocNumberWidth() = with(LocalDensity.current) { 34.sp.toDp() }
+
+/** A document as a list row (iOS `WikiDocRow`): its number, its title, a line under it and the chevron into its page — the
+ * plan page's row (mock 22 ②), and the home's (design §12.3.1, mocks 30 ③, 31 ① ③). One row, two lines under the title:
+ * the plan's is the question the document answers; the home's is the document's lead ([lead]), a shade darker, since it is
+ * what the document says rather than what it is for. [fresh] is the blue dot of what is new since the reader last looked;
+ * [muted] a document not written yet; [end] what ends the row in the chevron's place (a principle's day); [extra] goes
+ * under the line (the plan's counts). */
+@Composable
+internal fun WikiDocRow(mark: WikiDocMark?, title: String, tag: String, line: String? = null, lead: Boolean = false, fresh: Boolean = false,
+    locked: Boolean = false, muted: Boolean = false, end: String? = null, onClick: () -> Unit, extra: @Composable ColumnScope.() -> Unit = {}) {
+    val numberWidth = wikiDocNumberWidth()
+    Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).heightIn(min = 48.dp)
+        .padding(horizontal = 16.dp, vertical = 10.dp).testTag(tag), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        when (mark) {
+            is WikiDocMark.Number -> Text(mark.number, Modifier.width(numberWidth).alignByBaseline(),
+                style = WikiType.subtext.copy(fontWeight = FontWeight.SemiBold, fontFeatureSettings = "tnum"), color = WikiPalette.secondary)
+            WikiDocMark.Pin -> Box(Modifier.width(numberWidth).align(Alignment.CenterVertically)) {
+                Icon(painterResource(R.drawable.ic_pin), null, Modifier.size(16.dp), tint = WikiPalette.secondary)
+            }
+            null -> Unit
+        }
         Column(Modifier.weight(1f).alignByBaseline(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(doc.title, Modifier.weight(1f, fill = false), style = WikiType.prose)
-                if (doc.protected) Icon(painterResource(R.drawable.ic_lock), WikiPlanCopy.protected, Modifier.size(12.dp), tint = WikiPalette.secondary)
+                // The dot is the row's look, not a word: TalkBack hears nothing for it.
+                if (fresh) Text("●", Modifier.testTag("$tag-new").clearAndSetSemantics {}, style = WikiType.meta, color = WikiPalette.color(WikiTone.BLUE))
+                Text(title, Modifier.weight(1f, fill = false), style = WikiType.prose, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    color = if (muted) WikiPalette.secondary else MaterialTheme.colorScheme.onSurface)
+                if (locked) Icon(painterResource(R.drawable.ic_lock), WikiPlanCopy.protected, Modifier.size(12.dp), tint = WikiPalette.secondary)
             }
-            if (doc.question.isNotEmpty()) Text(doc.question, style = WikiType.subtext, color = WikiPalette.secondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(buildAnnotatedString {
-                if (errors > 0) {
-                    withStyle(SpanStyle(color = error, fontWeight = FontWeight.Bold)) { append(WikiPlanCopy.errorCount(errors)) }
-                    append(" · ")
-                }
-                append(WikiPlanLogic.docLine(doc))
-            }, style = WikiType.label, color = WikiPalette.secondary)
+            if (!line.isNullOrEmpty()) Text(line, style = WikiType.subtext, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                color = if (lead) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f) else WikiPalette.secondary)
+            extra()
         }
-        Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.size(14.dp).align(Alignment.CenterVertically), tint = WikiPalette.secondary)
+        if (end != null) Text(end, Modifier.alignByBaseline(), style = WikiType.label.copy(fontFeatureSettings = "tnum"), color = WikiPalette.secondary)
+        else Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.size(14.dp).align(Alignment.CenterVertically), tint = WikiPalette.secondary)
     }
+}
+
+/** A category's folded row (iOS `WikiDocFoldedRow`): what of it is not written yet, in grey under the title column, and the
+ * chevron that turns down once it is opened to their titles; TalkBack hears whether it is open. */
+@Composable
+internal fun WikiDocFoldedRow(text: String, open: Boolean, tag: String, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).heightIn(min = 48.dp)
+        .padding(horizontal = 16.dp, vertical = 10.dp).testTag(tag).semantics { stateDescription = if (open) "Expanded" else "Collapsed" },
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Spacer(Modifier.width(wikiDocNumberWidth()))
+        Text(text, Modifier.weight(1f), style = WikiType.subtext, color = WikiPalette.secondary)
+        Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.size(14.dp).rotate(if (open) 90f else 0f), tint = WikiPalette.secondary)
+    }
+}
+
+/** The separator between two document rows: from the title column, past the number column (mock 30 ③). */
+@Composable
+internal fun WikiDocDivider(numbered: Boolean = true) {
+    HorizontalDivider(Modifier.padding(start = 16.dp + if (numbered) wikiDocNumberWidth() + 10.dp else 0.dp))
 }
 
 /** An inset-grouped section's header: its title, and the count beside it. */

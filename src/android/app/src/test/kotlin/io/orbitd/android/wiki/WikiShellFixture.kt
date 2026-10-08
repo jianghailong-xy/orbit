@@ -54,6 +54,11 @@ internal object WikiShell {
     @Volatile var plans: Map<String, String> = emptyMap()
     /** `GET /workspaces`: the directory's workspaces. */
     @Volatile var workspaces: String = "[]"
+    /** `GET /wiki/spaces/:id/docs` (the shared fixture's directory read unless set), answered with [docsStatus]. */
+    @Volatile var docs: String? = null
+    @Volatile var docsStatus: Int = 200
+    /** `GET /wiki/spaces/:id/articles`; none answers 404, as a server from before the articles. */
+    @Volatile var articles: String? = null
     @Volatile private var frames = Channel<String>(Channel.UNLIMITED)
     @Volatile private var opened = 0
 
@@ -61,7 +66,7 @@ internal object WikiShell {
         calls.clear(); ended.clear(); gates.clear(); decided.clear()
         decision = "accepted"; watchState = "ACTIVE"; pauseRefusal = null
         wikiDisabled = false; spaces = WikiFixtures.spaces; entries = fixtureEntries(); reviewQueue = WikiFixtures.review
-        plans = emptyMap(); workspaces = "[]"
+        plans = emptyMap(); workspaces = "[]"; docs = null; docsStatus = 200; articles = null
         frames = Channel(Channel.UNLIMITED); opened = 0
     }
 
@@ -108,7 +113,7 @@ internal object WikiShell {
         return JsonObject(row + ("ops" to JsonArray(ops))).toString()
     }
     private fun watch() = WatchFixture.json(id = WATCH, state = watchState, action = "NOTIFY_USER", observer = null).toString()
-    private val docs = wikiDocsFixture().obj("docs")
+    private val docsFixture = wikiDocsFixture().obj("docs")
 
     val transport = HttpTransport { request ->
         val api = request.api
@@ -149,9 +154,10 @@ internal object WikiShell {
                 ?: status(404, """{"message":"not found"}""")
             path == "workspaces" -> ok(workspaces)
             path.endsWith("/timeline") -> ok(WikiFixtures.timeline)
-            path.endsWith("/docs") -> ok(docs.obj("directory").obj("read").toString())
-            path.endsWith("/docs/$DOC") -> ok(docs.obj("doc").obj("read").toString())
-            path.endsWith("/doc-index") -> ok(buildJsonObject { put("plan", docs.obj("directory").obj("read").obj("plan")); put("items", docs.obj("index").arr("items")) }.toString())
+            path.endsWith("/docs") -> status(docsStatus, if (docsStatus == 200) docs ?: docsFixture.obj("directory").obj("read").toString() else """{"message":"unavailable"}""")
+            path.endsWith("/articles") && articles != null -> ok(articles!!)
+            path.endsWith("/docs/$DOC") -> ok(docsFixture.obj("doc").obj("read").toString())
+            path.endsWith("/doc-index") -> ok(buildJsonObject { put("plan", docsFixture.obj("directory").obj("read").obj("plan")); put("items", docsFixture.obj("index").arr("items")) }.toString())
             path == "wiki/spaces/$SPACE/changesets" -> ok("""{"changesetId":"34UDCsOwnerEdit000009","ops":[{"seq":0,"status":"applied","entryId":"$ENTRY","revision":5}]}""")
             path == "wiki/entries/$ENTRY" -> ok(WikiFixtures.entryDetail)
             path == "wiki/review" -> ok(review())

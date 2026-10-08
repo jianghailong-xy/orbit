@@ -339,7 +339,10 @@ data class WikiDocsDirectory(val spaceId: String? = null, val plan: WikiDocsPlan
     @Serializable
     data class Doc(val slug: String, val number: String? = null, val title: String, val question: String? = null,
         val written: Boolean? = null, val status: String? = null, val updatedAt: String? = null, val planVersion: Int? = null,
-        val sections: List<Section>? = null)
+        val sections: List<Section>? = null,
+        /** The first two sentences of its first section, cut at 200 characters (contract `docs.lead`); null until it is
+         * written, and from a server before the lead. */
+        val lead: String? = null)
     @Serializable
     data class Category(val key: String, val number: Int? = null, val title: String, val question: String? = null,
         val forAgents: Boolean? = null, val docs: List<Doc>? = null)

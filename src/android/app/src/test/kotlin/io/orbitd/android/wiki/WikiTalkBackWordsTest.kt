@@ -75,6 +75,7 @@ class WikiTalkBackWordsTest {
                 "wiki/spaces/$space" -> 200 to WikiFixtures.space
                 "wiki/spaces/$space/entries" -> 200 to WikiFixtures.entries
                 "wiki/spaces/$space/timeline" -> 200 to WikiFixtures.timeline
+                "wiki/spaces/$space/docs" -> 200 to wikiDocsFixture().obj("docs").obj("directory").obj("read").toString()
                 "wiki/review" -> 200 to WikiFixtures.review
                 else -> null
             }
@@ -87,8 +88,10 @@ class WikiTalkBackWordsTest {
             if (page.destination == Destination.WIKI) WikiHomeScreen(store, page, DirectoryData(), WikiNavRecord().nav)
             else WikiActivityScreen(store, page, DirectoryData(), WikiNavRecord().nav)
         }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-home-list").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-home-line").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-space-picker").assert(hasContentDescription(WikiCopy.spacePickerHint)).assertTextContains("orbit")
+        // The documents' rows, their folded row and All 4: words, never a bare glyph (the blue dots are silent).
+        compose.onNodeWithTag("wiki-home-principles-all").assert(hasContentDescription("All 4"))
         compose.onNodeWithTag("wiki-bar-activity").assert(hasContentDescription(WikiCopy.activity)).assert(hasStateDescription("3 waiting on you"))
         assertTalkBackReadsWords("home")
         page = OrbitRoute(Destination.WIKI_ACTIVITY)
