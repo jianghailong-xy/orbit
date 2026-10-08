@@ -529,7 +529,8 @@ class RealStackDeviceTest {
             compose.onNodeWithTag("project-start-line:MAIN").performClick()
             compose.onNodeWithTag("project-start-confirm").performScrollTo().performClick()
         }
-        compose.waitUntil(90_000) { projectRecord(id).text("startedAt") != null }
+        // The start commits, then opens the coordinator before it answers: a read between the two sees only the first.
+        compose.waitUntil(90_000) { projectRecord(id).let { it.text("startedAt") != null && it.text("coordinatorSessionId") != null } }
         val started = projectRecord(id)
         record("after Start", "startedAt=${started.text("startedAt")} coordinatorEnabled=${started["coordinatorEnabled"]} coordinatorSessionId=${started.text("coordinatorSessionId")}")
         assertNotNull("the start opened the project's first coordinator", started.text("coordinatorSessionId"))
