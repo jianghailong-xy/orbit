@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -112,6 +115,94 @@ func TestDshACPRunnerProcessFailure(t *testing.T) {
 	}
 	if prompts != 1 {
 		t.Fatalf("EOF prompt was automatically replayed: %d requests", prompts)
+	}
+}
+
+// TestDshACPRunnerAttachments: the composition takes text only, so a turn with attachments, an image
+// included, runs with each one saved beside the session and named in the prompt instead of failing.
+func TestDshACPRunnerAttachments(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	blobs := map[string]string{"att-text": "synthetic notes", "att-image": "\x89PNG synthetic"}
+	inbox := make(chan RunInboxResponse, 2)
+	inbox <- RunInboxResponse{TurnID: "runner-turn-1", Kind: "message", Content: "what is in these?", Attachments: []TurnAttachment{
+		{ID: "att-text", MimeType: "text/plain", FileName: "notes.txt"},
+		{ID: "att-image", MimeType: "image/png", FileName: "shot.png"},
+	}}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if id, ok := strings.CutPrefix(r.URL.Path, "/api/runner/sessions/dsh-runner-session/attachments/"); ok && r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(blobs[id]))
+			return
+		}
+		if r.Method != http.MethodGet || r.URL.Path != "/api/runner/sessions/dsh-runner-session/inbox" {
+			t.Errorf("unexpected control-plane request: %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		select {
+		case message := <-inbox:
+			_ = json.NewEncoder(w).Encode(message)
+		case <-r.Context().Done():
+		}
+	}))
+	defer server.Close()
+	spec, record := dshMockLaunchSpec(t, "attachments")
+	job := &ClaimedSession{SessionID: "dsh-runner-session", Provider: providerDsh, Agent: AgentExecConfig{Provider: providerDsh}}
+	var events dshProcessEvents
+	var completions []TurnCompleteRequest
+	complete := func(request TurnCompleteRequest, _ ...context.Context) error {
+		completions = append(completions, request)
+		inbox <- RunInboxResponse{TurnID: "end-session", Kind: "end"}
+		return nil
+	}
+	status, ended, _ := providerRuntimeFor(runtimeProvider(job)).run(sessionProcessArgs{
+		ctx: ctx, shutdownCtx: context.Background(), t: NewTransport(server.URL, "synthetic-runner-token"),
+		job: job, execDir: spec.Cwd, scratchDir: t.TempDir(), dshLaunchSpec: &spec,
+		emit:    func(typ string, payload map[string]interface{}) { events.emit("", typ, payload) },
+		emitFor: events.emit, setTurn: func(string) {}, completeTurn: complete,
+		waitTurnPermit: func(context.Context) bool { return true },
+		onLeaseLost:    func(err error) { t.Errorf("mock session lost lease: %v", err) },
+	})
+	if ctx.Err() != nil {
+		t.Fatalf("runner session did not finish on its own: %v", ctx.Err())
+	}
+	if status != stSucceeded || !ended || len(completions) != 1 || completions[0].Status != stSucceeded || completions[0].Result != "reply-1" {
+		t.Fatalf("a turn with attachments must run like any other: %s, %v, %+v", status, ended, completions)
+	}
+	textPath := filepath.Join(uploadsDir(job.SessionID), "notes.txt")
+	imagePath := filepath.Join(uploadsDir(job.SessionID), "shot.png")
+	for path, want := range map[string]string{textPath: blobs["att-text"], imagePath: blobs["att-image"]} {
+		if got, err := os.ReadFile(path); err != nil || string(got) != want {
+			t.Fatalf("attachment %s = %q, %v; want %q", path, got, err, want)
+		}
+	}
+	wantPrompt := []interface{}{map[string]interface{}{"type": "text", "text": "[The user uploaded 2 file(s), saved at: " +
+		textPath + ", " + imagePath + " - read or process them with your tools as needed.]\n\nwhat is in these?"}}
+	var prompts []interface{}
+	for _, request := range dshProcessRequests(t, record) {
+		if request["method"] == "session/prompt" {
+			prompts = append(prompts, mapValue(request["params"])["prompt"])
+		}
+	}
+	if len(prompts) != 1 || !reflect.DeepEqual(prompts[0], wantPrompt) {
+		t.Fatalf("session/prompt = %#v; want one text block naming both files: %#v", prompts, wantPrompt)
+	}
+	wantRefs := []map[string]interface{}{
+		{"id": "att-text", "mime": "text/plain", "name": "notes.txt"},
+		{"id": "att-image", "mime": "image/png", "name": "shot.png"},
+	}
+	users := 0
+	for _, event := range events.snapshot() {
+		if event.turn == "runner-turn-1" && event.typ == evUser {
+			users++
+			if event.payload["text"] != "what is in these?" || !reflect.DeepEqual(event.payload["attachments"], wantRefs) {
+				t.Fatalf("user event must show the message and its attachments: %+v", event.payload)
+			}
+		}
+	}
+	if users != 1 {
+		t.Fatalf("user events for the turn = %d, want 1", users)
 	}
 }
 

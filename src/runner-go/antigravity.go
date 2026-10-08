@@ -880,7 +880,7 @@ func (d *agyDriver) handleInit(event map[string]interface{}) {
 func (d *agyDriver) startTurn(resp *RunInboxResponse, pendingShellCtx []string) {
 	d.setTurn(resp.TurnID)
 	d.turn = newAgyTurn(resp.TurnID)
-	text, refs := prepareAntigravityPrompt(d.ctx, d.t, d.job, resp, pendingShellCtx)
+	text, refs := prepareTextOnlyPrompt(d.ctx, d.t, d.job, resp, pendingShellCtx)
 	userEvent := map[string]interface{}{"text": resp.Content}
 	if len(refs) > 0 {
 		userEvent["attachments"] = refs
@@ -909,10 +909,10 @@ func (d *agyDriver) startTurn(resp *RunInboxResponse, pendingShellCtx []string) 
 	d.proc.send(append(frame, '\n'))
 }
 
-// prepareAntigravityPrompt is a turn's text. agy's stream-json input takes text only (§1.1), so every
-// attachment — images included — is saved beside the session and named in the prompt for agy's own
-// tools to open.
-func prepareAntigravityPrompt(ctx context.Context, t *Transport, job *ClaimedSession, resp *RunInboxResponse, pendingShellCtx []string) (string, []map[string]interface{}) {
+// prepareTextOnlyPrompt is a turn's text for an engine whose input takes text only — agy's stream-json
+// (§1.1), dsh's ACP composition — so every attachment, images included, is saved beside the session
+// and named in the prompt for the engine's own tools to open.
+func prepareTextOnlyPrompt(ctx context.Context, t *Transport, job *ClaimedSession, resp *RunInboxResponse, pendingShellCtx []string) (string, []map[string]interface{}) {
 	var refs []map[string]interface{}
 	var paths []string
 	for _, att := range resp.Attachments {
