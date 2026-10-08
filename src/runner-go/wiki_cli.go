@@ -326,6 +326,11 @@ the commit, and its lines are where it was found; the server checks a record's q
 document's overview is written last, from its other sections as they are written. The command stops at
 the first 401 from the model's endpoint, and exits non-zero when any section it took up was left
 unwritten. Any session but a maintenance run of the space is refused WIKI_NOT_MAINTENANCE_SESSION.
+
+For an account the Orbit server runs the wiki for (ORBIT_WIKI_EXECUTOR server, or canary with the
+account on its list) the server answers WIKI_SERVER_EXECUTES instead: its wiki worker builds the
+documents when the owner confirms a plan, with the deployment's System model. The command then asks no
+model, says so and exits 0; a build job's run ends its job failed, saying why.
 `,
 	"articles": `orbit wiki articles — have the local model write the articles of a space's changed topics, as its Wiki maintenance run
 

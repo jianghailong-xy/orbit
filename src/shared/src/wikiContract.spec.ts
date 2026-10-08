@@ -123,6 +123,7 @@ import {
   WIKI_DOC_VERDICTS,
   WIKI_DOC_WITHDRAW_REASONS,
   WIKI_DOCS_AFFECTED_RULES,
+  WIKI_DOCS_BUILD_JOB,
 } from './wikiDocs';
 import {
   WIKI_SYSTEM_MODEL,
@@ -1592,6 +1593,38 @@ describe('wiki contract', () => {
     expect(server.propose).toMatch(/origin import/u);
     expect(server.deterministic).toContain('src/shared/src/wiki-import.fixture.json');
     for (const file of ['src/shared/src/wiki-import.fixture.json', 'src/runner-go/wiki_import_fixture_test.go', 'src/apiserver/src/wiki-worker/wiki-import-golden.spec.ts']) {
+      expect(existsSync(path.join(ROOT, file)), `${file} does not exist`).toBe(true);
+    }
+  });
+
+  it('builds the documents on the server when the switch gives the account to it, as the runner builds them (server execution P7)', () => {
+    const server = CONTRACT.docs.build.server;
+    // The job's numbers and words are the shared constants the worker runs by.
+    expect(server.priority).toBe(WIKI_DOCS_BUILD_JOB.priority);
+    expect(server.steps).toEqual({ ...WIKI_DOCS_BUILD_JOB.steps });
+    expect([server.maxTokens, server.repoWaitSeconds, server.readsInFlight, server.readAttempts])
+      .toEqual([WIKI_DOCS_BUILD_JOB.maxTokens, WIKI_DOCS_BUILD_JOB.repoWaitSeconds, WIKI_DOCS_BUILD_JOB.readsInFlight, WIKI_DOCS_BUILD_JOB.readAttempts]);
+    // Owner-initiated: above background maintenance (jobs.priority), as the import is.
+    expect(WIKI_DOCS_BUILD_JOB.priority).toBeGreaterThan(WIKI_ARTICLES_JOB.priority);
+    // Every call is the documents' to wait for and to run: their wait limit, and their call budget.
+    for (const step of Object.values(WIKI_DOCS_BUILD_JOB.steps)) {
+      expect(wikiModelWaitLimitSeconds(step)).toBe(WIKI_MODEL_QUEUE.waitLimitSeconds.docs);
+      expect(wikiModelCallBudgetSeconds(step)).toBe(WIKI_MODEL_QUEUE.callBudgetSeconds.docs);
+    }
+    // A job of its own kind, which the worker runs; the plan job is how the plan page sees it.
+    expect(WIKI_JOB_KINDS).toContain(WIKI_DOCS_BUILD_JOB.kind);
+    expect(CONTRACT.jobs.kindRuns.docs_build).toMatch(/docs\.build\.server/u);
+    expect(CONTRACT.plan.jobs.server).toMatch(/docs_build job/u);
+    expect(CONTRACT.docs.who.write).toMatch(/docs_build job/u);
+    expect(CONTRACT.repoOps.waiting).toMatch(/docs\.build\.server\.repository/u);
+    expect(server.who).toMatch(/Under the default runner none of this runs/u);
+    expect(server.door).toMatch(/WIKI_SERVER_EXECUTES/u);
+    expect(server.repository).toMatch(/wholeFileChars/u);
+    // The whole files a build reads fit the read's own limits: one item, one request.
+    expect(WIKI_REPO_OPS.wholeFileChars).toBeLessThanOrEqual(WIKI_REPO_OPS.sectionChars);
+    // The runner's prompts and steps, held to one fixture both implementations read.
+    expect(server.calls).toContain('src/shared/src/wiki-docs-build.fixture.json');
+    for (const file of ['src/shared/src/wiki-docs-build.fixture.json', 'src/runner-go/wiki_docs_build_fixture_test.go', 'src/apiserver/src/wiki-worker/wiki-docs-build-golden.spec.ts']) {
       expect(existsSync(path.join(ROOT, file)), `${file} does not exist`).toBe(true);
     }
   });

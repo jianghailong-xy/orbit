@@ -2086,7 +2086,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // (ON DELETE CASCADE) and one partial unique index. `share_link` is the only table altered and
       // `wiki_space` is named only as the table the key references; no task, project, acceptance or
       // DONE fence object, function, trigger or type is named, and no row is written or backfilled.
-      '0403_share_link_wiki_space'],
+      '0403_share_link_wiki_space',
+      // A plan job made by the wiki-worker's job (0405): 0338's `wiki_plan_job_made_chk` replaced by the same
+      // CHECK over both of the row's makers, task_id and 0401's job_id, inside a DO block that replaces it only
+      // while it still reads the old way. `wiki_plan_job` is the only table altered; no task, project,
+      // acceptance or DONE fence object, function, trigger or type is named, and no row is written — none
+      // names a job yet, so every stored row reads the new CHECK as it read the old.
+      '0405_wiki_plan_job_server_maker'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

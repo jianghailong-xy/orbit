@@ -40,6 +40,9 @@ type docsBuildDoor struct {
 	job      map[string]interface{}
 	jobCode  string
 	jobPosts []map[string]interface{}
+	// executes names the routes that answer WIKI_SERVER_EXECUTES, as they do for an account the Orbit server runs
+	// the wiki for: docs, material, view, write.
+	executes map[string]bool
 }
 
 func newDocsBuildDoor(t *testing.T) *docsBuildDoor {
@@ -65,6 +68,15 @@ func newDocsBuildDoor(t *testing.T) *docsBuildDoor {
 			out, _ := json.Marshal(value)
 			w.WriteHeader(status)
 			_, _ = w.Write(out)
+		}
+		route := map[string]string{
+			http.MethodGet + " docs": "docs", http.MethodGet + " docs/session-runtime/material": "material",
+			http.MethodGet + " docs/session-runtime": "view", http.MethodPost + " docs/session-runtime": "write",
+		}[r.Method+" "+path]
+		if door.executes[route] {
+			reply(http.StatusConflict, map[string]string{"code": "WIKI_SERVER_EXECUTES",
+				"message": "the Orbit server writes this account's wiki documents (ORBIT_WIKI_EXECUTOR=canary). Nothing was read or written."})
+			return
 		}
 		switch {
 		case r.Method == http.MethodGet && path == "plan/job" && door.jobCode != "":
@@ -1215,6 +1227,75 @@ func TestWikiArticleBuildTakesTheHeadingASectionNamesBeforeOneItsNameContains(t 
 				got = piece.section
 			}
 			t.Errorf("§ %q read %q, want %q", cited, got, want)
+		}
+	}
+}
+
+// ── An account the server runs the wiki for ────────────────────────────────────────────────────
+
+// For an account the Orbit server runs the wiki for (contract `docs.build.server`), the runner door answers
+// WIKI_SERVER_EXECUTES before anything is read: the command asks this session's model nothing, writes nothing, says
+// so and exits 0 — and a build job's session, one made before the switch, ends its job saying why.
+func TestWikiArticleBuildAsksNoModelForAnAccountTheServerRuns(t *testing.T) {
+	door, model, _, spawns, repo := docsBuildSetup(t)
+	door.mu.Lock()
+	door.executes = map[string]bool{"docs": true}
+	door.mu.Unlock()
+	summary, out, err := docsBuildRun(t, repo.checkout)
+	if err != nil {
+		t.Fatalf("a refusal the server runs the documents for exits 0: %v\n%s", err, out)
+	}
+	if !summary.ServerExecutes || summary.Written != 0 || summary.Failed != 0 || summary.Calls != 0 {
+		t.Errorf("summary = %+v", summary)
+	}
+	if n := len(model.Prompts()); n != 0 || len(spawns()) != 0 || len(door.Writes()) != 0 {
+		t.Errorf("%d prompts, %d writes: the session's model was asked or something was written", n, len(door.Writes()))
+	}
+	var words strings.Builder
+	if err := cmdWikiCLI([]string{"docs", "build", "--space", "space-1", "--repo", repo.checkout}, strings.NewReader(""), &words); err != nil ||
+		!strings.Contains(words.String(), "WIKI_SERVER_EXECUTES") || !strings.Contains(words.String(), "Nothing was asked of this session's model") {
+		t.Errorf("orbit wiki docs build said %q (%v)", words.String(), err)
+	}
+
+	// A build task made before the switch: its run ends the job failed, naming why, and still exits 0.
+	door.mu.Lock()
+	door.job = map[string]interface{}{
+		"job":   map[string]interface{}{"id": "job-9", "spaceId": "space-1", "kind": "build", "trigger": "owner", "state": "running", "version": 3, "attemptsMax": 3},
+		"space": map[string]interface{}{"id": "space-1", "title": "orbit", "repo": map[string]interface{}{"urlNorm": nil, "rootCommitSha": nil}, "workspace": nil},
+	}
+	door.mu.Unlock()
+	summary, _, err = docsBuildRun(t, repo.checkout)
+	if err != nil || summary.Job == nil || summary.Job.Outcome != "failed" || !strings.Contains(summary.Job.Error, "WIKI_SERVER_EXECUTES") {
+		t.Fatalf("a build job's run: %v, job %+v", err, summary.Job)
+	}
+	finish := door.jobPosts[len(door.jobPosts)-1]
+	if finish["_route"] != "plan/job/finish" || finish["outcome"] != "failed" || !strings.Contains(fmt.Sprint(finish["error"]), "WIKI_SERVER_EXECUTES") {
+		t.Errorf("the job was told %v", finish)
+	}
+	if len(model.Prompts()) != 0 {
+		t.Error("a build job's run asked the session's model")
+	}
+}
+
+// The switch gives the account to the server while a build runs: the section that met the refusal is not written,
+// no section after it and no overview asks the model, and the command says so and exits 0.
+func TestWikiArticleBuildStopsWhenTheServerTakesTheAccountOver(t *testing.T) {
+	door, model, _, _, repo := docsBuildSetup(t)
+	door.mu.Lock()
+	door.executes = map[string]bool{"material": true}
+	door.mu.Unlock()
+	summary, out, err := docsBuildRun(t, repo.checkout)
+	if err != nil || !summary.ServerExecutes {
+		t.Fatalf("a refusal mid-run: %v, %+v\n%s", err, summary, out)
+	}
+	for _, prompt := range model.Prompts() {
+		if strings.Contains(prompt, "（概述，") || strings.Contains(prompt, "「约定」") {
+			t.Errorf("a section after the refusal asked the model: %.120s", prompt)
+		}
+	}
+	for _, write := range door.Writes() {
+		if write.Sections[0].Key == "s3" || write.Sections[0].Key == "s1" {
+			t.Errorf("section %s was written after the refusal", write.Sections[0].Key)
 		}
 	}
 }

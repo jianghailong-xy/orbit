@@ -2,8 +2,10 @@ import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { WikiArticles } from '../wiki/wiki-articles';
+import { WikiDocs } from '../wiki/wiki-docs';
 import { WikiService } from '../wiki/wiki.service';
 import { wikiArticlesJobRunner } from './wiki-articles-job';
+import { wikiDocsBuildJobRunner } from './wiki-docs-build-job';
 import { wikiImportJobRunner } from './wiki-import-job';
 import { WikiJobExecutor, WIKI_JOB_RUNNERS, WIKI_JOB_RUNNERS_TOKEN, type WikiJobRunner } from './wiki-job-executor';
 import { WikiModelRequestChannel } from './wiki-model-notify';
@@ -21,7 +23,8 @@ import { currentWikiSystemModel, type WikiSystemModelConfig } from './wiki-syste
  *
  *   WikiModelStatusProbe      probes the model and writes `wiki_model_status` (probe on /health, state, heartbeat)
  *   WikiModelRequestQueue     runs the request queue: claim, call, write back, settle (design §5.2)
- *   WikiService, WikiArticles the wiki's own reads and writes, for the pipelines that run as jobs (design §4.2)
+ *   WikiService, WikiArticles, WikiDocs
+ *                             the wiki's own reads and writes, for the pipelines that run as jobs (design §4.2)
  *   WikiJobExecutor           claims jobs and runs them, their calls going through the queue (design §5.1)
  *
  * WikiRepoOpChannel is here for the other half of that same wait (design §7): a job that needs the
@@ -35,7 +38,9 @@ import { currentWikiSystemModel, type WikiSystemModelConfig } from './wiki-syste
  * THE PIPELINES WRITE THROUGH THE WIKI'S OWN SERVICES, not through their own queries (design §4.2): an import
  * proposes through WikiService, the same one writer the runner door's `imports` route calls, with origin
  * import; the `articles` job reads the plan and a topic's input and writes its articles through WikiArticles,
- * exactly as the runner door does, and asks for the space's snapshot through WikiRepoOps. The worker holds no
+ * exactly as the runner door does, and asks for the space's snapshot through WikiRepoOps; the `docs_build` job
+ * reads what is written and writes a document's sections through WikiDocs, the documents' route's own writer, and
+ * reads the repository at the snapshot's commit through WikiRepoOps. The worker holds no
  * realtime hub and no push service — the services' own defaults are none — so what a job records is not
  * announced to a connected client by this process; realtime is an accelerant and never the truth (contract
  * `realtime.correctness`). What the pipelines' own kinds are is decided here too: the job kind map the
@@ -47,6 +52,7 @@ import { currentWikiSystemModel, type WikiSystemModelConfig } from './wiki-syste
     { provide: WIKI_SYSTEM_MODEL_CONFIG, useFactory: currentWikiSystemModel },
     { provide: WikiService, useFactory: (prisma: PrismaService) => new WikiService(prisma), inject: [PrismaService] },
     { provide: WikiArticles, useFactory: (prisma: PrismaService) => new WikiArticles(prisma), inject: [PrismaService] },
+    { provide: WikiDocs, useFactory: (prisma: PrismaService, wiki: WikiService) => new WikiDocs(prisma, wiki), inject: [PrismaService, WikiService] },
     WikiRepoOps,
     {
       provide: WIKI_JOB_RUNNERS_TOKEN,
@@ -57,12 +63,14 @@ import { currentWikiSystemModel, type WikiSystemModelConfig } from './wiki-syste
         model: WikiSystemModelConfig,
         repoWake: WikiRepoOpChannel,
         articles: WikiArticles,
+        docs: WikiDocs,
       ): Record<string, WikiJobRunner> => ({
         ...WIKI_JOB_RUNNERS,
         import: wikiImportJobRunner({ prisma, wiki, repoOps, model: model.model, repoWake }),
         articles: wikiArticlesJobRunner({ prisma, articles, repoOps, repoWake, model: model.model ?? '' }),
+        docs_build: wikiDocsBuildJobRunner({ prisma, docs, wiki, repoOps, repoWake, model: model.model ?? '' }),
       }),
-      inject: [PrismaService, WikiService, WikiRepoOps, WIKI_SYSTEM_MODEL_CONFIG, WikiRepoOpChannel, WikiArticles],
+      inject: [PrismaService, WikiService, WikiRepoOps, WIKI_SYSTEM_MODEL_CONFIG, WikiRepoOpChannel, WikiArticles, WikiDocs],
     },
     WikiModelStatusProbe,
     WikiModelRequestChannel,

@@ -77,7 +77,10 @@ var wikiDocsBuildDescription = wikiDocsBuildPrecondition + " This is a Wiki main
 	"each with a reason, sent with the section) and writes the section, a verbatim quote for every footnote; repository " +
 	"quotes are checked here at the commit, records by the server. A document's overview is written last. It stops at " +
 	"the first 401 from the model's endpoint, and exits non-zero when any section it took up was left unwritten. Any " +
-	"session but a maintenance run of the space is refused WIKI_NOT_MAINTENANCE_SESSION."
+	"session but a maintenance run of the space is refused WIKI_NOT_MAINTENANCE_SESSION. For an account the Orbit server " +
+	"runs the wiki for (ORBIT_WIKI_EXECUTOR server, or canary with the account on its list) the server answers " +
+	"WIKI_SERVER_EXECUTES: its wiki worker builds the documents when the owner confirms a plan, so this asks no model, " +
+	"says so and exits 0."
 
 // wikiDocsBuildSystemPrompt is the whole system prompt the clean call carries: the rest is in the prompt.
 const wikiDocsBuildSystemPrompt = "你是 Orbit 的技术文档作者。你只根据给你的材料写，不编造事实、名字、数字和路径。" +
@@ -276,6 +279,9 @@ type wikiDocsBuildSummary struct {
 	Usage       wikiModelUsage        `json:"usage"`
 	Seconds     float64               `json:"seconds"`
 	Stopped     string                `json:"stopped,omitempty"`
+	// ServerExecutes is a run the server answered WIKI_SERVER_EXECUTES: the account's documents are the server's
+	// wiki worker's to build, so this one asked no model and wrote nothing more.
+	ServerExecutes bool `json:"serverExecutes,omitempty"`
 	// Job is the build job this run was, and how it told the server it ended; nil for any other run.
 	Job *wikiDocsBuildJobEnd `json:"job,omitempty"`
 }
@@ -359,6 +365,10 @@ func runWikiDocsBuild(t *Transport, sessionID string, opts wikiDocsBuildOptions,
 	started := time.Now()
 	summary = wikiDocsBuildSummary{SpaceID: opts.spaceID, Docs: []wikiDocsBuildDocRun{}}
 	raw, err := t.wikiPlanState(sessionID, opts.spaceID)
+	if wikiServerExecutes(err) {
+		summary.ServerExecutes = true
+		return summary, nil
+	}
 	if err != nil {
 		return summary, wikiDocsBuildCallError(opts.spaceID, err)
 	}
@@ -402,6 +412,11 @@ func runWikiDocsBuild(t *Transport, sessionID string, opts wikiDocsBuildOptions,
 		docs = taken
 	}
 	raw, err = t.wikiDocsState(sessionID, opts.spaceID)
+	if wikiServerExecutes(err) {
+		// The server builds this account's documents (contract `docs.build.server`): before any model is asked.
+		summary.ServerExecutes = true
+		return summary, nil
+	}
 	if err != nil {
 		return summary, wikiDocsBuildCallError(opts.spaceID, err)
 	}
@@ -444,6 +459,11 @@ func runWikiDocsBuild(t *Transport, sessionID string, opts wikiDocsBuildOptions,
 			opts.onDoc(i, len(docs), &docs[i])
 		}
 		result := run.document(doc, stored[doc.Slug], opts.section, opts.only[doc.Slug])
+		if run.serverExecutes() {
+			// The switch gave the account to the server while this ran: what is left is the server's to write.
+			summary.ServerExecutes = true
+			return summary, nil
+		}
 		summary.Docs = append(summary.Docs, result)
 		for _, section := range result.Sections {
 			switch section.Outcome {
@@ -470,6 +490,25 @@ func (r *wikiDocsBuildRun) stopped() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.stop
+}
+
+// serverExecutes is whether the server answered WIKI_SERVER_EXECUTES to a call of this run.
+func (r *wikiDocsBuildRun) serverExecutes() bool {
+	return errors.Is(r.stopped(), errWikiServerExecutes)
+}
+
+// heardServerExecutes stops the run when the server answered WIKI_SERVER_EXECUTES: no section after it asks a
+// model. It reports whether err was that answer.
+func (r *wikiDocsBuildRun) heardServerExecutes(err error) bool {
+	if !wikiServerExecutes(err) {
+		return false
+	}
+	r.mu.Lock()
+	if r.stop == nil {
+		r.stop = errWikiServerExecutes
+	}
+	r.mu.Unlock()
+	return true
 }
 
 // model is the endpoint, the token and the model, read once there is something to write, and the
@@ -744,6 +783,9 @@ func (r *wikiDocsBuildRun) submit(slug string, section wikiDocSection) (*wikiDoc
 	defer r.writes.Unlock()
 	request := wikiDocWriteRequest{PlanVersion: r.planVersion, RepoSha: r.repo.sha, Model: r.cfg.model, Sections: []wikiDocSection{section}}
 	raw, err := r.t.writeWikiDoc(r.sessionID, r.spaceID, slug, request)
+	if r.heardServerExecutes(err) {
+		return nil, errWikiServerExecutes
+	}
 	if err != nil {
 		if refusal, ok := wikiDocRefused(err); ok {
 			var lines []string
@@ -800,6 +842,9 @@ func (r *wikiDocsBuildRun) overview(doc wikiDocsPlanDoc, index int, stored wikiD
 			continue
 		}
 		raw, err := r.t.wikiDocWritten(r.sessionID, r.spaceID, doc.Slug)
+		if r.heardServerExecutes(err) {
+			return fail(errWikiServerExecutes.Error())
+		}
 		if err != nil {
 			return fail("reading the sections it sums up: " + wikiDocsBuildCallError(r.spaceID, err).Error())
 		}
@@ -1110,6 +1155,9 @@ func (r *wikiDocsBuildRun) gather(doc wikiDocsPlanDoc, section wikiDocsPlanSecti
 	}
 	if section.Sources.Sessions != nil {
 		raw, err := r.t.wikiDocMaterialOf(r.sessionID, r.spaceID, doc.Slug, section.Key)
+		if r.heardServerExecutes(err) {
+			return nil, nil, errWikiServerExecutes
+		}
 		if err != nil {
 			return nil, nil, fmt.Errorf("the server's material: %w", wikiDocsBuildCallError(r.spaceID, err))
 		}
@@ -2536,7 +2584,14 @@ func cliWikiDocsBuild(args []string, out io.Writer, ctx cliOrchestrationContext)
 	}
 	summary, runErr := runWikiDocsBuild(t, ctx.sessionID, opts, progress)
 	if job != nil {
-		end, finishErr := finishWikiDocsBuildJob(t, ctx.sessionID, spaceID, *job, summary, runErr)
+		jobErr := runErr
+		if summary.ServerExecutes && jobErr == nil {
+			// A build task made before the switch gave the account to the server: this session writes none of it,
+			// and its job ends saying why.
+			jobErr = fmt.Errorf("%s: the Orbit server builds this account's documents with the deployment's System model, so "+
+				"this session wrote none — the owner's next confirmation of a plan asks the server for them", wikiServerExecutesCode)
+		}
+		end, finishErr := finishWikiDocsBuildJob(t, ctx.sessionID, spaceID, *job, summary, jobErr)
 		summary.Job = &end
 		if finishErr != nil && runErr == nil {
 			runErr = finishErr
@@ -2555,6 +2610,9 @@ func cliWikiDocsBuild(args []string, out io.Writer, ctx cliOrchestrationContext)
 	}
 	if runErr != nil {
 		return runErr
+	}
+	if summary.ServerExecutes {
+		return nil
 	}
 	if summary.Failed > 0 {
 		return fmt.Errorf("%s left unwritten: the next run tries again", wikiCount(summary.Failed, "section was", "sections were"))
@@ -2642,6 +2700,14 @@ func derefInt(n *int) int {
 }
 
 func describeWikiDocsBuildSummary(s wikiDocsBuildSummary) string {
+	if s.ServerExecutes {
+		line := fmt.Sprintf("The Orbit server builds the documents of space %s (%s): its wiki worker builds them when the owner "+
+			"confirms a plan, with the deployment's System model. Nothing was asked of this session's model.", s.SpaceID, wikiServerExecutesCode)
+		if s.Job != nil {
+			line += fmt.Sprintf(" Build job %s ended %s (version %d).", s.Job.ID, s.Job.Outcome, s.Job.Version)
+		}
+		return line
+	}
 	sections := s.Written + s.Unchanged + s.Failed
 	if sections == 0 {
 		line := fmt.Sprintf("Space %s: no section of the confirmed plan (version %d) was taken up.", s.SpaceID, s.PlanVersion)
