@@ -380,7 +380,7 @@ func runChatGPTScenario(t *testing.T, exe string, server *httptest.Server, caFil
 		}
 	}
 	request("initialize", map[string]interface{}{
-		"clientInfo":   map[string]interface{}{"name": "orbit", "title": "Orbit", "version": "0.1.0"},
+		"clientInfo":   map[string]interface{}{"name": codexClientName, "title": "Codex CLI", "version": "0.1.0"},
 		"capabilities": map[string]interface{}{"experimentalApi": true},
 	})
 	send(map[string]interface{}{"method": "initialized", "params": map[string]interface{}{}})

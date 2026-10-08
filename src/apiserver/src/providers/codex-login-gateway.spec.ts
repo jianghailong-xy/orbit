@@ -10,13 +10,16 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import { zstdDecompressSync } from 'node:zlib';
 
 import {
   CHATGPT_CODEX_BASE,
   CODEX_OAUTH_CLIENT_ID,
   codexUsageSnapshot,
+  codexVersionFromUserAgent,
   loginForwardedHeaders,
   loginMissingReason,
+  loginProviderRequest,
   loginSignedOutNotice,
   loginSpentNotice,
   OPENAI_OAUTH_TOKEN_URL,
@@ -82,6 +85,35 @@ test('the credential goes as the CLI sends it — a bearer access token and the 
     'x-codex-turn-metadata': '{"a":1}',
     'content-length': '42',
   });
+});
+
+test('the built-in provider\'s shape is added to a configured provider\'s request — guardian credits, zstd, routing hint and version', () => {
+  // The CLI's own User-Agent names the codex that sent it; a configured provider does not send `version`.
+  assert.equal(codexVersionFromUserAgent('codex_cli_rs/0.162.0 (Debian 13.0.0; x86_64) unknown (codex_cli_rs; 0.1.0)'), '0.162.0');
+  assert.equal(codexVersionFromUserAgent('orbit/0.158.0 (Debian 13.0.0; x86_64) unknown (orbit; 0.1.0)'), '0.158.0');
+  assert.equal(codexVersionFromUserAgent('codex_cli_rs'), undefined);
+  assert.equal(codexVersionFromUserAgent(''), undefined);
+  assert.equal(codexVersionFromUserAgent(undefined), undefined);
+
+  const incoming = { 'user-agent': 'codex_cli_rs/0.162.0 (Debian 13.0.0; x86_64) unknown (codex_cli_rs; 0.1.0)' };
+  const body = Buffer.from(JSON.stringify({
+    model: 'gpt-5.1-codex', stream: true,
+    client_metadata: { turn_id: 't', 'x-codex-turn-metadata': '{}' },
+  }));
+  const prepared = loginProviderRequest(incoming, body);
+  assert.deepEqual(prepared.extra, {
+    'content-encoding': 'zstd',
+    'x-codex-routing-hint': 'model=gpt-5.1-codex',
+    version: '0.162.0',
+  });
+  const sent = JSON.parse(zstdDecompressSync(prepared.body).toString('utf8')) as Record<string, unknown>;
+  assert.equal((sent.client_metadata as Record<string, unknown>).guardian_credits_requested, 'true');
+  assert.equal((sent.client_metadata as Record<string, unknown>).turn_id, 't', 'the rest of the metadata survives');
+  assert.equal(sent.model, 'gpt-5.1-codex');
+
+  // A body that is not codex's JSON object is passed through with nothing added, so nothing is mangled.
+  const notJson = Buffer.from('not json');
+  assert.deepEqual(loginProviderRequest(incoming, notJson), { body: notJson, extra: {} });
 });
 
 test('the refresh is the codex CLI\'s own request, byte for byte but the token', () => {
