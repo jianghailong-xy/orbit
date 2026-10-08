@@ -1,0 +1,116 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="../../project-merge-sessions-page/kit.css">
+<link rel="stylesheet" href="landing.css">
+<script src="../../project-merge-sessions-page/kit.js"></script>
+<script src="landing.js"></script>
+<body>
+<h1>⑤ 落地会话页（2026-10-07 按 main 现状重画）</h1>
+<p class="lede" style="max-width:2120px">外壳和普通会话相同：标题、时间线、URL、⌘F、Pin；不同的是时间线由 Orbit 写，底部没有输入框，会话不进 Trash。<b>一轮合入 main 一个会话</b>（从第一次检查到 MERGED、DECLINED 或 CANCELLED），<b>一个任务的一段落地一个会话</b>（从 DONE 到落上项目分支）。合入会话的入口在项目 sessions 页的合入卡（Watch）和时间线里的「已合入」行；任务段的入口在进度卡的落地行、Landings 组、任务页和写代码的那个会话。判断不在这里做，但判断的结果带着署名记在同一个会话里。</p>
+<div class="row5" id="figs"></div>
+<script>
+const SUB_M = 'Run by Orbit · → main';
+const term1 = `<div class="term"><span class="dim">$ npm test -w @orbit/apiserver</span>
+ <span class="ok">✔</span> projects/project-integration-line.spec.ts (412ms)
+ <span class="ok">✔</span> projects/project-promotion-read.spec.ts (301ms)
+ ▶ projects/project-task-integration.spec.ts <span class="cur"></span></div>`;
+const CAND = rnd('Candidate · 5 commits · 2 tasks')
+  + ev('11:02', RING, 'Merge check started on the combined tree<span class="sub">project/34Zur…UGnx + main @ 41ac9e0</span>')
+  + ev('11:20', OK, 'Merge check passed · 17m 52s <a style="margin-left:4px">Log ›</a>')
+  + ev('11:20', ic('merge', 14, 'var(--orange)', 2.2), 'Asked you to merge into main')
+  + ev('11:34', '<span class="av me">W</span>', '<b>You</b> pressed Merge to main', 'who')
+  + ev('11:34', UP, 'main moved 2 commits since the check — re-checking before merging');
+
+// a · 一轮合入，正在重查（从合入卡的 Watch 进来）
+const pA = phone(`${statusBar('11:38')}${navLanding('Merge to main', SUB_M)}
+${mk(`<div class="scard" style="margin:0"><div class="h">${ic('ring', 16, 'var(--tint)', 2.3)}<span class="ink">Re-checking before merging</span><span class="r2">3m 50s</span></div>
+<div class="m">Merge check&nbsp;<b>3m 50s</b>&nbsp;/ 60m<span style="margin-left:auto;color:var(--l3)">usually ~18m</span></div>
+<div class="bud"><i style="width:6.4%"></i><u style="left:30%"></u></div>
+<div class="m"><span class="live"></span>Output 3s ago · Updated just now</div></div>`, 1, 'margin:4px 14px 10px;border-radius:16px')}
+${tlw(246, CAND + ev('11:34', RING, toolBlock('Merge check', 'live', '3m 50s', term1)))}
+${FOOT}`, 'page');
+
+// b · 已合入：会话顶部就是回执（从时间线的「已合入」行进来）
+const receiptCard = `<div class="scard green" style="margin:0"><div class="h">${ic('merge', 16, 'var(--green-ink)', 2.2)}<span class="grn">Merged into main</span><span class="r2">11:52</span></div>
+<div class="m"><span style="font:12.5px 'DejaVu Sans Mono',monospace;color:var(--label)">8d5a868</span> · merge of project/34Zur…UGnx · by you</div>
+<div class="m" style="color:var(--label);margin-top:6px"><b>Now on main · 2 tasks</b></div>
+<ul class="tk"><li>${TASKS[0]}</li><li>${TASKS[1]}</li></ul>
+<div class="m" style="margin-top:5px;color:var(--green-ink)">✓ Passed on the combined tree · 17m 52s</div>
+<div class="m">Landed exactly the tested tree <span style="font:12px 'DejaVu Sans Mono',monospace;color:var(--label)">5e5bfca</span></div></div>`;
+const pB = phone(`${statusBar('12:20')}${navLanding('Merge to main', 'Run by Orbit · settled 11:52')}
+${mk(receiptCard, 1, 'margin:4px 14px 10px;border-radius:16px')}
+${tlw(346, CAND + rnd('Re-check')
+  + ev('11:34', OK, 'Merge check passed · 17m 41s <a style="margin-left:4px">Log ›</a>')
+  + ev('11:52', ic('up', 15, 'var(--green-ink)', 2), 'Pushed to main · <code style="font-size:11.5px">8d5a868</code>')
+  + ev('11:52', OK, '<b>Merged</b> · receipts for 2 tasks<span class="sub">Landing settled</span>'))}
+${lfoot('This landing is complete — <b>nothing to type here.</b><br>The next merge into main opens a new landing.')}`, 'page');
+
+// c · 任务段：检查没过，交给协调会话
+const SUB_T = 'Run by Orbit · runner HPC';
+const term2 = `<div class="term"><span class="dim">$ cd src/runner-go &amp;&amp; go test ./...</span>
+--- FAIL: TestDshCapabilityNeedsPinnedInstall (0.41s)
+    dsh_test.go:212: provider:dsh advertised
+FAIL	orbit	38.214s</div>`;
+const pC = phone(`${statusBar('11:25')}${navLanding('Land · dsh：runner 只在已安装固定…', SUB_T)}
+${mk(`<div class="scard amber" style="margin:0"><div class="h">${ic('warn', 16, 'var(--orange)', 2.1)}<span class="amb">Checks failed — not landed</span></div>
+<div class="m">Task acceptance · exit 1 after 3m 52s · nothing was pushed</div>
+<div class="m">${ic('person', 13, '#7a5af5', 2)}<b>Coordinator</b>&nbsp;· 18m · goes to you in 1h 42m</div>
+<div class="acts"><span class="btn pri sm">Open Coordinator</span><span class="btn sec sm">Open Task</span></div></div>`, 1, 'margin:4px 14px 10px;border-radius:16px')}
+${tlw(268, rnd('Generation 1')
+  + ev('11:02', ic('task', 14, '#8e8e93', 2), 'Task marked done · queued to land on project/34Zur…UGnx')
+  + ev('11:03', RING, 'Claimed by runner HPC · fetch, sync main, rebase')
+  + ev('11:03', X, toolBlock('Task acceptance', 'exit 1', '3m 52s', term2, 'var(--red-ink)'))
+  + ev('11:07', STOP, '<b>Not landed</b> · CHECK_FAILED<span class="sub">The project branch did not move.</span>')
+  + mk(ev('11:07', ARR, 'Handed to <b>the coordinator</b> — Automatic is on<span class="sub">Item “Landing checks failed: dsh：runner 只在…” · <a>Open ›</a></span>'), 2, 'border-radius:10px;margin:0 -6px;padding:0 6px'))}
+${FOOT}`, 'page');
+
+// d · 任务段的 ⋯ 菜单
+const menu = `<div class="dimbg" style="background:rgba(0,0,0,.18);z-index:20"></div><div class="lmenu" style="top:112px;right:14px">
+<div class="mi">Open Task${ic('task', 19, '#000', 1.9)}</div>
+<div class="mi">Open Source Session${ic('bubble', 19, '#000', 1.9)}</div>
+<div class="mi">Open Project${ic('grid', 19, '#000', 1.9)}</div>
+<div class="mi">Open Coordinator${ic('bubble', 19, '#000', 1.9)}</div>
+<div class="mi">Copy Link${ic('link', 19, '#000', 1.9)}</div>
+<div class="gap"></div>
+${mk(`<div class="mi red"><span>Stop Landing<span class="sm">Nothing has been pushed yet</span></span>${ic('stop', 19, '#E5281D', 2)}</div>`, 1, 'outline-offset:-4px;border-radius:0')}
+</div>`;
+const pD = phone(`${statusBar('11:05')}${navLanding('Land · dsh：runner 只在已安装固定…', SUB_T)}
+<div class="scard" style="margin:4px 14px 10px"><div class="h">${ic('ring', 16, 'var(--tint)', 2.3)}<span class="ink">Checking · task acceptance</span><span class="r2">1m 40s</span></div>
+<div class="m">Task acceptance&nbsp;<b>1m 40s</b>&nbsp;/ 60m</div><div class="bud"><i style="width:2.8%"></i></div><div class="m"><span class="live"></span>Output 1s ago · Updated just now</div></div>
+${tlw(246, rnd('Generation 1') + ev('11:02', ic('task', 14, '#8e8e93', 2), 'Task marked done · queued to land') + ev('11:03', RING, 'Claimed by runner HPC · fetch, sync main, rebase') + ev('11:03', RING, 'Task acceptance · live · 1m 40s'))}
+${FOOT}${menu}`, 'page');
+
+// e · runner 失联：秒表停住，出现 Abandon
+const pE = phone(`${statusBar('11:31')}${navLanding('Land · dsh：runner 只在已安装固定…', SUB_T)}
+${mk(`<div class="scard grey" style="margin:0"><div class="h">${ic('dashc', 16, '#8e8e93', 2)}<span>Update unavailable</span><span class="r2">lease expired</span></div>
+<div class="m">Task acceptance stopped at&nbsp;<b>8m 4s</b><span style="margin-left:auto;color:var(--l3)">at 11:19</span></div>
+<div class="bud grey"><i style="width:13%"></i></div>
+<div class="m"><span class="live off"></span>No word from runner HPC for 12m</div>
+<div class="m" style="color:var(--label)">Nothing was pushed — it never reached the push step.</div>
+<div class="acts"><span class="btn sm" style="background:rgba(255,59,48,.1);color:var(--red-ink)">Abandon</span><span class="btn sec sm">Open Coordinator</span></div></div>`, 1, 'margin:4px 14px 10px;border-radius:16px')}
+${tlw(332, rnd('Generation 2') + ev('11:11', RING, 'Claimed by runner HPC') + ev('11:11', ic('dashc', 15, '#8e8e93', 2), toolBlock('Task acceptance', 'stopped', '8m 4s', `<div class="term"><span class="ok">ok</span>   orbit   12.904s
+=== RUN   TestDshCapabilityNeedsPinnedInstall</div>`, '#8e8e93')) + '<div class="ephem">No report from HPC since 11:19</div>')}
+${FOOT}`, 'page');
+
+document.getElementById('figs').innerHTML = [
+  fig('after', 'a · 一轮合入 · 重查中（从 Watch 进来）', pA, `<b>一轮合入：从第一次检查记到现在</b><ol>
+<li>${n(1)}顶部状态卡和合入卡读同一份数据：当前步骤对比预算和通常用时，加上输出最后一次动的时间。</li>
+<li>时间线从这一轮的第一次检查开始：检查通过、问你、你按 Merge to main、main 又动了所以重查，都在一页里。正在跑的检查<b>实时显示输出</b>，跑完保留头和尾。</li>
+<li>⋯ 菜单里的 Review the Merge 回到项目 sessions 页的合入卡；Cancel Merge 和卡上的 Cancel 是同一扇门。</li></ol>`),
+  fig('after', 'b · 已合入（从「已合入」行进来）', pB, `<b>结案的合入会话：顶部就是回执</b><ol>
+<li>${n(1)}今天点「已合入」行打开的回执（提交、Now on main 的任务、检查、落下的树），改后就是这个会话的顶部，内容一字不变。</li>
+<li>下面是这一轮的全过程，可以看每次检查的日志。会话结案后进入 Completed，不会再变。</li>
+<li>下一次合入 main 开一个新的会话。</li></ol>`),
+  fig('warn', 'c · 任务段 · 检查没过', pC, `<b>任务段：一个任务从 DONE 到落上项目分支</b><ol>
+<li>${n(1)}状态卡写清楚：哪条检查、怎么失败、有没有推送、现在在谁手里、多久后交给你（项目的 exceptionEscalationSeconds，这里是 2 小时）。</li>
+<li>失败检查的输出就在时间线上，不用去别处找。今天只能在异常卡上看到 16 KB 的尾巴。</li>
+<li>${n(2)}「交给了谁」是时间线上的一条事实，和开待办在同一个事务里写。协调会话重跑（或者你经 owner 重跑门重跑），第 2 代接着记在同一个会话里；协调会话改为建修复任务时，这里链接到修复任务自己的落地会话。</li></ol>`),
+  fig('n', 'd · 任务段的 ⋯ 菜单', pD, `<b>能做什么、谁能做</b><ol>
+<li>${n(1)}<b>Stop Landing</b> 是新的 owner 门，只在推送之前出现：排队中的直接取消；在跑的由 runner 在下一次回报时停下。任务段叫停后<b>不结案</b>，显示 <i>Stopped by you · not landed</i>，任务再次完成时接着记在这里。</li>
+<li>Open Task、Open Source Session（写代码的那个会话）、Open Project、Open Coordinator、Copy Link。没有 Rename、Fork、Share、换模型，也没有 Merge 栏。</li>
+<li>Abandon 平时不出现，只在租约过期后出现（见 e）。</li></ol>`),
+  fig('stall', 'e · runner 失联', pE, `<b>runner 失联：秒表停住，出现 Abandon</b><ol>
+<li>${n(1)}超过 10 分钟没有回报就是租约过期：秒表停在最后一次回报，写明多久没回报、有没有推送。runner 推送前必须先同步回报，所以「没推送」有据可查。</li>
+<li><b>Abandon</b> 只在租约过期后出现，owner 和协调会话都能用。旧版 runner 的领取在检查期间不判过期；放弃旧版领取时一律写 <i>may have been pushed</i>，由下一个作业核对后补写回执。</li>
+<li>过期满 15 分钟，还会给你开一条带 Abandon 的待办（owner 10-04 的决定）。</li></ol>`),
+].join('');
+</script>

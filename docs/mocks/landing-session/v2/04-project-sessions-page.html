@@ -1,0 +1,87 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="../../project-merge-sessions-page/kit.css">
+<link rel="stylesheet" href="landing.css">
+<script src="../../project-merge-sessions-page/kit.js"></script>
+<script src="landing.js"></script>
+<body>
+<h1>④ 项目 sessions 页上的落地（2026-10-07 按 main 现状重画）</h1>
+<p class="lede" style="max-width:2120px">10-04 之后 main 上线了项目 sessions 页：进度卡、合入卡（修订 10）、Coordinator、时间线。落地已经在这一页出现两次，一次是进度卡里的落地行，一次是合入卡，但两处都<b>点不进任何地方</b>，检查超过 10 分钟还会假装停住。改后：每个落地主体都有落地会话；进度卡的落地行、合入卡的 <b>Watch</b>、时间线里的「已合入」行都进入对应的落地会话；页面多一个 <b>Landings</b> 组。数据仍读 <code>integration</code> 与 <code>promotions/current</code>，新字段都是可选的，老服务端时入口不可点。</p>
+<div class="row5" id="figs"></div>
+<script>
+const coordW = coordRow({ eye: true, sub: 'Watching P6：验收端到端行为、故障语义与旧版本兼容' });
+const today = (rows) => rows.map((r) => (typeof r === 'string' ? r : sessRow(r))).join('');
+const R = {
+  p6: { t: '执行任务：P6：验收端到端行为、故障语义与旧版本兼容', tm: 'just now', run: true, sub: '正在跑端到端回归：12 个场景已过 7 个…' },
+  d3: { t: '执行任务：修复 D3：DeepSeek Harness 会话上的 EXECUTABLE 验收命令无法执行', tm: '12m ago', sub: 'D3 已提交：dsh 会话里补上 shell 环境，验收命令可执行。' },
+  dsh: { t: '执行任务：dsh：runner 只在已安装固定版本时才声明 provider:dsh', tm: '31m ago', sub: '已提交：未装固定版本时不再声明能力。' },
+  d1: { t: '执行任务：修复 D1：runner 声明 dsh 能力，打通 Harness 会话的创建→领取→运行', tm: '1h ago', sub: 'D1 已完成并提交（bc89fd5），随后合入了最新 main。' },
+};
+const page = (at, sessions, done, run, top, coord, mid, rows) => phone(`${statusBar(at)}${navProject(sessions)}<div class="list">${top}${sh('Coordinator')}${coord}${mid || ''}${sh('Today')}${today(rows)}</div>`);
+const marked = (html, nn, style = 'margin-top:10px;border-radius:16px') => mk(html.replace(/class="mc ([a-z]+)"/, 'class="mc $1" style="margin-top:0"'), nn, style);
+
+// a · 现在
+const nowLine = `<div class="lline grey"><div class="a">${ic('ring', 14, '#8e8e93', 2.3)}<b>Landing</b><span class="s">Update unavailable</span>${chev()}</div>
+<div class="w">修复 D3：DeepSeek Harness 会话上的 EXECUTABLE 验收命令…</div>
+<div class="ln"><span>Elapsed <b>10m 0s</b></span><span class="u">Updated just now</span></div></div>`;
+const pA = page('11:20', 32, 15, 1, mk(progWithLanding(15, 20, 1, nowLine).replace('class="pcard"', 'class="pcard" style="margin-top:0"'), 1, 'margin-top:8px;border-radius:13px') + cardChecking(), coordW, '', [R.p6, R.d3, R.dsh, R.d1]);
+
+// b · 改后 · 正在跑
+const liveLine = landingLine({ what: '修复 D3：DeepSeek Harness 会话上的 EXECUTABLE 验收命令…', step: 'Task acceptance&nbsp;<b>13m 10s</b>&nbsp;/ 60m', bar: 22, live: 'Output 2s ago · Updated just now' });
+const chkWatch = `<div class="mc chk"><div class="mh">${ic('ring', 15, 'var(--tint)', 2.3)}<b>Merge check</b><span class="s">checking</span>${chev()}</div>
+<div class="ref">project/34Zur…UGnx + main · 2 tasks</div>
+<div class="ln"><span>Merge check <b>7m 12s</b> / 60m</span><span class="u">usually ~18m</span></div>
+<div class="bud"><i style="width:12%"></i><u style="left:30%"></u></div>
+<div class="ln"><span class="live"></span><span>Output 4s ago · Updated just now</span></div>
+<div class="foot" style="margin-top:8px"><span>Asks you when it passes.</span><span class="lnk watch">Watch ${ic('chevr', 11, 'var(--tint)', 2.8)}</span></div></div>`;
+const landings = mk(`${sh('Landings <span style="font-size:14px;font-weight:500">2 open</span>')}
+${lrow({ t: 'Land · 修复 D3：DeepSeek Harness 会话上的 EXECUTABLE 验收命令无法执行', tm: 'now', sub: 'Checking · task acceptance · 13m', cls: 'ink', icon: spinner('var(--tint)') })}
+${lrow({ t: 'Land · dsh：runner 只在已安装固定版本时才声明 provider:dsh', tm: '18m', sub: 'Checks failed · coordinator', cls: 'redt' })}
+<div class="fold">${ic('check', 14, 'var(--green-ink)', 2.6)}14 landed · 1 nothing to land<span class="chev">${chev()}</span></div>`, 3, 'margin:4px -6px 0;padding:0 6px;border-radius:12px');
+const pB = page('11:20', 32, 15, 1, mk(progWithLanding(15, 20, 1, liveLine).replace('class="pcard"', 'class="pcard" style="margin-top:0"'), 1, 'margin-top:8px;border-radius:13px') + marked(chkWatch, 2), coordW, landings, [R.p6, R.d3]);
+
+// c · 改后 · 你按了 Cancel：取消中
+const cxl = `<div class="mc cxl"><div class="mh"><span class="tile" style="background:rgba(120,120,128,.16);color:#6b6b70">${ic('merge', 17, '#6b6b70', 2.3)}</span><b>Cancelling the merge…</b>${spinner('rgba(60,60,67,.6)', 15)}</div>
+<div class="st">Orbit stops the re-check at the runner’s next report (within 30s). Nothing has been pushed.</div>
+<div class="note">If the push had already started, the merge is recorded as merged — the card says so instead of “cancelled”.</div>
+<div class="foot" style="margin-top:10px"><span>Cancelled by you · 11:41</span><span class="lnk watch">Watch ${ic('chevr', 11, 'var(--tint)', 2.8)}</span></div></div>`;
+const pC = page('11:41', 33, 16, 1, progCard(16, 20, 1) + marked(cxl, 1), coordW, '', [R.p6, R.d3, R.dsh, R.d1]);
+
+// d · 改后 · 推送被抢，交回（owner 确认过的候选）
+const handed = `<div class="mc blk"><div class="mh">${ic('warn', 17, 'var(--orange)', 2.1)}<b>Can’t merge into main yet</b>${chev('var(--l3)')}</div>
+<div class="st">The re-check passed, but main moved before the push. Nothing was pushed.</div>
+<div class="commits2"><code>c41e9a2</code> feat(ios): replace session share button…<span class="oq">outside the queue</span><br><code>8d07b31</code> fix(settings): keep close button visible…<span class="oq">outside the queue</span></div>
+<div class="press">${spinner('rgba(60,60,67,.6)', 15)}Coordinator is re-checking it · 2m</div>
+<div class="foot"><span>Goes to you if untouched for 2h</span><span class="lnk">Watch ${ic('chevr', 11, 'var(--tint)', 2.8)}</span></div></div>`;
+const coordRun = sessRow({ t: PROJECT, tm: 'just now', chip: 'Coordinator', run: true, sub: 'Re-checking the merge after main moved' });
+const pD = page('11:56', 33, 16, 2, progCard(16, 20, 2) + marked(handed, 1), coordRun, '', [R.p6, R.d3, R.dsh, R.d1]);
+
+// e · 改后 · 已合入：时间线那一行就是这一轮合入的会话入口
+const coord12 = coordRow({ eye: true, sub: 'Watching D3：DeepSeek Harness 会话上的 EXECUTABLE…' });
+const merged = mk(mergedRow({ tm: '6m ago', sha: '8d5a868', tasks: 2, who: 'by you' }).replace('<div class="ms">', '<div class="ms" style="border-bottom:none">'), 1, 'margin:0 -6px;padding:0 6px;border-radius:10px');
+const landingsFold = `${sh('Landings')}<div class="fold">${ic('check', 14, 'var(--green-ink)', 2.6)}16 landed · 1 nothing to land<span class="chev">${chev()}</span></div>`;
+const pE = page('12:20', 35, 17, 1, progCard(17, 20, 1), coord12, landingsFold, [R.p6, 'MERGED_SLOT', R.d3]).replace(sessRow(R.p6) + 'MERGED_SLOT', sessRow(R.p6) + merged);
+
+document.getElementById('figs').innerHTML = [
+  fig('now', '现在 · main 上', pA, `<b>现在：落地有两处，都点不进去</b><ol>
+<li>${n(1)}进度卡里的落地行，今天点按只会打开项目页。健康的检查跑过 10 分钟没续租，就变成灰色的 <i>Update unavailable</i>，秒表停在 10m 0s，像是卡住了。</li>
+<li>合入卡的 <i>Merge check · checking</i> 同样只有用时，看不到在跑哪条检查、输出有没有动。</li>
+<li>页面上找不到任何一次落地的记录：失败了也只能去协调会话里翻。</li></ol>`),
+  fig('after', '改后 · 正在跑', pB, `<b>改后：三个入口，一个 Landings 组</b><ol>
+<li>${n(1)}进度卡的落地行改成 Work overview 那一行的读法：当前步骤对比预算，<i>Output 2s ago</i> 是 runner 每 30 秒回报的事实，检查期间不会假装停住。整行点进这次落地的会话。</li>
+<li>${n(2)}合入卡加 <b>Watch</b>，进入这一轮合入的落地会话，看实时检查输出。检查中的卡没有撤销门，这一点和今天一样。</li>
+<li>${n(3)}Coordinator 下面多一个 <b>Landings</b> 组：只列没结案的、或者有待办的落地；已结案的折成一行。正在进行的合入轮不在这里重复，它在合入卡上。</li>
+<li>Landings 组的行不计入页头的 <i>33 sessions</i>，也不计入 running 数和状态点；平铺的会话列表里看不到它们。</li></ol>`),
+  fig('stall', '改后 · 取消中', pC, `<b>改后：按了 Cancel 之后</b><ol>
+<li>${n(1)}今天按 Cancel，晋升立刻记成 CANCELLED，而 runner 并不知道，已经开始的推送照样会把合入推进 main。改后卡片先变成灰色的 <b>Cancelling…</b>，等 runner 下一次回报（不超过 30 秒）真的停下，才收起。</li>
+<li>结果以事实为准：撤销到达时推送已经开始，就如实记成合入，卡片直接变成时间线里的「已合入」行，并写明是在撤销之后推上去的。</li>
+<li>Cancel 只在 Re-checking / Merging 时出现，和今天一样；推送之后（含 VERIFY）不再出现。</li></ol>`),
+  fig('warn', '改后 · 推送被抢，交回', pD, `<b>改后：推送被抢一次就交回（owner 10-04 的决定）</b><ol>
+<li>${n(1)}重查通过了，但推送之前 main 又被推进：不再在同一个作业里重跑两轮完整检查。卡片说清没有推送，并列出<b>是哪几个提交推进了 main</b>，标出是否来自队列外。</li>
+<li>候选交回协调会话处理（琥珀色，不亮橙点），2 小时没人处理才变橙交给你，沿用合入卡现有的规则。<b>Watch</b> 进入同一个落地会话，第 2 代检查接着记在里面。</li>
+<li>Automatic 下被抢就回到「检查中」，Orbit 自己重来，今天已经是这样。</li></ol>`),
+  fig('after', '改后 · 已合入', pE, `<b>改后：「已合入」那一行就是这一轮合入的会话</b><ol>
+<li>${n(1)}时间线里的 <i>Merged into main</i> 行，点进去是这一轮合入的落地会话（见 ⑤-b）：会话顶部就是今天的回执（提交、Now on main 的任务、检查、落下的树），下面是从第一次检查到合入的全过程。</li>
+<li>Landings 组里没有在途的落地时，只剩折叠行；点开列出已结案的落地会话，按结案时间排。</li>
+<li>会话列表的项目行不变：一个项目只占一行，第二行按现有优先级写落地状态（见 ⑥）。</li></ol>`),
+].join('');
+</script>

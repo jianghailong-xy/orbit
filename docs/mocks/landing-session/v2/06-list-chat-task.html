@@ -1,0 +1,76 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="../../project-merge-sessions-page/kit.css">
+<link rel="stylesheet" href="landing.css">
+<script src="../../project-merge-sessions-page/kit.js"></script>
+<script src="landing.js"></script>
+<body>
+<h1>⑥ 会话列表、协调会话、任务页和写代码的会话（2026-10-07）</h1>
+<p class="lede" style="max-width:1700px">落地会话<b>不进平铺的会话列表</b>：一个项目在列表里仍然只占一行，第二行按现有优先级写落地状态，只是不再在健康的长检查里变灰。其余入口都链到落地会话：协调会话里的例外卡多一个 <b>Open the landing</b>（和 Chat about this 并列，修订 9），任务页有 <b>Landing</b> 段，写代码的那个会话底部有一个派生的落地标签。合入 main 在协调会话里每个时刻只留一行（修订 10），点开是项目 sessions 页的合入卡。</p>
+<div class="row" id="figs"></div>
+<script>
+const navList = () => `<div class="nav"><div class="circ">${ic('ham', 21, '#000', 2.1)}</div><div class="circ">${ic('plus', 21, '#000', 2.2)}</div></div>`;
+const meter = (d, t) => `<span class="pchip"><span class="mini"><i style="width:${d / t * 100}%;background:var(--green)"></i></span>${d}/${t}</span>`;
+const prow = ({ t, tm, d, tt, sub, cls = 'mut', run }) => `<div class="prow2"><div class="a"><span class="t">${t}</span>${run ? spinner(run) : ''}<span class="tm">${tm}</span></div><div class="b">${meter(d, tt)}<span class="sub ${cls}">${sub}</span></div></div>`;
+const srow = ({ t, tm, sub }) => `<div class="prow2"><div class="a"><span class="t">${t}</span><span class="tm">${tm}</span></div><div class="b"><span class="sub">${sub}</span></div></div>`;
+
+// a · 会话列表
+const pA = phone(`${statusBar('11:31', 32)}${navList()}<div class="big">orbit-develop</div><div class="wl">${sh('Today')}
+${mk(prow({ t: 'DeepSeek Harness 原生接入（核心首版）', tm: 'just now', d: 15, tt: 20, sub: 'Merge check · checking · 14m · output 3s ago', cls: 'ink' }), 1, 'margin:0 -6px;padding:0 6px;border-radius:10px')}
+${prow({ t: '落地会话：每次落地都有自己的会话…', tm: '2m', d: 3, tt: 21, sub: 'Landing · checking · 4m · D3：DeepSeek Harness…', cls: 'ink' })}
+${mk(prow({ t: '项目收尾重做：协调者请求收尾…', tm: '12m', d: 23, tt: 24, sub: 'Merge to main · no word from runner · 12m', cls: 'mut' }), 2, 'margin:0 -6px;padding:0 6px;border-radius:10px')}
+${srow({ t: '修复 iOS 菜单字幕被截断', tm: '3m ago', sub: 'You: 再看一下 macOS 菜单里的换行' })}
+${srow({ t: 'Antigravity Google 登录', tm: '18m ago', sub: 'Running Bash…' })}
+${sh('Yesterday')}${srow({ t: 'Toast 系统重做', tm: 'yesterday', sub: 'Levels and the iPhone board are in docs/mocks…' })}</div>`);
+
+// b · 协调会话
+const exc = `<div class="exc"><div class="eh">${ic('warn', 15, 'var(--amber-ink)', 2)}Exception item<span class="kind">Integration</span></div>
+<div class="et">Landing checks failed: dsh：runner 只在已安装固定版本时才声明 provider:dsh</div>
+<div class="eb">Task acceptance exited 1 on the combined tree. The project branch did not move.</div>
+<div class="ebox">--- FAIL: <code>TestDshCapabilityNeedsPinnedInstall</code> · dsh_test.go:212</div>
+${mk(`<div class="el" style="margin-top:0"><span>Open the task ↗</span><span>Open the landing ↗</span><span>Chat about this</span></div>`, 1, 'margin-top:8px;border-radius:6px')}
+<div class="ef">a notification, not an interruption</div></div>`;
+const body = stamp('11:07') + exc
+  + abub('dsh 的验收没过：未装固定版本时仍然声明了 provider:dsh。检查输出说明是交付本身的问题、不是环境问题，所以不重跑，用 <code>task_reopen</code> 退回返工；返工后的下一代还记在同一个落地会话里。')
+  + stamp('11:34') + mk(sysLine(`${ic('merge', 13, 'rgba(60,60,67,.75)', 2.2)}Merge into main · you confirmed it 11:34 <span class="go">${ic('chevr', 11, 'var(--tint)', 2.8)}</span>`), 2, 'align-self:center;border-radius:999px;margin:8px 16px')
+  + abub('合入在重查：main 在你确认之后又被推进了 2 个提交。');
+const pB = chatPage({ at: '11:38', sub: 'Working · Open · now', body });
+
+// c · 任务页
+const navTask = `<div class="nav"><div class="circ">${ic('chevl', 21, '#000', 2.4)}</div><div class="ttl"><b>Task</b></div><div class="circ">${ic('dots', 25, '#000', 1.7)}</div></div>`;
+const pC = phone(`${statusBar('11:25')}${navTask}<div style="padding:4px 20px 10px"><div style="font-size:21px;font-weight:700;line-height:1.3">dsh：runner 只在已安装固定版本时才声明 provider:dsh</div>
+<div style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:13.5px;color:var(--l2)"><span class="chip" style="background:rgba(52,199,89,.16);color:var(--green-ink)">Done</span>not landed yet</div></div>
+<div style="background:#F2F2F7;position:absolute;top:212px;left:0;right:0;bottom:0;padding:12px 16px">
+${mk(`<div style="background:#fff;border-radius:16px;padding:12px 14px"><div style="display:flex;align-items:baseline;gap:8px"><b style="font-size:17px">Landing</b><span style="font-size:13px;color:var(--l2)">onto project/34Zur…UGnx</span></div>
+<div style="display:flex;gap:9px;margin-top:9px">${ic('x', 16, 'var(--red-ink)', 2.6)}<div><div style="font-size:15.5px;font-weight:600">Landing checks failed</div>
+<div style="font-size:13px;color:var(--l2);line-height:1.5;margin-top:2px">generation 1 · stopped while checking<br>Task acceptance · exit 1 after 3m 52s<br>With the coordinator · 18m · goes to you in 1h 42m</div></div></div>
+<div class="btn sec" style="margin-top:12px;text-align:center;color:var(--tint)">Open landing</div></div>`, 1, 'border-radius:16px')}
+<div style="background:#fff;border-radius:16px;padding:12px 14px;margin-top:12px"><div style="display:flex"><b style="font-size:17px">Runs</b><span style="margin-left:auto;color:var(--l2)">1</span></div>
+<div style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:15px"><span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">执行任务：dsh：runner 只在已安装…</span><span class="chip" style="background:rgba(52,199,89,.16);color:var(--green-ink)">Completed</span>${chev()}</div></div>
+</div>`);
+
+// d · 写代码的会话
+const pD = chatPage({ at: '11:25', sub: 'Completed · 23m ago', body:
+  ubub('未装固定版本时不要声明 provider:dsh；装了再声明。')
+  + abub('改好了：<code>advertiseDsh</code> 先检查固定版本是否已安装，没有就不声明。补了单测，已提交 <code>4c0f2e1</code>，任务标记完成。')
+  + stamp('Completed 11:02 · task marked Done')
+  + mk(`<div style="align-self:center;margin:22px 0 4px;display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:15px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.08),inset 0 0 0 .5px rgba(0,0,0,.06);font-size:13.5px;font-weight:600;color:var(--red-ink)">${ic('x', 12, 'var(--red-ink)', 2.6)}Landing · checks failed ${ic('chevr', 11, 'var(--red-ink)', 2.8)}</div>`, 1, 'align-self:center;border-radius:16px') }).replace('Message the coordinator…', 'Message…').replace(navChat('Completed · 23m ago'), `<div class="nav"><div class="circ">${ic('chevl', 21, '#000', 2.4)}</div><div class="ttl"><b>执行任务：dsh：runner 只在已安装固定…</b><span>Completed · 23m ago</span></div><div class="circ">${ic('dots', 25, '#000', 1.7)}</div></div>`);
+
+document.getElementById('figs').innerHTML = [
+  fig('after', 'a · 会话列表的项目行', pA, `<b>会话列表：一个项目仍然一行</b><ol>
+<li>${n(1)}第二行沿用现有优先级（19555f614）写落地状态，加上一条服务端事实「输出几秒前动过」，健康的长检查不再变灰。点按目标不变：行进协调会话，进度小标签进项目 sessions 页。</li>
+<li>${n(2)}真的失联才写 <i>no word from runner · 12m</i>，灰色，不亮橙点。橙点只在等你时出现。</li>
+<li>落地会话本身不进平铺列表，也不进搜索结果：它们只在项目 sessions 页的 Landings 组和各处链接里。</li></ol>`),
+  fig('after', 'b · 协调会话', pB, `<b>协调会话：例外卡能直达落地会话</b><ol>
+<li>${n(1)}落地失败的例外卡，链接行多一个 <b>Open the landing ↗</b>，和 Open the task、Chat about this（修订 9）并列。卡上的标题和首句照用服务端原文，投递给协调会话的文本一个字节都不改。</li>
+<li>${n(2)}合入 main 在这里每个时刻只留一行（修订 10），点开是项目 sessions 页的合入卡，Watch 在卡上。</li>
+<li>协调会话读得到同一份事实：<code>project_integration_get</code> 能按作业、轮次、检查分页读日志，不用再直接查生产库。</li></ol>`),
+  fig('after', 'c · 任务页的 Landing 段', pC, `<b>任务页：落地有自己的一段</b><ol>
+<li>${n(1)}用词照搬 web 的 LandTaskStatus：<i>Landing checks failed</i>、<i>generation N</i>、<i>stopped while …</i>。<b>Open landing</b> 进这个任务的落地会话。</li>
+<li>Runs 仍然只列 agent 干活的会话，落地会话不放在这里，否则一个任务看起来像跑了两次。</li>
+<li>iOS 开始解码 landTasks（今天只解码 state、handler、checksRunningForMs）。</li></ol>`),
+  fig('after', 'd · 写代码的那个会话', pD, `<b>写代码的会话：从源头也能找到它</b><ol>
+<li>${n(1)}会话底部根据作业推导出一个小标签：<i>Landing · checking</i>、<i>Landing · checks failed</i>，或者 <i>On project/34Zur… ✓</i>，点了进入落地会话。</li>
+<li>说的是集成线上的落地，和这个会话自己的 session merge 是两回事，用词不混。</li>
+<li>这个会话不会因为落地被唤醒，也不会多出轮次：落地的过程不写进这里的转录。</li></ol>`),
+].join('');
+</script>
