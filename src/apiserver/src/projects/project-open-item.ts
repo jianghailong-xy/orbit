@@ -1032,6 +1032,31 @@ export async function resolveIntegrationItemsOnLanding(
   });
 }
 
+/**
+ * §4.4 X-D4 (5), revision 13: a task filed to fix an exception has landed, so that exception goes
+ * back in front of the coordinator, which closes it or reruns what it is about.
+ *
+ * Called in the transaction that wrote the fix's landing receipt. The item is about ANOTHER task's
+ * work, and whether that work reached the line with the fix is a question about commits this server
+ * cannot answer (it has no git), so nothing here closes it. It is re-keyed instead, the way X-D5
+ * re-keys a drained turn — `assigned_at` moves, `waiting_since` and `escalate_at` stay — and the
+ * caller delivers it after the commit, worded with what landed (`openItemMessage`). Only an item
+ * still the coordinator's and not a candidate's: a candidate's failure is closed by the candidate
+ * the landing opens, and an item the owner holds is delivered to no conversation (X-D7).
+ */
+export async function rearmItemFixedBy(
+  tx: Prisma.TransactionClient,
+  taskId: string,
+): Promise<string | null> {
+  const fix = await tx.task.findUnique({ where: { id: taskId }, select: { fixesOpenItemId: true } });
+  if (!fix?.fixesOpenItemId) return null;
+  const rearmed = await tx.projectOpenItem.updateMany({
+    where: { id: fix.fixesOpenItemId, state: 'OPEN', assignee: 'COORDINATOR', promotionId: null },
+    data: { assignedAt: new Date() },
+  });
+  return rearmed.count > 0 ? fix.fixesOpenItemId : null;
+}
+
 /** What a finished delivery whose landing somebody has to decide is filed under (0375). */
 export const DELIVERY_REVIEW_KIND = 'DELIVERY_REVIEW' satisfies OpenItemKind;
 
@@ -1419,6 +1444,23 @@ export interface OpenItemMessageSource {
   /** The candidate a promotion's failure is about; absent or null for every other item. */
   promotionId?: string | null;
   payload: unknown;
+  /** The fixes of this item whose landing is in (§4.4 X-D4 5); absent or empty before any has. */
+  landedFixes?: readonly LandedFix[];
+  /** The commit the item's own failed landing was handed (its job's `source_sha`), when it has one. */
+  failedSourceSha?: string | null;
+}
+
+/**
+ * One fix of an item whose landing is in, as its re-keyed delivery words it (§4.4 X-D4 5). Only
+ * what no longer changes — the task's id and its finished landing job, never the task's title — so
+ * the same key words the same text (G6).
+ */
+export interface LandedFix {
+  taskId: string;
+  jobId: string;
+  state: string;
+  targetRef: string;
+  landedSha: string | null;
 }
 
 /** The payload fields an integration item carries (§4.2's payload column), all of them optional
@@ -1521,6 +1563,19 @@ function failureClassLines(payload: IntegrationItemPayload, aboutTask: boolean):
 }
 
 /**
+ * What an integration item says about the owner (§4.6 and §4.7, revision 13): once the coordinator
+ * has taken it up it stays the coordinator's — no clock hands it over — so what the owner has to
+ * decide is ASKED, and the item is handed over only when the owner has to act on it themselves.
+ */
+function askOwnerFirst(projectId: string, itemId: string, doors: { askOwnerMcp: string; handOverMcp: string }): string {
+  return `处理中遇到只有账号所有者才能决定的取舍（例如跳过或改动合并检查），用 ${doors.askOwnerMcp} 提问`
+    + '（带推荐选项和理由），待办仍留在你这里，答复会作为一轮送回这条会话；'
+    + '你接手之后，平台不会因为时间到了把它交给账号所有者。'
+    + `只有必须由账号所有者亲手处理的事（他的设备、账号或密钥），才用 ${doors.handOverMcp}`
+    + `（projectId 传 ${projectId}，itemId 传 ${itemId}，note 说明原因）把待办交给他。`;
+}
+
+/**
  * The next step a LAND_TASK's failure leaves its coordinator, by the class it failed of (J-T1b).
  *
  * The task is already DONE — a landing is what follows a DONE — so the one door this message must not
@@ -1535,6 +1590,7 @@ function landingNextStep(
   payload: IntegrationItemPayload,
   doors: {
     retryMcp: string;
+    askOwnerMcp: string;
     handOverMcp: string;
     taskCommentMcp: string;
     taskReopenMcp: string;
@@ -1549,8 +1605,7 @@ function landingNextStep(
   const rework = `用 ${doors.taskReopenMcp} 把任务退回返工，或者取消（${doors.taskUpdateMcp} 置 CANCELLED）`;
   const repair = `若判断是代码/交付问题，${doors.taskCreateMcp} 新建修复任务，并把 fixesOpenItemId 传 ${itemId}`
     + '挂到这条待办；这是修复工作，不是改写已经 DONE 的任务。';
-  const handOver = `如果你无法判断或处理，用 ${doors.handOverMcp}（projectId 传 ${projectId}，itemId 传 ${itemId}，note 说明原因）`
-    + '把待办交给账号所有者。';
+  const handOver = askOwnerFirst(projectId, itemId, doors);
   if (payload.phase === 'MAIN_SYNC') return read + mainSyncNextStep(payload, doors);
   if (payload.failureClass === 'CONFLICT' || (payload.files?.length ?? 0) > 0) {
     return read
@@ -1622,8 +1677,7 @@ function promotionNextStep(
       + `把 fixesOpenItemId 传 ${itemId} 挂到这条待办；`
       + '那个任务落地后，平台会为新的分支尖端开一个新的候选并重新检查，'
       + '这个候选和这条待办随之由平台关闭。\n'
-      + `如果这不是你能处理的代码问题，用 ${doors.handOverMcp}（projectId 传 ${projectId}，itemId 传 ${itemId}，note 说明原因）`
-      + '交给账号所有者。';
+      + askOwnerFirst(projectId, itemId, doors);
   }
   const candidate = promotionId ? uuidToBase62(promotionId) : '这个候选的编号';
   const retry = `（projectId 传 ${projectId}，promotionId 传 ${candidate}，reason 写明这次为什么会不同）`;
@@ -1634,8 +1688,8 @@ function promotionNextStep(
     + `${retry}把这个候选的检查重跑一次。检查通过之后，合并照旧由账号所有者在卡上确认，或由 Automatic `
     + '设置按原来的规则自动合并：这扇门只让候选回到可以合并的状态，不替任何人合并。\n'
     + `如果需要改合并检查命令、时限或其他只有所有者能决定的取舍，用 ${doors.askOwnerMcp}`
-    + ' 带至少两个选项提问，并在推荐选项里写明理由；如果你处理不了，用 '
-    + `${doors.handOverMcp}（projectId 传 ${projectId}，itemId 传 ${itemId}，note 说明原因）。`;
+    + ' 带至少两个选项提问，并在推荐选项里写明理由。'
+    + askOwnerFirst(projectId, itemId, doors);
 }
 
 /**
@@ -1753,8 +1807,70 @@ function checkResult(value: IntegrationItemPayload['check']): IntegrationCheckRe
  * disagreed and what it returned, the error code — because the reader's first question is which of
  * the two branches moved, and the answer is a column of this row. A promotion's failure names no
  * task, so it does not pretend to.
+ *
+ * Re-keyed because a fix of it landed (§4.4 X-D4 5), it opens with what landed — the reason it is in
+ * front of the coordinator again — and then says everything it said the first time.
  */
 export function openItemMessage(item: OpenItemMessageSource): string {
+  const landed = landedFixPreface(item);
+  return landed ? `${landed}\n\n${openItemBody(item)}` : openItemBody(item);
+}
+
+/**
+ * What a re-keyed item says first once a fix of it has landed (§4.4 X-D4 5).
+ *
+ * It says what landed and leaves the judgement where it was. The item is about ANOTHER task's work,
+ * and whether that work went in with the fix is a question about commits, which this server cannot
+ * ask — so the coordinator is handed the two commits to ask it of, and the door for each answer.
+ */
+function landedFixPreface(item: OpenItemMessageSource): string | null {
+  const fixes = item.landedFixes ?? [];
+  if (fixes.length === 0) return null;
+  const payload = (item.payload ?? {}) as IntegrationItemPayload;
+  const doors = openItemDoorMessageNames({
+    kind: item.kind,
+    assignee: 'COORDINATOR',
+    taskId: item.taskId,
+    promotionId: item.promotionId ?? null,
+    payload,
+    phase: payload.phase ?? null,
+    jobKind: payload.jobKind ?? null,
+    failureClass: payload.failureClass ?? null,
+  });
+  const projectId = uuidToBase62(item.projectId);
+  const resolve = `${doors.resolveMcp}（projectId 传 ${projectId}，itemId 传 ${uuidToBase62(item.id)}）`;
+  const ask = `要账号所有者拍板的，用 ${doors.askOwnerMcp} 问，待办仍留在你这里。`;
+  const landedLines = fixes.map((fix) => {
+    const target = fix.targetRef.startsWith('refs/heads/') ? fix.targetRef.slice('refs/heads/'.length) : fix.targetRef;
+    const result = fix.state === 'NOTHING_TO_LAND'
+      ? '结果是 NOTHING_TO_LAND（它没有自己的提交要落）'
+      : `结果是 ${fix.state}，落在 ${target}${fix.landedSha ? ` 的 ${fix.landedSha.slice(0, 12)}` : ''}`;
+    return `- 修复任务 ${uuidToBase62(fix.taskId)}：${result}（作业 ${uuidToBase62(fix.jobId)}）。`;
+  });
+  const head = `【修复已落地】挂在这条待办上的修复任务已经落地：\n${landedLines.join('\n')}\n`;
+  const aboutTask = item.taskId ? uuidToBase62(item.taskId) : null;
+  if (!aboutTask || !(INTEGRATION_ITEM_KINDS as readonly string[]).includes(item.kind)) {
+    return head
+      + '平台不会因为修复落地就关掉这条待办。由你判断这个修复是否已经回答了它：'
+      + `是，就用 ${resolve} 写明理由关掉；不是，按下面原来的内容处理。${ask}\n`
+      + '下面是这条待办原来的内容。';
+  }
+  const landedTip = [...fixes].reverse().find((fix) => fix.landedSha)?.landedSha ?? null;
+  const check = item.failedSourceSha && landedTip
+    ? `例如 git merge-base --is-ancestor ${item.failedSourceSha} ${landedTip}`
+    : '对照目标分支现在的 tip';
+  return head
+    + `平台不会因为修复落地就关掉这条待办：它记的是任务 ${aboutTask} 自己的那次落地，`
+    + '服务端判断不了那份工作是否随修复一起上了线。由你收尾：\n'
+    + `- 先核对任务 ${aboutTask} 交付的提交是否已经在目标分支上（${check}）；\n`
+    + `- 在，就用 ${resolve} 写明理由关掉；\n`
+    + `- 不在（修复只修好了基线），就用 ${doors.retryMcp}（projectId 传 ${projectId}，taskId 传 ${aboutTask}，`
+    + 'reason 写明修复已落地）重排它的落地；\n'
+    + `- ${ask}\n`
+    + '下面是这条待办原来的内容。';
+}
+
+function openItemBody(item: OpenItemMessageSource): string {
   const projectId = uuidToBase62(item.projectId);
   const payload = (item.payload ?? {}) as {
     how?: string;
@@ -1794,7 +1910,8 @@ export function openItemMessage(item: OpenItemMessageSource): string {
       + '要判断的是下一步。\n'
       + (taskId
         ? `${landingNextStep(projectId, uuidToBase62(item.id), taskId, payload, doorNames)}\n`
-          + '任务落地、被取消或被取代之后，这条待办由平台自己关闭。'
+          + '任务落地、被取消或被取代之后，这条待办由平台自己关闭；挂在它上面的修复任务落地不算，'
+          + '那时平台会把这条待办再送来一次，由你核对后关掉或重排。'
           + `${handling('重排', '落地了')}你不用回报。${handClose}\n`
         : `${promotionNextStep(projectId, item.promotionId ?? null, uuidToBase62(item.id), payload, {
           retryMcp: doorNames.retryMcp,
@@ -1901,8 +2018,8 @@ function deliveryReviewMessage(
     + `先读任务的声明（task_get，taskId 传 ${taskId}）、它服务的那条判据（project_get 的 `
     + 'acceptanceCriteriaItems）和它实际的改动，再选一条：\n'
     + `${answers.map((line) => `- ${line}`).join('\n')}\n`
-    + '任务被退回、取消或被取代之后，这条待办由平台自己关闭；这条会话停着不处理超过项目的 '
-    + 'exceptionEscalationSeconds，它会交给账号所有者。\n'
+    + '任务被退回、取消或被取代之后，这条待办由平台自己关闭；你接手之后它一直归你，'
+    + '平台不会因为时间到了把它交给账号所有者。\n'
     + '这不是验收标准的问题，不要为它 ask_owner：改验收标准、确认标准集仍然只有账号所有者能做；'
     + '交付声称某条判据不适用、或判据在它开工之后被改过，那两种情况是账号所有者的 blocker。\n\n'
     + notice;

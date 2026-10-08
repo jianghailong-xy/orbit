@@ -45,6 +45,10 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 	if a.Effort != "" {
 		args = append(args, "--effort", claudeEffortFlag(a.Effort))
 	}
+	// The engine's guess at the person's next message, after each turn (claude_prompt_suggestion.go).
+	if claudePromptSuggestionsOn(job) {
+		args = append(args, "--prompt-suggestions")
+	}
 	// Apply the agent's configured prompts (claim payload carries both; previously
 	// dropped here). --system-prompt replaces the default, --append-system-prompt adds.
 	// The Orbit CLI discovery instructions are platform instructions and therefore

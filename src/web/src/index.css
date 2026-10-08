@@ -6420,6 +6420,77 @@ html[data-theme='dark'] .session-tag-chip {
 .composer-field textarea.orbit-textarea:focus-visible {
   outline: none;
 }
+/* The engine's guess at the next message, offered in the empty box (lib/promptSuggestion). It sits
+   on the first line exactly where the placeholder would — same inset, same 24px line — so nothing
+   moves when it arrives a second after the turn ends. Only Use takes the pointer: a click anywhere
+   else on the line still lands in the textarea, to type something else instead. */
+.composer-suggestion {
+  position: absolute;
+  top: 12px;
+  left: 23px;
+  right: 12px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+  font-size: 15px;
+}
+.composer-suggestion-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-4);
+}
+.composer-suggestion-use {
+  pointer-events: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 6px 0 11px;
+  border: 0;
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--brand) 9%, transparent);
+  color: var(--brand);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.composer-suggestion-use:hover {
+  background: color-mix(in srgb, var(--brand) 15%, transparent);
+}
+.composer-suggestion-use:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.composer-suggestion-key {
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--bg-raised);
+  box-shadow:
+    inset 0 0 0 1px var(--border),
+    0 1px 0 var(--border);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+}
+/* No keyboard to press Tab on: the button alone. */
+@media (hover: none) {
+  .composer-suggestion-use {
+    padding: 0 11px;
+  }
+  .composer-suggestion-key {
+    display: none;
+  }
+}
 /* Zero net layout width: the padding shaping the pill is cancelled by an equal negative margin,
    so the background bleeds outward while the glyphs stay exactly where the textarea puts them.
    Any residual width here compounds — every chip pushes the rest of the line further off. */
