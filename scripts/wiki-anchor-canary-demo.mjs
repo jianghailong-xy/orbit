@@ -1,19 +1,16 @@
 #!/usr/bin/env node
 /**
- * The local demonstration for the 2026-10-08 wiki canary incident's repair, end to end on a
- * throwaway PostgreSQL this script creates and destroys:
+ * The local demonstration for the 2026-10-08 wiki canary incident's read-only verification, end to
+ * end on a throwaway PostgreSQL this script creates and destroys:
  *
- *   1. build the same corruption the incident wrote — a window of server-path checks laid on the
- *      wrong entry, and a symbol anchor adopting a page-mate's region as its baseline;
- *   2. run the read-only triage against it: it must find every touched anchor and flag the
- *      mis-adopted baseline;
- *   3. run the repair DRY: the plan must say which checks are restored to the pre-T0 capture and
- *      which are cleared;
- *   4. run the repair --apply, and read the rows back: restored where the capture has a check,
- *      cleared where it has none;
- *   5. play the NEXT correct check the way the fixed server job lays one down, and assert every
- *      conclusion and every baseline is right — the re-adopted baseline is the region the symbol
- *      itself holds now.
+ *   1. build the window's writes — checks the server path laid during the canary window, on two
+ *      entries of one space, mixed path / symbol / commit;
+ *   2. run the verification script against it: it must list every one of them, counted by space,
+ *      entry and type;
+ *   3. play the runner path's next maintenance run, which re-verifies every anchor on its own and
+ *      overwrites the window's checks with its own ref and time;
+ *   4. run the verification again: the count must be zero, and an entry nobody re-checked (another
+ *      owner's) must never have appeared in either run.
  *
  *   node scripts/wiki-anchor-canary-demo.mjs
  *
@@ -22,7 +19,7 @@
  */
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
 import net from 'node:net';
@@ -35,10 +32,11 @@ const OWNER = randomUUID();
 const OTHER = randomUUID();
 const SPACE = randomUUID();
 const T0 = '2026-10-08T14:03:04.000Z';
-const UNTIL = '2026-10-08T15:45:00.000Z';
-const PRE_T0_AT = '2026-10-08T13:00:00.000Z';
+const UNTIL = '2026-10-08T16:26:00.000Z';
 const WINDOW_AT = '2026-10-08T15:03:00.000Z';
+const REDONE_AT = '2026-10-09T01:00:00.000Z';
 const OLD_REF = createHash('sha1').update('origin/main before the window').digest('hex');
+const REDONE_REF = createHash('sha1').update('origin/main after the rollback').digest('hex');
 const SNAP = createHash('sha1').update('the snapshot the server job read').digest('hex');
 const GOOD_COMMIT = createHash('sha1').update('the commit the repository holds').digest('hex');
 const GONE_COMMIT = createHash('sha1').update('a commit the repository never held').digest('hex');
@@ -51,44 +49,27 @@ const E2 = randomUUID();
 const E3 = randomUUID();
 const FOREIGN = randomUUID();
 
-function entry(id, anchors) {
-  return { id, spaceId: SPACE, ownerId: OWNER, title: `entry ${id.slice(0, 8)}`, status: 'active', currentRevision: 1, anchors };
-}
 const check = (state, ref, at, extra = {}) => ({ state, ref, at, ...extra });
+function entry(id, ownerId, anchors) {
+  return { id, ownerId, spaceId: SPACE, title: `entry ${id.slice(0, 8)}`, status: 'active', currentRevision: 1, anchors };
+}
 
-/** The state before the window: E1's path and commit verified by the runner path, its symbol never
- * checked; E2 never checked at all. The window is the first check E1's symbol ever gets — the
- * incident's poisoned case: it adopts whatever region the page-mate's verdict carries. */
-const BEFORE = [
-  entry(E1, [
-    { type: 'path', path: 'src/app.go', check: check('verified', OLD_REF, PRE_T0_AT) },
-    { type: 'symbol', path: 'src/app.go', symbol: 'main' },
-    { type: 'commit', sha: GOOD_COMMIT, check: check('verified', OLD_REF, PRE_T0_AT) },
-  ]),
-  entry(E2, [
-    { type: 'path', path: 'src/gone.go' },
-    { type: 'symbol', path: 'src/app.go', symbol: 'serve', regionSha256: SERVE_BASELINE },
-    { type: 'commit', sha: GONE_COMMIT },
-  ]),
-  // Never touched by anything: must come through untouched.
-  entry(E3, [{ type: 'path', path: 'docs/untouched.md', check: check('verified', OLD_REF, PRE_T0_AT) }]),
-  { ...entry(FOREIGN, [{ type: 'path', path: 'docs/foreign.md', check: check('verified', OLD_REF, PRE_T0_AT) }]), ownerId: OTHER },
-];
-
-/** What the buggy window run wrote: E1 took E2's verdicts, E2 took E1's; E1's symbol adopted E2's region. */
+/** The window's writes: six checks on two entries, mixed path / symbol / commit, all `verified`. */
 const WINDOWED = [
-  entry(E1, [
-    { type: 'path', path: 'src/app.go', check: check('missing', SNAP, WINDOW_AT) },
-    { type: 'symbol', path: 'src/app.go', symbol: 'main', check: check('verified', SNAP, WINDOW_AT, { regionSha256: REGION_SERVE, baselineSha256: REGION_SERVE }) },
-    { type: 'commit', sha: GOOD_COMMIT, check: check('missing', SNAP, WINDOW_AT) },
+  entry(E1, OWNER, [
+    { type: 'path', path: 'src/app.go', check: check('verified', SNAP, WINDOW_AT) },
+    { type: 'symbol', path: 'src/app.go', symbol: 'main', check: check('verified', SNAP, WINDOW_AT, { regionSha256: REGION_MAIN, baselineSha256: REGION_MAIN }) },
+    { type: 'commit', sha: GOOD_COMMIT, check: check('verified', SNAP, WINDOW_AT) },
   ]),
-  entry(E2, [
+  entry(E2, OWNER, [
     { type: 'path', path: 'src/gone.go', check: check('verified', SNAP, WINDOW_AT) },
-    { type: 'symbol', path: 'src/app.go', symbol: 'serve', regionSha256: SERVE_BASELINE, check: check('changed', SNAP, WINDOW_AT, { regionSha256: REGION_MAIN }) },
+    { type: 'symbol', path: 'src/app.go', symbol: 'serve', regionSha256: SERVE_BASELINE, check: check('verified', SNAP, WINDOW_AT, { regionSha256: REGION_SERVE }) },
     { type: 'commit', sha: GONE_COMMIT, check: check('verified', SNAP, WINDOW_AT) },
   ]),
-  BEFORE[2],
-  BEFORE[3],
+  // Checked long before the window: never a finding.
+  entry(E3, OWNER, [{ type: 'path', path: 'docs/untouched.md', check: check('verified', OLD_REF, '2026-10-08T13:00:00.000Z') }]),
+  // Another owner's window-time write: not this verification's without --owner, and never with it.
+  entry(FOREIGN, OTHER, [{ type: 'path', path: 'docs/foreign.md', check: check('verified', SNAP, WINDOW_AT) }]),
 ];
 
 let passed = 0;
@@ -105,7 +86,7 @@ function assertEqual(actual, expected, what) {
 const port = await new Promise((resolve) => {
   const probe = net.createServer();
   probe.listen(0, '127.0.0.1', () => {
-    const chosen = (probe.address() ).port;
+    const chosen = probe.address().port;
     probe.close(() => resolve(chosen));
   });
 });
@@ -126,9 +107,10 @@ try {
   }
   if (!up) throw new Error('postgres did not come up');
   const url = `postgres://postgres:demo@127.0.0.1:${port}/demo`;
-  const sql = new pg.Client({ connectionString: url });
+  let sql;
   for (let attempt = 0; ; attempt += 1) {
     try {
+      sql = new pg.Client({ connectionString: url, connectionTimeoutMillis: 3_000 });
       await sql.connect();
       break;
     } catch (error) {
@@ -140,87 +122,59 @@ try {
   await sql.query(`CREATE TABLE "wiki_repo_snapshot"("space_id" uuid NOT NULL, "owner_id" uuid NOT NULL, "sha" char(40) NOT NULL, "created_at" timestamptz)`);
   await sql.query(
     `CREATE TABLE "wiki_entry"("id" uuid NOT NULL PRIMARY KEY, "owner_id" uuid NOT NULL, "space_id" uuid NOT NULL, "title" text,
-       "status" text, "current_revision" int, "anchors" jsonb, "anchor_state" text DEFAULT 'unchecked',
-       "anchor_checked_ref" char(40), "anchor_checked_at" timestamptz)`,
+       "status" text, "current_revision" int, "anchors" jsonb, "anchor_state" text DEFAULT 'unchecked')`,
   );
   await sql.query(`INSERT INTO "wiki_repo_snapshot"("space_id","owner_id","sha","created_at") VALUES ($1,$2,$3,now())`, [SPACE, OWNER, SNAP]);
-  for (const row of BEFORE) {
+  for (const row of WINDOWED) {
     await sql.query(
       `INSERT INTO "wiki_entry"("id","owner_id","space_id","title","status","current_revision","anchors") VALUES ($1,$2,$3,$4,'active',1,$5::jsonb)`,
       [row.id, row.ownerId, row.spaceId, row.title, JSON.stringify(row.anchors)],
     );
   }
+  mkdtempSync(path.join(tmpdir(), 'wiki-anchor-demo-'));
 
-  const dir = mkdtempSync(path.join(tmpdir(), 'wiki-anchor-demo-'));
-  const capture = path.join(dir, 'pre-t0-capture.json');
-  // The capture a person takes before flipping the switch: the anchors as they stood at T0.
-  writeFileSync(capture, JSON.stringify({ entries: BEFORE.slice(0, 2).map(({ id, anchors }) => ({ entryId: id, anchors })) }));
-
-  const run = (script, extra) => {
-    const child = spawnSync('node', [path.join(REPO_ROOT, 'scripts', script), '--url', url, '--owner', OWNER, '--since', T0, '--until', UNTIL, ...extra], { encoding: 'utf8' });
-    console.log(`\n$ ${script} ${extra.join(' ')}\n${child.stdout.trim()}`);
+  const run = (extra) => {
+    const child = spawnSync('node', [path.join(REPO_ROOT, 'scripts', 'wiki-anchor-canary-verify.mjs'), '--url', url, '--since', T0, '--until', UNTIL, ...extra], { encoding: 'utf8' });
+    console.log(`\n$ wiki-anchor-canary-verify.mjs ${extra.join(' ')}\n${child.stdout.trim()}`);
     if (child.status !== 0) {
       console.error(child.stderr);
-      throw new Error(`${script} exited ${child.status}`);
+      throw new Error(`verify exited ${child.status}`);
     }
     return child.stdout;
   };
 
-  // 1. The incident's writes land.
-  for (const row of WINDOWED) {
-    await sql.query(`UPDATE "wiki_entry" SET "anchors"=$2::jsonb WHERE "id"=$1`, [row.id, JSON.stringify(row.anchors)]);
-  }
-  const readAnchors = async (id) => (await sql.query(`SELECT "anchors" FROM "wiki_entry" WHERE "id"=$1`, [id])).rows[0].anchors;
+  // 2. The verification lists everything the window wrote, counted by space, entry and type.
+  console.log('\n==> 1. verify over the windowed database (scoped to the canary owner)');
+  const before = run(['--owner', OWNER, '--refs', SNAP]);
+  assertEqual(/(\d+) anchor check\(s\) the server path wrote/.exec(before)?.[1], '6', 'all six window-written checks are listed');
+  assertEqual((before.match(/space [0-9a-f-]{36}: 6 check\(s\) across 2 entr\(ies\) — 2 path, 2 symbol, 2 commit/) ?? []).length, 1,
+    'the space count names two entries and two of each type');
+  assertEqual((before.match(/^  entry /gm) ?? []).length, 2, 'one line per affected entry');
 
-  // 2. The triage finds every touched anchor and flags the borrowed baseline.
-  console.log('\n==> 1. triage over the windowed database');
-  const triage = run('wiki-anchor-canary-triage.mjs', ['--pre-t0', capture]);
-  assertEqual((triage.match(/window check:/g) ?? []).length, 6, 'the triage lists all six window-written checks');
-  assertEqual((triage.match(/!! baseline adopted in the window/g) ?? []).length, 1, 'exactly the borrowed baseline is flagged');
-
-  // 3. The dry run plans the restores and the clears.
-  console.log('\n==> 2. repair, dry-run');
-  const dry = run('wiki-anchor-canary-repair.mjs', ['--pre-t0', capture]);
-  assertEqual((dry.match(/restored to the pre-T0 check/g) ?? []).length, 2, 'E1\'s path and commit are restored from the capture');
-  assertEqual((dry.match(/cleared: the capture shows no check/g) ?? []).length, 4, 'E1\'s symbol and E2\'s three checks are cleared: the capture shows none');
-  assertEqual((dry.match(/2 would be restored, 4 cleared/g) ?? []).length, 1, 'the dry-run says so plainly');
-  assertEqual((await readAnchors(E1))[0].check.state, 'missing', 'the dry run wrote nothing');
-
-  // 4. The apply restores and clears, and nothing else moves.
-  console.log('\n==> 3. repair, --apply');
-  run('wiki-anchor-canary-repair.mjs', ['--pre-t0', capture, '--apply']);
-  assertEqual((await readAnchors(E1)).map((a) => a.check?.state), ['verified', undefined, 'verified'], 'E1\'s path and commit read their pre-T0 checks, its symbol none');
-  assertEqual((await readAnchors(E2)).map((a) => a.check), [undefined, undefined, undefined], 'E2 has no checks: the next correct check re-adopts baselines');
-  assertEqual((await readAnchors(E3))[0].check.state, 'verified', 'the window never touched E3, and the repair does not either');
-  assertEqual((await readAnchors(FOREIGN))[0].check.state, 'verified', 'another owner\'s entry is not this owner\'s to repair');
-  const rollup = (await sql.query(`SELECT "anchor_state" FROM "wiki_entry" WHERE "id"=$1`, [E1])).rows[0];
-  assertEqual(rollup.anchor_state, 'unchecked', 'E1\'s rolled-up anchor state follows its restored checks');
-
-  // 5. The next correct check — the fixed mapping, laid down the way a written check is.
-  console.log('\n==> 4. the next correct check, as the fixed server job lays it down');
-  const correctCheck = (anchor) => {
-    if (anchor.type === 'path') return check(anchor.path === 'src/app.go' ? 'verified' : 'missing', OLD_REF, '2026-10-09T01:00:00.000Z');
-    if (anchor.type === 'commit') return check(anchor.sha === GOOD_COMMIT ? 'verified' : 'missing', OLD_REF, '2026-10-09T01:00:00.000Z');
+  // 3. The runner path's next maintenance run re-verifies every anchor on its own ref and time.
+  console.log('\n==> 2. the runner path re-checks every anchor');
+  const redone = (anchor) => {
+    if (anchor.type === 'path') return check(anchor.path === 'src/app.go' ? 'verified' : 'missing', REDONE_REF, REDONE_AT);
+    if (anchor.type === 'commit') return check(anchor.sha === GOOD_COMMIT ? 'verified' : 'missing', REDONE_REF, REDONE_AT);
     const region = anchor.symbol === 'main' ? REGION_MAIN : REGION_SERVE;
     const baseline = anchor.regionSha256 ?? region;
-    return check(region === baseline ? 'verified' : 'changed', OLD_REF, '2026-10-09T01:00:00.000Z',
+    return check(region === baseline ? 'verified' : 'changed', REDONE_REF, REDONE_AT,
       { regionSha256: region, ...(anchor.regionSha256 ? {} : { baselineSha256: baseline }) });
   };
-  for (const id of [E1, E2]) {
-    const anchors = await readAnchors(id);
-    await sql.query(`UPDATE "wiki_entry" SET "anchors"=$2::jsonb WHERE "id"=$1`, [id, JSON.stringify(anchors.map((anchor) => ({ ...anchor, check: correctCheck(anchor) })))]);
+  for (const row of WINDOWED.filter((one) => one.ownerId === OWNER)) {
+    await sql.query(`UPDATE "wiki_entry" SET "anchors"=$2::jsonb WHERE "id"=$1`, [row.id, JSON.stringify(row.anchors.map((anchor) => ({ ...anchor, check: redone(anchor) })))]);
   }
-  const e1 = await readAnchors(E1);
-  assertEqual(e1[0].check.state, 'verified', 'E1\'s path holds');
-  assertEqual(e1[1].check.state, 'verified', 'E1\'s symbol is verified again');
-  assertEqual(e1[1].check.baselineSha256, REGION_MAIN, 'and the baseline it adopts now is its own region, not the page-mate\'s');
-  const e2 = await readAnchors(E2);
-  assertEqual(e2[0].check.state, 'missing', 'E2\'s gone path is missing again');
-  assertEqual(e2[1].check.state, 'changed', 'E2\'s serve symbol moved against the baseline it named');
-  assertEqual(e2[1].regionSha256, SERVE_BASELINE, 'and that baseline is the one the anchor itself names, untouched');
-  assertEqual(e2[1].check.regionSha256, REGION_SERVE, 'the changed check carries the region the symbol holds now');
-  assertEqual(e2[2].check.state, 'missing', 'E2\'s unheld commit is missing again');
-  console.log(`\nDEMO PASS: ${passed} assertions, the triage found everything, the repair restored and cleared, and the next correct check reads every anchor right.`);
+
+  // 4. The count is zero — and the untouched and foreign entries never appeared.
+  console.log('\n==> 3. verify again: the window has been re-checked away');
+  const after = run(['--owner', OWNER, '--refs', SNAP]);
+  assertEqual(/(\d+) anchor check\(s\) the server path wrote/.exec(after)?.[1], '0', 'the count is zero once the runner path has re-checked');
+  assertEqual((after.match(/nothing left of the window/) ?? []).length, 1, 'and it says so');
+  for (const output of [before, after]) {
+    assertEqual((output.match(/untouched/) ?? []).length, 0, 'the pre-window entry is never a finding');
+    assertEqual((output.match(/foreign/) ?? []).length, 0, 'another owner\'s entry is never a finding when scoped');
+  }
+  console.log(`\nDEMO PASS: ${passed} assertions — the verification lists every window-written check by space, entry and type, and the count comes back zero once the runner path has re-checked them.`);
   await sql.end();
 } finally {
   await stop();
