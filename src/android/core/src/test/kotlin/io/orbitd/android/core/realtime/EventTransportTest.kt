@@ -33,16 +33,18 @@ class EventTransportTest {
         }
     }
 
+    /** A comment every 250 ms keeps a 1 s watchdog quiet through a 2 s stream; a socket silent after its headers ends at
+     * the watchdog, well before its 3 s body. Windows this wide hold on a loaded host. */
     @Test fun watchdogCountsCommentBytesAndSilentSocketsTimeOut() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream")
-                .setBody(":k\n\n".repeat(8)).throttleBody(4, 50, TimeUnit.MILLISECONDS))
-            withTimeout(60_000) { OkHttpEventTransport(150).stream(request(server), {}, { fail("Comments do not dispatch") }) }
+                .setBody(":k\n\n".repeat(8)).throttleBody(4, 250, TimeUnit.MILLISECONDS))
+            withTimeout(60_000) { OkHttpEventTransport(1_000).stream(request(server), {}, { fail("Comments do not dispatch") }) }
             server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream")
-                .setBody("data: {}\n\n").setBodyDelay(1, TimeUnit.SECONDS))
+                .setBody("data: {}\n\n").setBodyDelay(3, TimeUnit.SECONDS))
             var opened = false
             try {
-                withTimeout(60_000) { OkHttpEventTransport(100).stream(request(server), { opened = true }, {}) }
+                withTimeout(60_000) { OkHttpEventTransport(1_000).stream(request(server), { opened = true }, {}) }
                 fail("Silent stream should fail")
             } catch (_: NetworkException) { assertTrue(opened) }
         }

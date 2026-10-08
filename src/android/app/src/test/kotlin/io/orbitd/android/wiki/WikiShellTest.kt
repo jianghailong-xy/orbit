@@ -239,7 +239,10 @@ class WikiShellTest {
         compose.onNodeWithTag("wiki-review-accept").performScrollTo().performClick()
         compose.waitUntil(60_000) { shell.writes("wiki/changesets/${WikiShell.AMEND_CHANGESET}/decide").isNotEmpty() }
         settle(2_000)
+        // On a loaded host the decide can still be on its way: its card is gone before the late read answers.
+        settleUntil("the accepted card to go") { compose.onAllNodesWithTag("wiki-review-card:${WikiShell.AMEND_OP}").fetchSemanticsNodes().isEmpty() }
         late.complete(Unit)
+        settleUntil("the late read to answer") { shell.ended["GET wiki/review"] == "answered" }
         settle(2_000)
         assertTrue("the answered card does not come back", compose.onAllNodesWithTag("wiki-review-card:${WikiShell.AMEND_OP}").fetchSemanticsNodes().isEmpty())
     }
@@ -297,12 +300,16 @@ class WikiShellTest {
         Thread.sleep(25)
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); compose.waitForIdle()
     }
-    /** Step the clocks until [condition] holds. */
+    /** Step the clocks until [condition] holds, [ms] of them at most. A loaded host then gets up to a minute of real
+     * time, the clocks standing still, for reads still on their way. */
     private fun settleUntil(what: String, ms: Long = 15_000, condition: () -> Boolean) {
         var left = ms
+        while (left > 0 && !condition()) { step(); left -= 250 }
+        val until = System.nanoTime() + 60_000_000_000
         while (!condition()) {
-            if (left <= 0) throw AssertionError("waited for $what; last calls=${shell.calls.takeLast(30)}")
-            step(); left -= 250
+            if (System.nanoTime() > until) throw AssertionError("waited for $what; last calls=${shell.calls.takeLast(30)}")
+            Thread.sleep(25); main.scheduler.runCurrent()
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); compose.waitForIdle()
         }
     }
 }
