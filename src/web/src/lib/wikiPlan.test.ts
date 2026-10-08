@@ -65,6 +65,17 @@ function readFixture(): { timeZone: string; now: string; docs: { directory: { re
   return JSON.parse(readFileSync(path, 'utf8'));
 }
 
+/** The server-execution fixture (P9): the one line this file shares with OrbitKit's `WikiPlanCopy`. */
+function readServerFixture(): { plan: { note: string } } {
+  const candidates = [
+    resolve(process.cwd(), '../shared/src/wiki-server-execution.fixture.json'),
+    resolve(process.cwd(), 'src/shared/src/wiki-server-execution.fixture.json'),
+  ];
+  const path = candidates.find((candidate) => existsSync(candidate));
+  if (!path) throw new Error(`wiki-server-execution.fixture.json not found from ${process.cwd()}`);
+  return JSON.parse(readFileSync(path, 'utf8'));
+}
+
 /** Run `fn` with the process in `tz`: Node re-reads `process.env.TZ` on the next Date call. */
 function inTimeZone<T>(tz: string, fn: () => T): T {
   const before = process.env.TZ;
@@ -214,7 +225,7 @@ describe("the plan's words", () => {
     }
     for (const row of c.protectedKept) expect(P.wikiPlanProtectedKept(row.numbers as string[])).toBe(row.says);
     for (const row of c.emptyText) expect(P.wikiPlanEmptyText(row.provider as string | null)).toBe(row.says);
-    for (const row of c.emptyNote) expect(P.wikiPlanEmptyNote(row.where as string | null, row.provider as string | null)).toBe(row.says);
+    for (const row of c.emptyNote) expect(P.wikiPlanEmptyNote(row.where as string | null, row.provider as string | null, false)).toBe(row.says);
     for (const row of c.saveNote) expect(P.wikiPlanSaveNote(row.n as number)).toBe(row.says);
     for (const row of c.editTitle) expect(P.wikiPlanEditTitle(row.number as string)).toBe(row.says);
     for (const row of c.confirmed) expect(P.wikiPlanConfirmed(row.n as number)).toBe(row.says);
@@ -230,6 +241,27 @@ describe("the plan's words", () => {
     expect([...P.WIKI_PLAN_SECTION_SECTIONS]).toEqual(plan.orders.section);
     expect([...P.WIKI_PLAN_CHANGE_PARTS]).toEqual(plan.orders.change);
     expect([...P.WIKI_PLAN_LOOKS]).toEqual(plan.orders.looks);
+  });
+});
+
+describe('the plan’s line under Draft plan, under server execution and under runner', () => {
+  const served = readServerFixture();
+  const context = (serverExecutes: boolean, provider: string | null) => ({ now, docs: null, runnerOnline: true, provider, serverExecutes });
+  const noPlan = (): WikiPlanState => ({ spaceId: 'sp1', confirmed: null, draft: null, proposals: [], job: null });
+
+  it('says the System model’s line, from the shared fixture, while the server executes the account', () => {
+    expect(P.WIKI_PLAN_NOTE_SERVER).toBe(served.plan.note);
+    expect(P.wikiPlanCard('noPlan', noPlan(), context(true, 'local-vllm')).note).toBe(served.plan.note);
+    expect(P.wikiPlanCard('noPlan', noPlan(), context(true, null)).note).toBe(served.plan.note);
+    expect(P.wikiPlanEmptyNote('orbit · wikova', 'local-vllm', true)).toBe(served.plan.note);
+    expect(P.wikiPlanEmptyNote(null, null, true)).toBe(served.plan.note);
+  });
+
+  it('says the provider’s line, word for word as before, under runner', () => {
+    expect(P.wikiPlanCard('noPlan', noPlan(), context(false, 'local-vllm')).note).toBe('local-vllm · about 1–2 hours');
+    expect(P.wikiPlanCard('noPlan', noPlan(), context(false, null)).note).toBe('Wiki maintenance · about 1–2 hours');
+    expect(P.wikiPlanEmptyNote('orbit · wikova', 'local-vllm', false)).toBe(plan.counts.emptyNote[0].says);
+    expect(P.wikiPlanEmptyNote(null, null, false)).toBe(plan.counts.emptyNote[1].says);
   });
 });
 

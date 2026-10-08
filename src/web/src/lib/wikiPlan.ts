@@ -94,8 +94,14 @@ export function wikiPlanEmptyText(provider: string | null): string {
     + `and where each section’s material comes from. ${provider ?? WIKI_HISTORY_MAINTENANCE} drafts it; nothing is written until you confirm it.`
   );
 }
-/** Where a draft runs and how long it takes, under Draft plan: `on orbit · wikova with local-vllm`. */
-export function wikiPlanEmptyNote(where: string | null, provider: string | null): string {
+/**
+ * Where a draft runs and how long it takes, under Draft plan: `on orbit · wikova with local-vllm`. While the
+ * server executes the account the wiki-worker drafts it with the System model, so the line is the server's
+ * (owner's call 2026-10-08, mock 35's Plan card): the duration is not touched until P10 measures it.
+ */
+export const WIKI_PLAN_NOTE_SERVER = 'System model · about 1–2 hours';
+export function wikiPlanEmptyNote(where: string | null, provider: string | null, serverExecutes: boolean): string {
+  if (serverExecutes) return WIKI_PLAN_NOTE_SERVER;
   const on = where ? `, on ${where}` : '';
   const with_ = provider ? ` with ${provider}` : '';
   return `Runs as a task in the Wiki maintenance list${on}${with_} — usually 1–2 hours. Until you confirm a plan, the Wiki shows its topic articles.`;
@@ -1508,7 +1514,13 @@ export interface WikiPlanCard {
 export function wikiPlanCard(
   look: WikiPlanLook,
   state: WikiPlanState,
-  context: { now: number; docs: { written: number; total: number } | null; runnerOnline: boolean | null; provider: string | null },
+  context: {
+    now: number;
+    docs: { written: number; total: number } | null;
+    runnerOnline: boolean | null;
+    provider: string | null;
+    serverExecutes: boolean;
+  },
 ): WikiPlanCard {
   const open = wikiPlanOpenJob(state);
   const inForce = state.confirmed ? `v${state.confirmed.version}` : null;
@@ -1609,7 +1621,7 @@ export function wikiPlanCard(
         text: 'No plan yet. A plan lays out this wiki’s documents; until you confirm one, the Wiki shows its topic articles.',
         primary: { label: WIKI_PLAN_DRAFT, to: 'draft' },
         secondary: null,
-        note: `${context.provider ?? WIKI_HISTORY_MAINTENANCE} · about 1–2 hours`,
+        note: context.serverExecutes ? WIKI_PLAN_NOTE_SERVER : `${context.provider ?? WIKI_HISTORY_MAINTENANCE} · about 1–2 hours`,
       };
   }
 }
