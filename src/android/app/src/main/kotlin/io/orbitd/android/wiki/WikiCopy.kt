@@ -16,6 +16,24 @@ internal object WikiCopy {
         "$count proposal${if (count == 1) "" else "s"} from $sessions session${if (sessions == 1) "" else "s"}"
     fun oldest(`when`: String) = "oldest $`when`"
 
+    /** Activity and the number waiting on the owner (design §12.3.2–§12.3.4, §12.3.7): every space's proposals and the
+     * things each plan waits on the owner for; the drawer's Wiki row and the bar's Activity badge show it, and say it the
+     * way the Projects row says its own. */
+    const val activity = "Activity"
+    fun waitingOnYou(count: Int) = "$count waiting on you"
+    /** Beside Recently changed: how many of its rows came after the reader last looked. */
+    fun newSinceLastLooked(count: Int) = "$count new since you last looked"
+    /** The share of Activity's first banner that is another space's: `3 proposals to review · 2 in wikova`. */
+    fun countInSpace(count: Int, space: String) = "· $count in $space"
+    /** After another space's plan banner, which space it is: `Plan draft ready to confirm · in wikova`. */
+    fun inSpace(space: String) = "· in $space"
+    /** After a space's name in the picker, what waits on the owner in it: `wikova · 2 waiting`. */
+    fun spaceWaiting(count: Int) = "· $count waiting"
+    /** The picker's words (mock 31 ④): the way into Wiki settings under the spaces, and each space's documents. */
+    const val manageSpaces = "Manage spaces"
+    fun documentCount(count: Int) = "${WikiArticleCopy.count(count)} ${if (count == 1) "document" else "documents"}"
+    const val noDocuments = "No documents yet"
+
     const val principles = "Principles"
     const val recentDecisions = "Recent decisions"
     const val recentlyChanged = "Recently changed"

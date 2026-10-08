@@ -59,29 +59,40 @@ internal fun rememberMinuteClock(): Instant {
     return now
 }
 
-/** The Wiki section's root: the home page of the space the owner last picked (iOS `WikiHomeView`). */
+/** The Wiki section's root (iOS `WikiHomeView`): the content of the space the reader opened. Its head is drawn at once from
+ * the spaces list the drawer has read; its own reads once they answer, the plan's read beside them (the Contents sheet's
+ * Plan count). What the home used to say of how the wiki is kept — the status line, what waits, the decisions, the
+ * changes, the agents' use — is Activity's, behind the bar's history mark with what waits on the owner on it. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: DirectoryData, nav: WikiNav) {
     val state by store.state.collectAsState()
     val scope = rememberCoroutineScope()
-    val now = rememberMinuteClock()
     var contentsShown by rememberSaveable { mutableStateOf(false) }
     var refreshing by remember { mutableStateOf(false) }
+    /** When the reader last looked, read as the home opens, before its look moves it: what the dots mark. */
+    var seen by remember { mutableStateOf<Double?>(null) }
     // A space a link named (`orbit://wiki/<spaceId>`) is picked once its row is known; the route keeps only the id.
     // A space the account does not have — deleted, or another account's — is said to be unavailable, and no other
     // space's home stands in for it; until the link is settled, nothing is drawn.
     var linkedSpaceApplied by rememberSaveable(route.id) { mutableStateOf(route.id == null) }
     var linkedSpaceMissing by rememberSaveable(route.id) { mutableStateOf(false) }
-    LaunchedEffect(store) { store.loadHome(); store.loadPlan(); store.loadDocsDirectory() }
     LaunchedEffect(state.spaces, route.id) {
         if (linkedSpaceApplied || !state.spacesState.hasLoaded) return@LaunchedEffect
         val linked = state.spaces.firstOrNull { sameWikiId(it.id, route.id) }
         linkedSpaceApplied = true
-        if (linked == null) linkedSpaceMissing = true
-        else if (linked.slug != state.currentSpace?.slug) {
-            store.select(linked.slug); store.loadHome(); store.loadPlan(); store.loadDocsDirectory()
-        }
+        if (linked == null) linkedSpaceMissing = true else store.select(linked.slug)
+    }
+    val space = state.currentSpace
+    // The space on screen, read and looked at: as the home opens, and again when another is picked. What came after the
+    // reader's last look is new, and this look moves the stamp (design §12.3.2, the web home's `readWikiSeen`, then
+    // `moveWikiSeen`).
+    LaunchedEffect(store, space?.slug, linkedSpaceApplied) {
+        // Opened before the drawer read the spaces: the head waits for them, then this runs again.
+        if (space == null) { store.loadSpaces(); return@LaunchedEffect }
+        if (!linkedSpaceApplied || linkedSpaceMissing) return@LaunchedEffect
+        seen = store.seen(space.slug); store.moveSeen(space.slug)
+        wikiHomeLoad(store)
     }
     if (state.disabled) {
         PageBar.Bind(route, title = "")
@@ -95,35 +106,38 @@ internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: Directory
         }
         return
     }
-    // The page's own header carries the title; the bar takes it once the header scrolls away (iOS's large title).
+    if (space == null) {
+        PageBar.Bind(route, title = "")
+        WikiHomePlaceholder(state) { scope.launch { store.loadSpaces() } }
+        return
+    }
+    // The page's own header carries the title; the bar takes it once the header scrolls away (iOS's large title). The
+    // bar's actions are the web head's — Contents, Activity, Settings — and Activity wears the drawer's number.
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val headerOnScreen by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
-    PageBar.Bind(route, title = if (headerOnScreen || state.home == null) "" else WikiCopy.title) {
+    PageBar.Bind(route, title = if (headerOnScreen) "" else WikiCopy.title) {
         BarIcon(R.drawable.ic_contents, WikiArticleCopy.contents, "wiki-bar-contents") { contentsShown = true }
+        WikiActivityButton(state.waiting) { nav.open(OrbitRoute(Destination.WIKI_ACTIVITY)) }
         BarIcon(R.drawable.ic_settings, WikiModeCopy.settings, "wiki-bar-settings") { nav.open(OrbitRoute(Destination.WIKI_SETTINGS)) }
     }
-    val runnerOnline = wikiMaintenanceRunnerOnline(state.currentSpace, data)
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = {
-        scope.launch { refreshing = true; try { store.loadHome(); store.loadPlan() } finally { refreshing = false } }
+        scope.launch { refreshing = true; try { wikiHomeLoad(store) } finally { refreshing = false } }
     }, modifier = Modifier.fillMaxSize().testTag("wiki-home")) {
-        val home = state.home
-        if (home != null) {
-            val plan = state.plan
-            val banner = plan?.let { p -> WikiPlanLogic.look(p, runnerOnline)?.let { look ->
-                val docs = state.docsDirectory?.takeIf { it.plan != null }?.docs?.let { it.written to it.total }
-                WikiPlanLogic.banner(look, p, now, docs, runnerOnline)
-            } }
-            WikiHomePage(home, now, banner, store, nav, listState, openSettings = { nav.open(OrbitRoute(Destination.WIKI_SETTINGS)) }) { slug ->
-                store.select(slug)
-                // iOS reloads only the home here; the plan banner and the docs counts are read again too, so they never speak for the old space.
-                scope.launch { store.loadHome(); store.loadPlan(); store.loadDocsDirectory() }
-            }
-        } else WikiHomePlaceholder(state) { scope.launch { store.loadHome() } }
+        WikiHomePage(space, state, seen, store, nav, listState, retry = { scope.launch { wikiHomeLoad(store) } },
+            // The home reads the space picked as its effect's key changes.
+            pickSpace = store::select, manageSpaces = { nav.open(OrbitRoute(Destination.WIKI_SETTINGS)) })
     }
-    if (contentsShown) WikiContentsSheet(store, WikiContentsAt.Home, runnerOnline, close = { contentsShown = false }) { pick ->
+    if (contentsShown) WikiContentsSheet(store, WikiContentsAt.Home, wikiMaintenanceRunnerOnline(space, data), close = { contentsShown = false }) { pick ->
         // The home is where the reader already is; the rest open as pages.
         if (pick != WikiContentsPick.Home) wikiGo(pick, nav)
     }
+}
+
+/** The home's reads, and the plan's beside them — the count on the Contents' Plan row. */
+private suspend fun wikiHomeLoad(store: WikiStore) = kotlinx.coroutines.coroutineScope {
+    val plan = launch { store.loadPlan() }
+    store.loadHome()
+    plan.join()
 }
 
 /** The Wiki reached on an account the server has not switched the wiki on for — a link, or a page kept from before: the
@@ -133,21 +147,22 @@ internal fun WikiDisabledNote() {
     Box(Modifier.fillMaxSize().testTag("wiki-disabled"), contentAlignment = Alignment.Center) { StatusMessage(WikiCopy.title, WikiCopy.disabledNote) }
 }
 
-/** A spinner, the reason the home could not be read, or — only after a read that succeeded — that there is no space yet. */
+/** What stands where the home would be before there is a space to draw: a spinner, the reason the spaces could not be
+ * read, or — only after a read that succeeded — that there is no space yet. */
 @Composable
 private fun WikiHomePlaceholder(state: WikiState, retry: () -> Unit) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         when {
-            state.homeState.lastLoadFailed -> StatusMessage("The wiki couldn't be loaded", "Check the connection, then try again.", retry)
-            state.homeState.hasLoaded && state.spaces.isEmpty() -> StatusMessage(WikiCopy.title, WikiCopy.noSpaces)
+            state.spacesState.lastLoadFailed -> StatusMessage("The wiki couldn't be loaded", "Check the connection, then try again.", retry)
+            state.spacesState.hasLoaded && state.spaces.isEmpty() -> StatusMessage(WikiCopy.title, WikiCopy.noSpaces)
             else -> LoadingMessage("Loading…")
         }
     }
 }
 
 @Composable
-private fun WikiHomePage(content: WikiHomeContent, now: Instant, planBanner: WikiPlanLogic.Banner?, store: WikiStore,
-    nav: WikiNav, listState: androidx.compose.foundation.lazy.LazyListState, openSettings: () -> Unit, pickSpace: (String) -> Unit) {
+private fun WikiHomePage(space: WikiSpace, state: WikiState, seen: Double?, store: WikiStore, nav: WikiNav,
+    listState: androidx.compose.foundation.lazy.LazyListState, retry: () -> Unit, pickSpace: (String) -> Unit, manageSpaces: () -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     var hits by remember { mutableStateOf<List<WikiSearchHit>>(emptyList()) }
     var searched by rememberSaveable { mutableStateOf("") }
@@ -161,67 +176,29 @@ private fun WikiHomePage(content: WikiHomeContent, now: Instant, planBanner: Wik
         hits = found; searched = text
     }
     fun openEntry(id: String) = nav.entry(id)
+    val principles = WikiLogic.principles(state.principles)
+    val now = rememberMinuteClock()
     LazyColumn(Modifier.fillMaxSize().testTag("wiki-home-list"), state = listState) {
-        item(key = "header") { HomeHeader(content, now, openSettings, { content.health?.maintenance?.lastRun?.sessionId?.let(nav::session) }, pickSpace) }
+        item(key = "header") { HomeHeader(space, state.spaces, pickSpace, manageSpaces) }
         item(key = "search") { SearchField(query) { query = it } }
         if (!searching) {
-            if (content.proposals > 0) item(key = "review-banner") {
-                HomeBanner(WikiCopy.proposalsToReview(content.proposals), amber = true, tag = "wiki-review-banner") { nav.open(OrbitRoute(Destination.WIKI_REVIEW)) }
-            }
-            if (planBanner != null) item(key = "plan-banner") {
-                HomeBanner(planBanner.text, amber = planBanner.amber, tag = "wiki-plan-banner") {
-                    nav.open(OrbitRoute(if (planBanner.toSettings) Destination.WIKI_SETTINGS else Destination.WIKI_PLAN))
+            if (state.homeLoading) {
+                if (state.homeState.lastLoadFailed) item(key = "failed") {
+                    StatusMessage("The wiki couldn't be loaded", "Check the connection, then try again.", retry)
                 }
-            }
-            item(key = "principles") {
-                WikiBandHeader(WikiCopy.principles, content.principles.size, badge = if (content.principlesAllOwner) WikiCopy.trustLabel("owner") else null)
-            }
-            if (content.principles.isEmpty()) item(key = "principles-empty") { WikiEmptyLine(WikiCopy.noPrinciples) }
-            items(content.principles, key = { "principle:${it.id}" }) { entry ->
-                WikiRowButton("wiki-entry:${entry.id}", onClick = { openEntry(entry.id) }) {
-                    WikiRowLabel(entry.displayTitle, WikiDate.relative(entry.validFrom, now), entry.summary, struck = entry.isEnded)
+            } else {
+                item(key = "principles") {
+                    WikiBandHeader(WikiCopy.principles, principles.size,
+                        badge = if (principles.isNotEmpty() && principles.all { it.trust == "owner" }) WikiCopy.trustLabel("owner") else null)
                 }
-            }
-            item(key = "decisions") { WikiBandHeader(WikiCopy.recentDecisions, content.recentDecisions.size) }
-            if (content.recentDecisions.isEmpty()) item(key = "decisions-empty") { WikiEmptyLine(WikiCopy.noDecisions) }
-            items(content.recentDecisions, key = { "decision:${it.id}" }) { entry ->
-                val line = listOf(WikiCopy.statusLabel(entry.status), entry.summary ?: "").filter { it.isNotEmpty() }.joinToString(" · ")
-                WikiRowButton("wiki-entry:${entry.id}", onClick = { openEntry(entry.id) }) {
-                    WikiRowLabel(entry.displayTitle, WikiDate.monthDay(entry.validFrom), line, struck = entry.isEnded)
-                }
-            }
-            item(key = "changed") { WikiBandHeader(WikiCopy.recentlyChanged) }
-            if (content.timeline.isEmpty()) item(key = "changed-empty") { WikiEmptyLine(WikiCopy.noChanges) }
-            else items(content.recentRows, key = { it.id }) { row ->
-                when (row) {
-                    is WikiModeLogic.RecentRow.Op -> ChangeRow(row.item, now) { row.item.entryId?.let(::openEntry) }
-                    is WikiModeLogic.RecentRow.Run -> {
-                        val summary = content.run(row.changesetId)?.let(WikiModeLogic::runSummary)
-                        val line = (listOf(WikiModeCopy.appliedChanges(summary?.applied ?: row.items.size)) +
-                            (summary?.let(WikiModeLogic::runCounts) ?: emptyList())).joinToString(" · ")
-                        WikiRowButton("wiki-run:${row.changesetId}", onClick = { nav.open(OrbitRoute(Destination.WIKI_RUN, row.changesetId)) }) {
-                            WikiRowLabel(WikiModeCopy.originWord(row.origin), WikiDate.relative(row.at, now), line)
-                        }
+                if (principles.isEmpty()) item(key = "principles-empty") { WikiEmptyLine(WikiCopy.noPrinciples) }
+                items(principles, key = { "principle:${it.id}" }) { entry ->
+                    WikiRowButton("wiki-entry:${entry.id}", onClick = { openEntry(entry.id) }) {
+                        WikiRowLabel(entry.displayTitle, WikiDate.relative(entry.validFrom, now), entry.summary, struck = entry.isEnded,
+                            dot = seen?.let { if (WikiSeenLog.isNew(entry.validFrom, it)) wikiNewDot(true) else null })
                     }
                 }
             }
-            item(key = "agents") { WikiBandHeader(WikiCopy.agentsUsed, hint = WikiCopy.agentsUsedHint) }
-            val usage = content.space.usage
-            if (content.usedThisWeek && usage != null) {
-                item(key = "usage-stats") {
-                    Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                        Stat(usage.sessionsPushed ?: 0, WikiCopy.sessionsReceived); Stat(usage.searches ?: 0, WikiCopy.searches)
-                    }
-                }
-                items(content.mostUsed, key = { "used:${it.entryId}" }) { used ->
-                    WikiRowButton("wiki-used:${used.entryId}", onClick = { openEntry(used.entryId) }) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(used.title ?: used.entryId, Modifier.weight(1f), style = WikiType.prose, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("${used.total ?: 0}×", style = WikiType.label, color = WikiPalette.secondary)
-                        }
-                    }
-                }
-            } else item(key = "usage-empty") { WikiEmptyLine(WikiCopy.noAgentsYet) }
             item(key = "end") { Spacer(Modifier.height(24.dp)) }
         } else {
             if (hits.isEmpty() && searched == query && query.isNotEmpty()) item(key = "no-results") {
@@ -236,41 +213,78 @@ private fun WikiHomePage(content: WikiHomeContent, now: Instant, planBanner: Wik
     }
 }
 
-/** Title and space on one row (the web's page head), and the status line under them. */
+/** The title and the space on one row — the web's page head. */
 @Composable
-private fun HomeHeader(content: WikiHomeContent, now: Instant, openSettings: () -> Unit, openRun: () -> Unit, pickSpace: (String) -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(WikiCopy.title, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.headlineLarge)
-            SpacePicker(content, pickSpace)
-        }
-        Text(wikiStatusText(content.statusParts(now), openSettings, openRun), Modifier.testTag("wiki-status-line"),
-            style = WikiType.label, color = WikiPalette.secondary)
+private fun HomeHeader(space: WikiSpace, spaces: List<WikiSpace>, pickSpace: (String) -> Unit, manageSpaces: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(WikiCopy.title, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.headlineLarge)
+        WikiSpacePicker(space, spaces, pickSpace, manageSpaces)
     }
 }
 
-/** The space as a capsule beside the title: a menu of every space, the current one ticked, each with its repository. */
+/** The space beside the title, by the name a reader knows it by (design §12.3.4, mock 31 ④; iOS `WikiSpacePicker`): with
+ * one space a grey label and no control; with several a menu of every space, the current one ticked — its name, the
+ * repository and its documents under it, what waits in it as the amber number — and Manage spaces at the foot, into Wiki
+ * settings. */
 @Composable
-private fun SpacePicker(content: WikiHomeContent, pickSpace: (String) -> Unit) {
+internal fun WikiSpacePicker(space: WikiSpace, spaces: List<WikiSpace>, pick: (String) -> Unit, manage: () -> Unit) {
+    val names = WikiSpaceLogic.names(spaces)
+    val name = names[space.id] ?: space.title ?: space.slug
+    val capsule = Modifier.background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f), CircleShape)
+    if (spaces.size < 2) {
+        // The name is its own text: as a state as well, TalkBack read it twice.
+        Box(capsule.padding(horizontal = 12.dp, vertical = 6.dp).testTag("wiki-space-picker")
+            .semantics(mergeDescendants = true) { contentDescription = WikiCopy.spacePickerHint }) {
+            Text(name, style = WikiType.label, color = WikiPalette.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        return
+    }
     var expanded by remember { mutableStateOf(false) }
     Box {
-        Row(Modifier.background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f), CircleShape).clickable(role = Role.Button) { expanded = true }
-            .heightIn(min = 36.dp).padding(horizontal = 12.dp, vertical = 6.dp).testTag("wiki-space-picker")
-            // The slug is its own text: as a state as well, TalkBack read it twice.
-            .semantics(mergeDescendants = true) { contentDescription = WikiCopy.spacePickerHint },
+        Row(capsule.clickable(role = Role.Button) { expanded = true }.heightIn(min = 36.dp).padding(horizontal = 12.dp, vertical = 6.dp)
+            .testTag("wiki-space-picker").semantics(mergeDescendants = true) { contentDescription = WikiCopy.spacePickerHint },
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(content.space.slug, style = WikiType.label.copy(fontWeight = FontWeight.SemiBold), maxLines = 1)
+            Text(name, Modifier.weight(1f, fill = false), style = WikiType.label.copy(fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Icon(painterResource(R.drawable.ic_chevron_updown), null, Modifier.size(14.dp))
         }
         DropdownMenu(expanded, { expanded = false }) {
-            content.spaces.forEach { space ->
-                val current = space.id == content.space.id
-                DropdownMenuItem(modifier = Modifier.testTag("wiki-space:${space.slug}"),
+            WikiSpaceLogic.menuRows(spaces, names).forEach { row ->
+                val current = row.id == space.id
+                DropdownMenuItem(modifier = Modifier.testTag("wiki-space:${row.slug}").semantics { selected = current },
                     leadingIcon = { if (current) Icon(painterResource(R.drawable.ic_check), null) else Spacer(Modifier.size(24.dp)) },
-                    text = { Column { Text(space.slug); space.repoUrlNorm?.let { Text(it, style = WikiType.label, color = WikiPalette.secondary) } } },
-                    onClick = { expanded = false; if (!current) pickSpace(space.slug) })
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(row.name)
+                            Text(row.subtitle(sayWaiting = false), style = WikiType.label, color = WikiPalette.secondary)
+                        }
+                    },
+                    trailingIcon = if (row.waiting > 0) ({ WikiWaitingBadge(row.waiting, WikiCopy.spaceWaiting(row.waiting).removePrefix("· ")) }) else null,
+                    onClick = { expanded = false; if (!current) pick(row.slug) })
             }
+            HorizontalDivider()
+            DropdownMenuItem(modifier = Modifier.testTag("wiki-space-manage"), text = { Text(WikiCopy.manageSpaces) },
+                leadingIcon = { Icon(painterResource(R.drawable.ic_settings), null) }, onClick = { expanded = false; manage() })
         }
+    }
+}
+
+/** What waits on the owner as an amber number in a circle — said in [words] to TalkBack. */
+@Composable
+internal fun WikiWaitingBadge(count: Int, words: String) {
+    Text("$count", Modifier.background(Color(0xFFFF9500), CircleShape).padding(horizontal = 6.dp, vertical = 1.dp)
+        .semantics { contentDescription = words }, color = Color.White, style = WikiType.meta.copy(fontWeight = FontWeight.SemiBold))
+}
+
+/** The bar's way into Activity (design §12.3.2): the history mark, with the drawer's orange number in its corner — what
+ * waits on the owner across every space — and nothing at zero; TalkBack says "Activity" and the number in words. */
+@Composable
+internal fun WikiActivityButton(waiting: Int, onClick: () -> Unit) {
+    IconButton(onClick = onClick, modifier = Modifier.testTag("wiki-bar-activity")
+        .semantics { if (waiting > 0) stateDescription = WikiCopy.waitingOnYou(waiting) }) {
+        BadgedBox(badge = {
+            if (waiting > 0) Badge(Modifier.testTag("wiki-bar-activity-badge").clearAndSetSemantics {}, containerColor = Color(0xFFFF9500),
+                contentColor = Color.White) { Text("$waiting") }
+        }) { Icon(painterResource(R.drawable.ic_history), WikiCopy.activity) }
     }
 }
 
@@ -299,35 +313,3 @@ private fun SearchField(query: String, change: (String) -> Unit) {
     }
 }
 
-/** The needs-you bar's shape: a wash, the dot, the words and a chevron — the whole bar one press. */
-@Composable
-private fun HomeBanner(text: String, amber: Boolean, tag: String, onClick: () -> Unit) {
-    val dot = if (amber) Color(0xFFFF9500) else MaterialTheme.colorScheme.primary
-    // Its words are its own text: a label repeating them made TalkBack read the bar twice.
-    Row(Modifier.fillMaxWidth().background(if (amber) WikiPalette.amberWash else MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
-        .clickable(role = Role.Button, onClick = onClick).heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 10.dp).testTag(tag),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-        Box(Modifier.size(7.dp).background(dot, CircleShape))
-        Text(text, Modifier.weight(1f), style = WikiType.prose, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.size(14.dp), tint = WikiPalette.secondary)
-    }
-}
-
-/** One change: the entry, when, and what happened to it, with the mark a review mode applied it with. */
-@Composable
-private fun ChangeRow(item: WikiTimelineItem, now: Instant, onClick: () -> Unit) {
-    val ended = item.status == "retired" || item.status == "superseded" || item.status == "rejected"
-    val line = listOf(WikiLogic.changeVerb(item), WikiCopy.kindLabel(item.kind)).filter { it.isNotEmpty() }.joinToString(" · ")
-    val marked = item.appliedByMode != null && !ended && (item.trust == "auto" || item.trust == "unreviewed")
-    WikiRowButton("wiki-change:${item.opId}", enabled = item.entryId != null, onClick = onClick) {
-        WikiRowLabel(item.title ?: "—", WikiDate.relative(item.at, now), line, WikiLogic.changeNote(item), ended, if (marked) item.trust else null)
-    }
-}
-
-@Composable
-private fun Stat(value: Int, label: String) {
-    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-        Text("$value", style = WikiType.subtext.copy(fontWeight = FontWeight.SemiBold))
-        Text(label, style = WikiType.label, color = WikiPalette.secondary)
-    }
-}

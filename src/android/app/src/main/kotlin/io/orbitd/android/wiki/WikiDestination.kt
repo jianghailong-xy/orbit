@@ -84,6 +84,7 @@ fun WikiDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRo
       Box(Modifier.fillMaxWidth().weight(1f)) {
         when (route.destination) {
             Destination.WIKI -> WikiHomeScreen(store, route, data, nav)
+            Destination.WIKI_ACTIVITY -> WikiActivityScreen(store, route, data, nav)
             Destination.WIKI_ENTRY -> WikiEntryScreen(store, route, data, nav)
             Destination.WIKI_REVIEW -> WikiReviewScreen(store, route, data, nav)
             Destination.WIKI_RUN -> WikiRunScreen(store, route, nav)
@@ -115,15 +116,36 @@ fun WikiDrawerRow(app: OrbitApplication, handle: SessionHandle, drawerOpen: Bool
     if (state.shown) row()
 }
 
-/** The drawer's Wiki row's amber number: the proposals waiting for review, summed over every space — the home
- * banner's and Review's own count — and nothing at zero (iOS `CompactShell.wikiRow`). The drawer reads the spaces
- * it counts each time it opens ([WikiDrawerRow]); deciding a proposal, not opening the Wiki, is what lowers it. */
+/** The drawer's Wiki row's amber number: what waits on the owner across every space — the proposals in Review and what
+ * each plan waits for (design §12.3.3) — the web sidebar's count and the Wiki bar's Activity badge, written and said the
+ * way the Projects row writes and says its own ("3 waiting on you"), and nothing at all at zero (iOS
+ * `CompactShell.wikiRow`). The drawer reads the spaces it counts each time it opens ([WikiDrawerRow]); opening the Wiki
+ * never clears it: only answering what waits does. */
 @Composable
 fun WikiDrawerCount(app: OrbitApplication, handle: SessionHandle) {
     val store = remember(handle) { WikiStore.of(app.session, handle, app.processScope) }
     val state by store.state.collectAsState()
-    val waiting = state.proposalsToReview
+    val waiting = state.waiting
     if (waiting > 0) androidx.compose.material3.Text("$waiting", color = androidx.compose.ui.graphics.Color(0xFFFF9500),
         style = androidx.compose.material3.MaterialTheme.typography.labelSmall.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
-        modifier = Modifier.testTag("wiki-drawer-count").semantics { contentDescription = WikiCopy.proposalsToReview(waiting) })
+        modifier = Modifier.testTag("wiki-drawer-count").semantics { contentDescription = WikiCopy.waitingOnYou(waiting) })
+}
+
+/** Where the reader is as they come into the Wiki (iOS `WikiSpaceLogic.workspaceInView`, design §12.3.4): the workspace
+ * whose session list the section shows, or — on a project's page, or a page opened over it — the project, whose
+ * coordinator's workspace the store reads; nowhere on a page that is neither (the Projects or Tasks list), which leaves
+ * the choice to the space last looked at. */
+internal data class WikiFrom(val workspaceId: String? = null, val projectId: String? = null)
+
+internal fun wikiFrom(navigation: OrbitNavigation): WikiFrom {
+    val frames = navigation.frames
+    frames.lastOrNull { it.destination == Destination.PROJECT && it.id != null }?.let { return WikiFrom(projectId = it.id) }
+    val root = frames.firstOrNull() ?: return WikiFrom()
+    return if (root.destination == Destination.WORKSPACE) WikiFrom(workspaceId = root.id ?: root.workspaceId) else WikiFrom()
+}
+
+/** The drawer's Wiki row pressed from another section: the Wiki opens the space bound to where the reader was
+ * ([WikiStore.open]), as iOS's `selectedSection` does on its way into the Wiki. */
+fun wikiEntered(app: OrbitApplication, handle: SessionHandle, navigation: OrbitNavigation) {
+    WikiStore.of(app.session, handle, app.processScope).open(wikiFrom(navigation))
 }

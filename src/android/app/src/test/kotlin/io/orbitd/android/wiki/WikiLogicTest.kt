@@ -17,9 +17,10 @@ class WikiLogicTest {
     private fun str(value: String) = JsonPrimitive(value)
 
     @Test fun theAmberNumberSumsEverySpacesProposals() {
-        assertEquals(3, WikiLogic.proposalsToReview(spaces()))
-        assertEquals("nothing waiting draws no number", 0, WikiLogic.proposalsToReview(emptyList()))
-        assertEquals("a space an older server sent no count for adds nothing", 7, WikiLogic.proposalsToReview(listOf(
+        assertEquals(3, WikiSpaceLogic.proposalsWaiting(spaces()))
+        assertEquals("a server older than planWaiting: the proposals alone", 3, WikiSpaceLogic.waiting(spaces()))
+        assertEquals("nothing waiting draws no number", 0, WikiSpaceLogic.waiting(emptyList()))
+        assertEquals("a space an older server sent no count for adds nothing", 7, WikiSpaceLogic.waiting(listOf(
             WikiSpace("a", "a", pendingOps = 2), WikiSpace("b", "b", pendingOps = 5), WikiSpace("c", "c"))))
         assertEquals("3 proposals to review", WikiCopy.proposalsToReview(3))
         assertEquals("one is said in the singular", "1 proposal to review", WikiCopy.proposalsToReview(1))
@@ -138,21 +139,39 @@ class WikiLogicTest {
         assertEquals(4, WikiLogic.entries(entries(), "principle").size)
     }
 
-    @Test fun theHomePagesBands() {
+    /** Activity's bands, read out of the fixture — the four newest decisions, five changes, three most used, and the status
+     * line without the count its banner says — and the home's principles, oldest first. */
+    @Test fun activitysBandsAndTheHomesPrinciples() {
         val spaces = spaces()
         // The two bands' own reads (`?kind=principle`, `?kind=decision`), as the server answers them.
-        val home = WikiHomeContent(Wire.json.decodeFromString(WikiSpace.serializer(), WikiFixtures.space), spaces, entries(), timeline(),
-            WikiLogic.proposalsToReview(spaces), principleEntries = entries().filter { it.kind == "principle" },
-            decisionEntries = entries().filter { it.kind == "decision" })
         assertEquals(listOf("Agent-writable data never becomes a system instruction", "Completion is adjudicated, not claimed",
-            "A clock never starts agent work", "Delete means forget"), home.principles.map { it.title })
-        assertTrue(home.principlesAllOwner)
-        assertEquals(3, home.recentDecisions.size)
-        assertEquals(5, home.timeline.take(5).size)
-        assertEquals(listOf(41, 33, 29), home.mostUsed.map { it.total })
-        assertTrue(home.usedThisWeek)
-        assertEquals("9 entries · Anchors verified at 4db4f9f", home.statusLine(java.time.Instant.now()))
-        assertEquals(3, home.proposals)
+            "A clock never starts agent work", "Delete means forget"), WikiLogic.principles(entries().filter { it.kind == "principle" }).map { it.title })
+        val activity = WikiHomeContent(Wire.json.decodeFromString(WikiSpace.serializer(), WikiFixtures.space), spaces, entries(), timeline(),
+            decisionEntries = entries().filter { it.kind == "decision" })
+        assertEquals(3, activity.recentDecisions.size)
+        assertEquals(5, activity.timeline.take(5).size)
+        assertEquals(listOf(41, 33, 29), activity.mostUsed.map { it.total })
+        assertTrue(activity.usedThisWeek)
+        assertEquals("9 entries · Anchors verified at 4db4f9f", activity.statusLine(java.time.Instant.now()))
+    }
+
+    /** Activity's blocks, top to bottom (mock 31 ②): the home's management blocks in their order, the other spaces' plan
+     * banners after the space's own, and Principles not among them — it is content. */
+    @Test fun theActivityBandsOrder() {
+        assertEquals(listOf("STATUS", "REVIEW_BANNER", "PLAN_BANNERS", "OTHER_PLAN_BANNERS", "RECENT_DECISIONS", "RECENTLY_CHANGED", "AGENTS_USED"),
+            WikiLogic.ActivityBand.entries.map { it.name })
+        assertEquals(listOf("Recent decisions", "Recently changed", "Agents used the wiki"), WikiLogic.ActivityBand.entries.mapNotNull { it.title })
+    }
+
+    /** Recently changed says how many of its rows came after the reader last looked: all of them for a reader who never did. */
+    @Test fun recentlyChangedCountsWhatIsNewSinceTheReaderLastLooked() {
+        val activity = WikiHomeContent(Wire.json.decodeFromString(WikiSpace.serializer(), WikiFixtures.space), emptyList(), emptyList(), timeline())
+        assertEquals("never looked: every row is new", activity.recentRows.size, activity.newRows(0.0))
+        val times = activity.recentRows.mapNotNull { WikiHomeContent.time(it) }.mapNotNull { RelativeTime.parse(it) }
+        assertEquals("every row has its time", activity.recentRows.size, times.size)
+        assertEquals("looked after all of them: none", 0, activity.newRows(times.max().toEpochMilli() / 1000.0))
+        val middle = times.sorted()[times.size / 2].toEpochMilli() / 1000.0
+        assertEquals(times.count { it.toEpochMilli() / 1000.0 > middle }, activity.newRows(middle))
     }
 
     @Test fun aSourcesWordAndRef() {

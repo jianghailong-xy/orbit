@@ -96,6 +96,10 @@ internal class WikiClient(private val api: OrbitApi, private val handle: Session
             putJsonArray("refs") { refs.forEach { (kind, id) -> add(buildJsonObject { put("kind", kind); put("id", id) }) } }
         })["previews"] as? JsonArray ?: JsonArray(emptyList())
 
+    /** `GET /projects/:id`: the workspace the project's coordinator runs in — the space the Wiki opens from the project's
+     * pages is the one bound to it (design §12.3.4). Null from a server that did not say. */
+    suspend fun coordinatorWorkspace(projectId: String): String? = json(listOf("projects", projectId))["coordinatorWorkspaceId"].text()
+
     /** The options a maintenance form offers: the account's workspaces and runners, and its providers. */
     suspend fun workspaces(): JsonArray = json(listOf("workspaces")) as? JsonArray ?: JsonArray(emptyList())
     suspend fun runners(): JsonArray = json(listOf("runners")) as? JsonArray ?: JsonArray(emptyList())

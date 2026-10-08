@@ -87,6 +87,13 @@ data class WikiSpace(
     val id: String, val slug: String, val title: String? = null, val repoUrlNorm: String? = null, val rootCommitSha: String? = null,
     val settings: WikiSpaceSettings? = null, val createdAt: String? = null, val updatedAt: String? = null,
     val pendingOps: Int? = null, val usage: WikiUsage? = null,
+    /** What of the space's plan waits on the owner (`planWaiting`, c6e66aaef): the drawer's number counts it beside the
+     * proposals. Absent from an older server, which then counts the proposals alone. */
+    val planWaiting: Int? = null,
+    /** The live workspaces bound to the space, in bind order: the space the Wiki opens from one of them. */
+    val workspaceIds: List<String>? = null,
+    /** The confirmed plan's documents and how many are written; null while the space has no confirmed plan. */
+    val docs: WikiDocsDirectory.Counts? = null,
 )
 
 // MARK: an entry

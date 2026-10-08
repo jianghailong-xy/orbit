@@ -4,6 +4,9 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -62,8 +65,8 @@ class WikiTalkBackWordsTest {
         assertTrue("$where: presses TalkBack reads twice: $twice", twice.isEmpty())
     }
 
-    /** The home: the review banner and the space picker say each of their words once (TalkBack read the banner twice,
-     * and the space's slug as a state and again as its text). */
+    /** The home and Activity: the space picker, the bar's Activity with its number, and the review banner say each of their
+     * words once (TalkBack read the banner twice, and the space's slug as a state and again as its text). */
     @Test fun theHomesPressesSayTheirWordsOnce() {
         val space = WikiFixtures.spaceID
         val rig = WikiTestRig { api ->
@@ -76,12 +79,22 @@ class WikiTalkBackWordsTest {
                 else -> null
             }
         }
+        val store = rig.store()
         val route = OrbitRoute(Destination.WIKI)
-        show(route) { WikiHomeScreen(rig.store(), route, DirectoryData(), WikiNavRecord().nav) }
+        var page by mutableStateOf(route)
+        show(null) {
+            Row { PageBar.Actions(page, this) }
+            if (page.destination == Destination.WIKI) WikiHomeScreen(store, page, DirectoryData(), WikiNavRecord().nav)
+            else WikiActivityScreen(store, page, DirectoryData(), WikiNavRecord().nav)
+        }
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-home-list").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("wiki-space-picker").assert(hasContentDescription(WikiCopy.spacePickerHint)).assertTextContains("orbit")
+        compose.onNodeWithTag("wiki-bar-activity").assert(hasContentDescription(WikiCopy.activity)).assert(hasStateDescription("3 waiting on you"))
+        assertTalkBackReadsWords("home")
+        page = OrbitRoute(Destination.WIKI_ACTIVITY)
         compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-review-banner").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-review-banner").assertTextContains("proposals to review", substring = true)
-        compose.onNodeWithTag("wiki-space-picker").assert(hasContentDescription(WikiCopy.spacePickerHint)).assertTextContains("orbit")
-        assertTalkBackReadsWords("home")
+        assertTalkBackReadsWords("activity")
     }
     private fun labelled(tag: String, label: String) = compose.onNodeWithTag(tag).assert(hasContentDescription(label))
 

@@ -50,6 +50,10 @@ internal object WikiShell {
     @Volatile var entries: List<JsonObject> = fixtureEntries()
     /** `GET /wiki/review` before any decide. */
     @Volatile var reviewQueue: String = WikiFixtures.review
+    /** `GET /wiki/spaces/:id/plan` by space id; a space with none answers 404, as a server from before the plan. */
+    @Volatile var plans: Map<String, String> = emptyMap()
+    /** `GET /workspaces`: the directory's workspaces. */
+    @Volatile var workspaces: String = "[]"
     @Volatile private var frames = Channel<String>(Channel.UNLIMITED)
     @Volatile private var opened = 0
 
@@ -57,6 +61,7 @@ internal object WikiShell {
         calls.clear(); ended.clear(); gates.clear(); decided.clear()
         decision = "accepted"; watchState = "ACTIVE"; pauseRefusal = null
         wikiDisabled = false; spaces = WikiFixtures.spaces; entries = fixtureEntries(); reviewQueue = WikiFixtures.review
+        plans = emptyMap(); workspaces = "[]"
         frames = Channel(Channel.UNLIMITED); opened = 0
     }
 
@@ -140,6 +145,9 @@ internal object WikiShell {
             path == "wiki/spaces/$SPACE" -> ok(WikiFixtures.space)
             path == "wiki/spaces/$OTHER_SPACE" -> ok(otherSpace())
             path.endsWith("/entries") && path.startsWith("wiki/spaces/") -> ok(listEntries(entries, api.query))
+            path.startsWith("wiki/spaces/") && path.endsWith("/plan") -> plans[api.path[2]]?.let(::ok) ?: plans[path.split('/')[2]]?.let(::ok)
+                ?: status(404, """{"message":"not found"}""")
+            path == "workspaces" -> ok(workspaces)
             path.endsWith("/timeline") -> ok(WikiFixtures.timeline)
             path.endsWith("/docs") -> ok(docs.obj("directory").obj("read").toString())
             path.endsWith("/docs/$DOC") -> ok(docs.obj("doc").obj("read").toString())

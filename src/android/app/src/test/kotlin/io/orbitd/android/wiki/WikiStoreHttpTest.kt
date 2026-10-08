@@ -123,20 +123,29 @@ class WikiStoreHttpTest {
 
     @After fun close() { scope.cancel(); authority.close() }
 
-    @Test fun homeReadsTheSpaceThenItsFourReadsAndEveryRunItFolds() = runBlocking {
+    @Test fun activityReadsTheSpaceThenItsFiveReadsAndEveryRunItFolds() = runBlocking {
         val store = store()
-        store.loadHome()
+        store.loadActivity()
         val reads = authority.calls.map { it.first }
         listOf("GET wiki/spaces", "GET wiki/spaces/$space?include=usage", "GET wiki/spaces/$space/entries?limit=200",
-            "GET wiki/spaces/$space/timeline", "GET wiki/spaces/$space/health", "GET wiki/changesets/$run").forEach {
+            "GET wiki/spaces/$space/entries?kind=decision&limit=4", "GET wiki/spaces/$space/timeline", "GET wiki/spaces/$space/health",
+            "GET wiki/changesets/$run").forEach {
             assertTrue("missing $it in $reads", it in reads)
         }
-        val home = store.state.value.home!!
-        assertEquals(4, home.proposals)
-        assertEquals(12, home.health!!.entries)
-        assertEquals(listOf(run), home.recentRunIds)
-        assertEquals(2, WikiModeLogic.runSummary(home.run(run)!!).applied)
-        assertEquals(LoadPresentation.CONTENT, presentation(store.state.value.homeState, false))
+        val activity = store.state.value.activity!!
+        assertEquals(12, activity.health!!.entries)
+        assertEquals(listOf(run), activity.recentRunIds)
+        assertEquals(2, WikiModeLogic.runSummary(activity.run(run)!!).applied)
+        assertEquals(LoadPresentation.CONTENT, presentation(store.state.value.activityState, false))
+        assertEquals("the drawer's number: every space's proposals", 4, store.state.value.waiting)
+    }
+
+    @Test fun theHomeReadsItsPrinciplesByKind() = runBlocking {
+        val store = store()
+        store.loadHome()
+        assertTrue(authority.calls.map { it.first }.contains("GET wiki/spaces/$space/entries?kind=principle&limit=200"))
+        assertEquals(space, store.state.value.homeSpaceId)
+        assertFalse(store.state.value.homeLoading)
     }
 
     @Test fun searchAsksTheSpaceOnScreenForTopics() = runBlocking {

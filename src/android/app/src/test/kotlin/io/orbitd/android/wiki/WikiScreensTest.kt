@@ -96,27 +96,46 @@ class WikiScreensTest {
         } } }
     }
 
-    @Test fun theHomeDrawsTheSpaceItsBandsAndWhereEachRowGoes() {
+    @Test fun theHomeDrawsTheSpaceItsPrinciplesAndWhereItsBarGoes() {
         val route = OrbitRoute(Destination.WIKI, origin = Origin.DRAWER)
         show(route) { WikiHomeScreen(it, route, DirectoryData(), nav) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-status-line").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-home-list").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-space-picker").assertTextContains("orbit")
+        listOf("Agent-writable data never becomes a system instruction", "Completion is adjudicated, not claimed",
+            "A clock never starts agent work", "Delete means forget").forEach {
+            compose.waitUntil(5_000) { runCatching { compose.onNodeWithTag("wiki-home-list").performScrollToNode(hasText(it)) }.isSuccess }
+        }
+        // The principles by their kind; what Activity draws is not the home's to read.
+        assertTrue(sent.any { it.first == "GET wiki/spaces/$space/entries" })
+        assertTrue(sent.none { it.first == "GET wiki/spaces/$space/timeline" })
+        compose.onNodeWithText("A clock never starts agent work").performClick()
+        // The bar: Contents, Activity — with the number waiting on the owner — and Settings.
+        compose.onNodeWithTag("wiki-bar-contents").assertExists()
+        compose.onNodeWithTag("wiki-bar-activity").assert(hasStateDescription("3 waiting on you")).performClick()
+        compose.onNodeWithTag("wiki-bar-settings").performClick()
+        assertEquals(listOf(OrbitRoute(Destination.WIKI_ENTRY, WikiFixtures.principleID), OrbitRoute(Destination.WIKI_ACTIVITY),
+            OrbitRoute(Destination.WIKI_SETTINGS)), opened)
+    }
+
+    @Test fun activityDrawsWhatTheHomeUsedToSayAndWhereEachRowGoes() {
+        val route = OrbitRoute(Destination.WIKI_ACTIVITY)
+        show(route) { WikiActivityScreen(it, route, DirectoryData(), nav) }
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-status-line").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-status-line").assertTextEquals("9 entries · Anchors verified at 4db4f9f")
         compose.onNodeWithTag("wiki-review-banner").assertTextContains("3 proposals to review", substring = true)
-        listOf("Agent-writable data never becomes a system instruction", "A clock never starts agent work", "Delete means forget",
-            "Task priority is a field on the task, not a dispatcher session", "Headless Chromium needs --window-size=393").forEach {
-            compose.onNodeWithTag("wiki-home-list").performScrollToNode(hasText(it))
+        listOf("Task priority is a field on the task, not a dispatcher session", "Delete means forget", "Headless Chromium needs --window-size=393",
+            "Agents used the wiki").forEach {
+            compose.onNodeWithTag("wiki-activity-list").performScrollToNode(hasText(it))
         }
-        compose.onNodeWithTag("wiki-home-list").performScrollToIndex(0)
-        // Each read the home is drawn from.
+        compose.onNodeWithTag("wiki-activity-list").performScrollToIndex(0)
+        // Each read Activity is drawn from.
         listOf("GET wiki/spaces", "GET wiki/spaces/$space", "GET wiki/spaces/$space/entries", "GET wiki/spaces/$space/timeline")
             .forEach { request -> assertTrue("missing $request", sent.any { it.first == request }) }
         compose.onNodeWithTag("wiki-review-banner").performClick()
-        compose.onNodeWithTag("wiki-home-list").performScrollToNode(hasText("A clock never starts agent work"))
-        compose.onNodeWithText("A clock never starts agent work").performClick()
-        compose.onNodeWithTag("wiki-bar-settings").performClick()
-        assertEquals(listOf(OrbitRoute(Destination.WIKI_REVIEW), OrbitRoute(Destination.WIKI_ENTRY, WikiFixtures.principleID),
-            OrbitRoute(Destination.WIKI_SETTINGS)), opened)
+        compose.onNodeWithTag("wiki-activity-list").performScrollToNode(hasText("Task priority is a field on the task, not a dispatcher session"))
+        compose.onNodeWithText("Task priority is a field on the task, not a dispatcher session").performClick()
+        assertEquals(OrbitRoute(Destination.WIKI_REVIEW), opened[0])
+        assertEquals(Destination.WIKI_ENTRY, opened[1].destination)
     }
 
     @Test fun searchFindsEntriesUnderTheTitleAndSaysWhenNothingMatches() {

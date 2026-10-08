@@ -105,7 +105,27 @@ internal data class WikiDiffHunk(val label: String, val lines: List<Line>) {
 }
 
 internal object WikiLogic {
-    fun proposalsToReview(spaces: List<WikiSpace>) = spaces.sumOf { maxOf(0, it.pendingOps ?: 0) }
+    // MARK: the home's principles
+
+    /** How many principles the home reads: the most one read answers, far above any space's own rules (`PRINCIPLES_READ`). */
+    const val PRINCIPLES_READ = 200
+
+    /** The home's principles, from their own read (`?kind=principle`): every one, of any status, oldest recorded first —
+     * the owner's rules do not reshuffle as the space fills up. Never picked out of the newest 200 entries of every kind:
+     * a space holds thousands, and its principles are among the oldest of them. */
+    fun principles(entries: List<WikiEntry>): List<WikiEntry> = entries.filter { it.kind == "principle" }
+        .sortedBy { RelativeTime.parse(it.recordedAt) ?: Instant.MIN }
+
+    // MARK: Activity
+
+    /** Activity's blocks, top to bottom (design §12.3.2, mock 31 ②) — the home's management blocks, moved in their order,
+     * as the web's `WikiActivityPage.tsx` draws them: the status line, the proposals' banner, the space's plan banners,
+     * the other spaces' plan banners that wait on the owner, Recent decisions, Recently changed and Agents used the wiki
+     * (OrbitKit `WikiLogic.ActivityBand`). The page lays its rows out in this order. */
+    enum class ActivityBand(val title: String?) {
+        STATUS(null), REVIEW_BANNER(null), PLAN_BANNERS(null), OTHER_PLAN_BANNERS(null),
+        RECENT_DECISIONS(WikiCopy.recentDecisions), RECENTLY_CHANGED(WikiCopy.recentlyChanged), AGENTS_USED(WikiCopy.agentsUsed)
+    }
 
     // MARK: whether the account has the wiki
 
@@ -336,22 +356,21 @@ internal object WikiLogic {
     fun clampedIndex(index: Int, count: Int): Int? = if (count <= 0) null else minOf(maxOf(0, index), count - 1)
 }
 
-/** One space's home page: the reads it is drawn from, and each band's rows as the web derives them. [entries] is the
- * newest entries of every kind, as many as one read answers (200) — what the status line counts until the health read is
- * in; never the bands' rows, which read their own kind: a space holds thousands of entries, and its principles and
- * decisions are among the oldest of them. */
+/** What one space's Activity is drawn from (design §12.3.2): the home's management blocks as they stood until the home
+ * became content — the status line, Recent decisions, Recently changed, Agents used the wiki — and each band's rows as the
+ * web derives them (OrbitKit `WikiHomeContent`). [entries] is the newest entries of every kind, as many as one read
+ * answers (200): what the status line counts until the health read is in; never the bands' rows — a space holds thousands
+ * of entries, and its decisions are among the oldest of them, so they read their own kind ([decisionEntries]). */
 internal data class WikiHomeContent(val space: WikiSpace, val spaces: List<WikiSpace>, val entries: List<WikiEntry>,
-    val timeline: List<WikiTimelineItem>, val proposals: Int, val runs: List<WikiChangesetView> = emptyList(),
-    val health: WikiSpaceHealth? = null, val principleEntries: List<WikiEntry> = emptyList(),
+    val timeline: List<WikiTimelineItem>, val runs: List<WikiChangesetView> = emptyList(), val health: WikiSpaceHealth? = null,
     val decisionEntries: List<WikiEntry> = emptyList()) {
-    /** Every principle, of any status, oldest recorded first — from their own read (`?kind=principle`). */
-    val principles: List<WikiEntry> get() = principleEntries.filter { it.kind == "principle" }
-        .sortedBy { RelativeTime.parse(it.recordedAt) ?: Instant.MIN }
-    val principlesAllOwner: Boolean get() = principles.let { it.isNotEmpty() && it.all { e -> e.trust == "owner" } }
     /** The four newest decisions, of any status, from their own read (`?kind=decision`). */
     val recentDecisions: List<WikiEntry> get() = WikiLogic.entries(decisionEntries, "decision").take(RECENT_DECISIONS)
     val recentRows: List<WikiModeLogic.RecentRow> get() = WikiModeLogic.recentRows(timeline).take(5)
     val recentRunIds: List<String> get() = recentRows.mapNotNull { (it as? WikiModeLogic.RecentRow.Run)?.changesetId }
+    /** How many of those rows came after the reader last looked ([seen], [WikiSeenLog]): what Activity says beside
+     * Recently changed (`N new since you last looked`), the rows that wear its blue dot. */
+    fun newRows(seen: Double): Int = recentRows.count { WikiSeenLog.isNew(time(it), seen) }
     fun run(id: String) = runs.firstOrNull { sameWikiId(it.id, id) }
     val mostUsed: List<WikiUsageEntry> get() = space.usage?.entries.orEmpty().filter { (it.total ?: 0) > 0 }.take(3)
     val usedThisWeek: Boolean get() = space.usage?.entries.orEmpty().any { (it.total ?: 0) > 0 }
@@ -365,10 +384,13 @@ internal data class WikiHomeContent(val space: WikiSpace, val spaces: List<WikiS
     fun statusLine(now: Instant) = WikiHealthLogic.text(statusParts(now))
 
     companion object {
-        /** How many principles the home reads: the most one read answers, far above any space's own rules. */
-        const val PRINCIPLES_READ = 200
         /** The decision log's rows: the newest four. */
         const val RECENT_DECISIONS = 4
+        /** When one of Recently changed's rows happened: the change's own time, or the newest of a run's. */
+        fun time(row: WikiModeLogic.RecentRow): String? = when (row) {
+            is WikiModeLogic.RecentRow.Op -> row.item.at
+            is WikiModeLogic.RecentRow.Run -> row.at
+        }
     }
 }
 
