@@ -1,0 +1,319 @@
+<!doctype html>
+<!-- Design mock: the quota card's words once a retry can run on another of the runner's accounts
+     (server change on orbit/retry-quota-ff0b55: accountAfterUsageLimitAt). The iOS / macOS card is one
+     SwiftUI view (OrbitApp Views/Console/AutoRetryCard.swift, wording in OrbitKit App/AutoRetryLogic.swift);
+     web's is AutoRetryCard in src/web/src/components/Transcript.tsx. "现在" frames are drawn from today's
+     source and the 2026-10-09 iPhone screenshot (colours sampled off it); "改后" is the proposal.
+     Not shipped code. Render: node /var/tmp/kimi-accounts-ios/render.cjs <abs path of this file> -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Quota card · retry on any account</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  .m-sheet { width: 1490px; }
+  .row3 { display: grid; grid-template-columns: repeat(3, 433px); gap: 34px; align-items: start; }
+  .q-l { display: flex; align-items: center; gap: 8px; margin: 0 0 4px 4px; font-size: 13px; font-weight: 600; color: var(--text-2); }
+  .q-cap { font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 6px 4px 0; }
+  .q-cap b { color: var(--text-1); }
+  .q-cap code, .m-notes code, .m-sub code, .tbl code { font-size: 11.5px; padding: 0 4px; border-radius: 4px; background: #eef0f3; }
+
+  /* the session transcript around the card on an iPhone, dark (AutoRetryCard.swift: padding 10,
+     radius 10, secondary at 8%; title .body bold, the rest .footnote and .caption2). Colours are the
+     screenshot's own: card #0b0b0b, title #919197, secondary #858586, button #2e2e30 / #3e69f6. */
+  .q-ph { width: 393px; box-sizing: border-box; padding: 18px 16px 20px; margin: 10px; border-radius: 30px; background: #000;
+          color: #fff; font-family: Inter, "Noto Sans SC", sans-serif; letter-spacing: -.01em; -webkit-font-smoothing: antialiased;
+          box-shadow: 0 0 0 9px #1d1d1f, 0 0 0 10px #4a4a4e; }
+  .q-card { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 10px; background: #0b0b0b; }
+  .q-title { display: flex; align-items: center; gap: 8px; font-size: 17px; line-height: 22px; font-weight: 600; color: #919197; }
+  .q-title svg { flex: none; width: 20px; height: 20px; }
+  .q-body { font-size: 13px; line-height: 18px; color: #858586; }
+  .q-when { font-size: 13px; line-height: 18px; color: #fff; }
+  .q-when b { font-weight: 700; }
+  .q-auto { display: flex; align-items: center; gap: 8px; }
+  .q-auto-t { flex: 1; min-width: 0; }
+  .q-auto-l { font-size: 13px; line-height: 18px; color: #fff; }
+  .q-auto-d { margin-top: 2px; font-size: 11px; line-height: 13px; color: #858586; }
+  .q-sw { position: relative; flex: none; width: 51px; height: 31px; border-radius: 16px; background: #67ce67; }
+  .q-sw::after { content: ''; position: absolute; top: 2px; right: 2px; width: 27px; height: 27px; border-radius: 50%;
+                 background: #fff; box-shadow: 0 2px 4px rgba(0, 0, 0, .25); }
+  .q-btn { align-self: flex-start; padding: 7px 14px; border-radius: 99px; background: #2e2e30; color: #3e69f6;
+           font-size: 17px; line-height: 22px; }
+  .q-note { font-size: 11px; line-height: 13px; color: #858586; }
+  .q-quote { padding: 6px 8px; border-radius: 8px; background: rgba(142, 142, 147, .12); font-size: 13px; line-height: 18px; color: #858586; }
+  .q-ql { font-size: 11px; line-height: 13px; color: #858586; }
+
+  /* marks: orange numbers are the changes, grey letters today's problems */
+  .m-mark { display: block; }
+  span.m-mark { display: inline; }
+  .m-mark.prob { outline-color: #8a8f99; }
+  .m-mark.prob > .m-n { background: #5b6270; }
+  .q-ph .m-mark > .m-n { box-shadow: 0 0 0 2px #000; }
+  .q-card .m-mark, .chat-quota .m-mark { outline-offset: 2px; }
+
+  /* web cards: the shipped .chat-quota CSS, framed */
+  .w-frame { border: 1px dashed var(--border-subtle); border-radius: 12px; padding: 14px 16px; background: var(--bg-subtle); }
+  .w-frame .chat-quota { margin: 0; }
+
+  .notes2 { display: grid; grid-template-columns: 1fr 1fr; gap: 34px; align-items: start; margin-top: 22px; }
+  .notes2 .m-notes { margin-top: 0; }
+  .notes2 .m-notes + .m-notes { margin-top: 14px; }
+  .m-notes h4 { margin: 0 0 6px; font-size: 13px; color: var(--text-1); }
+  .ask { background: #fff7e6; }
+  .ask .m-n { background: #fa8c16; }
+  .tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; line-height: 1.6; color: #3f4652; }
+  .tbl th { text-align: left; font-weight: 600; color: var(--text-1); padding: 4px 8px; border-bottom: 1px solid #dde0e6; }
+  .tbl td { vertical-align: top; padding: 5px 8px; border-bottom: 1px solid #eceef1; font-family: Inter, "Noto Sans SC", sans-serif; }
+  .tbl td.old { color: #8a8f99; }
+  .tbl td.new b { color: var(--text-1); }
+  .tbl tr:last-child td { border-bottom: 0; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">配额撞限卡片 · 重试改成「任一账号有额度就发」之后的文案（iOS / macOS 与 web）</h1>
+  <p class="m-sub zh">服务端已改：会话在 Automatic 上、它自己的账号额度用完时，自动重试排在 runner 上<b>最早恢复的那个账号</b>的时刻，到点搬过去重发。
+    卡片上 “Resets …” 显示的一直是服务端排好的重试时刻（<code>retryAt</code>），所以改完后它可能是<b>别的账号</b>的恢复时间，和正文 “The weekly quota … is used up.” 对不上。
+    iOS 和 macOS 是同一张 SwiftUI 卡片，web 是 <code>Transcript.tsx</code> 的 AutoRetryCard；Android 没有这张卡（只有输入框菜单里的 Retry last failed message / Cancel automatic retry），不动。
+    灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">现在</span> iPhone，暗色，和你的截图同一张卡（会话在 Automatic 上，HPC 有 Default / Account 2 / Account 3 三个 Claude 账号）</div>
+    <div class="row3">
+      <div>
+        <div class="q-l zh">①a 你截图那一刻（10/9 5:50），旧服务端</div>
+        <div class="q-ph">
+          <div class="q-card">
+            <div class="q-title"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="9.5" fill="#919197"/><path d="M10 4.6V10.4l3.4 2.1" fill="none" stroke="#0b0b0b" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>Weekly limit reached</div>
+            <div class="q-body">The weekly quota for claude on “HPC” is used up.</div>
+            <div class="q-when">Resets <b>14 Oct 2026 at 6:00 AM</b> · in 5 days</div>
+            <div class="q-auto">
+              <div class="q-auto-t">
+                <div class="q-auto-l">Auto-retry when the quota resets</div>
+                <div class="q-auto-d">Runs on the server — you don't have to stay here.</div>
+              </div>
+              <div class="q-sw"></div>
+            </div>
+            <div class="q-btn">Retry now anyway</div>
+            <div class="q-note">The quota hasn’t reset yet — this will likely fail again.</div>
+          </div>
+        </div>
+        <p class="q-cap zh">只等 Account 3 自己 10/14 的周额度重置。Account 2 的 5 小时窗口 4:50 就恢复了，没人去看它。</p>
+      </div>
+      <div>
+        <div class="q-l zh">①b 现在的文案 + 新服务端（10/9 3:16 刚撞限）</div>
+        <div class="q-ph">
+          <div class="q-card">
+            <div class="q-title"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="9.5" fill="#919197"/><path d="M10 4.6V10.4l3.4 2.1" fill="none" stroke="#0b0b0b" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>Weekly limit reached</div>
+            <div class="q-body">The weekly quota for claude on “HPC” is used up.</div>
+            <div class="q-when m-mark prob">Resets <b>4:50 AM</b> · in 2 hr<span class="m-n">A</span></div>
+            <div class="q-auto">
+              <div class="q-auto-t">
+                <div class="q-auto-l"><span class="m-mark prob">Auto-retry when the quota resets<span class="m-n">B</span></span></div>
+                <div class="q-auto-d">Runs on the server — you don't have to stay here.</div>
+              </div>
+              <div class="q-sw"></div>
+            </div>
+            <div class="q-btn">Retry now anyway</div>
+            <div class="q-note"><span class="m-mark prob">The quota hasn’t reset yet — this will likely fail again.<span class="m-n">C</span></span></div>
+          </div>
+        </div>
+        <p class="q-cap zh"><b>A</b> “Resets 4:50 AM” 写在 “weekly quota is used up” 下面，读起来像周额度 2 小时后重置；其实 4:50 是 <b>Account 2</b> 的 5 小时窗口恢复，Account 3 还是 10/14。
+          <b>B</b> 开关不再只等 “the quota” 重置。<b>C</b> 同 B。</p>
+      </div>
+      <div>
+        <div class="q-l zh">到点之后（不改，供参考）</div>
+        <p class="q-cap zh" style="margin-top:14px">4:50 一到，服务端发现 Account 3 仍满、Account 2 有额度 → 立即重发；runner 认领时把会话搬到 Account 2，transcript 里出现现有那行
+          <code>Switched to Account 2 — the usage limit on Account 3 is reached</code>，卡片变成 “Retrying — re-sending your message…”。这两处都是现有文案，不改。</p>
+        <p class="q-cap zh">手动选定账号的会话、工作区指定了账号的会话、不能跨账号搬对话的旧 runner：还是只等自己的账号，卡片时间就是它自己的重置（见 ②b）。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k new">改后</span> 同一张卡，只改三处文字；标题、正文、按钮都不变</div>
+    <div class="row3">
+      <div>
+        <div class="q-l zh">②a 别的账号先恢复（Automatic，10/9 3:16）</div>
+        <div class="q-ph">
+          <div class="q-card">
+            <div class="q-title"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="9.5" fill="#919197"/><path d="M10 4.6V10.4l3.4 2.1" fill="none" stroke="#0b0b0b" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>Weekly limit reached</div>
+            <div class="q-body">The weekly quota for claude on “HPC” is used up.</div>
+            <div class="q-when m-mark">Retries <b>4:50 AM</b> on another account · in 2 hr<span class="m-n">1</span></div>
+            <div class="q-auto">
+              <div class="q-auto-t">
+                <div class="q-auto-l"><span class="m-mark">Auto-retry when quota is back<span class="m-n">2</span></span></div>
+                <div class="q-auto-d">Runs on the server — you don't have to stay here.</div>
+              </div>
+              <div class="q-sw"></div>
+            </div>
+            <div class="q-btn">Retry now anyway</div>
+            <div class="q-note"><span class="m-mark">Quota isn’t back yet — this will likely fail again.<span class="m-n">3</span></span></div>
+          </div>
+        </div>
+        <p class="q-cap zh"><b>①</b> “Retries” 说的是重试发出的时刻，任何情况都成立；比这个账号自己的重置早时加 “on another account”。
+          <b>②</b> 开关：“when quota is back”，单账号多账号都对。<b>③</b> 小字同理。</p>
+      </div>
+      <div>
+        <div class="q-l zh">②b 只有一个账号 / 手动选定 / 自己的先恢复</div>
+        <div class="q-ph">
+          <div class="q-card">
+            <div class="q-title"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="9.5" fill="#919197"/><path d="M10 4.6V10.4l3.4 2.1" fill="none" stroke="#0b0b0b" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>Weekly limit reached</div>
+            <div class="q-body">The weekly quota for claude on “HPC” is used up.</div>
+            <div class="q-when m-mark">Retries <b>14 Oct 2026 at 6:00 AM</b> · in 5 days<span class="m-n">1</span></div>
+            <div class="q-auto">
+              <div class="q-auto-t">
+                <div class="q-auto-l"><span class="m-mark">Auto-retry when quota is back<span class="m-n">2</span></span></div>
+                <div class="q-auto-d">Runs on the server — you don't have to stay here.</div>
+              </div>
+              <div class="q-sw"></div>
+            </div>
+            <div class="q-btn">Retry now anyway</div>
+            <div class="q-note"><span class="m-mark">Quota isn’t back yet — this will likely fail again.<span class="m-n">3</span></span></div>
+          </div>
+        </div>
+        <p class="q-cap zh">时间就是这个账号自己的重置，不加 “on another account”。和今天比只是 “Resets” → “Retries”（见待你定 3）。</p>
+      </div>
+      <div>
+        <div class="q-l zh">②c 没有要重发的话（Continue 那套）</div>
+        <div class="q-ph">
+          <div class="q-card">
+            <div class="q-title"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="9.5" fill="#919197"/><path d="M10 4.6V10.4l3.4 2.1" fill="none" stroke="#0b0b0b" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>Weekly limit reached</div>
+            <div class="q-body">The weekly quota for claude on “HPC” is used up. Nothing to re-send — the limit landed on a turn that wasn’t yours.</div>
+            <div class="q-when m-mark">Continues <b>4:50 AM</b> on another account · in 2 hr<span class="m-n">1</span></div>
+            <div class="q-auto">
+              <div class="q-auto-t">
+                <div class="q-auto-l"><span class="m-mark">Continue when quota is back<span class="m-n">2</span></span></div>
+                <div class="q-auto-d">Runs on the server — you don't have to stay here.</div>
+              </div>
+              <div class="q-sw"></div>
+            </div>
+            <div class="q-btn">Continue now anyway</div>
+            <div class="q-note"><span class="m-mark">Quota isn’t back yet — this will likely fail again.<span class="m-n">3</span></span></div>
+          </div>
+        </div>
+        <p class="q-cap zh">“Continues” 本来就不说 Resets，只加 “on another account”；开关和小字跟 ②a 同一套。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k new">改后 · web</span> 同一套文字，用现在发布的 <code>index.css</code> 渲染（亮色）</div>
+    <div class="row3">
+      <div>
+        <div class="q-l zh">现在的文案 + 新服务端</div>
+        <div class="w-frame">
+          <div class="chat-quota" data-needs-you="false">
+            <div class="chat-quota-head">
+              <svg class="chat-quota-icon" width="15" height="15" viewBox="0 0 1024 1024" fill="currentColor"><path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm176.5 585.7l-28.6 39a7.99 7.99 0 01-11.2 1.7L483.3 569.8a7.92 7.92 0 01-3.3-6.5V288c0-4.4 3.6-8 8-8h48.1c4.4 0 8 3.6 8 8v247.5l142.6 103.1c3.6 2.5 4.4 7.5 1.8 11.1z"/></svg>
+              <div class="chat-quota-title">Weekly limit reached</div>
+            </div>
+            <div class="chat-quota-msg">The weekly quota for claude on “HPC” is used up.</div>
+            <div class="chat-quota-when"><span class="m-mark prob">Resets <b>4:50 AM</b> <span class="chat-quota-in">· in 2 hr</span><span class="m-n">A</span></span></div>
+            <div class="chat-quota-auto">
+              <div class="chat-quota-auto-txt">
+                <div class="chat-quota-auto-l"><span class="m-mark prob">Auto-retry when the quota resets<span class="m-n">B</span></span></div>
+                <div class="chat-quota-auto-d">Runs on the server — you can close this tab.</div>
+              </div>
+              <button class="sw" data-on="true"></button>
+            </div>
+            <div class="chat-quota-actions">
+              <button class="chat-quota-retry">Retry now anyway</button>
+              <span class="chat-quota-note"><span class="m-mark prob">The quota hasn’t reset yet — this will likely fail again.<span class="m-n">C</span></span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="q-l zh">改后 · 别的账号先恢复</div>
+        <div class="w-frame">
+          <div class="chat-quota" data-needs-you="false">
+            <div class="chat-quota-head">
+              <svg class="chat-quota-icon" width="15" height="15" viewBox="0 0 1024 1024" fill="currentColor"><path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm176.5 585.7l-28.6 39a7.99 7.99 0 01-11.2 1.7L483.3 569.8a7.92 7.92 0 01-3.3-6.5V288c0-4.4 3.6-8 8-8h48.1c4.4 0 8 3.6 8 8v247.5l142.6 103.1c3.6 2.5 4.4 7.5 1.8 11.1z"/></svg>
+              <div class="chat-quota-title">Weekly limit reached</div>
+            </div>
+            <div class="chat-quota-msg">The weekly quota for claude on “HPC” is used up.</div>
+            <div class="chat-quota-when"><span class="m-mark">Retries <b>4:50 AM</b> on another account <span class="chat-quota-in">· in 2 hr</span><span class="m-n">1</span></span></div>
+            <div class="chat-quota-auto">
+              <div class="chat-quota-auto-txt">
+                <div class="chat-quota-auto-l"><span class="m-mark">Auto-retry when quota is back<span class="m-n">2</span></span></div>
+                <div class="chat-quota-auto-d">Runs on the server — you can close this tab.</div>
+              </div>
+              <button class="sw" data-on="true"></button>
+            </div>
+            <div class="chat-quota-actions">
+              <button class="chat-quota-retry">Retry now anyway</button>
+              <span class="chat-quota-note"><span class="m-mark">Quota isn’t back yet — this will likely fail again.<span class="m-n">3</span></span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="q-l zh">改后 · 只有一个账号 / 手动选定</div>
+        <div class="w-frame">
+          <div class="chat-quota" data-needs-you="false">
+            <div class="chat-quota-head">
+              <svg class="chat-quota-icon" width="15" height="15" viewBox="0 0 1024 1024" fill="currentColor"><path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm176.5 585.7l-28.6 39a7.99 7.99 0 01-11.2 1.7L483.3 569.8a7.92 7.92 0 01-3.3-6.5V288c0-4.4 3.6-8 8-8h48.1c4.4 0 8 3.6 8 8v247.5l142.6 103.1c3.6 2.5 4.4 7.5 1.8 11.1z"/></svg>
+              <div class="chat-quota-title">Weekly limit reached</div>
+            </div>
+            <div class="chat-quota-msg">The weekly quota for claude on “HPC” is used up.</div>
+            <div class="chat-quota-when"><span class="m-mark">Retries <b>Wed, Oct 14, 6:00 AM</b> <span class="chat-quota-in">· in 5 days</span><span class="m-n">1</span></span></div>
+            <div class="chat-quota-auto">
+              <div class="chat-quota-auto-txt">
+                <div class="chat-quota-auto-l"><span class="m-mark">Auto-retry when quota is back<span class="m-n">2</span></span></div>
+                <div class="chat-quota-auto-d">Runs on the server — you can close this tab.</div>
+              </div>
+              <button class="sw" data-on="true"></button>
+            </div>
+            <div class="chat-quota-actions">
+              <button class="chat-quota-retry">Retry now anyway</button>
+              <span class="chat-quota-note"><span class="m-mark">Quota isn’t back yet — this will likely fail again.<span class="m-n">3</span></span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes2">
+    <div>
+      <div class="m-notes zh">
+        <h4>文案对照（iOS / macOS 和 web 同一套）</h4>
+        <table class="tbl">
+          <tr><th></th><th>现在</th><th>改后</th></tr>
+          <tr><td>① 时间行</td><td class="old">Resets <b>&lt;时刻&gt;</b> · in …</td>
+            <td class="new"><b>Retries &lt;时刻&gt;</b> · in …<br>比这个账号自己的重置早时：<b>Retries &lt;时刻&gt; on another account</b> · in …</td></tr>
+          <tr><td>① 时间行（Continue）</td><td class="old">Continues <b>&lt;时刻&gt;</b> · in …</td>
+            <td class="new">不变；同样的条件下加 <b>on another account</b></td></tr>
+          <tr><td>② 开关</td><td class="old">Auto-retry when the quota resets<br>Continue when the quota resets</td>
+            <td class="new"><b>Auto-retry when quota is back</b><br><b>Continue when quota is back</b></td></tr>
+          <tr><td>③ 按钮下小字</td><td class="old">The quota hasn’t reset yet — this will likely fail again.</td>
+            <td class="new"><b>Quota isn’t back yet — this will likely fail again.</b></td></tr>
+          <tr><td>不变</td><td colspan="2">标题（Weekly / 5-hour / Usage limit reached）、正文、“Runs on the server …”、按钮、API 出错那一版卡片、重试中 / 放弃 / 关掉后的文字</td></tr>
+        </table>
+      </div>
+      <ul class="m-notes zh">
+        <li><span class="m-n">1</span><span><b>什么时候加 “on another account”</b>：回复里写了这个账号自己的重置时刻（Claude 都写，如 <code>resets Oct 14, 6am</code>），
+          且服务端排的重试比它早 5 分钟以上。Codex / Kimi 的回复不写时刻 → 只显示 “Retries &lt;时刻&gt;”，时刻本身照样对。时刻的来源不变，还是服务端的 <code>retryAt</code>。</span></li>
+        <li><span class="m-n">2</span><span>不新增服务端字段：“on another account” 由客户端用回复里的时刻和 <code>retryAt</code> 比出来；web 和 Apple 各一处，同一条规则。</span></li>
+      </ul>
+    </div>
+    <div>
+      <ul class="m-notes zh">
+        <li><span class="m-n">⌁</span><span><b>要改的文件</b>：web <code>src/web/src/components/Transcript.tsx</code>（AutoRetryCard）、<code>Transcript.test.tsx</code>；
+          iOS / macOS <code>OrbitKit/App/AutoRetryLogic.swift</code>（文案 + 比较）、<code>AutoRetryLogicTests.swift</code>、<code>OrbitApp/Views/Console/AutoRetryCard.swift</code>（时间行）；
+          <code>docs/quota-limit-retry-design.md</code> 补一段多账号说明。Android 没有这张卡，不动。</span></li>
+      </ul>
+      <ul class="m-notes ask zh">
+        <li><span class="m-n">?</span><span><b>待你定 1 · 开关关掉再打开</b>：现在客户端按回复里的 “resets Oct 14, 6am” 重新排，等于这个账号自己的重置，多账号时又会等 5 天。
+          建议服务端重新排时也取「最早恢复的账号」（和自动排的同一条规则，apiserver 一处小改）。</span></li>
+        <li><span class="m-n">?</span><span><b>待你定 2 · 点不点名</b>：只说 “on another account”，还是写成 “on Account 2”？点名要服务端多给一个字段；
+          建议先不点名 —— 真搬过去时 transcript 那行 “Switched to Account 2 …” 会点名。</span></li>
+        <li><span class="m-n">?</span><span><b>待你定 3 · 单账号也改成 Retries？</b>建议改：一条规则、任何情况都成立；不改的话单账号时保留 “Resets”，只有多账号先恢复时才换成 “Retries … on another account”。</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+</body>
+</html>
