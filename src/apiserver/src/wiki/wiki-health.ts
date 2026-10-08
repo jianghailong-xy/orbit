@@ -103,7 +103,21 @@ export class WikiHealth {
       spaceId,
       entries,
       maintenance: { look: wikiMaintenanceLook(maintenance, now), ...maintenance },
-      repo: { look: repo.look, workspace: repo.workspace, runner: repo.runner, pending: repo.pending },
+      // The wire carries what the contract names (maintenance.health.repo): the machine's capability and
+      // whether it beats. A runner that declared only `wiki-repo-op/v1` reads the old bounded window rather
+      // than whole files, and that too reads as `runner_upgrade` — the one word a client acts on.
+      repo: {
+        look: repo.look,
+        workspace: repo.workspace,
+        runner: repo.runner && {
+          id: repo.runner.id,
+          name: repo.runner.name,
+          version: repo.runner.version,
+          capability: repo.runner.capability,
+          online: repo.runner.online,
+        },
+        pending: repo.pending,
+      },
       executor,
       systemModel: executor.serverExecutes ? await new WikiSystemModelReads(this.prisma).read(now) : null,
     };

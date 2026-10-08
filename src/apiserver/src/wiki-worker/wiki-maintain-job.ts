@@ -57,16 +57,20 @@ import {
 } from './wiki-maintain-plan';
 import { cutRunes, parseWikiImportAnswer, WikiImportRepo, wikiImportIsObject } from './wiki-import-extract';
 import { WikiPlanRepo, type WikiPlanSnapshotIndex } from './wiki-plan-repo';
+import { type WikiRepoFileRead } from '@orbit/shared';
 import {
+  readWikiRepoFiles,
   readWikiRepoReadiness,
   readWikiRepoSnapshot,
   waitForWikiRepoOp,
+  wikiRepoStepsCanRun,
   WikiRepoOpRefused,
   WikiRepoOpWaitCancelled,
   WikiRepoOpWaitTimedOut,
   type WikiRepoOps,
   type WikiRepoOpWait,
   type WikiRepoOpWake,
+  wikiRepoFileText,
 } from './wiki-repo-ops';
 import {
   WikiDocsCallFailed,
@@ -76,7 +80,7 @@ import {
   type WikiDocsWriteAnswer,
   type WikiDocsWriteRequest,
 } from './wiki-docs-build';
-import { WikiDocsSnapshotRepo, wikiDocsShownOf } from './wiki-docs-build-job';
+import { WikiDocsSnapshotRepo } from './wiki-docs-build-job';
 import { wikiDocCleanPath, wikiDocRepoPieces, type WikiDocShown, type WikiDocPiece, type WikiDocsPlanDoc } from './wiki-docs-writer';
 import { verifyWikiOps } from './wiki-verify-job';
 
@@ -276,6 +280,8 @@ class WikiMaintainRun {
   private breakerRead: { remaining: number | null } | null = null;
   private advanced = false;
   private position = '';
+  /** Whether the space's runner reads whole files; a bounded one is asked with the old limits. */
+  private wholeFile = false;
 
   constructor(
     private readonly jobContext: WikiJobContext,
@@ -448,9 +454,14 @@ class WikiMaintainRun {
     const { prisma } = this.deps;
     const { job } = this.jobContext;
     const readiness = await readWikiRepoReadiness(prisma, { ownerId: job.ownerId, spaceId: job.spaceId });
-    if (readiness.look !== 'ready') {
+    // A machine with only `wiki-repo-op/v1` can be handed operations — it answers the old bounded window
+    // (`runner_upgrade` says to upgrade it, and `wholeFile` says which read this run gets) — while one with no
+    // repository capability at all cannot, and waiting on it would wait out the whole limit to learn that.
+    if (!wikiRepoStepsCanRun(readiness)) {
       throw new WikiJobInfraError(`REPO_NOT_READY: the space's repository cannot be read now (${readiness.look})`);
     }
+    // Whether this machine reads whole files (repoOps.cache, 0406): a bounded one is asked with the old limits.
+    this.wholeFile = readiness.runner?.wholeFile === true;
     const held = await prisma.wikiRepoSnapshot.findFirst({ where: { spaceId: job.spaceId, ownerId: job.ownerId }, select: { sha: true } });
     const settled = await this.operation('snapshot', { skipSha: held?.sha ?? null }, 'the snapshot of origin/main');
     if (settled.state !== 'succeeded') {
@@ -1140,23 +1151,36 @@ class WikiMaintainRun {
   private snapshotRepo(sha: string, files: readonly string[], sizes: ReadonlyMap<string, number>): WikiDocsSnapshotRepo {
     const ordered = [...files].sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
     const map = new Map(sizes);
-    return new WikiDocsSnapshotRepo(sha, map, ordered, (batch) => this.readFiles(sha, batch));
+    return new WikiDocsSnapshotRepo(sha, map, ordered, (paths) => this.readFiles(sha, paths, map));
   }
 
-  /** Files read whole at a commit, through the space's runner, asked again when the read failed. */
-  private async readFiles(sha: string, batch: ReadonlyArray<{ path: string; size: number }>): Promise<Map<string, WikiDocShown | null>> {
-    const items = batch.map((file) => (file.size > 0 ? { path: file.path, maxChars: Math.min(file.size, WIKI_REPO_OPS.wholeFileChars) } : { path: file.path }));
-    const what = `${batch.length === 1 ? batch[0].path : `${batch.length} files`} at ${sha.slice(0, 12)}`;
+  /**
+   * Files read whole at a commit, through the space's runner, asked again when the read failed — cache first,
+   * as the documents' build reads (`readWikiRepoFiles`, repoOps.cache): what the space holds is served as it
+   * is, and only the rest becomes one `read` operation, packed by the snapshot's sizes.
+   */
+  private async readFiles(sha: string, paths: readonly string[], sizes: ReadonlyMap<string, number>): Promise<Map<string, WikiRepoFileRead | null>> {
+    const what = `${paths.length === 1 ? paths[0] : `${paths.length} files`} at ${sha.slice(0, 12)}`;
     let last = '';
     for (let attempt = 1; attempt <= 3; attempt += 1) {
-      const settled = await this.operation('read', { sha, items }, `reading ${what}`);
-      if (settled.state === 'succeeded') {
-        const answered = ((settled.result?.read as { items?: unknown[] } | undefined)?.items ?? []) as Array<{ found?: boolean; text?: string; truncated?: boolean }>;
-        const texts = new Map<string, WikiDocShown | null>();
-        batch.forEach((file, i) => texts.set(file.path, wikiDocsShownOf(answered[i], file.size)));
-        return texts;
+      try {
+        return await readWikiRepoFiles({
+          prisma: this.deps.prisma,
+          repoOps: this.deps.repoOps,
+          jobId: this.jobContext.job.id,
+          ownerId: this.jobContext.job.ownerId,
+          spaceId: this.jobContext.job.spaceId,
+          sha,
+          paths,
+          wholeFile: this.wholeFile,
+          sizeOf: (path) => sizes.get(path) ?? 0,
+          waitMs: this.deps.repoWaitMs ?? WIKI_MAINTAIN_JOB.repoWaitSeconds * 1000,
+          wake: this.deps.repoWake,
+          signal: this.jobContext.signal,
+        });
+      } catch (error) {
+        last = (error as Error)?.message ?? String(error);
       }
-      last = settled.error ?? settled.state;
     }
     throw new WikiJobInfraError(`REPO_OP_FAILED: reading ${what} failed 3 times: ${last}`);
   }
@@ -1286,9 +1310,11 @@ class WikiMaintainRun {
 
   /** One file's whole text at a commit, through the space's runner; null when it is not there. */
   private async readWholeFile(sha: string, path: string): Promise<string | null> {
-    const texts = await this.readFiles(sha, [{ path, size: this.snapshot?.sizes.get(path) ?? 0 }]);
-    const shown = texts.get(path) ?? null;
-    return shown === null ? null : shown.text;
+    const texts = await this.readFiles(sha, [path], this.snapshot?.sizes ?? new Map());
+    const file = texts.get(path) ?? null;
+    if (file === null) return null;
+    const text = wikiRepoFileText(file);
+    return text === '' && file.state !== 'found' && file.state !== 'cut' ? null : text;
   }
 
   /** The run's one plan proposal: the model says where the knowledge belongs, the run checks it, the gate decides. */

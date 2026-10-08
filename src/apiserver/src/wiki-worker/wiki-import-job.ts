@@ -25,6 +25,7 @@ import {
   readWikiRepoOp,
   readWikiRepoReadiness,
   readWikiRepoSnapshot,
+  wikiRepoStepsCanRun,
   waitForWikiRepoOp,
   WikiRepoOpRefused,
   WikiRepoOpWaitTimedOut,
@@ -229,7 +230,9 @@ class WikiImportRun {
     const { prisma } = this.deps;
     let asked: { sha: string } | null = null;
     const readiness = await readWikiRepoReadiness(prisma, { ownerId: job.ownerId, spaceId: job.spaceId });
-    if (readiness.look === 'ready') {
+    // A machine that can be handed operations at all takes one, whether or not it reads whole files: a
+    // snapshot is not a read, and a runner that reads only the old window still builds the index.
+    if (wikiRepoStepsCanRun(readiness)) {
       const opId = wikiImportSnapshotOpId(job.id);
       try {
         if (!(await readWikiRepoOp(prisma, { id: opId, ownerId: job.ownerId }))) {

@@ -102,6 +102,7 @@ import {
   WIKI_REPO_LOOKS,
   WIKI_REPO_OP_CAPABILITY,
   WIKI_REPO_OP_KINDS,
+  WIKI_REPO_OP_READ_CAPABILITY,
   WIKI_REPO_OP_STATES,
 } from './wikiRepoOps';
 import { PROVIDER_PRESETS } from './providerPresets';
@@ -226,11 +227,15 @@ describe('wiki contract', () => {
     const repoOps = CONTRACT.repoOps;
     expect(repoOps.table).toBe('wiki_repo_op');
     expect(repoOps.capability).toBe(WIKI_REPO_OP_CAPABILITY);
+    expect(repoOps.readCapability).toBe(WIKI_REPO_OP_READ_CAPABILITY);
     expect(repoOps.kinds).toEqual([...WIKI_REPO_OP_KINDS]);
     expect(repoOps.states).toEqual([...WIKI_REPO_OP_STATES]);
     expect(repoOps.looks).toEqual([...WIKI_REPO_LOOKS]);
     expect(repoOps.migration).toBe('src/apiserver/prisma/migrations/0402_wiki_repo_op/migration.sql');
     expect(existsSync(path.join(ROOT, repoOps.migration)), `${repoOps.migration} does not exist`).toBe(true);
+    // The read cache's table is the whole-file read's own migration, named where the contract names it.
+    expect(repoOps.fileMigration).toBe('src/apiserver/prisma/migrations/0406_wiki_repo_file/migration.sql');
+    expect(existsSync(path.join(ROOT, repoOps.fileMigration)), `${repoOps.fileMigration} does not exist`).toBe(true);
     // The numbers the dispatch, the fragments and the reads are held to, each read from the file the
     // runner-side constants are read from too.
     expect(repoOps.dispatch.perHeartbeat).toBe(WIKI_REPO_OPS.perHeartbeat);
@@ -242,8 +247,12 @@ describe('wiki contract', () => {
       docSectionChars: WIKI_REPO_OPS.docSectionChars,
       contractChars: WIKI_REPO_OPS.contractChars,
       sectionChars: WIKI_REPO_OPS.sectionChars,
-      wholeFileChars: WIKI_REPO_OPS.wholeFileChars,
+      wholeFileBytes: WIKI_REPO_OPS.wholeFileBytes,
+      boundedChars: WIKI_REPO_OPS.boundedChars,
+      operationBytes: WIKI_REPO_OPS.operationBytes,
     });
+    // The cache is the snapshot's two tables and the files read at a sha.
+    expect(repoOps.cache.tables).toEqual(['wiki_repo_snapshot', 'wiki_repo_snapshot_fragment', 'wiki_repo_file']);
     // Every kind says what it answers with, and every kind the contract names is one of the four.
     expect(Object.keys(repoOps.kindRuns).sort()).toEqual([...WIKI_REPO_OP_KINDS].sort());
     // The two routes the runner writes back through are named where the doors are.
@@ -1625,9 +1634,11 @@ describe('wiki contract', () => {
     expect(CONTRACT.repoOps.waiting).toMatch(/docs\.build\.server\.repository/u);
     expect(server.who).toMatch(/Under the default runner none of this runs/u);
     expect(server.door).toMatch(/WIKI_SERVER_EXECUTES/u);
-    expect(server.repository).toMatch(/wholeFileChars/u);
-    // The whole files a build reads fit the read's own limits: one item, one request.
-    expect(WIKI_REPO_OPS.wholeFileChars).toBeLessThanOrEqual(WIKI_REPO_OPS.sectionChars);
+    expect(server.repository).toMatch(/wholeFileBytes/u);
+    expect(server.repository).toMatch(/boundedChars/u);
+    // A whole file fits one item; a request is packed well under the API's body cap.
+    expect(WIKI_REPO_OPS.wholeFileBytes).toBeLessThanOrEqual(WIKI_REPO_OPS.operationBytes);
+    expect(WIKI_REPO_OPS.operationBytes).toBeLessThanOrEqual(WIKI_REPO_OPS.apiBodyBytes);
     // The runner's prompts and steps, held to one fixture both implementations read.
     expect(server.calls).toContain('src/shared/src/wiki-docs-build.fixture.json');
     for (const file of ['src/shared/src/wiki-docs-build.fixture.json', 'src/runner-go/wiki_docs_build_fixture_test.go', 'src/apiserver/src/wiki-worker/wiki-docs-build-golden.spec.ts']) {

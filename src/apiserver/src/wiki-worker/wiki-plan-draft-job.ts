@@ -3,7 +3,6 @@ import {
   WIKI_PLAN_JOB_RULES,
   WIKI_PLAN_RULES,
   WIKI_PLAN_SERVER_JOB,
-  WIKI_REPO_OPS,
   type WikiPlanGateError,
   type WikiPlanJobReport,
   type WikiPlanMaterials,
@@ -58,12 +57,15 @@ import {
   type WikiPlanRunState,
   type WikiPlanVersionRead,
 } from './wiki-plan-prompts';
-import { shortWikiHash, WikiPlanRepo, WIKI_PLAN_MATERIAL_CAPS, type WikiPlanSnapshotIndex } from './wiki-plan-repo';
+import { shortWikiHash, WikiPlanRepo, type WikiPlanSnapshotIndex } from './wiki-plan-repo';
 import {
+  readWikiRepoFiles,
   readWikiRepoOp,
   readWikiRepoReadiness,
   readWikiRepoSnapshot,
   waitForWikiRepoOp,
+  wikiRepoFileText,
+  wikiRepoStepsCanRun,
   WikiRepoOpRefused,
   WikiRepoOpWaitTimedOut,
   type WikiRepoOps,
@@ -215,6 +217,8 @@ class WikiPlanDraftRun implements WikiPlanRunState {
   private lastDraft: WikiPlanDraft | null = null;
   private readonly report: WikiPlanJobReport;
   private snapshot: WikiPlanSnapshotIndex | null = null;
+  /** Whether the space's runner read whole files (`wiki-repo-op-read/v1`), as the last readiness read said. */
+  private wholeFile = false;
   private startedAt = new Date();
 
   constructor(private readonly context: WikiJobContext, private readonly deps: WikiPlanDraftJobDeps) {
@@ -424,10 +428,7 @@ class WikiPlanDraftRun implements WikiPlanRunState {
       this.repo = new WikiPlanRepo(this.snapshot);
       await this.progress({ step: 'materials' });
       const materials = await wikiPlanMaterials(prisma, job.ownerId, job.spaceId, new Date());
-      const reads = [
-        ...this.repo.overviewFiles().map((path) => ({ path, maxChars: Math.min(WIKI_REPO_OPS.sectionChars, WIKI_PLAN_MATERIAL_CAPS.overview.full + 400) })),
-        ...this.repo.schemaFiles().map((path) => ({ path, maxChars: WIKI_REPO_OPS.wholeFileChars })),
-      ];
+      const reads = [...this.repo.overviewFiles(), ...this.repo.schemaFiles()];
       const texts = Object.fromEntries(await this.readTexts(snapshot.sha, reads));
       frame = { sha: snapshot.sha, date: materials.asOf.slice(0, 10), materials, texts };
       await saveWikiPlanJobMaterials(prisma, { planJobId: this.planJobId, wikiJobId: job.id, materials: frame as unknown as Record<string, unknown> });
@@ -451,7 +452,8 @@ class WikiPlanDraftRun implements WikiPlanRunState {
     const { job, signal } = this.context;
     const { prisma } = this.deps;
     const readiness = await readWikiRepoReadiness(prisma, { ownerId: job.ownerId, spaceId: job.spaceId });
-    if (readiness.look !== 'ready') {
+    this.wholeFile = readiness.runner?.wholeFile === true;
+    if (!wikiRepoStepsCanRun(readiness)) {
       this.say(`the space's repository cannot be read now (${readiness.look}): the draft is made from the snapshot the space holds`);
       return held;
     }
@@ -476,56 +478,40 @@ class WikiPlanDraftRun implements WikiPlanRunState {
   }
 
   /**
-   * Texts of the repository at the sha, through the runner's `read` (contract `repoOps.kinds.read`): packed so each
-   * request stays within one section's material, by the sizes the snapshot gives, and waited for together. A read
-   * that does not come back is the platform's: the job is tried again.
+   * Texts of the repository at the sha, through the runner's `read` (contract `repoOps.kinds.read`): the whole
+   * file (owner 2026-10-08), served from the read cache when it is already held and asked for once otherwise.
+   * The runner reads whole files when it declared `wiki-repo-op-read/v1`, and the bounded window when it did
+   * not (a heading or a symbol past it is missing, and says so). A read that does not come back is the
+   * platform's: the job is tried again.
    */
-  private async readTexts(sha: string, items: ReadonlyArray<{ path: string; maxChars: number }>): Promise<Map<string, string>> {
+  private async readTexts(sha: string, paths: readonly string[]): Promise<Map<string, string>> {
     const out = new Map<string, string>();
-    if (items.length === 0) return out;
+    if (paths.length === 0) return out;
     const { job, signal } = this.context;
-    const { prisma } = this.deps;
-    const packs: Array<Array<{ path: string; maxChars: number }>> = [];
-    let pack: Array<{ path: string; maxChars: number }> = [];
-    let budget = 0;
-    for (const item of items) {
-      const need = Math.max(1, Math.min(item.maxChars, this.repo.sizeOf(item.path) || item.maxChars));
-      if (pack.length > 0 && budget + need > WIKI_REPO_OPS.sectionChars) {
-        packs.push(pack);
-        pack = [];
-        budget = 0;
+    try {
+      const files = await readWikiRepoFiles({
+        prisma: this.deps.prisma,
+        repoOps: this.deps.repoOps,
+        jobId: job.id,
+        ownerId: job.ownerId,
+        spaceId: job.spaceId,
+        sha,
+        paths,
+        wholeFile: this.wholeFile,
+        sizeOf: (path) => this.repo.sizeOf(path),
+        waitMs: this.deps.readWaitMs ?? WIKI_PLAN_SERVER_JOB.readWaitSeconds * 1000,
+        wake: this.deps.repoWake,
+        signal,
+      });
+      for (const path of paths) out.set(path, wikiRepoFileText(files.get(path)));
+    } catch (error) {
+      if (error instanceof WikiRepoOpWaitTimedOut) {
+        throw new WikiJobInfraError(`a read of the repository at ${shortWikiHash(sha)} did not come back in time: the space's runner is away`);
       }
-      pack.push(item);
-      budget += need;
-    }
-    if (pack.length > 0) packs.push(pack);
-    const ops = packs.map((items) => ({
-      id: wikiPlanOpId(`wiki-plan-read:${job.id}:${job.attempts}:${sha}:${items.map((i) => `${i.path}#${i.maxChars}`).join('|')}`),
-      items,
-    }));
-    for (const op of ops) {
-      if (!(await readWikiRepoOp(prisma, { id: op.id, ownerId: job.ownerId }))) {
-        await this.deps.repoOps.enqueueWikiRepoOp({ id: op.id, jobId: job.id, kind: 'read', input: { sha, items: op.items } });
+      if (error instanceof WikiRepoOpRefused) {
+        throw new WikiJobInfraError(`a read of the repository at ${shortWikiHash(sha)} failed: ${error.message}`);
       }
-    }
-    const deadline = Date.now() + (this.deps.readWaitMs ?? WIKI_PLAN_SERVER_JOB.readWaitSeconds * 1000);
-    for (const op of ops) {
-      let settled;
-      try {
-        settled = await waitForWikiRepoOp(prisma, { id: op.id, ownerId: job.ownerId, timeoutMs: Math.max(1, deadline - Date.now()), wake: this.deps.repoWake, signal });
-      } catch (error) {
-        if (error instanceof WikiRepoOpWaitTimedOut) {
-          throw new WikiJobInfraError(`a read of the repository at ${shortWikiHash(sha)} did not come back in time: the space's runner is away`);
-        }
-        throw error;
-      }
-      if (settled.state !== 'succeeded') {
-        throw new WikiJobInfraError(`a read of the repository at ${shortWikiHash(sha)} ${settled.state}: ${settled.error ?? 'no reason given'}`);
-      }
-      const read = (settled.result?.read ?? {}) as { items?: Array<{ path?: unknown; found?: unknown; text?: unknown }> };
-      for (const piece of read.items ?? []) {
-        if (typeof piece.path === 'string') out.set(piece.path, piece.found === true && typeof piece.text === 'string' ? piece.text : '');
-      }
+      throw error;
     }
     return out;
   }
@@ -535,7 +521,7 @@ class WikiPlanDraftRun implements WikiPlanRunState {
     const wanted = wikiPlanTextsWanted(this);
     if (wanted.length === 0) return;
     await this.progress({ step: 'read' });
-    this.repo.withTexts(await this.readTexts(this.repo.sha, wanted.map((path) => ({ path, maxChars: WIKI_REPO_OPS.wholeFileChars }))));
+    this.repo.withTexts(await this.readTexts(this.repo.sha, wanted));
   }
 
   // ── One call ────────────────────────────────────────────────────────────────────────────────────

@@ -1,3 +1,21 @@
+<!--
+  Frozen test data for the whole-file read (owner 2026-10-08): a byte-for-byte copy of docs/wiki-contract.md as it stood
+  at the copy, taken so that the consistency fixture for `read` — a section and a footnote quote from PAST the old
+  22,000-character window, cut, fingerprinted and located identically by src/runner-go and src/apiserver/src/wiki-worker —
+  does not go red every time the live contract is edited by another task (the contract is edited first, by rule).
+
+  Source: docs/wiki-contract.md
+  Source bytes: 262906, sha256 c05bb55e89b8522b026e701380d47b257b8669a47d71c4376d1047142846ed0d
+  Copied at: 04b5101e48a5434bca5a611ab5c49a37b3a467a0 (2026-10-08)
+
+  DO NOT EDIT IN PLACE. To move the fixture to a newer copy of the document: replace this file with the new bytes, then
+  rewrite src/shared/src/wiki-docs-wholefile.fixture.json:
+
+      ORBIT_WIKI_DOCS_WHOLEFILE_FIXTURE=write go test -run TestWikiDocsWholeFileFixtureIsTheServersToo .
+
+  (in src/runner-go) and make src/apiserver/src/wiki-worker/wiki-docs-wholefile.spec.ts answer the same.
+-->
+
 # Orbit Wiki 契约（v1，阶段 1）
 
 **状态**：任务「T2 wiki 契约、迁移与共享类型」的产物，是项目「Orbit Wiki · 阶段 1」其余任务（T3 写入口与 REST、
@@ -1165,9 +1183,6 @@ JSON 里是 `articles.serverExecution`、`articles.job` 与 `jobs.kindRuns.artic
 JSON 里是 `maintenance.job`；迁移 `0320_wiki_maintenance_run`；服务端在 `src/apiserver/src/wiki/wiki-maintenance-run.ts`
 （触发、运行的起止与判据）、`wiki-maintenance-breaker.ts`（整次运行的熔断），runner 门在
 `runner-api/runner-wiki-maintain.controller.ts`；runner-go 在 `wiki_maintain.go`。
-
-服务端执行的账号（`ORBIT_WIKI_EXECUTOR`）由 wiki-worker 跑同一条流水线：触发建 `maintain` 作业而不是任务，章节见 §27；
-本节讲的是 runner 模式（默认）下的任务、命令与检查。
 
 ### 19.1 触发：事实驱动，不用时钟
 
@@ -2356,74 +2371,3 @@ JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` 
   `look` 取 `ready` / `no_workspace` / `runner_missing` / `runner_offline` / `runner_upgrade`。`runner_upgrade` 就是「升级 runner」，它盖两种
   机器：没有声明 `wiki-repo-op/v1` 的（什么都领不到，需要仓库的步骤会挂起），和只声明了它、没有声明 `wiki-repo-op-read/v1` 的
   （照旧只读到 22,000 字）。`runner` 字段里的 `capability` 和 `wholeFile` 把这两者分开：前者说这台机器能不能领，后者说它读不读整个文件。
-
-## 27. 服务端执行的维护运行：`maintain` 作业（服务端执行 P8）
-
-JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407_wiki_maintain_job`；设计见
-`docs/wiki-server-execution-design.md` §5、§5.5 和 §8。服务端实现在 `src/apiserver/src/wiki-worker/`：
-`wiki-maintain.ts`（抽取的提示词、离题判定、逐条检查、引文定位、重问、分批与熔断的算术）、
-`wiki-maintain-plan.ts`（一次 plan 修改建议：提示词、解析、按快照检查）、`wiki-maintain-job.ts`（整条流水线）；
-触发与运行行的收尾在 `src/apiserver/src/wiki/wiki-maintenance-run.ts`；runner 侧同一套逻辑在 `wiki_maintain.go` 与
-`wiki_maintain_docs.go`，P10 之前两条路并存。
-
-### 27.1 触发：建作业，不建任务
-
-- `ORBIT_WIKI_EXECUTOR` 给这个账号服务端执行时（`server`，或 `canary` 名单内），`considerWikiMaintenance` 的判定读法一字不变
-  （到期、当日次数、队列余量、期望位置），写入换成 `MaintenanceJobWriter.makeJob`：一个 `wiki_job`（`kind = maintain`，
-  `input = { runId }`，优先级 0）和它名下的 `wiki_maintenance_run` 行（`job_id` 写在同一事务里，
-  `wiki_maintenance_run_maker_chk` 要求每行恰好一个建者），**不建任务、不建会话**。空间行 `FOR NO KEY UPDATE` 是它的锁：
-  两个事实同时到达只建一个作业，进行中的作业像未结束的任务一样挡住下一次（`unfinished`），排队的 plan 作业照旧先走。
-- 服务端这条路上隐藏列表不是必需的：`settings.maintenance.enabled` 与 `workspaceId` 就够。列表存在时，死在里面的维护任务照旧先被
-  重跑或收尾（§19.7）。
-- 当日计数、追赶与熔断都按运行行统计：`wikiMaintenanceRunsToday` 的 `byJob` 分支数 `job_id` 非空的运行行（不再要求有列表），
-  追赶期本地端点不计数的判定改看运行行上的 `local_endpoint`——worker 起跑时按 System model 的地址写入，
-  apiserver 不读、也不校验任何 provider。
-- 打开维护（PATCH 空间设置）在服务端执行的账号上不校验 provider（`checkWikiMaintenanceInput`、`setWikiMaintenance`）：
-  一个没有任何 provider 行的账号也能打开维护并跑通一次运行。runner 模式下这段校验逐字不变。
-
-### 27.2 运行的身份：作业，而不是会话
-
-- 运行没有会话，所以**运行就是它的 `wiki_job`**：`wiki_changeset.job_id`（0407）记下它，熔断按它统计本次运行此前的改动
-  （`wikiMaintenanceRunChanges`），核实列表按它找自己的 op（`proposerScope`），plan 修改建议的 `author_job_id` 也写它
-  （`author_session_id` 为空，`wiki_plan_proposal_author_chk` 要求恰好一个作者）。写入的 principal 是 origin `maintenance`、
-  无会话、无 user（与文档构建作业相同）。
-- runner 门不再把运行的模型工作交给会话：`GET …/maintenance/run`、`GET …/spaces/:id/dossiers`、
-  `POST …/maintenance/changesets`、`GET`/`POST …/maintenance/verifications`、`POST …/maintenance/advance`、
-  `POST …/maintenance/finish` 在服务端执行的账号上回 **409 `WIKI_SERVER_EXECUTES`**（`RunnerWikiMaintainController`、
-  `RunnerWikiMaintenanceController`）；`GET …/maintenance/check` 不在其中——它是验收命令的只读调用。runner 模式下两个门都不变。
-
-### 27.3 流水线：与 `orbit wiki maintain` 同序
-
-1. **仓库**：一次 `snapshot` 仓库操作拿到 origin/main 的 sha 与索引（路径与大小、文档标题与章节、符号、契约、可达提交、
-   README 首段）；锚点查快照，不再有 checkout。
-2. **案卷**：`WikiMaintenance.dossierPage` 同一条服务端读法，从游标读到运行期望的位置；已处理过的（`unchanged`）跳过。
-3. **抽取**：每个案卷一个请求（step `extract`，unit 是案卷的 session id），同一作业最多
-   `maintenance.job.rules.extractConcurrency` 个在途；离题回 `{"offTopic": true}`；每条按案卷的行与 spans 检查字段与引文、
-   按快照检查锚点、按 `WIKI_MAINTAIN_JOB.planMaxTokens` 之外的同一条提示词重问一次（unit 加 `#retry`，拒绝原因写进提示词）。
-   引文的定位与 runner 逐字一致（`wikiMaintainPlain` / `wikiMaintainPlace`）。
-4. **自查与熔断**：按主题分组，每批最多 `limits.opsPerChangeset`（Manual 空间 `limits.opsPerTurn`）；先 dry run，
-   服务端找不到的引文从来源上摘掉再查一次，仍被拒的丢掉，被审阅队列挡下的不提交；熔断按 dry run 的回答把整页整页挡回，
-   游标停在那一页的起点。
-5. **提交**：每批用 `wiki-maintain-<runId>-<ops 摘要>` 的幂等键提交 changeset（origin maintenance，挂在作业上）；
-   dry run 通过而此刻被拒的 op 让这次运行失败。
-6. **推进游标**：op 记下后立刻 `advanceRecorded`（判据 3 第 4 版）：成功推进不再动它，之后任何一步失败仍以 failed 结束，
-   游标留在原处。
-7. **核实**：用 P3 的 `verifyWikiOps`，自己的 op 核两遍（第二次带上被拒原因），再收养最多
-   `rules.adoptOpsMax` 个等待中的 op；没有结论的 op 不上线、留给下一次运行，不算失败。
-8. **锚点**：一页一页取 `listWikiAnchorsForJob`，把这一页的锚点作为一次 `anchors` 仓库操作交给空间所在的 runner，
-   结果按现有写入口 `recordAnchorChecks` 写回（锚点状态、挑战 op）。
-9. **文档**（追赶期整步跳过）：`wikiDocsAffected` 拿服务端那一半；仓库那一半用 `diff` 仓库操作按节自己的 `repoSha`
-   比到 head（消失的路径先撤回，`withdrawPaths`），只重写受影响的节（P7 的 `runWikiDocsBuild`，`only` 传入本次要写的节）；
-   新增的设计文档（`--diff-filter=AR -- docs/`，去掉 `docs/mocks/` 与 `docs/evidence/`、已被引用或已被建议的）算出标题、
-   章节与开头；最后提一次 plan 修改建议，用 P6 的门（`proposeServer`）检查，最多三轮把门报的错回给模型。
-10. **结束**：写报告与 token 合计，`finishWikiMaintenanceJob` 推进游标、写运行行、按 owner 2026-10-08 的决定调用
-    `queueWikiArticlesAfterRun`——只有成功、记下了 op、且不在追赶期才排文章作业（§24）。
-
-### 27.4 失败与恢复（设计 §5.5）
-
-- **infra**：runner 不在或太旧、仓库操作超时、请求等过上限、worker 停机。运行行不结束，作业回 `queued` 按退避重试，
-  **不计入连续失败**（`consecutive_failures` 不动）。
-- **content**：模型给不出可用的答案、dry run 通过却被服务端拒绝、某一步自己的错误。运行以 failed 结束：
-  游标按规则不动，`consecutive_failures` 加一，连续三次通知 owner；作业以 `failure_kind = content` 结束。
-- **worker 停机**：模型请求与仓库等待被中止（`WikiModelWaitCancelled` / `WikiRepoOpWaitCancelled`），运行不结算，
-  租约交回，下一个进程重放；已经答过的请求直接复用。
