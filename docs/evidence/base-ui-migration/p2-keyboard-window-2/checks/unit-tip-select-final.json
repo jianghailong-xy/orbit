@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370 && git log --oneline -1 && git rev-parse project/34ZZeq0e3IR65GVm2kAs7 && test ! -e src/web/src/components/ui/Select.test.tsx && git show project/34ZZeq0e3IR65GVm2kAs7:src/web/src/components/ui/Select.test.tsx > src/web/src/components/ui/Select.test.tsx && (cd src/web && NO_COLOR=1 npx vitest run src/components/ui/Select.test.tsx src/components/ui/keyboardWindow.test.tsx); code=$?; rm -f src/web/src/components/ui/Select.test.tsx; git status --porcelain -- src/web; exit $code",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_13ef99e9692d",
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "commit": "aed0a7bab6e39a50edaeea4cf16cecdae212b6d5",
+ "webTree": "d0a53fc0735666a86981095e9efa200b8a80d62c",
+ "outputLastWritten": "2026-10-07T16:37:07.941478+00:00",
+ "exitCode": 0,
+ "outputSha256": "a581608f52af1c750adb8f3facb0a53682f23a6c15658033f622e4916fad2d5d",
+ "outputBytes": 607,
+ "note": "The project branch moved past this branch's base (7732f14f8 -> 3aa26fb97) and gained src/web/src/components/ui/Select.test.tsx (7820aee1a, the earlier task's Select ArrowDown/ArrowUp/Enter window). This branch merges with that tip without conflicts (git merge-tree). The tip's test file was copied in for this run only and removed after it (status clean): 26/26 against this branch's Select.tsx (Tab change included), beside keyboardWindow.test.tsx 58/58."
+}

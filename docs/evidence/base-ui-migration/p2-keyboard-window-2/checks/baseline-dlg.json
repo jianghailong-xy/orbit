@@ -1,0 +1,35 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.config.mjs --project chromium-dark-desktop --grep '\"'\"' dlg-[a-z-]+ (burst|paced) sample'\"'\"''",
+ "env": {},
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "runner": "run-chunks.py (inside one mcp__orbit__bg_run job)",
+ "commit": "0594f6d2c33ee60179eae2784ad781491e275e30",
+ "webTree": "b12625256d13a586b91846f64d759f384a90d8ca",
+ "dirtyWeb": "?? src/web/src/components/kw2scratch/",
+ "startedAt": "2026-10-07T12:35:15.241813+00:00",
+ "endedAt": "2026-10-07T13:06:54.580006+00:00",
+ "loadAverage": {
+  "start": [
+   14.73681640625,
+   10.9833984375,
+   13.58740234375
+  ],
+  "end": [
+   14.7001953125,
+   14.431640625,
+   13.8232421875
+  ]
+ },
+ "exitCode": 0,
+ "outputSha256": "181f5d485fd94ea5642d6e60f39d5bd69c292b4fc9aaea80bf2ba745f4c1ccf8",
+ "outputBytes": 207453,
+ "raw": "/var/tmp/kw2-246921c8/runs/baseline-dlg",
+ "stats": {
+  "expected": 1120,
+  "unexpected": 0,
+  "skipped": 0,
+  "flaky": 0,
+  "duration": 1898905.807,
+  "samples": 1120
+ }
+}

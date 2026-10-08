@@ -1,0 +1,35 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.config.mjs --project chromium-dark-desktop --grep '\"'\"' pop-[a-z-]+ (burst|paced) sample'\"'\"''",
+ "env": {},
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "runner": "run-chunks.py (inside one mcp__orbit__bg_run job)",
+ "commit": "0594f6d2c33ee60179eae2784ad781491e275e30",
+ "webTree": "b12625256d13a586b91846f64d759f384a90d8ca",
+ "dirtyWeb": "?? src/web/src/components/kw2scratch/",
+ "startedAt": "2026-10-07T13:06:54.673542+00:00",
+ "endedAt": "2026-10-07T13:24:44.052604+00:00",
+ "loadAverage": {
+  "start": [
+   14.7001953125,
+   14.431640625,
+   13.8232421875
+  ],
+  "end": [
+   12.689453125,
+   15.40771484375,
+   17.529296875
+  ]
+ },
+ "exitCode": 0,
+ "outputSha256": "a55e0cc60972005ebecf98714d2b053d333ffbc0209b0d7b1bf09c4ab84dcf31",
+ "outputBytes": 105452,
+ "raw": "/var/tmp/kw2-246921c8/runs/baseline-pop",
+ "stats": {
+  "expected": 560,
+  "unexpected": 0,
+  "skipped": 0,
+  "flaky": 0,
+  "duration": 1069023.322,
+  "samples": 560
+ }
+}
