@@ -29,6 +29,10 @@ export interface MenuProps extends FloatingProps {
   disabled?: boolean;
   /** The composer's existing phone attachment density; desktop stays compact. */
   variant?: 'default' | 'attachment';
+  /** False leaves ↑ and ↓ on the closed trigger to the page, as the replaced dropdown's trigger did (the Tasks
+   *  page steps through its rows with them); Enter, Space and a click still open it, and the open menu keeps its
+   *  arrows. */
+  openOnArrowKeys?: boolean;
 }
 
 /**
@@ -103,7 +107,7 @@ function Items({ items, container, zIndex }: { items: MenuItem[]; container: () 
   });
 }
 
-export function Menu({ trigger, items, disabled, variant = 'default', side = 'bottom', align = 'start',
+export function Menu({ trigger, items, disabled, variant = 'default', openOnArrowKeys = true, side = 'bottom', align = 'start',
   popupClassName, popupStyle, returnFocus, ...state }: MenuProps) {
   const layer = useFloating(state);
   const anchor = useRef<HTMLButtonElement>(null);
@@ -126,6 +130,9 @@ export function Menu({ trigger, items, disabled, variant = 'default', side = 'bo
       // do with focus in it (the menu convention).
       const menu = popup.current;
       if (layer.open && menu) handOver(event, menu.querySelector<HTMLElement>('[data-highlighted]') ?? menu, ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter', 'Tab']);
+      // Not opening on the arrows: Base UI's handler, which would open the menu and stop the key, is skipped, so the
+      // key goes on to the page's own handler.
+      else if (!layer.open && !openOnArrowKeys && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) event.preventBaseUIHandler();
     }} />
     <BaseMenu.Portal container={layer.container()}>
       <BaseMenu.Positioner ref={positioner} side={side} align={align} {...placement} positionMethod={layer.positionMethod} className="orbit-floating-positioner" style={{ zIndex: layer.zIndex }}>
