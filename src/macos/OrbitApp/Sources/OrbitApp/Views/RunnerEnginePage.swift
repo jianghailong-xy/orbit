@@ -211,7 +211,7 @@ private struct RunnerEngineContent: View {
                     .foregroundStyle(Color.secondary)
             }
         } header: {
-            RunnerSectionHeader(RunnerPageFormat.keepsAccounts(engine) ? "Accounts" : "Sign-In")
+            RunnerSectionHeader(RunnerPageFormat.accountsTitle(runner, engine: engine))
         } footer: {
             if engine == "antigravity" && RunnerPageFormat.antigravityCanSignIn(runner) {
                 VStack(alignment: .leading, spacing: 8) {
@@ -261,13 +261,23 @@ private struct RunnerEngineContent: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(line.name)
-                        .font(.headline)
+                    HStack(spacing: 4) {
+                        Text(line.name)
+                            .font(.headline)
+                        // Where Automatic starts the next session — the account pools' mark for the same
+                        // thing (web `AccountName`).
+                        if RunnerPageFormat.marksNext(runner, engine: engine, account: line.id, now: now) {
+                            PoolChip(text: SharedPoolPage.nextChip)
+                        }
+                    }
                     if let subtitle = line.subtitle {
+                        // What doesn't fit goes from the middle: a Kimi account's site leads the line,
+                        // and the directory's last part is what tells two accounts apart.
                         Text(subtitle)
                             .font(.orbitLabel)
                             .foregroundStyle(Color.secondary)
                             .lineLimit(1)
+                            .truncationMode(.middle)
                     }
                 }
                 Spacer(minLength: 8)

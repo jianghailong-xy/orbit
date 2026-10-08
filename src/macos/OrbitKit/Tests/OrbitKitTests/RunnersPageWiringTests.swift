@@ -445,7 +445,8 @@ final class RunnersPageWiringTests: XCTestCase {
         XCTAssertTrue(paste.contains("if phase == .active, opened { returned = true }"),
                       "back from the page it opened, Paste is the prominent press")
         let device = try slice(signIn, from: "private func deviceFlow(", to: "private func idle(")
-        try assertInOrder(device, ["Text(site?.enterCode ?? \"Enter this one-time code on the sign-in page:\")", "Text(code)",
+        try assertInOrder(device, ["Text((model.adding ? site?.enterCodeAdding : site?.enterCode) ?? \"Enter this one-time code on the sign-in page:\")",
+                                   "Text(code)",
                                    "PlatformPasteboard.copyString(code)", "openURL(url)",
                                    "Label(site?.copyCodeAndOpen ?? \"Copy Code & Open Sign-In Page\", systemImage: \"doc.on.doc\")"],
                           "the code first, then the press that copies it and opens its page")
@@ -456,6 +457,45 @@ final class RunnersPageWiringTests: XCTestCase {
                                  "signingIn == line.id && landedHere == line.id && line.auth == \"yes\"",
                                  "&& RunnerPageFormat.loginExpiresLine(line, now: now) == nil"],
                           "a card folds back once the row it folds into says the account is signed in")
+    }
+
+    /// An account's row wears NEXT beside its name where Automatic starts the next session — the account
+    /// pools' chip, on every engine's page — and its line under the name gives up its middle, never the
+    /// site that leads a Kimi account's or the id that ends its directory (docs/mocks/kimi-accounts/02-ios).
+    /// The section is Sign-In where the runner keeps one login of the engine.
+    func testAnAccountsRowWearsNextAndKeepsBothEndsOfItsLine() throws {
+        let page = code(try appSource("Views/RunnerEnginePage.swift"))
+        let row = try slice(page, from: "private func accountRow(", to: "private func withActions<")
+        try assertInOrder(row, ["Text(line.name)",
+                                "if RunnerPageFormat.marksNext(runner, engine: engine, account: line.id, now: now) {",
+                                "PoolChip(text: SharedPoolPage.nextChip)",
+                                "if let subtitle = line.subtitle {", ".lineLimit(1)", ".truncationMode(.middle)"],
+                          "NEXT beside the name, then the line under it")
+        XCTAssertTrue(page.contains("RunnerSectionHeader(RunnerPageFormat.accountsTitle(runner, engine: engine))"))
+        // The pools' chip is the page's to wear too — on the Mac as well, so not in the pool pages'
+        // iOS-only file.
+        let chip = code(try appSource("Views/PoolChip.swift"))
+        XCTAssertTrue(chip.contains("struct PoolChip: View {"))
+        XCTAssertFalse(chip.contains("#if os(iOS)"), "PoolChip is iOS-only")
+        XCTAssertFalse(code(try appSource("Views/ProviderPoolViews.swift")).contains("struct PoolChip"))
+    }
+
+    /// Kimi's Add Account names the account first and the site second: neither site can be pressed
+    /// without a name, the press signs in under it — as does starting over on the other site — and
+    /// Current marks only the site of the account being signed in again (02-ios ② ⑫).
+    func testKimisAddAccountNamesTheAccountThenItsSite() throws {
+        let signIn = code(try appSource("Views/RunnerSignInView.swift"))
+        let sites = try slice(signIn, from: "private func kimiSites(", to: "private func signInButton(")
+        try assertInOrder(sites, ["Task { await model.begin(accountName: accountName, site: KimiSite.named(site, on: model.runner)) }",
+                                  "if model.currentSite == site {",
+                                  ".disabled(model.busy || !model.runnerRead || !nameReady)"],
+                          "a site press signs the named account in on that site")
+        let device = try slice(signIn, from: "private func deviceFlow(", to: "private func idle(")
+        XCTAssertTrue(device.contains(
+            "Task { await model.begin(accountName: accountName, site: KimiSite.named(site.other, on: model.runner)) }"),
+            "the other site starts over under the same name")
+        let model = code(try appSource("RunnerSignInModel.swift"))
+        XCTAssertTrue(model.contains("var currentSite: KimiSite? { KimiSite.current(on: runner, account: account, adding: adding) }"))
     }
 
     /// ⑤ A workspace row says how many of its sessions run, and opens them — after the Settings sheet
