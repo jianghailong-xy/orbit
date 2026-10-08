@@ -267,6 +267,10 @@ export interface LandingLine {
   clockLabel: string;
   /** How fresh the line is, or the limit a timed-out job ran over ("limit 10m"). */
   updated: string | null;
+  /** "2m 24s" — what the job waited for a runner before it was claimed, or null when it never
+   *  waited, the read does not say, or it has not been claimed at all (a queued job's whole clock
+   *  is that wait, said by `clockLabel`). */
+  wait: string | null;
 }
 
 export const JOB_WORDS = {
@@ -274,6 +278,19 @@ export const JOB_WORDS = {
   CHECK_PROMOTION: 'Merge check',
   LAND_PROMOTION: 'Merge to main',
 };
+
+/**
+ * The state word for a job whose runner has stopped reporting.
+ *
+ * A fact about the REPORTS and nothing else: the runner is silent, which is not the same claim as
+ * "this job is broken", and emphatically not the same claim as "this job timed out" — a timeout is
+ * the job's own verdict, and only the server's `blockingReason` ever words one.
+ */
+export const LANDING_NO_REPORT = 'No report';
+/** The same fact with its age, for the row's right-hand slot: `No report for 11m`. */
+export const landingNoReportFor = (minutes: number): string => `No report for ${minutes}m`;
+/** And for a job claimed whose runner has never reported at all — the report that never came. */
+export const LANDING_NO_REPORT_YET = 'No report yet';
 
 export const JOB_PHASES = {
   FETCH: 'fetching',
@@ -347,7 +364,9 @@ export function landingClock(ms: number): string {
  * A server that lists its jobs (`inFlightJobs`) also judges which of them timed out, and the row
  * takes its word: "Timed out" when the job it describes did, and the count says how many did.
  * "Update unavailable" then means only that this app cannot read the server. A server older than the
- * list leaves the guess here, from the runner's heartbeat, as before.
+ * list leaves the reading of the reports here, from the runner's heartbeat: a claimed job whose
+ * runner has gone quiet reads "No report" for as long as it stays quiet — never "timed out", which
+ * is the job's own verdict to give and arrives as the server's `blockingReason`.
  */
 export function landingLine(
   view: ProjectIntegrationView,
@@ -362,15 +381,23 @@ export function landingLine(
   const lead = listed?.[0];
   const timedOutJobs = listed ? listed.filter((job) => job.timedOut).length : 0;
   const heartbeatAt = Date.parse(inFlight.heartbeatAt ?? '');
-  const heartbeatStale = !listed && running && Number.isFinite(heartbeatAt)
-    && now - heartbeatAt > INTEGRATION_CLAIM_STALE_MS;
-  const unavailable = unreadable(now, observation) || heartbeatStale;
+  // A claimed job whose runner has gone quiet: no report at all, or none since the claim lease the
+  // server itself uses (`INTEGRATION_CLAIM_STALE_MS`). Read only where the server hands over no
+  // verdict of its own (a server that does not list its jobs) — one that lists them judges the
+  // timeouts, and this row takes that word instead. Even here it is a fact about the REPORTS and
+  // never a verdict: "No report", not "timed out", which is the job's own to say.
+  const silent = !listed && running
+    && (!Number.isFinite(heartbeatAt) || now - heartbeatAt > INTEGRATION_CLAIM_STALE_MS);
+  const unavailable = unreadable(now, observation);
   const named = {
     word: inFlight.kind ? JOB_WORDS[inFlight.kind] ?? 'Integration' : 'Integration',
     what: jobs > 1 ? landingJobsCount(jobs, timedOutJobs) : inFlight.taskTitle,
   };
-  if (!unavailable && lead?.timedOut) return { ...named, ...timedOutLine(lead, now) };
-  return { ...named, ...liveLine(inFlight, now, observation, unavailable) };
+  // What the job waited for a runner before it was claimed — the row's own `inFlight` carries it,
+  // and only a CLAIMED job has one to show: a queued job's whole clock already is that wait.
+  const waitMs = running ? inFlight.waitMs : null;
+  if (!unavailable && lead?.timedOut) return { ...named, ...timedOutLine(lead, now, waitMs) };
+  return { ...named, ...liveLine(inFlight, now, observation, unavailable, silent, waitMs) };
 }
 
 /** Whether this app has lost the server: its last read failed, or is more than 90 s old. */
@@ -380,35 +407,51 @@ function unreadable(now: number, observation: { updatedAt?: number; failed?: boo
 }
 
 /** A running or queued job's half of a line: its state, its clock and how fresh the line is —
- *  frozen at the last word anyone had when `unavailable`, so a line nobody can update stops counting. */
+ *  frozen at the last word anyone had when `unavailable`, and at the last report when `silent`
+ *  (the same freeze, reached from the runner's silence rather than this app's read). */
 function liveLine(
   job: { state: 'RUNNING' | 'QUEUED'; phase?: IntegrationJobPhase | null; startedAt: string; heartbeatAt?: string | null },
   now: number,
   observation: { updatedAt?: number },
   unavailable: boolean,
+  silent: boolean,
+  waitMs?: number | null,
 ): Omit<LandingLine, 'word' | 'what'> {
   const running = job.state === 'RUNNING';
   const startedAt = Date.parse(job.startedAt);
   const heartbeatAt = Date.parse(job.heartbeatAt ?? '');
-  const updatedAt = running && Number.isFinite(heartbeatAt) ? heartbeatAt : observation.updatedAt;
-  const elapsedAt = unavailable ? Math.min(now, updatedAt ?? now) : now;
+  const reported = Number.isFinite(heartbeatAt);
+  // What this row has evidence for. A read that failed or went stale is evidence only of itself, so
+  // the row freezes at that read; a read that worked carries the runner's own last report, which is
+  // what the line's freshness follows — a successful refresh does not make a silent job look active.
+  const updatedAt = unavailable ? observation.updatedAt : running && reported ? heartbeatAt : observation.updatedAt;
+  const elapsedAt = unavailable || silent ? Math.min(now, updatedAt ?? now) : now;
   const age = updatedAt === undefined ? null : Math.max(0, Math.floor((now - updatedAt) / 60_000));
   return {
-    running: running && !unavailable,
+    running: running && !unavailable && !silent,
     timedOut: false,
     state: unavailable ? 'Update unavailable'
-      : running ? (job.phase ? JOB_PHASES[job.phase] ?? 'running' : 'running') : 'queued',
+      : silent ? LANDING_NO_REPORT
+        : running ? (job.phase ? JOB_PHASES[job.phase] ?? 'running' : 'running') : 'queued',
     // An instant this clock cannot read is no elapsed time rather than `NaN` on the page: the row
     // stays up and counts from zero, which is the one thing it can still say truthfully.
     clock: landingClock(Number.isFinite(startedAt) ? elapsedAt - startedAt : 0),
     clockLabel: running ? 'Elapsed' : 'Queued for',
-    updated: age === null ? null : age === 0 ? 'Updated just now' : `Updated ${age}m ago`,
+    // A read that failed or went stale says how old the read is; a read that WORKED says where the
+    // reports stand — and a silent job says that rather than putting a false "Updated" on itself.
+    updated: silent ? (reported && age !== null ? landingNoReportFor(age) : LANDING_NO_REPORT_YET)
+      : age === null ? null : age === 0 ? 'Updated just now' : `Updated ${age}m ago`,
+    wait: running && waitMs ? landingClock(waitMs) : null,
   };
 }
 
 /** A job the server judged timed out: how long its runner has said nothing — since its last report,
  *  or since the claim when it never made one — and the limit it ran over. */
-function timedOutLine(job: ProjectIntegrationJob, now: number): Omit<LandingLine, 'word' | 'what'> {
+function timedOutLine(
+  job: ProjectIntegrationJob,
+  now: number,
+  waitMs?: number | null,
+): Omit<LandingLine, 'word' | 'what'> {
   const silentSince = Date.parse(job.heartbeatAt ?? job.startedAt);
   return {
     running: false,
@@ -417,6 +460,7 @@ function timedOutLine(job: ProjectIntegrationJob, now: number): Omit<LandingLine
     clock: Number.isFinite(silentSince) ? `${Math.max(0, Math.floor((now - silentSince) / 60_000))}m` : '0m',
     clockLabel: LANDING_WORDS.NO_REPORT_FOR,
     updated: landingLimit(job.limitSeconds ?? 600),
+    wait: waitMs ? landingClock(waitMs) : null,
   };
 }
 
@@ -458,7 +502,7 @@ export function landingJobLines(
       taskId: job.taskId,
       line: !unavailable && job.timedOut
         ? { ...named, ...timedOutLine(job, now) }
-        : { ...named, ...liveLine(job, now, observation, unavailable) },
+        : { ...named, ...liveLine(job, now, observation, unavailable, false, null) },
       detail: job.timedOut
         ? `${job.runnerName ? `Runner ${job.runnerName}` : 'The runner'} took it at ${landingClockTime(job.startedAt)} · stopped at ${stoppedAt} · ${pushed ? LANDING_WORDS.MAY_HAVE_BEEN_PUSHED : LANDING_WORDS.NO_PUSH_RECORDED}`
         : job.retriedBy
@@ -493,6 +537,9 @@ export function LandingRow({ line }: { line: LandingLine }) {
       {line.what ? <div className="project-landing-what">{line.what}</div> : null}
       <div className="project-landing-meta">
         <span>{line.clockLabel} <span className="project-landing-clock">{line.clock}</span></span>
+        {/* The other half of "how long is this taking": what it waited for a runner before any of
+            the elapsed time began. */}
+        {line.wait ? <span>Waited <span className="project-landing-wait">{line.wait}</span></span> : null}
         {line.updated ? <span>{line.updated}</span> : null}
       </div>
     </div>

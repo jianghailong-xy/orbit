@@ -741,16 +741,19 @@
       "who": {
         "runner": "Only the session that proposed the ops. The runner door requires X-Orbit-Session-Id (a headless call is refused) and lists and accepts verdicts for that session's own ops alone: another session's op, and anything of another owner's, is the same 404 as one that does not exist.",
         "import": "The one-off import the API server's container runs as {origin: import, authorKind: system} calls WikiService.listVerifications and WikiService.recordVerifications directly, and reaches the ops of import changesets that name no session. Its verdicts leave the same trail and apply the same way.",
-        "maintenance": "A Wiki maintenance run of the space also verifies what ended sessions left waiting there, on its own two routes (adoption): the ops whose proposing session has ended, which nobody else is left to verify."
+        "maintenance": "A Wiki maintenance run of the space also verifies what ended sessions left waiting there, on its own two routes (adoption): the ops whose proposing session has ended, which nobody else is left to verify.",
+        "server": "Under jobs.executor=server, or canary for an account it lists, the ops a session proposed are verified by the server's own job (jobs.kindRuns.verify, agentSurface.verify.serverExecution): it is not a session, and it writes as none — the identity it reports a verdict under is the PROPOSING session's, taken from the job's input, and its writes are authored system, because the server made them on its own account. The rule that only a session's own ops may be verified is unchanged: the job reaches exactly the ops of the session it names, and the read it works from is the same list this door answers with."
       },
       "routes": {
         "list": "GET /api/runner/wiki/spaces/:id/verifications",
-        "report": "POST /api/runner/wiki/spaces/:id/verifications"
+        "report": "POST /api/runner/wiki/spaces/:id/verifications",
+        "request": "POST /api/runner/wiki/spaces/:id/verifications/request"
       },
       "list": "The calling session's ops that wait for their verification in the space, oldest first, after the op ?after= names and at most ?limit= of them (rules.verificationListMax): each with its op, its kind, the entry as it would read once applied (an add's draft, an amend's changes laid over its entry), its sources each with the text of its record read now and redacted (at most rules.verificationSourceMaxChars of it, marked when cut), and its similar[] as recorded, each neighbour's title, status and trust read now. The answer names the space's mode, so a verifier can stop before it asks a model anything.",
       "report": "verdicts[], at most limits.opsPerChangeset of them, each {opId, verdict, reason, model} and duplicateOf for a duplicate. Each is judged on its own and in a transaction of its own; its outcome is applied, rejected, reinforced, conflict or refused, and a request none of whose verdicts was recorded answers with the status of its first refusal. A verdict for an op already verified the same way answers with what was recorded, replayed, and writes nothing.",
       "fallback": "Facts, never a clock: when a verdict recorded in an automatic space is unsupported, the unsupported ones among the rules.verificationWindow latest verdicts recorded in the space since settings.reviewModeChangedAt are counted, and more than rules.verificationMaxUnsupportedPercent percent of rules.verificationWindow sends the space back to tiered in the same transaction (reviewModeChangedBy verification). A verdict about an op none of whose sources could be read (evidence.unreadable) is out of the window altogether: not counted, and not counted against. The owner is sent one notification after it commits. The switch is a compare-and-set on the mode, so a space already out of automatic trips no second time, whatever is verified after.",
-      "cli": "orbit wiki verify (agentSurface.verify) is the runner's verifier: it reads the list, asks a clean Claude Code for one verdict per op, and reports each verdict as soon as it has it.",
+      "cli": "orbit wiki verify (agentSurface.verify) is the runner's verifier: it reads the list, asks a clean Claude Code for one verdict per op, and reports each verdict as soon as it has it. Under jobs.executor=server (or canary, for a listed account) the server verifies instead and the session runs nothing: see agentSurface.verify.serverExecution.",
+      "servedBy": "Under jobs.executor=server, or canary for an account its list names, who verifies an op is the server's own worker (jobs.kindRuns.verify) and not the session's provider: the verification list this door answers is then EMPTY for a session that is not a maintenance run of the space, and says so — `servedBy: \"server\"` and `waiting`, how many of the session's ops wait, so a caller can wait for the count to reach zero — and the answer a submission gets (POST .../changesets, and the import's) carries the same field. A caller that reads it runs no model of its own: orbit wiki verify (the next runner release) calls routes.request, which queues the one verify job a submission would have made for the calling session and answers { spaceId, servedBy, jobId }, and then waits for the ops to leave the list. Nothing else about the door changes: a maintenance run of the space reads its own list and reports as before (it verifies its own ops in its own process until P8, cli), under the default runner mode every field here is absent, and a session the server does not run for sees the list it always saw.",
       "reopen": {
         "why": "A verdict given before the evidence rule could read no tool, thinking or system event: an op citing nothing else was found unsupported for want of text, and stood as a not_true counter-example in the next similar[].",
         "route": "POST /api/wiki/spaces/:id/verifications/reopen",
@@ -1236,9 +1239,9 @@
         "lagSeconds": "How long ago that fact was, in whole seconds; 0 when there is none.",
         "dailyLimitReached": "The space has made settings.maintenance.dailyRunLimit maintenance tasks since midnight UTC (wikiMaintenanceRunsToday), however they ended — but the runs made in catch-up that are not counted — and the next run would count: no fact makes another today. False while the space catches up on a local endpoint (maintenance.job.catchUp.dailyLimit), whose runs the day does not count.",
         "held": "maintenance.job.held as the cursor row keeps it: {reason, at}, or null.",
-        "running": "The run under way — its row has started and not ended, and its task is OPEN or IN_PROGRESS — as {sessionId, startedAt}, or null; startedAt is when its latest attempt started (maintenance.job.recovery.attempts).",
-        "lastRun": "The run that ended last, as {sessionId, outcome, endedAt}, or null: what View run opens.",
-        "lastFailure": "Of the runs whose latest attempt failed — outcome failed or truncated — the one that ended last, as {kind, reason, at, sessionId}: kind is its failureKind (maintenance.job.recovery.failureKinds), reason its error, at when it ended; null while no run's latest attempt failed. What a client tells the platform failing from the run failing by."
+        "running": "The run under way — its row has started and not ended, and its task is OPEN or IN_PROGRESS — as {sessionId, startedAt}, or null; startedAt is when its latest attempt started (maintenance.job.recovery.attempts). Beside them jobId (P9): the server's job that runs it, null for a maintenance session's run.",
+        "lastRun": "The run that ended last, as {sessionId, outcome, endedAt}, or null: what View run opens. Beside them jobId (P9): the server's job that ran it, which has no session — View run then opens that run's row on Activity (jobs.read) instead of a session.",
+        "lastFailure": "Of the runs whose latest attempt failed — outcome failed or truncated — the one that ended last, as {kind, reason, at, sessionId}: kind is its failureKind (maintenance.job.recovery.failureKinds), reason its error, at when it ended; null while no run's latest attempt failed. What a client tells the platform failing from the run failing by. Beside them jobId (P9), as lastRun's."
       },
       "looks": ["off", "failing", "running", "behind", "ok"],
       "look": "The first that holds, in the order of looks: off — maintenance is off; failing — consecutiveFailures is more than 0; running — running is not null; behind — the oldest fact after the cursor is older than maintenance.rules.maxPendingAgeHours; ok — none of those (wikiMaintenanceLook).",
@@ -1248,7 +1251,9 @@
         "once": "Sent by the one failure report whose increment made consecutive_failures exactly afterFailures. The increment is one UPDATE … RETURNING on the cursor row, so of reports racing only one reads that number back, and the streak's later failures read more. After the statement, outside any transaction, best-effort: the failure is recorded whether or not the phone rang.",
         "reset": "A succeeded run sets consecutive_failures back to 0, so the next streak is told once more, at its own third failure."
       },
-      "client": "The Wiki home's status line, on the web at every width and on iOS: after the entries, the review count (desktop only) and the anchors, the maintenance part in the space's look — the same words and the same parts on both, locked by src/shared/src/wiki-health.fixture.json."
+      "client": "The Wiki home's status line, on the web at every width and on iOS: after the entries, the review count (desktop only) and the anchors, the maintenance part in the space's look — the same words and the same parts on both, locked by src/shared/src/wiki-health.fixture.json.",
+      "executor": "jobs.executor.read for the space's owner (P9): { mode, serverExecutes }. Absent from a control plane that predates it, which a client reads as runner.",
+      "systemModel": "While executor.serverExecutes holds, the System model as systemModel.read answers its state — { state, model, since, checkedAt, workerSeenAt }, never its address or key; null under runner, where the model is none of the account's business and is not read."
     }
   },
 
@@ -1618,6 +1623,62 @@
         "draftPrecondition": "Run this only as the plan job of the space, once, and let it finish: it drafts as the space's maintenance run, and only a draft that passed the plan's gate is stored — three rounds at most, each handing every error back to the model.",
         "revisePrecondition": "Run this only as the plan job the owner's redraft made, once, and let it finish: it revises the plan's newest version with the owner's instructions, and only a draft that passed the plan's gate is stored — three rounds at most, each handing every error back to the model.",
         "checkPrecondition": "Judge a plan job only by what this reads: it passes when the job's run stored a draft that passed the plan's gate — or, a build's, wrote the documents of the confirmed version it was made for — and a run cannot pass it by saying it finished."
+      },
+      "server": {
+        "phase": "server execution, P6",
+        "doc": "docs/wiki-contract.md section 21.10; docs/wiki-server-execution-design.md sections 4.3 and 8",
+        "why": "The plan's model moves off the runner (design section 0): when the executor switch gives the account to the server, a draft or a revision is a wiki_job the wiki-worker runs with the System model — the runner's pipeline (src/runner-go/wiki_plan_*.go) ported to src/apiserver/src/wiki-worker/wiki-plan-*.ts, its repository read from the space's snapshot — and no task, session or provider of the account's is made or spent.",
+        "when": "Under jobs.executor=server, or canary for an account its list names. Under runner (the default), and for an account canary does not list, a job is made as plan.jobs.task says and run as plan.jobs.run says, exactly as before.",
+        "make": "advanceWikiPlanJob asks the switch first: a draft is made as a `plan_draft` wiki_job and a revision as `plan_revise`, at priority, with input { planJobId }, in the transaction that marks the plan job made with it (wiki_plan_job.job_id). The space's maintenance workspace is still what it needs — the worker reads the repository through that workspace's runner — so a space without one is held no_maintenance_workspace as on the runner's path; the provider is not asked, since no session's model is, and nothing waits for the hidden list (plan.jobs.staggered is the runner's: the queue and one running job a space keep the model from being asked by both at once). No task is made.",
+        "kinds": {
+          "draft": "plan_draft",
+          "revise": "plan_revise"
+        },
+        "build": "A build is made as a `docs_build` wiki_job on the same path (P7, docs.build.server): by advanceWikiPlanJob, at docs.build.server.priority with input { planJobId }, in the transaction that marks the plan job made with it — held no_maintenance_workspace without a workspace, the provider not asked and nothing waiting for the hidden list, as a draft. Its run says how far it got on the plan job ({ docs, current }, as plan.jobs.progress says a build's run does) and ends it as plan.jobs.finish does a build's — the version it wrote, the build's report — with no session (docs.build.server.progress, docs.build.server.end). A build made before the switch, a task, ends with its task: its session is refused like any other (door).",
+        "priority": 1,
+        "priorityRule": "Owner-initiated (jobs.priority): the space's creation and the owner's redraft are both the owner's, so every request of the job goes before background maintenance.",
+        "maxTokens": 32000,
+        "formatTries": 3,
+        "concurrency": 4,
+        "systemPrompt": "你是这个仓库的文档主编。你根据给你的材料规划产品与技术文档。只使用材料里出现的文件路径、章节标题、符号、项目名，不编造。用中文写，代码名、路径、命令保留原文。只输出要求的内容。",
+        "steps": {
+          "skeleton": "plan_skeleton",
+          "details": "plan_details",
+          "outline": "plan_outline",
+          "rules": "plan_rules",
+          "reviseCatalogue": "plan_revise_catalogue",
+          "reviseDoc": "plan_revise_doc",
+          "redoDoc": "plan_redo_doc"
+        },
+        "calls": "Every call is one queue request (modelQueue): step one of steps — each `plan_*`, so it waits at most modelQueue.waitLimitSeconds.plan and runs at most modelQueue.callBudgetSeconds.plan, sixty minutes — and unit `a<round>/<the runner's unit name>@<the first 12 hex of the call's sha256>`, so a replay meets the request it already made, an answer that does not read is asked again with the format said once more (formatTries calls a unit at most), and a changed question is a new request. maxTokens a call, the system prompt above, one user message; what has arrived is kept as the request's partial while it runs (modelQueue).",
+        "materials": "Read once, at the job's first run, and kept on the plan job (wiki_plan_job.materials, migration 0404): the space's snapshot's sha — a fresh snapshot when its runner can take one, waited for at most snapshotWaitSeconds, else the snapshot the space holds, else the job waits as infra — the plan's materials (plan.jobs.materials, the same function the runner door answers with), the day they were read, and the texts at the sha the snapshot does not carry: the overview's documents and schema.prisma, through the runner's read (repoOps.kinds.read), waited for at most readWaitSeconds. A replay reads them back, so it asks the model the questions it asked; a snapshot that moved under the job (another job of the space took a newer one) makes it start over at the snapshot as it is, as the runner starts over when the sha it drafted from left origin/main.",
+        "snapshotWaitSeconds": 300,
+        "readWaitSeconds": 300,
+        "materialCaps": {
+          "overview": {
+            "full": 14000,
+            "detail": 10000,
+            "doc": 8000
+          },
+          "layout": {
+            "full": 32000,
+            "detail": 26000
+          },
+          "docsTree": {
+            "full": 45000,
+            "detail": 30000
+          },
+          "codeExcerpt": 16000
+        },
+        "materialCapsRule": "The runner's caps, in characters: a catalogue reads the overview at full, the structure and the documents' heading tree at full; a category's details read them at detail; a document's outline reads the overview at doc and its code's symbols within codeExcerpt (bytes, as the runner's builder counts them).",
+        "repository": "Everything the runner's job read of its checkout is read from the snapshot index at the same sha: the files with their sizes (the structure, hasPath), every document's headings (the heading trees, hasDocSection), every source file's symbols (the code excerpt, hasSymbol), the contracts' top-level keys (the contracts list). A symbol the index does not name is looked for, as on the runner, as a word of its file's text — the text read at the sha before the round is gated, at most repoOps.read.wholeFileChars characters a file. That limit, and the index carrying an object's keys only (a contract whose JSON is an array or empty reads as not JSON), are the two places the two paths can differ.",
+        "gate": "The job's own gate first — plan.jobs.run's checks, word for word, with every file, docs section, symbol and contract checked on the snapshot — then the plan's gate on the server (plan.gate), which the job reaches in process (WikiPlans.submitServerDraft) under the draft's idempotency key; repoCheck is the snapshot's sha and what this gate found. Whatever either finds goes back to the model unit by unit, plan.jobs.rules.attemptsMax rounds in all.",
+        "author": "A stored version names the wiki_job that drafted it (wiki_plan.author_job_id, migration 0404; authorJobId on the read) where a session's names its session; origin maintenance, model the System model's name.",
+        "progress": "The plan job says where the run is, as plan.jobs.progress does for a session's: started_at at the job's first run, attempt at each round — what the plan page reads. The wiki_job's own progress (jobs.progress) is { planJobId, attempt, step }.",
+        "finish": "The run ends its plan job as plan.jobs.finish does a session's, held to the same rules (WikiPlans.finishServerJob): succeeded with the version its draft became — a version of the space this wiki_job stored — or failed with the last round's errors, what went wrong, the report and the last draft; the wiki_job ends with { kind, planJobId, outcome, version, error, plan: the report }. A failure of the platform — a request past its wait limit, the space's runner away, the worker stopping — is not the draft's: the wiki_job is retried (jobs.retry) and the plan job stays running. A wiki_job that ends without its plan job ended ends it failed, and one that never started is cancelled, with its plan job ended, when the switch no longer gives the account to the server.",
+        "door": "The runner door's drafting routes are the server's (refusals: WIKI_SERVER_EXECUTES), whoever asks, once the space is found: context, progress, finish, materials and drafts — a build job's session too, since the documents are the server's as well (build): no build task is made, and one made before the switch stops at its first call like any other session. A session's `orbit wiki plan draft` or `revise` — one that predates this too — stops at its first call, before it has asked any model anything. What a maintenance run reads of the plan (plan.reads.state) and proposes to it (plan.proposals), and the check (plan.jobs.check), are as they were. Under runner every route is exactly as plan.jobs.who says.",
+        "deterministic": "One fixture holds both paths to the same answers: src/shared/src/wiki-plan.fixture.json, written by src/runner-go/wiki_plan_fixture_test.go from a real checkout read the runner's way, and read by src/apiserver/src/wiki-worker/wiki-plan-golden.spec.ts the server's way — the line format read back, the references found, the materials, every step's prompt, each round's draft, gate errors and repository check.",
+        "migration": "src/apiserver/prisma/migrations/0404_wiki_plan_server_draft/migration.sql"
       }
     }
   },
@@ -1740,7 +1801,7 @@
       "readers": "The owner, on the user door. Another owner's space or document is a plain 404."
     },
     "who": {
-      "write": "A maintenance run of the space (isWikiMaintenanceSession, maintenance.session) through the runner door, and an import the API server's container runs itself (origin import, no session and no user). Every other caller is refused WIKI_NOT_MAINTENANCE_SESSION, a headless call 400, another owner's space a plain 404; the user door has no write route. Every write asks requireConfirmedPlan first (plan.guard): with no confirmed plan it is WIKI_PLAN_UNCONFIRMED.",
+      "write": "A maintenance run of the space (isWikiMaintenanceSession, maintenance.session) through the runner door, the server's docs_build job for an account it runs (build.server; origin maintenance, no session and no user), and an import the API server's container runs itself (origin import, no session and no user). For an account the server runs, a maintenance session is refused WIKI_SERVER_EXECUTES (build.server.door). Every other caller is refused WIKI_NOT_MAINTENANCE_SESSION, a headless call 400, another owner's space a plain 404; the user door has no write route. Every write asks requireConfirmedPlan first (plan.guard): with no confirmed plan it is WIKI_PLAN_UNCONFIRMED.",
       "read": "The owner, on the user door."
     },
     "routes": {
@@ -1807,7 +1868,34 @@
         "materialHeaderChars": 120,
         "parallel": 4
       },
-      "rulesNote": "materialMaxChars is the most characters of material one section hands the model, each piece counted with materialHeaderChars for its header; the first piece is handed over whatever its size. parallel is the most sections of one document in flight at once."
+      "rulesNote": "materialMaxChars is the most characters of material one section hands the model, each piece counted with materialHeaderChars for its header; the first piece is handed over whatever its size. parallel is the most sections of one document in flight at once.",
+      "server": {
+        "phase": "server execution, P7",
+        "doc": "docs/wiki-contract.md section 22.13; docs/wiki-server-execution-design.md sections 4.3, 7 and 8",
+        "who": "An account the executor switch gives the server (jobs.executor: server, or canary with the account on its list). Under the default runner none of this runs: the owner's confirmation makes the build's task (plan.jobs.task), and orbit wiki docs build writes as this section says, word for word as before.",
+        "made": "The owner's confirmation of a version asks for its build (plan.jobs.request). For such an account the build is made as a docs_build job of the wiki-worker (jobs.kindRuns.docs_build) instead of a task of the hidden list: the plan job made with the job's id (wiki_plan_job.job_id, no task_id) and the job queued at `priority` with input { planJobId }, in one transaction. A space whose maintenance names no workspace holds it, as on the runner path (plan.jobs.held.no_maintenance_workspace): the job reads the repository through that workspace's runner. The provider is not asked about, and the build does not wait behind the hidden list's unfinished task: no session's model is in it. A build made this way and still queued when the switch no longer gives the account to the server is cancelled, its plan job ended failed, by the space's next request for a build.",
+        "repository": "The commit is origin/main as a snapshot names it (repoOps.kinds.snapshot, skipped when the space holds that commit's): the runner's fetch, as the command's own fetch was. The files a section's sources name are read whole at that commit (repoOps.kinds.read, no section: as many to one operation as fit repoOps.read.wholeFileChars by the snapshot's sizes, a larger file alone, `readsInFlight` operations at once, a failed one asked again up to `readAttempts` times in all), and the writer cuts a design document's section, a symbol, the declarations and a contract out of them exactly as `repository` says, at the same lines. A directory shows as git shows a tree, from the snapshot's paths, as the runner's git show did. A file longer than wholeFileChars is read to there: its text is the whole lines before the cut, and a heading or a symbol not among them is missing, and says so — in such a file only the heading a section names, by its words or its number, is looked for, never one that merely contains the name, which could be another section. Each operation is waited for holding the job's lease (the exception repoOps.waiting names), at most `repoWaitSeconds`; a space whose runner cannot be asked (repoOps.looks other than ready), and an operation past its limit, are infra failures, tried again.",
+        "material": "A section's session condition is read in process through src/apiserver/src/wiki/wiki-docs-material.ts, exactly as reads.material reads it: the entries it picks, the records they cite and the ones its projects, window and keywords find, each redacted with the owner's workspace.env values and placed.",
+        "calls": "Every model call is a request through the queue (modelQueue): the system prompt `systemPrompt` (the runner's word for word), one user message, max_tokens `maxTokens`, the step one of `steps` — merge, write, rewrite (a paragraph marked only at its end, asked for once more), quotes (a footnote with no quote that holds, asked about once more) and overview — and a unit made of the document, the section and the sha256 of the prompt, so a replay reuses every answer whose question did not change. The queue retries a 5xx, a 429 and a dropped connection; a 401 stops the whole queue (modelQueue.retry). The prompts and every deterministic step — the filter, the cap, the fingerprint, the merge and the draft as read, the footnotes and their lines — are the runner's: src/shared/src/wiki-docs-build.fixture.json holds both implementations to one answer, written by src/runner-go/wiki_docs_build_fixture_test.go and read by src/apiserver/src/wiki-worker/wiki-docs-build-golden.spec.ts.",
+        "write": "Through WikiDocs.write, the write route's own writer, as the server's own principal (origin maintenance, no session, no user: who.write): one section a write, the run's writes one at a time, model the System model's name. A refusal (WIKI_DOC_INVALID, WIKI_PLAN_STALE, WIKI_PLAN_UNCONFIRMED) fails its section, in the runner's words.",
+        "progress": "As each document is taken up and at the end: the plan job's progress (plan.jobs.progress, a build's { docs: { done, total }, current }) and the job's own (jobs.progress: { step: snapshot | documents, docs, current }).",
+        "end": "Every section it took up written or unchanged: the plan job ends succeeded with the confirmed version it wrote and the build's report (plan.jobs.buildReport), and the job succeeds with the run's summary as its report. A section left unwritten: the other sections are tried, then the plan job ends failed (`<n> sections were left unwritten`) and the job fails as content, its report on the row — as the command exited non-zero. A failure of the platform (the runner away, an operation or a request past its limit, the worker stopping) ends neither: the job is tried again and replays, and a section already written is left as it is by its fingerprint. A replay that finds its plan job already ended answers with that end.",
+        "door": "For such an account the documents' runner-door routes (routes.writerState, writerDoc, material, write, affected and withdraw) refuse a maintenance session WIKI_SERVER_EXECUTES before anything is read — as the plan job's routes refuse every session, a build job's included (plan.jobs.server.door) — so an older runner's orbit wiki docs build, and a maintenance run's documents step, ask their session's model nothing. Any other session is WIKI_NOT_MAINTENANCE_SESSION as before. Under runner they answer exactly as routes says.",
+        "runnerCli": "orbit wiki docs build reads WIKI_SERVER_EXECUTES as the server building the documents — at its first call, the job read, as at any of the documents' routes: it asks no model, writes nothing more, says so (`serverExecutes` in --json) and exits 0. A build task's run, made before the switch, is refused at that first call and its job ends with its task; an end refused because the switch moved mid-run is left to the task too. It ships with the next runner release; until then a runner exits non-zero on the refusal, having asked nothing.",
+        "priority": 1,
+        "steps": {
+          "merge": "docs_merge",
+          "write": "docs_write",
+          "rewrite": "docs_rewrite",
+          "quotes": "docs_quotes",
+          "overview": "docs_overview"
+        },
+        "maxTokens": 8192,
+        "repoWaitSeconds": 300,
+        "readsInFlight": 2,
+        "readAttempts": 3,
+        "systemPrompt": "你是 Orbit 的技术文档作者。你只根据给你的材料写，不编造事实、名字、数字和路径。用中文写，代码名、路径、命令保留原文。只输出要求的内容。"
+      }
     },
     "tool": "none: no MCP tool reads or writes a document. Writing is a maintenance run's verb on the CLI; reading is the owner's, in the Wiki."
   },
@@ -1892,8 +1980,9 @@
       "route": "GET /api/wiki/system-model",
       "who": "Any account the wiki is on for (JwtAuthGuard and WikiRolloutGuard; a personal access token needs wiki:read): it is the deployment's model, not a space's. It writes nothing.",
       "states": ["up", "down", "auth_failed", "unconfigured", "worker_not_running"],
-      "fields": ["state", "model", "since", "checkedAt", "workerSeenAt"],
+      "fields": ["state", "model", "since", "checkedAt", "workerSeenAt", "executor"],
       "workerNotRunning": "No row, or a workerSeenAt older than status.workerStaleSeconds, reads as worker_not_running: what the settings page and the health line show as wiki worker not running. since is then the last heartbeat.",
+      "executor": "The executor switch as it stands for the caller (jobs.executor.read, P9): { mode, serverExecutes } — what the wiki settings page reads to draw the System model instead of the provider. The other five fields are the deployment's and read the same for every account.",
       "never": "The System model's address, its key, and last_error: the read says the model's name and its state, and nothing else."
     },
     "metrics": {
@@ -1918,7 +2007,11 @@
     "kindRuns": {
       "articles": "The server's articles writer (P4, articles.serverExecution): orbit wiki articles done by the wiki worker with the System model. Its input is {}; it is made after a maintenance run of the space by the rule articles.regeneration states, at priority 0 (articles.job). It reads the plan, takes up the topics whose fingerprint changed, groups a big topic as the runner does, has the model name the groups and write the articles through the queue — step articles, a unit per topic, fingerprint and part — and writes them through WikiArticles.write. Its ref is the space's snapshot's sha, asked for once and parked on when there is none (repoOps.waiting). It succeeds when every topic it took up is written or unchanged, and fails as content, its report on the row, when one was left unwritten.",
       "smoke": "One model call, its answer and usage written into the job's report: the shortest route through the queue, and P1's end-to-end proof that claim, call, write-back and settle work together. It runs no pipeline and reads nothing; its input is { system?, prompt?, maxTokens? }, each with a default. A kind whose phase has not landed stays queued — the claim takes only the kinds the worker's build runs — so no deployment is handed work it would have to fail.",
-      "import": "orbit wiki import's reading, on the server (P5, import.server): the notes the command registered, read by the System model through the queue — one request a note (step import, unit the note), one retry with what did not hold up (step import_retry) — checked as the runner checks them, the anchors held to the space's snapshot, then a dry run and one proposal with origin import as the calling session, under a key made of the space and the ops. Its input is the create route's body with the session in it; its report is import.server.report, which the command prints and remembers. Made only by the runner door's create route, at import.server.priority."
+      "import": "orbit wiki import's reading, on the server (P5, import.server): the notes the command registered, read by the System model through the queue — one request a note (step import, unit the note), one retry with what did not hold up (step import_retry) — checked as the runner checks them, the anchors held to the space's snapshot, then a dry run and one proposal with origin import as the calling session, under a key made of the space and the ops. Its input is the create route's body with the session in it; its report is import.server.report, which the command prints and remembers. Made only by the runner door's create route, at import.server.priority.",
+      "verify": "The server's verifier (P3, design section 8 and agentSurface.verify.serverExecution): the ops an Automatic space holds back, verified by the wiki worker with the System model in place of the session's own provider. Its input is { sessionId } — the session whose waiting ops it verifies, which is the identity a verdict has to be reported under — and it runs the runner's verifier step by step: read reviewModes.verification.list for that session (rules.verificationListMax at a time, the server's own evidence reader), build the one-op prompt with the entries numbered E1..En (agentSurface.verify.prompt), ask the System model through the queue — one request per op, step verify, unit the op's id, so a replayed job reuses the answers it holds — and report each verdict through WikiService.recordVerifications, the one writer, as soon as it is read. An answer that is not a verdict is reported as nothing and counted in the report ({ looked, verified, supported, partial, unsupported, duplicate, failed, failures[{opId, why, refused}], stopped, usage }); the job still succeeds, because the ops that got verdicts are its result, and those left without one keep waiting. A space that is no longer automatic ends the pass where it stands (verification.notAutomatic), and a call whose request ends in a way that is not the platform's (the queue's own classes) is that op's failure, not the pass's. The two passes a maintenance run makes and the adoption of ended sessions' ops (verification.adoption) are arguments of the same function, P8's to call.",
+      "plan_draft": "A draft of the space's plan on the server (P6, plan.jobs.server): the four steps of plan.jobs.run — the catalogue, each category's details, each document's outline, the rules' draft — through the queue, gated on the space's snapshot and by the plan's gate, three rounds at most; stored as a version the wiki_job authored. Its input is { planJobId }; its report is { kind, planJobId, outcome, version, error, plan: plan.jobs.report }. Made by advanceWikiPlanJob for a draft the space's creation or its owner asked for, at plan.jobs.server.priority.",
+      "plan_revise": "A revision of the space's plan on the server (P6, plan.jobs.server): plan.jobs.run.revise through the queue — the new catalogue with what each document is made from and the conventions it moves, then the documents that merge or are new — gated as plan_draft is. Its input and report are plan_draft's; the owner's instructions are the plan job's own. Made by advanceWikiPlanJob for the owner's redraft with instructions.",
+      "docs_build": "The documents' build on the server (P7, docs.build.server): what orbit wiki docs build did in a build job's session, done by the wiki-worker with the System model. Made by the owner's confirmation of a plan version for an account the server runs, instead of the build's task (plan.jobs.server), at docs.build.server.priority; its input is { planJobId }. It reads the repository at a snapshot's commit through the space's runner, the records through the material read, writes each section through the docs write route's writer, says how far it got and how it ended on its plan job, and fails as content when a section was left unwritten."
     },
     "states": ["queued", "running", "waiting", "succeeded", "failed", "cancelled"],
     "waitingFor": ["repo", "model"],
@@ -1933,7 +2026,7 @@
       "sweep": "A running job whose lease_deadline_at passed goes back to queued, attempts one higher and the next attempt on retry.backoffSeconds; the takeover starts the job from the beginning, and the request rows it already made answer the replay (modelQueue.identity)."
     },
     "onePerSpace": "At most one job per space runs at a time (design section 5.1, the hidden list's maxConcurrent 1): the claim skips a space whose job is running, and a partial unique index over space_id WHERE state = 'running' is the same rule in the database, for two schedulers that read at once. A job that is waiting (waiting_for set) holds no lease and does not occupy the space.",
-    "priority": "Integer, default 0. Owner-initiated work — a plan draft, a review, a build, an import from the command line — is made with a higher priority than background maintenance, and the claim takes the highest first; within one priority, the longest-waiting job first.",
+    "priority": "Integer, default 0. Owner-initiated work — a plan draft, a review, a build, an import from the command line — is made with a higher priority than background maintenance, and the claim takes the highest first; within one priority, the longest-waiting job first. A verify job is made with 1: the session that proposed the op is waiting for it, and the space knows nothing of what was proposed until the verdict arrives; the pass a maintenance run makes over what ended sessions left waiting (verification.adoption, P8) is background work at 0.",
     "retry": {
       "backoffSeconds": [0, 10, 30],
       "rule": "An infra failure puts the job back to queued with attempts one higher and next_attempt_at now plus backoffSeconds[attempts], the same schedule the queue's calls use. A content failure ends it: state failed, failure_kind content, ended_at set. attempts counts the infra retries of the job's own row."
@@ -1941,8 +2034,8 @@
     "concurrencyPerWorker": 4,
     "pollSeconds": 5,
     "startup": "A worker runs one pass the moment it starts — sweep, then claim — so a job left queued or handed back by a dead worker is picked up where it stands.",
-    "make": "The pipelines enqueue a job as a row (kind, input, priority, state queued) when the executor switch says the server runs for that account. The phases that move each pipeline add their own route or trigger: since P5 the runner door's import-jobs route makes an `import` job (import.server.create), and smoke is made by the specs directly. Since P4 an articles job is also made, where the server records the end of a maintenance run of an account it runs, by the rule articles.regeneration states (articles.serverExecution.made).",
-    "progress": "A job's progress column is its own pipeline's to write (a step, a count, what it is doing), under its lease generation; report is what it ends with. The smoke job writes a report; the import job writes both (import.server.progress, import.server.report); the articles job writes its report (articles.serverExecution.ends).",
+    "make": "The pipelines enqueue a job as a row (kind, input, priority, state queued) when the executor switch says the server runs for that account. The phases that move each pipeline add their own route or trigger: since P3 a submission that recorded an op an Automatic space holds back (reviewModes.verification.waits) makes a verify job for the session that proposed it, after its own transaction commits, at the waiting priority (priority above) — and so does the owner reopening ops a verdict should not have decided (verification.reopen), whose sessions are usually long gone — with one queued job per session and space, since a job reads the ops that wait when it runs (a later submission rides it, while an op arriving mid-run gets a job of its own); since P5 the runner door's import-jobs route makes an `import` job (import.server.create); since P4 an articles job is also made, where the server records the end of a maintenance run of an account it runs, by the rule articles.regeneration states (articles.serverExecution.made); since P6 a plan job of the account is made as a `plan_draft` or `plan_revise` job (plan.jobs.server.make); since P7 the owner's confirmation of a plan version makes a docs_build job for an account the server runs, in place of the build's task (docs.build.server.made); and smoke is made by the specs directly.",
+    "progress": "A job's progress column is its own pipeline's to write (a step, a count, what it is doing), under its lease generation; report is what it ends with. The smoke job writes a report; the import job writes both (import.server.progress, import.server.report); the articles job writes its report (articles.serverExecution.ends), and so does the verify job (jobs.kindRuns.verify); the plan jobs write both (plan.jobs.server.progress, plan.jobs.server.finish), and so does the docs_build job (docs.build.server.progress, docs.build.server.end).",
     "executor": {
       "env": { "mode": "ORBIT_WIKI_EXECUTOR", "canaryOwners": "ORBIT_WIKI_EXECUTOR_CANARY_OWNERS" },
       "modes": ["runner", "canary", "server"],
@@ -1953,14 +2046,42 @@
         "server": "Every account is. The switch gates execution only: rows written by either path stay where they are, and moving it back to runner stops new jobs being taken without deleting anything."
       },
       "mistyped": "A value that is none of the three is read as runner, with a logged problem: a switch reached for and mistyped must land on the path that already runs, never on one whose worker nobody deployed.",
-      "whoReadsIt": "One pure function (src/apiserver/src/wiki/wiki-executor-switch.ts, shaped after wiki-rollout.ts) is read by the apiserver and by the wiki-worker, so both answer the same about an account. The variables reach a service the way the model's do — this deployment's compose passes them from its .env (owner-confirmed, the same way the wiki rollout's ORBIT_WIKI is set), and unset everywhere reads as runner."
+      "whoReadsIt": "One pure function (src/apiserver/src/wiki/wiki-executor-switch.ts, shaped after wiki-rollout.ts) is read by the apiserver and by the wiki-worker, so both answer the same about an account. The variables reach a service the way the model's do — compose passes them from the deployment's .env to both the apiserver and the wiki-worker (P3 wired them; test/compose-topology.test.mjs pins the two lines, and src/apiserver/src/wiki/wiki-compose-env.spec.ts holds them to names no agent session carries), and unset everywhere reads as runner. Setting the switch is the account owner's: production stays runner until P10.",
+      "read": {
+        "phase": "server execution, P9",
+        "fields": ["mode", "serverExecutes"],
+        "rule": "What a read tells the account that asks (wikiExecutorView): mode is the deployment's switch, one of modes, and serverExecutes whether the server executes this account's wiki — mode server, or canary with the account on its list. Never the list itself, nor whether any other account is on it.",
+        "readBy": "systemModel.read (executor) and maintenance.health (executor): the clients draw the server's settings, the Runs card and the status line's server reasons while serverExecutes holds, and under runner — or from a control plane that predates the field — exactly what they drew before."
+      }
     },
     "runRows": {
       "why": "Health and the day's count read runs, not the history of how they were made (design section 5.1).",
       "doctor": "wiki_maintenance_run.job_id and wiki_plan_job.job_id record the job that ran a run; task_id is nullable from 0401 on, and a CHECK requires exactly one maker per started row (a plan job is exempt while it is queued or held — it has made neither yet).",
       "count": "The day's runs (space.settings.maintenance.dailyRunLimit) count the maintenance list's tasks made since midnight UTC, as they always have, and the runs made by a job read off their own rows, which have no task; a run in active catch-up on a local endpoint and one that failed are not counted, whichever path made it. Plan jobs never count."
     },
-    "runnerTurns": "A server run creates no task and no session: it does not touch runnerActiveTurns, and the runner's only part in the server path is the repo operations of P2."
+    "runnerTurns": "A server run creates no task and no session: it does not touch runnerActiveTurns, and the runner's only part in the server path is the repo operations of P2.",
+    "read": {
+      "phase": "server execution, P9",
+      "route": "GET /api/wiki/spaces/:id/jobs",
+      "who": "The space's owner on the user door (JwtAuthGuard and WikiRolloutGuard; a personal access token needs wiki:read): another account's space is the plain 404. It writes nothing.",
+      "why": "A server run has no task and no session to open (design section 2.2): what it is doing — its step, its calls, where they wait — is on Activity, and this read is what the Runs card and a run's page draw.",
+      "limits": { "jobs": 10, "callsPerJob": 40 },
+      "answer": "{ spaceId, jobs }: the space's newest limits.jobs rows of wiki_job, newest first by created_at.",
+      "job": ["id", "kind", "state", "waitingFor", "priority", "attempts", "createdAt", "updatedAt", "startedAt", "endedAt", "nextAttemptAt", "failureKind", "error", "ahead", "progress", "calls", "nextCall", "requests"],
+      "jobRules": {
+        "ahead": "While the job is queued: how many queued jobs of the deployment the claim takes before it (priority DESC, created_at, id — lease.claim's order); null in every other state.",
+        "progress": "The pipeline's own progress (jobs.progress) as { step, done, total }: done and total as the pipeline wrote them, or for the import's shape (import.server.progress) the notes read or failed against the notes it was handed; null when the pipeline wrote none.",
+        "calls": "Its calls counted by state — total, queued, running, succeeded, failed, cancelled — and the input and output tokens they reported, over every one of its rows.",
+        "nextCall": "Of its queued calls, the one the queue reaches first: { ahead, enqueuedAt }, ahead counted as request.ahead is; null while none waits.",
+        "requests": "Its newest limits.callsPerJob calls by enqueued_at, given oldest first; calls.total counts the ones left out."
+      },
+      "request": ["id", "step", "unit", "attempt", "attempts", "state", "enqueuedAt", "startedAt", "endedAt", "inputTokens", "outputTokens", "httpStatus", "error", "errorKind", "ahead"],
+      "requestRules": {
+        "ahead": "While the call is queued: how many queued requests of the deployment the queue takes before it (priority DESC, enqueued_at, id — modelQueue.concurrency.claim's order), whoever they are for; null in every other state.",
+        "times": "How long a call waited is from enqueuedAt to startedAt (or to now while it is queued), and how long it ran from startedAt to endedAt (or to now while it runs); startedAt is its first claim's, so a retry's time is the call's own."
+      },
+      "never": "A call's request (system prompt, prompt, max_tokens), its request_sha256, answer and partial; the lease columns of either table; the job's input and report; whose the runs and calls ahead in a queue are; and the System model's address or key, which no row of either table holds (systemModel.request.errors: the queue's words name neither)."
+    }
   },
 
   "modelQueue": {
@@ -2070,7 +2191,7 @@
     "read": { "docSectionChars": 4200, "contractChars": 2500, "sectionChars": 22000, "wholeFileChars": 22000 },
     "looks": ["ready", "no_workspace", "runner_missing", "runner_offline", "runner_upgrade"],
     "safety": "An operation checks its checkout before it reads it: the repository's origin URL must be the space's `repo.urlNorm` and the checkout's root commit must be the space's `rootCommitSha`. Otherwise it fails, says which repository it found, and reads nothing.",
-    "waiting": "A job that needs a repository operation is parked (wiki_job state waiting, waiting_for 'repo', no lease) and woken by a NOTIFY on the wiki_repo_op channel when the operation settles. A runner that has not declared `wiki-repo-op/v1` is handed nothing: the operation stays queued, the job stays parked until its wait limit, and the space's health line says the runner has to be upgraded. The import's snapshot (import.server.snapshot) is the exception: it is waited for holding the job's lease, a bounded wait with a fallback, so a runner that is away costs the import its fresh anchors and never the run."
+    "waiting": "A job that needs a repository operation is parked (wiki_job state waiting, waiting_for 'repo', no lease) and woken by a NOTIFY on the wiki_repo_op channel when the operation settles. A runner that has not declared `wiki-repo-op/v1` is handed nothing: the operation stays queued, the job stays parked until its wait limit, and the space's health line says the runner has to be upgraded. The import's snapshot (import.server.snapshot) is the exception: it is waited for holding the job's lease, a bounded wait with a fallback, so a runner that is away costs the import its fresh anchors and never the run. The documents' build (docs.build.server.repository) waits for its snapshot and its reads the same way, each bounded by docs.build.server.repoWaitSeconds: they are many and short, and a job parked on each would replay the build each time; one past its limit fails the attempt as infra."
   },
 
   "refusals": [
@@ -2177,7 +2298,8 @@
           "GET /api/wiki/spaces/:id/docs",
           "GET /api/wiki/spaces/:id/docs/:slug",
           "GET /api/wiki/spaces/:id/doc-index",
-          "GET /api/wiki/system-model"
+          "GET /api/wiki/system-model",
+          "GET /api/wiki/spaces/:id/jobs"
         ]
       },
       "runner": {
@@ -2222,7 +2344,8 @@
         "maintenanceNote": "phase 2; any other session is refused WIKI_NOT_MAINTENANCE_SESSION. The maintenance job's check (maintenance.job.check) also answers the space's owner's runner with no session, since a task's acceptance command runs with none.",
         "verificationRoutes": [
           "GET /api/runner/wiki/spaces/:id/verifications",
-          "POST /api/runner/wiki/spaces/:id/verifications"
+          "POST /api/runner/wiki/spaces/:id/verifications",
+          "POST /api/runner/wiki/spaces/:id/verifications/request"
         ],
         "verificationNote": "The session that proposed the ops, and no other (reviewModes.verification.who.runner): X-Orbit-Session-Id is required, and another session's op or another owner's anything is a 404.",
         "importRoutes": [
@@ -2240,6 +2363,7 @@
     },
     "verify": {
       "cli": "orbit wiki verify",
+      "serverExecution": "Under jobs.executor=server — or canary, for an account its list names — the server verifies what a session proposed and the session runs nothing: an op the space's Automatic mode holds back (reviewModes.verification.waits) is queued as a verify job for the session that proposed it the moment it is recorded (jobs.kindRuns.verify, jobs.make), the wiki worker asks the System model through the queue instead of a clean Claude Code in the session, and each verdict is reported through the same writer (reviewModes.verification.who.server) with the same prompt and the same strict reading this entry describes. This command is then no longer something a session has to run, and its meaning becomes \"ask the server to verify these ops and wait for the result\": the runner-side half of that — the command asking the server and waiting rather than running a model of its own — ships with the next runner release (P3, project 34bmzOkov3xN2yLPrnsCk). Until that release, and under the default jobs.executor=runner, nothing about this command changes: it reads the list, runs its clean Claude Code and reports, exactly as the rest of this entry says. A maintenance run is not a session either: it verifies its own ops in its own process, on the runner until P8 moves it.",
       "tool": "none: a CLI verb with no MCP tool beside it. It runs a model, which is a runner's work rather than a tool call's, and it reports only what that model said.",
       "precondition": "Verify only the ops this session proposed into an automatic space, and never write a verdict yourself: each verdict is the local model's, read from a separate clean call against the op's own sources, and a verdict that cannot be read is reported as nothing.",
       "does": "Reads reviewModes.verification.list for --space, asks a clean Claude Code for one verdict per op, and reports each (reviewModes.verification.report) as soon as it has it, so what one run verified survives a run that stops half way. An op whose sources the list says are unreadable is asked about all the same: the server caps what its verdict can do (reviewModes.verification.evidence), and a duplicate still adds its sources. It stops at once on a 401 from the model's endpoint, and on a space that is no longer automatic.",

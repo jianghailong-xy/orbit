@@ -220,4 +220,50 @@ describe('several accounts of one engine on a runner', () => {
     await click(button(head('codex'), 'Add account'));
     expect(opened()).toEqual([`${RUNNER_ID}/claude`, `${RUNNER_ID}/codex`]);
   });
+
+  // docs/mocks/providers-group-row-click
+  it("fold from anywhere on the head's line — not from Add account, its panel, an account's row or a selection", async () => {
+    mount([runner()]);
+    // Folded, its status and its quota open it, as its name does; open, its blank folds it again.
+    await click(head().querySelector<HTMLElement>('.re-status')!);
+    expect(accountNames()).toEqual([WIKOVA.name, RD.name, ORBIT.name]);
+    await click(head());
+    expect(accountNames()).toEqual([]);
+    await click(head().querySelector<HTMLElement>('.re-quota')!);
+    expect(accountNames()).toEqual([WIKOVA.name, RD.name, ORBIT.name]);
+
+    // Add account opens its panel under the line and leaves the group open; nothing in that panel,
+    // and no account's row, folds it.
+    await click(button(head(), 'Add account'));
+    expect(head().querySelector('.re-add')).not.toBeNull();
+    await click(head().querySelector<HTMLElement>('.re-add-label')!);
+    await click(head().querySelector<HTMLElement>('.re-add input')!);
+    await click(host!.querySelector<HTMLElement>('.re-acct')!);
+    expect(accountNames()).toEqual([WIKOVA.name, RD.name, ORBIT.name]);
+    expect(opened()).toEqual([`${RUNNER_ID}/claude`]);
+
+    // A press that ends a drag across the head's words leaves them selected instead.
+    const words = document.createRange();
+    words.selectNodeContents(head().querySelector('.re-meta')!);
+    getSelection()!.addRange(words);
+    await click(head());
+    getSelection()!.removeAllRanges();
+    expect(accountNames()).toEqual([WIKOVA.name, RD.name, ORBIT.name]);
+  });
+});
+
+describe("a runner's card", () => {
+  const card = () => host!.querySelector<HTMLElement>('.re-runner-card')!;
+  const folded = () => card().classList.contains('collapsed');
+
+  it('folds from anywhere on its head — its summary too — and leaves Manage a link', async () => {
+    mount([runner()], { cards: false });
+    expect(folded()).toBe(true);
+    await click(card().querySelector<HTMLElement>('.re-summary')!);
+    expect(folded()).toBe(false);
+    await click(card().querySelector<HTMLElement>('.re-head')!);
+    expect(folded()).toBe(true);
+    await click(card().querySelector<HTMLElement>('.re-manage')!);
+    expect(folded()).toBe(true);
+  });
 });

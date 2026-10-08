@@ -199,10 +199,20 @@ function directivesNotInBaseline(block, baselineBlock) {
 // repository holds no mention of that identifier outside the migration that dropped it, and it
 // cannot tell a READER of the flag from prose about its removal — which is exactly why it carves
 // out the migration's own comment. Naming it here put main's only red on the board.
+//
+// The one exception is the wiki executor switch (docs/wiki-server-execution-design.md §2.1 and §10, P3,
+// 2026-10-08): two variables the apiserver and the wiki worker both read, defaulting to the path that has
+// always run. They are listed here as directives — comments explaining them do not count — so a line added
+// anywhere else still turns this red exactly as it did before.
+const APPROVED_APISERVER_ADDITIONS = [
+  '      ORBIT_WIKI_EXECUTOR: "${ORBIT_WIKI_EXECUTOR:-runner}"',
+  '      ORBIT_WIKI_EXECUTOR_CANARY_OWNERS: "${ORBIT_WIKI_EXECUTOR_CANARY_OWNERS:-}"',
+];
 test('nothing beyond the approved configuration was added to pgbackup, apiserver or web', () => {
   for (const name of ['pgbackup', 'apiserver', 'web']) {
     assert.deepEqual(
-      directivesNotInBaseline(currentServices.get(name), survivingConfigurationServices.get(name)), [],
+      directivesNotInBaseline(currentServices.get(name), survivingConfigurationServices.get(name)),
+      name === 'apiserver' ? APPROVED_APISERVER_ADDITIONS : [],
       `${name} declares something the baseline did not: adding to a surviving service is forbidden`);
   }
 });
@@ -222,11 +232,28 @@ function withoutService(source, name) {
   return [...lines.slice(0, from), ...lines.slice(to)].join('\n');
 }
 
+/**
+ * `source` without the approved additions to a surviving service and the comment block that introduces
+ * them, the way `withoutService` sets the wiki worker aside: (k) proves what the SIDECAR REMOVAL did, and
+ * a pinned addition explained by five lines of prose must not move that proof by six. Everything else in
+ * the file still weighs in, so a line added anywhere unapproved still turns this red.
+ */
+function withoutApprovedAdditions(source) {
+  const lines = source.split('\n');
+  const first = lines.indexOf(APPROVED_APISERVER_ADDITIONS[0]);
+  assert.ok(first > 0, 'docker-compose.yml no longer has the approved executor switch');
+  const last = lines.lastIndexOf(APPROVED_APISERVER_ADDITIONS[APPROVED_APISERVER_ADDITIONS.length - 1]);
+  let from = first;
+  while (from > 0 && /^\s*#/.test(lines[from - 1])) from -= 1;
+  return [...lines.slice(0, from), ...lines.slice(last + 1)].join('\n');
+}
+
 // The sidecar removal stays subtraction. The wiki worker the owner added on 2026-10-07 is a service of
-// its own, whose every line (l) pins; it is set aside here, so that a line added anywhere else still
-// turns this red exactly as it did before that decision.
+// its own, whose every line (l) pins, and the executor switch added on 2026-10-08 is pinned beside it;
+// both are set aside here, so that a line added anywhere else still turns this red exactly as it did
+// before those decisions.
 test('(k) removing the sidecars is subtraction: setting the approved wiki worker aside, Compose lost more lines than it gained', () => {
-  const rest = withoutService(current, WIKI_WORKER);
+  const rest = withoutApprovedAdditions(withoutService(current, WIKI_WORKER));
   const scratch = mkdtempSync(path.join(tmpdir(), 'compose-topology-'));
   try {
     writeFileSync(path.join(scratch, 'baseline.yml'), baseline);
@@ -241,14 +268,21 @@ test('(k) removing the sidecars is subtraction: setting the approved wiki worker
     rmSync(scratch, { recursive: true, force: true });
   }
   assert.ok(rest.split('\n').length < baseline.split('\n').length);
-  // And only the wiki worker was set aside: every other service reads exactly as it does in the file.
-  assert.deepEqual(services(rest), new Map([...services(current)].filter(([name]) => name !== WIKI_WORKER)));
+  // And only the wiki worker and the approved additions were set aside: every other service — the
+  // apiserver's own added lines are what the test above pins, line by line — reads exactly as it does in
+  // the file, so this test cannot pass by quietly rewriting something else.
+  const aside = services(withoutService(current, WIKI_WORKER));
+  assert.deepEqual(
+    new Map([...services(rest)].filter(([name]) => name !== 'apiserver')),
+    new Map([...aside].filter(([name]) => name !== 'apiserver' && name !== WIKI_WORKER)));
 });
 
 // The definition the owner approved on 2026-10-07 (docs/wiki-server-execution-design.md §4.1), every
 // directive of it in order: the apiserver's image with the worker's entry point, no port, no mount, no
 // build of its own, no migration — it waits for the apiserver, which applies them — and the System
-// model's four variables. Changing any of it is a new decision, made here.
+// model's four variables. Changing any of it is a new decision, made here. The executor switch's two
+// variables joined it on 2026-10-08 (P3, §2.1): the same pair the apiserver reads, so the process that
+// queues a job and the one that runs it decide the same about an account, defaulting to runner.
 test('(l) the wiki worker is exactly the service the owner approved on 2026-10-07', () => {
   assert.deepEqual(directives(currentServices.get(WIKI_WORKER)), [
     '  wiki-worker:',
@@ -263,6 +297,8 @@ test('(l) the wiki worker is exactly the service the owner approved on 2026-10-0
     '      ORBIT_WIKI_MODEL_API_KEY: "${ORBIT_WIKI_MODEL_API_KEY:-}"',
     '      ORBIT_WIKI_MODEL: "${ORBIT_WIKI_MODEL:-}"',
     '      ORBIT_WIKI_MODEL_CONCURRENCY: "${ORBIT_WIKI_MODEL_CONCURRENCY:-4}"',
+    '      ORBIT_WIKI_EXECUTOR: "${ORBIT_WIKI_EXECUTOR:-runner}"',
+    '      ORBIT_WIKI_EXECUTOR_CANARY_OWNERS: "${ORBIT_WIKI_EXECUTOR_CANARY_OWNERS:-}"',
     '    depends_on:',
     '      apiserver:',
     '        condition: service_healthy',

@@ -3661,6 +3661,10 @@ protocol PromotionReviewSource: AnyObject {
     func promotionStanding(_ promotionID: String) -> ProjectPromotionView?
     /// The project's open items, both groups: a blocked candidate's holder is one of them.
     var promotionItems: [ProjectOpenItemRow] { get }
+    /// The project's current landings, for the row that names what is in front of a blocked
+    /// candidate (`PromotionCards.blockedByLine`). Empty where the host has not read them, and the
+    /// row is then absent rather than wrong.
+    var promotionLandings: [ProjectLandTask] { get }
     var criteriaMet: (met: Int, total: Int)? { get }
     func refreshPromotion() async
     func confirmMergeToMain(_ view: ProjectPromotionView) async -> String?
@@ -3861,9 +3865,15 @@ struct PromotionReviewSheet: View {
     /// D: it cannot land yet. Who has it is NOT a row here any more: it is on the press
     /// (`PromotionCards.resolvingLine`), which is the thing the reader looks at, and saying it
     /// twice was the whole of what this card got wrong (owner decision 2026-09-24).
+    ///
+    /// What IS a row is who is in FRONT of it, when the project's own line is busy: the same row the
+    /// sessions page's card draws, off the same read.
     private func blocked(_ view: ProjectPromotionView) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             CardRow(label: "Why", value: PromotionCards.blockedLine(view))
+            if let inFront = PromotionCards.blockedByLine(view, landings: source.promotionLandings) {
+                CardRow(label: PromotionCards.blockedByLabel, value: inFront)
+            }
         }
     }
 

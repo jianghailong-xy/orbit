@@ -55,6 +55,7 @@ import { docWithdrawReason } from './wiki-doc-withdrawal';
 import { wikiDocsAffected, withdrawDocSentencesByPath } from './wiki-docs-affected';
 import { conditionView, gatherDocMaterial, type StoredSessionCondition } from './wiki-docs-material';
 import { ownerEnvLiterals } from './wiki-dossier';
+import { currentWikiExecutorSwitch, wikiExecutorServes } from './wiki-executor-switch';
 import { isWikiMaintenanceSession } from './wiki-maintenance-settings';
 import { requireConfirmedPlan } from './wiki-plan';
 import { WikiRefusalError, WikiService, type WikiPrincipal } from './wiki.service';
@@ -908,6 +909,15 @@ export function docLead(sentences: readonly string[]): string | null {
   return chars.length <= WIKI_DOC_LEAD_RULES.maxChars ? text : `${chars.slice(0, WIKI_DOC_LEAD_RULES.maxChars).join('').trimEnd()}…`;
 }
 
+/**
+ * The principal the server's `docs_build` job reads and writes a space's documents as (contract `docs.who.write`,
+ * `jobs.kindRuns.docs_build`): the space's maintenance, with no session and no user — the server writes on its own
+ * account, as its `articles` job does (`wikiArticlesJobPrincipal`).
+ */
+export function wikiDocsBuildJobPrincipal(ownerId: string): WikiPrincipal {
+  return { origin: 'maintenance', ownerId, userId: null, sessionId: null, toolCallId: null, authorKind: 'system' };
+}
+
 @Injectable()
 export class WikiDocs {
   private readonly logger = new Logger(WikiDocs.name);
@@ -931,17 +941,34 @@ export class WikiDocs {
 
   /**
    * The writers (contract `docs.who.write`): a maintenance run of this space, asked the one test
-   * criterion 2 exported, or the import the server's own container runs. The space is found first, so
-   * another owner's is a 404 before it is anything else.
+   * criterion 2 exported, the server's own `docs_build` job, or the import the server's own container runs.
+   * The space is found first, so another owner's is a 404 before it is anything else.
    */
   async assertWriter(principal: WikiPrincipal, spaceId: string): Promise<void> {
     await this.requireSpace(principal.ownerId, spaceId);
     if (principal.origin === 'import' && principal.sessionId === null && principal.userId === null) return;
+    // The server's docs_build job (`wikiDocsBuildJobPrincipal`): maintenance with no session and no user, which no
+    // door builds — the runner door refuses a headless call before it names a principal.
+    if (principal.origin === 'maintenance' && principal.sessionId === null && principal.userId === null) return;
     if (
       principal.origin === 'maintenance'
       && principal.sessionId !== null
       && (await isWikiMaintenanceSession(this.prisma, { ownerId: principal.ownerId, sessionId: principal.sessionId, spaceId }))
     ) {
+      // An account the executor switch gives the server has its documents written by the wiki worker, with the
+      // deployment's System model (contract `docs.build.server`): its maintenance session is handed no material
+      // and writes nothing, so no session's provider is asked. Under the default runner this is never true, and
+      // the session reads and writes exactly as it always has.
+      const executor = currentWikiExecutorSwitch();
+      if (wikiExecutorServes(executor, principal.ownerId)) {
+        throw new WikiRefusalError({
+          code: 'WIKI_SERVER_EXECUTES',
+          message:
+            `the Orbit server writes this account's wiki documents (ORBIT_WIKI_EXECUTOR=${executor.mode}): its wiki worker `
+              + "builds them when the owner confirms a plan, with the deployment's System model, so this session's provider "
+              + 'is not asked. Nothing was read or written.',
+        });
+      }
       return;
     }
     throw new WikiRefusalError({

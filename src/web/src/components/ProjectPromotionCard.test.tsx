@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ProjectOpenItemRow, ProjectPromotionView } from '@orbit/shared';
+import type { ProjectLandTask, ProjectOpenItemRow, ProjectPromotionView } from '@orbit/shared';
 import {
   BLOCKERS_DECIDED_TOO,
   CANCEL_MERGE,
@@ -167,7 +167,12 @@ function markup(ui: JSX.Element): string {
 
 function card(
   view: ProjectPromotionView,
-  over: { item?: ProjectOpenItemRow | null; project?: PromotionProjectView | null } = {},
+  over: {
+    item?: ProjectOpenItemRow | null;
+    project?: PromotionProjectView | null;
+    /** The project's current landings, for state D's "who is in front of it" row. */
+    landings?: ProjectLandTask[] | null;
+  } = {},
 ): string {
   return markup(
     <ProjectPromotionCard
@@ -175,6 +180,7 @@ function card(
       promotion={view}
       item={over.item ?? null}
       project={over.project === undefined ? project() : over.project}
+      landings={over.landings ?? null}
       now={NOW}
     />,
   );
@@ -576,6 +582,43 @@ describe('state D — it cannot merge yet, and somebody is on it', () => {
     expect(html).toContain('2 files conflict');
     expect(html).toContain('src/runner-go/session_pool.go');
     expect(html).toContain('src/apiserver/prisma/schema.prisma');
+  });
+
+  /**
+   * The owner's report of 2026-10-08, on the project page: the orange card said "2 files conflict"
+   * and "Coordinator is resolving it" and nothing about what the merge was actually behind — a
+   * landing on the project branch, itself queued behind another task's landing. Both links are in
+   * the reads the page already holds, so the card names them.
+   */
+  it('names the landing in front of it, and what that landing is itself waiting for', () => {
+    const html = card(blocked, {
+      item: blockedItem(),
+      landings: [{
+        taskId: '34c2uuNTzRnCT03HWdCgq',
+        taskTitle: '同步项目线与 main：解开迁移台账冲突（0393/0394）',
+        integration: {
+          state: 'QUEUED', since: null, handler: null, openItemId: null, jobId: 'job-9',
+          checksRunningForMs: null,
+          landTask: {
+            jobId: 'job-9', state: 'QUEUED', phase: null, generation: '2',
+            queuedAt: at(3 * MINUTE), startedAt: null, heartbeatAt: null, finishedAt: null,
+            targetRef: 'project/bg-jobs', waitMs: 60_000,
+            blockingReason: { code: 'WAITING_SERIAL_SLOT', jobId: 'job-8',
+              summary: 'Waiting to land: the landing of “修合并树上的 11 个 Swift 失败” is running on this branch first' },
+          },
+        },
+      }],
+    });
+    expect(html).toContain('Blocked by');
+    expect(html).toContain('“同步项目线与 main：解开迁移台账冲突（0393/0394）” is landing on the project line');
+    expect(html).toContain('the landing of “修合并树上的 11 个 Swift 失败” is running on this branch first');
+    // The reason the reader was given before is still there, unchanged.
+    expect(html).toContain('2 files conflict');
+  });
+
+  it('says nothing about who is in front of it when the line is doing nothing here', () => {
+    expect(card(blocked, { item: blockedItem(), landings: [] })).not.toContain('Blocked by');
+    expect(card(blocked, { item: blockedItem() })).not.toContain('Blocked by');
   });
 
   it('carries who has it and how long on the press, and does not say it twice', () => {
