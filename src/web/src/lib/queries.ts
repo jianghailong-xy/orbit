@@ -186,6 +186,10 @@ export interface UserPreferences {
   /** Smart model selection for the whole account — the Suggested tiers and the Agent switch that
    *  routes task runs onto them. Absent means OFF; only turning it on has to be written. */
   modelRouting?: boolean;
+  /** Whether Claude sessions offer the next message you would probably type once a turn ends
+   *  (lib/promptSuggestion). Each one is a request on the session's account, read when its engine
+   *  starts. Absent means on; only opting out is ever written. */
+  promptSuggestions?: boolean;
 }
 
 /** How an account signs in (docs/google-sign-in-design.md §6): a password, and the Google account linked. */

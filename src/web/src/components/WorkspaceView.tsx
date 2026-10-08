@@ -506,6 +506,7 @@ import {
   waitingNoticeScope,
 } from '../lib/runnerSlots';
 import { reseedWithActiveSnapshot } from '../lib/reseedActiveSnapshot';
+import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
 
 interface RunEvent {
   seq: number;
@@ -8859,6 +8860,42 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             : selectedId
               ? 'Reply…'
               : 'Send this workspace a task…';
+  // The engine's guess at the next message (lib/promptSuggestion): offered in an idle, empty
+  // composer as a grey line with Use (and Tab), where "Reply…" would be. Only the placeholders
+  // above that explain why the box cannot send outrank it — and those states never offer one.
+  const waitingSummary = selectedSession as { pendingApprovals?: number; waitingKind?: string | null } | null;
+  const offeredSuggestion = offeredPromptSuggestion(
+    eventsSessionId === selectedId ? currentPromptSuggestion(events) : null,
+    {
+      idle,
+      draftEmpty: text === '' && images.length === 0,
+      replying: !!replyTo,
+      pendingApprovals: approvals.length + (waitingSummary?.pendingApprovals ?? 0),
+      waitingKind: waitingSummary?.waitingKind,
+      sendable:
+        !!selectedSession &&
+        !selectedTrashed &&
+        !selectedCompleted &&
+        !selectedMissing &&
+        !loadingSession &&
+        !sameSessionSendBlocked &&
+        runner.online === true,
+      failed: !!selectedSession && sessionRunStatusOf(selectedSession) === 'FAILED',
+    },
+  );
+  // Into the box with the caret at the end, the way a recalled draft lands: a guess is where the
+  // message starts, not a message sent — the person reads it, edits it if they like, and sends.
+  const acceptSuggestion = (): void => {
+    if (!offeredSuggestion) return;
+    setText(offeredSuggestion);
+    if (histIdx !== -1) setHistIdx(-1);
+    setTimeout(() => {
+      const ta: HTMLTextAreaElement | undefined = taRef.current?.resizableTextArea?.textArea;
+      if (!ta) return;
+      ta.focus();
+      ta.selectionStart = ta.selectionEnd = ta.value.length;
+    }, 0);
+  };
 
   return (
     <div className={`workspace-split${selectedId || composingRoute ? ' show-conversation' : ''}`}>
@@ -10516,7 +10553,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             // remeasures the whole value on every keystroke) and the transcript. Pasting past
             // the cap truncates; very large content should go through File instead.
             maxLength={MAX_PROMPT_CHARS}
-            placeholder={composerPlaceholder}
+            placeholder={offeredSuggestion ? '' : composerPlaceholder}
             value={text}
             disabled={composerDisabled}
             // Typing exits history recall: the next Up starts fresh from this draft.
@@ -10607,6 +10644,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   return;
                 }
               }
+              // Tab takes the offered suggestion. An open menu above has already had the key, and
+              // with no suggestion on offer Tab moves focus as it always has.
+              if (
+                e.key === 'Tab' &&
+                offeredSuggestion &&
+                !e.shiftKey &&
+                !e.altKey &&
+                !e.ctrlKey &&
+                !e.metaKey &&
+                !e.nativeEvent.isComposing
+              ) {
+                e.preventDefault();
+                acceptSuggestion();
+                return;
+              }
               // Shell-style history recall. Up only fires on the first line and Down on
               // the last line (with no text selected), so navigating within a multi-line
               // draft still moves the caret normally. After recall the caret is parked at
@@ -10675,6 +10727,25 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               }
             }}
           />
+          {offeredSuggestion && (
+            <div className="composer-suggestion">
+              <span className="composer-suggestion-text" title={offeredSuggestion}>
+                {offeredSuggestion}
+              </span>
+              <button
+                type="button"
+                className="composer-suggestion-use"
+                // Fill without blurring the box first: the click's focus change would land the
+                // caret somewhere before the text arrives.
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={acceptSuggestion}
+                aria-label={`Use suggestion: ${offeredSuggestion}`}
+                title="Use this suggestion"
+              >
+                Use <kbd className="composer-suggestion-key">Tab</kbd>
+              </button>
+            </div>
+          )}
           </div>
           <div className="composer-toolbar">
             {/* In shell mode this stops being a menu: `trigger={[]}` makes the Dropdown an inert
