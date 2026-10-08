@@ -48,7 +48,7 @@ export function useOverlayChild(open: boolean, onEscape: () => void) {
     return () => { scope.children.delete(key); };
   }, [open, scope]);
   const getContainer = useCallback(() => scope?.container.current ?? document.body, [scope]);
-  return { getContainer, zIndex: 1000 + (scope ? scope.level + 1 : 0) * 100 };
+  return { getContainer, zIndex: 1000 + (scope ? scope.level + 1 : 0) * 100, inOverlay: scope !== null };
 }
 
 export interface OverlayProps {
