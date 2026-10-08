@@ -267,7 +267,7 @@ burst 也一样：`after-sub-a` 里会话菜单和字段页的 →⏎、→↑�
 
 | 探针 | 修复前 | 第一版修复（`069601b67`） | 终版（`aed0a7bab`） |
 | --- | --- | --- | --- |
-| burst/paced，Chromium（Orbit 目标；每组合 20+20） | Orbit 有 74 个组合 burst 与 paced 不同，全是 20/20：要修的 62 个（规则 16、子菜单 36、顶层 Menu ⏎Tab/⏎Shift+Tab 4、Home/End 6），只记录的 12 个 | 菜单、Select、Dialog/ConfirmDialog、Popconfirm 全部重采（`after-*`，3200 样本）：要修的组合 0/20；只记录的组合与修复前相同；子菜单第一块（`after-sub-a`）见上节 | 子菜单三块重采（`after2-sub-*`）：【待补】。其余组件没有改动（`aed0a7bab` 只动子菜单触发器的 ⏎/Space），沿用 `069601b67` 上的 `after-*` |
+| burst/paced，Chromium（Orbit 目标；每组合 20+20） | Orbit 有 74 个组合 burst 与 paced 不同，全是 20/20：要修的 62 个（规则 16、子菜单 36、顶层 Menu ⏎Tab/⏎Shift+Tab 4、Home/End 6），只记录的 12 个 | 菜单、Select、Dialog/ConfirmDialog、Popconfirm 全部重采（`after-*`，3200 样本）：要修的组合 0/20；只记录的组合与修复前相同；子菜单第一块（`after-sub-a`）见上节 | 子菜单分 9 块重采（`after2-sub-{a,b,c}-{field,sample,session}`，1800 样本）：45 个组合 burst 全部 **0/20**，paced 参照与基线逐一相同。其余组件没有改动（`aed0a7bab` 只动子菜单触发器的 ⏎/Space），沿用 `069601b67` 上的 `after-*` |
 | 冻结帧，八环境（49 例 × 8） | 72/392（[before](checks/fix-held-frames-before.txt)、[before-home-end](checks/fix-held-frames-before-home-end.txt)）：通过的 9 例是本来就相同的（Dialog/ConfirmDialog 的 ⏎Escape、Dialog ⏎⏎、Popconfirm 6 例） | 312/392（[after](checks/fix-held-frames-after.txt)）：子菜单 10 例焦点落到 body | **392/392**（[after2](checks/fix-held-frames-after2.txt)） |
 | jsdom 单测 `keyboardWindow.test.tsx` | 0594f6d2c 上 23/52 失败（[unit-window-before](checks/unit-window-before.txt)）；加入 Home/End 后 4d54fbe5f 上 26/58 失败（[unit-window-before-2](checks/unit-window-before-2.txt)）。失败的全是窗口用例，参照全过 | 58/58（[unit-window-after](checks/unit-window-after.txt)） | **58/58**（[unit-window-final](checks/unit-window-final.txt)） |
 | 前任务 Select 探针（↓/↑/⏎，276 样本） | 276/276，burst 0 错（[prior-select-keys-before](checks/prior-select-keys-before.txt)） | 276/276（[prior-select-keys-after](checks/prior-select-keys-after.txt)） | Select 未再改动，沿用 |
@@ -294,9 +294,9 @@ burst 也一样：`after-sub-a` 里会话菜单和字段页的 →⏎、→↑�
 | 上面那条用例在这两个环境各重复 10 次（`--repeat-each 10`，40 次） | — | — | 终版 **40/40**（[entry-repeat-final](checks/prod-final-entry-repeat.txt)）；三个组件换回修复前（`0638f1944` 的 Overlay/Select/Menu，只换工作区，记录里是 dirty）也是 **40/40**（[entry-repeat-prefix](checks/prod-prefix-entry-repeat.txt)） |
 | overlays 矩阵（`test:ui-overlays`，96 个用例：初始焦点、焦点归还、逐层 Esc、滚动锁、Drawer 等） | 96/96 | 96/96（负载 62.8） | **96/96** |
 | choices 测试列表（`playwright --list`） | 520 个用例 | 逐字节相同 | **逐字节相同**（sha256 `869171286b2f…`） |
-| 完整 choices 矩阵（`test:ui-choices`，按项目分 8 次跑） | — | — | 【待补】 |
-| 试点（P3.2 pilot，生产构建，每棵树两次） | 72/72、72/72 | — | 72/72、【待补】 |
-| P0（`npm run test:ui-migration`，原命令） | 93 通过、8 失败、11 跳过；失败的都是 `profile`（`GET /api/auth/methods` 没有浏览器 fixture，P0 fixture 漂移） | — | 【待补】 |
+| 完整 choices 矩阵（`test:ui-choices`，按项目分 8 次跑） | — | — | chromium-light-desktop、chromium-light-phone、chromium-dark-desktop 各 **65/65**。其余 5 个项目在终版树上没跑完（磁盘满时停下），8 个项目在 rebase 后的新基础上全部重跑，**520/520**，见 [rebase 到 main 之后](#rebase-到-main-之后) |
+| 试点（P3.2 pilot，生产构建，每棵树两次） | 72/72、72/72 | — | **72/72、72/72** |
+| P0（`npm run test:ui-migration`，原命令） | 93 通过、8 失败、11 跳过；失败的都是 `profile`（`GET /api/auth/methods` 没有浏览器 fixture，P0 fixture 漂移） | — | 终版树上排在最后，磁盘满时没跑到；rebase 后在新基础上跑：**101 通过、11 跳过、0 失败** |
 | 相关单测 | — | 16 个文件 260 个用例（[unit-related-after](checks/unit-related-after.txt)） | 合并检查里的完整 Vitest，见[合入项目 tip 之后](#合入项目-tip-之后) |
 
 choices 入口那两次失败，不是第一版修复造成的：
@@ -359,11 +359,11 @@ choices 入口那两次失败，不是第一版修复造成的：
 | 检查 | 新基础上的结果 |
 | --- | --- |
 | 清单（`--check-owners`、2026-10-07d.json 的 `verify-record.mjs`、审计自检、P0.1 清单核对） | 见[清单复扫](#清单复扫与-2026-10-07djson)（[inventory-check-rebased](checks/inventory-check-rebased.txt)） |
-| 共享包构建，然后项目合并检查 `npm run build -w @orbit/web && npm run test -w @orbit/web` | 【待补】 |
-| 冻结帧，八环境（49 例 × 8） | 【待补】 |
-| choices 原入口，八环境 | 【待补】 |
-| P0（原命令） | 【待补】 |
-| 完整 choices 矩阵，按项目 | 【待补】 |
+| 共享包构建，然后项目合并检查 `npm run build -w @orbit/web && npm run test -w @orbit/web` | 构建通过；Vitest 358 个文件、4628 个用例全部通过，其中 `keyboardWindow.test.tsx` 58、项目 tip 带来的 `Select.test.tsx` 26、`Menu.test.tsx` 18（[merge-check](checks/prod-rebased-merge-check.txt)） |
+| 冻结帧，八环境（49 例 × 8） | **392/392**，每个环境一次运行（`held-frames-rebased-<项目>`） |
+| choices 原入口，八环境 | **32/32**（[choices-entry](checks/prod-rebased-choices-entry.txt)） |
+| P0（原命令） | **101 通过、11 跳过、0 失败**（[p0](checks/prod-rebased-p0.txt)）。开工时 `profile` 的 fixture 漂移（`GET /api/auth/methods`）在 main 上已补，所以新基础上不再失败 |
+| 完整 choices 矩阵，按项目 | **520/520**，8 个项目各 65/65（`choices-full-<项目>-rebased`） |
 | 试点那张图的复跑 | 【待补】 |
 
 共享包构建要先做：Web 从 `@orbit/shared` 的 `dist` 引入它，而这个工作树的 `dist` 还是按开工时的源码构建的；main 之后改了 20 个共享文件。这一步就是 worktree overlay 准备依赖时做的事。
@@ -381,9 +381,14 @@ choices 入口那两次失败，不是第一版修复造成的：
   - Popconfirm ⏎⏎、⏎Space、⏎Shift+Tab：burst 关上确认框，不回答问题。
 - **Menu 的 Tab 约定**：⏎Tab⏎ 的 Orbit 结果与旧 Dropdown 不同。Orbit 是 Tab 离开并关闭菜单，⏎ 落在页面下一个按钮上；旧 Dropdown 是 Tab 进菜单，⏎ 执行 File。这是 10-07 约定带来的，不是回归。
 - **字符检索**（`s`、`c`、`7`、`n`）：顶层 Menu 与 Select 的检索序列在基线上 Orbit 的 burst 已与 paced 一致，无需处理；子菜单的 →c⏎ 随子菜单窗口一起修。
-- **P0**：`profile` 在八个环境都失败，是 P0 fixture 的漂移（`GET /api/auth/methods` 没有浏览器 fixture）。修复前后相同，与本任务无关。【待补：终版与合并树】
+- **P0**：开工时的树上，`profile` 在八个环境都失败，是 P0 fixture 的漂移（`GET /api/auth/methods` 没有浏览器 fixture），与本任务无关。终版树上的 P0 因磁盘满没跑到；rebase 到 main 后 fixture 已补，新基础上的 P0 全部通过（101 通过、11 跳过）。
 - **清单**：合并树上那 2 个未归属点要等 P4.2 的 `2026-10-07c.json` 落地后才消失。
-【待补：其余】
+- **新基础上没有重跑的**：burst/paced 探针、前两个任务的探针、overlays 和试点两次运行。这些都只在 rebase 前的树上跑过，结果见上文。新基础上重跑的是协调者点名的几项：清单、合并检查（含完整 Vitest，所以相关单测和 `keyboardWindow.test.tsx` 都重跑了）、冻结帧八环境、choices 入口和 P0；另外加了完整 choices 矩阵和试点那张图的复跑。冻结帧覆盖了全部修复的行为，而且不依赖自然时序。
+- **磁盘与中断**：共用磁盘多次跌到 5 GB 以下，一度为 0，有几次运行因此中断：
+  - 引擎回收时 runner 以 drain_cap 结束了作业；
+  - 跌到 5 GB 以下时，或按协调者通知，我手动停下作业。
+
+  被打断的运行，原始结果不完整，已删掉，本文不引用。本文引用的都是完整跑完的运行。另有两次（22:04Z、23:49Z）是在某一步快跑完时跌到 5 GB 以下：那一步剩下不到一分钟，跑完时它自己的 trace 临时文件就会释放，所以让它跑完了，队列随后停在下一步的闸门前。
 
 ## 文件与原始数据
 
