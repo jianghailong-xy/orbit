@@ -38,8 +38,8 @@ import java.util.Date
 fun AboutSection(updates: AppUpdater, modifier: Modifier = Modifier) {
     val state by updates.state.collectAsState()
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(stringResource(R.string.about), style = MaterialTheme.typography.titleMedium)
-        Text(stringResource(R.string.about_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE))
+        Text(stringResource(R.string.about_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
+            style = MaterialTheme.typography.titleMedium)
         UpdateProgress(state)
         updateAction(updates, state)?.let { (label, action) -> Button(onClick = action) { Text(label) } }
         val idle = state !is UpdateState.Disabled && state !is UpdateState.Checking && state !is UpdateState.Downloading &&

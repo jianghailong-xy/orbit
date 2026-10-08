@@ -49,6 +49,7 @@ import io.orbitd.android.management.*
 import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.push.PushNoticeHost
 import io.orbitd.android.push.NotificationSettings
+import io.orbitd.android.update.AboutSection
 import io.orbitd.android.update.UpdatePromptHost
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
@@ -252,7 +253,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                     changed = { app.realtime.refreshDirectory() },
                                     workspaceDeleted = { select("workspaces", OrbitRoute(Destination.WORKSPACES)) },
                                     deviceAlerts = { if (app.push.configured) app.push.notifications.allowed() else null },
-                                    notifications = { NotificationSettings(app.push) })
+                                    notifications = { NotificationSettings(app.push) }, about = { AboutSection(app.updates) })
                                 Destination.RUNNER -> RunnerScreen(management, route.id, route.recordId, revision, ::open, { navigation = navigation.back() }) {
                                     select(it, OrbitRoute(Destination.WORKSPACE, it, it))
                                 }

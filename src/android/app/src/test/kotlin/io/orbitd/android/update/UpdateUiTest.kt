@@ -10,12 +10,12 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.Lifecycle
 import io.orbitd.android.BuildConfig
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.TestOrbitApplication
+import io.orbitd.android.signIn
 import io.orbitd.android.core.auth.AuthState
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
@@ -72,24 +72,21 @@ class UpdateUiTest {
 
     @Test
     fun launchPromptsThenSettingsAboutInstallsAfterUnknownAppsPermission() {
-        // Starting the app is an automatic check; the newer android-v* release is offered once.
+        // Starting the app is an automatic check; the newer v* release's Android build is offered once.
         waitForText("Update available")
         compose.onNodeWithText("Orbit 9.0.0 ($code) is available.").assertIsDisplayed()
         compose.onNodeWithText("Notes for 9.0.0").assertIsDisplayed()
         compose.onNodeWithText("Later").performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Update available").fetchSemanticsNodes().isEmpty() }
 
-        compose.onNodeWithText("Instance address").performTextInput("https://example.test")
-        compose.onNodeWithText("Email").performTextInput("fixture@example.test")
-        compose.onNodeWithText("Password").performTextInput("fixture-password")
-        compose.onAllNodesWithText("Sign in")[1].performScrollTo().performClick()
+        compose.signIn("https://example.test", "fixture@example.test", "fixture-password")
         val app = compose.activity.application as OrbitApplication
         compose.waitUntil(5_000) { app.session.state.value is AuthState.SignedIn }
         compose.onNodeWithContentDescription("Open navigation").performClick()
         compose.onNodeWithText("Settings").performScrollTo().performClick()
 
         // Settings → About: the installed version, the found update and a manual check.
-        compose.onNodeWithText("About").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("About").performScrollTo().performClick()
         compose.onNodeWithText("Orbit ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})").assertIsDisplayed()
         compose.onNodeWithText("Check for updates").performScrollTo().performClick()
         waitForText("Download and install")
