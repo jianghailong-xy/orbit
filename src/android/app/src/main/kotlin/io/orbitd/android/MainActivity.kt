@@ -49,6 +49,8 @@ import io.orbitd.android.management.*
 import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.push.PushNoticeHost
 import io.orbitd.android.push.NotificationSettings
+import io.orbitd.android.update.AboutSection
+import io.orbitd.android.update.UpdatePromptHost
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 
@@ -64,9 +66,11 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) acceptIntent(intent)
         setContent {
             AccountAppearance(application as OrbitApplication) {
-                PushNoticeHost((application as OrbitApplication).push) {
-                    OrbitShell(auth, application as OrbitApplication, incoming) { address ->
-                        auth.continueWithGoogle(address) { url -> openInSignInBrowser(this@MainActivity, url) }
+                UpdatePromptHost((application as OrbitApplication).updates) {
+                    PushNoticeHost((application as OrbitApplication).push) {
+                        OrbitShell(auth, application as OrbitApplication, incoming) { address ->
+                            auth.continueWithGoogle(address) { url -> openInSignInBrowser(this@MainActivity, url) }
+                        }
                     }
                 }
             }
@@ -249,7 +253,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                     changed = { app.realtime.refreshDirectory() },
                                     workspaceDeleted = { select("workspaces", OrbitRoute(Destination.WORKSPACES)) },
                                     deviceAlerts = { if (app.push.configured) app.push.notifications.allowed() else null },
-                                    notifications = { NotificationSettings(app.push) })
+                                    notifications = { NotificationSettings(app.push) }, about = { AboutSection(app.updates) })
                                 Destination.RUNNER -> RunnerScreen(management, route.id, route.recordId, revision, ::open, { navigation = navigation.back() }) {
                                     select(it, OrbitRoute(Destination.WORKSPACE, it, it))
                                 }

@@ -246,6 +246,8 @@ type loginRun struct {
 	slot   string
 	kind   accountSlotKind
 	google *antigravityGoogleLoginOutput
+	// googleCopied is closed once agy's terminal output has stopped coming into google.
+	googleCopied <-chan struct{}
 	// googleDir is the Gemini directory an Antigravity sign-in writes: Default's, or its account's.
 	googleDir string
 	ctx       context.Context
@@ -483,8 +485,9 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 	}
 	out := &syncBuffer{}
 	var startErr error
+	var googleCopied <-chan struct{}
 	if google != nil {
-		stdin, startErr = startAntigravityGooglePTY(cmd, google)
+		stdin, googleCopied, startErr = startAntigravityGooglePTY(cmd, google)
 	} else {
 		cmd.Stdout = out
 		cmd.Stderr = out
@@ -503,7 +506,7 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 		giveUp(signInStartError(startErr, flow))
 		return
 	}
-	run = &loginRun{key: key, attempt: attempt, stdin: stdin, cancel: cancel, out: out, slot: createdSlot, kind: kind, google: google, googleDir: antigravityGoogleDirIn(env), ctx: ctx, binPath: binPath, finished: make(chan struct{})}
+	run = &loginRun{key: key, attempt: attempt, stdin: stdin, cancel: cancel, out: out, slot: createdSlot, kind: kind, google: google, googleCopied: googleCopied, googleDir: antigravityGoogleDirIn(env), ctx: ctx, binPath: binPath, finished: make(chan struct{})}
 	if r.runs == nil {
 		r.runs = map[string]*loginRun{}
 	}

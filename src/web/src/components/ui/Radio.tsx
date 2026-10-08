@@ -16,17 +16,20 @@ export interface RadioGroupProps<Value extends RadioValue = RadioValue>
   readOnly?: boolean;
   invalid?: boolean;
   variant?: 'default' | 'button';
+  /** Buttons only: the checked one outlined (default) or filled with the primary colour. */
+  buttonStyle?: 'outline' | 'solid';
   size?: 'small' | 'middle';
 }
 
 export function RadioGroup<Value extends RadioValue>({
-  className, variant = 'default', size = 'middle', invalid, ...props
+  className, variant = 'default', buttonStyle = 'outline', size = 'middle', invalid, ...props
 }: RadioGroupProps<Value>) {
   return (
     <BaseRadioGroup
       {...props}
       className={`orbit-radio-group${className ? ` ${className}` : ''}`}
       data-variant={variant}
+      data-button-style={variant === 'button' ? buttonStyle : undefined}
       data-size={size}
       aria-invalid={invalid || props['aria-invalid'] || undefined}
     />

@@ -80,7 +80,7 @@ const ONE_ACCOUNT: [string, (auth: Auth) => Partial<RunnerEngineHealth>][] = [
 ];
 
 /** What the Codex row shows: its strings in reading order, the colour of its status tag, how far
- *  its quota bar is filled, and each button as `label · antd type`, with `· disabled` when it is. */
+ *  its quota bar is filled, and each button as `label · type`, with `· disabled` when it is. */
 interface CodexRow {
   text: string[];
   tag: string | null;
@@ -203,16 +203,16 @@ const strings = (scope: Element) =>
     )
     .filter(Boolean);
 
-/** Which antd preset an element was drawn with: `ant-tag-green` is green, `ant-btn-text` text. */
+/** Which preset an element was drawn with: `orbit-badge-green` is green, `orbit-button-text` text. */
 const preset = (el: Element, pattern: RegExp) =>
   [...el.classList].map((c) => pattern.exec(c)?.[1]).find(Boolean) ?? null;
 
-/** A button as `label · antd type`, with `· disabled` when it is — the label being the name of a
+/** A button as `label · type`, with `· disabled` when it is — the label being the name of a
  *  mark that has no words (Re-sign in). */
 const described = (button: HTMLButtonElement) =>
   [
     button.textContent?.trim() || button.getAttribute('aria-label'),
-    preset(button, /^ant-btn-(primary|default|dashed|text|link)$/),
+    preset(button, /^orbit-button-(primary|default|dashed|text|link)$/),
     button.disabled && 'disabled',
   ]
     .filter(Boolean)
@@ -233,10 +233,11 @@ function codexRowOf(page: HTMLElement): HTMLElement {
 function codexRow(page: HTMLElement): CodexRow {
   const row = codexRowOf(page).cloneNode(true) as HTMLElement;
   addAccount(row)?.remove();
-  const tag = row.querySelector('.ant-tag');
+  // The status tag: the one label in the row's status slot.
+  const tag = row.querySelector('.re-status')?.firstElementChild;
   return {
     text: strings(row),
-    tag: tag && preset(tag, /^ant-tag-(?!filled$|outlined$|solid$|borderless$)(.+)$/),
+    tag: tag ? preset(tag, /^orbit-badge-(.+)$/) : null,
     bar: row.querySelector<HTMLElement>('.runner-util-fill')?.style.width ?? null,
     buttons: [...row.querySelectorAll('button')].map(described),
   };

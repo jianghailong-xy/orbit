@@ -29,10 +29,13 @@ import type { ApprovalSupport, PermissionSemantics, RunnerModelCatalog } from '.
  *                       primitives — but not every tool, and Don't Ask is still not enforced
  *                       (see below).
  *  - DSH      partial — measured on 0.2.0-rc.2 (P4): only a file-sandbox escalation raises an
- *                       ACP approval, which the runner bridges to the same card, once. Reads,
- *                       sandboxed commands, web tools and MCP tools never ask; subagent tools are
- *                       removed because their escalations never reach ACP. Default, Auto and
- *                       Don't Ask are enforced (DSH_PERMISSION_MODES); the rest are refused.
+ *                       ACP approval, which the runner bridges to the same card, once — in Auto
+ *                       only when it is not routine (dshAutoRoutineEscalation). Orbit's tool gate
+ *                       asks the same way before a command that acts on another system and before
+ *                       a third-party MCP tool. Reads, web tools, Orbit's MCP tools and other
+ *                       sandboxed commands never ask; subagent tools are removed because their
+ *                       escalations never reach ACP. Default, Auto and Don't Ask are enforced
+ *                       (DSH_PERMISSION_MODES); the rest are refused.
  *
  * Shared rather than server-only so the composer can describe a session it has not created yet
  * with the same table the server will apply to it. Update it together with the runner; this is
@@ -59,7 +62,21 @@ const ASK_MODES: ReadonlySet<string> = new Set([
   PermissionMode.PLAN,
 ]);
 
-/** Modes that deliberately never ask and simply allow. */
+/**
+ * Modes whose unapproved actions are allowed rather than asked about. Bypass never asks. Auto
+ * promises that for routine work, on every runtime, and leaves the rest to the runtime's own
+ * judgement of what must reach a person — a boundary crossing or a high-impact action such as a
+ * push, a deploy, an install or data leaving the machine. Each runtime keeps it its own way, and
+ * where one falls short its session note says so:
+ *  - CLAUDE: Claude Code's Auto mode and its classifier.
+ *  - CODEX: a workspace-write sandbox without network; codexAutoApproval allows routine requests,
+ *    the rest go to Codex's reviewer and then to the card.
+ *  - DSH: a workspace-write file sandbox; dshAutoRoutineEscalation allows routine escalations, the
+ *    rest reach the card, as do commands its tool gate names (dshToolGateRules) and third-party MCP
+ *    tools. Other commands that write no files, network ones included, are not reviewed.
+ *  - KIMI, OPENCODE, ANTIGRAVITY: the CLI's own allow-everything mode; nothing is reviewed.
+ * A runtime that offers Auto states its line here.
+ */
 const ALLOW_MODES: ReadonlySet<string> = new Set([PermissionMode.AUTO, PermissionMode.BYPASS]);
 
 /**
@@ -201,9 +218,13 @@ export function derivePermissionSemantics(
         shortNote: 'unsupported on DeepSeek Harness; session configuration is rejected',
       };
     }
-    const unasked =
-      'Reading files, read-only commands, web tools and MCP tools (Orbit’s included) run ' +
-      'without asking; subagents are not available.';
+    // The file sandbox reviews writes only; Orbit's tool gate (runner dshToolGateRules) asks before a
+    // command that acts on another system, in every mode.
+    const beyondFiles = (outcome: string) =>
+      'Reading files, web tools and Orbit’s MCP tools run without asking, and so do commands that ' +
+      'write no files, network ones included — except a push, a remote shell, an HTTP write, a ' +
+      `GitHub, cluster, cloud or service change, a privilege change or a publish, which ${outcome}; ` +
+      'subagents are not available.';
     if (mode === PermissionMode.AUTO) {
       return {
         mode,
@@ -211,8 +232,11 @@ export function derivePermissionSemantics(
         approvalSupport,
         honored: true,
         note:
-          'Edits and commands inside the workspace and temporary directories run without asking; ' +
-          'a write anywhere else asks you once. ' + unasked,
+          'Edits and commands inside the workspace and temporary directories run without asking. ' +
+          'A command that must write elsewhere runs outside the file sandbox: Orbit allows a ' +
+          'routine one itself (a commit in an isolated worktree, a build cache) and asks you ' +
+          'about the rest, such as a push or an install. Third-party MCP tools ask you first. ' +
+          beyondFiles('ask you first'),
       };
     }
     if (mode === PermissionMode.DEFAULT) {
@@ -223,7 +247,7 @@ export function derivePermissionSemantics(
         honored: true,
         note:
           'Files are read-only: each write, by a tool or a command, asks you once before it runs. ' +
-          unasked,
+          beyondFiles('ask you first'),
       };
     }
     return {
@@ -231,7 +255,8 @@ export function derivePermissionSemantics(
       unapproved: 'deny',
       approvalSupport,
       honored: true,
-      note: 'Files are read-only and every write is refused without asking. ' + unasked,
+      note:
+        'Files are read-only and every write is refused without asking. ' + beyondFiles('are refused'),
     };
   }
 

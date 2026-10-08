@@ -1,8 +1,7 @@
 import { useNavigate } from 'react-router-dom';
-import { useRef } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, EditOutlined } from '@ant-design/icons';
-import { Button, Popconfirm, Space, Table, Tag, type TableColumnsType } from 'antd';
 import { api } from '../api';
 import { isLoginPool } from '../lib/codexLogin';
 import { routeId } from '../lib/idCodec';
@@ -17,9 +16,26 @@ import { RunnerEngines } from '../components/RunnerEngines';
 import { DshRunnerStatus } from '../components/DshRunnerStatus';
 import { DeepSeekBalanceLine } from '../components/DeepSeekBalance';
 import { hasDeepSeekBalance } from '../lib/deepseekBalance';
-import { useIsMobile } from '../lib/useMediaQuery';
+import { Badge } from '../components/ui/Badge';
+import { Button } from '../components/ui/Button';
+import { Popconfirm } from '../components/ui/Popconfirm';
+import { TableEmptyRow, TableFrame } from '../components/ui/Table';
+import { useIsMobile, useMediaQuery } from '../lib/useMediaQuery';
 import { useToast } from '../lib/toast';
 import type { Runner } from '../components/TasksSidePanel';
+
+/** One column of the keys table: its header, its width in the fixed layout, and what each row shows. */
+interface KeyColumn {
+  key: string;
+  title: string;
+  width?: number;
+  /** Right-aligned, header included. */
+  end?: boolean;
+  cell: (row: ProviderRow) => ReactNode;
+}
+
+/** From here up the keys table shows its wide columns (the replaced table's `md` breakpoint). */
+const WIDE_KEYS_QUERY = '(min-width: 768px)';
 
 /**
  * Where a workspace's model comes from — two kinds of identity, in the order a new user has them.
@@ -41,6 +57,7 @@ export function ProvidersPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
+  const wide = useMediaQuery(WIDE_KEYS_QUERY);
   const runnerSection = useRef<HTMLDivElement>(null);
   const runners = useQuery(runnersQuery());
   const geminiReady = ((runners.data ?? []) as Runner[]).filter(
@@ -80,13 +97,13 @@ export function ProvidersPage() {
     onError: (e: Error) => message.error("Couldn't delete the provider", e.message),
   });
 
-  const columns: TableColumnsType<ProviderRow> = [
+  const columns: KeyColumn[] = [
     {
-      title: 'Provider',
       key: 'provider',
+      title: 'Provider',
       // The dispatch slug is the server's to generate and nobody's to read, so the row shows the
       // vendor: its logo (by preset, not by the row's identifier) and the name it was given.
-      render: (_, p) => (
+      cell: (p) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           <ProviderTile slug={p.presetSlug ?? p.slug} label={providerDisplayLabel(p.label, p.presetSlug)} size={32} />
           <div style={{ minWidth: 0 }}>
@@ -127,46 +144,35 @@ export function ProvidersPage() {
         </div>
       ),
     },
+    // A model count is the weakest signal here — what the row is, whether it's on, and its
+    // controls all outrank it — so it waits for a window wide enough for the whole table. The
+    // endpoint is the widest column and the least needed on a phone: it is one tap away on the edit
+    // page, and its long URL is exactly what pushes the table past the viewport.
+    ...(wide
+      ? [
+          { key: 'models', title: 'Models', width: 70, cell: (p: ProviderRow) => (p.models?.length ? `${p.models.length}` : '—') },
+          { key: 'baseUrl', title: 'Endpoint', width: 200, cell: (p: ProviderRow) => <code className="prov-endpoint">{p.baseUrl}</code> },
+          {
+            key: 'enabled',
+            title: 'Enabled',
+            width: 100,
+            cell: (p: ProviderRow) => <Badge tone={p.enabled ? 'green' : 'default'}>{p.enabled ? 'Enabled' : 'Disabled'}</Badge>,
+          },
+        ]
+      : []),
     {
-      title: 'Models',
-      key: 'models',
-      width: 70,
-      // A model count is the weakest signal here — what the row is, whether it's on, and its
-      // controls all outrank it — so it waits for a window wide enough for the whole table.
-      responsive: ['md'],
-      render: (_, p) => (p.models?.length ? `${p.models.length}` : '—'),
-    },
-    {
-      title: 'Endpoint',
-      dataIndex: 'baseUrl',
-      key: 'baseUrl',
-      width: 200,
-      // The widest column and the least needed on a phone: the endpoint is one tap away on the
-      // edit page, and its long URL is exactly what pushes the table past the viewport.
-      responsive: ['md'],
-      render: (u: string) => <code className="prov-endpoint">{u}</code>,
-    },
-    {
-      title: 'Enabled',
-      dataIndex: 'enabled',
-      key: 'enabled',
-      width: 100,
-      responsive: ['md'],
-      render: (on: boolean) => <Tag color={on ? 'green' : 'default'}>{on ? 'Enabled' : 'Disabled'}</Tag>,
-    },
-    {
-      title: '',
       key: 'actions',
-      align: 'right',
+      title: '',
+      end: true,
       width: isMobile ? 88 : 170,
-      render: (_, p) => (
-        <Space size={isMobile ? 4 : 8}>
+      cell: (p) => (
+        <span className="prov-actions" style={{ gap: isMobile ? 4 : 8 }}>
           {/* Icon-only on narrow screens: the labelled pair is what pushes the table past a
               phone's viewport once the wide columns are hidden. */}
           {isMobile ? (
             <Button
               size="small"
-              type="text"
+              variant="text"
               icon={<EditOutlined />}
               aria-label={`Edit ${providerDisplayLabel(p.label, p.presetSlug)}`}
               onClick={() => navigate(`/providers/${p.id}`)}
@@ -176,19 +182,59 @@ export function ProvidersPage() {
               Edit
             </Button>
           )}
-          <Popconfirm title={`Delete ${providerDisplayLabel(p.label, p.presetSlug)}?`} onConfirm={() => deleteMut.mutate(p.id)}>
-            {isMobile ? (
-              <Button size="small" type="text" danger icon={<DeleteOutlined />} aria-label={`Delete ${providerDisplayLabel(p.label, p.presetSlug)}`} />
-            ) : (
-              <Button size="small" danger>
-                Delete
-              </Button>
-            )}
-          </Popconfirm>
-        </Space>
+          <Popconfirm
+            title={`Delete ${providerDisplayLabel(p.label, p.presetSlug)}?`}
+            onConfirm={() => deleteMut.mutate(p.id)}
+            trigger={
+              isMobile ? (
+                <Button size="small" variant="text" danger icon={<DeleteOutlined />} aria-label={`Delete ${providerDisplayLabel(p.label, p.presetSlug)}`} />
+              ) : (
+                <Button size="small" danger>
+                  Delete
+                </Button>
+              )
+            }
+          />
+        </span>
       ),
     },
   ];
+  const end = { textAlign: 'right' } as const;
+  const keysTable = (rows: ProviderRow[], loading = false) => (
+    <TableFrame className="provider-keys" loading={loading} style={{ marginTop: 12 }}>
+      <table className="orbit-table" style={{ tableLayout: 'fixed' }}>
+        <colgroup>
+          {columns.map((column) => (
+            <col key={column.key} style={column.width ? { width: column.width } : undefined} />
+          ))}
+        </colgroup>
+        <thead>
+          <tr>
+            {columns.map((column) => (
+              <th key={column.key} scope="col" style={column.end ? end : undefined}>
+                {column.title}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <TableEmptyRow colSpan={columns.length} />
+          ) : (
+            rows.map((row) => (
+              <tr key={row.id}>
+                {columns.map((column) => (
+                  <td key={column.key} style={column.end ? end : undefined}>
+                    {column.cell(row)}
+                  </td>
+                ))}
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </TableFrame>
+  );
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
@@ -197,7 +243,7 @@ export function ProvidersPage() {
           Providers
         </h1>
         {/* Still only about keys: an engine gets its identity from the Sign in on its own row. */}
-        <Button type="primary" onClick={() => navigate('/providers/new')}>
+        <Button variant="primary" onClick={() => navigate('/providers/new')}>
           Add provider
         </Button>
         <div className="prov-page-sub">
@@ -227,16 +273,7 @@ export function ProvidersPage() {
       )}
 
       {providers.isLoading ? (
-        <Table
-          rowKey="id"
-          className="provider-keys"
-          tableLayout="fixed"
-          style={{ marginTop: 12 }}
-          loading
-          dataSource={[]}
-          columns={columns}
-          pagination={false}
-        />
+        keysTable([], true)
       ) : (providers.data?.length ?? 0) === 0 ? (
         <div className="provider-empty">
           <h3>No keys yet</h3>
@@ -245,15 +282,7 @@ export function ProvidersPage() {
         </div>
       ) : (
         <>
-          <Table
-            rowKey="id"
-            className="provider-keys"
-            tableLayout="fixed"
-            style={{ marginTop: 12 }}
-            dataSource={providers.data ?? []}
-            columns={columns}
-            pagination={false}
-          />
+          {keysTable(providers.data ?? [])}
           {/* The gallery stays on the page once the list isn't empty: it's how another vendor gets
               connected, and it's where "which of these do I already have?" gets answered. */}
           <div className="provider-more">

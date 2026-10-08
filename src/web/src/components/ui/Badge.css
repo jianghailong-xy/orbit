@@ -10,3 +10,7 @@
 .orbit-badge-warning { color: var(--orbit-badge-warning); background: var(--orbit-badge-warning-bg); }
 .orbit-badge-error { color: var(--orbit-control-error); background: var(--orbit-control-error-bg); }
 .orbit-badge-blue { color: var(--orbit-badge-blue); background: var(--orbit-badge-blue-bg); }
+.orbit-badge-green { color: var(--orbit-badge-green); background: var(--orbit-badge-green-bg); }
+.orbit-badge-orange { color: var(--orbit-badge-orange); background: var(--orbit-badge-orange-bg); }
+.orbit-badge-red { color: var(--orbit-badge-red); background: var(--orbit-badge-red-bg); }
+.orbit-badge-gold { color: var(--orbit-badge-gold); background: var(--orbit-badge-gold-bg); }

@@ -597,7 +597,7 @@ model DeviceToken {
 model ClientVersion {
   userId     String   @map("user_id") @db.Uuid
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  /// 'web' | 'ios' | 'macos' — the client kind, from the `X-Orbit-Client` header.
+  /// 'web' | 'ios' | 'macos' | 'android' — the client kind, from the `X-Orbit-Client` header.
   kind       String
   version    String
   lastSeenAt DateTime @updatedAt @map("last_seen_at")
