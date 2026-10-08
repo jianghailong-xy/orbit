@@ -31,8 +31,8 @@ class AntigravityAccountsTest {
         val health = agy(runner)
         assertEquals("Signed in", RunnerPage.engineStatus(health)?.first)
         assertTrue(RunnerPage.antigravityCanSignIn(runner))
-        // The row carries every bucket, as the engine page does.
-        assertEquals(listOf("gemini-weekly", "3p-5h"), RunnerPage.engineWindows(runner, "antigravity").map { it.groupLabel })
+        // The row carries the bucket closest to its limit; the engine page every bucket.
+        assertEquals(listOf("3p-5h"), RunnerPage.engineWindows(runner, "antigravity", ms("2026-10-04T03:00:00Z")).map { it.groupLabel })
         val rows = RunnerPage.accountWindows(runner, "antigravity", "default")
         assertEquals(listOf("Weekly", "5-hour"), rows.map { it.label })
         assertEquals(listOf("gemini-weekly", "3p-5h"), rows.map { it.groupLabel })
@@ -151,14 +151,14 @@ class AntigravityAccountsTest {
     }
     private val workspace = json("""{"id":"w1","name":"orbit-develop","lastProvider":"antigravity"}""")
 
-    /** ① One Google account reads like Codex: Signed in, its windows on the row, no Sign In. */
-    @Test fun oneGoogleAccountIsSignedInWithItsWindowsOnTheRow() {
+    /** ① One Google account reads like Codex: Signed in, its window closest to its limit on the row, no Sign In. */
+    @Test fun oneGoogleAccountIsSignedInWithItsWindowOnTheRow() {
         val hpc = runner(engine(accounts = listOf(Triple("default", null, "yes")), defaultBuckets = defaultBuckets))
         val health = agy(hpc)
         assertEquals("Signed in" to "ok", RunnerPage.engineStatus(health, hpc))
         assertFalse(RunnerPage.needsSignIn(health))
         assertNull(RunnerPage.signInHint(hpc, "antigravity"))
-        assertEquals(listOf("gemini-weekly", "gemini-5h", "3p-weekly", "3p-5h"), RunnerPage.engineWindows(hpc, "antigravity").map { it.groupLabel })
+        assertEquals(listOf("3p-weekly"), RunnerPage.engineWindows(hpc, "antigravity", now).map { it.groupLabel })
         val rows = RunnerPage.accountWindows(hpc, "antigravity", "default")
         assertEquals(listOf("gemini-weekly", "gemini-5h", "3p-weekly", "3p-5h"), rows.map { it.groupLabel })
         assertEquals(listOf("Weekly", "5-hour", "Weekly", "5-hour"), rows.map { it.label })
@@ -166,12 +166,14 @@ class AntigravityAccountsTest {
         assertTrue("still what is left, as agy says it", rows.all { it.remaining })
     }
 
-    /** ③ Several read like Claude Code: "2 accounts signed in"; each account's quota is its own, on the engine page. */
+    /** ③ Several read like Claude Code: "2 accounts signed in", and the window of the account a new session starts on, named. */
     @Test fun severalGoogleAccountsAreCountedAndEachOnesQuotaIsItsOwn() {
         val hpc = runner(engine(accounts = listOf(Triple("default", null, "yes"), Triple(work, "Work", "yes")),
             defaultBuckets = defaultBuckets, others = mapOf(work to workBuckets)))
         assertEquals("2 accounts signed in" to "ok", RunnerPage.engineStatus(agy(hpc), hpc))
-        assertEquals(emptyList<UsageRow>(), RunnerPage.engineWindows(hpc, "antigravity"))
+        // Work's 5 hours are down to 4%, nearly spent: a new session starts on Default.
+        assertEquals("Default", RunnerPage.engineNextAccount(hpc, "antigravity", now))
+        assertEquals(listOf("3p-weekly"), RunnerPage.engineWindows(hpc, "antigravity", now).map { it.groupLabel })
         assertEquals(listOf(100, 100, 98, 100), RunnerPage.accountWindows(hpc, "antigravity", "default").map { it.percent })
         assertEquals(listOf(61, 4, 100, 100), RunnerPage.accountWindows(hpc, "antigravity", work).map { it.percent })
         assertEquals(emptyList<UsageRow>(), RunnerPage.accountWindows(hpc, "antigravity", "gone"))
@@ -183,11 +185,15 @@ class AntigravityAccountsTest {
         assertEquals("Signed out" to "warn", RunnerPage.engineStatus(agy(hpc), hpc))
         assertTrue(RunnerPage.needsSignIn(agy(hpc)))
         assertEquals("a signed-out account has no quota", emptyList<UsageRow>(), RunnerPage.accountWindows(hpc, "antigravity", work))
+        assertEquals("Default", RunnerPage.engineNextAccount(hpc, "antigravity", now))
+        assertEquals(listOf("3p-weekly"), RunnerPage.engineWindows(hpc, "antigravity", now).map { it.groupLabel })
         // Default signed out takes its buckets with it, and the rest are still each one's own.
         val defaultOut = runner(engine(auth = "no", accounts = listOf(Triple("default", null, "no"), Triple(work, "Work", "yes")), others = mapOf(work to workBuckets)))
         assertEquals("Signed out", RunnerPage.engineStatus(agy(defaultOut), defaultOut)?.first)
         assertEquals(emptyList<UsageRow>(), RunnerPage.accountWindows(defaultOut, "antigravity", "default"))
         assertEquals(listOf(61, 4, 100, 100), RunnerPage.accountWindows(defaultOut, "antigravity", work).map { it.percent })
+        assertEquals("Work", RunnerPage.engineNextAccount(defaultOut, "antigravity", now))
+        assertEquals(listOf(4), RunnerPage.engineWindows(defaultOut, "antigravity", now).map { it.percent })
     }
 
     /** A runner on its own GEMINI_API_KEY keeps saying "env key": its Default answers no, yet is neither signed out nor short
@@ -215,6 +221,9 @@ class AntigravityAccountsTest {
         assertFalse(RunnerPage.needsSignIn(agy(both)))
         assertEquals(listOf(true, false), RunnerPage.accountLines(agy(both)).map { it.envKey })
         assertEquals(listOf(null, "yes"), RunnerPage.accountLines(agy(both)).map { it.auth })
+        // The key has no quota to spend first: a new session starts on Work, and the row says so.
+        assertEquals("Work", RunnerPage.engineNextAccount(both, "antigravity", now))
+        assertEquals(listOf("gemini-5h"), RunnerPage.engineWindows(both, "antigravity", now).map { it.groupLabel })
         val workOut = runner(engine(authSource = "env_key", accounts = listOf(Triple("default", null, "no"), Triple(work, "Work", "no"))))
         assertEquals("Signed out", RunnerPage.engineStatus(agy(workOut), workOut)?.first)
         assertTrue("Work is out, and needs signing in", RunnerPage.needsSignIn(agy(workOut)))
@@ -268,6 +277,28 @@ class AntigravityAccountsTest {
         val own = accountSnapshot(usage, "default")!!
         assertEquals(4, EngineAccounts.windows(own).size)
         assertNull(own["accounts"])
+        assertFalse(EngineAccounts.nearlySpent(own, now))
+        assertTrue(EngineAccounts.nearlySpent(accountSnapshot(usage, work)!!, now))
+    }
+
+    /** A new session with none picked starts where quota would go to waste first — not on an account whose 5 hours are 80%
+     * used, nor on one signed out; read from the engine health, never the runner's own report. */
+    @Test fun automaticWeighsGoogleAccountsAsItWeighsEveryOther() {
+        val accounts = listOf(json("""{"id":"default","auth":"yes"}"""), json("""{"id":"$work","name":"Work","auth":"yes"}"""))
+        fun usage(workFiveHourLeft: Double) = agy(runner(engine(accounts = listOf(Triple("default", null, "yes"), Triple(work, "Work", "yes")),
+            defaultBuckets = defaultBuckets, others = mapOf(work to buckets(listOf(0.61, workFiveHourLeft, 1.0, 1.0), "2026-10-10T00:05:00Z", "2026-10-06T11:40:00Z"))))).obj("planUsage")
+        // Work's week ends half a day before Default's: it takes the session while its 5 hours have room…
+        assertEquals(work, EngineAccounts.toStartOn(accounts, usage(0.5), now))
+        // …and not once they are nearly spent.
+        assertEquals("default", EngineAccounts.toStartOn(accounts, usage(0.04), now))
+        assertEquals("default", EngineAccounts.toStartOn(listOf(accounts[0], json("""{"id":"$work","auth":"no"}""")), usage(0.5), now))
+        val hpc = runner(engine(accounts = listOf(Triple("default", null, "yes"), Triple(work, "Work", "yes")), defaultBuckets = defaultBuckets, others = mapOf(work to workBuckets)))
+        assertEquals(agy(hpc).obj("planUsage"), EngineAccounts.usage("antigravity", hpc))
+        assertNull(planUsageSnapshot(hpc.obj("planUsage"), "antigravity"))
+        assertEquals("nothing to carry between Google accounts: a runner that keeps them moves a session",
+            EngineAccounts.ANTIGRAVITY_ACCOUNT_LOGIN, EngineAccounts.moveCapability("antigravity"))
+        assertEquals("claude-account-move/v1", EngineAccounts.moveCapability("claude"))
+        assertEquals("codex-account-move/v1", EngineAccounts.moveCapability("codex"))
     }
 
     /** A nearly spent Antigravity quota is weighed by what it has used: raised only when every account that can run is near

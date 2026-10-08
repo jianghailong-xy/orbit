@@ -29,7 +29,7 @@ import java.time.Instant
 
 /**
  * A runner's page and its engine pages over the controlled server, as RunnerPageParts, RunnerEnginePage and RunnerSignInView
- * draw them on iOS: Antigravity's Google sign-in and its accounts (A13-3/A13-4).
+ * draw them on iOS: Antigravity's Google sign-in and its accounts (A13-3/A13-4), and one quota window per Engines row (A13-5).
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = ManagementShellApplication::class)
@@ -96,7 +96,23 @@ class RunnerEnginePageTest {
     private val claudeOneAccount get() = """{"engine":"claude","installed":true,"version":"2.1.284 (Claude Code)","auth":"yes"}"""
     private val claudeUsage get() = ""","planUsage":{"claude":{"fiveHour":{"utilization":14,"resetsAt":"${at(2)}"},"sevenDay":{"utilization":98,"resetsAt":"${at(50)}"}}}"""
 
-    // A13-3 · A13-4: the runner page's Engines rows
+    // A13-3 · A13-4 · A13-5: the runner page's Engines rows
+
+    @Test fun theAntigravityRowCountsGoogleAccountsAndNamesTheNextOneAboveItsOneWindow() {
+        fixture.runnerEngines = "[$claudeOneAccount,$twoGoogleAccounts]"
+        fixture.runnerExtra = extra() + claudeUsage
+        page(null)
+        await("2 accounts signed in")
+        compose.onNodeWithText("Antigravity", useUnmergedTree = true).assertExists()
+        assertEquals("the engine is Antigravity, not its CLI", 0, shown("Antigravity CLI"))
+        // Work's 5 hours are down to 4%: a new session starts on Default, and the row carries Default's binding bucket only.
+        await("Next: Default")
+        await("3p-weekly"); await("98% remaining")
+        assertEquals("one window on the Antigravity row", 0, shown("gemini-weekly"))
+        // Claude Code's one account: its weekly window, the one closest to its limit, and not its 5-hour one.
+        await("Weekly · all models")
+        assertEquals(0, shown("5-hour limit"))
+    }
 
     @Test fun anAntigravityThatCannotSignInWithGoogleSaysWhyOnItsRow() {
         fixture.runnerEngines = """[{"engine":"antigravity","installed":true,"version":"1.3.0","auth":"no"}]"""

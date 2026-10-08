@@ -217,6 +217,24 @@ class RunnerPageTest {
         assertEquals("a flat Claude payload is no Codex snapshot", emptyList<UsageRow>(), RunnerPage.accountWindows(hpcRunner, "codex", "1e84046c"))
     }
 
+    /** A13-5: one window per Engines row — the one that stops that login first — and every window on the engine page; with two
+     * accounts, the window of the one a new session starts on. Times are the clock's, as the page's are. */
+    @Test fun anEngineRowCarriesOneWindowEvenWithSeveralAccounts() {
+        val now = java.time.Instant.now()
+        fun at(hours: Long) = now.plusSeconds(hours * 3600).toString()
+        val runner = Json.parseToJsonElement("""{"id":"r","name":"wikova","online":true,"lastHeartbeatAt":"$now",
+            "engines":[{"engine":"claude","installed":true,"auth":"yes"},
+              {"engine":"codex","installed":true,"auth":"yes","accounts":[{"id":"default","auth":"yes"},{"id":"1fda3f43","name":"Work","auth":"yes"}]}],
+            "planUsage":{"claude":{"fiveHour":{"utilization":14,"resetsAt":"${at(2)}"},"sevenDay":{"utilization":98,"resetsAt":"${at(50)}"}},
+              "codex":{"provider":"codex","primary":{"utilization":20,"windowDurationMins":300,"resetsAt":"${at(3)}"},
+                "accounts":{"1fda3f43":{"provider":"codex","primary":{"utilization":91,"windowDurationMins":300,"resetsAt":"${at(1)}"}}}}}}""").jsonObject
+        assertEquals(listOf("Weekly · all models" to 98), RunnerPage.engineWindows(runner, "claude").map { it.label to it.percent })
+        assertEquals(listOf("5-hour limit", "Weekly · all models"), RunnerPage.accountWindows(runner, "claude", "default").map { it.label })
+        // Work's 5 hours are nearly spent (91%): a new session starts on Default, whose window the row carries.
+        assertEquals(listOf(20), RunnerPage.engineWindows(runner, "codex").map { it.percent })
+        assertEquals(listOf(91), RunnerPage.accountWindows(runner, "codex", "1fda3f43").map { it.percent })
+    }
+
     @Test fun aDraggedRowTakesTheNextPlaceOncePastHalfOfIt() {
         val heights = mapOf("a" to 100, "b" to 100, "c" to 100)
         val start = RunnerDrag("a", listOf("a", "b", "c"), 0f)

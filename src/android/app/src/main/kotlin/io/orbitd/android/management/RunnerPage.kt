@@ -104,11 +104,12 @@ internal object AccountCopy {
     const val GOOGLE_TERMS = "Google terms"
     const val GOOGLE_TERMS_URL = "https://antigravity.google/terms"
     const val ADD_ACCOUNT = "Add Account"
+    fun next(account: String) = "Next: $account"
 }
 
 /**
  * CodexAccounts: a runner's accounts of an engine that keeps several (Claude Code, Codex, Antigravity) — whose quota each
- * one reads, and what moves a session between them. Shared by the runner pages and
+ * one reads, which one a new session starts on, and what moves a session between them. Shared by the runner pages and
  * the composer's account rows.
  */
 internal object EngineAccounts {
@@ -116,6 +117,9 @@ internal object EngineAccounts {
     const val AUTOMATIC = "automatic"
     /** What a runner declares once it signs an Antigravity account Orbit names into that account's own Gemini directory. */
     const val ANTIGRAVITY_ACCOUNT_LOGIN = "antigravity-account-login/v1"
+    private const val NEAR_LIMIT = 90.0
+    private const val SHORT_WINDOW_NEAR_LIMIT = 80.0
+    private const val SHORT_WINDOW_MINS = 5 * 60
     private const val WEEK_MINS = 7 * 24 * 60
     /** How long an Antigravity bucket's window is, from agy's own name for it (shared BUCKET_WINDOW_MINS). */
     private val bucketWindowMins = mapOf("5h" to 5 * 60, "weekly" to WEEK_MINS)
@@ -153,6 +157,48 @@ internal object EngineAccounts {
 
     fun windows(snapshot: JsonObject): List<JsonObject> = withLength(snapshot).map { it.first }
 
+    private fun resetMs(window: JsonObject) = isoMs(window.str("resetsAt"))
+    private fun used(window: JsonObject) = window.dbl("utilization") ?: 0.0
+
+    /** Any window nearly spent and not past its reset: 80% of one of five hours or less, 90% of a longer one. */
+    fun nearlySpent(snapshot: JsonObject, nowMs: Long) = withLength(snapshot).any { (window, mins) ->
+        val open = resetMs(window)?.let { it <= nowMs } != true
+        open && used(window) >= (if (mins != null && mins <= SHORT_WINDOW_MINS) SHORT_WINDOW_NEAR_LIMIT else NEAR_LIMIT)
+    }
+
+    /** When what an account has left goes to waste: the reset of its longest window — or, when none says how long it
+     * is, the latest reset. Infinity when no window names a reset ahead. */
+    fun expiresAt(snapshot: JsonObject, nowMs: Long): Double {
+        val ahead = withLength(snapshot).mapNotNull { (window, mins) -> resetMs(window)?.takeIf { it > nowMs }?.let { mins to it } }
+        val longest = ahead.maxOfOrNull { it.first ?: -1 } ?: return Double.POSITIVE_INFINITY
+        val pick = if (longest >= 0) ahead.filter { (it.first ?: -1) == longest } else ahead
+        return pick.maxOfOrNull { it.second.toDouble() } ?: Double.POSITIVE_INFINITY
+    }
+
+    /**
+     * CodexAccounts.toStartOn: which account a new session with none picked starts on — the one whose quota would go to
+     * waste first. Signed-out accounts are no candidates; one with a spent window, or paused by hand, waits until it frees
+     * up; one nearly spent comes after the rest; then the soonest-expiring, then the roomiest by its tightest window; ties
+     * go to Default, then the lower id. Every candidate held: the one that frees up first. Null with fewer than two.
+     */
+    fun toStartOn(accounts: List<JsonObject>, usage: JsonObject?, nowMs: Long): String? {
+        if (accounts.size < 2) return null
+        class Candidate(val id: String, val nearLimit: Boolean, val expiresAt: Double, val tightest: Double, val spentUntil: Double?)
+        val candidates = accounts.filter { it.str("auth") != "no" }.map { account ->
+            val own = accountSnapshot(usage, account.text("id"))
+            val windows = own?.let(::windows).orEmpty()
+            val spent = windows.filter { window -> resetMs(window)?.let { it <= nowMs } != true && used(window) >= 100 }
+            var spentUntil = spent.maxOfOrNull { resetMs(it)?.toDouble() ?: Double.POSITIVE_INFINITY }
+            isoMs(account.str("pausedUntil"))?.takeIf { it > nowMs }?.let { pause -> spentUntil = maxOf(pause.toDouble(), spentUntil ?: 0.0) }
+            Candidate(account.text("id"), own?.let { nearlySpent(it, nowMs) } ?: false, own?.let { expiresAt(it, nowMs) } ?: Double.POSITIVE_INFINITY,
+                windows.maxOfOrNull(::used) ?: Double.POSITIVE_INFINITY, spentUntil)
+        }
+        val byId = compareBy<Candidate> { it.id != DEFAULT }.thenBy { it.id }
+        val usable = candidates.filter { it.spentUntil == null }
+        if (usable.isNotEmpty()) return usable.sortedWith(compareBy<Candidate> { it.nearLimit }.thenBy { it.expiresAt }.thenBy { it.tightest }
+            .then(byId)).first().id
+        return candidates.sortedWith(compareBy<Candidate> { it.spentUntil ?: 0.0 }.then(byId)).firstOrNull()?.id
+    }
 }
 
 internal data class AttentionAction(val kind: String, val engine: String? = null, val workspaceId: String? = null, val command: String? = null)
@@ -662,12 +708,30 @@ internal object RunnerPage {
         return checked?.let { RunnerCopy.enginesChecked(ago(it.first, nowMs)) }
     }
 
-    /** The windows an Engines row shows: Default's, while it is signed in and keeps one account. */
-    fun engineWindows(runner: JsonObject, engine: String): List<UsageRow> {
-        val health = engineHealth(runner, engine) ?: return emptyList()
-        if (health.bool("installed") != true || health.str("auth") != "yes" || health.list("accounts").size >= 2) return emptyList()
-        return accountWindows(runner, engine, "default")
+    /** The one quota window an Engines row shows: the binding one (bindingRow, the composer gauge's) — Default's while the
+     * engine is signed in with one account; with several, that of the account a new session starts on, which the row names
+     * above it (engineNextAccount). Every window, and every account's, is the engine page's to list. */
+    fun engineWindows(runner: JsonObject, engine: String, nowMs: Long = System.currentTimeMillis()): List<UsageRow> {
+        val health = engineHealth(runner, engine)?.takeIf { it.bool("installed") == true } ?: return emptyList()
+        val account = when {
+            health.list("accounts").size >= 2 -> nextAccount(runner, health, nowMs) ?: return emptyList()
+            health.str("auth") == "yes" -> EngineAccounts.DEFAULT
+            else -> return emptyList()
+        }
+        return accountSnapshot(EngineAccounts.usage(engine, runner), account)?.let { bindingRow(it, nowMs) }?.let(::listOf).orEmpty()
     }
+
+    /** The account an Engines row names above its window while the engine has several: the one a new session starts on.
+     * Null with one account, none signed in, or no window to show for it. */
+    fun engineNextAccount(runner: JsonObject, engine: String, nowMs: Long = System.currentTimeMillis()): String? {
+        val health = engineHealth(runner, engine)?.takeIf { it.bool("installed") == true } ?: return null
+        val next = nextAccount(runner, health, nowMs) ?: return null
+        if (engineWindows(runner, engine, nowMs).isEmpty()) return null
+        return accountLabel(next, health.list("accounts"))
+    }
+
+    private fun nextAccount(runner: JsonObject, health: JsonObject, nowMs: Long) =
+        EngineAccounts.toStartOn(health.list("accounts"), EngineAccounts.usage(health.text("engine"), runner), nowMs)
 
     /** One account's own windows, all of them: Default's are the engine snapshot's, another's its entry under `accounts`. */
     fun accountWindows(runner: JsonObject, engine: String, account: String): List<UsageRow> =

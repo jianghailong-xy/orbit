@@ -584,7 +584,8 @@ private fun RunnerCapacity(runner: JsonObject, workspaces: List<JsonObject>, mod
 }
 
 /** RunnerEngineRow: its version and where its sign-ins stand, a failed update that has become its problem, Sign In when a
- * login it needs is out (or, for an Antigravity that can't sign in with Google here, why not), and its quota windows. */
+ * login it needs is out (or, for an Antigravity that can't sign in with Google here, why not), and one quota window — with
+ * several accounts, that of the account a new session starts on, named. */
 @Composable
 private fun EngineRow(runner: JsonObject, health: JsonObject, offline: Boolean, now: Long, open: () -> Unit) {
     val engine = health.text("engine")
@@ -592,6 +593,7 @@ private fun EngineRow(runner: JsonObject, health: JsonObject, offline: Boolean, 
     val status = RunnerPage.engineStatus(health, runner)
     val version = if (installed) RunnerPage.engineVersion(health.str("version")) else null
     val hint = RunnerPage.signInHint(runner, engine)
+    val next = RunnerPage.engineNextAccount(runner, engine, now)
     Row(Modifier.fillMaxWidth().clickable(enabled = installed, role = Role.Button, onClick = open).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -608,8 +610,11 @@ private fun EngineRow(runner: JsonObject, health: JsonObject, offline: Boolean, 
             else if (RunnerPage.needsSignIn(health)) Text(RunnerCopy.SIGN_IN, Modifier.padding(top = 4.dp).clip(RoundedCornerShape(50))
                 .background(if (offline) Ink.muted.copy(alpha = .1f) else MaterialTheme.colorScheme.primary.copy(alpha = .12f)).padding(horizontal = 14.dp, vertical = 6.dp),
                 color = if (offline) Ink.muted else MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
-            val windows = RunnerPage.engineWindows(runner, engine)
-            if (windows.isNotEmpty()) Column(Modifier.padding(top = 8.dp)) { windows.forEach { UsageWindowRow(it, RunnerPage.resetsLine(it, now), withGroup = true) } }
+            next?.let { Text(AccountCopy.next(it), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.labelMedium, color = Ink.muted) }
+            val windows = RunnerPage.engineWindows(runner, engine, now)
+            if (windows.isNotEmpty()) Column(Modifier.padding(top = if (next == null) 8.dp else 4.dp)) {
+                windows.forEach { UsageWindowRow(it, RunnerPage.resetsLine(it, now), withGroup = true) }
+            }
         }
         if (installed) Chevron()
     }
