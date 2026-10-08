@@ -25,12 +25,24 @@ class WikiDecisionRefusalTest {
 
     @Test fun aConflictOrAWithdrawalIsARefusalThatAppliedNothing() {
         listOf("amend", "supersede", "retire", "add").forEach { op ->
-            assertEquals("a stale $op", WikiCopy.conflictRefused, WikiLogic.decisionRefusal("conflict", op))
+            assertEquals("a stale $op", WikiCopy.conflictRefused, WikiLogic.decisionRefusal("conflict", op, "accept"))
         }
-        assertEquals("a challenge of an entry no longer active", WikiCopy.inactiveRefused, WikiLogic.decisionRefusal("conflict", "challenge"))
-        assertEquals(WikiCopy.withdrawnRefused, WikiLogic.decisionRefusal("withdrawn", "amend"))
+        assertEquals("a challenge of an entry no longer active", WikiCopy.inactiveRefused, WikiLogic.decisionRefusal("conflict", "challenge", "reconfirm"))
+        assertEquals(WikiCopy.inactiveRefused, WikiLogic.decisionRefusal("conflict", "challenge", "retire"))
+        assertEquals(WikiCopy.withdrawnRefused, WikiLogic.decisionRefusal("withdrawn", "amend", "accept"))
         listOf("accepted", "edited", "rejected", "auto_applied", "pending", "verifying", null).forEach { decision ->
-            assertNull("$decision is no refusal", WikiLogic.decisionRefusal(decision, "challenge"))
+            assertNull("$decision is no refusal", WikiLogic.decisionRefusal(decision, "challenge", "reconfirm"))
         }
+    }
+
+    /** Retire on a challenge withdraws every op still waiting on the entry, the challenge included: recorded
+     * `withdrawn`, it is the Retire done, said "Retired". Any other answer recorded `withdrawn` applied nothing. */
+    @Test fun aChallengesRetireRecordedWithdrawnIsTheRetireDone() {
+        assertNull(WikiLogic.decisionRefusal("withdrawn", "challenge", "retire"))
+        assertEquals(WikiCopy.retired, WikiLogic.decidedToast("challenge", "retire"))
+        listOf("reconfirm", "amend").forEach { action ->
+            assertEquals("a challenge's $action", WikiCopy.withdrawnRefused, WikiLogic.decisionRefusal("withdrawn", "challenge", action))
+        }
+        assertEquals("an accepted retire proposal", WikiCopy.withdrawnRefused, WikiLogic.decisionRefusal("withdrawn", "retire", "accept"))
     }
 }

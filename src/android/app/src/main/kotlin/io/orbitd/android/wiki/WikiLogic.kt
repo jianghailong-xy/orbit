@@ -274,10 +274,12 @@ internal object WikiLogic {
     fun recordedDecision(answer: JsonElement?, opId: String): String? = (answer as? JsonObject)?.get("ops")?.let { it as? JsonArray }
         ?.filterIsInstance<JsonObject>()?.firstOrNull { sameWikiId(it["id"].text(), opId) }?.get("decision").text()
     /** A recorded decision that applied nothing, as the refusal to show (`conflict`: the entry moved past the op, or —
-     * for a challenge — is no longer active; `withdrawn`); null when the answer did what was asked. */
-    fun decisionRefusal(decision: String?, op: String?): String? = when (decision) {
+     * for a challenge — is no longer active; `withdrawn`); null when the answer did what was asked. Except a
+     * challenge's Retire: the retire takes every op still waiting on the entry with it, the challenge it answers
+     * included, so `withdrawn` there is the answer done (OrbitKit `WikiLogic.decisionRefusal(_:op:action:)`). */
+    fun decisionRefusal(decision: String?, op: String?, action: String): String? = when (decision) {
         "conflict" -> if (op == "challenge") WikiCopy.inactiveRefused else WikiCopy.conflictRefused
-        "withdrawn" -> WikiCopy.withdrawnRefused
+        "withdrawn" -> if (op == "challenge" && action == "retire") null else WikiCopy.withdrawnRefused
         else -> null
     }
     fun cardTitle(card: ReviewCard, entry: WikiEntry?) = knownTitle(card, entry) ?: WikiCopy.entryWord
