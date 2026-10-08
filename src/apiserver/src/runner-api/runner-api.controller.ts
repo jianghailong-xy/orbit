@@ -46,6 +46,7 @@ import {
   ANTIGRAVITY_ACCOUNT_LOGIN_V1,
   CLAUDE_ACCOUNT_MOVE_V1,
   CODEX_ACCOUNT_MOVE_V1,
+  KIMI_ACCOUNT_MOVE_V1,
 } from '../providers/account-move-capability';
 import { accountEnvVar } from '../providers/account';
 import { sessionAccountPausedUntil, type WorkspaceAccountChoices } from '../providers/plan-usage-accounts';
@@ -743,8 +744,8 @@ export type QuotaRetryTransaction = TransactionSurface<{ runner: ['findUnique'] 
 /** The retry plan reads the session, then hands the same transaction to the quota snapshot read. */
 export type RetryPlanTransaction = TransactionSurface<{ session: ['findUnique'] }> & QuotaRetryTransaction;
 
-/** A Codex usage limit reads the workspace too: whether it leaves the account to Orbit. */
-export type CodexUsageLimitTransaction = TransactionSurface<{ workspace: ['findUnique'] }> & QuotaRetryTransaction;
+/** A Codex or Kimi usage limit reads the workspace too: whether it leaves the account to Orbit. */
+export type UsageLimitTransaction = TransactionSurface<{ workspace: ['findUnique'] }> & QuotaRetryTransaction;
 
 @MachineProtocol()
 @Controller('runner')
@@ -4435,10 +4436,12 @@ export class RunnerApiController {
           poolKeyId: true,
           poolCodexAccountId: true,
           model: true,
-          // Which of the runner's Codex accounts a turn its usage limit ended ran on, and whether it
-          // was picked by hand — see `codexUsageLimit` below.
+          // Which of the runner's Codex or Kimi accounts a turn its usage limit ended ran on, and
+          // whether it was picked by hand — see `usageLimit` below.
           codexAccount: true,
           codexAccountPinned: true,
+          kimiAccount: true,
+          kimiAccountPinned: true,
           // What the run still has of its own in flight, for the OWNER_CONFIRMED question below:
           // work that will report back and wake this session again, which is what makes a turn the
           // run ends not the end of the run (`runStoppedWorking`). Read with the row.
@@ -4804,18 +4807,27 @@ export class RunnerApiController {
       // codex_account_move.go); else it waits for this account's reset. A task's run too, as a Claude
       // one does (retryPlanFor): the retry this arms holds its task's failure back (retryPending
       // below), and the run goes on in its own checkout and thread rather than ending the attempt.
-      const codexUsageLimit =
+      //
+      // A built-in Kimi session the same way, on a runner that carries its conversation to another
+      // account (KIMI_ACCOUNT_MOVE_V1, runner kimi_account_move.go). Kimi's ACP answers a turn its
+      // usage limit ended as an ordinary end and says nothing of why; the runner reads the limit from
+      // the turn's own record and reports it as the turn's error, in the words this reads
+      // (kimi_acp.go kimiTurnUsageLimit).
+      const usageLimitEngine = current.provider === AgentProvider.CODEX
+        ? 'codex' as const
+        : current.provider === AgentProvider.KIMI ? 'kimi' as const : null;
+      const usageLimit =
         failSession
         && completedTurn?.kind === 'message'
         && current.retryAt == null
-        && current.provider === AgentProvider.CODEX
+        && usageLimitEngine
         && isUsageLimitErrorText(failureText)
-          ? await this.codexUsageLimitRetry(tx, runner.id, current, failureText!)
+          ? await this.usageLimitRetry(tx, runner.id, usageLimitEngine, current, failureText!)
           : null;
       const retryArmAt = keyRetryAt
         ? new Date(keyRetryAt.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS))
-        : codexUsageLimit
-          ? codexUsageLimit.retryAt
+        : usageLimit
+          ? usageLimit.retryAt
           : unanswered && dto.numTurns === 0 && (dto.costUsd ?? 0) === 0 && current.retryAt == null
             ? nextAutoRetryAt(current.retryAttempts, new Date())
             : null;
@@ -5196,8 +5208,11 @@ export class RunnerApiController {
           ...(retryArmAt ? { retryAt: retryArmAt } : {}),
           // The account it moves to, and the line the next engine start carries into the transcript
           // (the events path attaches it, as it does a pool's).
-          ...(codexUsageLimit?.move
-            ? { codexAccount: codexUsageLimit.move.to, poolSwitchNotice: codexUsageLimit.move.notice }
+          ...(usageLimit?.move
+            ? {
+                ...(usageLimitEngine === 'kimi' ? { kimiAccount: usageLimit.move.to } : { codexAccount: usageLimit.move.to }),
+                poolSwitchNotice: usageLimit.move.notice,
+              }
             : {}),
           ...(acknowledgedCoordinatorContextKey
             ? { coordinatorContextAckKey: acknowledgedCoordinatorContextKey }
@@ -5380,7 +5395,7 @@ export class RunnerApiController {
         failSession,
         // What the STATUS below announces beside FAILED: a usage limit this turn armed is a retry
         // on its way, and the clients draw Retrying rather than Failed.
-        retryAt: codexUsageLimit?.retryAt ?? current.retryAt,
+        retryAt: usageLimit?.retryAt ?? current.retryAt,
         taskReclaimed,
         taskId: current.taskId,
         taskOwnerId: current.ownerId,
@@ -7336,20 +7351,23 @@ export class RunnerApiController {
   }
 
   /**
-   * The retry a built-in Codex session's usage limit arms: at once, on another of the runner's accounts
-   * with room, when its workspace leaves the account to Orbit (codexAccountAfterUsageLimit) and its
-   * runner can carry the thread there (CODEX_ACCOUNT_MOVE_V1) — or at this account's reset
-   * (quotaRetryAt). Null when no reset can be read either: nothing says when to try again, and the
-   * session stays FAILED, one message away from resuming.
+   * The retry a built-in Codex or Kimi session's usage limit arms: at once, on another of the runner's
+   * accounts with room, when its workspace leaves the account to Orbit (accountAfterUsageLimit) and its
+   * runner can carry the conversation there (CODEX_ACCOUNT_MOVE_V1, KIMI_ACCOUNT_MOVE_V1) — or at this
+   * account's reset (quotaRetryAt). Null when no reset can be read either: nothing says when to try
+   * again, and the session stays FAILED, one message away from resuming.
    */
-  private async codexUsageLimitRetry(
-    tx: CodexUsageLimitTransaction,
+  private async usageLimitRetry(
+    tx: UsageLimitTransaction,
     runnerId: string,
+    engine: 'codex' | 'kimi',
     session: {
       ownerId: string;
       provider: string;
       codexAccount: string | null;
       codexAccountPinned: boolean;
+      kimiAccount: string | null;
+      kimiAccountPinned: boolean;
       workspaceId: string | null;
     },
     text: string,
@@ -7362,21 +7380,16 @@ export class RunnerApiController {
     const workspace = session.workspaceId
       ? await tx.workspace.findUnique({
           where: { id: session.workspaceId },
-          select: { env: true, codexAccount: true, claudeAccount: true },
+          select: { env: true, codexAccount: true, claudeAccount: true, kimiAccount: true },
         })
       : null;
-    const move = runner?.capabilities.includes(CODEX_ACCOUNT_MOVE_V1)
-      ? accountAfterUsageLimit(
-          'codex',
-          { account: session.codexAccount, pinned: session.codexAccountPinned },
-          workspace,
-          runner.engines,
-          runner.planUsage,
-          now,
-          runner.accountPauses,
-        )
+    const own = engine === 'kimi'
+      ? { account: session.kimiAccount, pinned: session.kimiAccountPinned }
+      : { account: session.codexAccount, pinned: session.codexAccountPinned };
+    const move = runner?.capabilities.includes(engine === 'kimi' ? KIMI_ACCOUNT_MOVE_V1 : CODEX_ACCOUNT_MOVE_V1)
+      ? accountAfterUsageLimit(engine, own, workspace, runner.engines, runner.planUsage, now, runner.accountPauses)
       : null;
-    if (move && runner) return { retryAt: now, move: { to: move.to, notice: accountSwitchNotice('codex', move, runner) } };
+    if (move && runner) return { retryAt: now, move: { to: move.to, notice: accountSwitchNotice(engine, move, runner) } };
     const at = await this.quotaRetryAt(tx, runnerId, session, text, workspace);
     return at ? { retryAt: at } : null;
   }

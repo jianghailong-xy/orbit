@@ -238,7 +238,8 @@ type sessionMeta struct {
 	// KimiCodeHome is the KIMI_CODE_HOME of the added Kimi account this session runs on
 	// (kimiSessionHomeToRecord): where its conversation is kept, so where `orbit resume` looks for it,
 	// and what a removal of that account refuses to take while the session is running. Empty on
-	// Default.
+	// Default. A session moved to another account keeps the one it ran on here until its engine starts
+	// on the new one, its conversation carried there first (writeKimiSessionMeta).
 	KimiCodeHome string `json:"kimiCodeHome,omitempty"`
 	WorkDir      string `json:"workDir"`
 	// PreviousWorkDir is the WorkDir before the last write that changed it: where a session moved
@@ -306,7 +307,18 @@ func writeSessionMeta(scratch string, job *ClaimedSession, execDir string) {
 	writeSessionMetaWithCodexState(scratch, job, execDir, "", "", "")
 }
 
+// writeKimiSessionMeta is writeSessionMeta from a Kimi engine that has started in the KIMI_CODE_HOME
+// its claim names, the session's conversation carried there first (carryKimiConversation): the one
+// write that moves KimiCodeHome to another account.
+func writeKimiSessionMeta(scratch string, job *ClaimedSession, execDir string) {
+	writeSessionMetaRecord(scratch, job, execDir, "", "", "", true)
+}
+
 func writeSessionMetaWithCodexState(scratch string, job *ClaimedSession, execDir, layout, partition, codexHome string) {
+	writeSessionMetaRecord(scratch, job, execDir, layout, partition, codexHome, false)
+}
+
+func writeSessionMetaRecord(scratch string, job *ClaimedSession, execDir, layout, partition, codexHome string, kimiStarted bool) {
 	// Generic writes happen before the provider starts and on cold claims. Preserve
 	// the Codex state scope learned by an earlier successful start so a resume never
 	// falls back from runner-shared state to a stale legacy session directory.
@@ -314,6 +326,13 @@ func writeSessionMetaWithCodexState(scratch string, job *ClaimedSession, execDir
 	antigravityDir := antigravitySessionGoogleDirToRecord(job)
 	kimiHome := kimiSessionHomeToRecord(job, execDir)
 	existing := readSessionMeta(filepath.Join(scratch, "meta.json"))
+	// A Kimi conversation stays in the account it ran on until the engine that starts on another
+	// carries it there, so a write before then — a cold claim already naming the account it moves to —
+	// keeps the account it is in: the one `orbit resume` has to open, and a removal has to leave alone.
+	if !kimiStarted && existing != nil && existing.Provider == providerKimi && existing.RuntimeSessionID != "" &&
+		runtimeProvider(job) == providerKimi {
+		kimiHome = existing.KimiCodeHome
+	}
 	if layout == "" || claudeDir == "" {
 		if existing != nil {
 			if layout == "" {
