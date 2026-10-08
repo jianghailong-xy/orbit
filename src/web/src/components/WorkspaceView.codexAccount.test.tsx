@@ -754,7 +754,9 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
   });
 
   /** Two Kimi Code accounts — Default on kimi.ai, Work on kimi.com — their quota in the heartbeat's
-   *  planUsage.kimi: Default's month is 41% used, Work's 5-hour window 97%. */
+   *  planUsage.kimi: Default's month is 41% used, Work's 5-hour window 97%. Default's coding share is
+   *  above its month, which Kimi never reports (the share is part of the month), so that a gauge or a
+   *  row still weighing it would name it. */
   const withKimiAccounts = (capabilities: string[] = []) =>
     ({
       ...RUNNER,
@@ -779,6 +781,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
           provider: 'kimi',
           fiveHour: { utilization: 12, resetsAt: RESETS },
           month: { utilization: 41, resetsAt: RESETS },
+          monthCode: { utilization: 88, resetsAt: RESETS },
           accounts: { [WORK]: { provider: 'kimi', fiveHour: { utilization: 97, resetsAt: RESETS } } },
         },
       },
@@ -793,6 +796,11 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     // Work's 5-hour window is nearly spent, so Automatic would start on Default, whose month the gauge shows.
     expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 41%');
     expect(await gaugeAccount()).toEqual({ name: 'Default', note: 'Automatic — the account whose quota resets soonest' });
+    // The month is its total: the coding share beside it is neither listed nor what the gauge reads.
+    expect([...document.querySelectorAll('.cu-pop .cu-row .cu-head')].map((head) => head.textContent)).toEqual([
+      '5h limit12%',
+      'Monthly limit41%',
+    ]);
     expect((await providerMenuRows())!.map(rowText)).toEqual([
       'Kimi',
       'AutomaticSwitches to soonest reset ✓',

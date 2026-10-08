@@ -40,13 +40,16 @@ const kimi = (accounts: RunnerEngineAccount[]): RunnerEngineHealth => ({
   accounts,
 });
 
-/** Default's month is its fullest window; Work's 5-hour one is nearly spent. */
+/** Default's month is its fullest window; Work's 5-hour one is nearly spent. Default's coding share is
+ *  above its month, which Kimi never reports (the share is part of the month), so that a picker still
+ *  weighing it would name it. */
 const USAGE: PlanUsage = {
   kimi: {
     provider: 'kimi',
     fiveHour: { utilization: 12 },
     sevenDay: { utilization: 34 },
     month: { utilization: 41 },
+    monthCode: { utilization: 88 },
     accounts: { [WORK.id]: { provider: 'kimi', fiveHour: { utilization: 97 }, month: { utilization: 10 } } },
   },
 };
@@ -197,6 +200,8 @@ describe('which Kimi account a workspace runs on', () => {
       ['Default (~/.kimi-code)', 'Monthly limit 41% · signed in'],
       ['Work', '5h limit 97% · signed in'],
     ]);
+    // Neither the coding share's name nor its 88% is anywhere in the list.
+    expect(document.body.querySelector('[role="listbox"]')?.textContent).not.toMatch(/Monthly · code|88%/);
     await press(offered[2].el);
     await click(byText('button', 'Save'));
     expect(patches).toHaveLength(1);

@@ -57,7 +57,7 @@ describe('planUsageRows', () => {
     });
   });
 
-  it("names Kimi Code's windows as its own /usage panel does, its monthly ones included", () => {
+  it("names Kimi Code's windows as its own /usage panel does: one monthly bar, the total", () => {
     const rows = planUsageRows({
       provider: 'kimi',
       fiveHour: { utilization: 12 },
@@ -69,12 +69,28 @@ describe('planUsageRows', () => {
       { key: 'fiveHour', label: '5h limit', percent: 12, nearLimit: false },
       { key: 'sevenDay', label: 'Weekly limit', percent: 34, nearLimit: false },
       { key: 'month', label: 'Monthly limit', percent: 91, nearLimit: true },
-      { key: 'monthCode', label: 'Monthly · code', percent: 30, nearLimit: false },
     ]);
     // What stops the login is its month, though its 5-hour window has room.
     expect(bindingPlanUsageRow(rows)?.key).toBe('month');
     // A window the runner did not read is not drawn.
     expect(planUsageRows({ provider: 'kimi', sevenDay: { utilization: 7 } }).map((row) => row.label)).toEqual(['Weekly limit']);
+  });
+
+  it("never draws Kimi's coding share of the month, nor names it as what stops the login", () => {
+    // A share above its month cannot come from Kimi — it is part of the month — and stands here so
+    // that a reader still weighing it would name it.
+    const rows = currentPlanUsageRows({
+      provider: 'kimi',
+      fiveHour: { utilization: 12 },
+      sevenDay: { utilization: 34 },
+      month: { utilization: 41 },
+      monthCode: { utilization: 97 },
+    });
+    expect(rows.map((row) => row.label)).toEqual(['5h limit', 'Weekly limit', 'Monthly limit']);
+    expect(rows.map((row) => row.label)).not.toContain('Monthly · code');
+    expect(bindingPlanUsageRow(rows)).toMatchObject({ key: 'month', percent: 41 });
+    // A coding share alone is nothing to draw.
+    expect(planUsageRows({ provider: 'kimi', monthCode: { utilization: 30 } })).toEqual([]);
   });
 
   it('selects Kimi quota without leaking a flat Kimi snapshot into Claude', () => {

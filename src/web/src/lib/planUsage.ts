@@ -139,7 +139,7 @@ export function planUsageSnapshots(usage: PlanUsage): PlanUsageSectionInfo[] {
   ];
 }
 
-type NamedWindowKey = 'fiveHour' | 'sevenDay' | 'sevenDayOpus' | 'sevenDaySonnet' | 'month' | 'monthCode';
+type NamedWindowKey = 'fiveHour' | 'sevenDay' | 'sevenDayOpus' | 'sevenDaySonnet' | 'month';
 
 const CLAUDE_ROWS: { key: NamedWindowKey; label: string }[] = [
   { key: 'fiveHour', label: '5-hour limit' },
@@ -148,13 +148,13 @@ const CLAUDE_ROWS: { key: NamedWindowKey; label: string }[] = [
   { key: 'sevenDaySonnet', label: 'Weekly · Sonnet' },
 ];
 
-/** Kimi Code's windows (PlanUsageSnapshot), in the words its own /usage panel uses for them — and its
- *  coding share of the month, which that panel puts under the monthly limit as "code N%". */
+/** Kimi Code's windows (PlanUsageSnapshot), in the words its own /usage panel uses for them. The month
+ *  is one bar, its total: the coding share of it (`monthCode`) is not drawn, on every client — the
+ *  owner's call, 2026-10-08 — though the quota decisions in @orbit/shared still read it. */
 const KIMI_ROWS: { key: NamedWindowKey; label: string }[] = [
   { key: 'fiveHour', label: '5h limit' },
   { key: 'sevenDay', label: 'Weekly limit' },
   { key: 'month', label: 'Monthly limit' },
-  { key: 'monthCode', label: 'Monthly · code' },
 ];
 
 function clampPercent(value: number): number {

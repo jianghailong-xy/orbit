@@ -451,14 +451,16 @@ describe('the runner’s Kimi Code accounts, under the Kimi choice', () => {
       accounts: accounts.map((account) => ({ ...account, home: home(account.id) })),
     },
   ];
-  // Kimi's windows in the heartbeat's planUsage.kimi: Default's own, Work's under `accounts`.
+  // Kimi's windows in the heartbeat's planUsage.kimi: Default's own, Work's under `accounts`. Default's
+  // coding share is above its month, which Kimi never reports (the share is part of the month), so that a
+  // row still weighing it would name it.
   const usage = {
     kimi: {
       provider: 'kimi',
       fiveHour: { utilization: 12 },
       sevenDay: { utilization: 34 },
       month: { utilization: 41 },
-      monthCode: { utilization: 30 },
+      monthCode: { utilization: 88 },
       accounts: {
         '5c2e91a0': { provider: 'kimi', fiveHour: { utilization: 97 }, sevenDay: { utilization: 20 }, month: { utilization: 10 } },
       },
@@ -466,7 +468,7 @@ describe('the runner’s Kimi Code accounts, under the Kimi choice', () => {
   } as never;
   const accountsOf = (choices: ReturnType<typeof providerChoices>) => choices.find((choice) => choice.slug === 'kimi')?.accounts;
 
-  it('lists each account by the window that stops it, its monthly ones included', () => {
+  it('lists each account by the window that stops it, the month by its total', () => {
     const choices = providerChoices(
       [],
       catalog,
@@ -476,7 +478,8 @@ describe('the runner’s Kimi Code accounts, under the Kimi choice', () => {
       usage,
     );
     expect(accountsOf(choices)).toEqual([
-      // Its month is the fullest of its windows, though its 5-hour one has room.
+      // Its month is the fullest of the windows drawn, though its 5-hour one has room; its coding share
+      // is never one of them.
       { id: 'default', label: 'Default', quota: 'Monthly 41%' },
       { id: '5c2e91a0', label: 'Work', quota: '5h 97%', nearLimit: true },
       { id: 'c0ffee42', label: 'Account c0ffee42', unavailable: 'Not signed in' },

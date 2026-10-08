@@ -22,8 +22,8 @@ import type { Runner } from './TasksSidePanel';
  * the Kimi row where the runner keeps Kimi accounts apart (kimi-account-login/v1), a panel that asks
  * for the site before it signs anything in, a device code that names the site of the account being
  * added, each account's row saying its site before its directory, Re-sign in marking the account's own
- * site Current, and each account's own quota — its 5-hour, weekly and monthly windows — in the same
- * quota column Claude Code's and Codex's accounts use.
+ * site Current, and each account's own quota — its 5-hour and weekly windows and one bar for its
+ * month, the total — in the same quota column Claude Code's and Codex's accounts use.
  *
  * Mounted into a real DOM and pressed through to the mocked `api()`: what a press sends — which name,
  * which account, which site — is what matters, and a static render cannot press anything.
@@ -72,7 +72,8 @@ const runner = (engine: RunnerEngineHealth = kimi(), over: Partial<Runner> = {})
 
 /** Ahead of whenever this runs, so no reading is about a window already over. */
 const inHours = (hours: number) => new Date(Date.now() + hours * 3600_000).toISOString();
-/** One Kimi account's four windows, as used shares (`used_ratio × 100`), from the managed /usages. */
+/** One Kimi account's four windows, as used shares (`used_ratio × 100`), from the managed /usages: the
+ *  page draws three of them, the month by its total, and never the coding share (`monthCode`). */
 const usages = (fiveHour: number, sevenDay: number, month: number, monthCode: number): PlanUsageSnapshot => ({
   provider: 'kimi',
   fetchedAt: inHours(-0.05),
@@ -346,13 +347,15 @@ describe('two Kimi accounts on one runner', () => {
 });
 
 describe('each Kimi account’s own quota', () => {
-  it('shows its 5-hour, weekly and monthly windows in the quota column', () => {
+  it('shows its 5-hour, weekly and monthly windows in the quota column, one bar for the month', () => {
     const page = mount(withQuota(usages(12, 34, 41, 30), usages(97, 20, 10, 5)));
     expect(kimiRow(page).querySelector('.re-meta')?.textContent).toBe('2.1.1 · 2 of 2 accounts available');
     const [defaultRow, workRow] = accountRows(page);
-    expect(windows(defaultRow)).toEqual(['5h limit12%', 'Weekly limit34%', 'Monthly limit41%', 'Monthly · code30%']);
-    expect(windows(workRow)).toEqual(['5h limit97%', 'Weekly limit20%', 'Monthly limit10%', 'Monthly · code5%']);
-    expect(all(defaultRow, '.re-reset')).toHaveLength(4);
+    expect(windows(defaultRow)).toEqual(['5h limit12%', 'Weekly limit34%', 'Monthly limit41%']);
+    expect(windows(workRow)).toEqual(['5h limit97%', 'Weekly limit20%', 'Monthly limit10%']);
+    expect(all(defaultRow, '.re-reset')).toHaveLength(3);
+    // The month is its total: the coding share reported beside it is not drawn.
+    expect(page.textContent).not.toContain('Monthly · code');
     // Work's 5-hour window is nearly spent: its bar says so, and a new session starts on Default.
     expect(all(workRow, '.runner-util.full')).toHaveLength(1);
     expect(all(defaultRow, '.runner-util.full')).toHaveLength(0);
@@ -360,12 +363,15 @@ describe('each Kimi account’s own quota', () => {
     expect([defaultRow, workRow].map(tags)).toEqual([['Available'], ['Available']]);
   });
 
-  it('folded, the head shows the next account’s window nearest its limit', () => {
-    const page = mount(withQuota(usages(12, 34, 41, 30), usages(97, 20, 10, 5)), { folded: true });
+  it('folded, the head shows the next account’s window nearest its limit, of the three it draws', () => {
+    // Default's coding share is set above its month — which Kimi never reports, the share being part of
+    // the month — so that a head still weighing it would name it.
+    const page = mount(withQuota(usages(12, 34, 41, 88), usages(97, 20, 10, 5)), { folded: true });
     const head = kimiRow(page);
     expect(tags(head)).toEqual(['Available']);
     expect(head.querySelector('.re-quota-next')?.textContent).toBe('Next: Default');
     expect(windows(head)).toEqual(['Monthly limit41%']);
+    expect(head.textContent).not.toContain('Monthly · code');
   });
 
   it('counts a spent account out of the head, and says when it comes back', () => {
@@ -374,10 +380,11 @@ describe('each Kimi account’s own quota', () => {
     expect(tags(accountRow(page, 'Work'))[0]).toMatch(/^Spent · resets /);
   });
 
-  it('shows the windows on the one-account row too', () => {
+  it('shows the same three on the one-account row', () => {
     const page = mount({ ...runner(kimi({ accounts: [DEFAULT] })), planUsage: { kimi: usages(12, 34, 41, 30) } });
     const row = kimiRow(page);
     expect(tags(row)).toEqual(['Available']);
-    expect(windows(row)).toEqual(['5h limit12%', 'Weekly limit34%', 'Monthly limit41%', 'Monthly · code30%']);
+    expect(windows(row)).toEqual(['5h limit12%', 'Weekly limit34%', 'Monthly limit41%']);
+    expect(row.textContent).not.toContain('Monthly · code');
   });
 });
