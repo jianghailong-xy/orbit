@@ -2144,8 +2144,9 @@ private struct PoolSectionHeader: View {
     }
 }
 
-/// A small capitalised tag: NEXT, ADMIN — and SHARED, in the brand colour.
-private struct PoolChip: View {
+/// A small capitalised tag: NEXT, ADMIN — and SHARED, in the brand colour. An engine page's account
+/// rows wear its NEXT too (RunnerEnginePage).
+struct PoolChip: View {
     let text: String
     var brand = false
 

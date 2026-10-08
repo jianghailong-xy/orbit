@@ -121,10 +121,12 @@ final class ConsoleModel {
     /// id). Nil leaves it to the workspace: its own pick, else Automatic — the account with the most
     /// room, which the server chooses when it creates the session.
     private(set) var draftCodexAccount: String?
-    /// Draft only: the same for a Claude account picked under Claude, and an Antigravity account picked
-    /// under Antigravity. At most one of the three is set — a pick is made under one engine.
+    /// Draft only: the same for a Claude account picked under Claude, an Antigravity account picked
+    /// under Antigravity and a Kimi account picked under Kimi. At most one of the four is set — a pick
+    /// is made under one engine.
     private(set) var draftClaudeAccount: String?
     private(set) var draftAntigravityAccount: String?
+    private(set) var draftKimiAccount: String?
     /// Which Codex account this session runs on, from its detail: its own (`Session.codexAccount`),
     /// and its workspace's for a session that stored none. Only a detail read sets them.
     private(set) var sessionCodexAccount: String?
@@ -136,10 +138,13 @@ final class ConsoleModel {
     private(set) var workspaceClaudeAccount: String?
     private(set) var sessionCodexAccountPinned = false
     private(set) var sessionClaudeAccountPinned = false
-    /// The same three for Antigravity.
+    /// The same three for Antigravity, and for Kimi.
     private(set) var sessionAntigravityAccount: String?
     private(set) var workspaceAntigravityAccount: String?
     private(set) var sessionAntigravityAccountPinned = false
+    private(set) var sessionKimiAccount: String?
+    private(set) var workspaceKimiAccount: String?
+    private(set) var sessionKimiAccountPinned = false
     private(set) var workspaceEnv: [String: String]?
     private var workspaceAntigravityKeys: [String: Bool]?
     private(set) var runnerAntigravity: RunnerAntigravityState?
@@ -480,8 +485,8 @@ final class ConsoleModel {
     /// and none at all while no account can be named.
     var planUsage: PlanUsageSnapshot? {
         if currentPool != nil { return poolAccount?.member.planUsage }
-        // A built-in Codex, Claude or Antigravity session spends one of the runner's accounts — the one
-        // it runs on. Antigravity's Default too: its quota is never in the runner's own report, only
+        // A built-in Codex, Claude, Antigravity or Kimi session spends one of the runner's accounts — the
+        // one it runs on. Antigravity's Default too: its quota is never in the runner's own report, only
         // with its engine's health (`engineUsage`), and a Default on the machine's Gemini key has none.
         if let engine = accountEngine, engine == "antigravity" || account(for: engine) != CodexAccounts.defaultID {
             return CodexAccounts.snapshot(engineUsage(engine), account: account(for: engine))
@@ -664,8 +669,8 @@ final class ConsoleModel {
         default: return nil
         }
     }
-    /// The engine whose account this draft or session names: the built-in Codex, Claude or Antigravity
-    /// engine, not an account pool. Nil for everything else.
+    /// The engine whose account this draft or session names: the built-in Codex, Claude, Antigravity or
+    /// Kimi engine, not an account pool. Nil for everything else.
     var accountEngine: String? {
         currentPool == nil && RunnerPageFormat.keepsAccounts(provider) ? provider : nil
     }
@@ -695,6 +700,7 @@ final class ConsoleModel {
         switch engine {
         case "claude": return draftClaudeAccount
         case "antigravity": return draftAntigravityAccount
+        case "kimi": return draftKimiAccount
         default: return draftCodexAccount
         }
     }
@@ -703,6 +709,7 @@ final class ConsoleModel {
         switch engine {
         case "claude": return sessionClaudeAccount
         case "antigravity": return sessionAntigravityAccount
+        case "kimi": return sessionKimiAccount
         default: return sessionCodexAccount
         }
     }
@@ -711,6 +718,7 @@ final class ConsoleModel {
         switch engine {
         case "claude": return sessionClaudeAccountPinned
         case "antigravity": return sessionAntigravityAccountPinned
+        case "kimi": return sessionKimiAccountPinned
         default: return sessionCodexAccountPinned
         }
     }
@@ -719,6 +727,7 @@ final class ConsoleModel {
         switch engine {
         case "claude": return workspaceClaudeAccount
         case "antigravity": return workspaceAntigravityAccount
+        case "kimi": return workspaceKimiAccount
         default: return workspaceCodexAccount
         }
     }
@@ -1801,6 +1810,9 @@ final class ConsoleModel {
         sessionAntigravityAccount = s.antigravityAccount
         workspaceAntigravityAccount = s.agent?.antigravityAccount
         sessionAntigravityAccountPinned = s.antigravityAccountPinned ?? false
+        sessionKimiAccount = s.kimiAccount
+        workspaceKimiAccount = s.agent?.kimiAccount
+        sessionKimiAccountPinned = s.kimiAccountPinned ?? false
         workspaceEnv = s.agent?.env
         workspaceAntigravityKeys = s.agent?.antigravityKeyAvailableByRunner
 
@@ -1967,6 +1979,9 @@ final class ConsoleModel {
         sessionAntigravityAccount = s.antigravityAccount
         workspaceAntigravityAccount = s.agent?.antigravityAccount
         sessionAntigravityAccountPinned = s.antigravityAccountPinned ?? false
+        sessionKimiAccount = s.kimiAccount
+        workspaceKimiAccount = s.agent?.kimiAccount
+        sessionKimiAccountPinned = s.kimiAccountPinned ?? false
         workspaceEnv = s.agent?.env
         workspaceAntigravityKeys = s.agent?.antigravityKeyAvailableByRunner
         return true
@@ -2125,6 +2140,7 @@ final class ConsoleModel {
         draftCodexAccount = slug == "codex" ? account : nil
         draftClaudeAccount = slug == "claude" ? account : nil
         draftAntigravityAccount = slug == "antigravity" ? account : nil
+        draftKimiAccount = slug == "kimi" ? account : nil
     }
 
     /// Move this session to another of its runner's accounts — which pins it there — or back onto
@@ -2933,6 +2949,7 @@ final class ConsoleModel {
                 codexAccount: provider == "codex" ? draftCodexAccount : nil,
                 claudeAccount: provider == "claude" ? draftClaudeAccount : nil,
                 antigravityAccount: provider == "antigravity" ? draftAntigravityAccount : nil,
+                kimiAccount: provider == "kimi" ? draftKimiAccount : nil,
                 // The folder page this draft was opened from, if any: the session is filed in it as
                 // it is created (§3.3). Omitted for a draft from a list.
                 folderId: draftFolderID))
@@ -2945,6 +2962,7 @@ final class ConsoleModel {
             draftCodexAccount = nil
             draftClaudeAccount = nil
             draftAntigravityAccount = nil
+            draftKimiAccount = nil
             // The Mode pick is different: without a write-back it lived on this one session, while
             // the runs nobody starts from a composer — task-launched, MCP-created — keep resolving
             // the ACCOUNT default server-side. Web parity, and best-effort: a failed write costs a
