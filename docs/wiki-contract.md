@@ -1595,6 +1595,58 @@ JSON 里是 `plan.jobs`；迁移 `0338_wiki_plan_job`；服务端在 `src/apiser
 - **只重写变了的**：材料指纹没变的节跳过，所以小改后重新确认，只重写变了的节。写到一半 plan 又被确认了新版本：旧版本的写入会被
   `WIKI_PLAN_STALE` 拒绝，这次生成以失败结束；等着的那个生成接着写新版本。
 
+### 21.10 服务端起草与修订（服务端执行 P6，`plan.jobs.server`）
+
+JSON 里是 `plan.jobs.server`；迁移 `0404_wiki_plan_server_draft`；实现在 `src/apiserver/src/wiki-worker/`（行格式 `wiki-plan-format.ts`、
+快照上的仓库 `wiki-plan-repo.ts`、材料与聚类 `wiki-plan-materials.ts`、提示 `wiki-plan-prompts.ts`、检查闸 `wiki-plan-gate.ts`、作业
+`wiki-plan-draft-job.ts`），是 `src/runner-go/wiki_plan_*.go` 的移植；常量是 `src/shared/src/wikiPlan.ts` 的 `WIKI_PLAN_SERVER_JOB`。
+
+- **什么时候走这条路**：执行器开关是 `server`，或是 `canary` 且账号在名单内（24.5）。`runner`（默认）和名单外的账号，作业照 21.7、21.8
+  建任务、由维护会话跑，一字不改。
+- **怎么建**：`advanceWikiPlanJob` 先问开关：起草建 `plan_draft`、修订建 `plan_revise` 的 `wiki_job`（优先级 1，输入 `{ planJobId }`），
+  和把 plan 作业记为 `made`（`wiki_plan_job.job_id`）在同一个事务里。仍然要维护 workspace——worker 经它的 runner 读仓库——没有就照旧
+  held `no_maintenance_workspace`；不问 provider（不调任何会话的模型），也不等隐藏清单（`staggered` 是 runner 那条路的规则：服务端由队列和
+  「同一空间同时只跑一个作业」保证模型不被两边同时调）。不建任务、不建会话。建 space 和 owner 的要求都是 owner 发起的，所以作业的每个
+  请求都排在后台维护前面（`jobs.priority`）。
+- **调用**：每次调用是模型请求队列里的一个请求。step 是 `plan_skeleton` / `plan_details` / `plan_outline` / `plan_rules` /
+  `plan_revise_catalogue` / `plan_revise_doc` / `plan_redo_doc`，都是 `plan_*`：等待至多 20 分钟，一次调用至多 60 分钟（25.5）。unit 是
+  `a<轮次>/<runner 上的单元名>@<这次调用 sha256 的前 12 位>`，所以重放碰到的是已经发出的那个请求，问题变了就是新请求。max_tokens 32,000，
+  system prompt 与 runner 逐字相同，一条 user 消息；已收到的部分随调用写进请求的 `partial`。回答读不成行格式的，把格式要求再说一遍重问，
+  一个单元至多 3 次；一个作业同时至多 4 个请求在途，和 runner 的 `--concurrency` 默认值一样。
+- **分几步**：同 21.8。起草先出目录骨架，篇数不在范围内时带着篇数重问，至多两次，仍不对的交给检查闸；再按大类并行补每篇的读者与范围，
+  逐篇并行出大纲与每节来源，规则草案和它们同时问。修订先出新目录，只重写合并或新增的篇，受保护的篇原样带过去。
+- **材料**：作业第一次运行时读一次，存在 plan 作业上（`wiki_plan_job.materials`）：space 快照的 sha——runner 能取时先要一份新快照（至多等
+  300 秒），否则用 space 已有的快照，都没有就按 infra 等——plan 材料（`GET …/plan/materials` 用的同一个函数）、读材料的日期，以及快照
+  不带的原文：概览的几篇文档和 `schema.prisma`，经 runner 的 read 在该 sha 上读（至多等 300 秒）。重放读回它们，问模型的还是那些问题；
+  快照在作业下面换了（别的作业取了更新的快照），就在新快照上从头起草，和 runner 起草所用的 sha 离开 origin/main 时一样。
+- **材料上限**（字符，沿用 runner 的现值）：出目录读概览 14,000、模块结构 32,000、docs 标题树 45,000；按大类补细节读 10,000 / 26,000 /
+  30,000；逐篇出大纲读概览 8,000，代码符号摘录 16,000 字节。会话标题照旧按 TF-IDF k-means 聚类，每算 20 毫秒让出一次事件循环。
+- **仓库**：runner 的作业在 checkout 里读的，全部在同一个 sha 的快照索引上读：文件和大小（模块结构、`hasPath`）、每篇文档的标题（标题树、
+  `hasDocSection`）、每个源文件的符号（代码摘录、`hasSymbol`）、契约的顶层键（契约清单）。索引里没有的符号，和 runner 一样在文件原文里
+  找这个词——原文在这一轮过闸之前按该 sha 读，每个文件至多 `repoOps.read.wholeFileChars`（22,000）字。这个上限，和索引只记对象的键
+  （JSON 是数组或空对象的契约读作「非 JSON」），是两条路仅有的两处可能不同。
+- **检查闸**：先过作业自己的闸——21.8 的本地检查，错误文案逐字相同，文件、docs 章节、符号、契约都在快照上查——再过服务端的闸（21.3）：
+  作业在进程内提交（`WikiPlans.submitServerDraft`），带草稿的幂等键，`repoCheck` 是快照的 sha 和作业的闸查到的结果，所以服务端的闸
+  现在也查得了仓库。两道闸查出的错误，连同可用的章节标题和符号，按单元交回模型重做，一共至多 `rules.attemptsMax`（3）轮。
+- **作者**：存下的版本记跑出它的 `wiki_job`（`wiki_plan.author_job_id`，读出来是 `authorJobId`），会话存下的照旧记会话；来源 `maintenance`，
+  模型名是 System model 的。
+- **进度与结束**：plan 作业照 21.7 记进度——第一次运行记 `started_at`，每轮记 `attempt`，plan 页读的就是这些；`wiki_job` 自己的进度是
+  `{ planJobId, attempt, step }`。运行照 21.7 的规则结束 plan 作业（`WikiPlans.finishServerJob`）：成功时带上这个作业存下的本 space 的版本，
+  失败时带最后一轮的错误、出错原因、报告和最后那份草稿；`wiki_job` 以 `{ kind, planJobId, outcome, version, error, plan }` 结束。平台的
+  失败——请求等待超限、space 的 runner 不在、worker 停机——不算草稿的失败：`wiki_job` 重试（24.4），plan 作业保持 running。`wiki_job`
+  结束了而 plan 作业没结束的，记为失败；开关不再把账号交给服务端时，还没开始的 `wiki_job` 被取消，plan 作业随之结束。
+- **runner 门归服务端**（`WIKI_SERVER_EXECUTES`，409）：找到 space 之后，不论谁来问，起草用的路由——`GET …/plan/job`、
+  `POST …/plan/job/progress`、`POST …/plan/job/finish`、`GET …/plan/materials`、`POST …/plan/drafts`——一律拒绝；只有生成作业
+  （`build`）自己的会话例外：文档的流水线移到服务端之前（P7），生成仍是那个任务的会话来写，它的 `GET …/plan/job`、`progress`、`finish`
+  照 21.7 不变。所以会话里的 `orbit wiki plan draft` 或 `revise`，包括本期之前的版本，在第一次调用时就停下，没问过任何模型；
+  新版命令（随下一个 runner 版本发布）说明 plan 由服务端用 System model 起草、这里什么也没读也没问模型、要起草请 owner 在 plan
+  页要求。维护运行读 plan（`GET …/plan`）、提修改建议、`plan check` 都不变。`runner` 下每条路由照 21.7。
+- **迁移 0404**：加 `wiki_plan.author_job_id`，`wiki_plan_author_chk` 改为维护来源的版本恰好记会话或作业之一；加 `wiki_plan_job.materials`；
+  `wiki_plan_job_made_chk` 改为 made / ended 时恰好有一个来源（任务或作业），与文档构建的 0405（P7）逐字相同，谁先跑另一条就什么也不做。
+- **两边同一个答案**：`src/shared/src/wiki-plan.fixture.json` 由 `src/runner-go/wiki_plan_fixture_test.go` 从一个真实的 checkout 按 runner 的
+  方式读出，`src/apiserver/src/wiki-worker/wiki-plan-golden.spec.ts` 按服务端的方式读——行格式读回、引用、材料、每一步的 prompt、每一轮
+  的草稿、检查闸的错误和仓库检查，逐字节相同。
+
 ## 22. 文档：按确认的 plan 逐节写，脚注引一手原文（判据 9 第 2 版）
 
 JSON 里是 `docs`；迁移 `0326_wiki_docs` 与 `0337_wiki_doc_dispositions`；服务端在 `src/apiserver/src/wiki/wiki-docs.ts`（写入、
@@ -1932,6 +1984,9 @@ JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5
 - `import`（P5，§5.1 的服务端执行、契约 `jobs.kindRuns.import`）：由 runner 门的 `POST .../import-jobs` 建，输入是命令交来的 note
   和调用会话，报告就是命令打印并记下的那份（`wiki-import-job.ts`）。执行中写 `progress`（`snapshot` / `reading` / `proposing` 和计数）。
 - `verify`（P3，§24.7）：由记录 op 进入 `verifying` 的那次提交建（业主重开核实也建），按会话排一条、`priority = 1`。
+- `plan_draft` / `plan_revise`（P6，§21.10、契约 `jobs.kindRuns.plan_draft` / `plan_revise`）：由 `advanceWikiPlanJob` 在开关把账号交给服务端时
+  建，和 plan 作业同一个事务，输入是 `{ planJobId }`，优先级 1；报告是 `{ kind, planJobId, outcome, version, error, plan }`
+  （`wiki-plan-draft-job.ts`）。执行中写 `progress`（`planJobId`、`attempt`、`step`）。
 - 作业重放时，某个单元上一次的请求如果是因等待超限而失败的（平台的失败，不是这次调用的），就换下一个 `attempt` 再问一次；否则
   作业每次重放都会碰到同一行失败的请求，模型回来以后也永远不再问（`wikiModelRequestAttempt`，P5 补上）。
 

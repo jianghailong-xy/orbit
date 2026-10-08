@@ -1558,6 +1558,19 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'None inside. After the commit and outside the closure: one `task.changed` for the task made, published by the caller (nothing depends on it; the dispatcher reads runAt).',
     answer: 'Typed 503 from the global boundary; the job stays queued or held and the next fact asks again.',
   },
+  // A plan job the server runs (contracts/wiki.contract.json `plan.jobs.server`, migration 0404): its wiki_job
+  // made with it, and no task.
+  {
+    at: 'wiki/wiki-plan-job.ts#makeOnServer',
+    shape: 'TX_RETRIED',
+    locks: 'One UPDATE of the wiki_plan_job row by id and owner while it is queued or held (rank 60, reaching wiki_space through (space_id, owner_id) FOR KEY SHARE), then one INSERT of the wiki_job row (60; its composite foreign key takes FOR KEY SHARE on the same space row). No task_list row is read or locked: a server-made job does not wait for the hidden list. Ascending throughout.',
+    identity: 'The plan job and its state. The UPDATE matches only a job still queued or held, so of two facts asking together one makes it — the other matches no row and the closure writes nothing and answers null.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The wiki_job id is drawn inside the closure, and the job\'s state is re-evaluated by the UPDATE itself, so a re-run either makes the same job with a fresh id (the rolled-back attempt took its row with it) or finds it made and writes nothing.',
+    effects: 'None inside, and none after: the worker\'s next pass claims the job; no task is published.',
+    answer: 'Typed 503 from the global boundary; the plan job stays queued or held, and the owner\'s next request or settings change asks again.',
+  },
   // The articles (contracts/wiki.contract.json `articles`, migration 0317): one topic's articles
   // replaced together, by a maintenance run of the space or the server's own import.
   {
@@ -2319,6 +2332,9 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: 'wiki/wiki-plan-job.ts#progressWikiPlanJob', class: 'ONE_ROW_CAS', statements: 1, note: 'The gate round a job\'s run is on (contract `plan.jobs.progress`), on its row by id while it is made; a later round overwrites it. A job ended meanwhile is not matched, and the door answers WIKI_PLAN_NO_JOB.' },
   { at: 'wiki/wiki-plan-job.ts#progressWikiPlanBuild', class: 'ONE_ROW_CAS', statements: 1, note: 'How far a build\'s run has got (contract `plan.jobs.progress`): the documents it went through and the one it writes now, on its row by id while it is made and a build; a later report overwrites it. A job ended meanwhile is not matched, and the door answers WIKI_PLAN_NO_JOB.' },
   { at: 'wiki/wiki-plan-job.ts#finishWikiPlanJob', class: 'ONE_ROW_CAS', statements: 1, note: 'How a job\'s run ended (contract `plan.jobs.finish`): its row by id while it is made, ended with the outcome, the version or the gate\'s errors, the report and the last draft. A job ended already is not matched, so a second end keeps the first.' },
+  { at: 'wiki/wiki-plan-job.ts#endJobWhoseServerJobIsOver', class: 'ONE_ROW_CAS', statements: 2, note: 'A made plan job of the server\'s whose wiki_job ended, or is gone, before the run said how it went: its row by id, only while it is still made, ended failed with why. When the switch no longer gives the account to the server and its wiki_job never started, that wiki_job is cancelled first — by id, only while it is still queued with no start — and only a cancellation that matched ends the plan job. Two independent rows, each its own compare-and-set: a worker that took the job meanwhile leaves the cancel matching nothing, and the plan job made.' },
+  { at: 'wiki/wiki-plan-job.ts#progressWikiPlanJobOfJob', class: 'ONE_ROW_CAS', statements: 1, note: 'A server-run plan job\'s start and its gate round (contract `plan.jobs.server.progress`): started_at the first time (coalesce), attempt when given, on its row by id while it is made by this wiki_job. A job ended meanwhile, or made by another, is not matched.' },
+  { at: 'wiki/wiki-plan-job.ts#saveWikiPlanJobMaterials', class: 'ONE_ROW_CAS', statements: 1, note: 'What a server-run plan job drafts from, kept at its first run (contract `plan.jobs.server.materials`, migration 0404): its row by id while it is made by this wiki_job, the frame written whole. A replay reads it back; a rebuilt frame (the snapshot moved) overwrites it the same way.' },
   { at: 'wiki/wiki-plan.ts#propose', class: 'INSERT', statements: 1, note: 'A maintenance run\'s proposed change to the plan (contracts/wiki.contract.json `plan.proposals`): one INSERT, pending, after the gate passed it against the confirmed version. Outside a transaction on purpose: it changes no version, and the owner\'s acceptance gates it again against the plan as it stands then.' },
   // Managed runners (migration 0399): the lease and the compare-and-set every manager step commits
   // with, and the owner's retry. One row each, by id, under a predicate; none is retried here.
