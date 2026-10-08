@@ -313,6 +313,26 @@ JSON 的 `kinds.<kind>.fields` 与 TS 的 `KIND_SPECS[kind].fields` 用同一套
   目录按 frontmatter 的 type（feedback、user、reference、project、其余）再按文件名排序，跳过 `MEMORY.md`。
   在本机（`$ORBIT_HOME/wiki-import` 或 `--state`）记住导到了哪：重跑从断点续，导过的文件不再送模型，内容变了的按新
   note 导。碰到模型端点的第一个 401 就停；首次调用前先等 `/health` 回 200。
+- **服务端执行时的导入**（服务端执行 P5，契约 `import.server`；执行器开关为 `server`，或账号在 `canary` 名单内）：
+  - 命令先问 `GET /api/runner/wiki/spaces/:id/import`：回答 `{ executor, model, modelState }`。回答不是 `server` 的——`runner`、
+    老服务端的 404、拒绝、没有回答——都按上面的老路径走，行为和文案都不变。问错了也不会调模型：服务端执行时，不带
+    `readBy: "server"` 的登记会被拒（见下）。
+  - 回 `server` 时，命令照旧列文件、读 frontmatter、登记 note（body 带 `readBy: "server"`，回答里不再有 `text`），然后把
+    要读的 note 和带着上次没提议的 op 的 note，按顺序一次交给 `POST .../import-jobs`（作业 id 由命令起，重发是同一个作业；
+    至多 1000 条 note），等 `GET .../import-jobs/:jobId` 的作业结束，打印作业报告里的数字，并把报告写回本机的记忆，
+    所以下一次运行不管走哪条路都从断点续。不需要会话的 provider，不起 Claude Code，`--model` 不用。
+  - 作业（wiki-worker 的 `import`，优先级 1）：每条 note 经模型请求队列调一次 System model（step `import`，unit 是 note id，
+    system prompt 和 prompt 与 runner 上逐字相同，max_tokens 8192），不合格的带着问题再问一次（step `import_retry`）；解析、
+    修复、字段和语言检查、verify.command 必须出现在 note 的代码里、引文逐字匹配，全部与 Go 一致——
+    `src/shared/src/wiki-import.fixture.json` 把两边逐字节绑在同一组输出上。锚点查 space 的快照：路径在 origin/main 的树里、
+    提交被 origin/main 可达；space 的 runner 能取时先要一份新快照（最多等 180 秒，持租约等），取不到就用 space 已有的快照，
+    都没有就不带锚点。之后先 dry run，再以 import 来源、调用会话的身份、`wiki-import:<空间和 op 的哈希>` 幂等键提议；
+    分批规则和老路径相同：遇到 `WIKI_QUOTA` 或 `WIKI_REVIEW_QUEUE_FULL`，剩下的留给下一次。
+  - 命令停止等待（作业留在服务端，id 记在本机，下一次运行先收它的结果）：System model 拒了 key 或没配置时立即停；模型
+    不在线、或作业没开始，超过 10 分钟时停；作业已经失败重试 3 次时停。作业失败时，交给它的 note 保持已登记，下一次运行交给新作业。
+  - runner 门在此时归服务端（`WIKI_SERVER_EXECUTES`，409）：不带 `readBy: "server"` 的登记——也就是会用会话自己的模型
+    读 note 的老版命令——在登记任何东西之前就被拒；`POST .../imports` 也被拒，因为提议由作业来做，不收会话模型写的条目。
+    老版命令因此在第一次登记就停下，不会调任何模型。
 
 ---
 
@@ -1856,6 +1876,10 @@ JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5
 - `kind` 闭集：`verify` / `articles` / `import` / `plan_draft` / `plan_revise` / `docs_build` / `maintain`，加上本期的 `smoke`——
   只调一次模型、把答案和用量写进 `report`，是队列最短的一条端到端路径（`wiki-jobs.pg.spec.ts` 对 fake 端点跑通它）。还没落地的种类
   留在队列里：领取只取本 build 认识的种类，不会被交给一个只能失败的 worker。
+- `import`（P5，§5.1 的服务端执行、契约 `jobs.kindRuns.import`）：由 runner 门的 `POST .../import-jobs` 建，输入是命令交来的 note
+  和调用会话，报告就是命令打印并记下的那份（`wiki-import-job.ts`）。执行中写 `progress`（`snapshot` / `reading` / `proposing` 和计数）。
+- 作业重放时，某个单元上一次的请求如果是因等待超限而失败的（平台的失败，不是这次调用的），就换下一个 `attempt` 再问一次；否则
+  作业每次重放都会碰到同一行失败的请求，模型回来以后也永远不再问（`wikiModelRequestAttempt`，P5 补上）。
 
 ### 24.2 领取、租约、回收
 
@@ -2051,7 +2075,9 @@ JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` 
 - 作业要用仓库时 `waitForWikiRepoOpAsJob`：作业先落到 `waiting` / `waiting_for = 'repo'`，**交出租约**（等的是别的东西，
   就不该占着租约）；操作结算的通知（`wiki_repo_op` 通道）一到就把它放回 `queued`，领取用新代数接手，流水线从头重放，答案已经在缓存里。
   等待本身超时（或 worker 停机）是 infra 失败：作业回 `queued`、`attempts + 1`、`failure_kind = 'infra'`、理由写在行上；
-  操作留在队列里给下一次尝试。轮询是兜底，不是主路径。
+  操作留在队列里给下一次尝试。轮询是兜底，不是主路径。worker 停机时等待立即结束（`WikiRepoOpWaitCancelled`），不再空转到超时。
+- 导入的快照是例外（§5.1、契约 `import.server.snapshot`）：持着租约有上限地等，等不到就用 space 已有的快照或不带锚点，
+  所以 runner 不在时，导入只是少了新快照，不会卡住。
 - 健康行新增 `wikiRepo`：`GET /api/wiki/spaces/:id/health` 的回答多一个 `repo` 字段（`look` / `workspace` / `runner` / `pending`），
   `look` 取 `ready` / `no_workspace` / `runner_missing` / `runner_offline` / `runner_upgrade`——最后一个就是「升级 runner」：
   工作区所在的机器在心跳，但没有声明 `wiki-repo-op/v1`。

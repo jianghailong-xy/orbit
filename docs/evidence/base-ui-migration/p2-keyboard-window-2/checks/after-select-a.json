@@ -1,0 +1,35 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.config.mjs --project chromium-dark-desktop --grep '\"'\"' (orbit-field|orbit-sample) (select-down|select-down-enter|select-down-enter-from-7|select-down-home-enter|select-down-end-enter|select-down-space|select-down-space-from-null) (burst|paced) sample'\"'\"''",
+ "env": {},
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "runner": "run-chunks.py (inside one mcp__orbit__bg_run job)",
+ "commit": "069601b675c735a69263f4a75f8d4349c0877c77",
+ "webTree": "34ebe07972ab9680cad0775ad5f4169c39b5f98b",
+ "dirtyWeb": "?? src/web/src/components/kw2scratch/\n?? src/web/ui-migration/zz-debug.html\n?? src/web/ui-migration/zz-debug.tsx\n?? src/web/zz-vite.config.ts",
+ "startedAt": "2026-10-07T15:42:20.359712+00:00",
+ "endedAt": "2026-10-07T16:08:25.732791+00:00",
+ "loadAverage": {
+  "start": [
+   55.31982421875,
+   42.19091796875,
+   39.11767578125
+  ],
+  "end": [
+   27.80615234375,
+   25.13525390625,
+   32.9541015625
+  ]
+ },
+ "exitCode": 0,
+ "outputSha256": "002f3a8c30a72926a3ccc04ee877887ef2a1abd94c3f20b78fabb3049ca311b1",
+ "outputBytes": 98044,
+ "raw": "/var/tmp/kw2-246921c8/runs/after-select-a",
+ "stats": {
+  "expected": 520,
+  "unexpected": 0,
+  "skipped": 0,
+  "flaky": 0,
+  "duration": 1564751.076,
+  "samples": 520
+ }
+}

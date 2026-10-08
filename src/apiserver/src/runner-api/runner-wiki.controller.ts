@@ -6,6 +6,8 @@ import { PublicIdPipe } from '../common/public-id';
 import { PrismaService } from '../prisma/prisma.service';
 import { WikiProposeDto, WikiVerificationReportDto } from '../wiki/dto';
 import { registerWikiNote, wikiImportPrincipal, WikiNoteDto } from '../wiki/wiki-import';
+import { createWikiImportJob, readWikiImportJob, wikiImportExecutor, WikiImportJobDto } from '../wiki/wiki-import-jobs';
+import { currentWikiExecutorSwitch, wikiExecutorServes } from '../wiki/wiki-executor-switch';
 import { flagParam, listParam, WikiRetrieval } from '../wiki/wiki-retrieval';
 import { WikiRolloutGuard } from '../wiki/wiki-rollout';
 import { answerFor, answerForVerifications, WikiService, WikiRefusalError, type WikiPrincipal } from '../wiki/wiki.service';
@@ -166,6 +168,11 @@ export class RunnerWikiController {
    * `orbit wiki import`, first step (contract `import.note`): one file registered as the `note` its
    * entries will cite — redacted before it is hashed or kept, and the note the space already holds when
    * the text is one it has. The answer carries the stored text, which is what the importer's model reads.
+   *
+   * WHEN THE SERVER READS (contract `import.server`), the text is the server's to hand to its own model and
+   * no session's: a runner that says the server reads it (`readBy: server`) is answered without it, and one
+   * that does not — an `orbit wiki import` that predates the server's import, and would read the text with
+   * the session's own provider — is refused WIKI_SERVER_EXECUTES before anything is registered.
    */
   @Post('spaces/:id/notes')
   @HttpCode(HttpStatus.OK)
@@ -176,7 +183,16 @@ export class RunnerWikiController {
     @Body() dto: WikiNoteDto,
   ) {
     await this.importer(runner, callingSessionId);
-    return registerWikiNote(this.prisma, this.wiki, runner.ownerId, id, dto);
+    if (!wikiExecutorServes(currentWikiExecutorSwitch(), runner.ownerId)) {
+      return registerWikiNote(this.prisma, this.wiki, runner.ownerId, id, dto);
+    }
+    if (dto.readBy !== 'server') {
+      throw serverExecutes('this account\'s wiki import runs on the Orbit server (ORBIT_WIKI_EXECUTOR): the server reads '
+        + 'each note with its System model, and this orbit wiki import predates that — it would read the note with the '
+        + 'session\'s own model. Nothing was registered or read: upgrade the runner, then run the import again.');
+    }
+    const { text: _text, ...registered } = await registerWikiNote(this.prisma, this.wiki, runner.ownerId, id, dto);
+    return registered;
   }
 
   /**
@@ -193,7 +209,63 @@ export class RunnerWikiController {
     @Body() dto: WikiProposeDto,
   ) {
     const principal = await this.importer(runner, callingSessionId);
+    if (wikiExecutorServes(currentWikiExecutorSwitch(), runner.ownerId)) {
+      // What a session's own model found is not what the server's import proposes (contract `import.server`).
+      throw serverExecutes('this account\'s wiki import runs on the Orbit server (ORBIT_WIKI_EXECUTOR): its import job '
+        + 'proposes what the System model found, and the door takes no entries a session\'s own model wrote. Nothing '
+        + 'was proposed: upgrade the runner, then run the import again.');
+    }
     return answerFor(await this.wiki.submitChangeset(principal, id, dto));
+  }
+
+  /**
+   * `orbit wiki import`, before it reads anything (contract `import.server.executor`): which path this space's
+   * import takes — the server's import job, when the executor switch gives the account to the server, or the
+   * session's own model as it always has — and the System model the server would read with.
+   */
+  @Get('spaces/:id/import')
+  async importExecutor(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+  ) {
+    await this.importer(runner, callingSessionId);
+    await this.wiki.requireSpace(runner.ownerId, id);
+    return wikiImportExecutor(this.prisma, runner.ownerId);
+  }
+
+  /**
+   * `orbit wiki import` on the server (contract `import.server.create`): the notes the command registered, as
+   * one import job of the space, recorded against the calling session. The command names the job's id, so the
+   * same request sent again after a lost answer is answered with the job it already made.
+   */
+  @Post('spaces/:id/import-jobs')
+  @HttpCode(HttpStatus.OK)
+  async createImportJob(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: WikiImportJobDto,
+  ) {
+    const principal = await this.importer(runner, callingSessionId);
+    return createWikiImportJob(this.prisma, this.wiki, {
+      ownerId: runner.ownerId,
+      spaceId: id,
+      sessionId: principal.sessionId as string,
+      body: dto,
+    });
+  }
+
+  /** The import job the command waits on (contract `import.server.read`): where it is, and its report. */
+  @Get('spaces/:id/import-jobs/:jobId')
+  async readImportJob(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('jobId', PublicIdPipe) jobId: string,
+  ) {
+    await this.importer(runner, callingSessionId);
+    return readWikiImportJob(this.prisma, { ownerId: runner.ownerId, spaceId: id, jobId });
   }
 
   /** One entry, as the calling session's space shares it. */
@@ -297,4 +369,9 @@ export class RunnerWikiController {
       });
     }
   }
+}
+
+/** The refusal a runner door route answers when the account's pipeline is the server's (contract `refusals`). */
+function serverExecutes(message: string): WikiRefusalError {
+  return new WikiRefusalError({ code: 'WIKI_SERVER_EXECUTES', message });
 }

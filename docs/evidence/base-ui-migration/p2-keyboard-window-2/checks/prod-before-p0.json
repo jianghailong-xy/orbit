@@ -1,0 +1,17 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 npm run test:ui-migration -w @orbit/web'",
+ "commit": "2d8073fc9d2e883c417189c9e1f815e2dab612d8",
+ "webTree": "c9b680e536261073e36d2a37e3238fe4f6ef4bdc",
+ "dirtyWeb": "?? src/web/src/components/kw2scratch/",
+ "startedAt": "2026-10-07T14:55:12Z",
+ "endedAt": "2026-10-07T14:59:15+00:00",
+ "loadAverage": {
+  "start": "11.54 11.75 11.47",
+  "end": [
+   "23.45",
+   "16.34",
+   "13.23"
+  ]
+ },
+ "exitCode": 1
+}

@@ -1189,10 +1189,18 @@ function RunnerEngineCard({
           aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${name}`}
           onClick={onToggle}
         >
-          {/* Leads the row, in the column the engine rows below put their icon in, and drawn the
-              way the account pool card draws its own: one small triangle. */}
+          {/* Leads the row, in the column the engine rows below put their icon in: one place
+              holds it folded or open, and no row's summary can move it. */}
           <span className={`re-chev${collapsed ? '' : ' open'}`} aria-hidden="true">
-            ▸
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path
+                d="m9 5 7 7-7 7"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </span>
           <span className={`re-dot${runner.online ? ' on' : ''}`} />
           <span className="re-runner-copy">

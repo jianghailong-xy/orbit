@@ -1,0 +1,35 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.config.mjs --project webkit-light-phone'",
+ "env": {},
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "runner": "run-chunks.py (inside one mcp__orbit__bg_run job)",
+ "commit": "f162a2f9de3cb4bdea8e9a6120dd28a8e2184328",
+ "webTree": "d8ae59f026644577041afea38b5994da1eef0f9f",
+ "dirtyWeb": "",
+ "startedAt": "2026-10-08T03:35:05.094305+00:00",
+ "endedAt": "2026-10-08T03:36:55.441583+00:00",
+ "loadAverage": {
+  "start": [
+   26.9384765625,
+   37.7880859375,
+   30.95458984375
+  ],
+  "end": [
+   32.591796875,
+   36.96630859375,
+   31.42626953125
+  ]
+ },
+ "exitCode": 0,
+ "outputSha256": "68d36a75f733675f706371e943c92943e28bca4950c484de8807f35e311ce5d9",
+ "outputBytes": 8785,
+ "raw": "/var/tmp/kw2-246921c8/runs/held-frames-rebased-webkit-light-phone",
+ "stats": {
+  "expected": 49,
+  "unexpected": 0,
+  "skipped": 0,
+  "flaky": 0,
+  "duration": 109993.807,
+  "samples": 49
+ }
+}

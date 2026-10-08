@@ -44,19 +44,20 @@ private func sentBody(_ request: URLRequest) -> String {
     return String(decoding: data, as: UTF8.self)
 }
 
-/// What reached the wire: the method, the path and the body.
+/// What reached the wire: the method, the path and the body — and the query, when there is one.
 private final class ShareDoorRecorder: @unchecked Sendable {
     struct Sent: Equatable {
         let method: String?
         let path: String?
         let body: String
+        var query: String? = nil
     }
 
     private let lock = NSLock()
     private var storage: [Sent] = []
 
     func append(_ request: URLRequest) {
-        let sent = Sent(method: request.httpMethod, path: request.url?.path, body: sentBody(request))
+        let sent = Sent(method: request.httpMethod, path: request.url?.path, body: sentBody(request), query: request.url?.query)
         lock.lock()
         storage.append(sent)
         lock.unlock()
@@ -114,7 +115,10 @@ final class ShareLinksAPIClientTests: XCTestCase {
         let links = try await client().shareLinks()
         XCTAssertEqual(links.map(\.id), ["L1"])
         XCTAssertEqual(links.first?.state, .active)
-        XCTAssertEqual(listed.sent, [.init(method: "GET", path: "/api/share-links", body: "")])
+        // Every kind this build draws, by name: a server lists no other, so a kind added later never
+        // reaches a build that cannot decode it.
+        XCTAssertEqual(listed.sent, [.init(method: "GET", path: "/api/share-links", body: "",
+                                           query: "kind=SESSION,TASK,PROJECT,WIKI")])
 
         let turned = answer(#"{"count":2}"#)
         let count = try await client().turnOffShareLinks(["L1", "L2"])
@@ -136,6 +140,23 @@ final class ShareLinksAPIClientTests: XCTestCase {
             .init(method: "GET", path: "/api/projects/34UonbgOiq9ajX8aH3JPz/share", body: ""),
             .init(method: "GET", path: "/api/tasks/34UozoiaJIsxCZj728bfe/share", body: ""),
             .init(method: "GET", path: "/api/sessions/244BxBMw6XOK2rqknTjz2S/share", body: ""),
+        ])
+    }
+
+    /// A wiki space's link lives under its space: read, Footnotes on, turned off.
+    func testAWikiSpacesLinkIsAtItsSpacesPath() async throws {
+        let recorder = answer(Self.link(kind: "WIKI", include: #"{"footnotes":true}"#))
+        let api = client()
+        _ = try await api.shareLink(.wiki, "w1")
+        var panel = SharePanel(kind: .wiki)
+        let link = try await api.putShareLink(.wiki, "w1", panel.toggle(.footnotes, on: true))
+        try await api.turnOffShareLink(.wiki, "w1")
+        XCTAssertEqual(link.kind, .wiki)
+        XCTAssertEqual(link.include.footnotes, true)
+        XCTAssertEqual(recorder.sent, [
+            .init(method: "GET", path: "/api/wiki/spaces/w1/share", body: ""),
+            .init(method: "PUT", path: "/api/wiki/spaces/w1/share", body: #"{"include":{"footnotes":true}}"#),
+            .init(method: "DELETE", path: "/api/wiki/spaces/w1/share", body: ""),
         ])
     }
 

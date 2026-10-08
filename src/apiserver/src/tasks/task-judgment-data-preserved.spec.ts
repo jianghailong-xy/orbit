@@ -2074,7 +2074,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // objects; no 0177 relation is altered and no `task`, `session`, `project` or
       // `project_acceptance_*` object is named. No INSERT, UPDATE or DELETE: every statement is DDL,
       // and the four tables carry no stored row to hold a CHECK to.
-      '0402_wiki_repo_op'],
+      '0402_wiki_repo_op',
+      // Wiki links (0403): one nullable `wiki_space_id` on share_link, 0306's one-root CHECK replaced
+      // by the same CHECK over four columns, one composite foreign key to `wiki_space (id, owner_id)`
+      // (ON DELETE CASCADE) and one partial unique index. `share_link` is the only table altered and
+      // `wiki_space` is named only as the table the key references; no task, project, acceptance or
+      // DONE fence object, function, trigger or type is named, and no row is written or backfilled.
+      '0403_share_link_wiki_space'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

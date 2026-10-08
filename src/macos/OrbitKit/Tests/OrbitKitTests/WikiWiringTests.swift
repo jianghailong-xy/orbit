@@ -299,6 +299,9 @@ final class WikiWiringTests: XCTestCase {
                               "Button(action: actions.openActivity)", "WikiActivityGlyph(waiting: waiting)",
                               ".accessibilityLabel(WikiCopy.activity)",
                               ".accessibilityValue(waiting > 0 ? WikiCopy.waitingOnYou(waiting) : \"\")",
+                              "Button(action: actions.openShare)", "WikiShareGlyph(live: shareLive)",
+                              ".accessibilityLabel(SharePanelCopy.share)",
+                              ".accessibilityValue(shareLive ? SharePanelCopy.liveLink : \"\")",
                               "Button(action: actions.openSettings)", "Image(systemName: \"gearshape\")"],
                     "the home's bar")
         let glyph = code(try slice(try source("Views/WikiView.swift"),
@@ -312,6 +315,17 @@ final class WikiWiringTests: XCTestCase {
         XCTAssertTrue(home.contains("waiting: wiki.waiting,"), "the badge is the drawer's number, from the same model")
         XCTAssertTrue(home.contains("besideContents: rowNavigation == .selection,"), "the detail pane's home has no head")
         XCTAssertTrue(home.contains("openActivity: { open(.wikiActivity) },"))
+        // The globe opens the one Share panel on the space, and says whether the space has a link open.
+        XCTAssertTrue(home.contains("openShare: { sharing = true },"))
+        XCTAssertTrue(home.contains("ShareSheet(kind: .wiki, rootID: space.id, baseURL: baseURL, tokenStore: model.tokenStore)"))
+        XCTAssertTrue(home.contains("shareLive: shareRead?.link.map { $0.state != .ended } ?? false,"))
+        let globe = code(try slice(try source("Views/WikiView.swift"), from: "struct WikiShareGlyph: View {",
+                                   to: "let wikiMenuIconsDrawAmber"))
+        assertOrder(globe, ["if live {", "Image(systemName: \"globe\").foregroundStyle(Color.green)", "} else {"],
+                    "the Share globe")
+        let quiet = try XCTUnwrap(globe.components(separatedBy: "} else {").last)
+        XCTAssertTrue(quiet.contains("Image(systemName: \"globe\")"), "with no link open, the globe is still there")
+        XCTAssertFalse(quiet.contains(".foregroundStyle("), "with no link open, the globe is the bar's own colour")
         XCTAssertTrue(home.contains("case .push:      model.push(node)"))
         XCTAssertTrue(home.contains("case .selection: model.nav.replaceTop(with: node)"))
     }
