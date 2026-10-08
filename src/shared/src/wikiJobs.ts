@@ -123,3 +123,36 @@ export const WIKI_EXECUTOR_ENV = {
  */
 export const WIKI_EXECUTOR_MODES = ['runner', 'canary', 'server'] as const;
 export type WikiExecutorMode = (typeof WIKI_EXECUTOR_MODES)[number];
+
+/**
+ * The server's import (contract `import.server`, design §2.2 and §8, P5): `orbit wiki import` still reads the
+ * files and registers each as a note on the runner, and when the executor switch gives the account to the
+ * server it hands the notes to an `import` job instead of a model of its own — the wiki-worker reads each note
+ * with the System model through the queue, checks what it answers, and proposes it with origin import.
+ */
+export const WIKI_IMPORT_JOB = {
+  /** Owner-initiated, like a verification a session waits for: above background maintenance (contract `jobs.priority`). */
+  priority: 1,
+  /** The queue's steps for a note's read and its one retry; `import*` is the import's wait limit (WIKI_MODEL_QUEUE.waitLimitSeconds). */
+  steps: { read: 'import', retry: 'import_retry' },
+  /** One read's max_tokens: six entries, the most a note may give (WIKI_IMPORT_RULES.entriesPerNote), with room to spare. */
+  maxTokens: 8192,
+  /** The notes the model reads at once (the command's --concurrency): the queue still runs at most WIKI_MODEL_QUEUE.maxInFlightPerJob of them. */
+  defaultConcurrency: 4,
+  maxConcurrency: 8,
+  /** The notes one job is handed at most: the command hands the rest to its next run. */
+  maxNotes: 1000,
+  /**
+   * How long the job waits for the space's runner to snapshot origin/main before it checks the anchors against
+   * the snapshot the space already holds (or leaves them out, when it holds none).
+   */
+  snapshotWaitSeconds: 180,
+  /** The importer's whole system prompt, word for word what `orbit wiki import` sends on the runner (wikiImportSystemPrompt). */
+  systemPrompt: 'You compile durable engineering knowledge from one note about a code repository into wiki entries. You output only a JSON array.',
+  /** The runner door's three routes (contract `agentSurface.doors.runner.importJobRoutes`). */
+  routes: {
+    executor: 'GET /api/runner/wiki/spaces/:id/import',
+    create: 'POST /api/runner/wiki/spaces/:id/import-jobs',
+    read: 'GET /api/runner/wiki/spaces/:id/import-jobs/:jobId',
+  },
+} as const;

@@ -1,0 +1,1298 @@
+{
+  "why": "One input, one deterministic answer on both paths: what src/runner-go/wiki_import.go makes of a note (on the runner) and what src/apiserver/src/wiki-worker/wiki-import-extract.ts makes of it (on the server) — the prompt, a note's language, the reading of an answer, the quote, the verify command, the ops an answer becomes and the retry that names what did not hold up, and a path anchor. The outputs are the Go code's; both implementations are held to them (contract import.server, criterion: the deterministic results agree on both paths).",
+  "write": "cd src/runner-go && ORBIT_WIKI_IMPORT_FIXTURE=write go test -run TestWikiImportFixtureIsTheServersToo .",
+  "notes": [
+    {
+      "id": "note-1",
+      "path": "memory/feedback-rules.md",
+      "date": "2026-09-20",
+      "text": "---\nname: feedback-rules\ndescription: a test note\nmetadata:\n  type: feedback\n  modified: 2026-09-20T10:00:00.000Z\n---\n\nReply in Chinese; code stays as it is.\nNever store a secret: the vault key is [redacted].\n"
+    },
+    {
+      "id": "note-2",
+      "path": "memory/reference-release.md",
+      "date": "2026-09-20",
+      "text": "`release.sh next` tags at once: it is not a dry run.\nThe guard lives in src/app/main.go, and docs/guide.md explains it.\n"
+    },
+    {
+      "id": "note-3",
+      "path": "memory/feedback-zh.md",
+      "date": "2026-09-21",
+      "text": "发版前先核对 `origin/main`：别直接给会话分支打 tag，否则客户端会倒退。\n"
+    },
+    {
+      "id": "note-4",
+      "path": "memory/project-baseline.md",
+      "date": "2026-09-22",
+      "text": "开工先在 main 上取 full-api 基线，见 [[full-api-red-on-main]]：\n```bash\n$ npm run test:full-api   -- --main\n```\n再跑 `git status --short`。\n"
+    },
+    {
+      "id": "note-5",
+      "path": "CLAUDE.md",
+      "date": "2026-09-23",
+      "text": "Run `scripts/run-pg-spec.sh`   before you\ntrust a green **pg spec**: “a skip is red”.\nUse <b>bold</b> & keep `a<b>` as it is.\n"
+    }
+  ],
+  "prompts": [
+    {
+      "note": 0,
+      "prompt": "Below is a NOTE: one Markdown file kept beside a code repository. It is an instruction file for coding agents (a CLAUDE.md or an AGENTS.md), or one file of an agent's memory library, whose frontmatter gives the memory a name, a one-line description and a type (user: about the owner; feedback: how the owner wants work done; project: ongoing work; reference: facts and pointers). Agents wrote most of these notes while working for the repository's owner: \"the user\" in a note is the owner.\n\nTASK: extract the knowledge in this note that would change how a future agent works in this repository and that it could NOT learn by reading the code for one minute:\n- rules and corrections — how the owner wants things done, a practice the note says to follow -> convention\n- decisions, with the alternatives and why they were rejected -> decision\n- traps and surprises: something behaves differently than expected, with the cause and the fix -> pitfall\n- a multi-step procedure, with a command that shows it worked -> recipe\n- the meaning of a project-specific term or mechanism that is easy to get wrong -> concept\nNever write a principle: principles are the owner's alone. Write a general rule with its reason as a convention.\nDo NOT extract: status or progress reports, what was built, one-off facts about a single task, generic programming advice, or anything the code states plainly. A note that only lists or links other notes -> []. Prefer fewer, stronger entries. If there is nothing worth keeping, output [].\n\nOUTPUT: a JSON array (at most 6 objects), nothing else — no prose, no code fence. Each object is FLAT:\n{\"kind\": \"convention|decision|pitfall|recipe|concept\",\n \"title\": \"<= 60 characters, states the knowledge itself\",\n \"summary\": \"one or two short sentences a future agent can act on\",\n ...the kind's own fields at the top level (below)...,\n \"anchors\": {\"paths\": [repository file paths the note names], \"commits\": [commit shas the note names]},\n \"quote\": \"a span of the note, copied character for character, that shows it (<= 150 characters)\"}\nThe kind's own fields (all required; be terse: each text field one short sentence):\n- convention: \"rule\", \"scope\": [\"where it applies\"], \"exceptions\" (\"\" if none)\n- decision: \"context\", \"decision\", \"alternatives\": [{\"option\": \"...\", \"whyRejected\": \"...\"}], \"consequences\", \"decidedAt\": \"YYYY-MM-DD\"\n- pitfall: \"trigger\": {\"paths\": [...], \"commands\": [...], \"errorSignature\": \"...\"} (at least one non-empty; [] for an empty list), \"symptom\", \"cause\", \"fix\"\n- recipe: \"steps\": [\"...\"], \"verify\": {\"command\": \"<a command the note gives, copied as it is written>\", \"expectedExit\": 0}\n- concept: \"definition\", \"boundaries\"\nRULES:\n- quote: copied exactly from the note, backticks and punctuation included — no \"…\", no paraphrase, no translation. Prefer a span without double quotes; if one is unavoidable, escape it as \\\".\n- Write titles and text fields in the language the note is written in; keep code, paths and commands verbatim.\n- verify.command is a command copied exactly from the note's code (a code block or a span in backticks), one that shows the procedure worked — never a description of a check or a link to another note. A procedure the note gives no such command for is not a recipe: write it as a convention, or leave it out.\n- Only put a path or a sha in anchors if it appears in the note; never invent one. decidedAt is the date the note gives the decision, or else the note's date.\n\nEXAMPLE (a fictional repository, for format only):\nNOTE (memory/upload-fixture-port.md, 2025-03-02):\n---\nname: upload-fixture-port\ndescription: STORAGE_PORT is read at import time, so fixtures must hand out the URL\nmetadata:\n  type: feedback\n---\nUpload tests failed with `Error: connect ECONNREFUSED 127.0.0.1:9000` on CI.\nSTORAGE_PORT is read when src/api/storage.ts is imported, before the fixture sets it.\nThe user said: never hard-code ports in a fixture; always take them from what the fixture returns.\nOUTPUT:\n[{\"kind\":\"pitfall\",\"title\":\"STORAGE_PORT is read at import, so a fixture sets it too late\",\"summary\":\"Set STORAGE_PORT before src/api/storage.ts is imported, or tests connect to the default 9000.\",\"trigger\":{\"paths\":[\"src/api/storage.ts\"],\"commands\":[],\"errorSignature\":\"connect ECONNREFUSED 127.0.0.1:9000\"},\"symptom\":\"Upload tests fail with ECONNREFUSED 127.0.0.1:9000\",\"cause\":\"STORAGE_PORT is read when the module is imported, before the fixture sets it\",\"fix\":\"Have the fixture return the URL and read the port from there\",\"anchors\":{\"paths\":[\"src/api/storage.ts\"],\"commits\":[]},\"quote\":\"STORAGE_PORT is read when src/api/storage.ts is imported, before the fixture sets it.\"},\n {\"kind\":\"convention\",\"title\":\"Tests take ports from the fixture, never hard-code them\",\"summary\":\"Take every port from what the fixture returns.\",\"rule\":\"Never hard-code a port in a fixture; take it from what the fixture returns\",\"scope\":[\"test fixtures\"],\"exceptions\":\"\",\"anchors\":{\"paths\":[],\"commits\":[]},\"quote\":\"never hard-code ports in a fixture; always take them from what the fixture returns.\"}]\n\n==== NOTE (memory/feedback-rules.md, 2026-09-20) ====\n---\nname: feedback-rules\ndescription: a test note\nmetadata:\n  type: feedback\n  modified: 2026-09-20T10:00:00.000Z\n---\n\nReply in Chinese; code stays as it is.\nNever store a secret: the vault key is [redacted].\n\n==== END OF NOTE ====\nOutput the JSON array now."
+    },
+    {
+      "note": 1,
+      "prompt": "Below is a NOTE: one Markdown file kept beside a code repository. It is an instruction file for coding agents (a CLAUDE.md or an AGENTS.md), or one file of an agent's memory library, whose frontmatter gives the memory a name, a one-line description and a type (user: about the owner; feedback: how the owner wants work done; project: ongoing work; reference: facts and pointers). Agents wrote most of these notes while working for the repository's owner: \"the user\" in a note is the owner.\n\nTASK: extract the knowledge in this note that would change how a future agent works in this repository and that it could NOT learn by reading the code for one minute:\n- rules and corrections — how the owner wants things done, a practice the note says to follow -> convention\n- decisions, with the alternatives and why they were rejected -> decision\n- traps and surprises: something behaves differently than expected, with the cause and the fix -> pitfall\n- a multi-step procedure, with a command that shows it worked -> recipe\n- the meaning of a project-specific term or mechanism that is easy to get wrong -> concept\nNever write a principle: principles are the owner's alone. Write a general rule with its reason as a convention.\nDo NOT extract: status or progress reports, what was built, one-off facts about a single task, generic programming advice, or anything the code states plainly. A note that only lists or links other notes -> []. Prefer fewer, stronger entries. If there is nothing worth keeping, output [].\n\nOUTPUT: a JSON array (at most 6 objects), nothing else — no prose, no code fence. Each object is FLAT:\n{\"kind\": \"convention|decision|pitfall|recipe|concept\",\n \"title\": \"<= 60 characters, states the knowledge itself\",\n \"summary\": \"one or two short sentences a future agent can act on\",\n ...the kind's own fields at the top level (below)...,\n \"anchors\": {\"paths\": [repository file paths the note names], \"commits\": [commit shas the note names]},\n \"quote\": \"a span of the note, copied character for character, that shows it (<= 150 characters)\"}\nThe kind's own fields (all required; be terse: each text field one short sentence):\n- convention: \"rule\", \"scope\": [\"where it applies\"], \"exceptions\" (\"\" if none)\n- decision: \"context\", \"decision\", \"alternatives\": [{\"option\": \"...\", \"whyRejected\": \"...\"}], \"consequences\", \"decidedAt\": \"YYYY-MM-DD\"\n- pitfall: \"trigger\": {\"paths\": [...], \"commands\": [...], \"errorSignature\": \"...\"} (at least one non-empty; [] for an empty list), \"symptom\", \"cause\", \"fix\"\n- recipe: \"steps\": [\"...\"], \"verify\": {\"command\": \"<a command the note gives, copied as it is written>\", \"expectedExit\": 0}\n- concept: \"definition\", \"boundaries\"\nRULES:\n- quote: copied exactly from the note, backticks and punctuation included — no \"…\", no paraphrase, no translation. Prefer a span without double quotes; if one is unavoidable, escape it as \\\".\n- Write titles and text fields in the language the note is written in; keep code, paths and commands verbatim.\n- verify.command is a command copied exactly from the note's code (a code block or a span in backticks), one that shows the procedure worked — never a description of a check or a link to another note. A procedure the note gives no such command for is not a recipe: write it as a convention, or leave it out.\n- Only put a path or a sha in anchors if it appears in the note; never invent one. decidedAt is the date the note gives the decision, or else the note's date.\n\nEXAMPLE (a fictional repository, for format only):\nNOTE (memory/upload-fixture-port.md, 2025-03-02):\n---\nname: upload-fixture-port\ndescription: STORAGE_PORT is read at import time, so fixtures must hand out the URL\nmetadata:\n  type: feedback\n---\nUpload tests failed with `Error: connect ECONNREFUSED 127.0.0.1:9000` on CI.\nSTORAGE_PORT is read when src/api/storage.ts is imported, before the fixture sets it.\nThe user said: never hard-code ports in a fixture; always take them from what the fixture returns.\nOUTPUT:\n[{\"kind\":\"pitfall\",\"title\":\"STORAGE_PORT is read at import, so a fixture sets it too late\",\"summary\":\"Set STORAGE_PORT before src/api/storage.ts is imported, or tests connect to the default 9000.\",\"trigger\":{\"paths\":[\"src/api/storage.ts\"],\"commands\":[],\"errorSignature\":\"connect ECONNREFUSED 127.0.0.1:9000\"},\"symptom\":\"Upload tests fail with ECONNREFUSED 127.0.0.1:9000\",\"cause\":\"STORAGE_PORT is read when the module is imported, before the fixture sets it\",\"fix\":\"Have the fixture return the URL and read the port from there\",\"anchors\":{\"paths\":[\"src/api/storage.ts\"],\"commits\":[]},\"quote\":\"STORAGE_PORT is read when src/api/storage.ts is imported, before the fixture sets it.\"},\n {\"kind\":\"convention\",\"title\":\"Tests take ports from the fixture, never hard-code them\",\"summary\":\"Take every port from what the fixture returns.\",\"rule\":\"Never hard-code a port in a fixture; take it from what the fixture returns\",\"scope\":[\"test fixtures\"],\"exceptions\":\"\",\"anchors\":{\"paths\":[],\"commits\":[]},\"quote\":\"never hard-code ports in a fixture; always take them from what the fixture returns.\"}]\n\n==== NOTE (memory/reference-release.md, 2026-09-20) ====\n`release.sh next` tags at once: it is not a dry run.\nThe guard lives in src/app/main.go, and docs/guide.md explains it.\n\n==== END OF NOTE ====\nOutput the JSON array now."
+    },
+    {
+      "note": 2,
+      "prompt": "Below is a NOTE: one Markdown file kept beside a code repository. It is an instruction file for coding agents (a CLAUDE.md or an AGENTS.md), or one file of an agent's memory library, whose frontmatter gives the memory a name, a one-line description and a type (user: about the owner; feedback: how the owner wants work done; project: ongoing work; reference: facts and pointers). Agents wrote most of these notes while working for the repository's owner: \"the user\" in a note is the owner.\n\nTASK: extract the knowledge in this note that would change how a future agent works in this repository and that it could NOT learn by reading the code for one minute:\n- rules and corrections — how the owner wants things done, a practice the note says to follow -> convention\n- decisions, with the alternatives and why they were rejected -> decision\n- traps and surprises: something behaves differently than expected, with the cause and the fix -> pitfall\n- a multi-step procedure, with a command that shows it worked -> recipe\n- the meaning of a project-specific term or mechanism that is easy to get wrong -> concept\nNever write a principle: principles are the owner's alone. Write a general rule with its reason as a convention.\nDo NOT extract: status or progress reports, what was built, one-off facts about a single task, generic programming advice, or anything the code states plainly. A note that only lists or links other notes -> []. Prefer fewer, stronger entries. If there is nothing worth keeping, output [].\n\nOUTPUT: a JSON array (at most 6 objects), nothing else — no prose, no code fence. Each object is FLAT:\n{\"kind\": \"convention|decision|pitfall|recipe|concept\",\n \"title\": \"<= 60 characters, states the knowledge itself\",\n \"summary\": \"one or two short sentences a future agent can act on\",\n ...the kind's own fields at the top level (below)...,\n \"anchors\": {\"paths\": [repository file paths the note names], \"commits\": [commit shas the note names]},\n \"quote\": \"a span of the note, copied character for character, that shows it (<= 150 characters)\"}\nThe kind's own fields (all required; be terse: each text field one short sentence):\n- convention: \"rule\", \"scope\": [\"where it applies\"], \"exceptions\" (\"\" if none)\n- decision: \"context\", \"decision\", \"alternatives\": [{\"option\": \"...\", \"whyRejected\": \"...\"}], \"consequences\", \"decidedAt\": \"YYYY-MM-DD\"\n- pitfall: \"trigger\": {\"paths\": [...], \"commands\": [...], \"errorSignature\": \"...\"} (at least one non-empty; [] for an empty list), \"symptom\", \"cause\", \"fix\"\n- recipe: \"steps\": [\"...\"], \"verify\": {\"command\": \"<a command the note gives, copied as it is written>\", \"expectedExit\": 0}\n- concept: \"definition\", \"boundaries\"\nRULES:\n- quote: copied exactly from the note, backticks and punctuation included — no \"…\", no paraphrase, no translation. Prefer a span without double quotes; if one is unavoidable, escape it as \\\".\n- Write titles and text fields in the language the note is written in; keep code, paths and commands verbatim.\n- verify.command is a command copied exactly from the note's code (a code block or a span in backticks), one that shows the procedure worked — never a description of a check or a link to another note. A procedure the note gives no such command for is not a recipe: write it as a convention, or leave it out.\n- Only put a path or a sha in anchors if it appears in the note; never invent one. decidedAt is the date the note gives the decision, or else the note's date.\n\nEXAMPLE (a fictional repository, for format only):\nNOTE (memory/upload-fixture-port.md, 2025-03-02):\n---\nname: upload-fixture-port\ndescription: STORAGE_PORT is read at import time, so fixtures must hand out the URL\nmetadata:\n  type: feedback\n---\nUpload tests failed with `Error: connect ECONNREFUSED 127.0.0.1:9000` on CI.\nSTORAGE_PORT is read when src/api/storage.ts is imported, before the fixture sets it.\nThe user said: never hard-code ports in a fixture; always take them from what the fixture returns.\nOUTPUT:\n[{\"kind\":\"pitfall\",\"title\":\"STORAGE_PORT is read at import, so a fixture sets it too late\",\"summary\":\"Set STORAGE_PORT before src/api/storage.ts is imported, or tests connect to the default 9000.\",\"trigger\":{\"paths\":[\"src/api/storage.ts\"],\"commands\":[],\"errorSignature\":\"connect ECONNREFUSED 127.0.0.1:9000\"},\"symptom\":\"Upload tests fail with ECONNREFUSED 127.0.0.1:9000\",\"cause\":\"STORAGE_PORT is read when the module is imported, before the fixture sets it\",\"fix\":\"Have the fixture return the URL and read the port from there\",\"anchors\":{\"paths\":[\"src/api/storage.ts\"],\"commits\":[]},\"quote\":\"STORAGE_PORT is read when src/api/storage.ts is imported, before the fixture sets it.\"},\n {\"kind\":\"convention\",\"title\":\"Tests take ports from the fixture, never hard-code them\",\"summary\":\"Take every port from what the fixture returns.\",\"rule\":\"Never hard-code a port in a fixture; take it from what the fixture returns\",\"scope\":[\"test fixtures\"],\"exceptions\":\"\",\"anchors\":{\"paths\":[],\"commits\":[]},\"quote\":\"never hard-code ports in a fixture; always take them from what the fixture returns.\"}]\n\n==== NOTE (memory/feedback-zh.md, 2026-09-21) ====\n发版前先核对 `origin/main`：别直接给会话分支打 tag，否则客户端会倒退。\n\n==== END OF NOTE ====\nThis note is written in Chinese: write every title, summary and text field in Chinese, although the example above is in English; keep code, paths and commands verbatim.\nOutput the JSON array now."
+    },
+    {
+      "note": 3,
+      "prompt": "Below is a NOTE: one Markdown file kept beside a code repository. It is an instruction file for coding agents (a CLAUDE.md or an AGENTS.md), or one file of an agent's memory library, whose frontmatter gives the memory a name, a one-line description and a type (user: about the owner; feedback: how the owner wants work done; project: ongoing work; reference: facts and pointers). Agents wrote most of these notes while working for the repository's owner: \"the user\" in a note is the owner.\n\nTASK: extract the knowledge in this note that would change how a future agent works in this repository and that it could NOT learn by reading the code for one minute:\n- rules and corrections — how the owner wants things done, a practice the note says to follow -> convention\n- decisions, with the alternatives and why they were rejected -> decision\n- traps and surprises: something behaves differently than expected, with the cause and the fix -> pitfall\n- a multi-step procedure, with a command that shows it worked -> recipe\n- the meaning of a project-specific term or mechanism that is easy to get wrong -> concept\nNever write a principle: principles are the owner's alone. Write a general rule with its reason as a convention.\nDo NOT extract: status or progress reports, what was built, one-off facts about a single task, generic programming advice, or anything the code states plainly. A note that only lists or links other notes -> []. Prefer fewer, stronger entries. If there is nothing worth keeping, output [].\n\nOUTPUT: a JSON array (at most 6 objects), nothing else — no prose, no code fence. Each object is FLAT:\n{\"kind\": \"convention|decision|pitfall|recipe|concept\",\n \"title\": \"<= 60 characters, states the knowledge itself\",\n \"summary\": \"one or two short sentences a future agent can act on\",\n ...the kind's own fields at the top level (below)...,\n \"anchors\": {\"paths\": [repository file paths the note names], \"commits\": [commit shas the note names]},\n \"quote\": \"a span of the note, copied character for character, that shows it (<= 150 characters)\"}\nThe kind's own fields (all required; be terse: each text field one short sentence):\n- convention: \"rule\", \"scope\": [\"where it applies\"], \"exceptions\" (\"\" if none)\n- decision: \"context\", \"decision\", \"alternatives\": [{\"option\": \"...\", \"whyRejected\": \"...\"}], \"consequences\", \"decidedAt\": \"YYYY-MM-DD\"\n- pitfall: \"trigger\": {\"paths\": [...], \"commands\": [...], \"errorSignature\": \"...\"} (at least one non-empty; [] for an empty list), \"symptom\", \"cause\", \"fix\"\n- recipe: \"steps\": [\"...\"], \"verify\": {\"command\": \"<a command the note gives, copied as it is written>\", \"expectedExit\": 0}\n- concept: \"definition\", \"boundaries\"\nRULES:\n- quote: copied exactly from the note, backticks and punctuation included — no \"…\", no paraphrase, no translation. Prefer a span without double quotes; if one is unavoidable, escape it as \\\".\n- Write titles and text fields in the language the note is written in; keep code, paths and commands verbatim.\n- verify.command is a command copied exactly from the note's code (a code block or a span in backticks), one that shows the procedure worked — never a description of a check or a link to another note. A procedure the note gives no such command for is not a recipe: write it as a convention, or leave it out.\n- Only put a path or a sha in anchors if it appears in the note; never invent one. decidedAt is the date the note gives the decision, or else the note's date.\n\nEXAMPLE (a fictional repository, for format only):\nNOTE (memory/upload-fixture-port.md, 2025-03-02):\n---\nname: upload-fixture-port\ndescription: STORAGE_PORT is read at import time, so fixtures must hand out the URL\nmetadata:\n  type: feedback\n---\nUpload tests failed with `Error: connect ECONNREFUSED 127.0.0.1:9000` on CI.\nSTORAGE_PORT is read when src/api/storage.ts is imported, before the fixture sets it.\nThe user said: never hard-code ports in a fixture; always take them from what the fixture returns.\nOUTPUT:\n[{\"kind\":\"pitfall\",\"title\":\"STORAGE_PORT is read at import, so a fixture sets it too late\",\"summary\":\"Set STORAGE_PORT before src/api/storage.ts is imported, or tests connect to the default 9000.\",\"trigger\":{\"paths\":[\"src/api/storage.ts\"],\"commands\":[],\"errorSignature\":\"connect ECONNREFUSED 127.0.0.1:9000\"},\"symptom\":\"Upload tests fail with ECONNREFUSED 127.0.0.1:9000\",\"cause\":\"STORAGE_PORT is read when the module is imported, before the fixture sets it\",\"fix\":\"Have the fixture return the URL and read the port from there\",\"anchors\":{\"paths\":[\"src/api/storage.ts\"],\"commits\":[]},\"quote\":\"STORAGE_PORT is read when src/api/storage.ts is imported, before the fixture sets it.\"},\n {\"kind\":\"convention\",\"title\":\"Tests take ports from the fixture, never hard-code them\",\"summary\":\"Take every port from what the fixture returns.\",\"rule\":\"Never hard-code a port in a fixture; take it from what the fixture returns\",\"scope\":[\"test fixtures\"],\"exceptions\":\"\",\"anchors\":{\"paths\":[],\"commits\":[]},\"quote\":\"never hard-code ports in a fixture; always take them from what the fixture returns.\"}]\n\n==== NOTE (memory/project-baseline.md, 2026-09-22) ====\n开工先在 main 上取 full-api 基线，见 [[full-api-red-on-main]]：\n```bash\n$ npm run test:full-api   -- --main\n```\n再跑 `git status --short`。\n\n==== END OF NOTE ====\nThis note is written in Chinese: write every title, summary and text field in Chinese, although the example above is in English; keep code, paths and commands verbatim.\nOutput the JSON array now."
+    },
+    {
+      "note": 4,
+      "prompt": "Below is a NOTE: one Markdown file kept beside a code repository. It is an instruction file for coding agents (a CLAUDE.md or an AGENTS.md), or one file of an agent's memory library, whose frontmatter gives the memory a name, a one-line description and a type (user: about the owner; feedback: how the owner wants work done; project: ongoing work; reference: facts and pointers). Agents wrote most of these notes while working for the repository's owner: \"the user\" in a note is the owner.\n\nTASK: extract the knowledge in this note that would change how a future agent works in this repository and that it could NOT learn by reading the code for one minute:\n- rules and corrections — how the owner wants things done, a practice the note says to follow -> convention\n- decisions, with the alternatives and why they were rejected -> decision\n- traps and surprises: something behaves differently than expected, with the cause and the fix -> pitfall\n- a multi-step procedure, with a command that shows it worked -> recipe\n- the meaning of a project-specific term or mechanism that is easy to get wrong -> concept\nNever write a principle: principles are the owner's alone. Write a general rule with its reason as a convention.\nDo NOT extract: status or progress reports, what was built, one-off facts about a single task, generic programming advice, or anything the code states plainly. A note that only lists or links other notes -> []. Prefer fewer, stronger entries. If there is nothing worth keeping, output [].\n\nOUTPUT: a JSON array (at most 6 objects), nothing else — no prose, no code fence. Each object is FLAT:\n{\"kind\": \"convention|decision|pitfall|recipe|concept\",\n \"title\": \"<= 60 characters, states the knowledge itself\",\n \"summary\": \"one or two short sentences a future agent can act on\",\n ...the kind's own fields at the top level (below)...,\n \"anchors\": {\"paths\": [repository file paths the note names], \"commits\": [commit shas the note names]},\n \"quote\": \"a span of the note, copied character for character, that shows it (<= 150 characters)\"}\nThe kind's own fields (all required; be terse: each text field one short sentence):\n- convention: \"rule\", \"scope\": [\"where it applies\"], \"exceptions\" (\"\" if none)\n- decision: \"context\", \"decision\", \"alternatives\": [{\"option\": \"...\", \"whyRejected\": \"...\"}], \"consequences\", \"decidedAt\": \"YYYY-MM-DD\"\n- pitfall: \"trigger\": {\"paths\": [...], \"commands\": [...], \"errorSignature\": \"...\"} (at least one non-empty; [] for an empty list), \"symptom\", \"cause\", \"fix\"\n- recipe: \"steps\": [\"...\"], \"verify\": {\"command\": \"<a command the note gives, copied as it is written>\", \"expectedExit\": 0}\n- concept: \"definition\", \"boundaries\"\nRULES:\n- quote: copied exactly from the note, backticks and punctuation included — no \"…\", no paraphrase, no translation. Prefer a span without double quotes; if one is unavoidable, escape it as \\\".\n- Write titles and text fields in the language the note is written in; keep code, paths and commands verbatim.\n- verify.command is a command copied exactly from the note's code (a code block or a span in backticks), one that shows the procedure worked — never a description of a check or a link to another note. A procedure the note gives no such command for is not a recipe: write it as a convention, or leave it out.\n- Only put a path or a sha in anchors if it appears in the note; never invent one. decidedAt is the date the note gives the decision, or else the note's date.\n\nEXAMPLE (a fictional repository, for format only):\nNOTE (memory/upload-fixture-port.md, 2025-03-02):\n---\nname: upload-fixture-port\ndescription: STORAGE_PORT is read at import time, so fixtures must hand out the URL\nmetadata:\n  type: feedback\n---\nUpload tests failed with `Error: connect ECONNREFUSED 127.0.0.1:9000` on CI.\nSTORAGE_PORT is read when src/api/storage.ts is imported, before the fixture sets it.\nThe user said: never hard-code ports in a fixture; always take them from what the fixture returns.\nOUTPUT:\n[{\"kind\":\"pitfall\",\"title\":\"STORAGE_PORT is read at import, so a fixture sets it too late\",\"summary\":\"Set STORAGE_PORT before src/api/storage.ts is imported, or tests connect to the default 9000.\",\"trigger\":{\"paths\":[\"src/api/storage.ts\"],\"commands\":[],\"errorSignature\":\"connect ECONNREFUSED 127.0.0.1:9000\"},\"symptom\":\"Upload tests fail with ECONNREFUSED 127.0.0.1:9000\",\"cause\":\"STORAGE_PORT is read when the module is imported, before the fixture sets it\",\"fix\":\"Have the fixture return the URL and read the port from there\",\"anchors\":{\"paths\":[\"src/api/storage.ts\"],\"commits\":[]},\"quote\":\"STORAGE_PORT is read when src/api/storage.ts is imported, before the fixture sets it.\"},\n {\"kind\":\"convention\",\"title\":\"Tests take ports from the fixture, never hard-code them\",\"summary\":\"Take every port from what the fixture returns.\",\"rule\":\"Never hard-code a port in a fixture; take it from what the fixture returns\",\"scope\":[\"test fixtures\"],\"exceptions\":\"\",\"anchors\":{\"paths\":[],\"commits\":[]},\"quote\":\"never hard-code ports in a fixture; always take them from what the fixture returns.\"}]\n\n==== NOTE (CLAUDE.md, 2026-09-23) ====\nRun `scripts/run-pg-spec.sh`   before you\ntrust a green **pg spec**: “a skip is red”.\nUse <b>bold</b> & keep `a<b>` as it is.\n\n==== END OF NOTE ====\nOutput the JSON array now."
+    }
+  ],
+  "languages": [
+    {
+      "text": "发版前先核对 `origin/main`，再跑 `.claude/skills/release/release.sh next`。",
+      "lang": "Chinese"
+    },
+    {
+      "text": "---\nname: x\ndescription: 中文的描述\n---\nThe body is English prose about the release script, with one word in Chinese: 发版.\n",
+      "lang": ""
+    },
+    {
+      "text": "```\n中文 inside a code block only\n```\nThe rest is English prose about the release script.",
+      "lang": ""
+    },
+    {
+      "text": "Run it twice.",
+      "lang": ""
+    },
+    {
+      "text": "",
+      "lang": ""
+    },
+    {
+      "text": "看 https://example.com/中文/path 这里",
+      "lang": "Chinese"
+    },
+    {
+      "text": "中文 and English words mixed together in equal measure here",
+      "lang": ""
+    },
+    {
+      "text": "---\nname: feedback-rules\ndescription: a test note\nmetadata:\n  type: feedback\n  modified: 2026-09-20T10:00:00.000Z\n---\n\nReply in Chinese; code stays as it is.\nNever store a secret: the vault key is [redacted].\n",
+      "lang": ""
+    },
+    {
+      "text": "`release.sh next` tags at once: it is not a dry run.\nThe guard lives in src/app/main.go, and docs/guide.md explains it.\n",
+      "lang": ""
+    },
+    {
+      "text": "发版前先核对 `origin/main`：别直接给会话分支打 tag，否则客户端会倒退。\n",
+      "lang": "Chinese"
+    },
+    {
+      "text": "开工先在 main 上取 full-api 基线，见 [[full-api-red-on-main]]：\n```bash\n$ npm run test:full-api   -- --main\n```\n再跑 `git status --short`。\n",
+      "lang": "Chinese"
+    },
+    {
+      "text": "Run `scripts/run-pg-spec.sh`   before you\ntrust a green **pg spec**: “a skip is red”.\nUse <b>bold</b> & keep `a<b>` as it is.\n",
+      "lang": ""
+    }
+  ],
+  "answers": [
+    {
+      "answer": "[{\"kind\":\"concept\",\"title\":\"A\",\"summary\":\"B\",\"definition\":\"C\",\"boundaries\":\"D\",\"quote\":\"E\"}]",
+      "entries": [
+        {
+          "boundaries": "D",
+          "definition": "C",
+          "kind": "concept",
+          "quote": "E",
+          "summary": "B",
+          "title": "A"
+        }
+      ]
+    },
+    {
+      "answer": "```json\n[{\"kind\":\"concept\",\"title\":\"A\",\"summary\":\"B\",\"definition\":\"C\",\"boundaries\":\"D\",\"quote\":\"E\"}]\n```",
+      "entries": [
+        {
+          "boundaries": "D",
+          "definition": "C",
+          "kind": "concept",
+          "quote": "E",
+          "summary": "B",
+          "title": "A"
+        }
+      ]
+    },
+    {
+      "answer": "Let me think about the note [first] step.\n[{\"kind\":\"concept\",\"title\":\"A\",\"summary\":\"B\",\"definition\":\"C\",\"boundaries\":\"D\",\"quote\":\"E\"}]",
+      "entries": [
+        {
+          "boundaries": "D",
+          "definition": "C",
+          "kind": "concept",
+          "quote": "E",
+          "summary": "B",
+          "title": "A"
+        }
+      ]
+    },
+    {
+      "answer": "{\"entries\":[{\"kind\":\"concept\",\"title\":\"A\",\"summary\":\"B\",\"definition\":\"C\",\"boundaries\":\"D\",\"quote\":\"E\"}]}",
+      "entries": [
+        {
+          "boundaries": "D",
+          "definition": "C",
+          "kind": "concept",
+          "quote": "E",
+          "summary": "B",
+          "title": "A"
+        }
+      ]
+    },
+    {
+      "answer": "{\"Entries\":[{\"title\":\"case\"}]}",
+      "entries": [
+        {
+          "title": "case"
+        }
+      ]
+    },
+    {
+      "answer": "[{\"kind\":\"concept\",\"title\":\"A\",\"summary\":\"B\",\"definition\":\"C\",\"boundaries\":\"D\",\"quote\":\"E\"},]",
+      "entries": [
+        {
+          "boundaries": "D",
+          "definition": "C",
+          "kind": "concept",
+          "quote": "E",
+          "summary": "B",
+          "title": "A"
+        }
+      ]
+    },
+    {
+      "answer": "[{\"kind\":\"concept\",\"title\":\"A\",\"summary\":\"B\",\"definition\":\"C\",\"boundaries\":\"D\",\"quote\":\"he said \"stop\" twice\"}]",
+      "entries": [
+        {
+          "boundaries": "D",
+          "definition": "C",
+          "kind": "concept",
+          "quote": "he said \"stop\" twice",
+          "summary": "B",
+          "title": "A"
+        }
+      ]
+    },
+    {
+      "answer": "[{\"kind\":\"concept\",\"title\":\"A\",\"summary\":\"B\",\"definition\":\"C\",\"boundaries\":\"D\",\"quote\":\"\"quoted\" at the start\"}]",
+      "entries": [
+        {
+          "boundaries": "D",
+          "definition": "C",
+          "kind": "concept",
+          "quote": "\"quoted\" at the start",
+          "summary": "B",
+          "title": "A"
+        }
+      ]
+    },
+    {
+      "answer": "Nothing here is worth keeping.\n[]",
+      "entries": []
+    },
+    {
+      "answer": "I cannot tell.",
+      "entries": null
+    },
+    {
+      "answer": "{\"verdict\":\"supported\"}",
+      "entries": null
+    },
+    {
+      "answer": "[1, 2, 3]",
+      "entries": null
+    },
+    {
+      "answer": "[null]",
+      "entries": null
+    },
+    {
+      "answer": "[null, {\"title\":\"after a null\"}]",
+      "entries": [
+        null,
+        {
+          "title": "after a null"
+        }
+      ]
+    },
+    {
+      "answer": "[{\"kind\":\"concept\",\"title\":\"A [b] c\",\"summary\":\"x]\"}] and then [{\"title\":\"short\"}]",
+      "entries": [
+        {
+          "kind": "concept",
+          "summary": "x]",
+          "title": "A [b] c"
+        }
+      ]
+    },
+    {
+      "answer": "First [{\"title\":\"one\"}], then the fuller [{\"title\":\"two\",\"summary\":\"longer by far than the first\"}].",
+      "entries": [
+        {
+          "summary": "longer by far than the first",
+          "title": "two"
+        }
+      ]
+    },
+    {
+      "answer": "```\n[{\"title\":\"no json tag\"}]\n```",
+      "entries": [
+        {
+          "title": "no json tag"
+        }
+      ]
+    },
+    {
+      "answer": "```json\nnot json\n```\n```json\n[{\"title\":\"second fence\"}]\n```",
+      "entries": [
+        {
+          "title": "second fence"
+        }
+      ]
+    },
+    {
+      "answer": "{\"entries\":[]}",
+      "entries": []
+    },
+    {
+      "answer": "{\"entries\":null}",
+      "entries": null
+    },
+    {
+      "answer": "{\"entries\":[1]}",
+      "entries": null
+    },
+    {
+      "answer": "  [ ]  ",
+      "entries": []
+    },
+    {
+      "answer": "[{\"title\":\"<b>&\\u2028\"}]",
+      "entries": [
+        {
+          "title": "<b>&\u2028"
+        }
+      ]
+    }
+  ],
+  "quotes": [
+    {
+      "note": "Run `scripts/run-pg-spec.sh`   before you\ntrust a green **pg spec**: “a skip is red”.\nUse <b>bold</b> & keep `a<b>` as it is.\n",
+      "quote": "Run `scripts/run-pg-spec.sh` before you trust",
+      "cited": "Run `scripts/run-pg-spec.sh` before you trust"
+    },
+    {
+      "note": "Run `scripts/run-pg-spec.sh`   before you\ntrust a green **pg spec**: “a skip is red”.\nUse <b>bold</b> & keep `a<b>` as it is.\n",
+      "quote": "Run scripts/run-pg-spec.sh before you trust",
+      "cited": "Run `scripts/run-pg-spec.sh`   before you\ntrust"
+    },
+    {
+      "note": "Run `scripts/run-pg-spec.sh`   before you\ntrust a green **pg spec**: “a skip is red”.\nUse <b>bold</b> & keep `a<b>` as it is.\n",
+      "quote": "trust a green pg spec",
+      "cited": "trust a green **pg spec**"
+    },
+    {
+      "note": "Run `scripts/run-pg-spec.sh`   before you\ntrust a green **pg spec**: “a skip is red”.\nUse <b>bold</b> & keep `a<b>` as it is.\n",
+      "quote": "Run scripts/run-pg-spec.sh",
+      "cited": "Run `scripts/run-pg-spec.sh`"
+    },
+    {
+      "note": "Run `scripts/run-pg-spec.sh`   before you\ntrust a green **pg spec**: “a skip is red”.\nUse <b>bold</b> & keep `a<b>` as it is.\n",
+      "quote": "\"a skip is red\"",
+      "cited": "“a skip is red”"
+    },
+    {
+      "note": "Run `scripts/run-pg-spec.sh`   before you\ntrust a green **pg spec**: “a skip is red”.\nUse <b>bold</b> & keep `a<b>` as it is.\n",
+      "quote": "",
+      "cited": null
+    },
+    {
+      "note": "Run `scripts/run-pg-spec.sh`   before you\ntrust a green **pg spec**: “a skip is red”.\nUse <b>bold</b> & keep `a<b>` as it is.\n",
+      "quote": "a paraphrase the note never says",
+      "cited": null
+    },
+    {
+      "note": "Run `scripts/run-pg-spec.sh`   before you\ntrust a green **pg spec**: “a skip is red”.\nUse <b>bold</b> & keep `a<b>` as it is.\n",
+      "quote": "Use <b>bold</b> & keep a<b> as it is.",
+      "cited": "Use <b>bold</b> & keep `a<b>` as it is."
+    },
+    {
+      "note": "Run `scripts/run-pg-spec.sh`   before you\ntrust a green **pg spec**: “a skip is red”.\nUse <b>bold</b> & keep `a<b>` as it is.\n",
+      "quote": "   ",
+      "cited": "   "
+    },
+    {
+      "note": "Run `scripts/run-pg-spec.sh`   before you\ntrust a green **pg spec**: “a skip is red”.\nUse <b>bold</b> & keep `a<b>` as it is.\n",
+      "quote": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "cited": null
+    },
+    {
+      "note": "`release.sh next` tags at once: it is not a dry run.\nThe guard lives in src/app/main.go, and docs/guide.md explains it.\n",
+      "quote": "release.sh next tags at once: it is not a dry run.",
+      "cited": "`release.sh next` tags at once: it is not a dry run."
+    },
+    {
+      "note": "it's ‘quoted’ and **bold** here",
+      "quote": "it's 'quoted' and bold here",
+      "cited": "it's ‘quoted’ and **bold** here"
+    },
+    {
+      "note": "a yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy end",
+      "quote": "a yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "cited": "a yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+    }
+  ],
+  "commands": [
+    {
+      "note": "开工先在 main 上取 full-api 基线，见 [[full-api-red-on-main]]：\n```bash\n$ npm run test:full-api   -- --main\n```\n再跑 `git status --short`。\n",
+      "command": "npm run test:full-api -- --main",
+      "gives": true
+    },
+    {
+      "note": "开工先在 main 上取 full-api 基线，见 [[full-api-red-on-main]]：\n```bash\n$ npm run test:full-api   -- --main\n```\n再跑 `git status --short`。\n",
+      "command": "$ npm run test:full-api -- --main",
+      "gives": true
+    },
+    {
+      "note": "开工先在 main 上取 full-api 基线，见 [[full-api-red-on-main]]：\n```bash\n$ npm run test:full-api   -- --main\n```\n再跑 `git status --short`。\n",
+      "command": "git status --short",
+      "gives": true
+    },
+    {
+      "note": "开工先在 main 上取 full-api 基线，见 [[full-api-red-on-main]]：\n```bash\n$ npm run test:full-api   -- --main\n```\n再跑 `git status --short`。\n",
+      "command": "full-api on main",
+      "gives": false
+    },
+    {
+      "note": "开工先在 main 上取 full-api 基线，见 [[full-api-red-on-main]]：\n```bash\n$ npm run test:full-api   -- --main\n```\n再跑 `git status --short`。\n",
+      "command": "npm run test:full-api -- --branch",
+      "gives": false
+    },
+    {
+      "note": "开工先在 main 上取 full-api 基线，见 [[full-api-red-on-main]]：\n```bash\n$ npm run test:full-api   -- --main\n```\n再跑 `git status --short`。\n",
+      "command": "见 [[full-api-red-on-main]]",
+      "gives": false
+    },
+    {
+      "note": "开工先在 main 上取 full-api 基线，见 [[full-api-red-on-main]]：\n```bash\n$ npm run test:full-api   -- --main\n```\n再跑 `git status --short`。\n",
+      "command": "full-api-red-on-main",
+      "gives": false
+    },
+    {
+      "note": "开工先在 main 上取 full-api 基线，见 [[full-api-red-on-main]]：\n```bash\n$ npm run test:full-api   -- --main\n```\n再跑 `git status --short`。\n",
+      "command": "",
+      "gives": false
+    },
+    {
+      "note": "开工先在 main 上取 full-api 基线，见 [[full-api-red-on-main]]：\n```bash\n$ npm run test:full-api   -- --main\n```\n再跑 `git status --short`。\n",
+      "command": "  $ ",
+      "gives": true
+    },
+    {
+      "note": "no code at all: make",
+      "command": "make",
+      "gives": false
+    },
+    {
+      "note": "```\nmake   all\n```",
+      "command": "make all",
+      "gives": true
+    }
+  ],
+  "builds": [
+    {
+      "note": 0,
+      "answer": "[{\"kind\":\"convention\",\"title\":\"Reply in Chinese\",\"summary\":\"Answer the owner in Chinese; leave code as it is.\",\"rule\":\"Reply in Chinese\",\"scope\":\"every reply\",\"exceptions\":\"\",\"anchors\":{\"paths\":[],\"commits\":[]},\"quote\":\"Reply in Chinese; code stays as it is.\"},{\"kind\":\"principle\",\"title\":\"Secrets are never stored\",\"summary\":\"x\",\"statement\":\"Never store a secret.\",\"rationale\":\"It leaks.\",\"quote\":\"Never store a secret\"}]",
+      "built": {
+        "dropped": 0,
+        "ops": [
+          {
+            "entry": {
+              "fields": {
+                "rule": "Reply in Chinese",
+                "scope": [
+                  "every reply"
+                ]
+              },
+              "kind": "convention",
+              "summary": "Answer the owner in Chinese; leave code as it is.",
+              "title": "Reply in Chinese"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "quote": "Reply in Chinese; code stays as it is.",
+                "ref": "note-1"
+              }
+            ]
+          }
+        ],
+        "parsed": true,
+        "principles": 1,
+        "problems": []
+      },
+      "suffix": ""
+    },
+    {
+      "note": 1,
+      "answer": "Here is what I found.\n```json\n[{\"kind\":\"pitfall\",\"title\":\"release.sh next tags at once\",\"summary\":\"It is not a dry run.\",\"trigger\":{\"paths\":[],\"commands\":[\"release.sh next\"],\"errorSignature\":\"\"},\"symptom\":\"A tag appears\",\"cause\":\"next tags\",\"fix\":\"Run it only to release\",\"anchors\":{\"paths\":[\"src/app/main.go\",\"/root/orbit/docs/guide.md\",\"src/does/not/exist.go\"],\"commits\":[\"0000000\"]},\"quote\":\"release.sh next tags at once: it is not a dry run.\"}]\n```",
+      "built": {
+        "dropped": 0,
+        "ops": [
+          {
+            "entry": {
+              "fields": {
+                "cause": "next tags",
+                "fix": "Run it only to release",
+                "symptom": "A tag appears",
+                "trigger": {
+                  "commands": [
+                    "release.sh next"
+                  ],
+                  "paths": []
+                }
+              },
+              "kind": "pitfall",
+              "summary": "It is not a dry run.",
+              "title": "release.sh next tags at once"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "quote": "`release.sh next` tags at once: it is not a dry run.",
+                "ref": "note-2"
+              }
+            ]
+          }
+        ],
+        "parsed": true,
+        "principles": 0,
+        "problems": []
+      },
+      "suffix": ""
+    },
+    {
+      "note": 0,
+      "answer": "[{\"kind\":\"concept\",\"title\":\"Alpha 1\",\"summary\":\"What Alpha 1 means.\",\"definition\":\"It is 1.\",\"boundaries\":\"Not 2.\",\"anchors\":{\"paths\":[],\"commits\":[]},\"quote\":\"fact\"},{\"kind\":\"concept\",\"title\":\"Alpha 2 REFUSE-SCHEMA\",\"summary\":\"What Alpha 2 means.\",\"definition\":\"It is 2.\",\"boundaries\":\"Not 3.\",\"anchors\":{\"paths\":[],\"commits\":[]},\"quote\":\"fact\"},{\"kind\":\"concept\",\"title\":\"Alpha 3\",\"summary\":\"What Alpha 3 means.\",\"definition\":\"It is 3.\",\"boundaries\":\"Not 4.\",\"anchors\":{\"paths\":[],\"commits\":[]},\"quote\":\"fact\"},{\"kind\":\"concept\",\"title\":\"Alpha 4\",\"summary\":\"What Alpha 4 means.\",\"definition\":\"It is 4.\",\"boundaries\":\"Not 5.\",\"anchors\":{\"paths\":[],\"commits\":[]},\"quote\":\"fact\"}]",
+      "built": {
+        "dropped": 0,
+        "ops": [
+          {
+            "entry": {
+              "fields": {
+                "boundaries": "Not 2.",
+                "definition": "It is 1."
+              },
+              "kind": "concept",
+              "summary": "What Alpha 1 means.",
+              "title": "Alpha 1"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-1"
+              }
+            ]
+          },
+          {
+            "entry": {
+              "fields": {
+                "boundaries": "Not 3.",
+                "definition": "It is 2."
+              },
+              "kind": "concept",
+              "summary": "What Alpha 2 means.",
+              "title": "Alpha 2 REFUSE-SCHEMA"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-1"
+              }
+            ]
+          },
+          {
+            "entry": {
+              "fields": {
+                "boundaries": "Not 4.",
+                "definition": "It is 3."
+              },
+              "kind": "concept",
+              "summary": "What Alpha 3 means.",
+              "title": "Alpha 3"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-1"
+              }
+            ]
+          },
+          {
+            "entry": {
+              "fields": {
+                "boundaries": "Not 5.",
+                "definition": "It is 4."
+              },
+              "kind": "concept",
+              "summary": "What Alpha 4 means.",
+              "title": "Alpha 4"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-1"
+              }
+            ]
+          }
+        ],
+        "parsed": true,
+        "principles": 0,
+        "problems": []
+      },
+      "suffix": ""
+    },
+    {
+      "note": 0,
+      "answer": "[{\"kind\":\"concept\",\"title\":\"Many 1\",\"summary\":\"What Many 1 means.\",\"definition\":\"It is 1.\",\"boundaries\":\"Not 2.\",\"anchors\":{\"paths\":[],\"commits\":[]},\"quote\":\"fact\"},{\"kind\":\"concept\",\"title\":\"Many 2\",\"summary\":\"What Many 2 means.\",\"definition\":\"It is 2.\",\"boundaries\":\"Not 3.\",\"anchors\":{\"paths\":[],\"commits\":[]},\"quote\":\"fact\"},{\"kind\":\"concept\",\"title\":\"Many 3\",\"summary\":\"What Many 3 means.\",\"definition\":\"It is 3.\",\"boundaries\":\"Not 4.\",\"anchors\":{\"paths\":[],\"commits\":[]},\"quote\":\"fact\"},{\"kind\":\"concept\",\"title\":\"Many 4\",\"summary\":\"What Many 4 means.\",\"definition\":\"It is 4.\",\"boundaries\":\"Not 5.\",\"anchors\":{\"paths\":[],\"commits\":[]},\"quote\":\"fact\"},{\"kind\":\"concept\",\"title\":\"Many 5\",\"summary\":\"What Many 5 means.\",\"definition\":\"It is 5.\",\"boundaries\":\"Not 6.\",\"anchors\":{\"paths\":[],\"commits\":[]},\"quote\":\"fact\"},{\"kind\":\"concept\",\"title\":\"Many 6\",\"summary\":\"What Many 6 means.\",\"definition\":\"It is 6.\",\"boundaries\":\"Not 7.\",\"anchors\":{\"paths\":[],\"commits\":[]},\"quote\":\"fact\"},{\"kind\":\"concept\",\"title\":\"Many 7\",\"summary\":\"What Many 7 means.\",\"definition\":\"It is 7.\",\"boundaries\":\"Not 8.\",\"anchors\":{\"paths\":[],\"commits\":[]},\"quote\":\"fact\"},{\"kind\":\"concept\",\"title\":\"Many 8\",\"summary\":\"What Many 8 means.\",\"definition\":\"It is 8.\",\"boundaries\":\"Not 9.\",\"anchors\":{\"paths\":[],\"commits\":[]},\"quote\":\"fact\"}]",
+      "built": {
+        "dropped": 0,
+        "ops": [
+          {
+            "entry": {
+              "fields": {
+                "boundaries": "Not 2.",
+                "definition": "It is 1."
+              },
+              "kind": "concept",
+              "summary": "What Many 1 means.",
+              "title": "Many 1"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-1"
+              }
+            ]
+          },
+          {
+            "entry": {
+              "fields": {
+                "boundaries": "Not 3.",
+                "definition": "It is 2."
+              },
+              "kind": "concept",
+              "summary": "What Many 2 means.",
+              "title": "Many 2"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-1"
+              }
+            ]
+          },
+          {
+            "entry": {
+              "fields": {
+                "boundaries": "Not 4.",
+                "definition": "It is 3."
+              },
+              "kind": "concept",
+              "summary": "What Many 3 means.",
+              "title": "Many 3"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-1"
+              }
+            ]
+          },
+          {
+            "entry": {
+              "fields": {
+                "boundaries": "Not 5.",
+                "definition": "It is 4."
+              },
+              "kind": "concept",
+              "summary": "What Many 4 means.",
+              "title": "Many 4"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-1"
+              }
+            ]
+          },
+          {
+            "entry": {
+              "fields": {
+                "boundaries": "Not 6.",
+                "definition": "It is 5."
+              },
+              "kind": "concept",
+              "summary": "What Many 5 means.",
+              "title": "Many 5"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-1"
+              }
+            ]
+          },
+          {
+            "entry": {
+              "fields": {
+                "boundaries": "Not 7.",
+                "definition": "It is 6."
+              },
+              "kind": "concept",
+              "summary": "What Many 6 means.",
+              "title": "Many 6"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-1"
+              }
+            ]
+          },
+          {
+            "entry": {
+              "fields": {
+                "boundaries": "Not 8.",
+                "definition": "It is 7."
+              },
+              "kind": "concept",
+              "summary": "What Many 7 means.",
+              "title": "Many 7"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-1"
+              }
+            ]
+          },
+          {
+            "entry": {
+              "fields": {
+                "boundaries": "Not 9.",
+                "definition": "It is 8."
+              },
+              "kind": "concept",
+              "summary": "What Many 8 means.",
+              "title": "Many 8"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-1"
+              }
+            ]
+          }
+        ],
+        "parsed": true,
+        "principles": 0,
+        "problems": []
+      },
+      "suffix": ""
+    },
+    {
+      "note": 0,
+      "answer": "[{\"kind\":\"convention\",\"title\":\"Keep it\",\"summary\":\"s\",\"rule\":\"Keep it\"},{\"kind\":\"concept\",\"title\":\"Also\",\"summary\":\"s\",\"definition\":\"d\",\"boundaries\":\"b\"}]",
+      "built": {
+        "dropped": 1,
+        "ops": [
+          {
+            "entry": {
+              "fields": {
+                "boundaries": "b",
+                "definition": "d"
+              },
+              "kind": "concept",
+              "summary": "s",
+              "title": "Also"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-1"
+              }
+            ]
+          }
+        ],
+        "parsed": true,
+        "principles": 0,
+        "problems": [
+          "entry \"Keep it\": scope is missing"
+        ]
+      },
+      "suffix": "\n\nSOME ENTRIES IN YOUR ANSWER WERE REJECTED:\n[{\"kind\":\"convention\",\"rule\":\"Keep it\",\"summary\":\"s\",\"title\":\"Keep it\"}]\n\nPROBLEMS:\n- entry \"Keep it\": scope is missing\nOutput a JSON array with corrected versions of ONLY these rejected entries (flat objects as specified; fill every required field). Drop an entry you cannot support. Output the JSON array only."
+    },
+    {
+      "note": 0,
+      "answer": "I would rather not.",
+      "built": {
+        "dropped": 0,
+        "ops": [],
+        "parsed": false,
+        "principles": 0,
+        "problems": []
+      },
+      "suffix": "\n\nYOUR ANSWER WAS NOT A JSON ARRAY OF FLAT ENTRY OBJECTS:\nI would rather not.\n\nOutput the JSON array only, as specified."
+    },
+    {
+      "note": 0,
+      "answer": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "built": {
+        "dropped": 0,
+        "ops": [],
+        "parsed": false,
+        "principles": 0,
+        "problems": []
+      },
+      "suffix": "\n\nYOUR ANSWER WAS NOT A JSON ARRAY OF FLAT ENTRY OBJECTS:\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\nOutput the JSON array only, as specified."
+    },
+    {
+      "note": 2,
+      "answer": "[{\"kind\":\"convention\",\"title\":\"Check origin/main before a release\",\"summary\":\"别给会话分支打 tag。\",\"rule\":\"先核对 origin/main 再打 tag\",\"scope\":[\"发版\"]},{\"kind\":\"convention\",\"title\":\"发版前先核对 origin/main\",\"summary\":\"别给会话分支打 tag。\",\"rule\":\"先核对 origin/main 再打 tag\",\"scope\":[\"发版\"]}]",
+      "built": {
+        "dropped": 1,
+        "ops": [
+          {
+            "entry": {
+              "fields": {
+                "rule": "先核对 origin/main 再打 tag",
+                "scope": [
+                  "发版"
+                ]
+              },
+              "kind": "convention",
+              "summary": "别给会话分支打 tag。",
+              "title": "发版前先核对 origin/main"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-3"
+              }
+            ]
+          }
+        ],
+        "parsed": true,
+        "principles": 0,
+        "problems": [
+          "entry \"Check origin/main before a release\": title is not in the note's language: the note is written in Chinese, so write the title in Chinese"
+        ]
+      },
+      "suffix": "\n\nSOME ENTRIES IN YOUR ANSWER WERE REJECTED:\n[{\"kind\":\"convention\",\"rule\":\"先核对 origin/main 再打 tag\",\"scope\":[\"发版\"],\"summary\":\"别给会话分支打 tag。\",\"title\":\"Check origin/main before a release\"}]\n\nPROBLEMS:\n- entry \"Check origin/main before a release\": title is not in the note's language: the note is written in Chinese, so write the title in Chinese\nOutput a JSON array with corrected versions of ONLY these rejected entries (flat objects as specified; fill every required field). Drop an entry you cannot support. Output the JSON array only."
+    },
+    {
+      "note": 3,
+      "answer": "[{\"kind\":\"recipe\",\"title\":\"取基线\",\"summary\":\"s\",\"steps\":[\"a\",\" \",\"b\"],\"verify\":{\"command\":\"npm run test:full-api -- --main\",\"expectedExit\":\"2\"}},{\"kind\":\"recipe\",\"title\":\"取基线二\",\"summary\":\"s\",\"steps\":\"one step\",\"verify\":{\"command\":\"full-api on main\",\"expectedExit\":0}},{\"kind\":\"recipe\",\"title\":\"取基线三\",\"summary\":\"s\",\"fields\":{\"steps\":[\"x\"],\"verify\":{\"command\":\"$ git status --short\",\"expectedExit\":2.7}}},{\"kind\":\"recipe\",\"title\":\"取基线四\",\"summary\":\"s\",\"steps\":[\"x\"],\"verify\":{\"command\":\"git status --short\",\"expectedExit\":300}},{\"kind\":\"recipe\",\"title\":\"取基线五\",\"summary\":\"s\",\"steps\":[\"x\"],\"verify\":{\"command\":\"git status --short\",\"expectedExit\":\"-1\"}}]",
+      "built": {
+        "dropped": 1,
+        "ops": [
+          {
+            "entry": {
+              "fields": {
+                "steps": [
+                  "a",
+                  "b"
+                ],
+                "verify": {
+                  "command": "npm run test:full-api -- --main",
+                  "expectedExit": 2
+                }
+              },
+              "kind": "recipe",
+              "summary": "s",
+              "title": "取基线"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-4"
+              }
+            ]
+          },
+          {
+            "entry": {
+              "fields": {
+                "steps": [
+                  "x"
+                ],
+                "verify": {
+                  "command": "$ git status --short",
+                  "expectedExit": 2
+                }
+              },
+              "kind": "recipe",
+              "summary": "s",
+              "title": "取基线三"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-4"
+              }
+            ]
+          },
+          {
+            "entry": {
+              "fields": {
+                "steps": [
+                  "x"
+                ],
+                "verify": {
+                  "command": "git status --short",
+                  "expectedExit": 0
+                }
+              },
+              "kind": "recipe",
+              "summary": "s",
+              "title": "取基线四"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-4"
+              }
+            ]
+          },
+          {
+            "entry": {
+              "fields": {
+                "steps": [
+                  "x"
+                ],
+                "verify": {
+                  "command": "git status --short",
+                  "expectedExit": 0
+                }
+              },
+              "kind": "recipe",
+              "summary": "s",
+              "title": "取基线五"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-4"
+              }
+            ]
+          }
+        ],
+        "parsed": true,
+        "principles": 0,
+        "problems": [
+          "entry \"取基线二\": verify.command \"full-api on main\" is not a command the note gives: copy one exactly from the note's code (a code block or a span in backticks), or, when the note gives none, write the procedure as a convention or leave it out"
+        ]
+      },
+      "suffix": "\n\nSOME ENTRIES IN YOUR ANSWER WERE REJECTED:\n[{\"kind\":\"recipe\",\"steps\":\"one step\",\"summary\":\"s\",\"title\":\"取基线二\",\"verify\":{\"command\":\"full-api on main\",\"expectedExit\":0}}]\n\nPROBLEMS:\n- entry \"取基线二\": verify.command \"full-api on main\" is not a command the note gives: copy one exactly from the note's code (a code block or a span in backticks), or, when the note gives none, write the procedure as a convention or leave it out\nOutput a JSON array with corrected versions of ONLY these rejected entries (flat objects as specified; fill every required field). Drop an entry you cannot support. Output the JSON array only."
+    },
+    {
+      "note": 0,
+      "answer": "[{\"kind\":\"decision\",\"title\":\"tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt\",\"summary\":\"s\",\"context\":\"c\",\"decision\":\"d\",\"alternatives\":{\"option\":\"o\",\"whyRejected\":\"w\"},\"consequences\":\"q\",\"decidedAt\":\"2026-13-45\"},{\"kind\":\"decision\",\"title\":\"d2\",\"summary\":\"s\",\"context\":\"c\",\"decision\":\"d\",\"alternatives\":[{\"option\":\"o\"},{\"option\":\"p\",\"whyRejected\":\"r\"},\"x\"],\"consequences\":\"q\",\"decidedAt\":\"2026-02-28 noon\"},{\"kind\":\"decision\",\"title\":\"d3\",\"summary\":\"s\",\"context\":\"c\",\"decision\":\"d\",\"alternatives\":[],\"consequences\":\"q\"},{\"kind\":\"Decision \",\"title\":\"d4\",\"summary\":\"s\",\"context\":\"c\",\"decision\":\"d\",\"alternatives\":[{\"option\":\"o\",\"whyRejected\":\"w\"}],\"consequences\":\"q\",\"decidedAt\":\"2024-02-29\"},{\"kind\":\"decision\",\"title\":\"d5\",\"summary\":\"s\",\"context\":\"c\",\"decision\":\"d\",\"alternatives\":[{\"option\":\"o\",\"whyRejected\":\"w\"}],\"consequences\":\"q\",\"decidedAt\":\"2023-02-29\"}]",
+      "built": {
+        "dropped": 1,
+        "ops": [
+          {
+            "entry": {
+              "fields": {
+                "alternatives": [
+                  {
+                    "option": "o",
+                    "whyRejected": "w"
+                  }
+                ],
+                "consequences": "q",
+                "context": "c",
+                "decidedAt": "2026-09-20",
+                "decision": "d"
+              },
+              "kind": "decision",
+              "summary": "s",
+              "title": "tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-1"
+              }
+            ]
+          },
+          {
+            "entry": {
+              "fields": {
+                "alternatives": [
+                  {
+                    "option": "p",
+                    "whyRejected": "r"
+                  }
+                ],
+                "consequences": "q",
+                "context": "c",
+                "decidedAt": "2026-02-28",
+                "decision": "d"
+              },
+              "kind": "decision",
+              "summary": "s",
+              "title": "d2"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-1"
+              }
+            ]
+          },
+          {
+            "entry": {
+              "fields": {
+                "alternatives": [
+                  {
+                    "option": "o",
+                    "whyRejected": "w"
+                  }
+                ],
+                "consequences": "q",
+                "context": "c",
+                "decidedAt": "2024-02-29",
+                "decision": "d"
+              },
+              "kind": "decision",
+              "summary": "s",
+              "title": "d4"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-1"
+              }
+            ]
+          },
+          {
+            "entry": {
+              "fields": {
+                "alternatives": [
+                  {
+                    "option": "o",
+                    "whyRejected": "w"
+                  }
+                ],
+                "consequences": "q",
+                "context": "c",
+                "decidedAt": "2026-09-20",
+                "decision": "d"
+              },
+              "kind": "decision",
+              "summary": "s",
+              "title": "d5"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-1"
+              }
+            ]
+          }
+        ],
+        "parsed": true,
+        "principles": 0,
+        "problems": [
+          "entry \"d3\": alternatives needs at least one {option, whyRejected}"
+        ]
+      },
+      "suffix": "\n\nSOME ENTRIES IN YOUR ANSWER WERE REJECTED:\n[{\"alternatives\":[],\"consequences\":\"q\",\"context\":\"c\",\"decision\":\"d\",\"kind\":\"decision\",\"summary\":\"s\",\"title\":\"d3\"}]\n\nPROBLEMS:\n- entry \"d3\": alternatives needs at least one {option, whyRejected}\nOutput a JSON array with corrected versions of ONLY these rejected entries (flat objects as specified; fill every required field). Drop an entry you cannot support. Output the JSON array only."
+    },
+    {
+      "note": 0,
+      "answer": "[{\"kind\":\"pitfall\",\"title\":\"p1\",\"summary\":\"s\",\"trigger\":{\"paths\":[]},\"symptom\":\"a\",\"cause\":\"b\",\"fix\":\"c\"},{\"kind\":\"pitfall\",\"title\":\"p2\",\"summary\":\"s\",\"trigger\":{\"errorSignature\":\"  ENOSPC  \"},\"symptom\":\"a\",\"cause\":\"b\",\"fix\":\"c\",\"detector\":\"df -h\"},{\"kind\":\"pitfall\",\"title\":\"p3\",\"summary\":\"s\",\"trigger\":\"not an object\",\"symptom\":\"a\",\"cause\":\"b\",\"fix\":\"c\"},{\"kind\":\"assumption\",\"title\":\"t\",\"summary\":\"s\"},{\"kind\":\"concept\",\"title\":\"\",\"summary\":\"s\",\"definition\":\"d\",\"boundaries\":\"b\"},{\"kind\":\"concept\",\"title\":\"c1\",\"summary\":\"\",\"definition\":\"d\",\"boundaries\":\"b\",\"notToConfuseWith\":\"c2\"},null,{\"kind\":\"concept\",\"title\":\"Also\",\"summary\":\"s\",\"definition\":\"d\",\"boundaries\":\"b\"},{\"kind\":\"concept\",\"title\":\"ALSO\",\"summary\":\"s\",\"definition\":\"d\",\"boundaries\":\"b\"},{\"kind\":\"concept\",\"title\":\"c3\",\"summary\":\"s\",\"definition\":null,\"fields\":{\"definition\":\"nested\"},\"boundaries\":\"b\"},{\"kind\":\"convention\",\"title\":\"c4\",\"summary\":\"s\",\"rule\":\"r\",\"scope\":[\"a\",1,\"\",{\"x\":1},\"b\"]}]",
+      "built": {
+        "dropped": 8,
+        "ops": [
+          {
+            "entry": {
+              "fields": {
+                "cause": "b",
+                "detector": "df -h",
+                "fix": "c",
+                "symptom": "a",
+                "trigger": {
+                  "commands": [],
+                  "errorSignature": "ENOSPC",
+                  "paths": []
+                }
+              },
+              "kind": "pitfall",
+              "summary": "s",
+              "title": "p2"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-1"
+              }
+            ]
+          },
+          {
+            "entry": {
+              "fields": {
+                "boundaries": "b",
+                "definition": "d"
+              },
+              "kind": "concept",
+              "summary": "s",
+              "title": "Also"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-1"
+              }
+            ]
+          },
+          {
+            "entry": {
+              "fields": {
+                "rule": "r",
+                "scope": [
+                  "a",
+                  "b"
+                ]
+              },
+              "kind": "convention",
+              "summary": "s",
+              "title": "c4"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "ref": "note-1"
+              }
+            ]
+          }
+        ],
+        "parsed": true,
+        "principles": 0,
+        "problems": [
+          "entry \"p1\": trigger needs at least one of paths, commands or errorSignature",
+          "entry \"p3\": trigger needs at least one of paths, commands or errorSignature",
+          "entry \"t\": kind \"assumption\" is not one of convention, decision, pitfall, recipe, concept",
+          "entry \"\": title is missing",
+          "entry \"c1\": summary is missing",
+          "entry \"\": kind \"\" is not one of convention, decision, pitfall, recipe, concept",
+          "entry \"c3\": definition is missing"
+        ]
+      },
+      "suffix": "\n\nSOME ENTRIES IN YOUR ANSWER WERE REJECTED:\n[{\"cause\":\"b\",\"fix\":\"c\",\"kind\":\"pitfall\",\"summary\":\"s\",\"symptom\":\"a\",\"title\":\"p1\",\"trigger\":{\"paths\":[]}},{\"cause\":\"b\",\"fix\":\"c\",\"kind\":\"pitfall\",\"summary\":\"s\",\"symptom\":\"a\",\"title\":\"p3\",\"trigger\":\"not an object\"},{\"kind\":\"assumption\",\"summary\":\"s\",\"title\":\"t\"},{\"boundaries\":\"b\",\"definition\":\"d\",\"kind\":\"concept\",\"summary\":\"s\",\"title\":\"\"},{\"boundaries\":\"b\",\"definition\":\"d\",\"kind\":\"concept\",\"notToConfuseWith\":\"c2\",\"summary\":\"\",\"title\":\"c1\"},null,{\"boundaries\":\"b\",\"definition\":null,\"fields\":{\"definition\":\"nested\"},\"kind\":\"concept\",\"summary\":\"s\",\"title\":\"c3\"}]\n\nPROBLEMS:\n- entry \"p1\": trigger needs at least one of paths, commands or errorSignature\n- entry \"p3\": trigger needs at least one of paths, commands or errorSignature\n- entry \"t\": kind \"assumption\" is not one of convention, decision, pitfall, recipe, concept\n- entry \"\": title is missing\n- entry \"c1\": summary is missing\n- entry \"\": kind \"\" is not one of convention, decision, pitfall, recipe, concept\n- entry \"c3\": definition is missing\nOutput a JSON array with corrected versions of ONLY these rejected entries (flat objects as specified; fill every required field). Drop an entry you cannot support. Output the JSON array only."
+    },
+    {
+      "note": 4,
+      "answer": "[{\"kind\":\"convention\",\"title\":\"Run the spec script\",\"summary\":\"s\",\"rule\":\"r\",\"scope\":[\"x\"],\"quote\":\"Run scripts/run-pg-spec.sh before you trust\"},{\"kind\":\"convention\",\"title\":\"<b> & </b>\",\"summary\":\"s & <i>\",\"rule\":\"r\",\"quote\":\"Use <b>bold</b> & keep a<b> as it is.\"},{\"kind\":\"concept\",\"title\":\"\\u2028odd\",\"summary\":\"s\",\"definition\":\"d\"}]",
+      "built": {
+        "dropped": 2,
+        "ops": [
+          {
+            "entry": {
+              "fields": {
+                "rule": "r",
+                "scope": [
+                  "x"
+                ]
+              },
+              "kind": "convention",
+              "summary": "s",
+              "title": "Run the spec script"
+            },
+            "op": "add",
+            "sources": [
+              {
+                "kind": "note",
+                "quote": "Run `scripts/run-pg-spec.sh`   before you\ntrust",
+                "ref": "note-5"
+              }
+            ]
+          }
+        ],
+        "parsed": true,
+        "principles": 0,
+        "problems": [
+          "entry \"<b> & </b>\": scope is missing",
+          "entry \"\\u2028odd\": boundaries is missing"
+        ]
+      },
+      "suffix": "\n\nSOME ENTRIES IN YOUR ANSWER WERE REJECTED:\n[{\"kind\":\"convention\",\"quote\":\"Use \\u003cb\\u003ebold\\u003c/b\\u003e \\u0026 keep a\\u003cb\\u003e as it is.\",\"rule\":\"r\",\"summary\":\"s \\u0026 \\u003ci\\u003e\",\"title\":\"\\u003cb\\u003e \\u0026 \\u003c/b\\u003e\"},{\"definition\":\"d\",\"kind\":\"concept\",\"summary\":\"s\",\"title\":\"\\u2028odd\"}]\n\nPROBLEMS:\n- entry \"<b> & </b>\": scope is missing\n- entry \"\\u2028odd\": boundaries is missing\nOutput a JSON array with corrected versions of ONLY these rejected entries (flat objects as specified; fill every required field). Drop an entry you cannot support. Output the JSON array only."
+    },
+    {
+      "note": 0,
+      "answer": "[{\"kind\":\"convention\",\"title\":\"r0\",\"summary\":\"s\",\"rule\":\"r\"},{\"kind\":\"convention\",\"title\":\"r1\",\"summary\":\"s\",\"rule\":\"r\"},{\"kind\":\"convention\",\"title\":\"r2\",\"summary\":\"s\",\"rule\":\"r\"},{\"kind\":\"convention\",\"title\":\"r3\",\"summary\":\"s\",\"rule\":\"r\"},{\"kind\":\"convention\",\"title\":\"r4\",\"summary\":\"s\",\"rule\":\"r\"},{\"kind\":\"convention\",\"title\":\"r5\",\"summary\":\"s\",\"rule\":\"r\"},{\"kind\":\"convention\",\"title\":\"r6\",\"summary\":\"s\",\"rule\":\"r\"},{\"kind\":\"convention\",\"title\":\"r7\",\"summary\":\"s\",\"rule\":\"r\"},{\"kind\":\"convention\",\"title\":\"r8\",\"summary\":\"s\",\"rule\":\"r\"},{\"kind\":\"convention\",\"title\":\"r9\",\"summary\":\"s\",\"rule\":\"r\"},{\"kind\":\"convention\",\"title\":\"r10\",\"summary\":\"s\",\"rule\":\"r\"},{\"kind\":\"convention\",\"title\":\"r11\",\"summary\":\"s\",\"rule\":\"r\"},{\"kind\":\"convention\",\"title\":\"r12\",\"summary\":\"s\",\"rule\":\"r\"},{\"kind\":\"convention\",\"title\":\"r13\",\"summary\":\"s\",\"rule\":\"r\"}]",
+      "built": {
+        "dropped": 14,
+        "ops": [],
+        "parsed": true,
+        "principles": 0,
+        "problems": [
+          "entry \"r0\": scope is missing",
+          "entry \"r1\": scope is missing",
+          "entry \"r2\": scope is missing",
+          "entry \"r3\": scope is missing",
+          "entry \"r4\": scope is missing",
+          "entry \"r5\": scope is missing",
+          "entry \"r6\": scope is missing",
+          "entry \"r7\": scope is missing",
+          "entry \"r8\": scope is missing",
+          "entry \"r9\": scope is missing",
+          "entry \"r10\": scope is missing",
+          "entry \"r11\": scope is missing",
+          "entry \"r12\": scope is missing",
+          "entry \"r13\": scope is missing"
+        ]
+      },
+      "suffix": "\n\nSOME ENTRIES IN YOUR ANSWER WERE REJECTED:\n[{\"kind\":\"convention\",\"rule\":\"r\",\"summary\":\"s\",\"title\":\"r0\"},{\"kind\":\"convention\",\"rule\":\"r\",\"summary\":\"s\",\"title\":\"r1\"},{\"kind\":\"convention\",\"rule\":\"r\",\"summary\":\"s\",\"title\":\"r2\"},{\"kind\":\"convention\",\"rule\":\"r\",\"summary\":\"s\",\"title\":\"r3\"},{\"kind\":\"convention\",\"rule\":\"r\",\"summary\":\"s\",\"title\":\"r4\"},{\"kind\":\"convention\",\"rule\":\"r\",\"summary\":\"s\",\"title\":\"r5\"},{\"kind\":\"convention\",\"rule\":\"r\",\"summary\":\"s\",\"title\":\"r6\"},{\"kind\":\"convention\",\"rule\":\"r\",\"summary\":\"s\",\"title\":\"r7\"},{\"kind\":\"convention\",\"rule\":\"r\",\"summary\":\"s\",\"title\":\"r8\"},{\"kind\":\"convention\",\"rule\":\"r\",\"summary\":\"s\",\"title\":\"r9\"},{\"kind\":\"convention\",\"rule\":\"r\",\"summary\":\"s\",\"title\":\"r10\"},{\"kind\":\"convention\",\"rule\":\"r\",\"summary\":\"s\",\"title\":\"r11\"},{\"kind\":\"convention\",\"rule\":\"r\",\"summary\":\"s\",\"title\":\"r12\"},{\"kind\":\"convention\",\"rule\":\"r\",\"summary\":\"s\",\"title\":\"r13\"}]\n\nPROBLEMS:\n- entry \"r0\": scope is missing\n- entry \"r1\": scope is missing\n- entry \"r2\": scope is missing\n- entry \"r3\": scope is missing\n- entry \"r4\": scope is missing\n- entry \"r5\": scope is missing\n- entry \"r6\": scope is missing\n- entry \"r7\": scope is missing\n- entry \"r8\": scope is missing\n- entry \"r9\": scope is missing\n- entry \"r10\": scope is missing\n- entry \"r11\": scope is missing\nOutput a JSON array with corrected versions of ONLY these rejected entries (flat objects as specified; fill every required field). Drop an entry you cannot support. Output the JSON array only."
+    }
+  ],
+  "paths": {
+    "root": "/home/me/checkouts/orbit-fork",
+    "name": "orbit",
+    "files": [
+      "src/app/main.go",
+      "docs/guide.md",
+      "README.md",
+      "src/web/src/lib/wikiImport.ts"
+    ],
+    "cases": [
+      {
+        "path": "src/app/main.go",
+        "anchor": "src/app/main.go"
+      },
+      {
+        "path": "/root/orbit/docs/guide.md",
+        "anchor": "docs/guide.md"
+      },
+      {
+        "path": "/root/.orbit/worktrees/0e2c/src/app/main.go",
+        "anchor": "src/app/main.go"
+      },
+      {
+        "path": "/home/me/checkouts/orbit-fork/docs/guide.md",
+        "anchor": "docs/guide.md"
+      },
+      {
+        "path": "~/code/orbit/src/app",
+        "anchor": "src/app"
+      },
+      {
+        "path": "`src/app/main.go:12-20`",
+        "anchor": "src/app/main.go"
+      },
+      {
+        "path": "src/app/main.go:12",
+        "anchor": "src/app/main.go"
+      },
+      {
+        "path": "./docs/",
+        "anchor": "docs"
+      },
+      {
+        "path": "src/does/not/exist.go",
+        "anchor": null
+      },
+      {
+        "path": "/etc/passwd",
+        "anchor": null
+      },
+      {
+        "path": "",
+        "anchor": null
+      },
+      {
+        "path": "\"README.md\"",
+        "anchor": "README.md"
+      },
+      {
+        "path": "'src/web/src/lib/'",
+        "anchor": "src/web/src/lib"
+      },
+      {
+        "path": "src",
+        "anchor": "src"
+      },
+      {
+        "path": "/orbit/src/app/main.go",
+        "anchor": "src/app/main.go"
+      },
+      {
+        "path": "/x/orbit/orbit/src/app/main.go",
+        "anchor": null
+      },
+      {
+        "path": "C:/orbit/src/app/main.go",
+        "anchor": null
+      },
+      {
+        "path": "src/app/main.go:1:2",
+        "anchor": "src/app/main.go"
+      },
+      {
+        "path": "src/app/main.go:x",
+        "anchor": null
+      },
+      {
+        "path": "/",
+        "anchor": null
+      }
+    ]
+  }
+}

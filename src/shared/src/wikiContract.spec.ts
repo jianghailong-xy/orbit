@@ -135,6 +135,7 @@ import {
 import {
   WIKI_EXECUTOR_ENV,
   WIKI_EXECUTOR_MODES,
+  WIKI_IMPORT_JOB,
   WIKI_JOB,
   WIKI_JOB_FAILURE_KINDS,
   WIKI_JOB_KINDS,
@@ -1552,6 +1553,37 @@ describe('wiki contract', () => {
     expect(imports.cli.tool).toMatch(/^none/u);
     expect(imports.cli.precondition).toMatch(/never write an entry yourself/u);
     expect(CONTRACT.agentSurface.tools).not.toContain('wiki_import');
+  });
+
+  it('reads an import on the server when the switch gives the account to it, under the same rules (server execution P5)', () => {
+    const server = CONTRACT.import.server;
+    // The job's numbers and words are the shared constants the worker and the door run by.
+    expect(server.priority).toBe(WIKI_IMPORT_JOB.priority);
+    expect(server.steps).toEqual({ ...WIKI_IMPORT_JOB.steps });
+    expect(server.maxTokens).toBe(WIKI_IMPORT_JOB.maxTokens);
+    expect([server.defaultConcurrency, server.maxConcurrency, server.maxNotes])
+      .toEqual([WIKI_IMPORT_JOB.defaultConcurrency, WIKI_IMPORT_JOB.maxConcurrency, WIKI_IMPORT_JOB.maxNotes]);
+    expect(server.systemPrompt).toBe(WIKI_IMPORT_JOB.systemPrompt);
+    expect(server.snapshot.waitSeconds).toBe(WIKI_IMPORT_JOB.snapshotWaitSeconds);
+    // Both of a note's calls are the import's to wait for and to run: its wait limit, the default budget.
+    for (const step of Object.values(WIKI_IMPORT_JOB.steps)) {
+      expect(wikiModelWaitLimitSeconds(step)).toBe(WIKI_MODEL_QUEUE.waitLimitSeconds.import);
+      expect(wikiModelCallBudgetSeconds(step)).toBe(WIKI_MODEL_QUEUE.defaultCallBudgetSeconds);
+    }
+    // Three routes on the runner door, beside the two the import has always had, and none of them decides anything.
+    const runner = CONTRACT.agentSurface.doors.runner;
+    expect(runner.importJobRoutes).toEqual([WIKI_IMPORT_JOB.routes.executor, WIKI_IMPORT_JOB.routes.create, WIKI_IMPORT_JOB.routes.read]);
+    expect([server.executor.route, server.create.route, server.read.route]).toEqual(runner.importJobRoutes);
+    for (const route of runner.importJobRoutes) expect(route).toMatch(/^(GET|POST) \/api\/runner\/wiki\/spaces\/:id\/import(-jobs(\/:jobId)?)?$/u);
+    // A job of its own kind, which the worker runs; and the runner's half answers exactly what the server's does.
+    expect(WIKI_JOB_KINDS).toContain('import');
+    expect(CONTRACT.jobs.kindRuns.import).toMatch(/import\.server/u);
+    expect(server.when).toMatch(/Under runner \(the default\)/u);
+    expect(server.propose).toMatch(/origin import/u);
+    expect(server.deterministic).toContain('src/shared/src/wiki-import.fixture.json');
+    for (const file of ['src/shared/src/wiki-import.fixture.json', 'src/runner-go/wiki_import_fixture_test.go', 'src/apiserver/src/wiki-worker/wiki-import-golden.spec.ts']) {
+      expect(existsSync(path.join(ROOT, file)), `${file} does not exist`).toBe(true);
+    }
   });
 
   it('calls the System model from the wiki-worker alone, and reads back its name and state only (server execution P1a)', () => {
