@@ -59,6 +59,7 @@ function evaluate(expression, event, ref, platform = '', outputs = {}) {
   // GitHub compares strings and startsWith without case sensitivity. All literals in these
   // guards are lowercase; normalize input strings to preserve that behavior in the test.
   // needs.<job>.outputs.<name> becomes a property read (job ids contain '-').
+  // The timeout only stops a runaway expression; a loaded host can stall a call past 100 ms.
   const source = expression.replace(/\bneeds\.([\w-]+)\.outputs\.(\w+)/g,
     (_, jobName, name) => `needs[${JSON.stringify(jobName)}].outputs.${name}`);
   const needs = Object.fromEntries(Object.entries(outputs).map(([name, values]) => [name, { outputs: values }]));
@@ -70,7 +71,7 @@ function evaluate(expression, event, ref, platform = '', outputs = {}) {
     inputs: { platform: platform.toLowerCase() },
     needs,
     startsWith: (value, prefix) => value.toLowerCase().startsWith(prefix.toLowerCase()),
-  }, { timeout: 100 });
+  }, { timeout: 5000 });
 }
 
 /**
