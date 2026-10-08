@@ -48,7 +48,7 @@ import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { PrismaClient } from '@prisma/client';
-import { toUuid, uuidToBase62, WIKI_MODEL_QUEUE, WIKI_PLAN_SERVER_JOB, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OPS } from '@orbit/shared';
+import { toUuid, uuidToBase62, WIKI_MODEL_QUEUE, WIKI_PLAN_SERVER_JOB, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY, WIKI_REPO_OPS } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -391,7 +391,7 @@ async function owner(h: Harness): Promise<Owner> {
   await h.sql.query(
     `INSERT INTO "runner"("id","name","owner_id","token_hash","capabilities","capabilities_reported_at","last_heartbeat_at")
      VALUES ($1,'spec',$2,$3,$4,now(),now())`,
-    [runnerId, id, createHash('sha256').update(runnerToken).digest('hex'), [WIKI_REPO_OP_CAPABILITY]],
+    [runnerId, id, createHash('sha256').update(runnerToken).digest('hex'), [WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY]],
   );
   const workspaceId = randomUUID();
   await h.sql.query(`INSERT INTO "workspace"("id","name","owner_id","env","runner_id","work_dir") VALUES ($1,'app',$2,'{}',$3,'~/app')`, [workspaceId, id, runnerId]);
@@ -497,18 +497,23 @@ async function redraft(h: Harness, o: Owner, instructions?: string): Promise<str
 
 // ── the runner ───────────────────────────────────────────────────────────────────────────────────────
 
-/** One read answered the way wiki_repo_ops.go answers it: each item within its own limit, the whole within one section's material. */
+/** One read answered the way wiki_repo_ops.go answers it now: the whole file, up to the file cap (owner 2026-10-08). */
 function readAnswer(input: { sha: string; items: Array<{ path: string; maxChars?: number }> }): Record<string, unknown> {
   let total = 0;
   const items = input.items.map((item) => {
     const text = FIXTURE.files[item.path];
     if (text === undefined) return { path: item.path, found: false, chars: 0 };
-    let max = item.maxChars && item.maxChars > 0 ? item.maxChars : WIKI_REPO_OPS.docSectionChars;
-    max = Math.min(max, WIKI_REPO_OPS.sectionChars, WIKI_REPO_OPS.sectionChars - total);
-    const runes = [...text];
-    const cut = runes.length <= max ? text : `${runes.slice(0, max - 8).join('')}\n…（后略）\n`;
-    total += [...cut].length;
-    return { path: item.path, found: true, text: cut, truncated: cut !== text, chars: [...cut].length };
+    const size = Buffer.byteLength(text, 'utf8');
+    if (size > WIKI_REPO_OPS.wholeFileBytes) return { path: item.path, found: false, reason: 'too_large', size, chars: 0 };
+    let out = text;
+    if (item.maxChars && item.maxChars > 0) {
+      // A caller that names a limit is answered within it: what an older control plane asks by.
+      const max = Math.min(item.maxChars, WIKI_REPO_OPS.boundedChars);
+      const runes = [...text];
+      if (runes.length > max) out = `${runes.slice(0, max - 8).join('')}\n…（后略）\n`;
+    }
+    total += [...out].length;
+    return { path: item.path, found: true, size, text: out, truncated: out !== text, chars: [...out].length };
   });
   return { read: { sha: input.sha, items, chars: total } };
 }
@@ -526,7 +531,7 @@ function playRunner(h: Harness, o: Owner, over: { sha?: string; index?: string }
   let stopped = false;
   const loop = (async () => {
     while (!stopped) {
-      const claimed = await ops.dispatch({ runnerId: o.runnerId, leaseOwner: randomUUID(), draining: false, capabilities: [WIKI_REPO_OP_CAPABILITY] });
+      const claimed = await ops.dispatch({ runnerId: o.runnerId, leaseOwner: randomUUID(), draining: false, capabilities: [WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY] });
       for (const op of claimed) {
         seen.push({ kind: op.kind, input: op.input });
         const result = op.kind === 'snapshot'
@@ -663,6 +668,11 @@ test('a draft is written in four steps through the queue, gated on the snapshot,
   assert.equal(runner.ops[0].kind, 'snapshot');
   assert.ok(runner.ops.some((op) => op.kind === 'read' && (op.input.items as Array<{ path: string }>).some((item) => item.path === 'docs/README.md')),
     'the overview\'s documents are read at the sha');
+  for (const op of runner.ops.filter((one) => one.kind === 'read')) {
+    for (const item of op.input.items as Array<{ path: string; maxChars?: number }>) {
+      assert.equal(item.maxChars ?? null, null, `${item.path} was asked with a window, not as a whole file`);
+    }
+  }
   // What was stored: the whole plan, the job its author, the System model its model, the snapshot its check.
   const stored = await versions(h, o.spaceId);
   assert.equal(stored.length, 2);
@@ -805,7 +815,14 @@ test('every reference is checked on the snapshot — a symbol the index lacks by
   // The file a symbol was looked for in, read at the sha: localHelper is declared in client.ts, not store.go.
   const reads = runner.ops.filter((op) => op.kind === 'read').flatMap((op) => (op.input.items as Array<{ path: string }>).map((item) => item.path));
   for (const file of ['src/app/store.go', 'src/web/client.ts']) assert.ok(reads.includes(file), `${file} was not read for a symbol: ${reads.join(', ')}`);
-  for (const op of runner.ops.filter((one) => one.kind === 'read')) assert.equal(op.input.sha, SHA, 'every read is at the snapshot\'s sha');
+  for (const op of runner.ops.filter((one) => one.kind === 'read')) {
+    assert.equal(op.input.sha, SHA, 'every read is at the snapshot\'s sha');
+    // owner 2026-10-08: the plan asks for whole files, not a window of them — the symbol fallback reads the
+    // text the snapshot does not carry, and a symbol past the old 22,000 characters is only in the whole file.
+    for (const item of op.input.items as Array<{ path: string; maxChars?: number }>) {
+      assert.equal(item.maxChars ?? null, null, `${item.path} was asked with a window, not as a whole file`);
+    }
+  }
   const redos = asked(h, '# 任务：改正 plan 里《');
   assert.equal(redos.length, 1);
   assert.ok(redos[0].includes('改正 plan 里《存储》'));

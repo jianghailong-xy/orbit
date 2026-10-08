@@ -370,7 +370,10 @@ export interface WikiPlanProposal {
   change: { doc: WikiPlanDocInput; category: WikiPlanCategoryInput | null };
   facts: Array<{ kind: WikiPlanFactKind; id: string }>;
   gate: WikiPlanGateReport;
-  authorSessionId: string;
+  /** The maintenance run that filed it: a session's, or null for a run the server's wiki job ran (P8, 0406). */
+  authorSessionId: string | null;
+  /** The wiki_job that filed it when the server ran the run (contract `plan.proposals.author`); null otherwise. */
+  authorJobId: string | null;
   decidedByUserId: string | null;
   decidedAt: string | null;
   decisionNote: string | null;

@@ -5,8 +5,11 @@ import {
   WIKI_REPO_OPS,
   WIKI_REPO_OP_CAPABILITY,
   WIKI_REPO_OP_KINDS,
+  WIKI_REPO_OP_READ_CAPABILITY,
   WIKI_REPO_OP_RESULT_STATES,
   wikiMaintenanceSettings,
+  type WikiRepoFileRead,
+  type WikiRepoFileState,
   type WikiRepoLook,
   type WikiRepoOpKind,
   type WikiRepoOpState,
@@ -36,10 +39,17 @@ import { notifyRunnerWakeOnCommit } from '../realtime/runner-wake';
  * machine being restarted mid-snapshot looks like.
  *
  * THE RESULT IS ALSO THE ANSWER. A kind's result is a JSON object small enough for one request body,
- * except a snapshot, which may not be: above WIKI_REPO_OPS.inlineBytes it travels in fragments staged
- * under the operation (wiki_repo_op_fragment) and is reassembled here — by its sha256 and its byte count
- * — before it becomes the space's snapshot. A snapshot that fails halfway therefore leaves the cache as
- * it was, and the staged fragments are dropped with the operation's settle.
+ * except a snapshot or a read, which may not be: above WIKI_REPO_OPS.inlineBytes the answer travels in
+ * fragments staged under the operation (wiki_repo_op_fragment) and is reassembled here — by its sha256 and
+ * its byte count — before it becomes the space's snapshot or the files of its read cache. An upload that
+ * therefore fails halfway leaves the cache as it was, and the staged fragments are dropped with the
+ * operation's settle.
+ *
+ * A READ IS CACHED, NOT REPLAYED. A read answers with the whole file at the sha (owner 2026-10-08) and
+ * every item of it is written into `wiki_repo_file`, one row per (space, sha, path), in the transaction that
+ * settles the operation. A pipeline that needs a file asks for it here: what the space already holds is
+ * served, and only the rest is asked of the runner — the same text is never read twice. A `cut` row (the
+ * bounded window an older runner answers with) satisfies an older runner's read and not a whole-file one.
  *
  * WHAT IS A SERVICE AND WHAT IS NOT. The three writes that own a transaction are methods of `WikiRepoOps`
  * below, so each retry is labelled the way every other retry in this tree is (db-write-inventory.ts). The
@@ -120,9 +130,31 @@ export interface WikiRepoReadiness {
   /** The workspace the operations read, when one is named and still exists. */
   workspace: { id: string; workDir: string | null } | null;
   /** The machine that runs them, when the workspace names one. */
-  runner: { id: string; name: string; version: string | null; capability: boolean; online: boolean } | null;
+  runner: {
+    id: string;
+    name: string;
+    version: string | null;
+    /** It declared `wiki-repo-op/v1`: without it, it is handed no repository work at all. */
+    capability: boolean;
+    /** It declared `wiki-repo-op-read/v1`: with it, a read answers with the whole file. */
+    wholeFile: boolean;
+    online: boolean;
+  } | null;
   /** Operations of this space that have not settled: what a reader is waiting on. */
   pending: number;
+}
+
+/**
+ * Whether the steps that need the repository can run at all (design §7): a machine is there, beating, and
+ * able to be handed operations. A runner with only `wiki-repo-op/v1` can — it reads the old bounded window
+ * (`runner_upgrade` says to upgrade it, and the step still runs, cut short) — while one with no repository
+ * capability at all cannot, and a step that waited on it would wait out its whole limit to learn that.
+ */
+export function wikiRepoStepsCanRun(readiness: WikiRepoReadiness): boolean {
+  if (readiness.look === 'no_workspace' || readiness.look === 'runner_missing' || readiness.look === 'runner_offline') {
+    return false;
+  }
+  return readiness.runner?.capability === true;
 }
 
 // ── the three writes that own a transaction ─────────────────────────────────────────────────────
@@ -344,10 +376,11 @@ export class WikiRepoOps {
       if (settled.count === 0) throw new WikiRepoOpRefused('STALE_CLAIM');
 
       if (state === 'succeeded') {
-        const answer = await settleSnapshot(tx, row, result as Record<string, unknown> | null);
+        const answer = await settleSnapshot(tx, row, result as Record<string, unknown> | null)
+          ?? await settleRead(tx, row, result as Record<string, unknown> | null);
         // A snapshot answers with its shape, never the payload: the payload is the cache's, and echoing a
         // megabyte of it into the row would double the bytes for a reader that has to be told where it is
-        // anyway.
+        // anyway. A read answers with what became of each item, its text being the cache's too.
         if (answer) {
           await tx.wikiRepoOp.update({ where: { id: row.id }, data: { result: answer as Prisma.InputJsonValue } });
         }
@@ -561,7 +594,134 @@ async function settleSnapshot(
     });
     ordinal += 1;
   }
+  // What is kept of the repository is the commit the snapshot names: the files read at another sha go with
+  // the snapshot that replaced them (design §7). A read in flight for an older sha that settles afterwards
+  // writes its own rows back, which the next snapshot drops.
+  await tx.wikiRepoFile.deleteMany({ where: { spaceId: row.spaceId, sha: { not: sha } } });
   return { sha, bytes, digest, fragments };
+}
+
+/**
+ * A succeeded read (§7, owner 2026-10-08): every item becomes a row of the space's file cache at
+ * (space, sha, path) — the whole file for `found`, the bounded window for `cut`, and the reason for
+ * `missing` and `too_large` — and the row's result is written with what became of each item. The texts
+ * themselves are the cache's, never echoed into the result: a reader that wants one reads it there.
+ */
+async function settleRead(
+  tx: Prisma.TransactionClient,
+  row: { id: string; spaceId: string; ownerId: string; kind: string },
+  result: Record<string, unknown> | null,
+): Promise<Record<string, unknown> | null> {
+  if (row.kind !== 'read') return null;
+  const read = readShapeOf(result);
+  const answer = await readAnswerOf(tx, row.id, read);
+  const sha = String(answer.sha ?? '').toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(sha)) {
+    throw new WikiRepoOpRefused('INVALID_RESULT', 'a read result names the commit it read at');
+  }
+  if (read.sha != null && String(read.sha).toLowerCase() !== sha) {
+    throw new WikiRepoOpRefused('INVALID_RESULT', 'the read is not of the commit the result names');
+  }
+  if (!Array.isArray(answer.items)) {
+    throw new WikiRepoOpRefused('INVALID_RESULT', 'a read result names its items');
+  }
+  const items: Array<Record<string, unknown>> = [];
+  for (const raw of answer.items) {
+    if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw new WikiRepoOpRefused('INVALID_RESULT', 'a read item is an object');
+    }
+    const piece = raw as Record<string, unknown>;
+    const path = typeof piece.path === 'string' ? piece.path.trim() : '';
+    if (path === '') throw new WikiRepoOpRefused('INVALID_RESULT', 'a read item names a path');
+    const found = piece.found === true;
+    const reason = typeof piece.reason === 'string' ? piece.reason : '';
+    const truncated = piece.truncated === true;
+    const section = typeof piece.section === 'string' ? piece.section.trim() : '';
+    const text = found && typeof piece.text === 'string' ? piece.text : '';
+    const size = Number.isFinite(Number(piece.size)) ? Math.max(0, Number(piece.size)) : 0;
+    if (!found && reason !== '' && reason !== 'too_large') {
+      throw new WikiRepoOpRefused('INVALID_RESULT', `a read item is missing for ${reason}, which is no reason`);
+    }
+    if (Buffer.byteLength(text, 'utf8') > WIKI_REPO_OPS.wholeFileBytes) {
+      throw new WikiRepoOpRefused('INVALID_RESULT', `${path} answers with more than a whole file may be`);
+    }
+    // What the runner answered: the whole file, or part of it — one section, or the old window's cut, which
+    // a whole-file reader treats as a miss and this cache keeps for the bounded reader that asked.
+    const state: WikiRepoFileState = !found
+      ? (reason === 'too_large' ? 'too_large' : 'missing')
+      : (truncated || section !== '' ? 'cut' : 'found');
+    await tx.wikiRepoFile.upsert({
+      where: { spaceId_sha_path: { spaceId: row.spaceId, sha, path } },
+      create: { ownerId: row.ownerId, spaceId: row.spaceId, sha, path, state, content: text, sizeBytes: BigInt(size) },
+      update: { state, content: text, sizeBytes: BigInt(size) },
+    });
+    items.push({
+      path,
+      state,
+      chars: Number.isFinite(Number(piece.chars)) ? Number(piece.chars) : [...text].length,
+    });
+  }
+  return { read: { sha, items } };
+}
+
+/** A read result's own object: the items, or — when the answer travelled in fragments — their shape. */
+function readShapeOf(result: Record<string, unknown> | null): Record<string, unknown> {
+  const read = result?.read;
+  if (read == null || typeof read !== 'object' || Array.isArray(read)) {
+    throw new WikiRepoOpRefused('INVALID_RESULT', 'a read result is an object');
+  }
+  return read as Record<string, unknown>;
+}
+
+/**
+ * The answer of a read: the items it carries, or — when it was too large for one request body — the staged
+ * fragments reassembled and read back. The digest and the byte count the result names are checked against
+ * what was staged, so a payload that is not all there is refused rather than cached in part.
+ */
+async function readAnswerOf(
+  tx: Prisma.TransactionClient,
+  opId: string,
+  read: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  if (Array.isArray(read.items)) return read;
+  const staged = await tx.wikiRepoOpFragment.findMany({
+    where: { opId },
+    orderBy: { ordinal: 'asc' },
+    select: { ordinal: true, content: true },
+  });
+  const total = Number(read.fragments ?? 0);
+  if (staged.length === 0 || staged.length !== total) {
+    throw new WikiRepoOpRefused(
+      'INVALID_RESULT',
+      `a read in fragments names how many there are: ${staged.length} staged, ${total} named`,
+    );
+  }
+  if (staged.some((fragment, index) => fragment.ordinal !== index)) {
+    throw new WikiRepoOpRefused('INVALID_RESULT', 'the staged fragments are not a run of 0..n');
+  }
+  const payload = staged.map((fragment) => fragment.content).join('');
+  const bytes = Buffer.byteLength(payload, 'utf8');
+  if (read.bytes != null && Number(read.bytes) !== bytes) {
+    throw new WikiRepoOpRefused('INVALID_RESULT', 'the read is not as many bytes as the result says');
+  }
+  const digest = createHash('sha256').update(payload, 'utf8').digest('hex');
+  if (read.digest != null && String(read.digest) !== digest) {
+    throw new WikiRepoOpRefused('INVALID_RESULT', 'the read does not hash as the result says it does');
+  }
+  let answer: unknown;
+  try {
+    answer = JSON.parse(payload);
+  } catch {
+    throw new WikiRepoOpRefused('INVALID_RESULT', 'the read payload is not JSON');
+  }
+  if (answer == null || typeof answer !== 'object' || Array.isArray(answer)) {
+    throw new WikiRepoOpRefused('INVALID_RESULT', 'a read payload is an object');
+  }
+  const shape = answer as Record<string, unknown>;
+  if (String(shape.sha ?? '').toLowerCase() !== String(read.sha ?? '').toLowerCase()) {
+    throw new WikiRepoOpRefused('INVALID_RESULT', 'the read payload is not of the commit the result names');
+  }
+  return shape;
 }
 
 /** A payload in storage-sized pieces: the same split a reader concatenates back by ordinal. */
@@ -637,6 +797,136 @@ export async function readWikiRepoSnapshot(
     fragments: header.fragmentCount,
     index: fragments.map((fragment) => fragment.content).join(''),
   };
+}
+
+/** What a pipeline reads a file as: its text, and whether it is the whole file at the sha. */
+export function wikiRepoFileText(file: WikiRepoFileRead | null | undefined): string {
+  return file != null && (file.state === 'found' || file.state === 'cut') ? file.text : '';
+}
+
+/**
+ * The files of a commit the space already holds, one entry per path the read cache has a row for
+ * (contract `repoOps.cache`, design §7): what a pipeline serves without asking the runner at all.
+ *
+ * `wholeFile` says what the caller needs. A `cut` row is the bounded window an older runner answered with:
+ * it satisfies a caller reading the same way and is a miss for a whole-file reader, which must read the
+ * file again once its runner can. `missing` and `too_large` are answers too — the commit does not change —
+ * and are served to both.
+ */
+export async function readCachedWikiRepoFiles(
+  prisma: PrismaService,
+  input: { ownerId: string; spaceId: string; sha: string; paths: readonly string[]; wholeFile: boolean },
+): Promise<Map<string, WikiRepoFileRead>> {
+  const out = new Map<string, WikiRepoFileRead>();
+  if (input.paths.length === 0) return out;
+  const rows = await prisma.wikiRepoFile.findMany({
+    where: { ownerId: input.ownerId, spaceId: input.spaceId, sha: input.sha, path: { in: [...new Set(input.paths)] } },
+    select: { path: true, state: true, content: true, sizeBytes: true },
+  });
+  for (const row of rows) {
+    const state = row.state as WikiRepoFileState;
+    if (input.wholeFile && state === 'cut') continue;
+    out.set(row.path, { path: row.path, state, text: row.content, sizeBytes: Number(row.sizeBytes) });
+  }
+  return out;
+}
+
+/** What one read of files at a sha needs: the job it answers, the commit, and the paths wanted. */
+export interface WikiRepoFilesRequest {
+  prisma: PrismaService;
+  repoOps: WikiRepoOps;
+  jobId: string;
+  ownerId: string;
+  spaceId: string;
+  sha: string;
+  paths: readonly string[];
+  /** Whether the space's runner reads whole files; a bounded one is asked with the old limits. */
+  wholeFile: boolean;
+  /** The size of a path at the sha, from the snapshot, for packing a request; unknown reads as the cap. */
+  sizeOf?: (path: string) => number;
+  /** How long one operation is waited for. */
+  waitMs: number;
+  wake?: WikiRepoOpWake;
+  signal?: AbortSignal;
+}
+
+/**
+ * The text of the paths at the sha, cache first (§7, owner 2026-10-08): what the space holds is served as
+ * it is, and only the rest becomes a `read` operation — packed by the sizes the snapshot gives, waited for
+ * one at a time — after which the answer is read back from the cache. Every requested path has an entry;
+ * one the runner answered `missing` or `too_large` reads as null text through `wikiRepoFileText`.
+ *
+ * A wait that runs out, and an operation that failed, are the caller's to word: they throw.
+ */
+export async function readWikiRepoFiles(
+  request: WikiRepoFilesRequest,
+): Promise<Map<string, WikiRepoFileRead | null>> {
+  const paths = [...new Set(request.paths)];
+  const out = new Map<string, WikiRepoFileRead | null>();
+  const cached = await readCachedWikiRepoFiles(request.prisma, {
+    ownerId: request.ownerId,
+    spaceId: request.spaceId,
+    sha: request.sha,
+    paths,
+    wholeFile: request.wholeFile,
+  });
+  for (const path of paths) out.set(path, cached.get(path) ?? null);
+  const missing = paths.filter((path) => !cached.has(path));
+  if (missing.length === 0) return out;
+
+  // One request's material: the whole-file runner is packed by bytes (its answer may travel in fragments,
+  // so a pack is generous), the bounded one by the characters it can answer in all.
+  const budget = request.wholeFile ? WIKI_REPO_OPS.operationBytes : WIKI_REPO_OPS.sectionChars;
+  const packs: string[][] = [];
+  let pack: string[] = [];
+  let used = 0;
+  for (const path of missing) {
+    const size = request.wholeFile
+      ? Math.min(request.sizeOf?.(path) ?? WIKI_REPO_OPS.wholeFileBytes, WIKI_REPO_OPS.wholeFileBytes)
+      : Math.min(request.sizeOf?.(path) ?? WIKI_REPO_OPS.boundedChars, WIKI_REPO_OPS.boundedChars);
+    if (pack.length > 0 && used + size > budget) {
+      packs.push(pack);
+      pack = [];
+      used = 0;
+    }
+    pack.push(path);
+    used += size;
+  }
+  if (pack.length > 0) packs.push(pack);
+
+  for (const one of packs) {
+    const items = one.map((path) => (request.wholeFile
+      ? { path }
+      : { path, maxChars: Math.min(request.sizeOf?.(path) ?? WIKI_REPO_OPS.boundedChars, WIKI_REPO_OPS.boundedChars) }));
+    const { id } = await request.repoOps.enqueueWikiRepoOp({
+      jobId: request.jobId,
+      kind: 'read',
+      input: { sha: request.sha, items },
+    });
+    const settled = await waitForWikiRepoOp(request.prisma, {
+      id,
+      ownerId: request.ownerId,
+      timeoutMs: request.waitMs,
+      wake: request.wake,
+      signal: request.signal,
+    });
+    if (settled.state !== 'succeeded') {
+      throw new WikiRepoOpRefused(
+        'INVALID_RESULT',
+        `a read of ${one.length === 1 ? one[0] : `${one.length} files`} ${settled.state}: ${settled.error ?? 'no reason given'}`,
+      );
+    }
+  }
+
+  const read = await readCachedWikiRepoFiles(request.prisma, {
+    ownerId: request.ownerId,
+    spaceId: request.spaceId,
+    sha: request.sha,
+    paths: missing,
+    wholeFile: request.wholeFile,
+  });
+  for (const path of missing) out.set(path, read.get(path) ?? null);
+  return out;
 }
 
 /** Waiters hear about a settled operation over the channel; a poll answers when one is lost. */
@@ -905,14 +1195,15 @@ export async function readWikiRepoReadiness(
   }
   const online = !!runnerRow.lastHeartbeatAt
     && now.getTime() - runnerRow.lastHeartbeatAt.getTime() < RUNNER_OFFLINE_AFTER_MS;
-  const capability = !!runnerRow.capabilitiesReportedAt && runnerRow.capabilities.includes(WIKI_REPO_OP_CAPABILITY);
-  const runner = { id: runnerRow.id, name: runnerRow.name, version: runnerRow.version, capability, online };
-  return {
-    look: capability ? (online ? 'ready' : 'runner_offline') : 'runner_upgrade',
-    workspace: { id: workspace.id, workDir: workspace.workDir },
-    runner,
-    pending,
-  };
+  const reported = !!runnerRow.capabilitiesReportedAt;
+  const capability = reported && runnerRow.capabilities.includes(WIKI_REPO_OP_CAPABILITY);
+  const wholeFile = reported && runnerRow.capabilities.includes(WIKI_REPO_OP_READ_CAPABILITY);
+  const runner = { id: runnerRow.id, name: runnerRow.name, version: runnerRow.version, capability, wholeFile, online };
+  // A machine that cannot be handed repository work at all, and one that can but reads only the old
+  // bounded window, are both the runner to upgrade: the reason the status line gives is the same one, and
+  // the second still runs the steps (cut short) while the first would make them wait.
+  const look: WikiRepoLook = !capability ? 'runner_upgrade' : !online ? 'runner_offline' : wholeFile ? 'ready' : 'runner_upgrade';
+  return { look, workspace: { id: workspace.id, workDir: workspace.workDir }, runner, pending };
 }
 
 /** One operation's kind is one of the four the contract names; anything else is a caller's mistake. */

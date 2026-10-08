@@ -2633,16 +2633,37 @@ final class ConsoleModel {
     /// read from this window.
     private(set) var serverNothingToResend = false
 
-    /// What a retry sends: what is on screen when that answers it, and the server's answer when
-    /// nothing on screen does.
-    var retryMessageText: String {
-        let loaded = lastUserMessageText
-        return loaded.isEmpty ? serverRetryText : loaded
+    /// Whether the window holds words of the READER's to send — the only ones a press may promise
+    /// from this client. False when it holds another session's message (whose press is the server's
+    /// own re-send, so only the server's chooser can say what it carries — and may say there is
+    /// nothing at all) or none at all.
+    ///
+    /// Read off the window alone, deliberately: it decides whether to ask, so it must not depend on
+    /// the answer the asking produces.
+    var retryWordsAreTheReaders: Bool {
+        !lastUserMessageText.isEmpty && lastUserMessage.sessionMessage == nil
     }
 
-    /// Go and get it — only when the window came up empty, and only once per session.
+    /// What a retry sends: what is on screen when the reader sent it, and the server's answer when
+    /// the window has nothing — or when what it holds is another session's, which is not the
+    /// reader's to send again (Web parity: `retryIsTheReaders` in WorkspaceView.tsx).
+    var retryMessageText: String {
+        retryWordsAreTheReaders ? lastUserMessageText : serverRetryText
+    }
+
+    /// Whether the auto-retry card is in its continue state: the server answered that a re-send has
+    /// nothing of anybody's to carry, and the window is not holding words of the reader's that their
+    /// own send would carry instead — those are theirs to send, whatever an earlier look answered.
+    var retryContinues: Bool { serverNothingToResend && !retryWordsAreTheReaders }
+
+    /// Go and get it — when the window cannot answer for the press, and only once per session.
+    ///
+    /// The window answers for words of the reader's own; everything else is the server's chooser to
+    /// answer, and asking is what keeps the card from promising what that chooser would refuse —
+    /// on 2026-10-07 a card quoting the window's bubble (another session's, with the failure on a
+    /// turn nobody sent) had its press answered with 'no message for a retry to re-send'.
     func refreshRetryText() async {
-        guard lastUserMessageText.isEmpty, serverRetryText.isEmpty else { return }
+        guard !retryWordsAreTheReaders, serverRetryText.isEmpty, serverRetrySender == nil else { return }
         let answer = try? await api.retryMessage(sessionID: sessionID)
         serverRetryText = answer?.text ?? ""
         serverRetrySender = answer?.sessionMessage
@@ -2659,12 +2680,15 @@ final class ConsoleModel {
         // the same bubble. When it holds none — a run's message is thousands of events behind the
         // window — the server's words stand in, and there are no files to carry with them.
         let last = lastUserMessage
+        // Whose words this press may carry: the reader's own off their bubble, and otherwise the
+        // server's answer — the only thing that knows what its chooser would re-send.
+        let readers = retryWordsAreTheReaders
         guard !sending, !retryInFlight else { return }
         // Nothing of anybody's to re-send — the failure landed on a turn nobody sent, and the server
         // said so. The press sends the platform's own sentence in the reader's name
         // (`AutoRetryLogic.continueMessage`, quoted under the button they pressed), through the same
         // send as anything typed, so the composer's provider pick travels with it.
-        if last.text.isEmpty, serverRetryText.isEmpty, serverNothingToResend {
+        if !readers, serverRetryText.isEmpty, serverNothingToResend {
             retryInFlight = true
             defer { retryInFlight = false }
             sendingAutoRetry = true
@@ -2672,7 +2696,8 @@ final class ConsoleModel {
             await send(overrideText: AutoRetryLogic.continueMessage, overrideAttachments: [])
             return
         }
-        switch RetryRoute.of(loadedText: last.text, loadedSender: last.sessionMessage,
+        switch RetryRoute.of(loadedText: readers ? last.text : "",
+                             loadedSender: readers ? last.sessionMessage : nil,
                              serverText: serverRetryText, serverSender: serverRetrySender) {
         case .nothing:
             return
@@ -2685,7 +2710,9 @@ final class ConsoleModel {
             defer { retryInFlight = false }
             sendingAutoRetry = true
             defer { sendingAutoRetry = false }
-            await send(overrideText: text, overrideAttachments: last.attachments)
+            // The files of the bubble THOSE words came from — and none at all when they came from
+            // the server's answer, which this client holds no bubble for.
+            await send(overrideText: text, overrideAttachments: readers ? last.attachments : [])
         }
     }
 
