@@ -1,0 +1,130 @@
+argv: npx playwright test --config ui-migration/playwright.config.mjs
+tree: /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del
+head: 822c00ff04b3f00af6d983e043b4275ad2f025c0
+uncommitted:
+load: 23.27 25.68 26.53 23/6030 3768278
+disk: / 66602M available, TMPDIR /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/tmp
+started: 2026-10-08T11:17:58Z
+
+P0 expected screenshots: 88 P0.2 originals, 150 main drift references, 14 accepted migration differences.
+
+Running 112 tests using 1 worker
+
+  ✓    1 [chromium-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (14.2s)
+  ✓    2 [chromium-light-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.5s)
+  ✓    3 [chromium-light-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.7s)
+  ✓    4 [chromium-light-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (840ms)
+  ✓    5 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (2.6s)
+  ✓    6 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › share (477ms)
+  ✓    7 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (2.7s)
+  ✓    8 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.1s)
+  ✓    9 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (660ms)
+  ✓   10 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (781ms)
+  ✓   11 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session (3.7s)
+  ✓   12 [chromium-light-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline (20.0s)
+  ✓   13 [chromium-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (873ms)
+  ✓   14 [chromium-light-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (1.9s)
+  -   15 [chromium-light-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓   16 [chromium-light-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.8s)
+  ✓   17 [chromium-light-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.0s)
+  ✓   18 [chromium-light-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (937ms)
+  ✓   19 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (2.4s)
+  ✓   20 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › share (541ms)
+  ✓   21 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (6.8s)
+  ✓   22 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (1.7s)
+  ✓   23 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings (921ms)
+  ✓   24 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (915ms)
+  ✓   25 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › session (4.0s)
+  -   26 [chromium-light-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   27 [chromium-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (525ms)
+  ✓   28 [chromium-light-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (1.8s)
+  ✓   29 [chromium-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (9.3s)
+  ✓   30 [chromium-dark-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.8s)
+  ✓   31 [chromium-dark-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.3s)
+  ✓   32 [chromium-dark-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.1s)
+  ✓   33 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (2.6s)
+  ✓   34 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › share (665ms)
+  ✓   35 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (3.1s)
+  ✓   36 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.4s)
+  ✓   37 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.1s)
+  ✓   38 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (994ms)
+  ✓   39 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session (4.6s)
+  -   40 [chromium-dark-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   41 [chromium-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (735ms)
+  ✓   42 [chromium-dark-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (1.8s)
+  -   43 [chromium-dark-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓   44 [chromium-dark-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.5s)
+  ✓   45 [chromium-dark-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (827ms)
+  ✓   46 [chromium-dark-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (751ms)
+  ✓   47 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (1.9s)
+  ✓   48 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › share (485ms)
+  ✓   49 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (2.6s)
+  ✓   50 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (1.3s)
+  ✓   51 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings (653ms)
+  ✓   52 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (765ms)
+  ✓   53 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session (3.4s)
+  -   54 [chromium-dark-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   55 [chromium-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (603ms)
+  ✓   56 [chromium-dark-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (1.8s)
+  ✓   57 [webkit-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (8.2s)
+  ✓   58 [webkit-light-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.9s)
+  ✓   59 [webkit-light-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.3s)
+  ✓   60 [webkit-light-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.3s)
+  ✓   61 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (2.5s)
+  ✓   62 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › share (639ms)
+  ✓   63 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (3.4s)
+  ✓   64 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.7s)
+  ✓   65 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.1s)
+  ✓   66 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.2s)
+  ✓   67 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session (4.8s)
+  -   68 [webkit-light-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   69 [webkit-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (887ms)
+  ✓   70 [webkit-light-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.4s)
+  -   71 [webkit-light-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓   72 [webkit-light-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.9s)
+  ✓   73 [webkit-light-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.4s)
+  ✓   74 [webkit-light-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.2s)
+  ✓   75 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (2.5s)
+  ✓   76 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › share (659ms)
+  ✓   77 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (3.3s)
+  ✓   78 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (1.7s)
+  ✓   79 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings (823ms)
+  ✓   80 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (905ms)
+  ✓   81 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › session (4.0s)
+  -   82 [webkit-light-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   83 [webkit-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (746ms)
+  ✓   84 [webkit-light-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.3s)
+  ✓   85 [webkit-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (9.6s)
+  ✓   86 [webkit-dark-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (7.1s)
+  ✓   87 [webkit-dark-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.8s)
+  ✓   88 [webkit-dark-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (4.0s)
+  ✓   89 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (2.7s)
+  ✓   90 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › share (598ms)
+  ✓   91 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (2.9s)
+  ✓   92 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.4s)
+  ✓   93 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (911ms)
+  ✓   94 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (939ms)
+  ✓   95 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session (4.4s)
+  -   96 [webkit-dark-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   97 [webkit-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (806ms)
+  ✓   98 [webkit-dark-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.4s)
+  -   99 [webkit-dark-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓  100 [webkit-dark-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.7s)
+  ✓  101 [webkit-dark-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.1s)
+  ✓  102 [webkit-dark-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.2s)
+  ✓  103 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (2.1s)
+  ✓  104 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › share (534ms)
+  ✓  105 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (2.6s)
+  ✓  106 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (1.4s)
+  ✓  107 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings (812ms)
+  ✓  108 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (882ms)
+  ✓  109 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session (3.9s)
+  -  110 [webkit-dark-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓  111 [webkit-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (704ms)
+  ✓  112 [webkit-dark-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.2s)
+
+  11 skipped
+  101 passed (4.3m)
+exit=0
+load: 16.30 23.08 25.58 7/5478 3838023
+ended: 2026-10-08T11:22:34Z

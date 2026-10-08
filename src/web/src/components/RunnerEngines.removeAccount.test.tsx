@@ -77,7 +77,7 @@ let host: HTMLDivElement | null = null;
 
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  // Remove asks in an antd popup, which measures itself with a ResizeObserver jsdom does not have.
+  // The account menu measures its button with a ResizeObserver, which jsdom does not have.
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
 });
 afterAll(() => {
@@ -126,13 +126,14 @@ const click = async (el: HTMLElement) => {
     el.click();
   });
 };
-/** The confirmation's own Remove, once its popup is drawn (a portal, a few frames late on a slow host). */
+/** The confirmation's own Remove, once its popup — a dialog named by its question — is drawn (a portal,
+ *  a few frames late on a slow host). */
 const confirmation = async () => {
   let ok: HTMLButtonElement | undefined;
   await act(async () => {
     await vi.waitFor(
       () => {
-        ok = [...document.querySelectorAll<HTMLButtonElement>('.ant-popconfirm button')].find(
+        ok = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
           (b) => b.textContent?.trim() === 'Remove',
         );
         expect(ok).toBeDefined();

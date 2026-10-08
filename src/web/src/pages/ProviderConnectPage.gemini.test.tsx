@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -67,13 +66,11 @@ describe('connecting a Gemini key', { timeout: 30_000 }, () => {
       root.render(
         <QueryClientProvider client={client}>
           <MemoryRouter initialEntries={[at]}>
-            <AntApp>
-              <Routes>
-                <Route path="/providers" element={<div>providers</div>} />
-                <Route path="/providers/new/:slug" element={<ProviderConnectPage />} />
-                <Route path="/providers/:id" element={<ProviderConnectPage />} />
-              </Routes>
-            </AntApp>
+            <Routes>
+              <Route path="/providers" element={<div>providers</div>} />
+              <Route path="/providers/new/:slug" element={<ProviderConnectPage />} />
+              <Route path="/providers/:id" element={<ProviderConnectPage />} />
+            </Routes>
           </MemoryRouter>
         </QueryClientProvider>,
       );

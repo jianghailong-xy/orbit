@@ -1,6 +1,12 @@
-import { Alert, Button, Card, Descriptions, Result, Spin, Tag } from 'antd';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import { Alert } from '../components/ui/Alert';
+import { Badge } from '../components/ui/Badge';
+import { Button } from '../components/ui/Button';
+import { Card } from '../components/ui/Card';
+import { Descriptions } from '../components/ui/Descriptions';
+import { Result } from '../components/ui/Result';
+import { Spinner } from '../components/ui/Spinner';
 import { useToast } from '../lib/toast';
 
 export interface DeviceInfo {
@@ -16,16 +22,19 @@ export interface DeviceInfo {
 /** The identity being approved. The user-chosen name and OS hostname are separate fields. */
 export function EnrollmentDetails({ info }: { info: DeviceInfo }) {
   return (
-    <Descriptions column={1} size="small" bordered style={{ marginBottom: 16 }}>
-      <Descriptions.Item label="Runner">{info.name}</Descriptions.Item>
-      {info.hostname && info.hostname !== info.name && (
-        <Descriptions.Item label="Hostname">{info.hostname}</Descriptions.Item>
-      )}
-      <Descriptions.Item label="Labels">
-        {info.labels.length ? info.labels.map((l) => <Tag key={l}>{l}</Tag>) : '—'}
-      </Descriptions.Item>
-      <Descriptions.Item label="Code">{info.userCode}</Descriptions.Item>
-    </Descriptions>
+    <Descriptions
+      style={{ marginBottom: 16 }}
+      items={[
+        { key: 'runner', label: 'Runner', children: info.name },
+        ...(info.hostname && info.hostname !== info.name ? [{ key: 'hostname', label: 'Hostname', children: info.hostname }] : []),
+        {
+          key: 'labels',
+          label: 'Labels',
+          children: info.labels.length ? info.labels.map((l) => <Badge key={l}>{l}</Badge>) : '—',
+        },
+        { key: 'code', label: 'Code', children: info.userCode },
+      ]}
+    />
   );
 }
 
@@ -71,7 +80,7 @@ export function EnrollPage() {
       <Card title="🛰 Register a machine" style={{ width: 460 }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: 24 }}>
-            <Spin />
+            <Spinner />
           </div>
         ) : error ? (
           <Result status="warning" title="Cannot register" subTitle={error} />
@@ -91,18 +100,17 @@ export function EnrollPage() {
             {info?.nameConflict && (
               <Alert
                 type="warning"
-                showIcon
                 style={{ marginBottom: 16 }}
-                message={`This runner ("${info.name}") is already registered on your account.`}
+                title={`This runner ("${info.name}") is already registered on your account.`}
                 description="Approving re-issues its credential. The old credential stops working; no duplicate runner is created."
               />
             )}
             <Button
-              type="primary"
+              variant="primary"
               danger={!!info?.nameConflict}
-              block
               loading={submitting}
-              onClick={approve}
+              onClick={() => void approve()}
+              style={{ width: '100%' }}
             >
               {info?.nameConflict ? 'Re-register machine' : 'Approve'}
             </Button>
