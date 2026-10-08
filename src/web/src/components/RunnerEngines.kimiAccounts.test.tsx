@@ -387,4 +387,27 @@ describe('each Kimi account’s own quota', () => {
     expect(windows(row)).toEqual(['5h limit12%', 'Weekly limit34%', 'Monthly limit41%']);
     expect(row.textContent).not.toContain('Monthly · code');
   });
+
+  it('says an account whose plan carries no quota limit apart from one never read', () => {
+    // Default's read held no window at all: its plan has no quota limit. Work's never landed.
+    const page = mount({ ...runner(), planUsage: { kimi: { provider: 'kimi', fetchedAt: inHours(-0.05) } } });
+    const [defaultRow, workRow] = accountRows(page);
+    expect(defaultRow.querySelector('.re-quota')?.textContent).toBe('No quota limit');
+    expect(workRow.querySelector('.re-quota')?.textContent).toBe('No quota reported');
+  });
+
+  it('reads one limitless account beside one with quota', () => {
+    const page = mount(withQuota(usages(12, 34, 41, 30), { provider: 'kimi', fetchedAt: inHours(-0.05) }));
+    const [defaultRow, workRow] = accountRows(page);
+    expect(windows(defaultRow)).toEqual(['5h limit12%', 'Weekly limit34%', 'Monthly limit41%']);
+    expect(workRow.querySelector('.re-quota')?.textContent).toBe('No quota limit');
+  });
+
+  it('says it on the one-account row too', () => {
+    const page = mount({
+      ...runner(kimi({ accounts: [DEFAULT] })),
+      planUsage: { kimi: { provider: 'kimi', fetchedAt: inHours(-0.05) } },
+    });
+    expect(kimiRow(page).querySelector('.re-quota')?.textContent).toBe('No quota limit');
+  });
 });

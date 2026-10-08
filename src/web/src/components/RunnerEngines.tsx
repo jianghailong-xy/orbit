@@ -36,12 +36,13 @@ import {
 import {
   bindingPlanUsageRow,
   currentPlanUsageRows,
+  kimiNoQuotaLimit,
   planUsageSnapshotForProvider,
   type PlanUsageDisplayRow,
 } from '../lib/planUsage';
 import { formatResetTime } from '../lib/providerPools';
 import { runnersQuery } from '../lib/queries';
-import { RUNNER_ENGINE_RENEW, runnerEngineNext } from '../lib/runnerCopy';
+import { RUNNER_ENGINE_NO_QUOTA_LIMIT, RUNNER_ENGINE_RENEW, runnerEngineNext } from '../lib/runnerCopy';
 import { loginExpiresLine, signedOutNote } from '../lib/accountLogin';
 import { foldFromAnywhere } from '../lib/foldHead';
 import { ENGINE_CLI_NAME, ago, engineVersionNumber, updateNoteOf } from '../lib/runnerEngines';
@@ -259,6 +260,9 @@ interface Quota {
   windows: PlanUsageDisplayRow[];
   /** "Usage as of 17:44 · 7h ago", once the reading is older than the runner's reads. */
   stale: string | null;
+  /** Kimi only: the login's quota was read and its plan carries no limit — no window to gauge
+   *  (kimiNoQuotaLimit), said as "No quota limit" rather than "No quota reported". */
+  noLimit: boolean;
 }
 
 /** Older than this, a reading has missed three of the runner's reads (every 5 min with a session
@@ -266,7 +270,7 @@ interface Quota {
 const STALE_QUOTA_MS = 30 * 60_000;
 
 function quotaOf(kind: RowKind, snapshot: PlanUsageSnapshot | null, online: boolean, now: number): Quota {
-  if (kind !== 'in' || !snapshot) return { windows: [], stale: null };
+  if (kind !== 'in' || !snapshot) return { windows: [], stale: null, noLimit: false };
   const windows = currentPlanUsageRows(snapshot, now);
   const read = snapshot.fetchedAt;
   // An offline machine reads nothing, and the card already says it is offline: one note per row
@@ -275,7 +279,7 @@ function quotaOf(kind: RowKind, snapshot: PlanUsageSnapshot | null, online: bool
     windows.length > 0 && online && read && now - Date.parse(read) > STALE_QUOTA_MS
       ? `Usage as of ${formatResetTime(read, now)} · ${ago(read, now)}`
       : null;
-  return { windows, stale };
+  return { windows, stale, noLimit: kimiNoQuotaLimit(snapshot) };
 }
 
 /** What a row's tag says: whether that login can run a session now — and if its quota is spent, when
@@ -321,7 +325,13 @@ function QuotaCell({ kind, quota, next }: { kind: RowKind; quota: Quota; next?: 
         </>
       ) : (
         <span className="re-quota-none">
-          {kind === 'in' ? 'No quota reported' : kind === 'out' ? 'Sign in to see quota' : '—'}
+          {kind === 'in'
+            ? quota.noLimit
+              ? RUNNER_ENGINE_NO_QUOTA_LIMIT
+              : 'No quota reported'
+            : kind === 'out'
+              ? 'Sign in to see quota'
+              : '—'}
         </span>
       )}
     </div>

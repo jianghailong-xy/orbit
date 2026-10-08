@@ -83,6 +83,9 @@ export const RUNNER_ENGINE_SIGNED_OUT = 'Signed out';
 export const RUNNER_ENGINE_NOT_INSTALLED = 'Not installed';
 export const RUNNER_ENGINE_UP_TO_DATE = 'up to date';
 export const RUNNER_ENGINE_NO_QUOTA = 'No quota reported';
+/** A Kimi login whose plan carries no quota limit: its quota was read and held no window at all —
+ *  not a read that failed or never ran (RUNNER_ENGINE_NO_QUOTA). */
+export const RUNNER_ENGINE_NO_QUOTA_LIMIT = 'No quota limit';
 export const RUNNER_SIGN_IN = 'Sign In';
 export const RUNNER_UPDATE_ENGINES_NOW = 'Update Engines Now';
 export const RUNNER_REFRESH_MODEL_LISTS = 'Refresh Model Lists';
