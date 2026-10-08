@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { uuidToBase62, WIKI_DOC_BUILD_RULES, WIKI_DOC_SCHEMA, WIKI_REPO_OPS } from '@orbit/shared';
+import { uuidToBase62, WIKI_DOC_BUILD_RULES, WIKI_DOC_SCHEMA, WIKI_REPO_OPS, type WikiRepoFileRead } from '@orbit/shared';
 
 import { WikiDocsSnapshotRepo, wikiDocsShownOf } from './wiki-docs-build-job';
 import {
@@ -160,6 +160,11 @@ function repoOf(contents: Record<string, string | WikiDocShown>, sha = 'a'.repea
   };
 }
 
+/** One file as the read cache answered it (`wiki_repo_file`). */
+function file(path: string, state: WikiRepoFileRead['state'], text: string, sizeBytes: number): WikiRepoFileRead {
+  return { path, state, text, sizeBytes };
+}
+
 test('the heading a section names — by its words or its number — is taken before one whose name only contains it', () => {
   const repo = repoOf({
     'docs/contract.md': '# Contract\n\n## 2. Space\n\nOne space a repository.\n\n## 19. 维护作业：由事实建任务\n\nThe trigger.\n\n'
@@ -176,7 +181,7 @@ test('the heading a section names — by its words or its number — is taken be
   for (const [cited, want] of Object.entries(cases)) assert.equal(wikiDocDocSection(repo, 'docs/contract.md', cited).piece?.section, want, `§ ${cited}`);
 });
 
-// ── A file the read cut short (the server's whole-file read, repoOps.read.wholeFileChars) ─────────
+// ── A file the read cut short (the bounded window a runner without the whole-file capability gives) ─
 
 test('in a file a read cut short only the heading named is looked for, and what it cannot see is missing, never another section', () => {
   // The heading named lies past the cut; a heading before it contains the name's words — on the runner's whole
@@ -199,16 +204,18 @@ test('in a file a read cut short only the heading named is looked for, and what 
   const { pieces, missing } = wikiDocRepoPieces(repo, section);
   assert.deepEqual(pieces.map((p) => `${p.id} ${p.symbol}`), ['C1 early']);
   assert.deepEqual(missing, [
-    `docs/contract.md § 19.4 orbit wiki maintain (past the first ${WIKI_REPO_OPS.wholeFileChars} characters a read of the file gives)`,
-    `src/big.ts :: late (past the first ${WIKI_REPO_OPS.wholeFileChars} characters a read of the file gives)`,
+    `docs/contract.md § 19.4 orbit wiki maintain (past the first ${WIKI_REPO_OPS.boundedChars} characters a read of the file gives)`,
+    `src/big.ts :: late (past the first ${WIKI_REPO_OPS.boundedChars} characters a read of the file gives)`,
   ]);
 });
 
 test('a read cut short keeps the file\'s whole lines before the cut, and an empty file is not a missing one', () => {
-  assert.deepEqual(wikiDocsShownOf({ found: true, text: 'line 1\nline 2\nhalf a li\n…（后略）\n', truncated: true }, 90_000), { text: 'line 1\nline 2\n', cut: true });
-  assert.deepEqual(wikiDocsShownOf({ found: true, text: 'whole\n', truncated: false }, 6), { text: 'whole\n', cut: false });
-  assert.deepEqual(wikiDocsShownOf({ found: false }, 0), { text: '', cut: false });
-  assert.equal(wikiDocsShownOf({ found: false }, 12), null);
+  assert.deepEqual(wikiDocsShownOf(file('docs/big.md', 'cut', 'line 1\nline 2\nhalf a li\n…（后略）\n', 90_000), 90_000), { text: 'line 1\nline 2\n', cut: true });
+  assert.deepEqual(wikiDocsShownOf(file('docs/a.md', 'found', 'whole\n', 6), 6), { text: 'whole\n', cut: false });
+  assert.deepEqual(wikiDocsShownOf(file('docs/empty.md', 'missing', '', 0), 0), { text: '', cut: false });
+  assert.equal(wikiDocsShownOf(file('docs/gone.md', 'missing', '', 12), 12), null);
+  // A file over the cap is missing with its reason, not a cut text: nothing of it is worth writing from.
+  assert.equal(wikiDocsShownOf(file('docs/huge.md', 'too_large', '', 3_000_000), 3_000_000), null);
 });
 
 // ── A directory, as git shows a tree ────────────────────────────────────────────────────────────
@@ -217,16 +224,16 @@ test('a directory shows as `git show <sha>:<dir>` shows a tree — the runner\'s
   const sha = 'c'.repeat(40);
   const files = ['contracts/a.json', 'contracts/sub/b.json', 'contracts/a.b.json', 'src/x.go'];
   const reads: string[][] = [];
-  const repo = new WikiDocsSnapshotRepo(sha, new Map(files.map((file) => [file, 10])), [...files].sort(), async (batch) => {
-    reads.push(batch.map((file) => file.path));
-    return new Map(batch.map((file) => [file.path, { text: `${file.path}\n`, cut: false }]));
+  const repo = new WikiDocsSnapshotRepo(sha, new Map(files.map((file) => [file, 10])), [...files].sort(), async (paths) => {
+    reads.push([...paths]);
+    return new Map(paths.map((path) => [path, file(path, 'found', `${path}\n`, 10)]));
   });
   assert.deepEqual(repo.show('contracts'), { text: `tree ${sha}:contracts\n\na.b.json\na.json\nsub/\n`, cut: false });
   assert.deepEqual(repo.show('contracts/')?.text.split('\n')[0], `tree ${sha}:contracts/`);
   assert.equal(repo.show('nowhere'), null);
   assert.throws(() => repo.show('src/x.go'), /shown before it was read/u);
   await repo.prepare(['src/x.go', './src/x.go', '`contracts/a.json`', 'nowhere']);
-  assert.deepEqual(reads, [['src/x.go', 'contracts/a.json']], 'one read for the files that fit it, each once; a path with no file reads nothing');
+  assert.deepEqual(reads, [['src/x.go', 'contracts/a.json']], 'one read for the files wanted, each once; a path with no file reads nothing');
   assert.deepEqual(repo.show('src/x.go'), { text: 'src/x.go\n', cut: false });
   // A code source naming a directory gives no piece and misses nothing, as on the runner; a contract naming one is
   // the tree's listing.
@@ -235,21 +242,20 @@ test('a directory shows as `git show <sha>:<dir>` shows a tree — the runner\'s
   assert.equal(wikiDocContract(repo, 'contracts/sub')?.text, `tree ${sha}:contracts/sub\n\nb.json`);
 });
 
-test('files are read as many to one operation as fit one read, a file over it alone', async () => {
-  const sizes = new Map([['a', 12_000], ['b', 9_000], ['c', 2_000], ['big', 60_000], ['d', 1]]);
+test('a file already read is not read again, and one the cache has no answer for is missing', async () => {
+  const sizes = new Map([['a', 12_000], ['b', 9_000], ['gone', 5]]);
   const reads: string[][] = [];
-  const repo = new WikiDocsSnapshotRepo('d'.repeat(40), sizes, [...sizes.keys()].sort(), async (batch) => {
-    reads.push(batch.map((file) => file.path));
-    return new Map(batch.map((file) => [file.path, { text: '', cut: false }]));
+  const repo = new WikiDocsSnapshotRepo('d'.repeat(40), sizes, [...sizes.keys()].sort(), async (paths) => {
+    reads.push([...paths]);
+    return new Map(paths.map((path) => [path, path === 'gone' ? null : file(path, 'found', `${path}\n`, sizes.get(path) ?? 0)]));
   });
-  await repo.prepare(['a', 'b', 'c', 'big', 'd']);
-  // In order, a batch closed when the next file would not fit it: 12,000 + 9,000 bytes fit, 2,000 more do not.
-  assert.deepEqual(reads, [['a', 'b'], ['c'], ['big'], ['d']]);
-  for (const batch of reads) {
-    const bytes = batch.reduce((sum, file) => sum + (sizes.get(file) ?? 0), 0);
-    assert.ok(batch.length === 1 || bytes <= WIKI_REPO_OPS.wholeFileChars, `${batch.join(',')} is ${bytes} bytes in one read`);
-  }
-  assert.deepEqual(reads.flat().sort(), ['a', 'b', 'big', 'c', 'd']);
+  await repo.prepare(['a', 'b', 'gone']);
+  assert.deepEqual(reads, [['a', 'b', 'gone']], 'one read for the files wanted, in the order they were asked for');
+  assert.deepEqual(repo.show('a'), { text: 'a\n', cut: false });
+  // Read once: the second ask, and the paths the cache answered for, are served without reading again.
+  await repo.prepare(['a', 'b', 'gone']);
+  assert.equal(reads.length, 1);
+  assert.equal(repo.show('gone'), null);
 });
 
 // ── The write's shape (wiki_docs_test.go, TestWikiDocWriteCarriesTheContractsFieldsAndNoOther) ───

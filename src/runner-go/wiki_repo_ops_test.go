@@ -210,31 +210,42 @@ func TestWikiRepoOpSnapshotSkipsACommitTheServerAlreadyHolds(t *testing.T) {
 	}
 }
 
-func TestWikiRepoOpReadIsBoundedAndReadsOneSection(t *testing.T) {
+func TestWikiRepoOpReadAnswersWithTheWholeFile(t *testing.T) {
 	f := newWikiRepoOpFixture(t)
-	// A document far larger than one section's material: the item's own limit is read against it, and so
-	// is the request's budget.
-	long := strings.Repeat("文", 30000)
-	head := f.push(t, "long", func() { f.write(t, "docs/long.md", "# Long\n\n## Wall\n\n"+long+"\n") })
+	// A document far past the old window (22,000 characters): the whole file comes back, byte for byte.
+	body := strings.Repeat("文", 30000)
+	content := "# Long\n\n## Wall\n\n" + body + "\n"
+	head := f.push(t, "long", func() { f.write(t, "docs/long.md", content) })
 
-	// A whole file is read within the limit the item asks for, and says that it was cut.
 	outcome := runWikiRepoOp(f.command(t, "read", map[string]interface{}{
 		"sha": head,
 		"items": []map[string]interface{}{
-			{"path": "src/a.ts", "maxChars": 40},
+			{"path": "docs/long.md"},
 			{"path": "docs/design.md", "section": "§4.3 Snapshots"},
 			{"path": "contracts/thing.contract.json"},
 		},
 	}), nil)
+	if outcome.state != "succeeded" {
+		t.Fatalf("read failed: %s", outcome.err)
+	}
+	if outcome.payload != "" {
+		t.Fatalf("a read of %d bytes should travel inside the result, not in fragments", len(content))
+	}
 	answer := decodeResult[wikiRepoOpReadAnswer](t, outcome, "read")
 	if len(answer.Items) != 3 {
 		t.Fatalf("the read answered %d items, want 3", len(answer.Items))
 	}
-	first := answer.Items[0]
-	if !first.Found || first.Chars != 40 || !first.Truncated {
-		t.Fatalf("the whole-file read was not cut at exactly its limit: %+v", first)
+	whole := answer.Items[0]
+	if !whole.Found || whole.Truncated {
+		t.Fatalf("the whole file was not answered whole: %+v", whole)
 	}
-	// One section: its heading and its lines, and nothing of the section after it.
+	if whole.Text != content {
+		t.Fatalf("the whole file is not byte for byte what the commit has: %d runes, want %d", len([]rune(whole.Text)), len([]rune(content)))
+	}
+	if whole.Chars != len([]rune(content)) || whole.Size != int64(len(content)) {
+		t.Fatalf("the answer's sizes are wrong: chars=%d size=%d", whole.Chars, whole.Size)
+	}
+	// One section still reads as its own section when a caller asks for one.
 	section := answer.Items[1]
 	if !strings.Contains(section.Text, "§4.3 Snapshots") || !strings.Contains(section.Text, "The runner builds one per commit.") {
 		t.Fatalf("the section read is wrong: %q", section.Text)
@@ -242,36 +253,98 @@ func TestWikiRepoOpReadIsBoundedAndReadsOneSection(t *testing.T) {
 	if strings.Contains(section.Text, "Four questions") || strings.Contains(section.Text, "The design") {
 		t.Fatalf("the section read took more than its own section: %q", section.Text)
 	}
-	// A contract gets the contract default, and an item naming no limit is still an answer.
 	if answer.Items[2].Chars == 0 || !strings.Contains(answer.Items[2].Text, "\"table\"") {
 		t.Fatalf("the contract was not read: %+v", answer.Items[2])
 	}
-	if answer.Chars != first.Chars+section.Chars+answer.Items[2].Chars {
+	if answer.Chars != whole.Chars+section.Chars+answer.Items[2].Chars {
 		t.Fatalf("the answer's total is not its items': %d", answer.Chars)
 	}
-	// A path the commit does not have is an answer, not a failure: found=false.
+
+	// A path the commit does not have is an answer, not a failure: found=false, and no reason.
 	missing := runWikiRepoOp(f.command(t, "read", map[string]interface{}{
 		"sha": head, "items": []map[string]interface{}{{"path": "docs/nope.md"}},
 	}), nil)
 	absent := decodeResult[wikiRepoOpReadAnswer](t, missing, "read")
-	if absent.Items[0].Found {
+	if absent.Items[0].Found || absent.Items[0].Reason != "" || absent.Items[0].Size != 0 {
 		t.Fatalf("a read of a path the tree has not found something: %+v", absent.Items[0])
 	}
 
-	// The whole request is one section's material: 22,000 characters in all, however many items.
-	whole := runWikiRepoOp(f.command(t, "read", map[string]interface{}{
+	// A request that names a limit is answered within it: what an older control plane asks by.
+	bounded := runWikiRepoOp(f.command(t, "read", map[string]interface{}{
 		"sha": head,
 		"items": []map[string]interface{}{
-			{"path": "docs/long.md", "maxChars": 22000},
-			{"path": "docs/design.md"},
+			{"path": "docs/long.md", "maxChars": 1000},
 		},
 	}), nil)
-	bounded := decodeResult[wikiRepoOpReadAnswer](t, whole, "read")
-	if bounded.Chars > wikiRepoOpSectionChars {
-		t.Fatalf("the read answered %d characters, more than one section's material", bounded.Chars)
+	cut := decodeResult[wikiRepoOpReadAnswer](t, bounded, "read")
+	if !cut.Items[0].Found || !cut.Items[0].Truncated || cut.Items[0].Chars != 1000 {
+		t.Fatalf("a bounded read was not cut at exactly its limit: %+v", cut.Items[0])
 	}
-	if !bounded.Items[1].Truncated {
-		t.Fatalf("the second item took more than the material left for it: %+v", bounded.Items[1])
+}
+
+func TestWikiRepoOpReadRefusesAFileOverTheLimit(t *testing.T) {
+	f := newWikiRepoOpFixture(t)
+	// Just over the file cap: missing with the reason, and the size it would have been.
+	big := strings.Repeat("y", wikiRepoOpWholeFileBytes+1)
+	head := f.push(t, "big", func() { f.write(t, "docs/big.md", big) })
+
+	outcome := runWikiRepoOp(f.command(t, "read", map[string]interface{}{
+		"sha": head, "items": []map[string]interface{}{{"path": "docs/big.md"}, {"path": "docs/design.md"}},
+	}), nil)
+	answer := decodeResult[wikiRepoOpReadAnswer](t, outcome, "read")
+	over := answer.Items[0]
+	if over.Found || over.Reason != "too_large" || over.Size != int64(len(big)) || over.Text != "" {
+		t.Fatalf("a file over the limit was not refused with its reason: %+v", over)
+	}
+	// The rest of the request is answered: one file over the limit is one missing item, not a failed read.
+	if !answer.Items[1].Found || !strings.Contains(answer.Items[1].Text, "The design") {
+		t.Fatalf("the item after the refused one was not read: %+v", answer.Items[1])
+	}
+}
+
+func TestWikiRepoOpReadUploadsALargeAnswerInFragments(t *testing.T) {
+	f := newWikiRepoOpFixture(t)
+	// Three files that fit the file cap but not one request body: the answer travels in fragments.
+	piece := strings.Repeat("z", 1500*1024)
+	head := f.push(t, "huge", func() {
+		for _, name := range []string{"docs/one.md", "docs/two.md", "docs/three.md"} {
+			f.write(t, name, "# "+name+"\n\n"+piece+"\n")
+		}
+	})
+	outcome := runWikiRepoOp(f.command(t, "read", map[string]interface{}{
+		"sha": head,
+		"items": []map[string]interface{}{
+			{"path": "docs/one.md"}, {"path": "docs/two.md"}, {"path": "docs/three.md"},
+		},
+	}), nil)
+	if outcome.state != "succeeded" {
+		t.Fatalf("read failed: %s", outcome.err)
+	}
+	if outcome.payload == "" {
+		t.Fatalf("an answer of more than %d bytes should travel in fragments", wikiRepoOpInlineBytes)
+	}
+	if outcome.payloadKey != "read" || outcome.sha != head {
+		t.Fatalf("the fragmented answer is not the read's: key=%q sha=%q", outcome.payloadKey, outcome.sha)
+	}
+	fragments := wikiRepoOpFragments(outcome.payload)
+	if len(fragments) < 2 {
+		t.Fatalf("the answer was not split: %d fragments", len(fragments))
+	}
+	for _, fragment := range fragments {
+		if len(fragment) > wikiRepoOpFragmentBytes {
+			t.Fatalf("a fragment of %d bytes is over the contract's %d", len(fragment), wikiRepoOpFragmentBytes)
+		}
+	}
+	// Reassembled by ordinal, the answer is byte for byte what the runner read.
+	if got := strings.Join(fragments, ""); got != outcome.payload {
+		t.Fatalf("the fragments do not reassemble to the answer: %d bytes, want %d", len(got), len(outcome.payload))
+	}
+	var answer wikiRepoOpReadAnswer
+	if err := json.Unmarshal([]byte(outcome.payload), &answer); err != nil {
+		t.Fatalf("the reassembled answer does not read back: %v", err)
+	}
+	if len(answer.Items) != 3 || answer.Items[0].Text != "# docs/one.md\n\n"+piece+"\n" {
+		t.Fatalf("the reassembled answer is not the three files")
 	}
 }
 
