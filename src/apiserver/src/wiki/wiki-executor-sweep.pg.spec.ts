@@ -10,7 +10,10 @@
  *      are ended with why — and the next fact makes the runner path's maintenance task;
  *   2. an account still on the `canary` list is untouched: the sweep cancels nothing, and the
  *      unfinished job holds the space the way it did;
- *   3. under `canary`, an account off the list is cancelled while one on it is not.
+ *   3. under `canary`, an account off the list is cancelled while one on it is not;
+ *   4. one job's whole settle is one transaction: a failure after the job's own write rolls back
+ *      whole — nothing is left cancelled, the job is still in flight — and the next sweep settles
+ *      it and every row it owns.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-executor-sweep.pg.spec.ts
  *
@@ -376,4 +379,75 @@ test('under canary, an account off the list is cancelled while one on it is not'
     await h.prisma.user.deleteMany({ where: { id: otherOwnerId } }).catch(() => undefined);
     delete process.env.ORBIT_WIKI_EXECUTOR;
   }
+});
+
+test('one job\'s whole settle is one transaction: a failure after its own write rolls back whole, and the next sweep settles it and everything it owns', { skip }, async () => {
+  const h = await boot();
+  const prisma = h.prisma as unknown as PrismaService;
+  process.env.ORBIT_WIKI_EXECUTOR = 'runner';
+  const fx = await fixture(h, h.ownerId);
+  const maintain = await inFlightMaintainJob(h, h.ownerId, fx);
+  const verify = await inFlightVerifyJob(h, h.ownerId, fx);
+  const plan = await inFlightPlanJob(h, h.ownerId, fx);
+
+  // A fault a database gives for real: whatever transaction cancels a wiki_job row is aborted the
+  // moment the cancellation lands. The sweep is expected to swallow the per-job failure and leave
+  // everything in flight — for the next pass, not half-settled.
+  await h.sql.query(`
+    CREATE OR REPLACE FUNCTION sweep_injected_fault() RETURNS trigger AS $$
+      BEGIN RAISE EXCEPTION 'injected fault: a cancel must not half-land'; END;
+    $$ LANGUAGE plpgsql`);
+  await h.sql.query(`
+    CREATE TRIGGER sweep_injected_fault_trg
+      AFTER UPDATE ON "wiki_job" FOR EACH ROW
+      WHEN (NEW."state" = 'cancelled')
+      EXECUTE FUNCTION sweep_injected_fault()`);
+  try {
+    const failed = await cancelUnservedWikiJobs(prisma);
+    assert.equal(failed.cancelled, 0, 'no job is reported cancelled when its transaction rolled back');
+
+    // Whole and in flight: the job with its lease, its calls with their partials and leases, its
+    // repository operation, its run row with no outcome — and the plan job still made.
+    const job = await h.prisma.wikiJob.findFirstOrThrow({ where: { id: maintain.jobId } });
+    assert.equal(job.state, 'running', 'the cancelled write rolled back with the rest of the transaction');
+    assert.ok(job.leaseOwner, 'the lease is still held');
+    const running = await h.prisma.wikiModelRequest.findFirstOrThrow({ where: { id: maintain.running.id } });
+    assert.equal(running.state, 'running');
+    assert.equal(running.partial, 'the first tokens');
+    assert.ok(running.leaseOwner);
+    const queued = await h.prisma.wikiModelRequest.findFirstOrThrow({ where: { id: maintain.queued.id } });
+    assert.equal(queued.state, 'queued');
+    const op = await h.prisma.wikiRepoOp.findFirstOrThrow({ where: { id: maintain.op.id } });
+    assert.equal(op.state, 'queued');
+    const run = await h.prisma.wikiMaintenanceRun.findFirstOrThrow({ where: { id: maintain.runId } });
+    assert.equal(run.outcome, null, 'the run row was not ended by a transaction that rolled back');
+    assert.equal(run.failureKind, null);
+    const verifyJob = await h.prisma.wikiJob.findFirstOrThrow({ where: { id: verify.jobId } });
+    assert.equal(verifyJob.state, 'queued');
+    const planJob = await h.prisma.wikiPlanJob.findFirstOrThrow({ where: { id: plan.planJobId } });
+    assert.equal(planJob.state, 'made');
+  } finally {
+    await h.sql.query('DROP TRIGGER IF EXISTS sweep_injected_fault_trg ON "wiki_job"').catch(() => undefined);
+    await h.sql.query('DROP FUNCTION IF EXISTS sweep_injected_fault()').catch(() => undefined);
+  }
+
+  // The sweep that follows settles this case's jobs whole, with every row each of them owns. (The
+  // count is not asserted to the case's three alone: the earlier cases' spaces are still in flight
+  // on this owner, and this pass settles them too.)
+  const swept = await cancelUnservedWikiJobs(prisma);
+  assert.ok(swept.cancelled >= 3, `this case's three jobs and the earlier cases' leftovers: ${JSON.stringify(swept)}`);
+  const job = await h.prisma.wikiJob.findFirstOrThrow({ where: { id: maintain.jobId } });
+  assert.equal(job.state, 'cancelled');
+  const run = await h.prisma.wikiMaintenanceRun.findFirstOrThrow({ where: { id: maintain.runId } });
+  assert.equal(run.outcome, 'failed');
+  assert.equal(run.failureKind, 'infra');
+  const running = await h.prisma.wikiModelRequest.findFirstOrThrow({ where: { id: maintain.running.id } });
+  assert.equal(running.state, 'cancelled');
+  assert.equal(running.partial, null);
+  const op = await h.prisma.wikiRepoOp.findFirstOrThrow({ where: { id: maintain.op.id } });
+  assert.equal(op.state, 'cancelled');
+  const planJob = await h.prisma.wikiPlanJob.findFirstOrThrow({ where: { id: plan.planJobId } });
+  assert.equal(planJob.state, 'ended');
+  assert.equal(planJob.outcome, 'failed');
+  delete process.env.ORBIT_WIKI_EXECUTOR;
 });
