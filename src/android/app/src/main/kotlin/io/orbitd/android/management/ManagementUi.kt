@@ -103,6 +103,10 @@ internal fun copyText(context: Context, label: String, text: String) {
     (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText(label, text))
 }
 
+/** What the clipboard holds, as text. Android 12+ says so itself ("pasted from your clipboard"): the platform's notice, kept. */
+internal fun pasteText(context: Context): String? = (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+    .primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()
+
 /** `Oct 7, 2026 at 3:45 PM`: Date.formatted(date: .abbreviated, time: .shortened) in English. */
 internal fun abbreviatedDateTime(ms: Long, zone: ZoneId = ZoneId.systemDefault()): String =
     DateTimeFormatter.ofPattern("MMM d, yyyy 'at' h:mm a", Locale.US).withZone(zone).format(Instant.ofEpochMilli(ms))
@@ -146,8 +150,23 @@ internal fun AccountPauseControls(name: String, pausedUntil: String?, scope: Str
     if (choosing) AccountPauseDialog(name, scope, onDismiss = { choosing = false }, save = save)
 }
 
+/** AccountPauseLine: an account's pause as a line of its row — Paused, and until when — a state, not a control; nothing once
+ * the pause has run out. What resumes it or changes the pause is the row's menu. */
 @Composable
-private fun AccountPauseDialog(name: String, scope: String, onDismiss: () -> Unit, save: suspend (Int?) -> String?) {
+internal fun AccountPauseLine(pausedUntil: String?) {
+    val until = isoMs(pausedUntil) ?: return
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    // Read again until the pause runs out, so the line goes with it.
+    LaunchedEffect(until) { while (now < until) { delay(1_000); now = System.currentTimeMillis() } }
+    if (until <= now) return
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Paused", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold), color = Ink.amber)
+        Text("Until ${abbreviatedDateTime(until)}", style = MaterialTheme.typography.labelSmall, color = Ink.amber)
+    }
+}
+
+@Composable
+internal fun AccountPauseDialog(name: String, scope: String, onDismiss: () -> Unit, save: suspend (Int?) -> String?) {
     var hours by remember { mutableIntStateOf(2) }
     var custom by remember { mutableStateOf(false) }
     var customHours by remember { mutableStateOf("2") }

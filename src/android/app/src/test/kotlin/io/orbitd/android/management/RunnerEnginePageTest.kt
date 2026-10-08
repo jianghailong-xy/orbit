@@ -29,7 +29,9 @@ import java.time.Instant
 
 /**
  * A runner's page and its engine pages over the controlled server, as RunnerPageParts, RunnerEnginePage and RunnerSignInView
- * draw them on iOS: Antigravity's Google sign-in and its accounts (A13-3/A13-4), and one quota window per Engines row (A13-5).
+ * draw them on iOS: Antigravity's Google sign-in and its accounts (A13-3/A13-4), one quota window per Engines row (A13-5), an
+ * account's row that says where it stands with its presses in its menu, and a sign-in card that starts on the press that
+ * raised it, offers one way out and pastes a code in one tap (A13-9).
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = ManagementShellApplication::class)
@@ -169,5 +171,101 @@ class RunnerEnginePageTest {
         await("env key · runs on your Gemini key")
         assertEquals("on the key it is neither signed in nor out", 0, shown("Signed out"))
         compose.onNode(hasText("Sign in with Google") and hasClickAction()).assertExists()
+    }
+
+    // A13-9: an account's row says where it stands; its presses are its menu's
+
+    private fun claudeAccounts(defaultExpires: String?) = """[{"engine":"claude","installed":true,"version":"2.1.284 (Claude Code)","auth":"yes","accounts":[
+        {"id":"default","auth":"yes","home":"/root/.claude"${defaultExpires?.let { ""","loginExpiresAt":"$it"""" }.orEmpty()}},
+        {"id":"1fda3f43","name":"Work","auth":"yes","home":"/root/.orbit/claude-accounts/1fda3f43","pausedUntil":"${at(2)}"},
+        {"id":"7d3e0c11","name":"Old","auth":"no","home":"/root/.orbit/claude-accounts/7d3e0c11"}]}]"""
+
+    @Test fun anAccountRowSaysOnlyWhereItStandsAndItsMenuHoldsThePresses() {
+        fixture.runnerEngines = claudeAccounts(at(47))
+        fixture.runnerExtra = ""","capabilities":["claude-account-remove/v1"]"""
+        page("engine:claude")
+        await("Old")
+        // Nothing to press on a signed-in row but its menu.
+        assertEquals(0, shown("Sign In Again")); assertEquals(0, shown("Pause…")); assertEquals(0, shown("Resume Now"))
+        await("Login expires in 2 days")
+        compose.onNode(hasText("Renew") and hasClickAction()).assertExists()
+        await("Paused"); await("Until ")
+        await("Sessions can’t use this account until you sign in again.")
+        compose.onNode(hasText("Sign In") and hasClickAction()).assertExists()
+        menu("Work")
+        for (item in listOf("Rename…", "Sign In Again", "Resume Now", "Change Duration…", "Remove…")) compose.onNodeWithText(item).assertExists()
+        click(hasText("Resume Now"))
+        compose.waitUntil(10_000) { fixture.pauseBodies.isNotEmpty() }
+        assertEquals("runners/${fixture.RUNNER}/accounts/claude/1fda3f43/pause {\"durationMinutes\":null}", fixture.pauseBodies.single())
+        menu("Default")
+        for (item in listOf("Rename…", "Sign In Again", "Pause…")) compose.onNodeWithText(item).assertExists()
+        assertEquals("Default is never removed", 0, shown("Remove…"))
+    }
+
+    @Test fun anOnlyAccountSignedOutSaysTheEngineCannotRunThere() {
+        fixture.runnerEngines = """[{"engine":"codex","installed":true,"version":"codex-cli 0.158.0","auth":"no"}]"""
+        page("engine:codex")
+        await("Sessions on this runner can’t use Codex until you sign in again.")
+    }
+
+    // A13-9: the sign-in card
+
+    @Test fun signInAgainStartsAtOnceOffersOneWayOutAndPastesTheCodeInOneTap() {
+        fixture.runnerEngines = claudeAccounts(at(47))
+        fixture.loginStarted = """{"engine":"claude","account":"default","status":"awaiting_code","url":"https://claude.ai/oauth/authorize?code=true"}"""
+        fixture.codeSent = """{"engine":"claude","account":"default","status":"done"}"""
+        // The runner reports the account signed in again, its login a month off, on its next check-in.
+        fixture.onCode = { fixture.runnerEngines = claudeAccounts(at(30 * 24)) }
+        page("engine:claude")
+        await("Login expires in 2 days")
+        menu("Default")
+        click(hasText("Sign In Again"))
+        // The press asked for the sign-in: the card starts it, with no button of its own to press first.
+        compose.waitUntil(10_000) { fixture.loginBodies.isNotEmpty() }
+        assertEquals(buildJsonObject { put("engine", "claude"); put("account", "default") }, fixture.loginBodies.single())
+        await("Approve it there, then paste the code the page gives you:")
+        compose.onNode(hasText("Open the sign-in page") and hasClickAction()).assertExists()
+        assertEquals("one way out while it runs", 0, shown("Close"))
+        compose.onNode(hasText("Cancel") and hasClickAction()).assertExists()
+        (compose.activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("code", "  pasted#code  "))
+        click(hasText("Paste") and hasClickAction())
+        compose.waitUntil(10_000) { fixture.loginBodies.size == 2 }
+        assertEquals(buildJsonObject { put("code", "pasted#code") }, fixture.loginBodies[1])
+        // Signed in: said for a moment, then the card folds back once the runner reports it.
+        await("Signed in — this runner is ready.")
+        until { shown("Signed in — this runner is ready.") == 0 && shown("Login expires") == 0 && shown("Approve it there") == 0 }
+        assertEquals(0, shown("Cancel"))
+    }
+
+    @Test fun aDeviceCodeComesFirstUnderOnePressThatCopiesItAndOpensItsPage() {
+        fixture.runnerEngines = """[{"engine":"codex","installed":true,"version":"codex-cli 0.158.0","auth":"no"}]"""
+        fixture.loginStarted = """{"engine":"codex","status":"awaiting_approval","userCode":"WXYZ-1234","url":"https://auth.openai.com/codex/device"}"""
+        page("engine:codex")
+        click(hasText("Sign In") and hasClickAction())
+        await("Enter this one-time code on the sign-in page:")
+        await("WXYZ-1234")
+        assertEquals(buildJsonObject { put("engine", "codex") }, fixture.loginBodies.single())
+        click(hasText("Copy Code & Open Sign-In Page") and hasClickAction())
+        val clipboard = compose.activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        assertEquals("WXYZ-1234", clipboard.primaryClip?.getItemAt(0)?.text?.toString())
+        assertEquals("https://auth.openai.com/codex/device", shadowOf(compose.activity).nextStartedActivity?.dataString)
+        // Cancel cancels the sign-in on the runner, and the card goes with it.
+        click(hasText("Cancel") and hasClickAction())
+        gone("WXYZ-1234")
+        compose.onNode(hasText("Sign In") and hasClickAction()).assertExists()
+    }
+
+    @Test fun addAccountStartsAtOnceUnderAPickedNameWithOneWayOut() {
+        fixture.runnerEngines = "[$twoGoogleAccounts]"
+        fixture.runnerExtra = extra()
+        fixture.loginStarted = """{"engine":"antigravity","status":"awaiting_code","url":"https://accounts.google.com/o/oauth2/auth"}"""
+        page("engine:antigravity")
+        click(hasText("Add Account") and hasClickAction())
+        compose.waitUntil(10_000) { fixture.loginBodies.isNotEmpty() }
+        assertEquals(buildJsonObject { put("engine", "antigravity"); put("accountName", "Account 3") }, fixture.loginBodies.single())
+        await("Approve it there, then paste the code the page gives you:")
+        assertEquals(0, shown("Close"))
+        click(hasText("Cancel") and hasClickAction())
+        await("Add Account")
     }
 }

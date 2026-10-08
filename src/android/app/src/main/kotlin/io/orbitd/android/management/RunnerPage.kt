@@ -94,6 +94,10 @@ internal object RunnerCopy {
 internal object AccountCopy {
     const val SIGN_IN_AGAIN = "Sign In Again"
     const val SIGN_IN_WITH_GOOGLE = "Sign in with Google"
+    const val RENEW = "Renew"
+    const val ACCOUNT_SIGNED_OUT_NOTE = "Sessions can’t use this account until you sign in again."
+    const val UNIT_DAY = "day"
+    const val UNIT_DAYS = "days"
     const val ENV_KEY = "env key"
     const val ENV_KEY_LINE = "env key · runs on your Gemini key"
     const val NOT_SUPPORTED_YET = "Not supported yet"
@@ -103,7 +107,23 @@ internal object AccountCopy {
     const val GOOGLE_TERMS_WARNING = "Google terms restrict personal account sign-in through third-party tools; your account may be suspended."
     const val GOOGLE_TERMS = "Google terms"
     const val GOOGLE_TERMS_URL = "https://antigravity.google/terms"
+    const val RENAME = "Rename…"
+    const val PAUSE = "Pause…"
+    const val RESUME_NOW = "Resume Now"
+    const val CHANGE_DURATION = "Change Duration…"
+    const val REMOVE = "Remove…"
     const val ADD_ACCOUNT = "Add Account"
+    const val CANCEL = "Cancel"
+    const val CLOSE = "Close"
+    const val ENTER_CODE = "Enter this one-time code on the sign-in page:"
+    const val COPY_CODE_AND_OPEN = "Copy Code & Open Sign-In Page"
+    const val OPEN_PAGE = "Open the sign-in page"
+    const val PASTE_THE_CODE = "Paste the code"
+    const val APPROVE_THEN_PASTE = "Approve it there, then paste the code the page gives you:"
+    const val SUBMIT = "Submit"
+    const val WAITING_FOR_APPROVAL = "Waiting for you to approve it…"
+    fun loginExpires(count: Int, unit: String) = "Login expires in $count $unit"
+    fun signedOutAlone(engine: String) = "Sessions on this runner can’t use $engine until you sign in again."
     fun next(account: String) = "Next: $account"
 }
 
@@ -744,7 +764,7 @@ internal object RunnerPage {
     /** One sign-in on the engine page. [auth] is none for an Antigravity Default on the machine's Gemini key ([envKey]),
      * which has nothing to sign in or pause; its line says what it runs on. */
     data class AccountLine(val id: String, val name: String, val home: String?, val auth: String?,
-                           val signInAccount: String?, val pausedUntil: String?, val envKey: Boolean = false) {
+                           val signInAccount: String?, val pausedUntil: String?, val envKey: Boolean = false, val loginExpiresAt: String? = null) {
         val isDefault get() = id == "default"
         val subtitle get() = if (!isDefault || name == "Default") home else listOfNotNull(home, "Default").joinToString(" · ")
     }
@@ -757,13 +777,32 @@ internal object RunnerPage {
             val own = accounts.firstOrNull()
             val envKey = runsOnEnvKey(health, EngineAccounts.DEFAULT, own?.str("auth"))
             return listOf(AccountLine("default", accountLabel("default", accounts), (own?.str("home") ?: own?.str("codexHome"))?.let(::tildePath),
-                if (envKey) null else health.str("auth"), null, own?.str("pausedUntil"), envKey))
+                if (envKey) null else health.str("auth"), null, own?.str("pausedUntil"), envKey, own?.str("loginExpiresAt")))
         }
         return accounts.map { account ->
             val envKey = runsOnEnvKey(health, account.text("id"), account.str("auth"))
             AccountLine(account.text("id"), accountLabel(account.text("id"), accounts), (account.str("home") ?: account.str("codexHome"))?.let(::tildePath),
-                if (envKey) null else account.str("auth"), account.text("id"), account.str("pausedUntil"), envKey)
+                if (envKey) null else account.str("auth"), account.text("id"), account.str("pausedUntil"), envKey, account.str("loginExpiresAt"))
         }
+    }
+
+    /** How far ahead of a login lapsing its line warns: Claude Code's own lead. */
+    private const val LOGIN_WARNING_LEAD = 3 * DAY
+
+    /** The warning under a signed-in account whose login lapses within three days, in whole days rounded up the way Claude
+     * Code counts them. None further off, past it (the runner reports that signed out), not signed in, or with no time read. */
+    fun loginExpiresLine(line: AccountLine, nowMs: Long): String? {
+        if (line.auth != "yes") return null
+        val left = (isoMs(line.loginExpiresAt) ?: return null) - nowMs
+        if (left <= 0 || left > LOGIN_WARNING_LEAD) return null
+        val days = kotlin.math.ceil(left.toDouble() / DAY).toInt()
+        return AccountCopy.loginExpires(days, if (days == 1) AccountCopy.UNIT_DAY else AccountCopy.UNIT_DAYS)
+    }
+
+    /** What a signed-out account costs: nothing runs on it — or, the engine's only account there, on the engine at all. */
+    fun signedOutNote(line: AccountLine, alone: Boolean, engine: String): String? {
+        if (line.auth != "no") return null
+        return if (alone) AccountCopy.signedOutAlone(engineName(engine)) else AccountCopy.ACCOUNT_SIGNED_OUT_NOTE
     }
 
     /** What Add Account calls a new account until the user names it. */

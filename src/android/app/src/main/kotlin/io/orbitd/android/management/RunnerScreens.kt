@@ -52,6 +52,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
 import io.orbitd.android.core.net.ApiError
@@ -683,10 +684,20 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
     if (runner == null) { if (model.loaded) RunnerGone(RunnerPage.engineName(engine)); return }
     val health = RunnerPage.engines(runner).firstOrNull { it.str("engine") == engine }
     val offline = RunnerPage.isOffline(runner, now)
+    // Whose sign-in card is open: an account's id, or "+" for a new one. One at a time: the runner runs one relay at a time.
     var signingIn by remember(id, engine) { mutableStateOf<String?>(null) }
+    // The account whose card said its sign-in landed: the card folds back once the runner reports it signed in too.
+    var landedHere by remember(id, engine) { mutableStateOf<String?>(null) }
     var renaming by remember { mutableStateOf<RunnerPage.AccountLine?>(null) }
     var removing by remember { mutableStateOf<RunnerPage.AccountLine?>(null) }
+    var pausing by remember { mutableStateOf<RunnerPage.AccountLine?>(null) }
     fun show(failure: String?) { failure?.let(notice::show) }
+    fun closeSignIn() { signingIn = null; landedHere = null; scope.launch { model.load() } }
+    // Said for a moment, then read again now rather than on the next pass.
+    fun landed(account: String) = scope.launch { delay(1_500); landedHere = account; model.load() }
+    suspend fun pause(line: RunnerPage.AccountLine, minutes: Int?) = model.press {
+        api.post("runners/$id/accounts/$engine/${line.id}/pause", buildJsonObject { put("durationMinutes", minutes?.let(::JsonPrimitive) ?: JsonNull) })
+    }
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
             Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -713,16 +724,15 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                         if (index > 0) HorizontalDivider()
                         AccountRow(api, runner, engine, line, offline, now, signingIn == line.id,
                             canPause = RunnerPage.keepsAccounts(engine) && health.list("accounts").any { it.str("id") == line.id }, alone = alone,
-                            signIn = { signingIn = line.id }, close = { signingIn = null; scope.launch { model.load() } },
-                            rename = { renaming = line }, remove = { removing = line }) { minutes ->
-                            model.press { api.post("runners/$id/accounts/$engine/${line.id}/pause", buildJsonObject {
-                                put("durationMinutes", minutes?.let(::JsonPrimitive) ?: JsonNull) }) }
-                        }
+                            foldsBack = signingIn == line.id && landedHere == line.id && line.auth == "yes" && RunnerPage.loginExpiresLine(line, now) == null,
+                            signIn = { signingIn = line.id }, close = ::closeSignIn, landed = { landed(line.id) },
+                            rename = { renaming = line }, remove = { removing = line }, pause = { pausing = line },
+                            resume = { scope.launch { show(pause(line, null)) } })
                     }
                     if (RunnerPage.canAddAccount(runner, engine)) {
                         HorizontalDivider()
                         AddAccountRow(api, model, runner, engine, health, offline, adding = signingIn == "+", start = { signingIn = "+" },
-                            close = { signingIn = null; scope.launch { model.load() } }, show = ::show)
+                            close = ::closeSignIn, show = ::show)
                     } else RunnerPage.signInHint(runner, engine)?.let { hint ->
                         HorizontalDivider()
                         Text(hint, Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.labelMedium, color = Ink.muted)
@@ -764,17 +774,29 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
             } }) { Text("Remove", color = Ink.red) } },
             dismissButton = { TextButton(onClick = { removing = null }) { Text("Cancel") } })
     }
+    pausing?.let { line -> AccountPauseDialog(line.name, PAUSE_SCOPE, onDismiss = { pausing = null }) { minutes -> pause(line, minutes) } }
 }
 
-/** One account: its name and where it lives, where it stands, its windows, and its way (back) in. */
+/** What a runner account's pause applies to, as the Pause Account dialog says it. */
+private const val PAUSE_SCOPE = "Personal account · This runner. Paused sessions wait until it resumes or you switch accounts."
+
+/**
+ * One account: its name and where it lives, where it stands, its windows — a login about to lapse, a pause, what being
+ * signed out costs — and its way (back) in where it is out. Its presses are its ⋯ menu's (the swipe iOS gives it): Rename…,
+ * Sign In Again, Pause… or Resume Now and Change Duration…, Remove… for an added one. None reach an offline machine but
+ * Rename… and the pause, which Orbit keeps.
+ */
 @Composable
 private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, line: RunnerPage.AccountLine, offline: Boolean, now: Long,
-                       signingIn: Boolean, canPause: Boolean, alone: Boolean, signIn: () -> Unit, close: () -> Unit, rename: () -> Unit,
-                       remove: () -> Unit, pause: suspend (Int?) -> String?) {
+                       signingIn: Boolean, canPause: Boolean, alone: Boolean, foldsBack: Boolean, signIn: () -> Unit, close: () -> Unit,
+                       landed: () -> Unit, rename: () -> Unit, remove: () -> Unit, pause: () -> Unit, resume: () -> Unit) {
     val windows = RunnerPage.accountWindows(runner, engine, line.id)
     val removal = RunnerPage.removal(runner.obj("accountRemove"), engine, line.id)
+    val paused = RunnerPage.isPaused(line.pausedUntil, now)
     val canSignIn = RunnerPage.canSignIn(runner, engine)
+    val signInBlocked = offline || removal?.first == true
     var menu by remember { mutableStateOf(false) }
+    LaunchedEffect(foldsBack) { if (foldsBack) close() }
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -785,28 +807,43 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
             Box {
                 TextButton(onClick = { menu = true }) { Text("⋯", Modifier.clearAndSetSemantics { contentDescription = "More for ${line.name}" }) }
                 DropdownMenu(menu, { menu = false }) {
-                    DropdownMenuItem(text = { Text("Rename…") }, onClick = { menu = false; rename() })
-                    if (!line.isDefault) DropdownMenuItem(text = { Text("Remove", color = if (offline) Ink.muted else Ink.red) }, enabled = !offline,
-                        onClick = { menu = false; remove() })
+                    DropdownMenuItem(text = { Text(AccountCopy.RENAME) }, onClick = { menu = false; rename() })
+                    if (line.auth == "yes" && !line.envKey && canSignIn) DropdownMenuItem(text = { Text(AccountCopy.SIGN_IN_AGAIN) },
+                        enabled = !signInBlocked, onClick = { menu = false; signIn() })
+                    if (canPause) {
+                        if (paused) {
+                            DropdownMenuItem(text = { Text(AccountCopy.RESUME_NOW) }, onClick = { menu = false; resume() })
+                            DropdownMenuItem(text = { Text(AccountCopy.CHANGE_DURATION) }, onClick = { menu = false; pause() })
+                        } else if (line.auth == "yes") DropdownMenuItem(text = { Text(AccountCopy.PAUSE) }, onClick = { menu = false; pause() })
+                    }
+                    if (!line.isDefault) {
+                        HorizontalDivider()
+                        DropdownMenuItem(text = { Text(AccountCopy.REMOVE, color = if (offline) Ink.muted else Ink.red) }, enabled = !offline,
+                            onClick = { menu = false; remove() })
+                    }
                 }
             }
         }
         if (windows.isNotEmpty()) windows.forEach { UsageWindowRow(it, RunnerPage.resetsLine(it, now), withGroup = true) }
-        // A Default on the machine's Gemini key runs on the key: neither signed in nor out, with no quota of its own.
         else if (line.envKey) Text(AccountCopy.ENV_KEY_LINE, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
         else if (line.auth == "yes" && RunnerPage.reportsQuota(engine)) Text(RunnerCopy.NO_QUOTA, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
-        removal?.second?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.red) }
-        when {
-            signingIn -> {
-                RunnerSignInCard(api, runner.text("id"), engine, account = line.signInAccount)
-                TextButton(onClick = close) { Text("Close") }
+        // A login about to lapse, said before it does the way Claude Code says it, with the way to renew it beside it.
+        if (!signingIn) RunnerPage.loginExpiresLine(line, now)?.let { expiring ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("⚠ $expiring", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold), color = Ink.amber)
+                OutlinedButton(onClick = signIn, enabled = !signInBlocked) { Text(AccountCopy.RENEW) }
             }
-            canPause && (line.auth == "yes" || RunnerPage.isPaused(line.pausedUntil, now)) -> AccountPauseControls(line.name, line.pausedUntil,
-                "Personal account · This runner. Paused sessions wait until it resumes or you switch accounts.",
-                signInAgain = if (canSignIn) signIn else null, signInDisabled = offline || removal?.first == true, save = pause)
-            // Alone, a Default on the machine's Gemini key offers Google's sign-in; beside Google accounts, Add Account does.
-            canSignIn && (!line.envKey || alone) -> OutlinedButton(onClick = signIn, enabled = !offline && removal?.first != true) {
-                Text(when { line.envKey -> AccountCopy.SIGN_IN_WITH_GOOGLE; line.auth == "yes" -> AccountCopy.SIGN_IN_AGAIN; else -> RunnerCopy.SIGN_IN })
+        }
+        removal?.second?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.red) }
+        if (signingIn) RunnerSignInCard(api, runner.text("id"), engine, account = line.signInAccount, autoStart = true, onClose = close, onSignedIn = landed)
+        else {
+            // Paused is the row's state; Resume and a new duration are its menu's.
+            AccountPauseLine(line.pausedUntil)
+            RunnerPage.signedOutNote(line, alone, engine)?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.muted) }
+            // A Default on the machine's Gemini key is not signed in to Google: alone, it offers that sign-in; beside Google
+            // accounts, Add Account is where another joins. An account signed in is signed in again from its menu.
+            if (canSignIn && (!line.envKey || alone) && line.auth != "yes") OutlinedButton(onClick = signIn, enabled = !signInBlocked) {
+                Text(if (line.envKey) AccountCopy.SIGN_IN_WITH_GOOGLE else RunnerCopy.SIGN_IN)
             }
         }
     }
@@ -865,8 +902,8 @@ private fun AddAccountRow(api: ManagementApi, model: RunnersModel, runner: JsonO
         OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth().onFocusChanged { state -> if (focused && !state.isFocused) saveName(); focused = state.isFocused },
             label = { Text("Account name") }, placeholder = { Text("Work") }, singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { saveName() }))
-        RunnerSignInCard(api, id, engine, accountName = name, autoStart = true)
-        TextButton(onClick = { saveName(); close() }) { Text("Close") }
+        // The card's own Cancel or Close puts it away; the name typed so far is saved as it goes.
+        RunnerSignInCard(api, id, engine, accountName = name, autoStart = true, onClose = { saveName(); close() })
     } else TextButton(enabled = !offline, onClick = {
         picked = RunnerPage.defaultAccountName(accounts); name = picked
         before = accounts.map { it.text("id") }.toSet(); waiting = null
@@ -898,6 +935,8 @@ private class SignInRelay(private val api: ManagementApi, val runnerId: String, 
         val reported = if (mine) relay?.str("status") else null
         return if (watched || inFlight(reported)) reported else null
     }
+    /** A sign-in of this card's is under way: one another device started for the account is followed, not started over. */
+    val underWay get() = inFlight(status)
     val verifying get() = submitting || (sent && status == "awaiting_code" && relay?.str("message") == null)
     val url get() = if (mine) relay?.str("url") else null
     val userCode get() = if (mine) relay?.str("userCode") else null
@@ -944,22 +983,35 @@ private class SignInRelay(private val api: ManagementApi, val runnerId: String, 
     }
 }
 
-/** RunnerSignInView: the relay for one engine/account, from start to signed in. */
+/**
+ * RunnerSignInView: the relay for one engine/account, from start to signed in. With [autoStart] the press that raised the
+ * card — Add Account, an account's Sign In, Sign In Again or Renew — already asked for the sign-in, so it starts as the card
+ * appears; a card for an account the runner has follows a sign-in already under way for it instead. Kimi's starts on the site
+ * it is asked for, so its card never starts one by appearing. Given [onClose], the card offers the one way to put it away:
+ * Cancel while a sign-in is under way (cancelling it first), Close otherwise — never both. [onSignedIn]: the sign-in landed.
+ */
 @Composable
 private fun RunnerSignInCard(api: ManagementApi, runnerId: String, engine: String, account: String? = null, accountName: String? = null,
-                             autoStart: Boolean = false) {
+                             autoStart: Boolean = false, onClose: (() -> Unit)? = null, onSignedIn: (() -> Unit)? = null) {
     val scope = rememberCoroutineScope()
     val relay = remember(runnerId, engine, account) { SignInRelay(api, runnerId, engine, account, adding = accountName != null) }
     val uri = LocalUriHandler.current
     val context = LocalContext.current
     val cli = RunnerPage.engineName(engine)
-    LaunchedEffect(relay) { if (autoStart) relay.begin(accountName, this) else relay.refresh(this) }
-    @Composable fun openPage() {
-        relay.url?.takeIf { runCatching { java.net.URI(it).scheme == "https" }.getOrDefault(false) }?.let { url ->
-            Button(onClick = { runCatching { uri.openUri(url) } }) { Text("Open the sign-in page") }
-        }
+    LaunchedEffect(relay) {
+        if (autoStart && engine != "kimi") {
+            if (accountName == null) relay.refresh(this)
+            if (!relay.underWay) relay.begin(accountName, this)
+        } else relay.refresh(this)
     }
-    @Composable fun cancel() = TextButton(onClick = { scope.launch { relay.cancel(scope) } }, enabled = !relay.busy) { Text("Cancel") }
+    val done = relay.status == "done"
+    LaunchedEffect(done) { if (done) onSignedIn?.invoke() }
+    fun open(url: String) { runCatching { uri.openUri(url) } }
+    val page = relay.url?.takeIf { runCatching { java.net.URI(it).scheme == "https" }.getOrDefault(false) }
+    @Composable fun cancel() = TextButton(onClick = { scope.launch { if (relay.cancel(scope)) onClose?.invoke() } }, enabled = !relay.busy) {
+        Text(AccountCopy.CANCEL)
+    }
+    @Composable fun close() { onClose?.let { TextButton(onClick = it) { Text(AccountCopy.CLOSE) } } }
     @Composable fun waiting(title: String, hint: String) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp); Text(title, style = MaterialTheme.typography.labelMedium)
@@ -969,34 +1021,29 @@ private fun RunnerSignInCard(api: ManagementApi, runnerId: String, engine: Strin
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         when (relay.status) {
-            "done" -> Text("✓ Signed in — this runner is ready.", style = MaterialTheme.typography.labelMedium, color = Ink.green)
+            "done" -> { Text("✓ Signed in — this runner is ready.", style = MaterialTheme.typography.labelMedium, color = Ink.green); close() }
             "pending" -> waiting("Starting sign-in on the runner…", "The runner picks it up on its next check-in, so the link can take up to a minute to show here.")
+            // Device flow: the code comes first, and one press both copies it and opens the page it goes into — over there,
+            // all that is left is a paste.
             "awaiting_approval" -> {
-                openPage()
-                Text("Sign in there, then enter this one-time code:", style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+                Text(AccountCopy.ENTER_CODE, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
                 relay.userCode?.let { code ->
-                    Text(code, Modifier.clickable { copyText(context, "Sign-in code", code) }.semantics { contentDescription = "Copy code $code" },
-                        fontFamily = FontFamily.Monospace)
+                    SelectionContainer { Text(code, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold), fontFamily = FontFamily.Monospace) }
+                }
+                page?.let { url ->
+                    Button(onClick = { relay.userCode?.let { copyText(context, "Sign-in code", it) }; open(url) }) {
+                        Text(if (relay.userCode != null) AccountCopy.COPY_CODE_AND_OPEN else AccountCopy.OPEN_PAGE)
+                    }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp); Text("Waiting for you to approve it…", style = MaterialTheme.typography.labelMedium)
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp); Text(AccountCopy.WAITING_FOR_APPROVAL, style = MaterialTheme.typography.labelMedium)
                 }
                 cancel()
             }
             "awaiting_code" -> if (relay.verifying) waiting("Signing in with your code…", "The runner picks it up on its next check-in, so this can take up to a minute.")
-            else {
-                relay.message?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.amber) }
-                openPage()
-                Text("Approve it there, then paste the code the page gives you:", style = MaterialTheme.typography.labelMedium, color = Ink.muted)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedTextField(relay.code, { relay.code = it }, Modifier.weight(1f), placeholder = { Text("Paste the code") }, singleLine = true,
-                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false, imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = { scope.launch { relay.submit(scope) } }))
-                    OutlinedButton(onClick = { scope.launch { relay.submit(scope) } }, enabled = !relay.busy && relay.code.isNotBlank()) { Text("Submit") }
-                }
-                cancel()
-            }
+            else PasteBack(relay, page, ::open) { cancel() }
             else -> {
+                // Kimi's sign-in starts from its own button: which of its sites is asked first is that card's question.
                 if (engine == "antigravity") GoogleSignInTerms()
                 if (relay.status == "failed") relay.message?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.amber) }
                 Button(onClick = { scope.launch { relay.begin(accountName, scope) } }, enabled = !relay.busy && (accountName == null || accountName.isNotBlank())) {
@@ -1005,10 +1052,55 @@ private fun RunnerSignInCard(api: ManagementApi, runnerId: String, engine: Strin
                         engine == "antigravity" -> AccountCopy.SIGN_IN_WITH_GOOGLE; else -> "Sign in to $cli"
                     })
                 }
+                close()
             }
         }
         relay.error?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.red) }
     }
+}
+
+/**
+ * PasteBackForm (Claude, Antigravity): the page hands over a code that comes back through here. The prominent press follows
+ * the next step: Open the sign-in page until it was opened from here and the app came back, then Paste, which reads the
+ * clipboard and sends the code at once (Android says it was pasted, as it does for every app). A code typed by hand goes
+ * with Submit, or Done.
+ */
+@Composable
+private fun PasteBack(relay: SignInRelay, page: String?, open: (String) -> Unit, cancel: @Composable () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var opened by remember { mutableStateOf(false) }
+    var returned by remember { mutableStateOf(false) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    // Back from the page this opened: the code is on the clipboard now, so Paste is the press.
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME && opened) returned = true }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    fun submit() { scope.launch { relay.submit(scope) } }
+    // A rejected code lands back here with the same page still valid: the message is what says anything changed.
+    relay.message?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.amber) }
+    page?.let { url ->
+        if (returned) TextButton(onClick = { open(url) }) { Text(AccountCopy.OPEN_PAGE) }
+        else Button(onClick = { opened = true; open(url) }) { Text(AccountCopy.OPEN_PAGE) }
+    }
+    Text(AccountCopy.APPROVE_THEN_PASTE, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        OutlinedTextField(relay.code, { relay.code = it }, Modifier.weight(1f), placeholder = { Text(AccountCopy.PASTE_THE_CODE) }, singleLine = true,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false, imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { submit() }))
+        if (relay.code.isNotBlank()) OutlinedButton(onClick = ::submit, enabled = !relay.busy) { Text(AccountCopy.SUBMIT) }
+        else {
+            val paste = {
+                pasteText(context)?.trim()?.takeIf { it.isNotEmpty() }?.let { code -> relay.code = code; submit() }
+                Unit
+            }
+            if (returned) Button(onClick = paste, enabled = !relay.busy) { Text("Paste") }
+            else OutlinedButton(onClick = paste, enabled = !relay.busy) { Text("Paste") }
+        }
+    }
+    cancel()
 }
 
 /** AddRunnerSheet: the install command, waiting for the new machine, and approving one with no browser. */
