@@ -2,7 +2,10 @@
 
 本目录服务于 [P2 跟进（第 2 批窗口）](orbit-task:34blUhb6Wip3e5nyziKfq)。验收条目 key `1BvO6hYrlFnU60JqxQPUHt`，原文：**P2：Orbit 自有弹层、选择及反馈组件保持现有键盘、焦点、通知和确认行为。**
 
-分支从当时的项目 tip `7732f14f8` 开工，修复与对照都在这棵树上做；最后合入了项目分支新的 tip `【待补】`，在合入后的树上再跑合并检查（见[合入项目 tip 之后](#合入项目-tip-之后)）。
+分支从当时的项目 tip `7732f14f8` 开工，修复与对照都在这棵树上做，终版是 `aed0a7bab`。之后协调者在 2026-10-08 要求各分支跟上 main，本分支整体 rebase 到 `origin/main` `c7efa24cb`；那时项目 tip `490b5dceb` 已全部在 main 里。
+- 22 个提交都没有冲突。5 个源文件的改动，patch-id 在 rebase 前后逐一相同。
+- **本文和 `checks/` 里的提交号都是 rebase 前的**，即运行时的提交。它们与 rebase 后提交的对照在 [rebase-map.txt](rebase-map.txt)；rebase 前的 tip `0e928e2fd` 留在 `refs/kw2/pre-rebase`，旧提交仍可达。
+- 在新基础上重跑了哪些检查，见 [rebase 到 main 之后](#rebase-到-main-之后)。
 
 ## 结论
 
@@ -36,7 +39,7 @@
 6. **约定和已验收的行为不变**：
    - Menu 的 Tab 约定不变：窗口内 ⏎Tab 的 burst 等于 paced，Tab 离开并关闭菜单。⏎Tab⏎ 与旧 Dropdown 不同，是约定所致，不是回归。
    - 前两个任务的探针修复前后相同：Select ↓/↑/⏎ 276 个样本，Menu 冻结帧 80 例。
-   - 其他回归检查见[已验收行为的回归](#已验收行为的回归)：choices 原入口八环境、overlays、choices 测试列表、试点、P0、相关单测；项目合并检查在合入项目 tip 后的树上跑。
+   - 其他回归检查见[已验收行为的回归](#已验收行为的回归)：choices 原入口八环境、overlays、choices 测试列表、试点、P0、相关单测。项目合并检查以及协调者指定的几项，在 rebase 到 main 后的树上重跑，见 [rebase 到 main 之后](#rebase-到-main-之后)。
 
 ## 旧 AntD 的机制（源码）
 
@@ -334,11 +337,36 @@ choices 入口那两次失败，不是第一版修复造成的：
 - 这个文件已由 `2026-10-07.json` 登记（status new，owner P6）。`--check-owners` 只对 P0.1 归属的文件检查符号增长，所以多出 Popconfirm 时它没有失去归属，新条目也就不是归属所必需的。
 - 如果照 07 的格式写成 `changed`，`verify-record.mjs` 第 3 项（每个新增/改动条目都必需）会失败；在临时目录里实测确实如此。
 - 协调者选了 B（请求 `34bt5NJy7hlys1RIl41ij`）：条目 status 用 `amended`，表示「重述已登记条目的当前事实，owner 不变，不是归属所必需」，所以第 3 项不适用；`added` 照写，相对被重述的条目计算。记录本身（`statusMeaning`）和 `inventory-delta/README.md` 都写明了这个含义；README 只在产物表追加一行、在 status 取值处补一条，不重排已有内容。
-- 记录由 [build-inventory-record.py](build-inventory-record.py) 从本分支源码的审计生成，scan 是 `aed0a7bab` 的源码；[inventory-check.sh](inventory-check.sh) 做核对。结果：【待补】
+- 记录写在 rebase 之后，[build-inventory-record.py](build-inventory-record.py) 从交付树的审计生成。scan 是 `37efe2490`，它的源码与交付时的 HEAD 相同。引入该导入的提交写的是 rebase 后的 `f74f4251f`，rebase 前是 `5cd02c2ae`。
 
-## 合入项目 tip 之后
+[inventory-check.sh](inventory-check.sh) 在新基础上核对（[inventory-check-rebased](checks/inventory-check-rebased.txt)）：
+- 记录能从 scan 的审计逐字节重建。
+- main 带来了 8 个还没有 owner 的使用点：
+  - `DeepSeekBalance.tsx`、`ProjectDoneConversation.test.tsx`、`RunnerEngines.accountFold.test.tsx`、`StartProjectCard.test.tsx`、`WorkspaceView.neverStarted.test.tsx`；
+  - `index.css` 第 6624、6625、10626 行。
 
-【待补：合入】
+  单独在 `origin/main` 上跑 `--check-owners` 也是同一组 8 个，本分支没有带来任何未归属点，各批的 owner 计数也不变。原来那 2 个测试文件（`ProjectDoneConversation.test.tsx`、`RunnerEngines.accountFold.test.tsx`）在新基础上还在，P4.2 的 `2026-10-07c.json` 还没落到 main。
+- 协调者 2026-10-08 判定这 8 个都归 P4.2：`DeepSeekBalance.tsx` 和 `RunnerEngines.accountFold.test.tsx` 随 P4.2 迁移，其余 6 个由 P4.2 的 `2026-10-07c.json` 登记。本任务不登记它们。
+- 因为这 8 个点，`verify-record.mjs 2026-10-07d.json` 在第 2 项（不能有未归属点）停下，列出的正是这 8 个点。
+- 为了核对 07d 本身的其余各项，脚本只在临时副本里加一份替身记录 `2026-10-07c-standin.json`，**不随交付提交**。它只给这 8 个点（5 个文件、3 行 index.css）owner「P4.2 (stand-in)」，别的什么也不写。加上它之后，`verify-record.mjs` 对 07d 全部通过：1 个文件条目与审计一致，排在 3 份记录之后，0 未归属、0 待定，P0.1 基线干净。这 8 个点的正式登记由 07c 负责。
+- 交付树上的 `--check-owners` 是这 8 个点（预期如此）。审计自检 `audit-antd-selfcheck.mjs`、P0.1 清单核对 `verify-antd-inventory.mjs` 都通过。
+- 如果交证据时 07c 已落到项目 tip 或 main，再在合并树上补跑一次 `verify-record.mjs` 和 `--check-owners`。【待补：届时状态】
+
+## rebase 到 main 之后
+
+终版树 `aed0a7bab` 上做完的运行，原件照旧有效（协调者 2026-10-08）。新基础上重跑的检查如下，按协调者的顺序，由 [rebased-queue.sh](rebased-queue.sh) 一次一个地跑，每步要 6 GB 空闲。
+
+| 检查 | 新基础上的结果 |
+| --- | --- |
+| 清单（`--check-owners`、2026-10-07d.json 的 `verify-record.mjs`、审计自检、P0.1 清单核对） | 见[清单复扫](#清单复扫与-2026-10-07djson)（[inventory-check-rebased](checks/inventory-check-rebased.txt)） |
+| 共享包构建，然后项目合并检查 `npm run build -w @orbit/web && npm run test -w @orbit/web` | 【待补】 |
+| 冻结帧，八环境（49 例 × 8） | 【待补】 |
+| choices 原入口，八环境 | 【待补】 |
+| P0（原命令） | 【待补】 |
+| 完整 choices 矩阵，按项目 | 【待补】 |
+| 试点那张图的复跑 | 【待补】 |
+
+共享包构建要先做：Web 从 `@orbit/shared` 的 `dist` 引入它，而这个工作树的 `dist` 还是按开工时的源码构建的；main 之后改了 20 个共享文件。这一步就是 worktree overlay 准备依赖时做的事。
 
 ## 边界
 
