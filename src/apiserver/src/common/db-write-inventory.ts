@@ -1582,6 +1582,19 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'None inside, and none after: the worker\'s next pass claims the job; no task is published.',
     answer: 'Typed 503 from the global boundary; the plan job stays queued or held, and the owner\'s next request or settings change asks again.',
   },
+  // The rollback sweep's per-job settle (contracts/wiki.contract.json `jobs.executor.rollback`, the
+  // 2026-10-08 incident): one job's whole cancellation, with every row that waits on its conclusion.
+  {
+    at: 'wiki/wiki-executor-sweep.ts#settle',
+    shape: 'TX_RETRIED',
+    locks: 'The wiki_job row by id while still queued, running or waiting (the job table\'s rank), then the wiki_model_request and wiki_repo_op rows of that job still in flight (same rank; their foreign keys to the job take FOR KEY SHARE on the row this transaction already holds), then the one companion row the kind names — the wiki_maintenance_run by id while outcome IS NULL, or the wiki_plan_job by id while still made (rank 60, reaching wiki_space FOR KEY SHARE). Ascending throughout; nothing else is read or locked inside.',
+    identity: 'The job and its state. The first UPDATE matches only a job still in flight, so a worker that settled the job while the sweep read matches no row and the closure writes nothing; a sweep that runs twice finds the first run\'s cancelled row already settled and matches nothing on the second pass.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Every statement re-decides its rows by the same predicates inside the closure — in flight still, no outcome yet, still made — and the reason string is computed before it, so a re-run either settles the same rows the same way or matches none of them. A failure rolls back whole: the job is left entirely in flight, and the next sweep settles it then.',
+    effects: 'None inside. The sweep\'s caller publishes one `wiki.changed` per space a job was cancelled in, after the commit and outside the closure.',
+    answer: 'Typed 503 from the global boundary; the job stays in flight and the next sweep settles it.',
+  },
   // The articles (contracts/wiki.contract.json `articles`, migration 0317): one topic's articles
   // replaced together, by a maintenance run of the space or the server's own import.
   {

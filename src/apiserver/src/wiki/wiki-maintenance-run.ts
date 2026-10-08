@@ -229,9 +229,13 @@ export async function considerWikiMaintenance(
   const settling = listId ? await settleWikiMaintenanceList(prisma, ownerId, spaceId, listId, now) : { rerun: [], closed: [] };
   if (settling.rerun.length > 0 || settling.closed.length > 0) recovered = settling;
   // Cheap first: a run that has not ended is the one this fact waits for — the list's open task, or the
-  // server's own unfinished job.
+  // server's own unfinished job. A server job holds the space only while the server executes the
+  // account: after the switch moves back to `runner` it is cancelled at apiserver start (contract
+  // `jobs.executor.rollback`), and until the sweep has run, a job nobody will ever run must not
+  // block the runner path's task — on 2026-10-08 one cancelled-never rollback left a space with no
+  // maintenance at all, on either path.
   if (listId && (await unfinishedTask(prisma, ownerId, listId))) return no('unfinished');
-  if (await unfinishedMaintainJob(prisma, ownerId, spaceId)) return no('unfinished');
+  if (onServer && (await unfinishedMaintainJob(prisma, ownerId, spaceId))) return no('unfinished');
   // And a plan job that waits for the list goes before the next run.
   if (await hasQueuedWikiPlanJob(prisma, ownerId, spaceId)) return no('plan_job_queued');
 
@@ -581,7 +585,9 @@ async function unfinishedTask(db: Pick<Prisma.TransactionClient, 'task'>, ownerI
  * Whether the space's server-executed maintenance has a run that has not ended: a `maintain` job queued,
  * running or parked on its repository (contract `maintenance.job.server`, P8). It is the task check's
  * counterpart — one run of a space at a time — and the fact that arrives while one waits is answered
- * `unfinished`, exactly as it is for a list whose task is open.
+ * `unfinished`, exactly as it is for a list whose task is open. Asked only of an account the server
+ * executes: under `runner` (or an account off the `canary` list) the job is cancelled at apiserver
+ * start (contract `jobs.executor.rollback`) and must not hold the space's runner-path task.
  */
 async function unfinishedMaintainJob(
   db: Pick<Prisma.TransactionClient, 'wikiJob'>,
