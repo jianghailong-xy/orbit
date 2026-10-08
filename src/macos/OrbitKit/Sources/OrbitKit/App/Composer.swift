@@ -213,6 +213,33 @@ public enum ComposerLogic {
         return (session ?? stream) == .running
     }
 
+    /// The engine's guess at the next message (`TranscriptState.promptSuggestion`), if the composer
+    /// offers it: as the grey line of an empty box, with Use (docs/prompt-suggestions-design.md §4.4).
+    /// A port of web's `offeredPromptSuggestion` (src/web/src/lib/promptSuggestion.ts).
+    ///
+    /// Only into a box with nothing typed, staged or armed; with no card waiting on the reader (the
+    /// card is what to answer); in a conversation that can take a message; and while no turn is in
+    /// flight. That last one reads the AUTHORITATIVE record where it is loaded, as `showsInterrupt`
+    /// does — `generating` included, for a turn the engine started on its own while parked — and the
+    /// stream only until it is. Not after a run that failed either: its own card says what next.
+    public static func offeredPromptSuggestion(_ suggestion: String?, session: SessionRunState?,
+                                               generating: Bool, stream: RunStatus,
+                                               hasText: Bool, hasAttachments: Bool, replying: Bool,
+                                               waitingOnReader: Bool, sendable: Bool) -> String? {
+        guard let suggestion, !suggestion.isEmpty, !generating,
+              !hasText, !hasAttachments, !replying, !waitingOnReader, sendable else { return nil }
+        let parked: Bool
+        if let session {
+            switch session {
+            case .awaitingInput, .interrupted, .succeeded, .ended: parked = true
+            case .queued, .running, .failed, .unknown:              parked = false
+            }
+        } else {
+            parked = stream == .awaitingInput || stream == .interrupted
+        }
+        return parked ? suggestion : nil
+    }
+
     /// Whether to offer "Stop & send" beside Send. A 1:1 port of web's `offersInterruptAndSend`.
     ///
     /// While a turn generates, Send steers — the message joins the turn that is running. "Stop this

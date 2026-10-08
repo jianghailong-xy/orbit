@@ -153,6 +153,11 @@ export interface AgentExecConfig {
    *  a re-spawn; Codex takes it per request. Either way it travels on a `reload`, never a
    *  `setconfig`. */
   fastMode?: boolean;
+  /** Spawn Claude Code with `--prompt-suggestions`, so each finished turn is followed by a
+   *  `prompt_suggestion` event (docs/prompt-suggestions-design.md §3.1). Decided by the control
+   *  plane on claim and reclaim; absent means off, so an older control plane never turns it on.
+   *  Like fastMode it is read once, at spawn. */
+  promptSuggestions?: boolean;
   maxTurns?: number;
   maxBudgetUsd?: number;
   /** MCP server config passed through to the SDK (`mcpServers`). */

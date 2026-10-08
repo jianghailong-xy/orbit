@@ -7,6 +7,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.orbitd.android.auth.chooseServer
 import io.orbitd.android.*
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.cards.*
@@ -43,10 +44,10 @@ class CardsDeviceTest {
         File(output,"identity.txt").writeText("sha=${BuildConfig.SOURCE_SHA}\ndirty=${BuildConfig.SOURCE_DIRTY}\n")
         http("/__control", """{"case":"$kind","mode":"$mode"}""")
         compose.waitUntil(10_000) { app.session.state.value !is AuthState.Restoring }
-        compose.onNodeWithText("Instance address").performTextReplacement(server)
-        compose.onNodeWithText("Email").performTextInput("a08@example.test")
-        compose.onNodeWithText("Password").performTextInput("a08-fixture-password")
-        compose.onAllNodesWithText("Sign in")[1].performScrollTo().performClick()
+        compose.chooseServer(server)
+        compose.onNodeWithText("Email").performTextReplacement("a08@example.test")
+        compose.onNodeWithText("Password").performTextReplacement("a08-fixture-password")
+        compose.onNodeWithText("Sign In").performScrollTo().performClick()
         compose.waitUntil(15_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
         compose.onNodeWithTag("workspace:01a0cca7-8609-70ed-a0e2-d4b55b832b61").performClick()
         compose.onNodeWithText("Card verification").performClick()

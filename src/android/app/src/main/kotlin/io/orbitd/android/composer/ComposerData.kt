@@ -173,3 +173,21 @@ internal fun sendEndpoint(detail: JsonObject): String {
 }
 
 internal fun SessionState?.canCompose() = this != null && fresh && !accessDenied && snapshot != null
+
+private val PARKED_STATES = setOf("AWAITING_INPUT", "INTERRUPTED", "SUCCEEDED", "ENDED", "CANCELLED")
+
+/** The engine's guess at the next message, if the empty box offers it (docs/prompt-suggestions-design.md
+ * §4.4; web `offeredPromptSuggestion`, OrbitKit `ComposerLogic.offeredPromptSuggestion`): nothing typed,
+ * staged or pending, a conversation that can take a message, no turn in flight — the engine's own
+ * included — no card waiting on the reader, and not after a run that failed. */
+internal fun offeredPromptSuggestion(suggestion: String?, detail: JsonObject, draftEmpty: Boolean, usable: Boolean): String? {
+    if (suggestion.isNullOrBlank() || !draftEmpty || !usable) return null
+    val state = detail.text("runState") ?: detail.text("runStatus") ?: detail.text("status")
+    if (state !in PARKED_STATES || detail.flag("engineTurnActive") == true) return null
+    val waiting = (detail["pendingApprovals"] as? JsonPrimitive)?.intOrNull ?: 0
+    if (waiting > 0 || detail.text("waitingKind") != null) return null
+    if (detail.text("lifecycleState").let { it != null && it != "OPEN" }) return null
+    val caps = detail["capabilities"] as? JsonObject
+    if (caps != null && caps.flag("canSend") != true && caps.flag("canResume") != true) return null
+    return suggestion
+}

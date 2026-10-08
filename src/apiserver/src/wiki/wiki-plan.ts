@@ -52,6 +52,7 @@ import { redactSecrets } from '../common/secret-redaction';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { currentWikiExecutorSwitch, wikiExecutorServes } from './wiki-executor-switch';
 import { isWikiMaintenanceSession } from './wiki-maintenance-settings';
 import {
   finishWikiPlanJob,
@@ -736,6 +737,7 @@ const VERSION_SELECT = {
   repoCheck: true,
   model: true,
   authorSessionId: true,
+  authorJobId: true,
   authorUserId: true,
   confirmedByUserId: true,
   confirmedAt: true,
@@ -883,6 +885,8 @@ interface NewVersion {
   repoCheck: WikiPlanRepoCheck | null;
   model: string | null;
   authorSessionId: string | null;
+  /** The wiki_job of a server-run plan job (contract `plan.jobs.server`), which has no session; null for every other. */
+  authorJobId?: string | null;
   authorUserId: string | null;
   /** A drafting job's draft under an idempotency key; nothing else has one. */
   idempotency?: DraftIdempotency;
@@ -979,6 +983,41 @@ export class WikiPlans {
         "only a Wiki maintenance run of this space drafts its plan or proposes a change to it — a session whose task is in the space's hidden "
           + '«Wiki maintenance» list. This caller is not one.',
     });
+  }
+
+  /**
+   * The runner door's drafting routes — a job's context, its progress and its end, the materials, a draft
+   * (contract `plan.jobs.server.door`): a maintenance run of the space, as `assertMaintainer` says — and, when the
+   * server executes the account's wiki, nobody. The wiki-worker drafts and revises with the System model then, so the
+   * door hands no session a job to run, the materials to draft from or a place for what its own model wrote, and an
+   * `orbit wiki plan draft` that predates this asks no model at all. Refused WIKI_SERVER_EXECUTES once the space is
+   * found, whoever asks — on the job routes, the session of a build job aside (`assertRunnerJob`).
+   */
+  private async assertRunnerDrafts(principal: WikiPrincipal, spaceId: string): Promise<void> {
+    if (wikiExecutorServes(currentWikiExecutorSwitch(), principal.ownerId)) {
+      await this.requireSpace(principal.ownerId, spaceId);
+      throw new WikiRefusalError({
+        code: 'WIKI_SERVER_EXECUTES',
+        message:
+          "this account's wiki plan is drafted on the Orbit server (ORBIT_WIKI_EXECUTOR): the wiki worker drafts and revises it with "
+            + "the System model, and no session's model is asked. Nothing was read or drafted; the owner asks for a draft on the plan page.",
+      });
+    }
+    await this.assertMaintainer(principal, spaceId);
+  }
+
+  /**
+   * The job routes — a run's context, its progress and its end — are a drafting run's and a build's. A build is
+   * written on the runner until the documents' pipeline moves to the server (P7): whatever the switch says it is a
+   * task its session runs, so the session of the space's build job is held to `assertMaintainer` alone, as before;
+   * every other caller is held to `assertRunnerDrafts`.
+   */
+  private async assertRunnerJob(principal: WikiPrincipal, spaceId: string): Promise<void> {
+    if (wikiExecutorServes(currentWikiExecutorSwitch(), principal.ownerId) && principal.sessionId !== null) {
+      const job = await wikiPlanJobOfSession(this.prisma, principal.ownerId, spaceId, principal.sessionId);
+      if (job?.kind === 'build') return this.assertMaintainer(principal, spaceId);
+    }
+    return this.assertRunnerDrafts(principal, spaceId);
   }
 
   // ── Reads ─────────────────────────────────────────────────────────────────────────────────────
@@ -1093,6 +1132,7 @@ export class WikiPlans {
       repoCheck: row.repoCheck === null ? null : (row.repoCheck as unknown as WikiPlanRepoCheck),
       model: row.model,
       authorSessionId: row.authorSessionId,
+      authorJobId: row.authorJobId,
       authorUserId: row.authorUserId,
       confirmedByUserId: row.confirmedByUserId,
       confirmedAt: row.confirmedAt?.toISOString() ?? null,
@@ -1265,6 +1305,7 @@ export class WikiPlans {
             repoCheck: next.repoCheck === null ? Prisma.DbNull : (next.repoCheck as unknown as Prisma.InputJsonValue),
             model: next.model,
             authorSessionId: next.authorSessionId,
+            authorJobId: next.authorJobId ?? null,
             authorUserId: next.authorUserId,
             idempotencyKey: next.idempotency?.key ?? null,
             requestSha256: next.idempotency?.requestSha256 ?? null,
@@ -1324,8 +1365,28 @@ export class WikiPlans {
    * draft landing again is answered with the version it stored (contract `plan.idempotency`).
    */
   async submitDraft(principal: WikiPrincipal, spaceId: string, body: unknown): Promise<WikiPlanDraftAnswer> {
-    await this.assertMaintainer(principal, spaceId);
-    const { ownerId } = principal;
+    await this.assertRunnerDrafts(principal, spaceId);
+    return this.storeDraft(principal.ownerId, spaceId, { sessionId: principal.sessionId, jobId: null }, body);
+  }
+
+  /**
+   * A draft the wiki-worker's plan job wrote (contract `plan.jobs.server`): gated exactly as a maintenance run's draft
+   * is — the protection check included, since the model wrote it — and stored with the wiki_job as its author,
+   * where a session's draft names its session. The job checked the repository references on the space's snapshot
+   * and says so in repoCheck.
+   */
+  async submitServerDraft(by: { ownerId: string; spaceId: string; wikiJobId: string }, body: unknown): Promise<WikiPlanDraftAnswer> {
+    await this.requireSpace(by.ownerId, by.spaceId);
+    return this.storeDraft(by.ownerId, by.spaceId, { sessionId: null, jobId: by.wikiJobId }, body);
+  }
+
+  /** A drafting job's draft, gated and stored: a session's (the runner door) or a server-run job's. */
+  private async storeDraft(
+    ownerId: string,
+    spaceId: string,
+    author: { sessionId: string | null; jobId: string | null },
+    body: unknown,
+  ): Promise<WikiPlanDraftAnswer> {
     const envelope = new Walk(new Map());
     const raw = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
     if (!raw) throw gateRefusal([{ check: 'schema', path: '', message: 'the body is an object: { baseVersion, target, plan, repoCheck, model, idempotencyKey }' }], 'The draft');
@@ -1369,7 +1430,8 @@ export class WikiPlans {
       gate: report(plan, target, true),
       repoCheck,
       model,
-      authorSessionId: principal.sessionId,
+      authorSessionId: author.sessionId,
+      authorJobId: author.jobId,
       authorUserId: null,
       idempotency,
     });
@@ -1728,7 +1790,7 @@ export class WikiPlans {
    * space, its repository and the maintenance workspace's checkout. Records that the run started.
    */
   async jobContext(principal: WikiPrincipal, spaceId: string): Promise<WikiPlanJobContext> {
-    await this.assertMaintainer(principal, spaceId);
+    await this.assertRunnerJob(principal, spaceId);
     const row = await this.jobOfRun(principal, spaceId);
     await startWikiPlanJob(this.prisma, row.id, principal.sessionId!);
     const job = await wikiPlanJobById(this.prisma, principal.ownerId, row.id);
@@ -1760,7 +1822,7 @@ export class WikiPlans {
    * plan page shows as it runs.
    */
   async jobProgress(principal: WikiPrincipal, spaceId: string, body: unknown): Promise<WikiPlanJob> {
-    await this.assertMaintainer(principal, spaceId);
+    await this.assertRunnerJob(principal, spaceId);
     const row = await this.jobOfRun(principal, spaceId);
     const raw = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
     if (row.state !== 'made') throw jobEnded();
@@ -1785,7 +1847,7 @@ export class WikiPlans {
    * refused WIKI_PLAN_NO_JOB.
    */
   async jobFinish(principal: WikiPrincipal, spaceId: string, body: unknown): Promise<WikiPlanJob> {
-    await this.assertMaintainer(principal, spaceId);
+    await this.assertRunnerJob(principal, spaceId);
     const row = await this.jobOfRun(principal, spaceId);
     if (row.state !== 'made') {
       // The same end said again by the run that said it — its first send landed and the answer was lost on
@@ -1822,6 +1884,33 @@ export class WikiPlans {
   }
 
   /**
+   * How a server-run plan job ended (contract `plan.jobs.server`): what the wiki-worker's run says of it, held to
+   * the rules a session's end is held to (`jobEndOf`) and kept on the plan job its wiki_job was made with. A draft
+   * that succeeded names a version of this space this very wiki_job stored; a build, one its owner confirmed.
+   * Answers whether the plan job was ended by it — one ended already keeps what it said first.
+   */
+  async finishServerJob(by: { ownerId: string; spaceId: string; planJobId: string; wikiJobId: string }, body: unknown): Promise<boolean> {
+    const end = jobEndOf(body);
+    const row = await this.prisma.wikiPlanJob.findFirst({
+      where: { id: by.planJobId, ownerId: by.ownerId, spaceId: by.spaceId, jobId: by.wikiJobId },
+      select: { kind: true },
+    });
+    if (!row) return false;
+    if (end.outcome === 'succeeded') {
+      const stored = await this.prisma.wikiPlan.findFirst({
+        where: row.kind === 'build'
+          ? { ownerId: by.ownerId, spaceId: by.spaceId, version: end.version!, confirmedAt: { not: null } }
+          : { ownerId: by.ownerId, spaceId: by.spaceId, version: end.version!, authorJobId: by.wikiJobId },
+        select: { id: true },
+      });
+      if (!stored) throw schemaRefusal(`version ${end.version} is not one this job ${row.kind === 'build' ? 'wrote from a confirmed version' : 'stored'}`);
+    }
+    const ended = await finishWikiPlanJob(this.prisma, by.planJobId, null, end, new Date(), row.kind as WikiPlanJob['kind'], by.wikiJobId);
+    if (ended) this.realtime?.publishWikiChanged(by.ownerId, by.spaceId);
+    return ended;
+  }
+
+  /**
    * `orbit wiki plan check` (contract `plan.jobs.check`): whether a job's run did what its task was made
    * for. The owner's runner with no session — a task's acceptance command runs with none — or a
    * maintenance run of the space; another owner's space or job is a 404. It writes nothing.
@@ -1835,7 +1924,7 @@ export class WikiPlans {
 
   /** What a draft reads of Orbit besides the repository (contract `plan.jobs.materials`): a maintenance run's alone. */
   async materials(principal: WikiPrincipal, spaceId: string): Promise<WikiPlanMaterials> {
-    await this.assertMaintainer(principal, spaceId);
+    await this.assertRunnerDrafts(principal, spaceId);
     return wikiPlanMaterials(this.prisma, principal.ownerId, spaceId);
   }
 

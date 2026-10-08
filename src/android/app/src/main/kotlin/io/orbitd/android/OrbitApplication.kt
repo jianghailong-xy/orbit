@@ -5,6 +5,7 @@ import io.orbitd.android.core.auth.AuthSession
 import io.orbitd.android.core.auth.GoogleSignIn
 import io.orbitd.android.core.net.OkHttpTransport
 import io.orbitd.android.storage.AndroidCredentialStore
+import io.orbitd.android.storage.AndroidEmailStore
 import io.orbitd.android.storage.AndroidInstanceStore
 import io.orbitd.android.storage.AndroidSessionDataStore
 import io.orbitd.android.core.realtime.RealtimeStore
@@ -55,6 +56,7 @@ open class OrbitApplication : Application() {
     protected open fun createSession() = AuthSession(
         OkHttpTransport(), AndroidCredentialStore(this), AndroidInstanceStore(this),
         AndroidSessionDataStore(this), BuildConfig.VERSION_NAME, allowLoopbackHttp = BuildConfig.DEBUG,
+        emails = AndroidEmailStore(this),
     )
     protected open fun createPush() = io.orbitd.android.push.PushController(this, session, realtime, processScope)
 }
