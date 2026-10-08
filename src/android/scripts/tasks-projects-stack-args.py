@@ -32,6 +32,10 @@ compact = {
         'automatic': {'id': automatic['id'], 'title': automatic['title'], 'blockerId': final['automatic']['blockersOpen'][0]['id']},
     },
 }
+# A11b: the two projects nobody has started (seed-start.mjs), when the stack was seeded with them.
+for key in ('startAsked', 'startOwn'):
+    if key in seed['projects']:
+        compact['projects'][key] = {'id': seed['projects'][key]['id'], 'title': seed['projects'][key]['title']}
 b64 = lambda text: base64.b64encode(text.encode()).decode()
 lines = {
     'a11Seed': json.dumps(compact, ensure_ascii=False, separators=(',', ':')),

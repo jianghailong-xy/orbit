@@ -30,6 +30,7 @@ on this host, on loopback, at the fixed server SHA `d621e29aaa0178ecf6656c56656b
 | `setup.sh` | builds and runs the stack (commands below) |
 | `lib.mjs` | the HTTP client the helpers share (loopback only), plus login from `accounts.json` |
 | `seed.mjs`, `seed-blocker.mjs` | the seed (called by `setup.sh seed` and `setup.sh reset`) |
+| `seed-start.mjs` | A11b: two projects nobody has started, for the start card — one whose coordinator files a start request through the runner's door (`projects.startAsked`), one nobody coordinates (`projects.startOwn`) |
 | `verify.mjs` | capability checks through the API: auth, SSE, tasks, projects, open items, member isolation, runner |
 | `snapshot.mjs` | writes the live state into `seed.json` → `finalState` (read-only toward the stack) |
 | `api.mjs` | `node <stack>/api.mjs METHOD PATH [json] [--as owner\|member]` for ad-hoc reads and writes |
@@ -49,7 +50,7 @@ stack directory. The runner cannot see `/root`, where checkouts live, and `seed.
 | `db` | (re)creates the Postgres container on tmpfs and applies the migrations |
 | `start` | starts the apiserver, and the runner too once the seed has registered it |
 | `stop` | stops the runner and the apiserver. Postgres and its data stay |
-| `seed` | runs `seed.mjs` then `seed-blocker.mjs`, which needs a freshly migrated database |
+| `seed` | runs `seed.mjs`, `seed-blocker.mjs` and `seed-start.mjs`, which need a freshly migrated database |
 | `status` | shows the source SHA, container, pids, `/api/health` and the listening ports |
 | `reset` | stops everything, wipes the runner state and sandbox repo, then runs `db`, `start` and `seed`: a freshly seeded stack in about 4 min |
 | `clean` | stops everything and removes the container and everything the script made under the stack directory (the directory itself goes once empty) |
@@ -67,6 +68,7 @@ Overrides, the same for every command and helper (export them before running any
 | `A11_STACK_PG_PORT` | `5711` |
 | `A11_STACK_PG_CONTAINER` | `a11-stack-pg` |
 | `NM_SRC` | a worktree with `node_modules` installed (`npm ci`) from the SHA's `package-lock.json`. If unset, the first one in `git worktree list` that passes `scripts/worktree-dependencies.mjs` is used |
+| `A11_STACK_REV`, `A11_STACK_API_TREE`, `A11_STACK_SHARED_TREE`, `A11_STACK_LOCK_SHA256` | another server version, all four together; `build` still checks the archived trees and lockfile against them. A11b ran main `f37505ec1626e972159494c86cb8da13499fb1b4` (`adc2cdcc5b3f0ee982d06b48b922c80544799a83`, `30b9e894c9a7d8aa78b0c820602740baade9c9e8`, lockfile `f0554c0375b5b06f71c47088d1b504a383639934b286f73f1b7f19272460c501`) on ports 3712/5712 |
 
 Requirements: root (for `unshare` and `mount`), docker, git, node, go and openssl.
 
@@ -94,6 +96,11 @@ A11_STACK_ARGS=<args file> bash src/android/scripts/tasks-projects-stack-device-
   run.
 - On a port other than 3711, also set `A11_STACK_SERVER=http://127.0.0.1:<port>` for the device-test script,
   which uses it for its health check and `adb reverse`.
+- A11b's start card journeys, `s14` (the coordinator's request, answered on its card) and `s15` (the owner's own
+  Start…, which opens the first coordinator), read `projects.startAsked/startOwn` from the args file and use them up:
+  run them with `A11_TEST=io.orbitd.android.taskprojects.RealStackDeviceTest#s14_…,…#s15_…` on a fresh `reset`. They were
+  written against main's server; `s07` still assumes the older server's start door (Automatic is now on by default, and
+  a start that cannot open a coordinator is refused).
 
 ## Keep-alive (65 s)
 

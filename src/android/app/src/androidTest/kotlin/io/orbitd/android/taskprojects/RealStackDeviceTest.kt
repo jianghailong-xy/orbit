@@ -20,6 +20,7 @@ import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.projects.ProjectPage
 import io.orbitd.android.projects.RunSettings
+import io.orbitd.android.projects.StartProjectCopy
 import io.orbitd.android.tasks.TaskDetailCopy
 import io.orbitd.android.tasks.TaskListCopy
 import kotlinx.coroutines.runBlocking
@@ -467,6 +468,72 @@ class RealStackDeviceTest {
         capture("stack-member-tasks")
         open("orbit-project:$ownersProject"); awaitText(ProjectPage.gone); capture("stack-member-owners-project")
         open("orbit-task:$ownersTask"); awaitText("This task is no longer available."); capture("stack-member-owners-task")
+    }
+
+    // MARK: A11b · the start card on the stack's own server (seed-start.mjs; run on main's server)
+
+    /** A real START_REQUEST, filed by the project's coordinator through the runner's door: the page's row, Review into the
+     * coordinator conversation onto the start card drawn from the server's own plan (Now and You from what each graph mark
+     * says), the note saying the coordinator suggested Automatic off, and Start answering the request — the record says
+     * started, Automatic on, and that Automatic is not what the request suggested. */
+    @Test fun s14_theCoordinatorAsksToStartAndTheOwnerStartsOnItsCard() = journey("stack-start-asked") {
+        val asked = project("startAsked"); val id = asked.text("id")!!
+        val item = record("GET /projects/$id/open-items → startRequest", get("/projects/$id/open-items").jsonObject.obj("startRequest")!!)
+        val marks = record("GET /projects/$id/dependency-graph → marks", get("/projects/$id/dependency-graph").jsonObject.objects("marks")
+            .map { "${it.text("title")} · ${it.text("completionCriterion")} · autoRunWhenReady=${it["autoRunWhenReady"]}" })
+        assertTrue("the server says how each task is settled and whether it starts by itself", marks.isNotEmpty() && marks.none { "null" in it })
+        val card = "start:${item.text("itemId")}"
+        signIn(); open("orbit-project:$id"); awaitTag("project-detail"); awaitIn("project-detail", asked.text("title")!!)
+        awaitScrollTo("project-detail", hasTestTag("start-request")); capture("stack-start-asked-0-row")
+        tap("start-request:action")
+        awaitTag("interaction-cards"); awaitScrollTo("transcript-list", hasTestTag(card))
+        compose.waitUntil(60_000) { compose.onAllNodes(hasTestTag("$card:START") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("$card-asked").assertTextContains("${StartProjectCopy.coordinatorAsked} ", substring = true)
+        capture("stack-start-asked-1-top")
+        compose.onNodeWithTag("$card-note").performScrollTo().assertTextEquals(StartProjectCopy.howItRunsNote(asked = true, suggestedOff = true))
+        capture("stack-start-asked-2-how-it-runs")
+        compose.onNodeWithTag("$card-level:1").performScrollTo().assertTextContains(StartProjectCopy.now)
+        compose.onNodeWithTag("$card-level:4").performScrollTo().assertTextContains(StartProjectCopy.you)
+        compose.onNodeWithTag("$card-caption").performScrollTo(); capture("stack-start-asked-3-plan-and-start")
+        compose.onNodeWithTag("$card:START").performScrollTo().performClick()
+        compose.waitUntil(90_000) { projectRecord(id).text("startedAt") != null }
+        record("after Start", projectRecord(id).let { "startedAt=${it.text("startedAt")} coordinatorEnabled=${it["coordinatorEnabled"]} coordinatorSessionId=${it.text("coordinatorSessionId")}" })
+        val startedWith = record("GET /projects/$id/acceptance/confirmation → startedWith",
+            get("/projects/$id/acceptance/confirmation").jsonObject.obj("confirmation")?.obj("startedWith"))
+        assertEquals(true, startedWith?.obj("settings")?.flag("automatic"))
+        assertTrue("Automatic on is not what the coordinator suggested", "automatic" in startedWith?.strings("differsFromRequest").orEmpty())
+        capture("stack-start-asked-4-started")
+    }
+
+    /** The owner's own Start… on a project nobody coordinates: the card says a start with Automatic on opens a coordinator, and
+     * the server does — the project starts with its first coordinator. */
+    @Test fun s15_theOwnersOwnStartOpensTheFirstCoordinator() = journey("stack-start-own") {
+        val own = project("startOwn"); val id = own.text("id")!!
+        record("before", projectRecord(id).let { "startedAt=${it["startedAt"]} coordinatorSessionId=${it["coordinatorSessionId"]}" })
+        signIn(); open("orbit-project:$id"); awaitTag("project-detail"); awaitIn("project-detail", own.text("title")!!)
+        awaitScrollTo("project-detail", hasTestTag("project-start-own")); tap("project-start-own"); awaitTag("project-start-confirm")
+        compose.onNodeWithTag("project-start-asked").assertTextEquals(StartProjectCopy.nobodyAskedLine(hasCoordinator = false))
+        compose.onNodeWithTag("project-start-opens").performScrollTo().assertTextEquals(StartProjectCopy.opensCoordinator)
+        capture("stack-start-own-1-top")
+        compose.onNodeWithTag("project-start-level:4").performScrollTo().assertTextContains(StartProjectCopy.you)
+        compose.onNodeWithTag("project-start-caption").performScrollTo().assertTextContains("Opens a coordinator", substring = true)
+        compose.onNodeWithTag("project-start-sheet").performTouchInput { swipeUp() }; capture("stack-start-own-2-plan-and-start")
+        compose.onNodeWithTag("project-start-confirm").performScrollTo().performClick()
+        // As in s07: the server decides what the project can start on, and a refusal stays on the card in its words.
+        val refusal = hasText(StartProjectCopy.notRecorded, substring = true)
+        compose.waitUntil(90_000) { projectRecord(id).text("startedAt") != null || compose.onAllNodes(refusal).fetchSemanticsNodes().isNotEmpty() }
+        if (projectRecord(id).text("startedAt") == null) {
+            record("refused (shown on the card)", compose.onAllNodes(refusal).fetchSemanticsNodes().first().config.getOrNull(SemanticsProperties.Text)?.joinToString())
+            compose.onNode(refusal).performScrollTo(); capture("stack-start-own-2b-refused")
+            compose.onNodeWithTag("project-start-line").performScrollTo().performClick()
+            compose.onNodeWithTag("project-start-line:MAIN").performClick()
+            compose.onNodeWithTag("project-start-confirm").performScrollTo().performClick()
+        }
+        compose.waitUntil(90_000) { projectRecord(id).text("startedAt") != null }
+        val started = projectRecord(id)
+        record("after Start", "startedAt=${started.text("startedAt")} coordinatorEnabled=${started["coordinatorEnabled"]} coordinatorSessionId=${started.text("coordinatorSessionId")}")
+        assertNotNull("the start opened the project's first coordinator", started.text("coordinatorSessionId"))
+        awaitGone("project-start-sheet"); capture("stack-start-own-3-started")
     }
 
     @Test fun s13_recordAsDoneThroughTheDoneDoorThenReopen() = journey("stack-done-door") {

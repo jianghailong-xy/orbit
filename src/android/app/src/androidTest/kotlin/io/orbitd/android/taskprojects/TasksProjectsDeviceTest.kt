@@ -348,20 +348,23 @@ class TasksProjectsDeviceTest {
         compose.onNodeWithTag("project-start-opens").performScrollTo().assertTextEquals(StartProjectCopy.opensCoordinator)
         compose.onNodeWithTag("project-start-comes-to-you").performScrollTo()
         compose.onNodeWithText("E · 上线 · you confirm it").assertIsDisplayed(); compose.onNodeWithText("Problems it can’t resolve within 1 h").assertIsDisplayed()
-        capture("start-own-2-how-it-runs")
         compose.onNodeWithTag("project-start-note").performScrollTo().assertTextEquals(StartProjectCopy.howItRunsNote(asked = false, suggestedOff = false))
+        capture("start-own-2-how-it-runs")
         compose.onNodeWithTag("project-start-level:1").performScrollTo().assertTextContains("A").assertTextContains(StartProjectCopy.now)
         compose.onNodeWithTag("project-start-level:2").assertTextContains("B · C").assertTextContains(StartProjectCopy.inParallel(2))
         compose.onNodeWithTag("project-start-level:4").assertTextContains("E").assertTextContains(StartProjectCopy.you)
         compose.onNodeWithTag("project-start-caption").performScrollTo().assertTextEquals("Opens a coordinator · starts A now · confirms this criterion")
+        compose.onNodeWithTag("project-start-sheet").performTouchInput { swipeUp() }
         capture("start-own-3-plan-and-start")
         assertNoOldStartLines()
+        // The journal outlives each journey's reset: only a start sent from here on is this press.
+        val before = journal().size
         compose.onNodeWithTag("project-start-confirm").performScrollTo().performClick()
-        compose.waitUntil(20_000) { http("/__stats").obj("project")?.text("startedAt") != null }
+        compose.waitUntil(20_000) { journal().drop(before).any { it.text("path") == "/api/projects/$projectId/start" } && http("/__stats").text("case") == "normal" }
         assertEquals(buildJsonObject {
             put("criteriaDigest", "seal1"); put("line", "PROJECT_BRANCH"); put("projectBranchName", "refs/heads/project/a11"); put("automatic", true)
             put("maxConcurrentTasks", 2); put("mergeCheckCommand", "true"); put("requestId", JsonNull)
-        }, journal().last { it.text("path") == "/api/projects/$projectId/start" }.obj("body"))
+        }, journal().drop(before).last { it.text("path") == "/api/projects/$projectId/start" }.obj("body"))
         awaitGone("project-start-sheet")
     }
 
@@ -384,16 +387,19 @@ class TasksProjectsDeviceTest {
         compose.onNodeWithTag("start:start1-automatic-says").assertTextEquals(RunSettings.automaticOnChecked)
         capture("start-asked-2-how-it-runs")
         compose.onNodeWithTag("start:start1-note").performScrollTo().assertTextEquals(StartProjectCopy.howItRunsNote(asked = true, suggestedOff = false))
+        capture("start-asked-2b-settings")
         compose.onNodeWithTag("start:start1-level:2").performScrollTo().assertTextContains("B · C").assertTextContains(StartProjectCopy.inParallel(2))
         compose.onNodeWithTag("start:start1-caption").performScrollTo().assertTextEquals("Starts A now · confirms this criterion · seal seal1")
         capture("start-asked-3-plan-and-start")
         assertNoOldStartLines()
+        // The journal outlives each journey's reset: only a start sent from here on is this press.
+        val before = journal().size
         compose.onNodeWithTag("start:start1:START").performScrollTo().performClick()
-        compose.waitUntil(20_000) { journal().any { it.text("method") == "POST" && it.text("path") == "/api/projects/$projectId/start" } }
+        compose.waitUntil(20_000) { journal().drop(before).any { it.text("method") == "POST" && it.text("path") == "/api/projects/$projectId/start" } }
         assertEquals(buildJsonObject {
             put("criteriaDigest", "seal1"); put("requestId", "start1"); put("line", "PROJECT_BRANCH"); put("automatic", true); put("maxConcurrentTasks", 2)
             put("mergeCheckCommand", "./verify"); put("projectBranchName", "refs/heads/project/cards")
-        }, journal().last { it.text("path") == "/api/projects/$projectId/start" }.obj("body"))
+        }, journal().drop(before).last { it.text("path") == "/api/projects/$projectId/start" }.obj("body"))
         awaitText("Request accepted"); capture("start-asked-4-accepted")
     }
 

@@ -13,6 +13,7 @@
 # helpers and the fake engine into the stack directory. Overrides (the same for every command and helper):
 #   A11_STACK_DIR (/var/tmp/a11-stack)  A11_STACK_API_PORT (3711)  A11_STACK_PG_PORT (5711)
 #   A11_STACK_PG_CONTAINER (a11-stack-pg)  NM_SRC (a checkout with node_modules from the same lockfile; found if unset)
+#   A11_STACK_REV + A11_STACK_API_TREE + A11_STACK_SHARED_TREE + A11_STACK_LOCK_SHA256 (another server version; all four)
 #
 # usage: setup.sh build | db | start | stop | seed | status | reset | clean | verify | snapshot
 #        (register <token>: used by seed)
@@ -24,10 +25,11 @@
 set -euo pipefail
 
 HERE=$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-REV=d621e29aaa0178ecf6656c56656b79936539915d
-WANT_API_TREE=c0aa1a79ded9d330c38acfb668e746e80d768b1b
-WANT_SHARED_TREE=de5d906751a4f57018c24f30c6ef0bca61ddf911
-WANT_LOCK_SHA256=1cbd66c8623d8d7fbd9499ed7607efba173bb578ff0877eda2c7dc12feff7836
+# Another server version (A11b ran main's): set all four, and each is still checked against what `build` archives.
+REV=${A11_STACK_REV:-d621e29aaa0178ecf6656c56656b79936539915d}
+WANT_API_TREE=${A11_STACK_API_TREE:-c0aa1a79ded9d330c38acfb668e746e80d768b1b}
+WANT_SHARED_TREE=${A11_STACK_SHARED_TREE:-de5d906751a4f57018c24f30c6ef0bca61ddf911}
+WANT_LOCK_SHA256=${A11_STACK_LOCK_SHA256:-1cbd66c8623d8d7fbd9499ed7607efba173bb578ff0877eda2c7dc12feff7836}
 
 S=$(realpath -m "${A11_STACK_DIR:-/var/tmp/a11-stack}")
 SRC=$S/src
@@ -45,7 +47,7 @@ RUNNER_BIN=$S/bin
 # no /usr/local/bin (codex) and no /root/.local/bin (claude, agy): the only engine the runner can find is ours
 RUNNER_PATH=$S/runner-path:/usr/bin:/bin
 # what prepare() copies from the checkout into $S (the fake engine goes to $S/runner-path/claude)
-INSTALLED=(setup.sh lib.mjs api.mjs seed.mjs seed-blocker.mjs verify.mjs snapshot.mjs loopback-only.cjs)
+INSTALLED=(setup.sh lib.mjs api.mjs seed.mjs seed-blocker.mjs seed-start.mjs verify.mjs snapshot.mjs loopback-only.cjs)
 
 die() { echo "setup.sh: $*" >&2; exit 1; }
 pid_alive() { [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null; }
@@ -287,9 +289,11 @@ node_env() {
     A11_STACK_PG_PORT="$PG_PORT" A11_STACK_PG_CONTAINER="$PG" "$@"
 }
 
-cmd_seed() {  # seed.mjs: accounts, runner, workspace, tasks, 2 projects; seed-blocker.mjs: the automatic project
+cmd_seed() {  # seed.mjs: accounts, runner, workspace, tasks, 2 projects; seed-blocker.mjs: the automatic project;
+              # seed-start.mjs: two projects nobody has started, one with its coordinator's start request
   node_env node "$S/seed.mjs"
   node_env node "$S/seed-blocker.mjs"
+  node_env node "$S/seed-start.mjs"
 }
 
 cmd_clean() {
