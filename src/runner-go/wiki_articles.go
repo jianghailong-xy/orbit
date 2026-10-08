@@ -60,7 +60,9 @@ var wikiArticlesDescription = wikiArticlesPrecondition + " This is a Wiki mainte
 	"from the entries alone, and writes the topic's articles, which the server keeps only as far as their footnotes " +
 	"name the topic's entries. It stops at the first 401 from the model's endpoint, and exits non-zero when any " +
 	"topic it took up was left unwritten. Any session but a maintenance run of the space is refused " +
-	"WIKI_NOT_MAINTENANCE_SESSION."
+	"WIKI_NOT_MAINTENANCE_SESSION. For an account the Orbit server runs the wiki for (ORBIT_WIKI_EXECUTOR server, or " +
+	"canary with the account on its list) the server answers WIKI_SERVER_EXECUTES: its wiki worker writes the " +
+	"articles, so this asks no model, says so and exits 0."
 
 // wikiArticleSystemPrompt is the whole system prompt the clean call carries (the demo's): the rest is
 // in the prompt, one article or one name at a time.
@@ -241,6 +243,9 @@ type wikiArticlesSummary struct {
 	Usage     wikiModelUsage         `json:"usage"`
 	Stats     wikiArticleStats       `json:"stats"`
 	Stopped   string                 `json:"stopped,omitempty"`
+	// ServerExecutes is a run the server answered WIKI_SERVER_EXECUTES: the account's articles are the server's
+	// wiki worker's to write, so this one asked no model and wrote nothing.
+	ServerExecutes bool `json:"serverExecutes,omitempty"`
 }
 
 // wikiArticlesTopicRun is one topic the run took up.
@@ -317,6 +322,10 @@ type wikiArticlesRun struct {
 func runWikiArticles(t *Transport, sessionID, spaceID, only, model string, progress io.Writer) (summary wikiArticlesSummary, err error) {
 	summary = wikiArticlesSummary{SpaceID: spaceID, Topics: []wikiArticlesTopicRun{}}
 	raw, err := t.planWikiArticles(sessionID, spaceID)
+	if wikiServerExecutes(err) {
+		summary.ServerExecutes = true
+		return summary, nil
+	}
 	if err != nil {
 		return summary, wikiArticlesCallError(spaceID, "", err)
 	}
@@ -373,6 +382,11 @@ func runWikiArticles(t *Transport, sessionID, spaceID, only, model string, progr
 	}()
 	for _, slug := range targets {
 		result, stop := run.topic(slug)
+		if errors.Is(stop, errWikiServerExecutes) {
+			// The switch gave the account to the server while this ran: what is left is the server's to write.
+			summary.ServerExecutes = true
+			return summary, nil
+		}
 		summary.Topics = append(summary.Topics, result)
 		switch result.Outcome {
 		case "written":
@@ -413,6 +427,9 @@ func (r *wikiArticlesRun) topic(slug string) (wikiArticlesTopicRun, error) {
 		return result
 	}
 	raw, err := r.t.wikiArticleInput(r.sessionID, r.spaceID, slug)
+	if wikiServerExecutes(err) {
+		return result, errWikiServerExecutes
+	}
 	if err != nil {
 		return fail(wikiArticlesCallError(r.spaceID, slug, err).Error()), nil
 	}
@@ -434,6 +451,9 @@ func (r *wikiArticlesRun) topic(slug string) (wikiArticlesTopicRun, error) {
 	}
 	body := wikiArticleWrite{EntrySetSha256: input.EntrySetSha256, Ref: r.ref, Model: r.cfg.model, Articles: parts}
 	raw, err = r.t.writeWikiArticles(r.sessionID, r.spaceID, slug, body)
+	if wikiServerExecutes(err) {
+		return result, errWikiServerExecutes
+	}
 	if err != nil {
 		return fail(wikiArticlesCallError(r.spaceID, slug, err).Error()), nil
 	}
@@ -1291,6 +1311,20 @@ func wikiArticlesCallError(spaceID, slug string, err error) error {
 // wikiArticleStaleCode is the refusal only the articles' write gives (contract `refusals`).
 const wikiArticleStaleCode = "WIKI_ARTICLE_STALE"
 
+// wikiServerExecutesCode is the runner door's answer for an account the Orbit server runs the wiki for
+// (contract `refusals`, `articles.serverExecution`): the server's wiki worker writes the articles with the
+// deployment's System model, and no session's provider is asked.
+const wikiServerExecutesCode = "WIKI_SERVER_EXECUTES"
+
+// errWikiServerExecutes stops a run whose topic the server answered WIKI_SERVER_EXECUTES for.
+var errWikiServerExecutes = errors.New(wikiServerExecutesCode)
+
+// wikiServerExecutes reports a call the server answered WIKI_SERVER_EXECUTES.
+func wikiServerExecutes(err error) bool {
+	var httpErr *transportHTTPError
+	return errors.As(err, &httpErr) && httpErr.code() == wikiServerExecutesCode
+}
+
 // ── The command ─────────────────────────────────────────────────────────────────────────────────
 
 func cliWikiArticles(args []string, out io.Writer, ctx cliOrchestrationContext) error {
@@ -1336,6 +1370,9 @@ func cliWikiArticles(args []string, out io.Writer, ctx cliOrchestrationContext) 
 	if runErr != nil {
 		return runErr
 	}
+	if summary.ServerExecutes {
+		return nil
+	}
 	if summary.Failed > 0 {
 		return fmt.Errorf("%s left unwritten: the next run tries again", wikiCount(summary.Failed, "topic was", "topics were"))
 	}
@@ -1343,6 +1380,10 @@ func cliWikiArticles(args []string, out io.Writer, ctx cliOrchestrationContext) 
 }
 
 func describeWikiArticlesSummary(s wikiArticlesSummary) string {
+	if s.ServerExecutes {
+		return fmt.Sprintf("The Orbit server writes the articles of space %s (%s): its wiki worker writes them after a "+
+			"maintenance run, with the deployment's System model. Nothing was asked of this session's model.", s.SpaceID, wikiServerExecutesCode)
+	}
 	if len(s.Topics) == 0 {
 		return fmt.Sprintf("No topic of space %s has entries its articles were not written from: nothing to write.", s.SpaceID)
 	}

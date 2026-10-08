@@ -293,6 +293,10 @@ model User {
   preferences           Json      @default("{}")
   // Access role. MEMBER (default) for everyone; ADMIN unlocks the user-management area.
   role                  String    @default("MEMBER")
+  // When an administrator disabled the account; null while it is enabled (docs/google-sign-in-design.md
+  // §5.5, migration 0396). A disabled account cannot sign in, refresh or use any credential it holds,
+  // and nothing it owns is deleted: enabling it again lets it back in.
+  disabledAt            DateTime? @map("disabled_at")
   // DEPRECATED, unread: a Claude subscription token (`claude setup-token`) the control plane used
   // to hold and inject on every runner. Claude now authenticates per runner — a session that finds
   // no local login surfaces the sign-in card (RunnerSignIn) — so nothing writes or reads these.

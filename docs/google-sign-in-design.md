@@ -241,9 +241,13 @@ model OAuthLoginFlow {               // oauth_login_flow：短命，兑换即删
 - 新增「停用」：管理员在用户管理里 Disable / Enable（`User.disabledAt`）。不能停用自己，也不能停用最后一个管理员。停用后：
   - 密码登录、Google 兑换、refresh 一律拒绝 `ACCOUNT_DISABLED`；停用时吊销该用户全部 refresh token（恢复后要重新登录）。
   - access token 是无状态 JWT，PAT 也走同一个 guard：`JwtAuthGuard` 对照一份内存里的停用用户集合
-    （每 30 秒从库里重读），停用在半分钟内对所有用户路由生效，不必每个请求查库。PAT 不吊销，停用期间被拒，恢复后照常可用。
+    （每 25 秒从库里重读，给查询本身和定时器的延迟留出余量），停用在半分钟内对所有用户路由生效，不必每个请求查库；
+    在本服务器上经管理接口停用或恢复，提交后立即重读。PAT 不吊销，停用期间被拒，恢复后照常可用。
   - runner 凭证的鉴权本来每次就按 `tokenHash` 查 runner（`runner-api/runner-auth.guard.ts`），同一次查询带出 owner 的
     `disabledAt` 即可拒绝；`runner-session-auth.guard.ts` 与 service token 同理。停用账号的 runner 因此收不到也领不到活。
+  - 池网关 token（`orbit-gw-` / `orbit-gwl-`）同理：两处 `caller()` 本来每次就按 `tokenHash` 查 token，同一次查询带出会话
+    owner 的 `disabledAt`，停用即回 403 `ACCOUNT_DISABLED`（codex 读的 OpenAI 错误形状，文案与 runner 凭证相同），当场生效。
+    停用前已在 runner 上跑着的 Codex 会话因此不能再经池网关消耗池主的 key 或登录账号；token 不吊销，恢复后照常可用。
   - 不删任何数据，可以恢复。身份行保留，同一个 Google 账号不能靠重新注册绕过（5.2 第 1 条先命中）。
 - 删除照旧：仍拥有 runner、workspace、任务的用户删不掉。处置滥用用停用，不用删除。
 

@@ -91,6 +91,12 @@ test('with Automatic on, the coordinator is told it judges task completion, and 
     assert.match(form, /同样用 integration_retry，传 promotionId 重跑那个候选的检查；合并本身仍由账号所有者或 Automatic 设置确认/);
     assert.match(form, /用 ask_owner 带至少两个选项提问/);
     assert.match(form, /用 open_item_hand_over 带说明交给账号所有者/);
+    // Revision 13 (§4.6, §4.4 X-D4 5): an item the coordinator took up stays its own, what needs the
+    // owner is asked, and a landed fix brings the item back to be closed or rerun.
+    assert.match(form, /待办你接手之后一直归你，\s*平台不会因为时间到了把它交给账号所有者/);
+    assert.match(form, /处理中遇到要账号所有者拍板的事，同样用 ask_owner 问，待办留在你这里/);
+    assert.match(form, /挂在待办上的修复任务落地后，平台会把待办再送来一次/);
+    assert.doesNotMatch(form, /这条会话停着不处理超过项目的/);
     assert.match(form, /重排或重跑之后待办显示为处理中，结果出来才标为已处理（HANDLED），或被新的失败取代/);
     // And not the conversational stance, whose second sentence is false with the switch on: wakes,
     // auto-run dispatch and the automatic merge into main all act on this project.

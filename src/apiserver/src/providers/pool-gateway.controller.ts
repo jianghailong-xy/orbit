@@ -1,5 +1,6 @@
 import { All, Controller, Req, Res } from '@nestjs/common';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
+import { ACCOUNT_DISABLED, ACCOUNT_DISABLED_MESSAGE } from '../auth/disabled-accounts';
 import {
   bearerToken,
   gatewayAllows,
@@ -41,6 +42,13 @@ export class PoolGatewayController {
       refuse(res, 401, 'orbit_gateway_token_invalid', login
         ? 'This Orbit session token is not valid any more — the session ended or moved, or the pool is gone'
         : 'This Orbit session token is not valid any more — the session ended, it left the shared pool, or the pool is gone');
+      return;
+    }
+    if (caller === ACCOUNT_DISABLED) {
+      // A good token of a disabled account (docs/google-sign-in-design.md §5.5): refused with the code and
+      // the words its runner credential is, in the shape codex reads — and 403, not the 401 the runner
+      // would take for its engine's own sign-in failing.
+      refuse(res, 403, ACCOUNT_DISABLED, ACCOUNT_DISABLED_MESSAGE);
       return;
     }
     const target = gatewayTarget(req.originalUrl ?? req.url);

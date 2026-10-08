@@ -344,8 +344,14 @@ async function world(stack: Stack, label: string, automatic = true): Promise<Wor
 }
 
 /** A code task settled DONE by its own acceptance command, through the runner's doors — which
- *  queues its landing (§2.3 J-T1a). Returns the task and the session that did its work. */
-async function doneCodeTask(stack: Stack, w: World, label: string): Promise<{ taskId: string; sessionId: string }> {
+ *  queues its landing (§2.3 J-T1a). Returns the task and the session that did its work. Given an
+ *  item, it is the coordinator's fix of that item (`fixesOpenItemId`, filed from its conversation). */
+async function doneCodeTask(
+  stack: Stack,
+  w: World,
+  label: string,
+  fixesOpenItemId?: string,
+): Promise<{ taskId: string; sessionId: string }> {
   const db = stack.db;
   const title = `${label} ${randomUUID().slice(0, 8)}`;
   const declared = await stack.tasks.create(w.ownerId, {
@@ -354,7 +360,8 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<{ ta
     projectId: w.projectId,
     acceptanceCommand: 'exit 0',
     acceptanceExpectedExitCode: 0,
-  });
+    ...(fixesOpenItemId ? { fixesOpenItemId } : {}),
+  }, undefined, fixesOpenItemId ? w.coordinatorSessionId : undefined);
   const sessionId = randomUUID();
   const turnId = randomUUID();
   await db.session.create({
@@ -1241,6 +1248,78 @@ test('no conversation left to ask: an escalated merge-into-main item offers "Rev
       assert.equal(pressed.status, 409);
       assert.equal(pressed.code, 'OPEN_ITEM_NO_COORDINATOR');
       assert.equal((await item(stack.db, blocked.itemId)).assignee, 'OWNER', 'nothing moved');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+/**
+ * §4.4 X-D4 (5), revision 13: the coordinator answered a red landing with a fix task, and the fix
+ * landed. Nothing closes the item by itself — it is about the FIRST task's work, and whether that
+ * went in with the fix is a question about commits the server cannot ask — so the item goes back in
+ * front of the coordinator under a new key, saying what landed and which two commits to compare, and
+ * the coordinator closes it. Before this, nothing told the coordinator, and two hours after the fix's
+ * session ended the clock handed the owner a card about work already on main (2026-10-08).
+ */
+test('a fix task landing puts the item it fixes back in front of the coordinator, saying what landed, and leaves the item open for the coordinator to close',
+  { skip, timeout: 240_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'fix-landed');
+      const red = await failedLanding(stack, w, 'fix-landed');
+      // Another red landing beside it, which no fix is about: nothing below may touch it.
+      const other = await failedLanding(stack, w, 'fix-landed-other');
+      const assignedAt = async (id: string) => (await stack.db.projectOpenItem.findUniqueOrThrow({
+        where: { id }, select: { assignedAt: true, waitingSince: true },
+      }));
+      const redBefore = await assignedAt(red.itemId);
+      const otherBefore = await assignedAt(other.itemId);
+      assert.equal((await toldAbout(stack.db, w.coordinatorSessionId, red.itemId)).length, 1,
+        'the coordinator was told about the red landing once');
+
+      const fix = await doneCodeTask(stack, w, 'fix-landed-fix', red.itemId);
+      const landing = await onlyClaim(stack, w, 'LAND_TASK');
+      const landedSha = '5'.repeat(40);
+      assert.equal((await report(stack, w, landing, landed(LINE_BEFORE, landedSha, '6'.repeat(40)))).accepted, true);
+
+      // Still open, still the coordinator's: nobody has said the first task's work is on the line.
+      const row = await item(stack.db, red.itemId);
+      assertStillOpen(row, 'the item the fix was filed against');
+      assert.equal(row.assignee, 'COORDINATOR');
+      const redAfter = await assignedAt(red.itemId);
+      assert.ok(redAfter.assignedAt.getTime() > redBefore.assignedAt.getTime(), 'the item was re-keyed');
+      assert.equal(redAfter.waitingSince.getTime(), redBefore.waitingSince.getTime(),
+        'and it has been waiting since it was opened, not since the fix landed');
+
+      // Told afresh, under the new key, about what landed and how to settle it.
+      const told = await toldAbout(stack.db, w.coordinatorSessionId, red.itemId);
+      assert.equal(told.length, 2, `the coordinator was told about the item again — ${JSON.stringify(told)}`);
+      const again = told[1]!;
+      for (const want of [
+        '【修复已落地】',
+        `修复任务 ${uuidToBase62(fix.taskId)}：结果是 LANDED`,
+        landedSha.slice(0, 12),
+        `git merge-base --is-ancestor ${TASK_BRANCH_TIP} ${landedSha}`,
+        `open_item_resolve（projectId 传 ${uuidToBase62(w.projectId)}，itemId 传 ${uuidToBase62(red.itemId)}）`,
+        `taskId 传 ${uuidToBase62(red.taskId)}`,
+        'ask_owner',
+        'Checks failed on the combined tree',
+      ]) {
+        assert.ok(again.includes(want), `the re-sent item does not say ${JSON.stringify(want)}:\n${again}`);
+      }
+      assert.ok(told[0]!.startsWith('【例外待办】'), 'the first delivery said nothing about a fix');
+
+      // The other item was neither re-keyed nor re-sent.
+      assert.equal((await assignedAt(other.itemId)).assignedAt.getTime(), otherBefore.assignedAt.getTime());
+      assert.equal((await toldAbout(stack.db, w.coordinatorSessionId, other.itemId)).length, 1);
+
+      // The coordinator compares the commits and closes it — its own press, with its reason.
+      const closed = await stack.openItems.resolveOpenItem(
+        w.ownerId, w.projectId, red.itemId,
+        { note: 'the fix landed and carries the first task\'s commits' },
+        { kind: 'SESSION', sessionId: w.coordinatorSessionId },
+      );
+      assert.deepEqual([closed.state, closed.resolution], ['RESOLVED', 'HANDLED']);
     } finally {
       await stack.db.$disconnect();
     }
