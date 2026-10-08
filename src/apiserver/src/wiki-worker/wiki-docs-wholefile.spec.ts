@@ -23,6 +23,11 @@ import {
  * what src/runner-go/wiki_docs_build.go makes of the same whole file
  * (src/runner-go/wiki_docs_wholefile_fixture_test.go writes src/shared/src/wiki-docs-wholefile.fixture.json).
  *
+ * THE DOCUMENT IS FROZEN, NOT THE LIVE ONE. Both sides read src/shared/src/wiki-docs-wholefile.source.md —
+ * a copy of docs/wiki-contract.md taken at 04b5101e — so a task that edits the live contract (the project
+ * edits it first, by rule) does not turn this red. The plan's own path, `docs/wiki-contract.md`, is what the
+ * fixture records and what the section names; only the bytes come from the frozen copy.
+ *
  * WHY THIS IS A CASE OF ITS OWN. A read that answers only the first 22,000 characters finds neither the section
  * nor the quote: the server's docs build would report the section missing and the footnote unlocatable while the
  * runner's own path, which has the whole file, writes it — the two paths the project requires to agree. So both
@@ -35,6 +40,7 @@ const ROOT = path.resolve(__dirname, '../../../..');
 
 interface Fixture {
   source: string;
+  frozen: string;
   plan: { key: string; title: string; kind: string; covers: string; length: number };
   section: string;
   sectionOffset: number;
@@ -66,6 +72,9 @@ interface Shaped {
 
 const FIXTURE = JSON.parse(readFileSync(path.join(ROOT, 'src/shared/src/wiki-docs-wholefile.fixture.json'), 'utf8')) as Fixture;
 
+/** The frozen copy both sides read (`frozen`), not the live document at `source`. */
+const FROZEN = path.join(ROOT, FIXTURE.frozen);
+
 /** A piece in the fixture's shape (`wikiDocsBuildFixturePiece`). */
 function shaped(pieces: readonly WikiDocPiece[]): Shaped[] {
   return pieces.map((p) => ({
@@ -86,7 +95,10 @@ function lineOffset(content: string, line: number): number {
 }
 
 test('a section and a footnote past the old 22,000-character window come out of the whole file as the runner makes them', () => {
-  const content = readFileSync(path.join(ROOT, FIXTURE.source), 'utf8');
+  // The bytes under test are the FROZEN copy (src/shared/src/wiki-docs-wholefile.source.md), not the live
+  // document: the contract is edited first, by rule, and other tasks edit it for their own reasons — a test
+  // that read the live file would go red for a change that has nothing to do with reading whole files.
+  const content = readFileSync(FROZEN, 'utf8');
   const repo: WikiDocRepo = {
     sha: 'f'.repeat(40),
     show: (raw) => (wikiDocCleanPath(raw) === FIXTURE.source ? { text: content, cut: false } : null),
@@ -110,7 +122,7 @@ test('a section and a footnote past the old 22,000-character window come out of 
   assert.ok(FIXTURE.quoteOffset > WIKI_REPO_OPS.boundedChars, `the quote stands at ${FIXTURE.quoteOffset}`);
   assert.equal(content.slice(0, FIXTURE.sectionOffset).includes(FIXTURE.section), false, 'the section is not in the old window');
   assert.equal(content.slice(0, FIXTURE.quoteOffset).includes(FIXTURE.quote), false, 'the quote is not in the old window');
-  assert.ok([...content].length > WIKI_REPO_OPS.boundedChars, `${FIXTURE.source} is only ${[...content].length} characters`);
+  assert.ok([...content].length > WIKI_REPO_OPS.boundedChars, `${FIXTURE.frozen} is only ${[...content].length} characters`);
 
   // The material: the section cut out of the whole file, with the lines and text the Go side cut.
   const { pieces, missing } = wikiDocRepoPieces(repo, section);

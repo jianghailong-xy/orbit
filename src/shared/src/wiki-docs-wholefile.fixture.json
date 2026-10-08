@@ -1,7 +1,8 @@
 {
- "why": "Owner 2026-10-08: a read answers with the whole file at the sha, not its first 22,000 characters. This fixture is one section and one footnote quote taken from PAST that window of this repository's own docs/wiki-contract.md, held to the answers src/runner-go/wiki_docs_build.go makes of the whole file — the section's text and lines, what survives the filter and the cap, the section's fingerprint and where the quote is found — so the server's port (wiki-docs-writer.ts) is held to the same bytes on a real document, not only on the small files of wiki-docs-build.fixture.json.",
+ "why": "Owner 2026-10-08: a read answers with the whole file at the sha, not its first 22,000 characters. This fixture is one section and one footnote quote taken from PAST that window of this repository's own docs/wiki-contract.md, held to the answers src/runner-go/wiki_docs_build.go makes of the whole file — the section's text and lines, what survives the filter and the cap, the section's fingerprint and where the quote is found — so the server's port (wiki-docs-writer.ts) is held to the same bytes on a real document, not only on the small files of wiki-docs-build.fixture.json. The bytes are the FROZEN copy (src/shared/src/wiki-docs-wholefile.source.md, taken from the live document at 04b5101e): the contract is edited first, by rule, and a test that read the live file would go red for another task's edit.",
  "write": "ORBIT_WIKI_DOCS_WHOLEFILE_FIXTURE=write go test -run TestWikiDocsWholeFileFixtureIsTheServersToo .",
  "source": "docs/wiki-contract.md",
+ "frozen": "src/shared/src/wiki-docs-wholefile.source.md",
  "plan": {
   "key": "s1",
   "title": "仓库操作",
@@ -9,27 +10,27 @@
   "covers": "",
   "length": 400
  },
- "section": "6.3 变更集",
- "sectionOffset": 22639,
- "quoteOffset": 22827,
- "quote": "全部立即生效的变更集一记录就是 `settled`；一个 op 都没通过的请求不留变更集。Review 只列出有 op 在等 owner 的变更集：\n只剩 op 在等核实的变更集不是 owner 的卡片。\n---",
+ "section": "6.2 op 的决定",
+ "sectionOffset": 22303,
+ "quoteOffset": 23491,
+ "quote": "库里的不变量：`decided_at` 当且仅当已决定（`pending` 与 `verifying` 都没有）；`decision_reason` 当且仅当被拒；\n`verifying` 的 op 不带结论，只有 add 与 amend 会等核实或带结论；`verification_evidence` 只在有结论时才可能有值（迁移 0314）；\n`verification_history` 是列表，没被重开过的 op 是空列表。",
  "missing": [],
  "piece": {
   "id": "D1",
   "kind": "design_doc",
   "path": "docs/wiki-contract.md",
   "lines": {
-   "start": 395,
-   "end": 402
+   "start": 387,
+   "end": 411
   },
-  "section": "6.3 变更集",
+  "section": "6.2 op 的决定",
   "symbol": "",
   "ref": "",
   "chars": {
    "start": 0,
    "end": 0
   },
-  "text": "### 6.3 变更集\n\n`pending`（还有 op 等 owner 或等核实，此时必须有 `expires_at`）→ `settled`（都没有了，此时有 `decided_at`）。\n§7.5 的重开把一个 op 送回等核实时，它所在的 `settled` 变更集回到 `pending`（重新给 `expires_at`），所以 `settled` 不再是终态。\n全部立即生效的变更集一记录就是 `settled`；一个 op 都没通过的请求不留变更集。Review 只列出有 op 在等 owner 的变更集：\n只剩 op 在等核实的变更集不是 owner 的卡片。\n\n---",
+  "text": "### 6.2 op 的决定\n\n提交时记为 `pending`（等 owner）、`auto_applied`（立即生效）或 `verifying`（Automatic 收下、等核实结论，§7.4）。\n`auto_applied` 只有两种出路：审阅模式直接生效的 add，owner 在条目上 Reject 时变 `rejected`（§7.3 的逐条 Reject）；owner 在条目上\nConfirm 时，模式对它生效过、还没人答的 op 变 `accepted`（§7.5）。其余 `auto_applied` 不再变。`rejected` 只有 §7.5 的重开能让它\n回到 `verifying`（当时读不到原文的 unsupported 结论）；Automatic 的 space 里等 owner 的 tainted add / amend，重开也能把它从 `pending`\n送去 `verifying`。其余被拒的 op 不再变。`verifying` 只由事实离开：核实结论让它变 `auto_applied`（supported / partial 生效）、`pending`\n（生效后被抽成抽检卡）、`rejected`（unsupported 记 `not_true`，duplicate 记 `duplicate`）或 `conflict`（amend 的目标条目在\n结论到来前已变，或已归 owner）；整次撤回或 amend 的目标条目离开 active 时变 `withdrawn`。它不过期，也没有任何时钟会动它。\n`pending` 只会变成：\n\n| 决定 | 何时 |\n| --- | --- |\n| `accepted` | owner 接受，且已生效 |\n| `edited` | owner 改过再接受，改后的版本已生效 |\n| `rejected` | owner 拒绝，必须选理由：Not true / Not useful / Duplicate / Too specific（存为 `not_true` / `not_useful` / `duplicate` / `too_specific`） |\n| `conflict` | owner 接受时 baseRevision 已不是当前版，什么都没生效 |\n| `expired` | 等了 14 天 |\n| `withdrawn` | owner 决定前，目标条目已被别的 op 取代或退役（或被整次撤回），这个 op 不再适用 |\n\n抽检卡（`spot_check`）也是 `pending` 的 op：效果已经生效，accept 是确认、edit 是 owner 改写后确认、reject 是撤销；条目在 op 生效后又被改过时记为 `conflict`。\n\n库里的不变量：`decided_at` 当且仅当已决定（`pending` 与 `verifying` 都没有）；`decision_reason` 当且仅当被拒；\n`verifying` 的 op 不带结论，只有 add 与 amend 会等核实或带结论；`verification_evidence` 只在有结论时才可能有值（迁移 0314）；\n`verification_history` 是列表，没被重开过的 op 是空列表。",
   "action": "",
   "into": "",
   "reason": "",
@@ -41,30 +42,30 @@
    "kind": "design_doc",
    "path": "docs/wiki-contract.md",
    "lines": {
-    "start": 395,
-    "end": 402
+    "start": 387,
+    "end": 411
    },
-   "section": "6.3 变更集",
+   "section": "6.2 op 的决定",
    "symbol": "",
    "ref": "",
    "chars": {
     "start": 0,
     "end": 0
    },
-   "text": "### 6.3 变更集\n\n`pending`（还有 op 等 owner 或等核实，此时必须有 `expires_at`）→ `settled`（都没有了，此时有 `decided_at`）。\n§7.5 的重开把一个 op 送回等核实时，它所在的 `settled` 变更集回到 `pending`（重新给 `expires_at`），所以 `settled` 不再是终态。\n全部立即生效的变更集一记录就是 `settled`；一个 op 都没通过的请求不留变更集。Review 只列出有 op 在等 owner 的变更集：\n只剩 op 在等核实的变更集不是 owner 的卡片。\n\n---",
+   "text": "### 6.2 op 的决定\n\n提交时记为 `pending`（等 owner）、`auto_applied`（立即生效）或 `verifying`（Automatic 收下、等核实结论，§7.4）。\n`auto_applied` 只有两种出路：审阅模式直接生效的 add，owner 在条目上 Reject 时变 `rejected`（§7.3 的逐条 Reject）；owner 在条目上\nConfirm 时，模式对它生效过、还没人答的 op 变 `accepted`（§7.5）。其余 `auto_applied` 不再变。`rejected` 只有 §7.5 的重开能让它\n回到 `verifying`（当时读不到原文的 unsupported 结论）；Automatic 的 space 里等 owner 的 tainted add / amend，重开也能把它从 `pending`\n送去 `verifying`。其余被拒的 op 不再变。`verifying` 只由事实离开：核实结论让它变 `auto_applied`（supported / partial 生效）、`pending`\n（生效后被抽成抽检卡）、`rejected`（unsupported 记 `not_true`，duplicate 记 `duplicate`）或 `conflict`（amend 的目标条目在\n结论到来前已变，或已归 owner）；整次撤回或 amend 的目标条目离开 active 时变 `withdrawn`。它不过期，也没有任何时钟会动它。\n`pending` 只会变成：\n\n| 决定 | 何时 |\n| --- | --- |\n| `accepted` | owner 接受，且已生效 |\n| `edited` | owner 改过再接受，改后的版本已生效 |\n| `rejected` | owner 拒绝，必须选理由：Not true / Not useful / Duplicate / Too specific（存为 `not_true` / `not_useful` / `duplicate` / `too_specific`） |\n| `conflict` | owner 接受时 baseRevision 已不是当前版，什么都没生效 |\n| `expired` | 等了 14 天 |\n| `withdrawn` | owner 决定前，目标条目已被别的 op 取代或退役（或被整次撤回），这个 op 不再适用 |\n\n抽检卡（`spot_check`）也是 `pending` 的 op：效果已经生效，accept 是确认、edit 是 owner 改写后确认、reject 是撤销；条目在 op 生效后又被改过时记为 `conflict`。\n\n库里的不变量：`decided_at` 当且仅当已决定（`pending` 与 `verifying` 都没有）；`decision_reason` 当且仅当被拒；\n`verifying` 的 op 不带结论，只有 add 与 amend 会等核实或带结论；`verification_evidence` 只在有结论时才可能有值（迁移 0314）；\n`verification_history` 是列表，没被重开过的 op 是空列表。",
    "action": "",
    "into": "",
    "reason": "",
    "handed": true
   }
  ],
- "fingerprint": "7e043a1a4421544ed522dd00520232cbb132c2db379a3643b51739ced7802e48",
+ "fingerprint": "2b771e6b6055b2e9040270a1607b7fee12fabff558c283da98b682bf05d3a64a",
  "located": {
-  "start": 399,
-  "end": 402
+  "start": 409,
+  "end": 411
  },
  "locatedWithin": {
-  "start": 399,
-  "end": 402
+  "start": 409,
+  "end": 411
  }
 }

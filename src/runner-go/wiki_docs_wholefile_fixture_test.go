@@ -8,14 +8,19 @@ import (
 	"testing"
 )
 
-// The whole-file half of the documents build's fixture (owner 2026-10-08): the real repository's
+// The whole-file half of the documents build's fixture (owner 2026-10-08): this repository's own
 // docs/wiki-contract.md — 144,000 characters, far past the 22,000-character window a runner without
 // `wiki-repo-op-read/v1` answers in — read whole, with a section and a footnote quote taken from PAST that
 // window. What this code cuts out of the whole file, how it fingerprints it and where it locates the quote
 // is what the server's port must produce from the same whole file:
-// src/apiserver/src/wiki-worker/wiki-docs-wholefile.spec.ts holds it to this fixture, and both read the same
-// file from the checkout, so a change to either side — or to the document — is a red test rather than a
-// server that quietly sees only the first 22,000 characters.
+// src/apiserver/src/wiki-worker/wiki-docs-wholefile.spec.ts holds it to this fixture.
+//
+// THE DOCUMENT IS FROZEN, NOT THE LIVE ONE (coordinator, 2026-10-08). The copy under test is
+// src/shared/src/wiki-docs-wholefile.source.md, taken from docs/wiki-contract.md at 04b5101e and frozen
+// there: the project edits the contract first, by rule, and other tasks edit it for their own reasons — a
+// consistency test that reads the live document would go red for a change that has nothing to do with
+// reading whole files. Both sides read the frozen copy, and the plan's own path (`docs/wiki-contract.md`)
+// is what the fixture records, so what is held to account is the two implementations, not the document.
 //
 // The fixture's outputs are this code's. To write them again after a deliberate change to it:
 //
@@ -25,16 +30,19 @@ import (
 
 const wikiDocsWholeFileFixturePath = "../shared/src/wiki-docs-wholefile.fixture.json"
 
-// The document both sides read: this repository's own contract, on disk relative to this package — and the
-// path it has inside the fixture's own checkout, which is the path the plan section names and the fixture
-// records (a source path of "../../docs/..." would write outside the temporary checkout).
-const wikiDocsWholeFileSource = "../../docs/wiki-contract.md"
+// The frozen copy both sides read, on disk relative to this package.
+const wikiDocsWholeFileFrozen = "../shared/src/wiki-docs-wholefile.source.md"
+
+// The path the plan section names and the fixture records: the live document's path, which is what a plan
+// cites. The bytes behind it here are the frozen copy's, not the live file's — see the note above.
 const wikiDocsWholeFileInRepo = "docs/wiki-contract.md"
 
 type wikiDocsWholeFileFixture struct {
-	Why    string `json:"why"`
-	Write  string `json:"write"`
+	Why   string `json:"why"`
+	Write string `json:"write"`
+	// The live document's path (what a plan cites) and the frozen copy's path (what both sides read).
 	Source string `json:"source"`
+	Frozen string `json:"frozen"`
 	// The plan section the material is gathered for, exactly as both sides build it: the fingerprint is the
 	// section's definition and its material, so the definition travels with the answer.
 	Plan    wikiDocsWholeFilePlan `json:"plan"`
@@ -70,9 +78,12 @@ func wikiDocsWholeFileRun(t *testing.T, content string) wikiDocsWholeFileFixture
 			"docs/wiki-contract.md, held to the answers src/runner-go/wiki_docs_build.go makes of the whole file — the " +
 			"section's text and lines, what survives the filter and the cap, the section's fingerprint and where the quote " +
 			"is found — so the server's port (wiki-docs-writer.ts) is held to the same bytes on a real document, not only " +
-			"on the small files of wiki-docs-build.fixture.json.",
+			"on the small files of wiki-docs-build.fixture.json. The bytes are the FROZEN copy " +
+			"(src/shared/src/wiki-docs-wholefile.source.md, taken from the live document at 04b5101e): the contract is " +
+			"edited first, by rule, and a test that read the live file would go red for another task's edit.",
 		Write:         "ORBIT_WIKI_DOCS_WHOLEFILE_FIXTURE=write go test -run TestWikiDocsWholeFileFixtureIsTheServersToo .",
 		Source:        wikiDocsWholeFileInRepo,
+		Frozen:        "src/shared/src/wiki-docs-wholefile.source.md",
 		Plan:          wikiDocsWholeFilePlan{Key: "s1", Title: "仓库操作", Kind: "ops", Covers: "", Length: 400},
 		SectionOffset: -1,
 	}
@@ -168,13 +179,13 @@ func wikiDocsWholeFileLineOffset(content string, line int) int {
 }
 
 func TestWikiDocsWholeFileFixtureIsTheServersToo(t *testing.T) {
-	raw, err := os.ReadFile(wikiDocsWholeFileSource)
+	raw, err := os.ReadFile(wikiDocsWholeFileFrozen)
 	if err != nil {
-		t.Fatalf("%s: %v", wikiDocsWholeFileSource, err)
+		t.Fatalf("%s: %v", wikiDocsWholeFileFrozen, err)
 	}
 	content := string(raw)
 	if len([]rune(content)) <= wikiRepoOpBoundedChars {
-		t.Fatalf("%s is only %d characters: it no longer reaches past the old window", wikiDocsWholeFileSource, len([]rune(content)))
+		t.Fatalf("%s is only %d characters: it no longer reaches past the old window", wikiDocsWholeFileFrozen, len([]rune(content)))
 	}
 	got := wikiDocsWholeFileRun(t, content)
 
