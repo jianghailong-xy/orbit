@@ -15095,17 +15095,16 @@ button.chat-jump-start:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  /* The account pool card's own triangle, in the column the engine rows put their icon in: the
-     header and the rows under it then share one grid, and the chevron never moves again with
-     whatever a row's summary happens to say. */
+  /* The column the engine rows put their icon in: the header and the rows under it then share one
+     grid, and the chevron never moves again with whatever a row's summary happens to say. */
   width: 28px;
   height: 24px;
-  color: var(--text-3);
+  color: var(--text-2);
   transition: color 0.15s, transform 0.15s;
 }
 .re-runner-card .re-chev.open,
 .re-runner-card .re-toggle:hover .re-chev {
-  color: var(--text-2);
+  color: var(--brand);
 }
 .re-runner-copy {
   display: flex;

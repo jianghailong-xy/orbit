@@ -10,11 +10,15 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 
 internal class RealtimeRest(private val api: OrbitApi) {
-    private suspend fun get(handle: SessionHandle, path: List<String>, query: List<Pair<String, String>> = emptyList()) =
-        Wire.decode(api.request(handle, ApiRequest(path, query = query)).body, JsonElement.serializer())
+    /** A read the server answers with null ("asking nothing", e.g. `promotions/current`) arrives as a 200 with no body. */
+    private suspend fun get(handle: SessionHandle, path: List<String>, query: List<Pair<String, String>> = emptyList()): JsonElement {
+        val body = api.request(handle, ApiRequest(path, query = query)).body
+        return if (body.isEmpty()) JsonNull else Wire.decode(body, JsonElement.serializer())
+    }
 
     private suspend fun objects(handle: SessionHandle, path: List<String>, query: List<Pair<String, String>> = emptyList()): List<JsonObject> =
         (get(handle, path, query) as? JsonArray)?.map { it as? JsonObject ?: throw ProtocolException() }

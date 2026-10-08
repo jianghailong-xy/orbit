@@ -173,6 +173,11 @@ public enum WikiCopy {
     public static let decidedAmended = "Amended"                            // WIKI_DECIDED_AMENDED
     /// A Review answer the server refused: what failed, with its reason under it.
     public static let decideFailed = "Couldn't record your answer"          // WIKI_DECIDE_FAILED
+    /// A Review answer the server recorded without applying it (`WikiLogic.decisionRefusal`): the reason
+    /// said under `decideFailed`, never the answer's own word. Android's sentences, word for word.
+    public static let conflictRefused = "Nothing was applied: the entry changed after this was proposed."  // WIKI_DECIDE_CONFLICT
+    public static let inactiveRefused = "Nothing was applied: the entry is no longer active."              // WIKI_DECIDE_INACTIVE
+    public static let withdrawnRefused = "Nothing was applied: the proposal was withdrawn."                // WIKI_DECIDE_WITHDRAWN
     public static let accept = "Accept"                                     // WIKI_REVIEW_ACCEPT
     public static let reviewEdit = "Edit"                                   // WIKI_REVIEW_EDIT
     public static let reject = "Reject"                                     // WIKI_REVIEW_REJECT
@@ -802,6 +807,29 @@ public enum WikiLogic {
         case .retire:    return WikiCopy.retired
         case .reject:    return op == .retire ? WikiCopy.decidedKept : WikiCopy.rejected
         case .accept:    return op == .retire ? WikiCopy.retired : WikiCopy.decidedAccepted
+        }
+    }
+
+    /// What the server recorded for the op a decide answered: the changeset it answers with lists every
+    /// op with its `decision`. Nil when the answer does not hold the op. Either spelling of the id names
+    /// the same op.
+    public static func recordedDecision(_ answer: WikiChangeset, opID: String) -> WikiOpDecision? {
+        let key = PublicID.storageKey(opID)
+        return answer.ops?.first { PublicID.storageKey($0.id) == key }?.decision
+    }
+
+    /// A decide the server answered 200 but recorded as applying nothing, as the refusal to say in place
+    /// of the answer's toast (web `wikiDecisionRefusal`); nil when the answer did what was asked.
+    /// `conflict` is an amend, supersede or retire whose entry moved past the revision it was written
+    /// against — or, for a challenge, an entry no longer active — and `withdrawn` a proposal that went
+    /// with its entry. Except a challenge's Retire: the retire takes every op still waiting on the entry
+    /// with it, the challenge it answers included, so `withdrawn` there is the answer done.
+    public static func decisionRefusal(_ decision: WikiOpDecision?, op: WikiOpKind?,
+                                       action: WikiDecideAction) -> String? {
+        switch decision {
+        case .conflict:  return op == .challenge ? WikiCopy.inactiveRefused : WikiCopy.conflictRefused
+        case .withdrawn: return op == .challenge && action == .retire ? nil : WikiCopy.withdrawnRefused
+        default:         return nil
         }
     }
 

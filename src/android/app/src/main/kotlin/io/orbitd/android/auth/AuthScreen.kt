@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -25,6 +26,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
@@ -106,6 +110,14 @@ private fun LoginForm(
     var server by remember(initialServer) { mutableStateOf(initialServer) }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    val focus = LocalFocusManager.current
+    fun submit() {
+        if (server.isBlank() || email.isBlank() || password.isEmpty()) return
+        val secret = password
+        password = ""
+        focus.clearFocus()
+        login(server, email, secret)
+    }
     // What the instance offers (docs/google-sign-in-design.md §6, §8.3): the remembered one at once, a
     // typed one when typing pauses. Until it answers, and when it cannot (an older server), the form
     // offers the password alone.
@@ -118,18 +130,17 @@ private fun LoginForm(
         Text(stringResource(R.string.sign_in), style = MaterialTheme.typography.titleLarge)
         OutlinedTextField(server, { server = it }, Modifier.fillMaxWidth(), singleLine = true,
             label = { Text(stringResource(R.string.instance_address)) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
+            keyboardActions = KeyboardActions(onNext = { focus.moveFocus(FocusDirection.Next) }))
         OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), singleLine = true,
             label = { Text(stringResource(R.string.email)) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
+            keyboardActions = KeyboardActions(onNext = { focus.moveFocus(FocusDirection.Next) }))
         OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), singleLine = true,
             label = { Text(stringResource(R.string.password)) }, visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
-        Button(enabled = server.isNotBlank() && email.isNotBlank() && password.isNotEmpty(), onClick = {
-            val secret = password
-            password = ""
-            login(server, email, secret)
-        }) { Text(stringResource(R.string.sign_in)) }
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { submit() }))
+        Button(enabled = server.isNotBlank() && email.isNotBlank() && password.isNotEmpty(), onClick = ::submit) { Text(stringResource(R.string.sign_in)) }
         if (methods?.google == true) {
             OutlinedButton(onClick = { continueWithGoogle(server) }) {
                 Image(painterResource(R.drawable.google_g), contentDescription = null, modifier = Modifier.size(18.dp))
