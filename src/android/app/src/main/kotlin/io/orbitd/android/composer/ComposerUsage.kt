@@ -37,15 +37,17 @@ fun ComposerUsage(model: ComposerModel, state: ComposerState, detail: JsonObject
             usage?.let { snapshot ->
                 snapshot.text("planType")?.let { Text(it) }
                 snapshot.text("fetchedAt")?.let { Text("Updated $it", style = MaterialTheme.typography.bodySmall) }
-                // An Antigravity account's buckets say what is left, as agy does.
-                if (snapshot.text("provider") == "antigravity") usageRows(snapshot).forEach { row ->
+                // An Antigravity account's buckets say what is left, as agy does; a Kimi Code account's windows are its own
+                // /usage panel's three, the month among them.
+                val provider = snapshot.text("provider")
+                if (provider == "antigravity" || provider == "kimi") usageRows(snapshot).forEach { row ->
                     row.groupLabel?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                    Text("${row.label}: ${row.percent}% remaining")
+                    Text("${row.label}: ${row.percent}%${if (row.remaining) " remaining" else ""}")
                     LinearProgressIndicator(progress = { row.percent / 100f })
                     row.window.text("resetsAt")?.let { Text("Resets $it", style = MaterialTheme.typography.bodySmall) }
                 }
                 val limits = snapshot.objects("rateLimits")
-                val blocks = if (limits.isEmpty()) listOf(snapshot) else limits
+                val blocks = if (provider == "kimi") emptyList() else if (limits.isEmpty()) listOf(snapshot) else limits
                 blocks.forEach { block ->
                     block.text("limitName")?.let { Text(it) }
                     listOf("fiveHour" to "5 hours", "sevenDay" to "7 days", "sevenDayOpus" to "Opus · 7 days", "sevenDaySonnet" to "Sonnet · 7 days", "primary" to "Primary", "secondary" to "Secondary").forEach { (key, label) ->
