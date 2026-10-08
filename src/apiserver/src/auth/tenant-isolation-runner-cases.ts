@@ -88,6 +88,8 @@ export interface RunnerObjects {
   /** An integration job, and a Codex reset operation, the machine holds the claim of (`leaseOwner`, generation 1). */
   integrationJobId: string;
   codexOperationId: string;
+  /** A wiki repository operation of the machine's, claimed by it the same way (migration 0402). */
+  wikiRepoOpId: string;
   /** A service token of the machine's, to be revoked. */
   spareServiceTokenId: string;
   /** A request from another of the account's sessions to `callingSessionId`, waiting for its reply. */
@@ -226,6 +228,29 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     request: (of) => ({
       params: { jobId: of.runner.integrationJobId },
       body: { claimGeneration: '1', leaseOwner: of.runner.leaseOwner, state: 'ERROR', errorCode: 'FETCH_FAILED' },
+    }),
+  },
+
+  // ── the wiki's repository operations (migration 0402) ────────────────────────────────────────────
+  // With the claim's own lease owner and generation, as the integration queue's are above: a machine
+  // that learned them is still not A's, and every one of the three writes is a compare-and-set on that
+  // claim rather than a write by an id.
+  'POST /runner/wiki/repo-ops/:id/progress': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.wikiRepoOpId }, body: { claimGeneration: 1, leaseOwner: of.runner.leaseOwner } }),
+  },
+  'POST /runner/wiki/repo-ops/:id/fragments': {
+    as: RUNNER,
+    request: (of) => ({
+      params: { id: of.runner.wikiRepoOpId },
+      body: { claimGeneration: 1, leaseOwner: of.runner.leaseOwner, sha: SHA, index: 0, total: 1, content: '{"census":true}' },
+    }),
+  },
+  'POST /runner/wiki/repo-ops/:id/result': {
+    as: RUNNER,
+    request: (of) => ({
+      params: { id: of.runner.wikiRepoOpId },
+      body: { claimGeneration: 1, leaseOwner: of.runner.leaseOwner, state: 'failed', error: 'refused by the census' },
     }),
   },
 
@@ -1333,6 +1358,12 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
  * any other — and the reading, with file:line, of what it reads.
  */
 export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly string[]; reading: string }>> = {
+  'POST /runner/wiki/repo-ops/:id/result body result.*': {
+    reads: [],
+    reading: 'the runner\'s own answer — a snapshot\'s index, a read\'s text, a diff\'s paths, an anchor\'s states — '
+      + 'stored as it is on the operation it holds and never dereferenced (wiki-worker/wiki-repo-ops.ts:436, the row '
+      + 'the result is written to)',
+  },
   'POST /runner/integration-jobs/:jobId/result body errorDetail.*': {
     reads: [],
     reading: 'the runner\'s own account of a failure, stored as it is on the job it holds and never dereferenced '

@@ -26,6 +26,7 @@ import {
 import { ModelUsage, NormalizedRunEvent, TokenUsage } from './events';
 import { SessionSourceSnapshot } from './source';
 import type { WikiMaintenanceRun } from './wiki';
+import type { WikiRepoOpCommand } from './wikiRepoOps';
 
 /** Why an ended session cannot currently be resumed on its original runner. */
 export type SessionResumeBlockedReason =
@@ -865,6 +866,13 @@ export interface RunnerHeartbeatResponse {
    *  named here is already RUNNING in the database and is nobody else's to take. Answered via
    *  POST /runner/integration-jobs/:jobId/{progress,result}. Absent on older control planes. */
   integrationJobs?: IntegrationJobCommand[];
+  /** Repository operations this runner has just claimed (contract `repoOps`, design §7): the wiki's
+   *  pipelines run on the server, which holds no repository, so a step that needs to know what the
+   *  repository says asks the machine its space's workspace runs on. Sent only to a process that
+   *  declared `wiki-repo-op/v1`, heartbeats with a leaseOwner and is not draining; at most two per
+   *  beat, and a row named here is already RUNNING in the database. Answered via
+   *  POST /runner/wiki/repo-ops/:id/{progress,fragments,result}. Absent on older control planes. */
+  wikiRepoOps?: WikiRepoOpCommand[];
 }
 
 /** `account/rateLimitResetCredit/consume` outcomes, spelled as the provider spells them. */

@@ -4,6 +4,7 @@
 
 import { WIKI_MAINTENANCE_RULES, type WikiCursorOutcome } from './wiki';
 import type { WikiMaintenanceFailureKind, WikiMaintenanceHeldReason } from './wikiMaintain';
+import type { WikiRepoLook } from './wikiRepoOps';
 
 /**
  * The looks the status line's maintenance part takes, in the order they win: the first that holds is
@@ -47,12 +48,37 @@ export interface WikiMaintenanceHealth {
   lastFailure: { kind: WikiMaintenanceFailureKind; reason: string | null; at: string; sessionId: string | null } | null;
 }
 
+/**
+ * What the space's repository steps depend on (contract `maintenance.health.repo`, design §2.2): the steps
+ * run on the server, which holds no repository, so they ask the machine the space's workspace runs on — and
+ * this is whether that machine can be asked. `look` is the one word the status line needs:
+ *
+ *   ready            the workspace's runner is there, beating, and has declared `wiki-repo-op/v1`;
+ *   no_workspace     the space names no workspace, or the one it names is gone or has no working directory;
+ *   runner_missing   the workspace is not bound to a machine;
+ *   runner_offline   the machine is not beating;
+ *   runner_upgrade   the machine is beating but is too old to be given repository work — upgrade it.
+ */
+export interface WikiSpaceRepoHealth {
+  look: WikiRepoLook;
+  workspace: { id: string; workDir: string | null } | null;
+  runner: { id: string; name: string; version: string | null; capability: boolean; online: boolean } | null;
+  /** The space's repository operations that have not settled — what a reader is waiting on. */
+  pending: number;
+}
+
 /** `GET /api/wiki/spaces/:id/health`. */
 export interface WikiSpaceHealth {
   spaceId: string;
   /** The space's active entries, every one of them — the status line's `N entries`. */
   entries: number;
   maintenance: WikiMaintenanceHealth;
+  /**
+   * The repository half of the status line (P2). Absent from a control plane older than that phase, which
+   * is the only reason a client sees it missing: this build always fills it, and a space whose steps need
+   * no repository reads `ready` with no pending work.
+   */
+  repo?: WikiSpaceRepoHealth;
 }
 
 /**
