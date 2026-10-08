@@ -75,6 +75,7 @@ import {
   WIKI_ARTICLE_ENTRIES_LISTED,
   WIKI_ARTICLE_KINDS,
   WIKI_ARTICLE_RULES,
+  WIKI_ARTICLES_JOB,
   WIKI_DEFAULT_TOPICS,
   wikiArticleChars,
   type WikiArticleView,
@@ -1136,6 +1137,15 @@ describe('wiki contract', () => {
     expect(articles.who.write).toMatch(/isWikiMaintenanceSession/u);
     const status = (code: string) => CONTRACT.refusals.find((r: { code: string }) => r.code === code)?.httpStatus;
     expect(status('WIKI_ARTICLE_STALE')).toBe(409);
+    // Server execution (P4): the job's numbers, its kind, the runner door closed for a server-run account.
+    expect(articles.job).toEqual({ ...WIKI_ARTICLES_JOB });
+    expect(CONTRACT.jobs.kinds).toContain('articles');
+    expect(CONTRACT.jobs.kindRuns.articles).toMatch(/articles\.serverExecution/u);
+    expect(status('WIKI_SERVER_EXECUTES')).toBe(409);
+    expect(articles.who.write).toMatch(/WIKI_SERVER_EXECUTES/u);
+    expect(articles.serverExecution.runnerDoor).toMatch(/WIKI_SERVER_EXECUTES/u);
+    expect(articles.regeneration).toMatch(/owner's decision of 2026-10-08/u);
+    expect(existsSync(path.join(ROOT, 'src/shared/src/wiki-article-writer.fixture.json'))).toBe(true);
     expect(CONTRACT.realtime.publishedWhen.some((when: string) => /articles were written/u.test(when))).toBe(true);
     expect(articles.cli.tool).toMatch(/^none/u);
   });

@@ -331,7 +331,9 @@ export class WikiRepoOps {
         },
         data: {
           state,
-          result: (result ?? null) as Prisma.InputJsonValue,
+          // No result is SQL NULL, never JSON null, which `wiki_repo_op_result_chk` refuses: the runner leaves
+          // `result` out of a failure (`omitempty`), so a JSON null here would make every failure unsettleable.
+          result: result == null ? Prisma.DbNull : (result as Prisma.InputJsonValue),
           error: state === 'failed' ? error : null,
           leaseOwner: null,
           claimedAt: null,
@@ -657,6 +659,14 @@ export class WikiRepoOpWaitTimedOut extends Error {
   }
 }
 
+/** The waiter's signal was aborted — the worker is stopping — before the operation settled. */
+export class WikiRepoOpWaitAborted extends Error {
+  constructor(readonly opId: string) {
+    super(`the wait for the repository operation ${opId} was stopped: the worker is stopping`);
+    this.name = 'WikiRepoOpWaitAborted';
+  }
+}
+
 /**
  * Wait for one operation to settle (§7): the notification is the wake-up and the poll is the fallback, so
  * an announcement lost to a dropped listener costs the waiter one poll interval rather than its answer.
@@ -682,6 +692,9 @@ export async function waitForWikiRepoOp(
     }
     const left = deadline - Date.now();
     if (left <= 0) throw new WikiRepoOpWaitTimedOut(input.id, input.timeoutMs);
+    // An aborted signal ends every turn of the wait at once: without this the loop would re-read the row
+    // as fast as the database answers until the deadline.
+    if (input.signal?.aborted) throw new WikiRepoOpWaitAborted(input.id);
     await wakeOrPoll(input.wake, input.id, Math.min(pollMs, left), input.signal);
   }
 }
