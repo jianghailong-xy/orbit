@@ -215,10 +215,13 @@ const WRAPPERS: ReadonlyArray<readonly [string, string]> = [['`', '`'], ['"', '"
  * taken off, then whatever backticks or quotes wrap the whole of it — a pair at its two ends with no more
  * of either inside — as often as they do: `decision` reads decision. Only the wrapping goes: `a` and `b`
  * is no wrapped value, and a value that is not in the set is still refused. The runner's gate reads the
- * same (wiki_verify.go `wikiUnwrap`).
+ * same (wiki_verify.go `wikiUnwrap`), save the very edge: the whitespace taken off is the union of what
+ * the two readers trim — every Unicode space, U+0085 among them (Go's TrimSpace), and U+FEFF (JavaScript's
+ * trim), a value either side accepts read here too (P10, 2026-10-08: the server takes the union and does
+ * not go back to the runner refusing a BOM).
  */
 export function unwrapped(value: string): string {
-  let text = value.trim();
+  let text = value.replace(/^[\s\u0085]+|[\s\u0085]+$/gu, '');
   for (;;) {
     const pair = WRAPPERS.find(([open, close]) => {
       if (text.length < open.length + close.length || !text.startsWith(open) || !text.endsWith(close)) return false;
@@ -226,7 +229,7 @@ export function unwrapped(value: string): string {
       return !held.includes(open) && !held.includes(close);
     });
     if (!pair) return text;
-    text = text.slice(pair[0].length, text.length - pair[1].length).trim();
+    text = text.slice(pair[0].length, text.length - pair[1].length).replace(/^[\s\u0085]+|[\s\u0085]+$/gu, '');
   }
 }
 

@@ -339,7 +339,9 @@ JSON 的 `kinds.<kind>.fields` 与 TS 的 `KIND_SPECS[kind].fields` 用同一套
   - 作业（wiki-worker 的 `import`，优先级 1）：每条 note 经模型请求队列调一次 System model（step `import`，unit 是 note id，
     system prompt 和 prompt 与 runner 上逐字相同，max_tokens 8192），不合格的带着问题再问一次（step `import_retry`）；解析、
     修复、字段和语言检查、verify.command 必须出现在 note 的代码里、引文逐字匹配，全部与 Go 一致——
-    `src/shared/src/wiki-import.fixture.json` 把两边逐字节绑在同一组输出上。锚点查 space 的快照：路径在 origin/main 的树里、
+    `src/shared/src/wiki-import.fixture.json` 把两边逐字节绑在同一组输出上。回答的 JSON 按 encoding/json 的读法：`{entries}`
+    包裹键不区分大小写，字符串和键里的孤立代理字符读作 U+FFFD，超出 float64 范围的数字使整个回答判为解析失败（不读成 Infinity）。
+    锚点查 space 的快照：路径在 origin/main 的树里、
     提交被 origin/main 可达；space 的 runner 能取时先要一份新快照（最多等 180 秒，持租约等），取不到就用 space 已有的快照，
     都没有就不带锚点。之后先 dry run，再以 import 来源、调用会话的身份、`wiki-import:<空间和 op 的哈希>` 幂等键提议；
     分批规则和老路径相同：遇到 `WIKI_QUOTA` 或 `WIKI_REVIEW_QUEUE_FULL`，剩下的留给下一次。
@@ -712,7 +714,8 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
   提示词手写：条目的 kind、标题、摘要、字段，每条出处的原文，以及可被判为重复的条目（op 自己 similar[] 里 active 的，amend 的目标条目）。
   可被判为重复的条目只给短编号（按列出的顺序 E1…En），不给 id：本地模型抄 21 位的 id 会抄错——09-30 到 10-02，`34XhYj76NhjjOJTEFEtFE`
   一再被写成 `34XhYj76NhjjOJTEFE`，这个 op 一直拿不到结论。回答必须是一个 JSON 对象 `{"verdict", "reason", "duplicateOf"}`，duplicateOf
-  填编号，命令把它映射回条目 id 再回报。编号必须是提示里列出的之一、原样：id（完整的或截断的）都不算编号，不按前缀或相似度猜；
+  填编号，命令把它映射回条目 id 再回报。键按 encoding/json 读结构体字段的读法，不区分大小写（`{"Verdict": …, "Reason": …}` 同样算给出
+  verdict 和 reason）；reason 的首尾按 Go `strings.TrimSpace` 的集合修剪（U+0085 也去掉）。编号必须是提示里列出的之一、原样：id（完整的或截断的）都不算编号，不按前缀或相似度猜；
   verdict 与编号的读法同 21.3 的枚举值（只去包裹的反引号、引号和首尾空白）。**读不成结论就不放行**：不回报、计入失败，op 继续等。
   遇到模型端点 401 立即停（真 Claude Code 每次 401 要重试约 3 分钟），space 不再是 Automatic 时停；有 op 没拿到结论就非零退出。
   单独调用时这个退出码的语义不变。维护运行不看它：它在自己的进程里核实本次运行的 op，没结论的再问一遍，仍没结论的不让运行失败（19.4 第 8 步）。
@@ -1233,7 +1236,8 @@ JSON 里是 `maintenance.job`；迁移 `0320_wiki_maintenance_run`；服务端�
    的仓库（`repo_url_norm`、有记录时的根提交）不一致就判失败并说明原因。
 3. **案卷**：从游标翻页到期望位置（`until`）；自上次处理后没变的案卷跳过。
 4. **抽取**：每个案卷一次干净的 Claude Code 调本地模型——照演示的 A2+6：8k 案卷、不开 thinking、每例最多 6 条；提示里带 space 的仓库
-   名、地址和一两句它是做什么的（取自仓库 README 的开头），要求讲的不是这个仓库的会话回答 `{"offTopic": true}`。每条照演示的
+   名、地址和一两句它是做什么的（取自仓库 README 的开头），要求讲的不是这个仓库的会话回答 `{"offTopic": true}`（键不区分大小写，
+   按 encoding/json 读结构体字段的读法）。每条照演示的
    `extract.py` 校验：种类与字段、出处必须是案卷里的行且引文逐字出自该行、锚点必须在 origin/main 上存在；没过的整批再问一次。
    代码锚点全都不在本仓库的条目丢弃（计 `entries.foreign`），离题的会话计 `offTopic`。principle 只有 owner 能写，抽到的丢弃并计数。
 5. **自检**：按主题分批（每批最多 `limits.opsPerChangeset` 个 op；Manual 最多 `limits.opsPerTurn`），逐批 `dryRun`：服务端找不到的
@@ -1489,7 +1493,9 @@ runner-go 在 `wiki_plan.go`，OrbitKit 在 `Models/WikiPlan.swift`。起草作�
   模型把值写成了带反引号的 `` `decision` ``，报错没加引号，读起来像「decision 不是 decision」，模型三轮都没改对。枚举类字段（节的
   kind、会话条件的 entryKinds 与 topics、newFields 的 at、facts 的 kind）校验前去掉首尾空白和包裹整个值的反引号或引号（`` ` `` `"`
   `'` `“”` `‘’` `「」` `『』` `«»`，可以套几层；成对、且里面不再有同样的符号才算包裹）。只去包裹，不做别的宽读：`` `decision` `` 读作
-  decision，Decision、decisions、后面跟着零宽空格的 decision 照样拒。runner 自己的闸和维护运行对修改建议的检查，读法和写法都一样。
+  decision，Decision、decisions、后面跟着零宽空格的 decision 照样拒。首尾的空白取两条路修剪集合的并集：全部 Unicode 空白（含只有
+  Go 的 TrimSpace 才修的 U+0085）和 U+FEFF——任一路接受的值这里都读，runner 拒绝 BOM 开头值的读法不回退（P10，2026-10-08）。
+  runner 自己的闸和维护运行对修改建议的检查，读法和写法都一样。
 - **仓库引用不在服务端查**：文件、docs 章节、符号、契约只在 checkout 里有，服务端没有。起草作业在 runner 上、在某个 sha 上核对，随草稿报
   `repoCheck: { sha, checked, missing: [{ kind, ref, at }] }`（`kind` 为 file / docSection / symbol / contract）；服务端原样存在版本上
   （`repo_sha`、`repo_check`），不评判。owner 做出的版本没有 runner 核对过，这两项为空。

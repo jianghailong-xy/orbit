@@ -99,6 +99,12 @@ test('parses only a verdict', () => {
     { text: '{"verdict":"duplicate","reason":"Same.","duplicateOf":"E1 (An entry)"}', refuse: 'and "E1 (An entry)" is not one' },
     { text: '{"verdict":"partial","reason":"Half.","duplicateOf":"E1"}', refuse: 'a partial verdict names a duplicate ("E1"), which only a duplicate does' },
     { text: '{"reason":"No verdict here."}', refuse: 'no JSON object' },
+    // P10's boundary probes (zz_p10_parity_test.go): the verdict object is read as Go's encoding/json
+    // reads it — the keys in any case, and a value's edge holds every space either side's reader trims
+    // (NEL per Go's TrimSpace, U+FEFF per the union the two paths agreed on 2026-10-08).
+    { text: '{"verdict":"supported","Reason":"A key in another case."}', verdict: 'supported' },
+    { text: '{"verdict":"supported\u0085","reason":"A NEL after the verdict."}', verdict: 'supported' },
+    { text: '{"verdict":"\ufeffsupported","reason":"A BOM before the verdict."}', verdict: 'supported' },
   ];
   for (const one of cases) {
     const got = parseWikiVerdict(one.text, candidates);
@@ -242,7 +248,7 @@ test('quotes what a value holds and unwraps only its wrapping', () => {
     '`decision`': '"`decision`"',
     ' decision ': '" decision "',
     'decision​': '"decision\\u200b"',
-    '﻿decision': '"\\ufeffdecision"',
+    '\ufeffdecision': '"\\ufeffdecision"',
     'a b　c': '"a\\u00a0b\\u3000c"',
     'say "hi"\\': '"say \\"hi\\"\\\\"',
     'tab\there\n': '"tab\\there\\n"',
