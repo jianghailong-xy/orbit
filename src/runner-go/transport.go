@@ -94,6 +94,7 @@ func init() {
 		sessionMoveCapabilityV1,
 		wikiMaintenanceRunV1,
 		wikiRepoOpCapabilityV1,
+		wikiRepoOpReadCapabilityV1,
 	}, declaredSteerCapabilities()...), ",")
 }
 

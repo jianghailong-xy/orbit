@@ -1629,8 +1629,9 @@ JSON 里是 `plan.jobs.server`；迁移 `0404_wiki_plan_server_draft`；实现�
   30,000；逐篇出大纲读概览 8,000，代码符号摘录 16,000 字节。会话标题照旧按 TF-IDF k-means 聚类，每算 20 毫秒让出一次事件循环。
 - **仓库**：runner 的作业在 checkout 里读的，全部在同一个 sha 的快照索引上读：文件和大小（模块结构、`hasPath`）、每篇文档的标题（标题树、
   `hasDocSection`）、每个源文件的符号（代码摘录、`hasSymbol`）、契约的顶层键（契约清单）。索引里没有的符号，和 runner 一样在文件原文里
-  找这个词——原文在这一轮过闸之前按该 sha 读，每个文件至多 `repoOps.read.wholeFileChars`（22,000）字。这个上限，和索引只记对象的键
-  （JSON 是数组或空对象的契约读作「非 JSON」），是两条路仅有的两处可能不同。
+  找这个词——原文在这一轮过闸之前按该 sha 读，读的是**整个文件**（`repoOps.read`，owner 2026-10-08）。两条路仅剩的一处可能不同，是索引
+  只记对象的键（JSON 是数组或空对象的契约读作「非 JSON」）；原文本身不再有窗口。空间的 runner 只声明了 `wiki-repo-op/v1` 时仍是旧窗口，
+  写明的缺失会说明这一点（§26.5）。
 - **检查闸**：先过作业自己的闸——21.8 的本地检查，错误文案逐字相同，文件、docs 章节、符号、契约都在快照上查——再过服务端的闸（21.3）：
   作业在进程内提交（`WikiPlans.submitServerDraft`），带草稿的幂等键，`repoCheck` 是快照的 sha 和作业的闸查到的结果，所以服务端的闸
   现在也查得了仓库。两道闸查出的错误，连同可用的章节标题和符号，按单元交回模型重做，一共至多 `rules.attemptsMax`（3）轮。
@@ -1889,12 +1890,14 @@ JSON 里是 `docs.build.server`、`jobs.kindRuns.docs_build` 与 `plan.jobs.serv
   `wiki_plan_job_made_chk` 改写成「made / ended 的作业有一个制造者：任务或 wiki 作业」，否则这样的 plan 作业根本建不出来。
   开关改回 runner 时，还在排队、服务端没开始的这种作业，会在下一次要生成时被取消，plan 作业以失败结束并写明原因。
 - **仓库**：先请求一次 `snapshot`（空间已有这个提交的快照时 runner 回 `skipped`），它给出的提交就是 origin/main——runner 的 fetch，和
-  命令自己的 fetch 一样。各节来源点名的文件，在这个提交上用 `read` 整个读回（不带 section；按快照里的大小，一次操作装下
-  `repoOps.read.wholeFileChars` = 22000 字以内的几个文件，更大的单独一次；同时至多 2 个操作，失败的至多再问两次），然后照 22.11 第 2 步
-  在服务端切出设计文档的节、符号、声明和契约，行号相同。目录照 git 显示树的样子给出（从快照的路径列出），和 runner 的 `git show` 一样。
-  超过 22000 字的文件只读到那里：保留截断前的整行，不在其中的标题或符号记为缺失并写明原因——这样的文件里只找名字或编号对得上的标题，
-  不找只是包含这个名字的标题，那可能是另一节。读取持有作业租约等待（`repoOps.waiting` 的例外），每次至多 300 秒；空间的 runner 不可用
-  （`repoOps.looks` 不是 ready）或等待超时都是 infra 失败，稍后重试。
+  命令自己的 fetch 一样。各节来源点名的文件，在这个提交上**整个**读回（不带 section；owner 2026-10-08）：按快照里的大小打包，一次操作
+  至多 `repoOps.read.operationBytes`（4 MiB），超过 `inlineBytes` 的回答走分片（§26.4）；服务端按 `(space, sha, path)` 缓存，同一份原文
+  不再读第二次。然后照 22.11 第 2 步在服务端切出设计文档的节、符号、声明和契约，行号相同。目录照 git 显示树的样子给出（从快照的路径
+  列出），和 runner 的 `git show` 一样。超过 `wholeFileBytes`（2 MiB）的文件不读：按缺失处理，原因写明 `too_large`。空间的 runner 只
+  声明了 `wiki-repo-op/v1` 时是旧窗口（22,000 字）：保留截断前的整行，不在其中的标题或符号记为缺失并写明原因——这样的文件里只找名字或
+  编号对得上的标题，不找只是包含这个名字的标题，那可能是另一节。读取持有作业租约等待（`repoOps.waiting` 的例外），每次至多 300 秒；
+  空间的 runner 不能领操作（`no_workspace` / `runner_missing` / `runner_offline`）或等待超时都是 infra 失败，稍后重试——只声明了
+  `wiki-repo-op/v1` 的机器不算，它照旧跑，只是读得短。
 - **会话材料**：在进程里直接调 `wiki-docs-material.ts`，和 22.10 的材料读一样：条件挑出的条目、它们引用的记录、项目与时间窗与关键词找到的
   记录，都按 owner 的 workspace.env 脱敏、定位。
 - **调用**：每次调用是队列里的一条请求：系统提示与 runner 逐字相同，一条 user 消息，`max_tokens` 8192，step 是 `docs_merge`、`docs_write`、
@@ -2263,10 +2266,11 @@ JSON 里是 `modelQueue` 一节；设计见 `docs/wiki-server-execution-design.m
 
 - 与 §23.6 同理：全部在读 metrics 时从库里取，每个副本一致；标签值来自闭集，状态标签是行里的状态码（这条序列本来就是讲状态码的）。
 
-## 26. 仓库操作 `wiki_repo_op` 与快照缓存（服务端执行 P2）
+## 26. 仓库操作 `wiki_repo_op`、快照缓存与原文缓存（服务端执行 P2）
 
-JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` §4.3 和 §7。迁移 `0402_wiki_repo_op`；服务端实现在
-`src/apiserver/src/wiki-worker/`（表、领取、结算与快照缓存 `wiki-repo-ops.ts`、`pg_notify` 监听 `wiki-repo-op-notify.ts`、
+JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` §4.3 和 §7。迁移 `0402_wiki_repo_op`（操作、分片暂存与快照缓存）
+和 `0406_wiki_repo_file`（按 (space, sha, path) 保存读到的原文）；服务端实现在
+`src/apiserver/src/wiki-worker/`（表、领取、结算、快照与原文缓存 `wiki-repo-ops.ts`、`pg_notify` 监听 `wiki-repo-op-notify.ts`、
 两个通道共用的 LISTEN 连接 `wiki-notify-channel.ts`），runner 侧在 `src/runner-go/wiki_repo_ops.go`（四种操作复用
 `wiki_plan_repo.go` 的索引和 `wiki_anchors.go` 的锚点检查）；共享常量在 `src/shared/src/wikiRepoOps.ts`。
 
@@ -2287,6 +2291,9 @@ JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` 
 - 能力 `wiki-repo-op/v1`（`src/runner-go/transport.go` 声明，服务端 `WIKI_REPO_OP_CAPABILITY`）。没有声明它的 runner 什么都拿不到：
   操作留在队列里，等它的步骤挂起，健康行说「升级 runner」（§26.6）。没有 `leaseOwner`、正在 drain 的进程同样什么都拿不到——
   这不是错误，是一台机器普通的状态。
+- 第二个能力 `wiki-repo-op-read/v1`（`WIKI_REPO_OP_READ_CAPABILITY`，owner 2026-10-08）：声明了它的 runner，`read` 回答的是指定 sha 上的
+  整个文件。只声明 `wiki-repo-op/v1` 的 runner 照旧能领到操作，只是 `read` 只给每个文件的前 `boundedChars`（22,000）字——服务端照旧处理，
+  健康行给出同一个「升级 runner」的原因（§26.6）。
 - 领取照集成作业：一条 `UPDATE "wiki_repo_op" … FROM (SELECT … JOIN workspace w ON w.id = o.workspace_id
   WHERE w.runner_id = <本机> AND (state = 'queued' OR (state = 'running' AND heartbeat_at < now - 60s AND lease_owner <> <本进程>))
   ORDER BY created_at, id LIMIT 1 FOR UPDATE SKIP LOCKED)`，每条给一个新代数。**每次心跳最多 2 个**，两个 apiserver 同时心跳时
@@ -2307,21 +2314,32 @@ JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` 
   不算错误，回答行里已有的状态。没有这条操作的账号得到 404。
 - 结算与它引发的一切在同一个事务里：快照的载荷变成空间的那一份、暂存分片删掉、`pg_notify` 发出。读者看不到「已结算但字节不齐」。
 
-### 26.4 分片上传与快照缓存
+### 26.4 分片上传、快照缓存与原文缓存
 
-- API 的请求体上限 10 MB（`src/apiserver/src/main.ts`），所以快照大于 `inlineBytes`（4 MiB）时走分片：每片不超过
+- API 的请求体上限 10 MB（`src/apiserver/src/main.ts`），所以一份回答大于 `inlineBytes`（4 MiB）时走分片：每片不超过
   `fragmentBytes`（2 MiB），按 3 MiB 的整数倍切字符（不会把一个字符切成两半）；服务端按 ordinal 拼回、按 sha256 和字节数与结果
-  对照，全部通过才成为空间的快照。整份上限 `maxSnapshotBytes`（64 MiB）。
+  对照，全部通过才落库。整份上限 `maxSnapshotBytes`（64 MiB）。**快照的索引和 `read` 的回答用同一套**：读很多文件时整份回答可能
+  超过一个请求体，就以同样的方式分片上传和拼回。
 - 缓存 `wiki_repo_snapshot`（每空间一行：`sha`、`digest`、`size_bytes`、`fragment_count`）与它保存载荷的
   `wiki_repo_snapshot_fragment`（按 ordinal）。**每个空间只留最近一份**：新的整份替换旧的，外键把旧的分片一起带走；空间删除时
   随复合外键一起删。没有路由返回它的内容，只对 owner 可见（设计 §9），发给模型前过共享脱敏器。
+- 缓存 `wiki_repo_file`（`0406`）：一行一个 `(space, sha, path)`——`state`（`found` / `cut` / `missing` / `too_large`）、`content`（`found`
+  和 `cut` 时的原文，至多一个文件的上限）、`size_bytes`（该 sha 上文件的大小）。**同一份原文只从 runner 读一次**：命中缓存就不再下发
+  `read`。新的快照落地时，这个空间只留它那个 sha 的行（和快照一起换代）；空间删除时随复合外键一起删。`cut` 是只声明了
+  `wiki-repo-op/v1` 的 runner 给的窗口：读旧路径的调用者能用，声明了整文件能力的调用者按未命中重新读。
 - 上传途中死掉的进程不会破坏缓存：分片先落在 `wiki_repo_op_fragment`（挂在操作上，随操作删），只有结算那一刻才写缓存。
 
-### 26.5 读取的上限（沿用现值）
+### 26.5 读取：指定 sha 上的整个文件（owner 2026-10-08）
 
-- 一项（`read` 的一个 item）：不给上限时，合同文件（`contracts/` 或 `.json`）2,500 字，其余按文档一节 4,200 字；单项最多 22,000 字。
-- 一次请求：整份回答不超过 **22,000 字**（一节的材料），超出的项被截断并标 `truncated`，截断标记算在限内。
-- 脚注核对要用的整个文件是它自己的情况：不带 `section` 的 item 直接要整份文件，上限同样是 22,000 字。
+- 一项（`read` 的一个 item）：不给上限时回答的是**该 sha 上的整个文件**。单个文件上限 `wholeFileBytes`（2 MiB）；更大的文件不截断，
+  而是「缺失并注明原因」：`found: false`、`reason: "too_large"` 和它的大小，服务端照缺失处理。
+- 一次请求：不再有「一节材料」的读取上限。服务端按快照给出的大小打包（`operationBytes`，4 MiB 一份），一份回答超过 `inlineBytes`
+  就分片（§26.4）。runner 只对声明了 `wiki-repo-op-read/v1` 的调用者这么回答。
+- 只声明 `wiki-repo-op/v1` 的 runner：一项最多 `boundedChars`（22,000 字），整份回答不超过 `sectionChars`（22,000 字），超出的截断并标
+  `truncated`；服务端照旧处理（截断按缺失并写明），健康行给出升级原因。
+- **每节材料的切取上限**（文档一节 `docSectionChars` 4,200 字、合同 `contractChars` 2,500 字、一节材料 `sectionChars` 22,000 字）仍然是
+  服务端切取材料时的规则：plan 和文档构建照旧按这些数字给模型材料，它们不再是读取的上限。
+- 带 `section` 的 item 仍然可以要一节：它按一节回答，缓存里记作 `cut`（不是整个文件）。
 
 ### 26.6 等待：pg_notify 与健康行
 
@@ -2332,5 +2350,6 @@ JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` 
 - 导入的快照是例外（§5.1、契约 `import.server.snapshot`）：持着租约有上限地等，等不到就用 space 已有的快照或不带锚点，
   所以 runner 不在时，导入只是少了新快照，不会卡住。
 - 健康行新增 `wikiRepo`：`GET /api/wiki/spaces/:id/health` 的回答多一个 `repo` 字段（`look` / `workspace` / `runner` / `pending`），
-  `look` 取 `ready` / `no_workspace` / `runner_missing` / `runner_offline` / `runner_upgrade`——最后一个就是「升级 runner」：
-  工作区所在的机器在心跳，但没有声明 `wiki-repo-op/v1`。
+  `look` 取 `ready` / `no_workspace` / `runner_missing` / `runner_offline` / `runner_upgrade`。`runner_upgrade` 就是「升级 runner」，它盖两种
+  机器：没有声明 `wiki-repo-op/v1` 的（什么都领不到，需要仓库的步骤会挂起），和只声明了它、没有声明 `wiki-repo-op-read/v1` 的
+  （照旧只读到 22,000 字）。`runner` 字段里的 `capability` 和 `wholeFile` 把这两者分开：前者说这台机器能不能领，后者说它读不读整个文件。

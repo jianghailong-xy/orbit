@@ -136,6 +136,7 @@ private fun WikiHomePlaceholder(state: WikiState, retry: () -> Unit) {
 @Composable
 private fun WikiHomePage(content: WikiHomeContent, now: Instant, planBanner: WikiPlanLogic.Banner?, store: WikiStore,
     nav: WikiNav, listState: androidx.compose.foundation.lazy.LazyListState, openSettings: () -> Unit, pickSpace: (String) -> Unit) {
+    val serverJobs = store.state.collectAsState().value.currentJobs
     var query by rememberSaveable { mutableStateOf("") }
     var hits by remember { mutableStateOf<List<WikiSearchHit>>(emptyList()) }
     var searched by rememberSaveable { mutableStateOf("") }
@@ -150,7 +151,11 @@ private fun WikiHomePage(content: WikiHomeContent, now: Instant, planBanner: Wik
     }
     fun openEntry(id: String) = nav.entry(id)
     LazyColumn(Modifier.fillMaxSize().testTag("wiki-home-list"), state = listState) {
-        item(key = "header") { HomeHeader(content, now, openSettings, { content.health?.maintenance?.lastRun?.sessionId?.let(nav::session) }, pickSpace) }
+        item(key = "header") { HomeHeader(content, now, openSettings, {
+            // A run the server's job made has no session: its page is the run's call log (P9).
+            val last = content.health?.maintenance?.lastRun
+            if (last?.jobId != null) nav.job(last.jobId) else last?.sessionId?.let(nav::session)
+        }, pickSpace) }
         item(key = "search") { SearchField(query) { query = it } }
         if (!searching) {
             if (content.proposals > 0) item(key = "review-banner") {
@@ -159,6 +164,15 @@ private fun WikiHomePage(content: WikiHomeContent, now: Instant, planBanner: Wik
             if (planBanner != null) item(key = "plan-banner") {
                 HomeBanner(planBanner.text, amber = planBanner.amber, tag = "wiki-plan-banner") {
                     nav.open(OrbitRoute(if (planBanner.toSettings) Destination.WIKI_SETTINGS else Destination.WIKI_PLAN))
+                }
+            }
+            // The server's runs, after Review and Plan (mock 35 ④, P9): drawn while the server executes the
+            // account's wiki, or once it ran something for this space.
+            if (WikiRunsLogic.shown(content.health?.serverExecutes == true, serverJobs)) {
+                item(key = "runs-head") { RunsBandHead(content.health?.systemModel) }
+                if (serverJobs.isNullOrEmpty()) item(key = "runs-empty") { WikiEmptyLine(WikiRunsCopy.none) }
+                else items(serverJobs, key = { "job:${it.id}" }) { job ->
+                    WikiRunRowView(WikiRunsLogic.row(job, now)) { nav.job(job.id) }
                 }
             }
             item(key = "principles") {
@@ -220,6 +234,22 @@ private fun WikiHomePage(content: WikiHomeContent, now: Instant, planBanner: Wik
                     WikiRowLabel(hit.title ?: hit.id, detail = listOf(WikiCopy.kindLabel(hit.kind), hit.summary ?: "").filter { it.isNotEmpty() }.joinToString(" · "))
                 }
             }
+        }
+    }
+}
+
+/** The Runs band's heading, a band heading's shape: the System model and its state beside it, as the web card's head
+ * says them — never where the model answers. */
+@Composable
+private fun RunsBandHead(model: WikiSystemModelStatus?) {
+    Row(Modifier.fillMaxWidth().padding(start = 32.dp, end = 16.dp, top = 18.dp, bottom = 4.dp)
+        .semantics(mergeDescendants = true) { heading() }, verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(WikiRunsCopy.runs, style = WikiType.label.copy(fontWeight = FontWeight.SemiBold))
+        if (model != null) {
+            Text(WikiRunsCopy.systemModelLabel(model.model), Modifier.weight(1f), style = WikiType.label, color = WikiPalette.secondary,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            WikiModelStateText(model)
         }
     }
 }

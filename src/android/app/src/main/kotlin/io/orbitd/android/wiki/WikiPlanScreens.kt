@@ -68,12 +68,15 @@ internal fun WikiPlanScreen(store: WikiStore, route: OrbitRoute, data: Directory
     LaunchedEffect(route) {
         store.loadPlan()
         store.loadDocsDirectory()
+        store.loadSystemModel()
         route.wikiVersion?.let { store.loadPlanVersion(it) }
     }
     val space = state.currentSpace
     val runnerOnline = wikiMaintenanceRunnerOnline(space, data)
-    // On what: the provider the space's maintenance is pinned to.
+    // On what: the provider the space's maintenance is pinned to. While the server executes this account's wiki
+    // (P9) every sentence that names the drafter says the System model instead.
     val provider = space?.settings?.maintenance?.provider
+    val serverExecutes = state.serverExecutes
 
     // MARK: the writes
 
@@ -171,10 +174,10 @@ internal fun WikiPlanScreen(store: WikiStore, route: OrbitRoute, data: Directory
                     val failed = WikiPlanLogic.failedJob(plan)
                     val inForce = shown?.status == WikiPlanLogic.ShownStatus.CONFIRMED && plan.confirmed?.version == shown.version
                     val card = WikiPlanLogic.jobCard(plan.job, now, runnerOnline,
-                        if (shown?.status == WikiPlanLogic.ShownStatus.FAILED) failed else null, inForce, state.docsDirectory)
+                        if (shown?.status == WikiPlanLogic.ShownStatus.FAILED) failed else null, inForce, state.docsDirectory, serverExecutes)
                     val rows = WikiPlanLogic.versionRows(state.planVersions, failed?.let { WikiPlanLogic.nextVersion(plan) to it.endedAt })
                     WikiPlanPage(route, plan, shown, shown?.let { WikiPlanLogic.base(it, plan) }, rows, card, planWritten(state),
-                        wikiMaintenanceWhere(space, data), provider, now, state.busy, refused, actions)
+                        wikiMaintenanceWhere(space, data), provider, now, state.busy, refused, serverExecutes, actions)
                 }
             }
             state.planMissing -> PlanPlaceholder(route, "wiki-plan-missing") { StatusMessage(WikiPlanCopy.title, WikiPlanCopy.none) }
@@ -191,7 +194,7 @@ internal fun WikiPlanScreen(store: WikiStore, route: OrbitRoute, data: Directory
     if (redrafting) {
         val newest = state.plan?.let(WikiPlanLogic::newest)
         val protectedDocs = newest?.let { version -> WikiPlanLogic.fromVersion(version).docs.filter { it.protected }.map { it.number } }.orEmpty()
-        WikiPlanRedraftSheet(WikiPlanCopy.redraftNote(provider, newest?.let { it.version to (it.status == "confirmed") }), protectedDocs, state.busy,
+        WikiPlanRedraftSheet(WikiPlanCopy.redraftNote(provider, newest?.let { it.version to (it.status == "confirmed") }, serverExecutes), protectedDocs, state.busy,
             close = { redrafting = false }) { words -> redraft(words) }
     }
     // Edit a document, or one of its sections, of the newest version — the draft waiting, else the one in force.
