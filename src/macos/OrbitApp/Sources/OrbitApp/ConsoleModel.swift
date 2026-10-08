@@ -1141,6 +1141,10 @@ final class ConsoleModel {
     private var worktreePollTask: Task<Void, Never>?
     /// The "Tasks created here" card's poll, started and stopped with the stream for the same reason.
     private var createdTasksPollTask: Task<Void, Never>?
+    /// The runner row's re-read once a minute (`refreshRunner`), started and stopped with the stream:
+    /// web's 60s `refetchInterval` on the console's runners query, so the plan-usage gauge keeps up
+    /// with the turns running here instead of waiting for a reconnect.
+    private var runnerPollTask: Task<Void, Never>?
 
     /// Begin the live SSE loop if it isn't already running. Idempotent (re-focusing the same session
     /// is a no-op) and inert for a draft/session-less console.
@@ -1149,6 +1153,13 @@ final class ConsoleModel {
         streamTask = Task { [weak self] in await self?.run() }
         worktreePollTask = Task { [weak self] in await self?.worktree.startPolling() }
         createdTasksPollTask = Task { [weak self] in await self?.createdTasks.startPolling() }
+        runnerPollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
+                guard let self, !Task.isCancelled else { return }
+                await self.refreshRunner()
+            }
+        }
     }
 
     /// Cancel the live SSE loop and drop its connection. The reducer state stays cached, so a later
@@ -1163,6 +1174,8 @@ final class ConsoleModel {
         worktreePollTask = nil
         createdTasksPollTask?.cancel()
         createdTasksPollTask = nil
+        runnerPollTask?.cancel()
+        runnerPollTask = nil
         codexResetPollTask?.cancel()
         codexResetPollTask = nil
         codexResetPollingOperationID = nil
@@ -1244,6 +1257,11 @@ final class ConsoleModel {
                 // reported while this socket was suspended puts a card here, and the read is the
                 // only way this window hears about it.
                 Task { [weak self] in await self?.refreshOwnerConfirmation(force: true) }
+                // And the runner's row. The model menu's names, the plan-usage gauge and the `/`
+                // catalogue all come from the one read `loadContext` made when the console opened:
+                // without this, a failed read would stay failed until the console was opened again,
+                // and a quota read before the phone slept would stay that old.
+                Task { [weak self] in await self?.refreshRunner() }
             }
             isReconnect = true
             let outcome = await withTaskGroup(of: StreamOutcome.self) { group in
@@ -1771,6 +1789,31 @@ final class ConsoleModel {
         runnerHeartbeatDraining = nil
     }
 
+    /// GET /runners for the read a console makes when it opens, tried three times before giving up,
+    /// as `seedTailPage` is. One transient failure (common on mobile) used to leave the model menu
+    /// on raw ids and the plan-usage gauge missing for as long as the console stayed open.
+    private func fetchRunners() async -> [Runner]? {
+        for attempt in 0..<3 {
+            if let rows = try? await api.runners() { return rows }
+            if attempt < 2 { try? await Task.sleep(nanoseconds: UInt64(300 * (attempt + 1)) * 1_000_000) }
+        }
+        return nil
+    }
+
+    /// Re-read this session's runner row: on a reconnect (`run()`), and once a minute while the
+    /// console streams (`runnerPollTask`). A failed read keeps what is on screen and fails the reset
+    /// admission closed, as `loadContext`'s does.
+    private func refreshRunner() async {
+        guard let runnerID else { return }
+        guard let rows = try? await api.runners() else {
+            clearCodexResetAdmission()
+            return
+        }
+        let runner = rows.first(where: { $0.id == runnerID })
+        if let runner { adoptRunnerSnapshot(runner) } else { clearRunnerSnapshot() }
+        applySlashItems(from: runner)
+    }
+
     /// Load the footer context once: the owning agent's name + the runner's plan usage, and
     /// adopt the session's stored model/permission/effort so the pills show its real settings
     /// (matching web — see AgentView's seed effects). This runs for terminal sessions too: a
@@ -1820,12 +1863,13 @@ final class ConsoleModel {
         let live = ComposerLogic.isLive(status: s.effectiveRunStatus)
 
         // Plan usage + Runtime model/default data ride the GET /runners list. A request failure is
-        // merely unavailable data and must retain the model already on screen.
+        // merely unavailable data and must retain the model already on screen; the next reconnect
+        // reads it again (`refreshRunner`).
         var sessionRunner: Runner?
         var runnerSnapshotLoaded = false
         runnerID = s.assignedRunnerId
         if let rid = s.assignedRunnerId {
-            if let rows = try? await api.runners() {
+            if let rows = await fetchRunners() {
                 if let r = rows.first(where: { $0.id == rid }) {
                     sessionRunner = r
                     runnerSnapshotLoaded = true
@@ -2983,7 +3027,7 @@ final class ConsoleModel {
         var runnerSnapshotLoaded = false
         var agentRunner: Runner?
         if let rid = draftAgent?.runnerId {
-            if let rows = try? await api.runners() {
+            if let rows = await fetchRunners() {
                 if let r = rows.first(where: { $0.id == rid }) {
                     agentRunner = r
                     runnerID = r.id
