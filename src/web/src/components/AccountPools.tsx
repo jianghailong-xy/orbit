@@ -13,6 +13,7 @@ import { api } from '../api';
 import { accountIsPaused, usePauseClock } from '../lib/accountPause';
 import { AccountPauseActions, AccountPauseStatus } from './AccountPause';
 import { isLoginPool, loginLine, type CodexLogin } from '../lib/codexLogin';
+import { foldFromAnywhere } from '../lib/foldHead';
 import { encodeId, routeId } from '../lib/idCodec';
 import { planUsageRows } from '../lib/planUsage';
 import {
@@ -614,7 +615,9 @@ function PoolCard({
   const people = !!shared && hasPeople(shared);
   return (
     <div className={`re-card pool-card${collapsed ? ' collapsed' : ''}`} data-pool={pool.id}>
-      <div className="re-head">
+      {/* As a runner card's head: a press anywhere on it — the space after the name, the gauge —
+          is the toggle's (foldFromAnywhere), and Manage → stays its own. */}
+      <div className="re-head" onClick={foldFromAnywhere(onToggle)}>
         <button className="re-toggle" type="button" aria-expanded={!collapsed} onClick={onToggle}>
           <span className={`re-chev${collapsed ? '' : ' open'}`} aria-hidden="true">
             ▸

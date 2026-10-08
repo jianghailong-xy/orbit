@@ -151,6 +151,9 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
                 record.ready) { preference("defaultPermissionMode", JsonPrimitive(it)) }
             SettingsSwitch("Session orchestration", R.drawable.ic_orchestration, (preferences["enableOrchestration"] as? JsonPrimitive)?.booleanOrNull != false,
                 record.ready) { preference("enableOrchestration", JsonPrimitive(it)) }
+            // The engine's guess at the next message after a Claude turn (docs/prompt-suggestions-design.md); absent means on.
+            SettingsSwitch("Suggested replies", R.drawable.ic_suggestion, (preferences["promptSuggestions"] as? JsonPrimitive)?.booleanOrNull != false,
+                record.ready) { preference("promptSuggestions", JsonPrimitive(it)) }
         }
         SettingsGroup("Machines & models") {
             SettingsLink("Runners", R.drawable.ic_runner, runners) { page("runners") }

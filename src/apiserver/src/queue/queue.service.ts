@@ -77,6 +77,7 @@ import {
 } from '../runner-api/runner-provider-support';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
 import { orchestrationEnabled } from '../common/orchestration-switch';
+import { claimPromptSuggestions } from '../common/prompt-suggestions-switch';
 import { dispatchAllowedTools } from '../common/permission-rules';
 import {
   loggedRetry,
@@ -945,6 +946,16 @@ export class QueueService {
         fastMode:
           session.fastMode &&
           fastModeAvailable(provider, exec.model, session.assignedRunner?.modelCatalog as RunnerModelCatalog | null),
+        // The engine's guess at the person's next message after each turn — decided here, on the
+        // endpoint this claim actually resolved (common/prompt-suggestions-switch.ts).
+        promptSuggestions: claimPromptSuggestions({
+          owner: session.owner,
+          provider,
+          runSource: session.runSource,
+          spawnDepth: session.spawnDepth,
+          maintenance,
+          env: exec.env,
+        }),
         // Per-session effort wins; otherwise use the workspace's effort setting.
         // An OpenCode variant is model-defined, so it is only checkable once the assigned
         // runner's catalog is known — an account default carried over from another runtime
