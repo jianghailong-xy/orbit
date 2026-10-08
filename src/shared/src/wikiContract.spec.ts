@@ -117,6 +117,15 @@ import {
   WIKI_DOCS_AFFECTED_RULES,
 } from './wikiDocs';
 import {
+  WIKI_SYSTEM_MODEL,
+  WIKI_SYSTEM_MODEL_ENV,
+  WIKI_SYSTEM_MODEL_ERROR_KINDS,
+  WIKI_SYSTEM_MODEL_READ_STATES,
+  WIKI_SYSTEM_MODEL_STATES,
+  wikiWorkerRunning,
+  type WikiSystemModelStatus,
+} from './wikiSystemModel';
+import {
   WIKI_PLAN_FACT_KINDS,
   WIKI_PLAN_GATE_CHECKS,
   WIKI_PLAN_JOB_HELD_REASONS,
@@ -1492,5 +1501,62 @@ describe('wiki contract', () => {
     expect(imports.cli.tool).toMatch(/^none/u);
     expect(imports.cli.precondition).toMatch(/never write an entry yourself/u);
     expect(CONTRACT.agentSurface.tools).not.toContain('wiki_import');
+  });
+
+  it('calls the System model from the wiki-worker alone, and reads back its name and state only (server execution P1a)', () => {
+    const model = CONTRACT.systemModel;
+    for (const file of [model.service.entry, model.status.migration]) {
+      expect(existsSync(path.join(ROOT, file)), `${file} does not exist`).toBe(true);
+    }
+    // The worker's four variables, and none of them a name an agent session's environment carries.
+    expect(model.env).toEqual({ ...WIKI_SYSTEM_MODEL_ENV });
+    for (const name of Object.values(WIKI_SYSTEM_MODEL_ENV)) expect(name).toMatch(/^ORBIT_WIKI_MODEL(_[A-Z]+)*$/u);
+    expect(model.envRules.defaultConcurrency).toBe(WIKI_SYSTEM_MODEL.defaultConcurrency);
+    // A call: the Messages API, streamed, the version pinned, the key as a Bearer, five events read.
+    expect(model.request.route).toBe(`POST {baseUrl}${WIKI_SYSTEM_MODEL.messagesPath}`);
+    expect(model.request.headers).toEqual({
+      authorization: 'Bearer {apiKey}',
+      'anthropic-version': WIKI_SYSTEM_MODEL.anthropicVersion,
+      'content-type': 'application/json',
+    });
+    expect(model.request.body).toMatch(/stream: true/u);
+    expect(model.request.body).toMatch(/no tools/u);
+    expect(model.request.events).toEqual(['message_start', 'content_block_delta', 'message_delta', 'message_stop', 'error']);
+    expect(model.request.idleTimeoutSeconds).toBe(WIKI_SYSTEM_MODEL.idleTimeoutSeconds);
+    expect(keysOf(model.request.errors)).toEqual([...WIKI_SYSTEM_MODEL_ERROR_KINDS]);
+    // The probe.
+    expect(model.health.route).toBe(`GET {baseUrl}${WIKI_SYSTEM_MODEL.healthPath}`);
+    expect(model.health.upStatuses).toEqual([...WIKI_SYSTEM_MODEL.healthUpStatuses]);
+    expect(model.health.authFailedStatuses).toEqual([401]);
+    expect(model.health.intervalSeconds).toBe(WIKI_SYSTEM_MODEL.probeIntervalSeconds);
+    expect(model.health.timeoutSeconds).toBe(WIKI_SYSTEM_MODEL.probeTimeoutSeconds);
+    // The one row, and the migration that makes it: every column, and the states as a CHECK.
+    expect(model.status.states).toEqual([...WIKI_SYSTEM_MODEL_STATES]);
+    expect(keysOf(model.status.meaning)).toEqual([...WIKI_SYSTEM_MODEL_STATES]);
+    expect(model.status.workerStaleSeconds).toBe(WIKI_SYSTEM_MODEL.workerStaleSeconds);
+    const sql = readFileSync(path.join(ROOT, model.status.migration), 'utf8');
+    expect(sql).toMatch(new RegExp(`CREATE TABLE IF NOT EXISTS "${model.status.table}"`, 'u'));
+    for (const column of model.status.columns) expect(sql).toContain(`"${column}"`);
+    expect(sql).toContain(`CHECK ("state" IN (${WIKI_SYSTEM_MODEL_STATES.map((state) => `'${state}'`).join(', ')}))`);
+    expect(sql).toContain('CHECK ("id" = 1)');
+    // The read: on the user door; the stored states and worker_not_running; its fields, and not the address or the key.
+    expect(CONTRACT.agentSurface.doors.user.routes).toContain(model.read.route);
+    expect(model.read.states).toEqual([...WIKI_SYSTEM_MODEL_READ_STATES]);
+    const status: WikiSystemModelStatus = { state: 'up', model: null, since: null, checkedAt: null, workerSeenAt: null };
+    expect(model.read.fields).toEqual(Object.keys(status));
+    expect(model.read.never).toMatch(/address, its key, and last_error/u);
+    // A heartbeat older than workerStaleSeconds, or none, is a worker that is not running.
+    const now = new Date('2026-10-07T12:00:00.000Z');
+    const ago = (seconds: number) => new Date(now.getTime() - seconds * 1000);
+    expect(wikiWorkerRunning(ago(WIKI_SYSTEM_MODEL.workerStaleSeconds), now)).toBe(true);
+    expect(wikiWorkerRunning(ago(WIKI_SYSTEM_MODEL.workerStaleSeconds + 1).toISOString(), now)).toBe(false);
+    expect(wikiWorkerRunning(null, now)).toBe(false);
+    // The metrics name the same states.
+    expect(keysOf(model.metrics.series)).toEqual([
+      'orbit_wiki_model_state',
+      'orbit_wiki_worker_heartbeat_age_seconds',
+      'orbit_wiki_model_calls_total',
+      'orbit_wiki_model_call_duration_seconds',
+    ]);
   });
 });

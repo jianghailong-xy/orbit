@@ -7294,3 +7294,25 @@ model WikiDocFootnote {
   @@unique([sentenceId, position], map: "wiki_doc_footnote_sentence_id_position_key")
   @@map("wiki_doc_footnote")
 }
+
+/// The System model as the wiki-worker last found it, and the worker's heartbeat (migration 0400, contract
+/// `systemModel.status`; docs/wiki-server-execution-design.md §5.3). Exactly one row, id 1: the worker writes
+/// it, the apiserver only reads it. No column holds the endpoint's address or its key.
+model WikiModelStatus {
+  id           Int       @id @default(1) @db.SmallInt
+  /// `up` | `down` | `auth_failed` | `unconfigured`.
+  state        String
+  /// ORBIT_WIKI_MODEL; NULL only while unconfigured.
+  model        String?
+  /// When the state began: kept while the state and the model stay what they were.
+  since        DateTime  @db.Timestamptz(3)
+  /// Why the state is not `up`, naming neither the address nor the key; NULL exactly while up.
+  lastError    String?   @map("last_error")
+  /// The last probe of `{base}/health`; NULL while unconfigured.
+  checkedAt    DateTime? @map("checked_at") @db.Timestamptz(3)
+  /// The worker's heartbeat, written with every probe. Stale past `workerStaleSeconds`, the read answers
+  /// `worker_not_running`.
+  workerSeenAt DateTime  @map("worker_seen_at") @db.Timestamptz(3)
+
+  @@map("wiki_model_status")
+}

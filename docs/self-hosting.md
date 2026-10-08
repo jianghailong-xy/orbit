@@ -1,7 +1,7 @@
 # Self-hosting Orbit
 
-This guide covers the included Docker Compose deployment: PostgreSQL, the control plane, web UI, backup
-sidecar, and nginx gateway. It is a practical starting point for one trusted team. Production operators remain
+This guide covers the included Docker Compose deployment: PostgreSQL, the control plane, the wiki worker, web UI,
+backup sidecar, and nginx gateway. It is a practical starting point for one trusted team. Production operators remain
 responsible for TLS, host security, monitoring, and off-host backups.
 
 For a fresh host, follow the [first-run checklist](first-run.md) through one completed task. Use the
@@ -85,6 +85,7 @@ Useful diagnostics:
 docker compose ps
 docker compose logs --tail=200 apiserver
 docker compose logs --tail=200 gateway
+docker compose logs --tail=200 wiki-worker
 ```
 
 ## 3. Put HTTPS in front
@@ -290,6 +291,33 @@ of the request:
   sign-in. The claim it names says how: `aud` names another client, and `exp` an expired token, which points
   at the apiserver's clock.
 
+## Wiki System model
+
+The `wiki-worker` service calls the wiki's System model: a model endpoint the deployment runs itself and that speaks
+the Anthropic Messages API, such as vLLM. It runs the apiserver image with another command, serves no port, and
+starts once the apiserver is healthy. It is the only service given the model's address and key; users' provider
+keys, subscriptions and account pools are not used for it.
+
+To configure it, set all three in `.env` and recreate the worker:
+
+```dotenv
+ORBIT_WIKI_MODEL_BASE_URL="http://192.168.1.20:8000"
+ORBIT_WIKI_MODEL_API_KEY="the key the endpoint expects"
+ORBIT_WIKI_MODEL="the model name it serves"
+```
+
+```bash
+docker compose up -d wiki-worker
+docker compose logs --tail=50 wiki-worker
+```
+
+The address must be reachable from inside the container, whose `127.0.0.1` is the container itself: for a model on
+the Docker host, use the host's LAN or tunnel address. The worker probes `{base}/health` every 10 seconds (200 or 404
+counts as up) and records the result. The wiki settings and health line show the model's name and its state, never
+its address or key; if the endpoint refuses the key, correct it and recreate the worker. See the
+[configuration reference](configuration.md#wiki-worker-and-system-model) for every variable. Until the wiki's jobs
+move to the server, the worker only probes the model and reports its state.
+
 ## Upgrading
 
 Review the release notes and create a verified backup before upgrading. Then fetch and check out the desired
@@ -301,8 +329,9 @@ git checkout <release-tag-or-reviewed-commit>
 docker compose up -d --build
 ```
 
-The control plane applies pending Prisma migrations on startup. Keep Postgres running unless the release notes
-explicitly require a database change outside the normal migration path.
+The control plane applies pending Prisma migrations on startup, and `wiki-worker`, which runs the same image,
+starts once it is healthy. Keep Postgres running unless the release notes explicitly require a database change
+outside the normal migration path.
 
 ## Production checklist
 
