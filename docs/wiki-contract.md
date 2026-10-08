@@ -1599,6 +1599,7 @@ JSON 里是 `plan.jobs`；迁移 `0338_wiki_plan_job`；服务端在 `src/apiser
   或是起草作业的会话，照常写、什么也不报。生成作业的会话里 `--doc`、`--section` 不可用。
 - **只重写变了的**：材料指纹没变的节跳过，所以小改后重新确认，只重写变了的节。写到一半 plan 又被确认了新版本：旧版本的写入会被
   `WIKI_PLAN_STALE` 拒绝，这次生成以失败结束；等着的那个生成接着写新版本。
+- **服务端执行**：执行器开关把账号交给服务端时，生成作业不建任务，由 wiki-worker 的 `docs_build` 作业来写，见 22.13。
 
 ### 21.10 服务端起草与修订（服务端执行 P6，`plan.jobs.server`）
 
@@ -1641,9 +1642,9 @@ JSON 里是 `plan.jobs.server`；迁移 `0404_wiki_plan_server_draft`；实现�
   失败——请求等待超限、space 的 runner 不在、worker 停机——不算草稿的失败：`wiki_job` 重试（24.4），plan 作业保持 running。`wiki_job`
   结束了而 plan 作业没结束的，记为失败；开关不再把账号交给服务端时，还没开始的 `wiki_job` 被取消，plan 作业随之结束。
 - **runner 门归服务端**（`WIKI_SERVER_EXECUTES`，409）：找到 space 之后，不论谁来问，起草用的路由——`GET …/plan/job`、
-  `POST …/plan/job/progress`、`POST …/plan/job/finish`、`GET …/plan/materials`、`POST …/plan/drafts`——一律拒绝；只有生成作业
-  （`build`）自己的会话例外：文档的流水线移到服务端之前（P7），生成仍是那个任务的会话来写，它的 `GET …/plan/job`、`progress`、`finish`
-  照 21.7 不变。所以会话里的 `orbit wiki plan draft` 或 `revise`，包括本期之前的版本，在第一次调用时就停下，没问过任何模型；
+  `POST …/plan/job/progress`、`POST …/plan/job/finish`、`GET …/plan/materials`、`POST …/plan/drafts`——一律拒绝，生成作业
+  （`build`）自己的会话也一样：P7 起文档也由服务端写（22.13），不再建生成任务；开关切换之前建的生成任务，它的会话在第一次调用时就停下，
+  作业随任务结束。所以会话里的 `orbit wiki plan draft` 或 `revise`，包括本期之前的版本，在第一次调用时就停下，没问过任何模型；
   新版命令（随下一个 runner 版本发布）说明 plan 由服务端用 System model 起草、这里什么也没读也没问模型、要起草请 owner 在 plan
   页要求。维护运行读 plan（`GET …/plan`）、提修改建议、`plan check` 都不变。`runner` 下每条路由照 21.7。
 - **迁移 0404**：加 `wiki_plan.author_job_id`，`wiki_plan_author_chk` 改为维护来源的版本恰好记会话或作业之一；加 `wiki_plan_job.materials`；
@@ -1872,6 +1873,52 @@ orbit wiki docs build --space <id> [--doc <slug>] [--section <key>] [--repo <pat
 - **`POST /api/runner/wiki/spaces/:id/maintenance/docs/withdrawals`**（`docs.withdrawalPaths`，维护会话）：`{ repoSha, paths: [{ path, change:
   deleted | renamed, to? }] }`，`repoSha` 是这些路径已不在的 origin/main 提交（40 位），至多 `withdrawPathsMax` = 500 条；形状不对
   `WIKI_DOC_INVALID`，逐条列出。回答 `{ spaceId, withdrawn, sections: [{ doc, key }] }`：这次撤下的句子数（已撤的不再算）和它们所在的节。
+
+### 22.13 服务端执行（服务端执行 P7，2026-10-08）
+
+JSON 里是 `docs.build.server`、`jobs.kindRuns.docs_build` 与 `plan.jobs.server.build`；迁移 `0405_wiki_plan_job_server_maker`；实现在
+`src/apiserver/src/wiki-worker/`（作业 `wiki-docs-build-job.ts`、一次构建 `wiki-docs-build.ts`、移植过来的写作 `wiki-docs-writer.ts`）和
+`src/apiserver/src/wiki/wiki-plan-job.ts`（排作业）、`wiki-docs.ts`（写入者与门）。
+
+- **对谁**：执行器开关把账号交给服务端的（`server`，或 `canary` 名单内）。runner 模式下这一节都不发生：确认照 21.9 建任务，
+  `orbit wiki docs build` 照 22.11 写，逐字不变。
+- **怎么排**：owner 确认一个版本，照 21.9 要一个生成作业；对这样的账号，生成作业不建隐藏列表里的任务，而是建一个 `docs_build` 作业：
+  plan 作业以 made 记下这个作业（`wiki_plan_job.job_id`，没有 `task_id`），作业优先级 1（owner 发起，排在后台维护之前），输入
+  `{ planJobId }`，二者在同一个事务里写。空间的维护没有指定 workspace 时照样 held（`no_maintenance_workspace`）：作业要经这个 workspace
+  所在的 runner 读仓库。不检查 provider，也不排在列表里未结束的任务后面——没有哪个会话的模型参与。迁移 0405 把 0338 的
+  `wiki_plan_job_made_chk` 改写成「made / ended 的作业有一个制造者：任务或 wiki 作业」，否则这样的 plan 作业根本建不出来。
+  开关改回 runner 时，还在排队、服务端没开始的这种作业，会在下一次要生成时被取消，plan 作业以失败结束并写明原因。
+- **仓库**：先请求一次 `snapshot`（空间已有这个提交的快照时 runner 回 `skipped`），它给出的提交就是 origin/main——runner 的 fetch，和
+  命令自己的 fetch 一样。各节来源点名的文件，在这个提交上用 `read` 整个读回（不带 section；按快照里的大小，一次操作装下
+  `repoOps.read.wholeFileChars` = 22000 字以内的几个文件，更大的单独一次；同时至多 2 个操作，失败的至多再问两次），然后照 22.11 第 2 步
+  在服务端切出设计文档的节、符号、声明和契约，行号相同。目录照 git 显示树的样子给出（从快照的路径列出），和 runner 的 `git show` 一样。
+  超过 22000 字的文件只读到那里：保留截断前的整行，不在其中的标题或符号记为缺失并写明原因——这样的文件里只找名字或编号对得上的标题，
+  不找只是包含这个名字的标题，那可能是另一节。读取持有作业租约等待（`repoOps.waiting` 的例外），每次至多 300 秒；空间的 runner 不可用
+  （`repoOps.looks` 不是 ready）或等待超时都是 infra 失败，稍后重试。
+- **会话材料**：在进程里直接调 `wiki-docs-material.ts`，和 22.10 的材料读一样：条件挑出的条目、它们引用的记录、项目与时间窗与关键词找到的
+  记录，都按 owner 的 workspace.env 脱敏、定位。
+- **调用**：每次调用是队列里的一条请求：系统提示与 runner 逐字相同，一条 user 消息，`max_tokens` 8192，step 是 `docs_merge`、`docs_write`、
+  `docs_rewrite`（只在段末标一次的段落再问一次）、`docs_quotes`（引文缺了或找不到再问一次）或 `docs_overview`，unit 由文档、节和提示词的
+  sha256 组成，作业被重放时问题没变的调用直接复用答案。5xx、429、断连由队列退避重试；401 让整个队列停下（§25.6）。
+- **确定性部分与 runner 相同**：提示词、过滤、上限、指纹、归并与草稿的读法、脚注及其行号。`src/shared/src/wiki-docs-build.fixture.json`
+  把两条路径钉成同一个答案，由 `src/runner-go/wiki_docs_build_fixture_test.go` 写出、`wiki-docs-build-golden.spec.ts` 读取——指纹一致，
+  空间从 runner 路径切到服务端时，runner 写过的节不会因此重写。
+- **写入**：经 `WikiDocs.write`，和 runner 门是同一个写入口，身份是服务端自己（`origin: 'maintenance'`、无会话、无用户）；一次写一节，
+  一次构建的写入一个一个来；`model` 是 System model 的名字。被拒（`WIKI_DOC_INVALID`、`WIKI_PLAN_STALE`、`WIKI_PLAN_UNCONFIRMED`）就是
+  这一节失败，原因照 runner 的说法写。
+- **进度与结束**：每开始写一篇和结束时，写 plan 作业的 `progress`（21.9 的 `{ docs: { done, total }, current }`）和作业自己的 progress。
+  拿起的节全部写成或无变化：plan 作业以 succeeded 结束，带写的版本和 `WikiPlanBuildReport`；作业成功，报告是这次构建的 summary。
+  有节没写成：其余节照常写完，plan 作业以失败结束（`<n> sections were left unwritten`），作业以 content 失败结束、报告留在行上——
+  和命令以非 0 退出一样。平台的失败（runner 不在、读取或请求等待超限、worker 停机）两者都不结束：作业稍后重放，已写的节靠指纹原样不动。
+  重放时发现 plan 作业已经结束，就按那个结束回答。
+- **runner 门**：对这样的账号，文档在 runner 门上的路由（`writerState`、`writerDoc`、`material`、`write`、`affected`、`withdraw`）
+  对维护会话一律回 `WIKI_SERVER_EXECUTES`，什么都不读；plan 作业的路由对所有会话也都这样回，生成作业的会话在内（21.10）——所以旧
+  runner 的 `orbit wiki docs build` 和维护运行的文档步骤都问不到会话的模型。别的会话照旧是 `WIKI_NOT_MAINTENANCE_SESSION`。runner 模式下
+  照 22.10、22.12 回答。
+- **命令行（随下一次 runner 发版）**：`orbit wiki docs build` 把 `WIKI_SERVER_EXECUTES` 读作「文档由服务端写」——第一次调用读作业时
+  如此，读写文档的路由上也如此：不调模型、不再写、说明一句（`--json` 里 `serverExecutes`），以 0 退出。开关切换之前建的生成任务，它的
+  会话在第一次调用时就被拒，作业随任务结束；运行到一半开关切换、结束作业也被拒的，同样留给任务。在那之前，旧 runner 碰到拒绝会以非 0
+  退出，同样什么都没问。
 
 ## 23. System model 与 wiki-worker（服务端执行 P1a）
 

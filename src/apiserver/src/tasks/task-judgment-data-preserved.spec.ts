@@ -2095,7 +2095,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // replaced or dropped, so it is not another writer of the DONE fence and names none of the six preserved
       // objects; no 0177 relation is altered and no `task`, `session`, `project` or `project_acceptance_*` object
       // is named. No INSERT, UPDATE or DELETE: every stored row holds the new CHECKs as it held the old ones.
-      '0404_wiki_plan_server_draft'],
+      '0404_wiki_plan_server_draft',
+      // A plan job made by the wiki-worker's job (0405): 0338's `wiki_plan_job_made_chk` restated as the same CHECK
+      // over both of the row's makers, task_id and 0401's job_id, inside a DO block that replaces it only while it
+      // still reads the old way — after 0404, which restates it identically, it changes nothing. `wiki_plan_job` is
+      // the only table it can alter; no task, project, acceptance or DONE fence object, function, trigger or type is
+      // named, and no row is written.
+      '0405_wiki_plan_job_server_maker'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
