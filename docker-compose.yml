@@ -184,6 +184,17 @@ services:
       # Set it on the host as ORBIT_WIKI_MODE, not ORBIT_WIKI, for the reason ORBIT_WATCHES_MODE gives above.
       ORBIT_WIKI: "${ORBIT_WIKI_MODE:-on}"
       ORBIT_WIKI_CANARY_OWNERS: "${ORBIT_WIKI_CANARY_OWNERS:-}"
+      # Optional: how far the wiki's pipelines run on the server rather than in a runner's maintenance
+      # session (src/apiserver/src/wiki/wiki-executor-switch.ts): runner (default — the behavior every
+      # deployment has had), canary (only the accounts ORBIT_WIKI_EXECUTOR_CANARY_OWNERS lists,
+      # comma-separated ids) or server. Both services read it from here so they always answer the same about
+      # an account: this one queues the work, and wiki-worker runs it. Takes effect on
+      # `docker compose up -d apiserver wiki-worker`; no migration and no runner release either way, and
+      # moving it back to runner stops new jobs being taken without deleting anything.
+      # Not a *_MODE name, unlike ORBIT_WIKI above: no agent session carries ORBIT_WIKI_EXECUTOR
+      # (src/apiserver/src/wiki/wiki-compose-env.spec.ts reads the runner's own list to hold that).
+      ORBIT_WIKI_EXECUTOR: "${ORBIT_WIKI_EXECUTOR:-runner}"
+      ORBIT_WIKI_EXECUTOR_CANARY_OWNERS: "${ORBIT_WIKI_EXECUTOR_CANARY_OWNERS:-}"
       PORT: "3000"
       CORS_ORIGINS: "http://localhost:2086"
       # Where runners reach this deployment — the origin the web image bakes in below. A session on a
@@ -242,6 +253,11 @@ services:
       ORBIT_WIKI_MODEL: "${ORBIT_WIKI_MODEL:-}"
       # Model requests in flight at once, across every space.
       ORBIT_WIKI_MODEL_CONCURRENCY: "${ORBIT_WIKI_MODEL_CONCURRENCY:-4}"
+      # The same executor switch the apiserver reads: which accounts' jobs this worker may claim. Under
+      # runner it claims nothing at all; under canary only the listed accounts', under server every
+      # account's. Left out of an env file, both services read runner and nothing changes.
+      ORBIT_WIKI_EXECUTOR: "${ORBIT_WIKI_EXECUTOR:-runner}"
+      ORBIT_WIKI_EXECUTOR_CANARY_OWNERS: "${ORBIT_WIKI_EXECUTOR_CANARY_OWNERS:-}"
     depends_on:
       apiserver:
         condition: service_healthy

@@ -561,7 +561,7 @@ describe('wiki contract', () => {
     expect(CONTRACT.reviewModes.spotChecks.card).toMatch(/does NOT count toward pendingOpsPerSpace/u);
     // The verifier reports only for the session that proposed, over the runner door.
     const runner = CONTRACT.agentSurface.doors.runner;
-    expect(runner.verificationRoutes).toEqual([verification.routes.list, verification.routes.report]);
+    expect(runner.verificationRoutes).toEqual([verification.routes.list, verification.routes.report, verification.routes.request]);
     expect(CONTRACT.agentSurface.verify.cli).toBe('orbit wiki verify');
     expect(CONTRACT.agentSurface.verify.cleanClaudeCode).toMatch(/--bare --tools "" --strict-mcp-config/u);
     expect(CONTRACT.agentSurface.verify.unreadable).toMatch(/is not a verdict/u);

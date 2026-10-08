@@ -2304,6 +2304,22 @@ func (t *Transport) listWikiVerifications(route, sessionID, spaceID, after strin
 	return out, err
 }
 
+// requestWikiVerification asks the server to verify the ops the calling session proposed in a space
+// (contract `reviewModes.verification.routes.request`, `servedBy`): what `orbit wiki verify` calls where
+// the list answered that this deployment verifies on the server, so the command waits for the verdict
+// instead of asking a model of the session's provider about it. One queued job per session and space, so
+// asking twice while one is queued is one job; the answer names it, and answers `servedBy: runner` with
+// no job where the server does not run for the account.
+func (t *Transport) requestWikiVerification(sessionID, spaceID string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(spaceID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/verifications/request"
+	_, err := t.doWiki(http.MethodPost, path, nil, &out, taskOpTimeout, sessionHeader(sessionID), true)
+	return out, err
+}
+
 // reportWikiVerifications reports verdicts for ops the list on the same route gave. A report none of
 // whose verdicts was recorded comes back as a 4xx carrying every outcome, as a refused proposal does.
 //

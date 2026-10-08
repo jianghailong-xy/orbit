@@ -59,13 +59,21 @@ export interface WikiJobContext {
 export type WikiJobRunner = (context: WikiJobContext) => Promise<Record<string, unknown> | void>;
 
 /**
- * The kinds this build runs, and what each is (contract `jobs.kinds`). A job of a kind that is not here —
- * a pipeline whose phase (P3–P8) has not landed — stays queued: the claim only takes what it can finish,
- * so an older worker is never handed work it would have to fail.
+ * The kinds a build runs with nothing but the job's own context, and what each is (contract `jobs.kinds`). A
+ * job of a kind that is not here — a pipeline whose phase (P3–P8) has not landed — stays queued: the claim
+ * only takes what it can finish, so an older worker is never handed work it would have to fail.
  */
 export const WIKI_JOB_RUNNERS: Record<string, WikiJobRunner> = {
   smoke: runWikiSmokeJob,
 };
+
+/**
+ * Where a worker puts the map its pipelines need: a kind that reaches the wiki's services and the System
+ * model's name (verify, and the phases after it) is built where those are, in the worker's own module, and
+ * given to the executor at this token. A worker started without it runs {@link WIKI_JOB_RUNNERS} alone —
+ * the specs' case, and the one every deployment has until a pipeline asks for more.
+ */
+export const WIKI_JOB_RUNNERS_TOKEN = Symbol('WIKI_JOB_RUNNERS');
 
 /**
  * The wiki job worker (design §5.1): claims jobs of the kinds this build runs and runs each in this process,
@@ -101,6 +109,7 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
     private readonly prisma: PrismaService,
     private readonly queue: WikiModelRequestQueue,
     @Optional() @Inject(WIKI_MODEL_QUEUE_OPTIONS) private readonly options: WikiModelQueueOptions = {},
+    @Optional() @Inject(WIKI_JOB_RUNNERS_TOKEN) private readonly runners: Record<string, WikiJobRunner> = WIKI_JOB_RUNNERS,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -159,7 +168,7 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
     if (room <= 0) return 0;
     const claimed = await claimWikiJobs(this.prisma, {
       workerId: this.workerId,
-      kinds: Object.keys(WIKI_JOB_RUNNERS),
+      kinds: Object.keys(this.runners),
       owners,
       limit: room,
       leaseMs: this.options.leaseMs ?? WIKI_JOB.leaseSeconds * 1000,
@@ -193,7 +202,7 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
     }, renewMs);
     renew.unref();
     try {
-      const runner = WIKI_JOB_RUNNERS[job.kind];
+      const runner = this.runners[job.kind];
       if (!runner) throw new WikiJobInfraError(`this build runs no '${job.kind}' jobs`);
       const report = await runner(this.context(job, controller));
       const settled = await succeedWikiJob(this.prisma, { id: job.id, generation: job.leaseGeneration, report: report ?? {} });

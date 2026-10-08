@@ -66,6 +66,7 @@ P1b。见新增的 §23，迁移 `0400_wiki_model_status`，JSON 里是 `systemM
 | 文章的行为测试 | `src/apiserver/src/wiki/wiki-articles.pg.spec.ts`（服务端），`src/runner-go/wiki_articles_test.go`（`orbit wiki articles`，假 vLLM 端点），`WikiArticlesContractTests.swift`（OrbitKit） |
 | plan 的行为测试 | `src/apiserver/src/wiki/wiki-plan.pg.spec.ts`（服务端：检查闸、版本、确认、修改建议、跨租户），`src/runner-go/wiki_plan_test.go`（runner 门三条路由与检查闸的错误），`WikiPlanContractTests.swift`（OrbitKit） |
 | System model 的行为测试 | `src/apiserver/src/wiki-worker/wiki-model-status.pg.spec.ts`（状态行、读接口、心跳与 worker 启停），`wiki-model-client.spec.ts`（本地 http 服务模拟 SSE），`test/compose-topology.test.mjs`（compose 里的 `wiki-worker`） |
+| 服务端核实的行为测试 | `src/apiserver/src/wiki-worker/wiki-verify.spec.ts`（提示词、编号、结论解析，照 `wiki_verify_test.go` 改写），`wiki-verify-job.pg.spec.ts`（建作业、跑作业、结论落库，对 fake System model）|
 
 **本任务不做**：服务、控制器、MCP 工具、推送、实时事件的实现，以及任何 UI。它们各自的任务照本契约写。
 
@@ -681,6 +682,8 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
   verdict 与编号的读法同 21.3 的枚举值（只去包裹的反引号、引号和首尾空白）。**读不成结论就不放行**：不回报、计入失败，op 继续等。
   遇到模型端点 401 立即停（真 Claude Code 每次 401 要重试约 3 分钟），space 不再是 Automatic 时停；有 op 没拿到结论就非零退出。
   单独调用时这个退出码的语义不变。维护运行不看它：它在自己的进程里核实本次运行的 op，没结论的再问一遍，仍没结论的不让运行失败（19.4 第 8 步）。
+  **服务端模式**（`ORBIT_WIKI_EXECUTOR=server`，或 `canary` 名单内的账号）：核实由服务端自己的 `verify` 作业做，会话不必跑这条命令；
+  命令的含义变成"请求服务端核实并等结果"，runner 那一半随下一次 runner 发版上线，默认 `runner` 模式下这条命令一字未改（`agentSurface.verify.serverExecution`，§24.7）。
   描述文案把「只核实本会话的 op、绝不手写结论」写成前置条件（`agentSurface.verify.precondition`），逐词测试。
 - **`wiki_propose` 的描述**把「这是提议、要等 owner 审」写成前置条件（JSON 的 `agentSurface.proposeDescription`），T5 做逐词测试。
 - **用户门** `/api/wiki`（JwtAuthGuard，owner 本人）：spaces 列表（待审数、plan 等你数、绑定的 workspace、文档数，§2）、建 space、改设置（含审阅模式）、绑 workspace、首页、条目列表、主题、
@@ -1854,8 +1857,8 @@ JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5
   由请求的等待上限收尾；把作业停在仓库操作上（P2）或停在模型不在时的那套转换，随需要它的阶段到来。
 - CHECK：租约三列与 `running` 互为条件；只有结束态有 `ended_at`；`succeeded` 没有 `error`；`report` / `progress` 是对象。
 - `kind` 闭集：`verify` / `articles` / `import` / `plan_draft` / `plan_revise` / `docs_build` / `maintain`，加上本期的 `smoke`——
-  只调一次模型、把答案和用量写进 `report`，是队列最短的一条端到端路径（`wiki-jobs.pg.spec.ts` 对 fake 端点跑通它）。还没落地的种类
-  留在队列里：领取只取本 build 认识的种类，不会被交给一个只能失败的 worker。
+  只调一次模型、把答案和用量写进 `report`，是队列最短的一条端到端路径（`wiki-jobs.pg.spec.ts` 对 fake 端点跑通它）；`verify` 自 P3 起有实现（§24.7）。
+  还没落地的种类留在队列里：领取只取本 build 认识的种类，不会被交给一个只能失败的 worker。
 
 ### 24.2 领取、租约、回收
 
@@ -1898,7 +1901,9 @@ JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5
   `runner` 是空集合——默认值下没有 worker 领取任何作业。
 - 误拼的值读作 `runner` 并记一条 problem：拿不准时落在已经在跑的旧路径上，而不是落在一个没人部署 worker 的新路径上。
 - 开关只管执行，不删历史；改回 `runner` 只是停止新的领取。
-- 两个变量进服务环境的方式和 System model 的一样：由本部署的 compose 从 `.env` 传入（owner 确认的那一类改动），都没设就是 `runner`。
+- 两个变量进服务环境的方式和 System model 的一样：compose 从部署的 `.env` 传给 **apiserver 与 wiki-worker 两个服务**（P3 接上；
+  `test/compose-topology.test.mjs` 逐行钉住这两行，`wiki-compose-env.spec.ts` 确认它们读的是宿主同名变量），都没设就是 `runner`。
+  把开关改成 `canary` 或 `server` 是 owner 的事：生产上停在 `runner` 直到 P10。
 
 ### 24.6 运行行与计数
 
@@ -1907,6 +1912,62 @@ JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5
 - 健康行与每日计数按运行行统计：`wiki_maintenance_run` 里由作业跑的运行（`job_id` 非空）按自己的行计数，与旧路径一样排除
   本地端点上的追赶运行和失败的运行；任务那条路径的计数一字未改，所以同一个部署今天算出的数和昨天一样。
 - 服务端运行不建任务、不建会话：不占 `runnerActiveTurns`，runner 在服务端路径里只做 P2 的仓库操作。
+
+### 24.7 核实作业：Automatic 的 op 由服务端核实（服务端执行 P3）
+
+JSON 里是 `jobs.kindRuns.verify`、`jobs.make`、`agentSurface.verify.serverExecution`、`reviewModes.verification.who.server`；设计见
+`docs/wiki-server-execution-design.md` §2.2、§8。实现在 `src/apiserver/src/wiki-worker/`（提示词与结论解析 `wiki-verify.ts`、作业
+`wiki-verify-job.ts`、建作业端 `../wiki/wiki-verify-jobs.ts`）；测试是 `wiki-verify.spec.ts`（从 `src/runner-go/wiki_verify_test.go`
+逐条改写来的）与端到端的 `wiki-verify-job.pg.spec.ts`。
+
+**会话侧的门关上了（`servedBy`，P3 第 2 版）**：账号由服务端执行时（`jobs.executor` 为 server，或在 canary 名单内），
+runner 门对非维护会话不再交出核实的材料——`GET …/verifications` 返回空页，带 `servedBy: "server"` 与 `waiting`（这个会话还有几条
+op 在等），于是旧版 `orbit wiki verify` 读到空列表就正常退出，不会用会话自己的 provider 去调模型（下一次 runner 发版的命令连 provider 环境都不再需要：它先问谁核实，由服务端核实就不读 endpoint、token 和模型，直接请求并等待）；`POST …/verifications`
+对这类会话回 409 `WIKI_SERVER_EXECUTES`（合同 `refusals`，与 P4 同一条）；`POST …/verifications/request` 让会话请服务端核实一次，
+返回它等的那条作业（同一 space+session 只排一条，所以重复请求还是那条）。`submitChangeset` 的回答同样带 `servedBy: "server"`，
+`wiki_propose` 对会话的说明随之改成「由服务端核实，结论会自己到，不需要跑命令」。维护会话与 runner 模式一字未改：维护运行照旧
+读自己的列表、自己报结论（P8 之前仍在 runner 上），runner 模式下这些字段一律不出现。
+
+**什么时候建作业**
+
+- 一次提交里只要有 op 因为 Automatic 落成 `verifying`，就在这次提交的事务**提交之后**建一个 `verify` 作业：`input = { sessionId }`，
+  `priority = 1`——提议的那个会话正在等这条结论，而 space 在这条结论到来之前不认这次提议（`jobs.make`、`jobs.priority`）。
+- 作业的身份是**提出 op 的那个会话**：结论只认提出者的 op（§7.4），作业不是会话，所以它带着会话 id 去读、去写，写下的行 authored
+  `system`，因为这是服务端用自己的账号做的（`reviewModes.verification.who.server`）。
+- 同一 space 同一会话同时只有一个**排队中**的 verify 作业：作业跑起来时才读"此刻在等的 op"，所以排队期间又来一次提交搭这班车；
+  作业已经在跑之后进来的 op 会有自己的作业（同一 space 一次只跑一个作业，排在后面）。
+- 业主重开核实（§7.5，`POST /api/wiki/spaces/:id/verifications/reopen`）把 op 送回 `verifying` 时同样建作业：那些 op 所属的会话
+  多半早就结束了，结论仍然得有人去问。
+- 执行器开关不为这个账号开（`runner`，默认）就不建作业，一切照旧；维护运行提议的 op 也不建作业（本节末）。
+
+**作业做什么**
+
+- 逐页读该会话在这个 space 里等待核实的 op（`listVerifications`，一页 `rules.verificationListMax` 条），证据用服务端自己的读取器：
+  同一条列表路由、同一份 `wiki-verify-evidence.ts` 的取文本、脱敏与截断。
+- 每个 op 组装一条提示（`wiki-verify.ts`，与 runner 的 `wikiVerifyPrompt` 逐句相同：条目、每条出处的原文、可判重复的条目按
+  E1…En 编号），经请求队列问 System model：一条 op 一个请求，`step = verify`、`unit = op id`，所以作业重放时已经答过的请求直接复用。
+- 回答按 runner 的严格程度解析：**读不成结论就什么都不报**，这个 op 记进 `report.failures`，继续等下一次（09-30 的教训：89 个里 1 个没结论
+  不该让整次运行失败）。作业因此以 `succeeded` 结束，`report` 是 `{ kind, spaceId, mode, model, looked, verified, supported, partial,
+  unsupported, duplicate, failed, failures[{opId, why, refused}], stopped, usage }`。
+- 结论走 `recordVerifications`（唯一的结论写入方）：supported 按 Auto 生效并推送、partial 记 Unreviewed、unsupported 驳回并留理由、
+  duplicate 把出处追到它指向的那条——与 runner 路径同一条写入路径、同一份留痕。
+- space 不再是 Automatic 就地停下（`stopped` 写明），剩下的继续等。单条 op 的调用以"这不是平台的错"的方式结束（队列的 content 类）
+  算这个 op 的失败，不算整次的失败；平台的错照 §24.4 回队列重试。
+- P8 的维护运行调用同一个函数的另外两个参数：维护的第二遍（带着 `refused` 的 retry 后缀再问一次）和收养（`adopt`，最多 50 条）。
+
+**会话这一侧**
+
+- server（或 canary 名单内）下会话不必再跑 `orbit wiki verify`：发起提交就有结论。命令保留，含义变成"请求服务端核实并等结果"——
+  runner 那一半（命令改为请求服务端并等待，不再自己起一个模型）随下一次 runner 发版上线；在那之前、以及默认 `runner` 模式下，
+  这条命令的行为一字未改（`agentSurface.verify.serverExecution`）。
+- 维护运行不是会话：它至今仍在自己的进程里核实自己的 op（P8 才搬过来），所以它的提交不为它建作业。
+
+**compose 里的执行器开关**
+
+- `ORBIT_WIKI_EXECUTOR` 与 `ORBIT_WIKI_EXECUTOR_CANARY_OWNERS` 现在同时给 apiserver 和 wiki-worker（两个服务的 `environment`，
+  默认 `runner`）：一个建作业、一个领作业，两个进程对同一账号必须给出同一个答案。`test/compose-topology.test.mjs` 逐行钉住这两行，
+  `src/apiserver/src/wiki/wiki-compose-env.spec.ts` 确认它们读的是宿主同名变量（不是会话会带进来的 `ORBIT_*` 名字）。
+- 生产上把开关改成 `canary` 或 `server` 是 owner 的事（设计 §10，P10）。
 
 ## 25. 模型请求队列 `wiki_model_request`（服务端执行 P1b）
 
