@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 val sourceSha = providers.gradleProperty("orbitSourceSha").orElse(
@@ -31,7 +32,7 @@ android {
         minSdk = 29
         targetSdk = 36
         versionCode = 1
-        versionName = "0.1.0-a03"
+        versionName = "0.1.0-a06"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "SOURCE_SHA", "\"$sourceSha\"")
@@ -71,6 +72,12 @@ dependencies {
     implementation(libs.androidx.browser)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
+    // Parse CommonMark/GFM into native selectable Compose content; no HTML/WebView runtime.
+    listOf("commonmark", "commonmark-ext-gfm-tables", "commonmark-ext-gfm-strikethrough",
+        "commonmark-ext-task-list-items", "commonmark-ext-autolink").forEach {
+        implementation("org.commonmark:$it:${libs.versions.commonmark.get()}")
+    }
+    implementation(libs.okhttp)
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)

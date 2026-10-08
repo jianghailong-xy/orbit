@@ -8,6 +8,7 @@ import androidx.browser.customtabs.CustomTabsIntent
 import androidx.browser.customtabs.CustomTabsService
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -110,7 +111,10 @@ class GoogleSignInFlowTest {
         val flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
         assertEquals(flags, forwarded.flags and flags)
         compose.activityRule.scenario.onActivity {
+            val launchIntent = it.intent
             InstrumentationRegistry.getInstrumentation().callActivityOnNewIntent(it, forwarded)
+            // MainActivity keeps the newest intent; ActivityScenario follows its activity by the launch intent.
+            it.intent = launchIntent
         }
         compose.waitForIdle()
     }
@@ -161,6 +165,9 @@ class GoogleSignInFlowTest {
 
         deliver("orbit://auth/google?ticket=fixture-ticket&state=$state")
         compose.waitUntil(5_000) { session().state.value is AuthState.SignedIn }
+        // Signed in, the app opens on its directory; the account is shown in Settings.
+        compose.onNodeWithContentDescription("Open navigation").performClick()
+        compose.onNodeWithText("Settings").performScrollTo().performClick()
         compose.onNodeWithText("Signed in").assertExists()
         val exchange = exchanges.single()
         assertEquals("https://orbit.example/team/", exchange.server.value)
@@ -271,7 +278,8 @@ class GoogleSignInFlowTest {
         ).map { it.activityInfo.name }
         assertEquals(listOf(GoogleSignInRedirectActivity::class.java.name), handlers("orbit://auth/google?ticket=t&state=s"))
         assertEquals(emptyList<String>(), handlers("orbit://auth/other?ticket=t&state=s"))
-        assertEquals(emptyList<String>(), handlers("orbit://session/1"))
+        // An object deep link opens the app's own page, never the redirect.
+        assertEquals(listOf(MainActivity::class.java.name), handlers("orbit://session/1"))
     }
 
     private fun auth() = androidx.lifecycle.ViewModelProvider(compose.activity)[AuthViewModel::class.java]

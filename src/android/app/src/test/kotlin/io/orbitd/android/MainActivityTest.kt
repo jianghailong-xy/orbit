@@ -2,6 +2,7 @@ package io.orbitd.android
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -74,6 +75,8 @@ class MainActivityTest {
         compose.onNodeWithText("Password").performTextInput("fixture-password")
         compose.onAllNodesWithText("Sign in")[1].performScrollTo().performClick()
         compose.waitUntil(5_000) { appSession().state.value is AuthState.SignedIn }
+        compose.onNodeWithContentDescription("Open navigation").performClick()
+        compose.onNodeWithText("Settings").performScrollTo().performClick()
         compose.onNodeWithText("Signed in").assertIsDisplayed()
         compose.activityRule.scenario.recreate()
         compose.onNodeWithText("Signed in").assertIsDisplayed()
@@ -81,6 +84,31 @@ class MainActivityTest {
         awaitLogin()
         compose.onNodeWithText("Password").assertIsDisplayed()
         compose.onNodeWithText("fixture-password").assertDoesNotExist()
+    }
+
+    @Test
+    fun unsignedObjectLinkSurvivesRecreationAndLoginThenReturnsHome() {
+        awaitLogin()
+        compose.activityRule.scenario.onActivity {
+            val launchIntent = it.intent
+            MainActivity::class.java.getDeclaredMethod("onNewIntent", android.content.Intent::class.java).apply { isAccessible = true }
+                .invoke(it, android.content.Intent(android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse("orbit-task:34TcwNgAIo6tGUiIKjqnQ")).setClass(it, MainActivity::class.java))
+            // ActivityScenario filters lifecycle events by the ORIGINAL launch intent.
+            // Its monitor identity is restored; Orbit's received/pending navigation stays intact.
+            it.intent = launchIntent
+        }
+        compose.waitForIdle()
+        compose.activityRule.scenario.recreate()
+        compose.onNodeWithText("Instance address").performTextInput("https://example.test")
+        compose.onNodeWithText("Email").performTextInput("fixture@example.test")
+        compose.onNodeWithText("Password").performTextInput("fixture-password")
+        compose.onAllNodesWithText("Sign in")[1].performScrollTo().performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Linked task").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Linked task").assertIsDisplayed()
+        compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithContentDescription("Open navigation").assertIsDisplayed()
+        compose.onNodeWithText("Linked task").assertDoesNotExist()
     }
 
     private fun appSession() = (compose.activity.application as OrbitApplication).session
@@ -100,10 +128,13 @@ class TestOrbitApplication : OrbitApplication() {
     override fun createSession(): AuthSession = AuthSession(
         HttpTransport { request ->
             requests += request
-            when (request.api.path) {
-                listOf("auth", "methods") -> methods()
-                listOf("auth", "google", "exchange") -> exchange()
-                else -> ApiResponse(200, LOGIN.encodeToByteArray())
+            when {
+                request.api.path == listOf("auth", "methods") -> methods()
+                request.api.path == listOf("auth", "google", "exchange") -> exchange()
+                request.api.path == listOf("auth", "login") -> ApiResponse(200, LOGIN.encodeToByteArray())
+                request.api.path.firstOrNull() == "tasks" -> ApiResponse(200, """{"id":"01a0cca7-8609-70ed-a0e2-d4b55b832b60","title":"Linked task"}""".encodeToByteArray())
+                // The signed-in shell's directory reads: empty lists.
+                else -> ApiResponse(200, "[]".encodeToByteArray())
             }
         },
         object : CredentialStore {
