@@ -24,13 +24,16 @@ package='io.orbitd.android.debug'
 runner='io.orbitd.android.debug.test/androidx.test.runner.AndroidJUnitRunner'
 emulator_pid=''
 night=''
+handwriting=''
 "$adb_bin" start-server
 exec 9>"${ANDROID_DEVICE_LOCK:-/var/lib/orbit/android/ui.lock}"
 flock -w 600 9
 cleanup() {
   local result=$?
-  # The emulator is shared: give it back in the night mode it had.
+  # The emulator is shared: give it back in the night mode and stylus setting it had.
   if [[ -n "$night" ]]; then adb -s "$serial" shell cmd uimode night "$night" > /dev/null || true; fi
+  if [[ "$handwriting" == null ]]; then adb -s "$serial" shell settings delete secure stylus_handwriting_enabled > /dev/null || true
+  elif [[ -n "$handwriting" ]]; then adb -s "$serial" shell settings put secure stylus_handwriting_enabled "$handwriting" > /dev/null || true; fi
   if [[ -n "$emulator_pid" ]]; then
     kill "$emulator_pid" 2>/dev/null || true
     wait "$emulator_pid" 2>/dev/null || true
@@ -109,6 +112,11 @@ done
 run_test login-ui io.orbitd.android.auth.AuthFlowDeviceTest 1
 # A03c: the login page with the system light, then dark; the dark process also reads what the light one remembered.
 night="$(adb -s "$serial" shell cmd uimode night | tr -d '\r' | sed -n 's/^Night mode: //p')"
+# API 34+ Gboard opens its stylus tutorial over a focused field and covers the screenshots: off for these runs, as A11's.
+if (( api >= 34 )); then
+  handwriting="$(adb -s "$serial" shell settings get secure stylus_handwriting_enabled | tr -d '\r')"
+  adb -s "$serial" shell settings put secure stylus_handwriting_enabled 0
+fi
 [[ "$night" =~ ^(yes|no|auto|custom)$ ]] || { echo "Unreadable night mode: $night" >&2; exit 1; }
 for phase in light dark; do
   adb -s "$serial" shell cmd uimode night "$([[ "$phase" == dark ]] && echo yes || echo no)" > /dev/null
