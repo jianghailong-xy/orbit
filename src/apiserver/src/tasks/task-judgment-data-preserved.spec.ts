@@ -2101,7 +2101,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // still reads the old way — after 0404, which restates it identically, it changes nothing. `wiki_plan_job` is
       // the only table it can alter; no task, project, acceptance or DONE fence object, function, trigger or type is
       // named, and no row is written.
-      '0405_wiki_plan_job_server_maker'],
+      '0405_wiki_plan_job_server_maker',
+      // Kimi Code accounts (0408): one nullable TEXT with no default on `workspace` (`kimi_account`,
+      // 0387's `antigravity_account` exactly), and on `session` one nullable TEXT with no default
+      // (`kimi_account`) and one BOOLEAN NOT NULL DEFAULT false (`kimi_account_pinned`) — 0387's pair
+      // exactly, catalog-only as a constant default is — with no index, no CHECK and no foreign key, and
+      // nothing else. `task`, `project` and `project_acceptance_criterion_definition` are not named, no
+      // `project_acceptance_*` object nor any of the six preserved triggers/functions is, and no function,
+      // trigger, enum or type is created — so it is not another writer of the DONE fence. No INSERT,
+      // UPDATE or DELETE: nothing is backfilled.
+      '0408_kimi_account'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

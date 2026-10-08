@@ -25,6 +25,7 @@ import {
   accountNameOf,
   accountPlanUsage,
   addsAntigravityAccounts,
+  addsKimiAccounts,
   defaultAccountName,
   engineKeepsAccounts,
   runsOnEnvKey,
@@ -508,12 +509,14 @@ function EngineRow({
   }).length;
   // "Add account" is how a machine gets from one account to two, so it is not the group's to hold:
   // the Codex row offers it whenever the probe speaks for the engine, whether it heads a group yet
-  // or not. An Antigravity account is a Google sign-in, which only some runners can add; OpenCode
-  // keeps no accounts at all, and has no sign-in to add one with.
+  // or not. An Antigravity account is a Google sign-in, which only some runners can add, and a Kimi
+  // account only a runner that keeps them apart can; OpenCode keeps no accounts at all, and has no
+  // sign-in to add one with.
   const addAccountTo: LoginEngine | null =
     loginEngine !== null && engineKeepsAccounts(loginEngine) &&
     (kind === 'in' || kind === 'out' || kind === 'unknown') &&
-    (loginEngine !== 'antigravity' || addsAntigravityAccounts(runner))
+    (loginEngine !== 'antigravity' || addsAntigravityAccounts(runner)) &&
+    (loginEngine !== 'kimi' || addsKimiAccounts(runner))
       ? loginEngine
       : null;
 

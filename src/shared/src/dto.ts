@@ -314,7 +314,8 @@ export type RunnerModelCatalog = Partial<Record<AgentProvider, RunnerModelInfo[]
 export type RuntimeDefaultModels = Partial<Record<AgentProvider, string>>;
 
 /** One rate-limit window from a provider quota snapshot. Claude reports named
- *  5-hour / weekly windows; Codex reports primary / secondary windows. */
+ *  5-hour / weekly windows; Codex reports primary / secondary windows; Kimi Code reports named
+ *  5-hour / weekly / monthly ones (PlanUsageSnapshot.month). */
 export interface PlanUsageWindow {
   /** Percent of the window consumed, 0..100. */
   utilization: number;
@@ -397,6 +398,21 @@ export interface PlanUsageRateLimitReset {
   sequence: number;
 }
 
+/**
+ * One engine's quota as a runner reports it.
+ *
+ * Kimi Code's (`PlanUsage.kimi`, provider `kimi`) is read from `GET <base_url>/usages` of the managed
+ * Kimi Code provider in the account's config.toml, whose `usages` names four limits, each
+ * `{used_ratio, reset_time}`. They land in named windows, each with `utilization = used_ratio × 100`
+ * and `resetsAt = reset_time`:
+ *
+ *   usages.limit_5h           → fiveHour
+ *   usages.limit_7d           → sevenDay
+ *   usages.limit_month_total  → month
+ *   usages.limit_month_code   → monthCode
+ *
+ * Its other accounts are under `accounts`, by id, the way Codex's and Claude's are.
+ */
 export interface PlanUsageSnapshot {
   provider?: AgentProvider;
   /** Rolling 5-hour session limit. */
@@ -407,6 +423,10 @@ export interface PlanUsageSnapshot {
   sevenDayOpus?: PlanUsageWindow;
   /** 7-day Sonnet-scoped limit. */
   sevenDaySonnet?: PlanUsageWindow;
+  /** Kimi Code only: the monthly limit on everything the account spends (`usages.limit_month_total`). */
+  month?: PlanUsageWindow;
+  /** Kimi Code only: the monthly limit on coding use (`usages.limit_month_code`), beside `month`. */
+  monthCode?: PlanUsageWindow;
   /** Codex primary rolling limit. */
   primary?: PlanUsageWindow;
   /** Codex secondary rolling limit. */
@@ -421,8 +441,8 @@ export interface PlanUsageSnapshot {
   /** Codex earned rate-limit reset state (docs/codex-rate-limit-reset-contract.md). Absent from
    *  older runners and from non-Codex snapshots. */
   rateLimitReset?: PlanUsageRateLimitReset;
-  /** The snapshot of every other account on the runner — of Codex, Claude Code or Antigravity —
-   *  keyed by its id (RunnerEngineAccount.id); the windows beside it are Default's
+  /** The snapshot of every other account on the runner — of Codex, Claude Code, Antigravity or Kimi
+   *  Code — keyed by its id (RunnerEngineAccount.id); the windows beside it are Default's
    *  (codexAccountSnapshot). An entry never carries a reset block — reset is Default's alone. Absent
    *  from older runners, and until the runner has read an account other than Default. */
   accounts?: Record<string, PlanUsageSnapshot>;
@@ -455,6 +475,8 @@ export interface PlanUsageBucket {
 export interface PlanUsage extends PlanUsageSnapshot {
   claude?: PlanUsageSnapshot;
   codex?: PlanUsageSnapshot;
+  /** Kimi Code's accounts: Default's windows as the snapshot's own, every other account's under
+   *  `accounts` (the mapping from Kimi's `usages` is on PlanUsageSnapshot). */
   kimi?: PlanUsageSnapshot;
   /** Antigravity's Google accounts. Never in a heartbeat's own planUsage: a runner reports it with the
    *  engine's health (RunnerEngineHealth.planUsage), and a reader that weighs every engine's quota the
@@ -1188,7 +1210,8 @@ export interface LoginCommand {
   accountName?: string;
   /** Kimi only: the site to sign in on (`kimi login --region`). Only a runner that declares
    *  `kimi-login-region/v1` is handed a start naming one; absent, the runner runs a bare `kimi login`,
-   *  exactly as before the choice. */
+   *  exactly as before the choice. A start adding a Kimi account (`accountName`, to a runner that
+   *  declares `kimi-account-login/v1`) carries both: the new account signs in on that site. */
   region?: KimiRegion;
 }
 
@@ -1269,9 +1292,9 @@ export interface RunnerEngineHealth {
   /** What the runner's updater last did to this engine. Absent from an older runner, and until
    *  the first pass — shown as "not reported yet", never as a problem. */
   update?: RunnerEngineUpdate;
-  /** Codex, Claude Code and Antigravity: every account signed into this machine's CLI, Default
-   *  first, each with its own sign-in state. `auth` above stays the engine's answer, which is what
-   *  every reader older than accounts takes it for — for Antigravity that may be a GEMINI_API_KEY,
+  /** Codex, Claude Code, Antigravity and Kimi Code: every account signed into this machine's CLI,
+   *  Default first, each with its own sign-in state. `auth` above stays the engine's answer, which is
+   *  what every reader older than accounts takes it for — for Antigravity that may be a GEMINI_API_KEY,
    *  while its Default account is the runner's Google sign-in alone. Absent from an older runner, and
    *  whenever the runner couldn't list its accounts — read as the one account every machine had
    *  before accounts. */
@@ -1303,8 +1326,8 @@ export interface DshRuntimeHealth {
 
 /**
  * One account on a runner: a directory the CLI keeps that login in — a Codex CODEX_HOME, a Claude
- * Code's CLAUDE_CONFIG_DIR, an Antigravity Google sign-in's Gemini directory — which the runner signs
- * in and runs sessions on.
+ * Code's CLAUDE_CONFIG_DIR, an Antigravity Google sign-in's Gemini directory, a Kimi Code
+ * KIMI_CODE_HOME — which the runner signs in and runs sessions on.
  *
  * Nothing here names the account itself. Neither its email nor its account id leaves the machine
  * (docs/codex-rate-limit-reset-contract.md §3): `name` is what the user called the slot, and
@@ -1329,6 +1352,10 @@ export interface RunnerEngineAccount {
   codexHome?: string;
   /** The CLI's own answer for this account, with `unknown` for anything ambiguous. */
   auth: 'yes' | 'no' | 'unknown';
+  /** Kimi Code only: the site this account's login is on — kimi.com or kimi.ai, whose accounts are
+   *  separate — read as the engine's own kimiRegion is (RunnerEngineHealth.kimiRegion), from this
+   *  account's config.toml. Absent before its first sign-in, and for every other engine. */
+  kimiRegion?: KimiRegion;
   /** `cxa1_` and the first 8 hex digits of the account's fingerprint. Absent until the runner has
    *  read one for this account, and for engines that report none. Two accounts showing the same one
    *  are the same account. */
