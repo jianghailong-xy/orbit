@@ -110,7 +110,7 @@ final class TaskDetailCopyParityTests: XCTestCase {
         assertSays(list, "'\(TaskDetailCopy.noAdjacentRelationships)'", in: Self.dependencyList)
         assertSays(list, "title=\"\(TaskDetailCopy.removePrerequisiteTitle)\"", in: Self.dependencyList)
         assertSays(list, "description=\"\(TaskDetailCopy.removePrerequisiteDetail)\"", in: Self.dependencyList)
-        assertSays(list, "okText=\"\(TaskDetailCopy.remove)\"", in: Self.dependencyList)
+        assertSays(list, "confirmText=\"\(TaskDetailCopy.remove)\"", in: Self.dependencyList)
         // The relationship line (`TaskDetailLogic.dependencyRows`).
         assertSays(list, "prerequisites ? `Depends on ${prerequisites}` : ''", in: Self.dependencyList)
         assertSays(list, "targets ? `Required by ${targets}` : ''", in: Self.dependencyList)
@@ -196,8 +196,8 @@ final class TaskDetailCopyParityTests: XCTestCase {
         assertSays(card, "<Card title=\"\(TaskDetailCopy.attributionHeading)\"", in: Self.attributionCard)
         assertSays(card, "'\(TaskDetailCopy.notReported)'", in: Self.attributionCard)
         assertSays(card, "'\(TaskDetailCopy.evidenceOnly)'", in: Self.attributionCard)
-        assertSays(card, "\(TaskDetailCopy.trigger) </Typography.Text>", in: Self.attributionCard)
-        assertSays(card, "message=\"\(TaskDetailCopy.attributionUnavailable)\"", in: Self.attributionCard)
+        assertSays(card, "<span className=\"orbit-typography orbit-typography-secondary\">\(TaskDetailCopy.trigger) </span>", in: Self.attributionCard)
+        assertSays(card, "title=\"\(TaskDetailCopy.attributionUnavailable)\"", in: Self.attributionCard)
         // The lines `TaskDetailLogic.noticedIn` and `blockedBy` build.
         assertSays(card, "<div>Task: {view.discovery.task.title}</div>", in: Self.attributionCard)
         assertSays(card, "<div>Session: {view.discovery.session.title ?? 'untitled'}</div>", in: Self.attributionCard)

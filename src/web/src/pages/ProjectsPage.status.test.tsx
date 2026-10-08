@@ -17,8 +17,8 @@ import { ProjectDetailPage, ProjectsPage } from './ProjectsPage';
  * the client: the method, the path and the JSON body. A mocked `api` would let this file pass
  * against an argument list rather than against a PATCH.
  *
- * Every predicate below is over RENDERED OUTPUT — `container.textContent`, the portal antd puts a
- * modal in, the `disabled` property of the button a reader would press. None of it reads a prop or
+ * Every predicate below is over RENDERED OUTPUT — `container.textContent`, the portal a dialog is
+ * drawn in, the `disabled` property of the button a reader would press. None of it reads a prop or
  * a mutation object: a confirmation that holds the right numbers in state and draws none of them
  * is the exact defect this entry exists to avoid.
  */
@@ -29,7 +29,7 @@ vi.mock('../components/ProjectDependencyGraph', async () => {
       createElement('div', { 'data-testid': 'project-dependency-graph' }),
   };
 });
-// Toasts need antd's App context, which this page is mounted without.
+// Toasts need their viewport, which this page is mounted without.
 const toast = { success: vi.fn(), info: vi.fn(), warning: vi.fn(), error: vi.fn() };
 vi.mock('../lib/toast', () => ({ useToast: () => toast }));
 
@@ -169,8 +169,8 @@ let root: Root;
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   toast.success.mockReset();
-  // antd's responsive controls subscribe to breakpoints on mount and jsdom ships no matchMedia;
-  // "no breakpoint matches" is the desktop reading, and layout is not this file's subject.
+  // The page's breakpoint reads subscribe on mount and jsdom ships no matchMedia; "no breakpoint
+  // matches" is the desktop reading, and layout is not this file's subject.
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: false,
     media: query,
@@ -263,13 +263,13 @@ const entry = (label: RegExp): HTMLButtonElement | undefined =>
     label.test(button.getAttribute('aria-label') ?? ''),
   );
 
-/** The open confirmation, in the portal antd puts it in — never `container`. */
-const dialog = (): HTMLElement | null => document.body.querySelector('.ant-modal');
+/** The open confirmation, by its role, in the portal it is drawn in — never `container`. */
+const dialog = (): HTMLElement | null => document.body.querySelector('[role="dialog"]');
 const dialogText = (): string => dialog()?.textContent ?? '';
 
 /** The confirmation's own confirm, matched on the words the reader reads on it. */
 const confirmButton = (label: RegExp): HTMLButtonElement | undefined =>
-  [...document.querySelectorAll<HTMLButtonElement>('.ant-modal button')].find((button) =>
+  [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((button) =>
     label.test((button.textContent ?? '').trim()),
   );
 
@@ -371,7 +371,8 @@ describe('ProjectDetailPage — recording the project’s own status', () => {
     const confirm = confirmButton(/^Record as done$/);
     expect(confirm, 'the confirmation has no confirm').toBeTruthy();
     expect(confirm!.disabled, 'a missing receipt disabled the press').toBe(false);
-    expect(confirm!.className).not.toContain('ant-btn-disabled');
+    expect(confirm!.getAttribute('aria-disabled'), 'a missing receipt disabled the press').not.toBe('true');
+    expect(confirm!.hasAttribute('data-disabled'), 'a missing receipt drew the press disabled').toBe(false);
 
     await click(confirm!);
     await tick();

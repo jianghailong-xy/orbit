@@ -918,7 +918,7 @@ function actionRow(html: string): { label: string; weight: Weight }[] {
     .querySelector('.project-open-item-actions');
   expect(row, 'the card draws an action row').not.toBeNull();
   return Array.from(row!.children).map((press) => {
-    const variant = press.className.match(/ant-btn-(primary|default|link)\b/)?.[1];
+    const variant = press.className.match(/orbit-button-(primary|default|link)\b/)?.[1];
     const weight: Weight | null =
       press.tagName === 'A' || variant === 'link'
         ? 'link'
@@ -1019,12 +1019,12 @@ describe('the exception card’s action row', () => {
     await settle();
 
     const press = button('Mark as handled');
-    expect(press?.className).toContain('ant-btn-link');
+    expect(press?.className).toContain('orbit-button-link');
 
     await act(async () => press!.click());
     await settle();
     expect(
-      document.body.querySelector<HTMLElement>('.ant-modal'),
+      document.body.querySelector<HTMLElement>('[role="dialog"]'),
       'the press opens the dialog that asks for the reason',
     ).not.toBeNull();
 
@@ -1138,7 +1138,7 @@ let root: Root | null = null;
 let container: HTMLElement | null = null;
 
 beforeEach(() => {
-  // The reason field the owner types into grows with its text, which antd measures with a
+  // The reason field the owner types into grows with its text, which it measures with a
   // ResizeObserver jsdom lacks — the same stub the blockers dialog's own suite carries.
   vi.stubGlobal('ResizeObserver', class {
     observe() {}
@@ -1374,7 +1374,7 @@ describe('an owner marking an exception handled', () => {
     expect(trigger).toBeTruthy();
     await click(trigger!);
 
-    const dialog = document.body.querySelector<HTMLElement>('.ant-modal');
+    const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]');
     expect(dialog).not.toBeNull();
     const field = dialog!.querySelector<HTMLTextAreaElement>('textarea');
     expect(field).not.toBeNull();

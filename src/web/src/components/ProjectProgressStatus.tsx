@@ -1,7 +1,6 @@
 import { useCallback, useId, useState, useSyncExternalStore, type JSX, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { Alert, Button, Input, Modal } from 'antd';
 import type {
   CoordinatorFuseUsage,
   CoordinatorWakeups,
@@ -41,6 +40,10 @@ import { refreshTaskScheduleViews } from '../lib/taskSchedule';
 import { readTaskRunConflict } from '../lib/taskRunHandoff';
 import { ago, formatSpan } from '../lib/watches';
 import { TaskRunHandoffNotice } from './TaskRunHandoffNotice';
+import { Alert } from './ui/Alert';
+import { Button } from './ui/Button';
+import { Dialog } from './ui/Dialog';
+import { Textarea } from './ui/Textarea';
 
 /**
  * What a project still owes somebody, and what its coordinator has left to spend
@@ -406,7 +409,7 @@ export function FusePauseCard({
       onChat={onChat}
     >
       <Button
-        type="primary"
+        variant="primary"
         size="small"
         loading={resume.isPending}
         disabled={row.fuseEpisodeId == null}
@@ -417,9 +420,8 @@ export function FusePauseCard({
       {resume.isError ? (
         <Alert
           type="error"
-          showIcon
           className="project-open-item-error"
-          message="The coordinator was not resumed"
+          title="The coordinator was not resumed"
           description={(resume.error as Error).message}
         />
       ) : null}
@@ -587,7 +589,7 @@ function PressButton({
     return (
       <Button
         className={`project-open-item-quiet${danger ? ' is-danger' : ''}`}
-        type="link"
+        variant="link"
         size="small"
         loading={pending}
         onClick={onClick}
@@ -599,7 +601,7 @@ function PressButton({
   return (
     <Button
       size="small"
-      type={tier === 'primary' ? 'primary' : 'default'}
+      variant={tier === 'primary' ? 'primary' : 'default'}
       danger={danger}
       loading={pending}
       onClick={onClick}
@@ -614,9 +616,8 @@ function PressError({ headline, error }: { headline: string; error: Error }): JS
   return (
     <Alert
       type="error"
-      showIcon
       className="project-open-item-error"
-      message={headline}
+      title={headline}
       description={error.message}
     />
   );
@@ -707,25 +708,42 @@ function CancelTaskPress({
         pending={cancel.isPending}
         onClick={() => setConfirming(true)}
       />
-      <Modal
+      <Dialog
+        className="project-open-item-dialog"
         open={confirming}
         title={CANCEL_TASK_MODAL_TITLE}
-        okText={CANCEL_TASK_MODAL_OK}
-        okButtonProps={{ danger: true, loading: cancel.isPending }}
-        cancelText="Back"
-        onOk={() => cancel.mutate(undefined, { onSuccess: () => setConfirming(false) })}
-        // A refusal leaves the modal open over the row it was about: the reader gets to read what
+        // A refusal leaves the dialog open over the row it was about: the reader gets to read what
         // the server said and decide again, rather than losing the question with the answer.
-        onCancel={() => {
+        onClose={() => {
           cancel.reset();
           setConfirming(false);
         }}
+        footer={
+          <>
+            <Button
+              onClick={() => {
+                cancel.reset();
+                setConfirming(false);
+              }}
+            >
+              Back
+            </Button>
+            <Button
+              variant="primary"
+              danger
+              loading={cancel.isPending}
+              onClick={() => cancel.mutate(undefined, { onSuccess: () => setConfirming(false) })}
+            >
+              {CANCEL_TASK_MODAL_OK}
+            </Button>
+          </>
+        }
       >
         <p>{CANCEL_TASK_MODAL_BODY}</p>
         {cancel.isError ? (
           <PressError headline="The task was not cancelled" error={cancel.error as Error} />
         ) : null}
-      </Modal>
+      </Dialog>
     </>
   );
 }
@@ -792,30 +810,41 @@ function MarkHandledPress({
         pending={mark.isPending}
         onClick={() => setAsking(true)}
       />
-      <Modal
+      <Dialog
+        className="project-open-item-dialog"
         open={asking}
         title={MARK_HANDLED_MODAL_TITLE}
-        okText={MARK_HANDLED}
-        // Empty is not a press: the server requires the reason, so the confirm waits for one. The
-        // handler holds the same line, because a disabled button is not a rule about what is sent.
-        okButtonProps={{ disabled: trimmed === '', loading: mark.isPending }}
-        cancelText="Back"
-        onOk={() => {
-          if (trimmed === '') return;
-          mark.mutate(trimmed, {
-            onSuccess: () => {
-              setNote('');
-              setAsking(false);
-            },
-          });
-        }}
-        onCancel={close}
+        onClose={close}
+        footer={
+          <>
+            <Button onClick={close}>Back</Button>
+            {/* Empty is not a press: the server requires the reason, so the confirm waits for one.
+                The handler holds the same line, because a disabled button is not a rule about what
+                is sent. */}
+            <Button
+              variant="primary"
+              disabled={trimmed === ''}
+              loading={mark.isPending}
+              onClick={() => {
+                if (trimmed === '') return;
+                mark.mutate(trimmed, {
+                  onSuccess: () => {
+                    setNote('');
+                    setAsking(false);
+                  },
+                });
+              }}
+            >
+              {MARK_HANDLED}
+            </Button>
+          </>
+        }
       >
         <p>{MARK_HANDLED_MODAL_BODY}</p>
         <label className="project-open-item-reason-label" htmlFor={fieldId}>
           Why is it no longer open?
         </label>
-        <Input.TextArea
+        <Textarea
           id={fieldId}
           value={note}
           maxLength={2000}
@@ -825,7 +854,7 @@ function MarkHandledPress({
         {mark.isError ? (
           <PressError headline="The item was not closed" error={mark.error as Error} />
         ) : null}
-      </Modal>
+      </Dialog>
     </>
   );
 }
