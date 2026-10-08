@@ -330,7 +330,7 @@ unwritten. Any session but a maintenance run of the space is refused WIKI_NOT_MA
 For an account the Orbit server runs the wiki for (ORBIT_WIKI_EXECUTOR server, or canary with the
 account on its list) the server answers WIKI_SERVER_EXECUTES instead: its wiki worker builds the
 documents when the owner confirms a plan, with the deployment's System model. The command then asks no
-model, says so and exits 0; a build job's run ends its job failed, saying why.
+model, says so and exits 0 — a build task's run too, made before the switch: its job ends with its task.
 `,
 	"articles": `orbit wiki articles — have the local model write the articles of a space's changed topics, as its Wiki maintenance run
 

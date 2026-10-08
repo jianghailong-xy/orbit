@@ -2563,6 +2563,11 @@ func cliWikiDocsBuild(args []string, out io.Writer, ctx cliOrchestrationContext)
 	}
 	opts := wikiDocsBuildOptions{spaceID: spaceID, doc: slug, section: key, repo: *repo, model: *model}
 	job, err := wikiDocsBuildJobOf(t, ctx.sessionID, spaceID)
+	if wikiServerExecutes(err) {
+		// The server runs this account's wiki (contract `docs.build.server`): the plan job routes refuse this session
+		// too — a build task made before the switch included — so it asks no model and writes nothing.
+		return printWikiDocsBuildSummary(out, *jsonOut, wikiDocsBuildSummary{SpaceID: spaceID, Docs: []wikiDocsBuildDocRun{}, ServerExecutes: true}, nil)
+	}
 	if err != nil {
 		return err
 	}
@@ -2592,12 +2597,23 @@ func cliWikiDocsBuild(args []string, out io.Writer, ctx cliOrchestrationContext)
 				"this session wrote none — the owner's next confirmation of a plan asks the server for them", wikiServerExecutesCode)
 		}
 		end, finishErr := finishWikiDocsBuildJob(t, ctx.sessionID, spaceID, *job, summary, jobErr)
-		summary.Job = &end
-		if finishErr != nil && runErr == nil {
-			runErr = finishErr
+		// The switch gave the account to the server while this ran: the job's end is refused like every other route,
+		// so nothing was said of it here, and the job ends with its task.
+		if refused := summary.ServerExecutes && wikiServerExecutes(finishErr); !refused {
+			summary.Job = &end
+			if finishErr != nil && runErr == nil {
+				runErr = finishErr
+			}
 		}
 	}
-	if *jsonOut {
+	return printWikiDocsBuildSummary(out, *jsonOut, summary, runErr)
+}
+
+// printWikiDocsBuildSummary says how the run went — compact JSON with --json — and answers the command's error:
+// the run's own, else none for a run the server answered WIKI_SERVER_EXECUTES, else whether a section it took up
+// was left unwritten.
+func printWikiDocsBuildSummary(out io.Writer, asJSON bool, summary wikiDocsBuildSummary, runErr error) error {
+	if asJSON {
 		raw, err := json.Marshal(summary)
 		if err != nil {
 			return err

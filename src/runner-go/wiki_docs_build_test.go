@@ -41,7 +41,7 @@ type docsBuildDoor struct {
 	jobCode  string
 	jobPosts []map[string]interface{}
 	// executes names the routes that answer WIKI_SERVER_EXECUTES, as they do for an account the Orbit server runs
-	// the wiki for: docs, material, view, write.
+	// the wiki for: docs, material, view, write, and the plan job's job, progress and finish.
 	executes map[string]bool
 }
 
@@ -72,6 +72,7 @@ func newDocsBuildDoor(t *testing.T) *docsBuildDoor {
 		route := map[string]string{
 			http.MethodGet + " docs": "docs", http.MethodGet + " docs/session-runtime/material": "material",
 			http.MethodGet + " docs/session-runtime": "view", http.MethodPost + " docs/session-runtime": "write",
+			http.MethodGet + " plan/job": "job", http.MethodPost + " plan/job/progress": "progress", http.MethodPost + " plan/job/finish": "finish",
 		}[r.Method+" "+path]
 		if door.executes[route] {
 			reply(http.StatusConflict, map[string]string{"code": "WIKI_SERVER_EXECUTES",
@@ -1235,7 +1236,8 @@ func TestWikiArticleBuildTakesTheHeadingASectionNamesBeforeOneItsNameContains(t 
 
 // For an account the Orbit server runs the wiki for (contract `docs.build.server`), the runner door answers
 // WIKI_SERVER_EXECUTES before anything is read: the command asks this session's model nothing, writes nothing, says
-// so and exits 0 — and a build job's session, one made before the switch, ends its job saying why.
+// so and exits 0 — a build task's session too, made before the switch, whose job route is refused the same way; and
+// one whose job was read before the switch moved ends it saying why, or leaves it to its task when that is refused.
 func TestWikiArticleBuildAsksNoModelForAnAccountTheServerRuns(t *testing.T) {
 	door, model, _, spawns, repo := docsBuildSetup(t)
 	door.mu.Lock()
@@ -1257,12 +1259,23 @@ func TestWikiArticleBuildAsksNoModelForAnAccountTheServerRuns(t *testing.T) {
 		t.Errorf("orbit wiki docs build said %q (%v)", words.String(), err)
 	}
 
-	// A build task made before the switch: its run ends the job failed, naming why, and still exits 0.
+	// A build task made before the switch: the plan job's route is refused too, so its run reads no job, asks nothing,
+	// tells the job nothing — it ends with its task — and exits 0.
 	door.mu.Lock()
 	door.job = map[string]interface{}{
 		"job":   map[string]interface{}{"id": "job-9", "spaceId": "space-1", "kind": "build", "trigger": "owner", "state": "running", "version": 3, "attemptsMax": 3},
 		"space": map[string]interface{}{"id": "space-1", "title": "orbit", "repo": map[string]interface{}{"urlNorm": nil, "rootCommitSha": nil}, "workspace": nil},
 	}
+	door.executes = map[string]bool{"docs": true, "job": true, "progress": true, "finish": true}
+	door.mu.Unlock()
+	summary, out, err = docsBuildRun(t, repo.checkout)
+	if err != nil || !summary.ServerExecutes || summary.Job != nil || len(door.jobPosts) != 0 {
+		t.Fatalf("a build task's run refused its job: %v, %+v, %d posts\n%s", err, summary, len(door.jobPosts), out)
+	}
+
+	// Its job was read before the switch moved, and the server takes the job's end: the run ends it failed, naming why.
+	door.mu.Lock()
+	door.executes = map[string]bool{"docs": true}
 	door.mu.Unlock()
 	summary, _, err = docsBuildRun(t, repo.checkout)
 	if err != nil || summary.Job == nil || summary.Job.Outcome != "failed" || !strings.Contains(summary.Job.Error, "WIKI_SERVER_EXECUTES") {
@@ -1271,6 +1284,16 @@ func TestWikiArticleBuildAsksNoModelForAnAccountTheServerRuns(t *testing.T) {
 	finish := door.jobPosts[len(door.jobPosts)-1]
 	if finish["_route"] != "plan/job/finish" || finish["outcome"] != "failed" || !strings.Contains(fmt.Sprint(finish["error"]), "WIKI_SERVER_EXECUTES") {
 		t.Errorf("the job was told %v", finish)
+	}
+
+	// The job's end is refused as well: nothing is said of the job here, and the run still exits 0.
+	door.mu.Lock()
+	door.executes = map[string]bool{"docs": true, "finish": true}
+	posts := len(door.jobPosts)
+	door.mu.Unlock()
+	summary, out, err = docsBuildRun(t, repo.checkout)
+	if err != nil || !summary.ServerExecutes || summary.Job != nil || len(door.jobPosts) != posts {
+		t.Fatalf("a refused end: %v, %+v\n%s", err, summary, out)
 	}
 	if len(model.Prompts()) != 0 {
 		t.Error("a build job's run asked the session's model")
