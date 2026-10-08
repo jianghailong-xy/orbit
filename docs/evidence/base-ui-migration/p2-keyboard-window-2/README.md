@@ -25,7 +25,7 @@
      - Popconfirm ⏎⏎、⏎Space、⏎Shift+Tab 3 个；
      - ConfirmDialog ⏎Tab、⏎Shift+Tab 2 个：旧 `modal.confirm` 自己的 burst 也 20/20 不同。Overlay 修复后这两个顺带与 paced 一致。
    - 其余组合：旧 AntD 与 Orbit 都已与各自的 paced 一致，或者是对照序列。
-3. **修复后**，在终版树（`aed0a7bab`）上用同一探针、同样条件重采：
+3. **修复后**用同一探针、同样条件重采：菜单、Select、Dialog、Popconfirm 在 `069601b67` 上，子菜单在终版 `aed0a7bab` 上，因为终版只改了子菜单触发器。结果：
    - 所有要修的组合 burst 错 0/20；
    - 只记录的组合与修复前逐样本同一结果（ConfirmDialog 那两个除外，见上）；
    - 每个 Orbit 组合的 paced 参照都与修复前相同。
@@ -34,12 +34,20 @@
    - ⏎Shift+Tab 的 burst：确认框关上，焦点到前一个按钮；
    - 都没有回答问题。
 5. **确定性回归**：
-   - jsdom 单测 [`keyboardWindow.test.tsx`](../../../../src/web/src/components/ui/keyboardWindow.test.tsx)（58 个用例）：修复前 26 个窗口用例失败、参照全过；修复后 58/58。
-   - 冻结帧探针，八个环境，49 例 × 8 = 392：修复前通过 72，第一版修复后 312，终版 392。第一版的问题见[第二次子菜单修复](#第二次子菜单修复)。
+   - jsdom 单测 [`keyboardWindow.test.tsx`](../../../../src/web/src/components/ui/keyboardWindow.test.tsx)（58 个用例）：修复前 26 个窗口用例失败，参照全过；修复后 58/58；rebase 后合并检查里也是 58/58。
+   - 冻结帧探针，八个环境，49 例 × 8 = 392：修复前通过 72，第一版修复后 312，终版 392，rebase 后的新基础上也是 392。第一版的问题见[第二次子菜单修复](#第二次子菜单修复)。
 6. **约定和已验收的行为不变**：
    - Menu 的 Tab 约定不变：窗口内 ⏎Tab 的 burst 等于 paced，Tab 离开并关闭菜单。⏎Tab⏎ 与旧 Dropdown 不同，是约定所致，不是回归。
    - 前两个任务的探针修复前后相同：Select ↓/↑/⏎ 276 个样本，Menu 冻结帧 80 例。
-   - 其他回归检查见[已验收行为的回归](#已验收行为的回归)：choices 原入口八环境、overlays、choices 测试列表、试点、P0、相关单测。项目合并检查以及协调者指定的几项，在 rebase 到 main 后的树上重跑，见 [rebase 到 main 之后](#rebase-到-main-之后)。
+   - 其他回归检查见[已验收行为的回归](#已验收行为的回归)：choices 原入口八环境、overlays、choices 测试列表、试点、P0、相关单测。试点里唯一一张超出抗锯齿级的截图是面板关闭图标的边缘，两种组件各复跑 5 次，两种状态都会出现，是噪声。
+7. **rebase 到 main（`c7efa24cb`）之后**，协调者指定的几项在新基础上重跑，全部通过（见 [rebase 到 main 之后](#rebase-到-main-之后)）：
+   - 项目合并检查：Vitest 358 个文件、4628 个用例；
+   - 冻结帧八环境 392/392；
+   - choices 原入口 32/32，完整 choices 矩阵 520/520；
+   - P0：101 通过、11 跳过、0 失败。
+8. **清单**：本分支只给 `ChoicesFixture.tsx` 加了 antd `Popconfirm` 导入，作为 Popconfirm 基线的参照，已登记为 `inventory-delta/2026-10-07d.json`（owner P6，status `amended`）。
+   - main 带来的 8 个未归属点不属本分支，协调者判给 P4.2。
+   - 用只在临时副本里加的替身记录补上这 8 个点后，`verify-record.mjs` 对 07d 全部通过。
 
 ## 旧 AntD 的机制（源码）
 
@@ -145,11 +153,18 @@
    - 冻结帧加 ⏎End⏎、↑Home⏎。
    - ⏎Space 维持只记录。
    - ↑Home⏎ 判为回归时还没有采样，依据是读代码；之后补采了基线（`baseline-menu-c`），修复后由确定性用例证实。
-3. 清单复扫后的两条（2026-10-07，见[清单复扫](#清单复扫与-2026-10-07djson)）：ChoicesFixture.tsx 新增的 antd Popconfirm 导入登记为 `inventory-delta/2026-10-07d.json`，owner 仍为 P6，条目 status 用 `amended`（请求 `34bt5NJy7hlys1RIl41ij`，选 B）；合并树上另有的 2 个未归属测试文件由 P4.2 用 `2026-10-07c.json` 登记，不归本任务。
+3. 清单复扫后的两条（2026-10-07，见[清单复扫](#清单复扫与-2026-10-07djson)）：
+   - ChoicesFixture.tsx 新增的 antd Popconfirm 导入登记为 `inventory-delta/2026-10-07d.json`，owner 仍为 P6，条目 status 用 `amended`（请求 `34bt5NJy7hlys1RIl41ij`，选 B）；
+   - 与项目 tip 的合并树上另有 2 个未归属测试文件，由 P4.2 用 `2026-10-07c.json` 登记，不归本任务。
+4. 2026-10-08：
+   - 各分支跟上 `origin/main`，本分支据此 rebase；
+   - 新基础上要重跑清单、合并检查、冻结帧八环境、choices 入口和 P0，终版树上已有的原件照旧有效；
+   - main 带来的 8 个未归属点全部归 P4.2；
+   - 同意用只在临时副本里加的替身记录来核对 07d。
 
 ## 基线与逐组合结论
 
-逐组合的完整数字（每个目标的 paced 参照与一致数、burst 错数及其结果、窗口和交接数，修复后的同一组数字）在 [combinations.md](combinations.md)，由 [render-tables.py](render-tables.py) 从 [keyboard-window-summary.json](keyboard-window-summary.json) 生成。下表只列需要处理或记录的组合（Orbit 目标；`20/20` 指 burst 20 个样本全部与 paced 参照不同）。
+逐组合的完整数字（每个目标的 paced 参照与一致数、burst 错数及其结果、窗口和交接数，修复后的同一组数字）在 [combinations.md](combinations.md)，由 [render-tables.py](render-tables.py) 从 [keyboard-window-summary.json](keyboard-window-summary.json) 生成。表中 `20/20` 指 burst 的 20 个样本全部与 paced 参照不同。
 
 下表列出修复前 burst 与 paced 不同的全部 74 个 Orbit 组合，每个目标一行；其余 59 个 Orbit 组合 burst 本来就与 paced 一致，在 [combinations.md](combinations.md) 里。「对应旧 AntD」：会话菜单对 `antd-session`，其余子菜单目标对 `antd-submenu`，菜单对 `antd-menu`，Select 对 `antd-sample`，Popconfirm 对 `antd-popconfirm`，Dialog 对 `antd-dialog`，ConfirmDialog 对 `antd-confirm`。「修复后」：子菜单取终版 `aed0a7bab` 上的 `after2-sub-*`，其余取 `069601b67` 上的 `after-*`（终版只改了子菜单触发器）。
 
@@ -245,13 +260,13 @@
 
 测试与样例：
 - `0594f6d2c`、`4d54fbe5f`：新增 jsdom 单测 `keyboardWindow.test.tsx`（子菜单 18、顶层 Menu Tab/Shift+Tab 8、Home/End 6、Select Tab 6、Dialog 10、ConfirmDialog 10）。原有测试文件和断言一行未改。
-- `5cd02c2ae`、`53d8fcb2d`：choices fixture（`__fixtures__/ChoicesFixture.tsx`）的外观样例新增 `sample=popconfirm` 和 `sample=session` 两种，旧 AntD 与 Orbit 各一份，同一触发器，带 output。已有样例的渲染不变：choices 测试列表 520 个用例在修改前后逐字节相同（[prod-before-choices-list](checks/prod-before-choices-list.txt)、[prod-after-choices-list](checks/prod-after-choices-list.txt)、[prod-final-choices-list](checks/prod-final-choices-list.txt)）。完整 choices 矩阵在终版树上的结果见[已验收行为的回归](#已验收行为的回归)。
+- `5cd02c2ae`、`53d8fcb2d`：choices fixture（`__fixtures__/ChoicesFixture.tsx`）的外观样例新增 `sample=popconfirm` 和 `sample=session` 两种，旧 AntD 与 Orbit 各一份，同一触发器，带 output。已有样例的渲染不变：choices 测试列表 520 个用例在修改前后逐字节相同（[prod-before-choices-list](checks/prod-before-choices-list.txt)、[prod-after-choices-list](checks/prod-after-choices-list.txt)、[prod-final-choices-list](checks/prod-final-choices-list.txt)）。完整 choices 矩阵在终版树上跑了 3 个项目，在 rebase 后的新基础上 8 个项目全部通过（520/520），见[已验收行为的回归](#已验收行为的回归)和 [rebase 到 main 之后](#rebase-到-main-之后)。
 
 ### 第二次子菜单修复
 
 第一版（`069601b67`）上的冻结帧探针是 312/392。失败的是子菜单的 10 例（→⏎、→Space、→Home⏎、→↑⏎、⏎⏎，会话菜单与字段页各 5 例），八个环境都失败：
 - 这 10 例执行的项都对，失败在焦点：菜单关上后焦点落到 body，没有回到菜单按钮。
-- 它们的共同点是 ⏎/Space 转交给子菜单项时，焦点还在父菜单的子菜单触发器上。→Home⏎ 的 Home 停在第一项，焦点不动；→↑⏎ 的 ↑ 从第一项绕到最后一项，焦点要下一帧才移。→↓⏎、→End⏎、⏎↓⏎ 的 ↓/End 当即把焦点移进子菜单，所以这 3 例通过。
+- 它们的共同点是 ⏎/Space 转交给子菜单项时，焦点还在父菜单的子菜单触发器上。→Home⏎ 的 Home 停在第一项，焦点不动；→↑⏎ 的 ↑ 从第一项绕到最后一项，焦点要下一帧才移。→↓⏎、→End⏎、⏎↓⏎ 里，↓/End 把高亮移到另一项，焦点随即跟进子菜单，⏎ 转交时焦点已在子菜单里，所以这 3 种序列（两个菜单共 6 例）通过。
 
 burst 也一样：`after-sub-a` 里会话菜单和字段页的 →⏎、→↑⏎ 都是 20/20 执行了对的项，但焦点落到 body（[after-sub-a](after-sub-a/samples.csv)）。
 
@@ -297,7 +312,7 @@ burst 也一样：`after-sub-a` 里会话菜单和字段页的 →⏎、→↑�
 | 完整 choices 矩阵（`test:ui-choices`，按项目分 8 次跑） | — | — | chromium-light-desktop、chromium-light-phone、chromium-dark-desktop 各 **65/65**。其余 5 个项目在终版树上没跑完（磁盘满时停下），8 个项目在 rebase 后的新基础上全部重跑，**520/520**，见 [rebase 到 main 之后](#rebase-到-main-之后) |
 | 试点（P3.2 pilot，生产构建，每棵树两次） | 72/72、72/72 | — | **72/72、72/72** |
 | P0（`npm run test:ui-migration`，原命令） | 93 通过、8 失败、11 跳过；失败的都是 `profile`（`GET /api/auth/methods` 没有浏览器 fixture，P0 fixture 漂移） | — | 终版树上排在最后，磁盘满时没跑到；rebase 后在新基础上跑：**101 通过、11 跳过、0 失败** |
-| 相关单测 | — | 16 个文件 260 个用例（[unit-related-after](checks/unit-related-after.txt)） | 合并检查里的完整 Vitest，见[合入项目 tip 之后](#合入项目-tip-之后) |
+| 相关单测 | — | 16 个文件 260 个用例（[unit-related-after](checks/unit-related-after.txt)） | rebase 后合并检查里的完整 Vitest（358 个文件、4628 个用例），见 [rebase 到 main 之后](#rebase-到-main-之后) |
 
 choices 入口那两次失败，不是第一版修复造成的：
 - 终版在低负载下 32/32；
@@ -318,7 +333,17 @@ choices 入口那两次失败，不是第一版修复造成的：
 - 两次修复前后对比各有 1 张超出抗锯齿级的截图，都是 chromium-light-desktop 的 `pilot-delete-confirm.png`：5 个和 75 个像素，最大通道差 20。
 - 差异全在任务面板右上角关闭按钮（×）图标的抗锯齿边缘上，x 1246–1247、y 28–39。本任务没有改这个图标，也没有改它所在的面板头。
 - 两棵树各自两次运行之间也各有 1 张超出，是 chromium-dark-desktop 的同一张图，像素位置完全相同（最大差 15）。逐像素看，深色下这个图标在两种边缘状态之间来回：修复前和终版的第 1 次是同一状态，第 2 次是另一状态。
-- 浅色下，修复前两次恰好都是一种状态，终版两次都是另一种。每棵树只有两次，这样分组可能是巧合，为此在两棵树上各补跑了 5 次：【待补：pilot-repeat 结果】
+- 浅色下，修复前两次恰好都是一种状态，终版两次都是另一种。每棵树只有两次，这样分组可能是巧合。为此补跑了 [pilot-repeat.sh](pilot-repeat.sh)（结果 [pilot-repeat.csv](pilot-repeat.csv)，记录 [rebased-queue](checks/rebased-queue.txt)）：
+  - 在 rebase 后的新基础上，把拍这张图的试点用例「fields, pickers and the panel header」在两个桌面项目各跑 10 次；
+  - 5 次用本分支的组件，5 次把三个组件换回基础上的版本（只换工作区并重新构建，跑完换回、再构建）；
+  - 结果如下，表里是关闭图标那块像素（x 1240–1253、y 24–41）的 SHA-256 前 12 位：
+
+  | 组件 | chromium-light-desktop | chromium-dark-desktop |
+  | --- | --- | --- |
+  | 本分支（5 次） | `7aa8bad0b12c` ×4、`dfda445e9451` ×1 | `f7fd0a03439b` ×5 |
+  | 基础上的版本（5 次） | `dfda445e9451` ×3、`7aa8bad0b12c` ×2 | `f7fd0a03439b` ×4、`58d9c0284bbd` ×1 |
+
+  两种组件都会出现两种边缘状态，而且就是修复前后那几次运行里的同一对状态（浅色 `7aa8…`/`dfda…`，深色 `f7fd…`/`58d9…`）。这张图的差异是运行间的噪声，与本任务的改动无关。
 - trace 里没有请求不同的步骤。只有快照字段不同的几步，都是动作后立即采的焦点或列表快照，与噪声对比里出现的是同一类。
 
 ## 清单复扫与 2026-10-07d.json
@@ -350,7 +375,7 @@ choices 入口那两次失败，不是第一版修复造成的：
 - 因为这 8 个点，`verify-record.mjs 2026-10-07d.json` 在第 2 项（不能有未归属点）停下，列出的正是这 8 个点。
 - 为了核对 07d 本身的其余各项，脚本只在临时副本里加一份替身记录 `2026-10-07c-standin.json`，**不随交付提交**。它只给这 8 个点（5 个文件、3 行 index.css）owner「P4.2 (stand-in)」，别的什么也不写。加上它之后，`verify-record.mjs` 对 07d 全部通过：1 个文件条目与审计一致，排在 3 份记录之后，0 未归属、0 待定，P0.1 基线干净。这 8 个点的正式登记由 07c 负责。
 - 交付树上的 `--check-owners` 是这 8 个点（预期如此）。审计自检 `audit-antd-selfcheck.mjs`、P0.1 清单核对 `verify-antd-inventory.mjs` 都通过。
-- 如果交证据时 07c 已落到项目 tip 或 main，再在合并树上补跑一次 `verify-record.mjs` 和 `--check-owners`。【待补：届时状态】
+- 协调者要求，如果交证据时 07c 已落到项目 tip 或 main，就在合并树上补跑一次 `verify-record.mjs` 和 `--check-owners`。交证据时（2026-10-08 04:4x UTC）07c 还没落地：`origin/main` `2ba6765d9` 和项目 tip `490b5dceb` 上都没有 `2026-10-07c.json`，所以没有补跑。
 
 ## rebase 到 main 之后
 
@@ -364,9 +389,11 @@ choices 入口那两次失败，不是第一版修复造成的：
 | choices 原入口，八环境 | **32/32**（[choices-entry](checks/prod-rebased-choices-entry.txt)） |
 | P0（原命令） | **101 通过、11 跳过、0 失败**（[p0](checks/prod-rebased-p0.txt)）。开工时 `profile` 的 fixture 漂移（`GET /api/auth/methods`）在 main 上已补，所以新基础上不再失败 |
 | 完整 choices 矩阵，按项目 | **520/520**，8 个项目各 65/65（`choices-full-<项目>-rebased`） |
-| 试点那张图的复跑 | 【待补】 |
+| 试点那张图的复跑 | 两种组件各 5 次，关闭图标的两种边缘状态都会出现，是噪声（见[已验收行为的回归](#已验收行为的回归)的试点一节） |
 
 共享包构建要先做：Web 从 `@orbit/shared` 的 `dist` 引入它，而这个工作树的 `dist` 还是按开工时的源码构建的；main 之后改了 20 个共享文件。这一步就是 worktree overlay 准备依赖时做的事。
+
+交证据时 `origin/main` 又前进到 `2ba6765d9`，比本分支的基础多 82 个提交；与本分支 merge-tree 没有冲突。本分支没有再 rebase，否则上面这些检查都要重跑；落地时会再与 main 同步。
 
 ## 边界
 
@@ -382,7 +409,7 @@ choices 入口那两次失败，不是第一版修复造成的：
 - **Menu 的 Tab 约定**：⏎Tab⏎ 的 Orbit 结果与旧 Dropdown 不同。Orbit 是 Tab 离开并关闭菜单，⏎ 落在页面下一个按钮上；旧 Dropdown 是 Tab 进菜单，⏎ 执行 File。这是 10-07 约定带来的，不是回归。
 - **字符检索**（`s`、`c`、`7`、`n`）：顶层 Menu 与 Select 的检索序列在基线上 Orbit 的 burst 已与 paced 一致，无需处理；子菜单的 →c⏎ 随子菜单窗口一起修。
 - **P0**：开工时的树上，`profile` 在八个环境都失败，是 P0 fixture 的漂移（`GET /api/auth/methods` 没有浏览器 fixture），与本任务无关。终版树上的 P0 因磁盘满没跑到；rebase 到 main 后 fixture 已补，新基础上的 P0 全部通过（101 通过、11 跳过）。
-- **清单**：合并树上那 2 个未归属点要等 P4.2 的 `2026-10-07c.json` 落地后才消失。
+- **清单**：main 带来的 8 个未归属点归 P4.2，其中 2 个随迁移，6 个由 `2026-10-07c.json` 登记。在那之前，交付树上的 `--check-owners` 仍会报这 8 个；07d 本身只用替身记录核对过。
 - **新基础上没有重跑的**：burst/paced 探针、前两个任务的探针、overlays 和试点两次运行。这些都只在 rebase 前的树上跑过，结果见上文。新基础上重跑的是协调者点名的几项：清单、合并检查（含完整 Vitest，所以相关单测和 `keyboardWindow.test.tsx` 都重跑了）、冻结帧八环境、choices 入口和 P0；另外加了完整 choices 矩阵和试点那张图的复跑。冻结帧覆盖了全部修复的行为，而且不依赖自然时序。
 - **磁盘与中断**：共用磁盘多次跌到 5 GB 以下，一度为 0，有几次运行因此中断：
   - 引擎回收时 runner 以 drain_cap 结束了作业；
@@ -400,7 +427,9 @@ choices 入口那两次失败，不是第一版修复造成的：
 | [held-frames-2.browser.mjs](held-frames-2.browser.mjs)、[held-frames-2.config.mjs](held-frames-2.config.mjs) | 冻结帧探针（八环境） |
 | [prior-select-keys.config.mjs](prior-select-keys.config.mjs)、[prior-menu-held-frames.config.mjs](prior-menu-held-frames.config.mjs) | 前两个任务的探针，原文件不改，只换结果目录 |
 | [run-chunks.py](run-chunks.py)、[slim.py](slim.py) | 分块运行、原件留在 `/var/tmp`、这里放瘦身副本和运行记录 |
-| [prod-runs.sh](prod-runs.sh)、[final-queue.sh](final-queue.sh) | 生产构建上的回归检查；终版树上的排队（一次一个，可续跑，每步要 6 GB 空闲） |
+| [prod-runs.sh](prod-runs.sh)、[final-queue.sh](final-queue.sh)、[rebased-queue.sh](rebased-queue.sh) | 生产构建上的回归检查；终版树上和 rebase 后新基础上的排队（一次一个，可续跑，每步要 6 GB 空闲） |
+| [pilot-repeat.sh](pilot-repeat.sh) | 试点那张图的复跑，结果 [pilot-repeat.csv](pilot-repeat.csv) |
+| [rebase-map.txt](rebase-map.txt) | rebase 前后的提交号对照 |
 | [record-check.py](record-check.py) | 把一个 `mcp__orbit__bg_run` 作业的原始输出和退出码记成 `checks/<名字>.json/.txt` |
 | [summarize.py](summarize.py)、[render-tables.py](render-tables.py) | 判定与 [keyboard-window-summary.json](keyboard-window-summary.json)；逐组合表 [combinations.md](combinations.md) |
 | [summarize-pilot.py](summarize-pilot.py) | 试点对比分类，写 [pilot-summary.json](pilot-summary.json) |
@@ -419,13 +448,16 @@ choices 入口那两次失败，不是第一版修复造成的：
 | `after2-sub-{a,b,c}-{field,sample,session}/` | 终版 `aed0a7bab` 上的子菜单（1800 个样本） |
 | `fix-held-frames-{before,before-home-end,after,after2}/` | 冻结帧：修复前、修复前补 Home/End、第一版、终版 |
 | `prior-select-keys-{before,after}/`、`prior-menu-held-frames-{before,after,after2}/` | 前两个任务的探针 |
-| `choices-entry-{before,after,final}/`、`entry-repeat-{final,prefix}/`、`overlays-{before,after,final}/`、`choices-full-<项目>-final/`、`pilot-{before,final}-{1,2}/`、`p0-{before,final}/` | 生产构建上的回归检查 |
+| `choices-entry-{before,after,final}/`、`entry-repeat-{final,prefix}/`、`overlays-{before,after,final}/`、`choices-full-<项目>-final/`、`pilot-{before,final}-{1,2}/`、`p0-before/` | 生产构建上的回归检查 |
+| `held-frames-rebased-<项目>/`、`choices-entry-rebased/`、`p0-rebased/`、`choices-full-<项目>-rebased/` | rebase 到 main 后新基础上的重跑 |
 | `pilot-{compare,compare-again,noise-before,noise-after}.json` | `../p3.2/compare_runs.py` 的输出 |
 | `checks/` | 每次运行的记录与原始输出（单测、清单、合并检查也在这里） |
 
 原件：
-- `/var/tmp/kw2-246921c8/runs/<名字>` 里是完整的 `report.json`（含附件正文）和失败时的 trace；`/var/tmp/kw2-246921c8/pilot/<标签>-<n>-shots` 里是试点截图。
+- `/var/tmp/kw2-246921c8/runs/<名字>` 里是完整的 `report.json`（含附件正文）和失败时的 trace，共 72 个运行、657 MB，每个都在本目录有同名的瘦身副本。
+- `/var/tmp/kw2-246921c8/pilot/<标签>-<n>-shots` 里是试点截图（92 MB）；`/var/tmp/kw2-246921c8/pilot-repeat/` 里是复跑的 20 张 `pilot-delete-confirm.png` 和每次的输出（2.4 MB）。
+- `/var/tmp/kw2-246921c8/scratch/` 里是 [antd-audit.json](antd-audit.json) 引用的三份审计报告和 owner 输出（2 MB）。
 - 按协调者要求，这些原件留到证据判定之后；`report.summary.json` 里记了每个附件正文的 SHA-256，可以对照。
 - 本目录没有提交 trace.zip、带附件正文的 report.json 或截图。
 
-【待补：大小与清点】
+大小：本目录约 27 MB，不超过 30 MB 的上限。[artifact-index.json](artifact-index.json) 列出每个文件的 SHA-256 和字节数，`python3 index-artifacts.py --verify <提交>` 可以从 Git 对象逐个复核。除了协调者要求的 `inventory-delta/` 两处（新增 `2026-10-07d.json`，README 加两行），其他证据目录没有改动。本任务没有在 `/var/tmp` 建工作树；临时文件已删，只留上面这些原件。
