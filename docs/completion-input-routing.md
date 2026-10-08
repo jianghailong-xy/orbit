@@ -385,7 +385,8 @@ fact any more" note at the `route(...)` call (lines 389-391):
 >   revision is recorded against `JUDGMENT_REQUEST_DERIVER` exactly as before.
 > - The turn asks the coordinator to decide, not to relay: read the revision with
 >   `task_evidence_list`, then `task_evidence_decide` it — CONFIRM, or SEND_BACK with a note saying
->   what the next revision has to show. It quotes the criterion the evidence cites, says that after
+>   what the next revision has to show, which is then delivered to the run that submitted the
+>   revision as a platform message of its own. It quotes the criterion the evidence cites, says that after
 >   the project's `exceptionEscalationSeconds` the revision goes to the owner, and that a question
 >   that really is the owner's goes through `ask_owner` — wanting the owner to take a look is not
 >   one.
