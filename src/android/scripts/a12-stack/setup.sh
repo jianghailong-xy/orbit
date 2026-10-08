@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Isolated Orbit server stack for task A12 (Android Wiki & Watch) — loopback only, no production data.
 # Adapted from A11's src/android/scripts/a11-stack (commit 49c028579); same server and runner trees.
-#   source : git archive of 0f98546a5 (A12's merge base: src/apiserver tree c0aa1a79…, src/shared tree de5d9067…)
-#            into $S/src
+#   source : git archive of 3eb8e8594 (the project tip A12 merged on 2026-10-08: src/apiserver tree fbe271e6…,
+#            src/shared tree bb96d8a6…, the same trees as A12's HEAD) into $S/src
 #   deps   : node_modules hard-linked (cp -al) from a worktree whose package-lock.json is byte-identical;
 #            @prisma/client is a private copy and the client is generated from THIS schema
 #   db     : postgres:16-alpine "a12-stack-pg" on 127.0.0.1:5712, data on tmpfs (gone when the container stops)
 #   api    : node dist/main.js on 127.0.0.1:3712, serves /api directly (app.setGlobalPrefix('api'))
-#   runner : the 0f98546a5 Go runner, ORBIT_HOME=$S/runner-home, HOME=$S/runner-userhome, no real engines on PATH
+#   runner : the 3eb8e8594 Go runner, ORBIT_HOME=$S/runner-home, HOME=$S/runner-userhome, no real engines on PATH
 # Every process starts under `env -i` so nothing from the calling Orbit session (ORBIT_HOME, ORBIT_SESSION_ID,
 # CLAUDE_CONFIG_DIR, …) or any provider credential leaks into the stack.
 #
@@ -26,10 +26,10 @@
 set -euo pipefail
 
 HERE=$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-REV=0f98546a5eed77ec0f41181296c33bdf037f161d
-WANT_API_TREE=c0aa1a79ded9d330c38acfb668e746e80d768b1b
-WANT_SHARED_TREE=de5d906751a4f57018c24f30c6ef0bca61ddf911
-WANT_LOCK_SHA256=1cbd66c8623d8d7fbd9499ed7607efba173bb578ff0877eda2c7dc12feff7836
+REV=3eb8e8594aea152b96fa82dd0b444ca3cc4f301d
+WANT_API_TREE=fbe271e6c219f180c80439ea0d6f5292409c9cc0
+WANT_SHARED_TREE=bb96d8a6566d907cfa5b95e76d87211970881ad1
+WANT_LOCK_SHA256=f0554c0375b5b06f71c47088d1b504a383639934b286f73f1b7f19272460c501
 
 S=$(realpath -m "${A12_STACK_DIR:-/var/tmp/a12-stack}")
 SRC=$S/src

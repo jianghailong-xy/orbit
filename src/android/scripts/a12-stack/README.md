@@ -2,8 +2,9 @@
 
 A private Orbit server for the A12 (Android Wiki & Watch) real-account device journeys, adapted from A11's
 `src/android/scripts/a11-stack` (commit `49c028579`). Everything runs on this host, on loopback, at the fixed server
-SHA `0f98546a5eed77ec0f41181296c33bdf037f161d` (A12's merge base; `src/apiserver` tree `c0aa1a79…`, `src/shared` tree
-`de5d9067…`, `src/runner-go` tree `4c77b08e…` — the same trees as A11's `d621e29aa` and as A12's HEAD):
+SHA `3eb8e8594aea152b96fa82dd0b444ca3cc4f301d` (the project tip A12 merged on 2026-10-08; `src/apiserver` tree
+`fbe271e6…`, `src/shared` tree `bb96d8a6…`, `src/runner-go` tree `5fa551c0…` — the same trees as A12's HEAD). The first
+live runs, on 2026-10-07, used `0f98546a5` (A12's first merge base; trees `c0aa1a79…`, `de5d9067…`, `4c77b08e…`):
 
 - **Postgres**: `postgres:16-alpine` in container `a12-stack-pg`, published on `127.0.0.1:5712`. Its data sits on
   tmpfs, so a stopped container takes the data with it.

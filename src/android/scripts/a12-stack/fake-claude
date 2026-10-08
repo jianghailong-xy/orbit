@@ -2,7 +2,7 @@
 """Fake `claude` CLI for the isolated A12 stack runner (NOT Claude Code; no model, account or network).
 
 It speaks just enough of Claude Code's stream-json protocol (as the runner's own fake_claude_test.go
-does) for the 0f98546a5 runner (the same runner-go tree as A11's d621e29aa) to run real sessions against the stack:
+does) for the runner setup.sh builds (3eb8e8594; first written for 0f98546a5) to run real sessions against the stack:
   * `--version` / `auth status` answer like a signed-in CLI, so the runner reports the engine usable;
   * a stream-json session answers every control_request with success and, per user message:
     replay the user frame, system/init, one assistant text, one result.

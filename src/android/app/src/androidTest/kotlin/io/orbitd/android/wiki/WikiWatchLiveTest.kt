@@ -50,8 +50,8 @@ private const val SAVED = WikiCopy.saved
 private const val ENTRY_GONE = WikiCopy.noEntrySelected
 
 /**
- * A12 against a real Orbit server: the isolated stack of `src/android/scripts/a12-stack` (the apiserver of
- * 0f98546a5 with its own PostgreSQL and runner, on the host's loopback, reached through `adb reverse tcp:3712`),
+ * A12 against a real Orbit server: the isolated stack of `src/android/scripts/a12-stack` (the apiserver of the
+ * revision its setup.sh pins, with its own PostgreSQL and runner, on the host's loopback, reached through `adb reverse tcp:3712`),
  * seeded through its HTTP API with a real owner account and a second account. The production Activity,
  * AuthSession and navigation open each journey from its link; every journey acts through the screens, then reads
  * the server back over HTTP with the acting account's own token and asserts what the server kept. What it read and
