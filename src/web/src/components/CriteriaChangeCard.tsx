@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type JSX, type Ref } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert } from 'antd';
+import { Alert } from './ui/Alert';
 import type { CriteriaChangesSinceConfirmed } from '@orbit/shared';
 import { api } from '../api';
 import {
@@ -209,8 +209,7 @@ export function CriteriaChangeCard({
           <Alert
             className="settlement-card-error"
             type="error"
-            showIcon
-            message={CONFIRMATION_NOT_RECORDED}
+            title={CONFIRMATION_NOT_RECORDED}
             description={error.message}
           />
         ) : null}

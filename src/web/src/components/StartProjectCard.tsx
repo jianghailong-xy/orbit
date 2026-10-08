@@ -12,7 +12,6 @@ import {
 } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Input, InputNumber, Modal, Select, Spin, Switch } from 'antd';
 import type {
   ProjectIntegrationView,
   ProjectOpenItemRow,
@@ -92,7 +91,14 @@ import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { ago } from '../lib/watches';
 import { ReviewCard } from './ReviewCard';
 import { useIsMobile } from '../lib/useMediaQuery';
+import { Alert } from './ui/Alert';
+import { Dialog } from './ui/Dialog';
 import { Drawer } from './ui/Drawer';
+import { NumberInput } from './ui/NumberInput';
+import { Select } from './ui/Select';
+import { Spinner } from './ui/Spinner';
+import { Switch } from './ui/Switch';
+import { Textarea } from './ui/Textarea';
 
 /**
  * "Start this project?" — the one card on which the account owner starts a project: the criteria
@@ -322,6 +328,11 @@ export function StartProjectCard({
     escalationSeconds: facts.escalationSeconds,
   });
   const set = (patch: Partial<StartSettingsDraft>) => onDraft({ ...draft, ...patch });
+  // The two lines the menu offers, each with what it means and, for a project branch, its name.
+  const lines = [
+    { value: 'PROJECT_BRANCH' as const, label: RUN_LINE_PROJECT_BRANCH, hint: RUN_LINE_PROJECT_BRANCH_HINT, branch },
+    { value: 'MAIN' as const, label: RUN_LINE_MAIN, hint: RUN_LINE_MAIN_HINT, branch: null },
+  ];
   // The plan by level: what starts now, what runs together, and the task that needs the owner.
   const levels = plan.levels ? (
     <ol className="start-card-levels">
@@ -416,7 +427,7 @@ export function StartProjectCard({
                 checked={draft.automatic}
                 disabled={!editable}
                 aria-label={RUN_AUTOMATIC}
-                onChange={(automatic) => set({ automatic })}
+                onCheckedChange={(automatic) => set({ automatic })}
               />
             </div>
             <div className="start-card-hint">{runAutomaticSays(draft.automatic, draft.line, hasMergeCheck)}</div>
@@ -441,19 +452,21 @@ export function StartProjectCard({
                 aria-label={RUN_TASKS_LAND_ON}
                 value={draft.line}
                 disabled={!editable}
-                popupMatchSelectWidth={false}
-                onChange={(line) => set({ line })}
-                options={[
-                  { value: 'PROJECT_BRANCH', label: RUN_LINE_PROJECT_BRANCH, hint: RUN_LINE_PROJECT_BRANCH_HINT, branch },
-                  { value: 'MAIN', label: RUN_LINE_MAIN, hint: RUN_LINE_MAIN_HINT, branch: null },
-                ]}
-                optionRender={(option) => (
-                  <div className="start-card-line-option">
-                    <b>{option.data.label}</b>
-                    {option.data.branch ? <code className="start-card-branch">{option.data.branch}</code> : null}
-                    <div className="start-card-hint">{option.data.hint}</div>
-                  </div>
-                )}
+                matchTriggerWidth={false}
+                onValueChange={(line) => {
+                  if (line) set({ line });
+                }}
+                options={lines.map(({ value, label }) => ({ value, label }))}
+                renderOption={(option) => {
+                  const line = lines.find((entry) => entry.value === option.value);
+                  return (
+                    <div className="start-card-line-option">
+                      <b>{option.label}</b>
+                      {line?.branch ? <code className="start-card-branch">{line.branch}</code> : null}
+                      <div className="start-card-hint">{line?.hint}</div>
+                    </div>
+                  );
+                }}
               />
             </div>
           </div>
@@ -472,7 +485,7 @@ export function StartProjectCard({
             {!hasMergeCheck && !mergeCheckOpen ? <div className="start-card-hint">{RUN_MERGE_CHECK_NONE_SAYS}</div> : null}
             {mergeCheckOpen ? (
               <>
-                <Input.TextArea
+                <Textarea
                   className="start-card-mono"
                   value={draft.mergeCheckCommand}
                   placeholder={RUN_MERGE_CHECK_PLACEHOLDER}
@@ -489,7 +502,7 @@ export function StartProjectCard({
             <div className="start-card-row-head">
               <span>{RUN_AT_MOST}</span>
               <span className="start-card-inline">
-                <InputNumber
+                <NumberInput
                   className="start-card-count"
                   min={1}
                   max={START_MAX_CONCURRENT_TASKS}
@@ -497,7 +510,7 @@ export function StartProjectCard({
                   value={draft.maxConcurrentTasks}
                   disabled={!editable}
                   aria-label={RUN_AT_MOST}
-                  onChange={(value) => set({ maxConcurrentTasks: typeof value === 'number' ? value : null })}
+                  onValueChange={(value) => set({ maxConcurrentTasks: value })}
                 />
                 <span>{runTasksAtATime(draft.maxConcurrentTasks)}</span>
               </span>
@@ -545,8 +558,7 @@ export function StartProjectCard({
           <Alert
             className="settlement-card-error"
             type="error"
-            showIcon
-            message={START_NOT_RECORDED}
+            title={START_NOT_RECORDED}
             description={error.message}
           />
         ) : null}
@@ -787,10 +799,10 @@ export function SessionStartProjectCard({
     const reading = standingRead.isPending || documentRead.isPending || (started === false && itemsRead.isPending);
     return reading ? (
       <div className="start-card-dialog-loading">
-        <Spin />
+        <Spinner />
       </div>
     ) : (
-      <Alert type="info" showIcon message={unread ? CONFIRMATION_UNREAD_EXPLANATION : START_REQUEST_GONE} />
+      <Alert type="info" title={unread ? CONFIRMATION_UNREAD_EXPLANATION : START_REQUEST_GONE} />
     );
   }
   const branchRef = request.settings.projectBranchName ?? `refs/heads/project/${project}`;
@@ -934,10 +946,10 @@ function OwnerStartProjectCard({
   const stale = unread ? CONFIRMATION_UNREAD_EXPLANATION : null;
   if (!request || !draft) {
     return unread ? (
-      <Alert type="error" showIcon message={CONFIRMATION_UNREAD_EXPLANATION} />
+      <Alert type="error" title={CONFIRMATION_UNREAD_EXPLANATION} />
     ) : (
       <div className="start-card-dialog-loading">
-        <Spin />
+        <Spinner />
       </div>
     );
   }
@@ -1010,8 +1022,9 @@ export function ProjectStartDialog({
       {card}
     </Drawer>
   ) : (
-    <Modal open={open} onCancel={onClose} footer={null} width={640} className="start-card-dialog">
+    // No title of its own on a wide screen: the card's head is its heading.
+    <Dialog open={open} onClose={onClose} title={null} width={640} className="start-card-dialog">
       {card}
-    </Modal>
+    </Dialog>
   );
 }
