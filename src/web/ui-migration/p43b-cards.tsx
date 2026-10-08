@@ -1,3 +1,8 @@
+// The stylesheets in main.tsx's order: the overlays', the review cards' and highlight.js's ahead of the
+// reset and index.css, as the app's production build links them.
+import '../src/components/ui/Overlay.css';
+import '../src/components/ReviewCard.css';
+import 'highlight.js/styles/github.css';
 import 'antd/dist/reset.css';
 import '../src/index.css';
 import '../src/components/ui/foundation.css';

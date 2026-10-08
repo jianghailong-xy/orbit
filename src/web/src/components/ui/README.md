@@ -119,9 +119,9 @@ useOverlayChild 按受控 open 登记旧子层，Esc 先交给最上层旧弹层
 
 复用 `lib/theme.tsx` 的 `ThemeProvider` / `useThemeMode`。唯一主题状态仍是 `system/light/dark`，解析结果写到 `<html data-theme>`；账号偏好为来源，localStorage 为首屏缓存。保留 `index.html` 的同步首屏脚本、theme-color 和原有 boot 样式。不创建第二套主题状态或把 Provider 包在每个控件外。
 
-`main.tsx` 按 `antd/dist/reset.css` → `index.css` → `ui/foundation.css` 加载。`foundation.css` 只声明变量，不引入 reset、全局 button/input 样式、CSS layer 或新的 stacking context；控件样式限定自己的 `.orbit-*` 类或 CSS module。图标继续使用 `@ant-design/icons`。
+`main.tsx` 按 `ui/Overlay.css`、`ReviewCard.css`、highlight.js 的 `github.css` → `antd/dist/reset.css` → `index.css` → `ui/foundation.css` 加载。生产构建把首屏静态导入的全部 CSS 合成一个文件，顺序就是模块第一次被导入的顺序（`vite.config.ts` 的 `codeSplitting` 分组，由 `src/firstPageStylesheet.test.ts` 守着）：前三个在 reset 与 index.css 之前，是此前生产构建一直给它们的位置（入口与懒加载的会话导出共用的 chunk），同权重时 index.css 的规则胜过它们；其余 Orbit 组件样式都在 index.css 之后，与开发模式相同。只有懒加载 chunk 才用到的 CSS（React Flow）仍随那个 chunk 加载。不分组时，入口与懒加载 chunk 共用的组件会被拆进共用 chunk，它的样式链接排在入口样式（含 index.css）之前，层叠随拆包结果变化（P4.3b 记录）。`foundation.css` 只声明变量，不引入 reset、全局 button/input 样式、CSS layer 或新的 stacking context；控件样式限定自己的 `.orbit-*` 类或 CSS module。图标继续使用 `@ant-design/icons`。
 
-行高：Checkbox/Radio/Switch 标签使用无单位的 1.5714（14px 时即 22px），其中字号不同的说明文字按自身字号计算行高，与被替换组件相同。Dialog/Drawer 外壳保持 22px（评审等对话框直接基于它设计）；替换 AntD Modal 的对话框需要被替换的无单位行高时，在业务样式中限定到该对话框（如 `.share-dialog.orbit-overlay`）。业务样式（index.css）覆盖 Orbit 组件类时，要用组件类限定提高优先级（如 `.share-layer-check.orbit-choice`），因为组件样式在 index.css 之后加载。
+行高：Checkbox/Radio/Switch 标签使用无单位的 1.5714（14px 时即 22px），其中字号不同的说明文字按自身字号计算行高，与被替换组件相同。Dialog/Drawer 外壳保持 22px（评审等对话框直接基于它设计）；替换 AntD Modal 的对话框需要被替换的无单位行高时，在业务样式中限定到该对话框（如 `.share-dialog.orbit-overlay`）。业务样式（index.css）覆盖 Orbit 组件类时，要用组件类限定提高优先级（如 `.share-layer-check.orbit-choice`），因为组件样式在 index.css 之后加载（`Overlay.css` 例外，见上）。
 
 颜色优先直接用现有 `--bg-base/raised`、`--text-1/2/3`、`--border`、`--brand` 和状态变量。新增 `--orbit-*` 仅补足控件真实角色；**品牌色与主控件填充不是同一值**：暗色 `--brand=#5b8cff`，主控件实测为 `#2e62dc`，hover 为 `#5585e8`。禁用色和焦点轮廓也来自计算样式，不能从 seed 推测。
 
