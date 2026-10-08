@@ -42,7 +42,8 @@ export class SharedController {
    * shape its page has always read — title, workspace, status, the tail page of its events and
    * `hasMore` (`limit` / `maxPayload` as on the events page below). A task root is the task as its
    * layers show it (share-links/public-task.ts); a project root is the project's seven blocks
-   * (share-links/public-project.ts) and `scope`, what the link opens besides it. The one request
+   * (share-links/public-project.ts) and `scope`, what the link opens besides it; a wiki root is the
+   * space's written documents by category (share-links/public-wiki.ts). The one request
    * that counts as a view — unless it is the owner's Preview (`preview=1`), which is them looking,
    * not a visitor. The count is information, not a boundary, so the flag is taken at its word.
    */
@@ -61,7 +62,9 @@ export class SharedController {
           .then((transcript) => ({ ...head, ...transcript, events: shown(link, transcript.events) }))
       : link.kind === 'TASK'
         ? { ...head, root: await this.links.taskPage(link) }
-        : { ...head, ...(await this.links.projectPage(link)) };
+        : link.kind === 'WIKI'
+          ? { ...head, root: await this.links.wikiPage(link) }
+          : { ...head, ...(await this.links.projectPage(link)) };
     if (preview !== '1') await this.links.recordView(link.id);
     return body;
   }
@@ -75,6 +78,17 @@ export class SharedController {
   async task(@Param('token') token: string, @Param('taskId', PublicIdPipe) taskId: string) {
     const link = await this.links.resolve(token);
     return this.links.projectTask(link, taskId);
+  }
+
+  /**
+   * One of a wiki link's written documents (`doc`), with the link's `include` and the wiki's name for
+   * the breadcrumb. Its footnotes only with Footnotes. A document the plan does not have, one nobody
+   * has written, and any other kind of link are the one 404. Not a view.
+   */
+  @Get(':token/docs/:slug')
+  async wikiDoc(@Param('token') token: string, @Param('slug') slug: string) {
+    const link = await this.links.resolve(token);
+    return this.links.wikiDoc(link, slug);
   }
 
   /** A page of the shared transcript: the newest `limit` (≤ 500, default 200) events, or those

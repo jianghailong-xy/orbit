@@ -37,13 +37,16 @@ export const countOf = (n: number, noun: string): string => `${n} ${noun}${n ===
 
 /**
  * What a link lets a visitor see, one chip per layer it includes, in the dialog's order. The first
- * is the root's own content, which every link includes. Conversations is the chip to notice: it can
- * carry command output and file contents.
+ * is the root's own content, which every link includes. Conversations and a wiki's Footnotes are the
+ * chips to notice: they can carry command output and file contents.
  */
 export function includeChips(link: Pick<ShareLink, 'kind' | 'include'>): { label: string; warn?: true }[] {
   const on = (layer: keyof ShareLink['include'], fallback: boolean) => link.include[layer] ?? fallback;
   if (link.kind === 'SESSION') {
     return [{ label: 'Messages' }, ...(on('toolOutput', true) ? [{ label: 'Tool output' }] : [])];
+  }
+  if (link.kind === 'WIKI') {
+    return [{ label: 'Documents' }, ...(on('footnotes', false) ? [{ label: 'Footnotes', warn: true as const }] : [])];
   }
   return [
     { label: 'Overview' },

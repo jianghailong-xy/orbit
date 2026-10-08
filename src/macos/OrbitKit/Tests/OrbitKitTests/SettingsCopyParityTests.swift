@@ -132,8 +132,13 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(page, "<h1 className=\"page-title\">\(SharedLinksList.title)</h1>", in: Self.sharedLinks)
         assertSays(page, "> \(SharedLinksList.subtitle) </p>", in: Self.sharedLinks)
         assertSays(page, "\(SharedLinksList.couldNotLoad) {linksQ.error.message}", in: Self.sharedLinks)
-        assertSays(page, "{ SESSION: '\(SharedLinksList.kindWord(.session))', TASK: '\(SharedLinksList.kindWord(.task))', PROJECT: '\(SharedLinksList.kindWord(.project))' }",
+        assertSays(page, "{ SESSION: '\(SharedLinksList.kindWord(.session))', TASK: '\(SharedLinksList.kindWord(.task))', PROJECT: '\(SharedLinksList.kindWord(.project))', WIKI: '\(SharedLinksList.kindWord(.wiki))' }",
                    in: Self.sharedLinks)
+        // A wiki has no status: its line is the kind alone, as the web's `rootWhere` says it.
+        assertSays(page, "if (link.kind === 'WIKI') return kind;", in: Self.sharedLinks)
+        XCTAssertEqual(SharedLinksList.whereLine(ShareLink(id: "l", kind: .wiki, token: "t",
+                                                           root: ShareRootSummary(id: "w", title: "orbit", slug: "orbit"))),
+                       SharedLinksList.kindWord(.wiki))
         // The paused line is one sentence on the phone; the web sets its first words apart in a span.
         let paused = SharedLinksList.whereLine(ShareLink(id: "l", kind: .session, token: "t", state: .paused,
                                                          root: ShareRootSummary(id: "r")))

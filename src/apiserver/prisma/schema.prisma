@@ -1836,9 +1836,13 @@ model ShareLink {
   task      Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
   projectId String?  @map("project_id") @db.Uuid
   project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// A wiki space (0403): its home and every document written for it. Reached through the space's
+  /// (id, owner_id) key, as every table of the wiki is, so a link is only ever rooted at its owner's.
+  wikiSpaceId String?    @map("wiki_space_id") @db.Uuid
+  wikiSpace   WikiSpace? @relation(fields: [wikiSpaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "share_link_wiki_space_fkey")
 
-  /// The ticked layers: `taskPages`, `commentsAndFiles`, `conversations`, `toolOutput`. A key that is
-  /// absent reads as its default (contract §1), so this records choices, not the defaults.
+  /// The ticked layers: `taskPages`, `commentsAndFiles`, `conversations`, `toolOutput`, `footnotes`. A
+  /// key that is absent reads as its default (contract §1), so this records choices, not the defaults.
   include       Json      @default("{}")
   /// NULL = never. Lazy: the public door compares it on every read.
   expiresAt     DateTime? @map("expires_at") @db.Timestamptz(3)
@@ -6512,6 +6516,8 @@ model WikiSpace {
   planJobs        WikiPlanJob[]
   /// Its documents, written section by section from the confirmed plan (0326).
   docs            WikiDoc[]
+  /// Its public links, live and ended (0403).
+  shareLinks      ShareLink[]
 
   /// The key every child's composite foreign key names.
   @@unique([id, ownerId], map: "wiki_space_id_owner_id_key")
