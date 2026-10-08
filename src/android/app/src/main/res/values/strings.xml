@@ -1,14 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Orbit Android</string>
-    <string name="sign_in">Sign in</string>
     <string name="signed_in">Signed in</string>
     <string name="sign_out">Sign out</string>
     <string name="switch_account_instance">Switch account or instance</string>
     <string name="cancel_sign_in">Cancel sign in</string>
-    <string name="instance_address">Instance address</string>
+    <!-- The login page, in iOS LoginView's words (fdeb033ad). -->
+    <string name="orbit_logo">Orbit</string>
+    <string name="change_server">Change server</string>
+    <string name="welcome_back">Welcome back</string>
+    <string name="sign_in_subtitle">Sign in to continue to Orbit</string>
     <string name="email">Email</string>
+    <string name="email_placeholder">you@example.com</string>
     <string name="password">Password</string>
+    <string name="password_placeholder">Enter your password</string>
+    <string name="show_password">Show password</string>
+    <string name="hide_password">Hide password</string>
+    <string name="sign_in_button">Sign In</string>
+    <string name="signing_in">Signing in…</string>
+    <string name="or">or</string>
+    <string name="server_title">Server</string>
+    <string name="server_address">Server address</string>
+    <string name="server_hint">For self-hosted Orbit. Leave as %1$s unless your admin gave you another address.</string>
+    <string name="server_invalid">Enter a valid server address.</string>
+    <string name="server_reset">Reset to %1$s</string>
+    <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
     <string name="session_expired">Your session expired. Sign in again.</string>
     <string name="auth_address_error">Enter an HTTPS instance address without credentials, query or fragment.</string>
     <string name="auth_credentials_error">Incorrect email or password.</string>

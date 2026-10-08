@@ -75,6 +75,14 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         catch (_: Exception) { null }
     }
 
+    /** The email the last password sign-in on the instance at [address] used (A03c), for the login page to prefill. */
+    suspend fun rememberedEmail(address: String): String? {
+        val server = try {
+            ServerAddress.parse(address, allowLoopbackHttp = BuildConfig.DEBUG)
+        } catch (_: InvalidServerAddress) { return null }
+        return session.rememberedEmail(server)
+    }
+
     /** Opens the instance's Google sign-in with [open]; its answer comes back to [handleGoogleCallback]. */
     fun continueWithGoogle(address: String, open: (String) -> Boolean) {
         ++attempt

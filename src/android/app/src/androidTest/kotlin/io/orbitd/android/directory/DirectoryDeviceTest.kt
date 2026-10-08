@@ -10,6 +10,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.orbitd.android.auth.chooseServer
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.AuthState
@@ -46,12 +47,12 @@ class DirectoryDeviceTest {
         MockWebServer().use { server ->
             server.dispatcher = fixtureDispatcher()
             try {
-                compose.onNodeWithText("Instance address").performTextReplacement(server.url("/").toString())
-                compose.onNodeWithText("Email").performTextInput("a05@example.test")
-                compose.onNodeWithText("Password").performTextInput("a05-fixture-password")
+                compose.chooseServer(server.url("/").toString())
+                compose.onNodeWithText("Email").performTextReplacement("a05@example.test")
+                compose.onNodeWithText("Password").performTextReplacement("a05-fixture-password")
                 tap(compose.onNodeWithText("Password"), requireAboveIme = false)
                 awaitIme(true)
-                val signIn = compose.onAllNodesWithText("Sign in")[1]
+                val signIn = compose.onNodeWithText("Sign In")
                 signIn.performScrollTo()
                 capture("login-ime")
                 tap(signIn, requireAboveIme = true)

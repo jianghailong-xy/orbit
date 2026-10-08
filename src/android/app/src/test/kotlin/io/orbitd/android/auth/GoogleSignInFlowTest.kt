@@ -6,19 +6,21 @@ import android.content.IntentFilter
 import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.browser.customtabs.CustomTabsService
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performCustomAccessibilityActionWithLabel
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.performTextClearance
-import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.test.platform.app.InstrumentationRegistry
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
 import io.orbitd.android.TestOrbitApplication
+import io.orbitd.android.chooseServer
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.auth.GoogleSignIn
 import io.orbitd.android.core.net.ApiResponse
@@ -46,7 +48,7 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = TestOrbitApplication::class)
-@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class, ExperimentalTestApi::class)
 class GoogleSignInFlowTest {
     @get:Rule(order = 0)
     val mainDispatcher = object : TestWatcher() {
@@ -65,11 +67,10 @@ class GoogleSignInFlowTest {
         app.methods = { ApiResponse(200, """{"password":true,"google":$google,"googleSignup":$signup}""".encodeToByteArray()) }
     }
 
-    /** Types an instance address and waits for the login page to have asked it what it offers. */
+    /** Picks an instance in the Server dialog and waits for the login page to have asked it what it offers. */
     private fun enterInstance(address: String) {
         compose.waitUntil(5_000) { session().state.value is AuthState.SignedOut }
-        compose.onNodeWithText("Instance address").performTextClearance()
-        compose.onNodeWithText("Instance address").performTextInput(address)
+        compose.chooseServer(address)
         val server = ServerAddress.parse(address)
         compose.waitUntil(5_000) {
             synchronized(app.requests) { app.requests.any { it.api.path == listOf("auth", "methods") && it.server == server } }
@@ -92,7 +93,6 @@ class GoogleSignInFlowTest {
     /** Continue with Google: answers what the app opened in the browser. */
     private fun continueWithGoogle(): Intent {
         drainStartedActivities()
-        // After a failed sign-in the form is new, and asks the instance again before offering Google.
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Continue with Google").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Continue with Google").performScrollTo().performClick()
         compose.waitForIdle()
@@ -139,10 +139,13 @@ class GoogleSignInFlowTest {
         enterInstance("https://unreachable.example")
         compose.onNodeWithText("Continue with Google").assertDoesNotExist()
         compose.onNodeWithText(sentence(R.string.google_signup_hint)).assertDoesNotExist()
-        // An address the app would not sign in to is never asked.
+        // An address the app would not sign in to is refused by the Server dialog and never asked.
         answerMethods(google = true)
-        compose.onNodeWithText("Instance address").performTextClearance()
-        compose.onNodeWithText("Instance address").performTextInput("http://remote.example")
+        compose.onNodeWithContentDescription("Orbit").performCustomAccessibilityActionWithLabel("Change server")
+        compose.onNodeWithText("Server address").performTextReplacement("http://remote.example")
+        compose.onNodeWithText("Save").performClick()
+        compose.onNodeWithText("Enter a valid server address.").assertExists()
+        compose.onNodeWithText("Cancel").performClick()
         compose.mainClock.advanceTimeBy(2_000)
         compose.waitForIdle()
         assertFalse(synchronized(app.requests) { app.requests.any { it.server.value.startsWith("http://remote.example") } })

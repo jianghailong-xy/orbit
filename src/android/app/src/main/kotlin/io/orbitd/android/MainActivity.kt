@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import io.orbitd.android.auth.AuthScreen
 import io.orbitd.android.auth.AuthViewModel
+import io.orbitd.android.auth.loginBackground
 import io.orbitd.android.auth.openInSignInBrowser
 import io.orbitd.android.core.BuildIdentity
 import io.orbitd.android.core.auth.AuthState
@@ -113,13 +114,11 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
     }
     if (signedIn == null) {
         Scaffold { padding ->
-            Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
-                if (showBuild) BuildInformation { showBuild = false } else Column(
-                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineLarge)
-                    AuthScreen(authState, authMessage, auth::login, auth::logout, auth::signInMethods, continueWithGoogle)
-                    Button(onClick = { showBuild = true }) { Text(stringResource(R.string.build_information)) }
-                }
+            val backdrop = if (showBuild) Modifier else Modifier.loginBackground(MaterialTheme.colorScheme.primary)
+            Box(Modifier.fillMaxSize().then(backdrop).padding(padding).consumeWindowInsets(padding).imePadding()) {
+                if (showBuild) BuildInformation { showBuild = false }
+                else AuthScreen(authState, authMessage, auth::login, auth::logout, auth::signInMethods, auth::rememberedEmail,
+                    continueWithGoogle) { showBuild = true }
             }
         }
         return

@@ -93,6 +93,38 @@ class CredentialStoreDeviceTest {
         }
     }
 
+    /** A03c: each server's last signed-in email, encrypted under its own Keystore key, kept when the credentials are cleared. */
+    @Test fun eachServersEmailIsEncryptedAndOutlivesSignOut() = runBlocking {
+        val path = File(context.noBackupFilesDir, "orbit/device-emails.bin")
+        val alias = "${context.packageName}.orbit.device-emails.v1"
+        val keys = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        path.delete(); keys.deleteEntry(alias)
+        try {
+            val emails = AndroidEmailStore(context, "device-emails")
+            assertNull(emails.load(fixtureServer.value))
+            emails.save(fixtureServer.value, "a03@example.test")
+            emails.save("https://other.example.test/", "other@example.test")
+            assertEquals("a03@example.test", AndroidEmailStore(context, "device-emails").load(fixtureServer.value))
+            assertEquals("other@example.test", AndroidEmailStore(context, "device-emails").load("https://other.example.test/"))
+            assertNull(emails.load("https://third.example.test/"))
+            val first = path.readBytes()
+            assertFalse("neither emails nor servers in plaintext", first.decodeToString().contains("example.test"))
+            emails.save(fixtureServer.value, "a03@example.test")
+            assertFalse("GCM must use a new random IV", first.contentEquals(path.readBytes()))
+            // Signing out clears the credentials and their key, never the emails.
+            val credentials = AndroidCredentialStore(context, "device-test")
+            credentials.save(StoredSession(fixtureServer.value, fixtureTokens()))
+            credentials.clear()
+            assertEquals("a03@example.test", emails.load(fixtureServer.value))
+            // An unreadable record fails closed to a read, and a later sign-in's email starts it again.
+            path.writeBytes(byteArrayOf(1, 2, 3))
+            assertTrue(runCatching { emails.load(fixtureServer.value) }.exceptionOrNull() is SecureStorageException)
+            emails.save(fixtureServer.value, "again@example.test")
+            assertEquals("again@example.test", emails.load(fixtureServer.value))
+            assertNull(emails.load("https://other.example.test/"))
+        } finally { path.delete(); keys.deleteEntry(alias) }
+    }
+
     @Test fun filesAreIsolatedByServerPortPathAndAccountAndAllAreDeleted() = runBlocking {
         val data = AndroidSessionDataStore(context, "device-data")
         data.clearAll()
