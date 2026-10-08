@@ -9,8 +9,9 @@ import type { Runner } from './TasksSidePanel';
 
 /**
  * The engine's guess at the next message, as the composer offers it (lib/promptSuggestion,
- * docs/prompt-suggestions-design.md §4): a grey line in the empty box with Use and Tab, which fill
- * the box and send nothing, and which goes the moment anything newer is said.
+ * docs/prompt-suggestions-design.md §4): a grey line in the empty box, taken with Tab (Use on a
+ * touch screen), which fills the box and sends nothing, and which goes the moment anything newer
+ * is said.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -231,6 +232,27 @@ describe('the composer offers the engine’s suggested next message', () => {
     await waitForUi(() => expect(box().value).toBe(SUGGESTION));
     expect(offered(), 'a filled box offers nothing more').toBeNull();
     expect(posted(), 'Use only fills the box').toEqual([]);
+  });
+
+  // Which of the key and Use shows is index.css's call (hover / focus), which jsdom does not apply:
+  // pinned here is the markup it chooses between, and what a screen reader is told instead.
+  it('names Tab right after the words, outside Use, and describes the box to a screen reader', async () => {
+    await mount();
+    await waitForUi(() => expect(offered()).toBe(SUGGESTION));
+    const key = mounted().querySelector('.composer-suggestion-key');
+    expect(key?.textContent).toBe('Tab');
+    expect(key?.previousElementSibling, 'the key follows the words').toBe(
+      mounted().querySelector('.composer-suggestion-text'),
+    );
+    expect(mounted().querySelector('.composer-suggestion-use')?.textContent, 'Use carries no key').toBe('Use');
+
+    const described = box().getAttribute('aria-describedby');
+    expect(described, 'the box points at its description').toBeTruthy();
+    expect(document.getElementById(described!)?.textContent).toBe(
+      `Suggested reply: ${SUGGESTION}. Press Tab to use it.`,
+    );
+    await type('no — check the docs first');
+    await waitForUi(() => expect(box().getAttribute('aria-describedby')).toBeNull());
   });
 
   it('takes it on Tab in the empty box', async () => {
