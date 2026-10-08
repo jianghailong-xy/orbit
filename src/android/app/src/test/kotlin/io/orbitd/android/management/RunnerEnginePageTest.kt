@@ -281,6 +281,20 @@ class RunnerEnginePageTest {
         assertEquals("two accounts can be on different sites: each says its own on the engine page", 0, shown("kimi.ai"))
     }
 
+    /** A Kimi login whose plan carries no quota limit was read and held no window: its row says "No quota limit", where
+     * an account with no snapshot of its own still says "No quota reported". */
+    @Test fun aKimiAccountWithNoQuotaLimitSaysSoWhereAnUnreadOneSaysNoQuotaReported() {
+        fixture.runnerEngines = "[${kimiEngine(kimiDefault, kimiWork)}]"
+        // Default's snapshot was read and held no window; Work has none under `accounts`.
+        fixture.runnerExtra = kimiCapabilities + ""","planUsage":{"kimi":{"provider":"kimi","fetchedAt":"${at(0)}"}}"""
+        page("engine:kimi")
+        await("Accounts"); await("Work")
+        await(RunnerCopy.NO_QUOTA_LIMIT)
+        assertEquals("only Default was read", 1, shown(RunnerCopy.NO_QUOTA_LIMIT))
+        await(RunnerCopy.NO_QUOTA)
+        assertEquals("Work was never read", 1, shown(RunnerCopy.NO_QUOTA))
+    }
+
     /** One account still offers Add Account; the form takes a name first, then asks the site — nothing starts until a site is
      * pressed, neither can be pressed without a name, and the device step names the site of the account being added, with the
      * other site one press away under the same name. */

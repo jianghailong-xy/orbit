@@ -110,6 +110,47 @@ class KimiAccountsTest {
         assertEquals(listOf(34), RunnerPage.engineWindows(oneKimi(), "kimi", now).map { it.percent })
     }
 
+    // no quota limit (web kimiNoQuotaLimit)
+
+    /** "No quota limit" is a Kimi login whose quota was read and held no window at all — told apart from a login never
+     * read or whose read failed, which still says "No quota reported" — and Kimi only: a windowless Codex or Claude
+     * snapshot is a failed read. */
+    @Test fun aWindowlessKimiSnapshotReadsAsNoQuotaLimitOnlyWhereOneWasRead() {
+        fun runner(usage: String?) = json("""{"id":"r","name":"hpc",
+            "engines":[{"engine":"kimi","installed":true,"auth":"yes","kimiRegion":"global",
+              "accounts":[{"id":"default","auth":"yes","home":"/root/.kimi-code","kimiRegion":"global"},
+                {"id":"5c2e91a0","name":"Work","auth":"yes","home":"/root/.orbit/kimi-accounts/5c2e91a0","kimiRegion":"mainland-cn"}]}]
+            ${usage?.let { ""","planUsage":$it""" }.orEmpty()}}""")
+        // A plan with no quota limit: the answer held no window, only when it was read — Default's and Work's alike.
+        val read = runner("""{"kimi":{"provider":"kimi","fetchedAt":"${at(0)}","accounts":{"5c2e91a0":{"provider":"kimi","fetchedAt":"${at(0)}"}}}}""")
+        assertTrue(RunnerPage.accountNoQuotaLimit(read, "kimi", "default"))
+        assertTrue(RunnerPage.accountNoQuotaLimit(read, "kimi", "5c2e91a0"))
+        // accountSnapshot collapses a windowless Default to null; the reported lookup keeps it, and an unread account
+        // has no snapshot to judge.
+        val usage = EngineAccounts.usage("kimi", read)!!
+        assertNull(accountSnapshot(usage, "default"))
+        assertTrue(kimiNoQuotaLimit(accountSnapshotReported(usage, "default")))
+        assertFalse(kimiNoQuotaLimit(accountSnapshotReported(usage, "deadbeef")))
+        // The coding share of the month is never drawn, but a plan reporting it has a limit.
+        val monthCodeOnly = runner("""{"kimi":{"provider":"kimi","fetchedAt":"${at(0)}","monthCode":${window(20, 552)}}}""")
+        assertFalse(RunnerPage.accountNoQuotaLimit(monthCodeOnly, "kimi", "default"))
+        // A snapshot with windows has quota to gauge.
+        assertFalse(RunnerPage.accountNoQuotaLimit(twoKimi(), "kimi", "default"))
+        assertFalse(RunnerPage.accountNoQuotaLimit(twoKimi(), "kimi", "5c2e91a0"))
+        // Never read: no planUsage at all, a snapshot whose own part is its provider alone, an added account with no entry.
+        assertFalse(RunnerPage.accountNoQuotaLimit(runner(null), "kimi", "default"))
+        val onlyWork = runner("""{"kimi":{"provider":"kimi","accounts":{"5c2e91a0":{${kimiUsage(12, 34, 8, 5)}}}}}""")
+        assertFalse(RunnerPage.accountNoQuotaLimit(onlyWork, "kimi", "default"))
+        assertFalse(RunnerPage.accountNoQuotaLimit(read, "kimi", "deadbeef"))
+        // Kimi only: a windowless Codex or Claude snapshot is a read that failed.
+        val codex = json("""{"id":"r","engines":[{"engine":"codex","installed":true,"auth":"yes","accounts":[{"id":"default","auth":"yes"}]}],
+            "planUsage":{"codex":{"provider":"codex","fetchedAt":"${at(0)}"}}}""")
+        assertFalse(RunnerPage.accountNoQuotaLimit(codex, "codex", "default"))
+        val claude = json("""{"id":"r","engines":[{"engine":"claude","installed":true,"auth":"yes"}],
+            "planUsage":{"claude":{"provider":"claude","fetchedAt":"${at(0)}"}}}""")
+        assertFalse(RunnerPage.accountNoQuotaLimit(claude, "claude", "default"))
+    }
+
     // NEXT
 
     /** NEXT marks the account a new session starts on: Work's five hours are past 80%, so Default — and only with two accounts. */
