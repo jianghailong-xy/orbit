@@ -2,6 +2,7 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { decryptSecret } from '../providers/provider-crypto';
 import { ProvidersService } from '../providers/providers.service';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { RunnerProvidersController } from './runner-providers.controller';
 
 // The runner's provider writes (`orbit provider create|update|delete`, provider_create/update/delete)
@@ -33,7 +34,15 @@ function matches(row: Row, where: Record<string, unknown>): boolean {
 function harness(seed: Row[] = []) {
   const rows: Row[] = [...seed];
   let next = 0;
+  // The engine an edit or a delete records first, on the sessions that name the key and have none
+  // (ProvidersService.recordSessionEngines): the engine and the slug it was recorded for.
+  const engineRecords: unknown[][] = [];
   const prisma = {
+    $executeRaw: async (...args: unknown[]) => {
+      const rendered = renderRawQuery(args);
+      if (rendered.text.includes('SET "engine"')) engineRecords.push(rendered.values.slice(0, 2));
+      return 0;
+    },
     modelProvider: {
       findMany: async ({ where }: { where: Record<string, unknown> }) => rows.filter((row) => matches(row, where)),
       findFirst: async ({ where }: { where: Record<string, unknown> }) =>
@@ -61,7 +70,7 @@ function harness(seed: Row[] = []) {
     { publishForUser: (ownerId: string) => published.push(ownerId) } as never,
     {} as never,
   );
-  return { controller: new RunnerProvidersController(service), rows, published };
+  return { controller: new RunnerProvidersController(service), rows, published, engineRecords };
 }
 
 const VLLM = {
@@ -131,6 +140,9 @@ test('update and delete are keyed by the slug the list shows, within the runner 
 
   assert.deepEqual(await h.controller.remove(RUNNER, 'local-vllm'), { ok: true });
   assert.deepEqual(h.rows.map((row) => row.id), ['shared', 'theirs']);
+  // Each change of its endpoint or key, and its deletion, first records the engine of the sessions on
+  // it that have none, so neither moves them (migration 0414).
+  assert.deepEqual(h.engineRecords, [['claude', 'local-vllm'], ['claude', 'local-vllm']]);
 });
 
 test('a reasoningLevels declaration dispatch could not honour is refused, not stored', async () => {

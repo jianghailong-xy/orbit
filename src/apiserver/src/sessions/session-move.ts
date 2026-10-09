@@ -45,6 +45,9 @@ export const MOVE_REFUSAL = {
   RETRY: 'An automatic retry is scheduled. Try again after it runs.',
   /** The move itself only takes an ended session; the client ends an idle one first (End and Move). */
   END: 'End the session first.',
+  /** Its engine was never recorded and its provider is gone (sessionEngine answered null), so nothing
+   *  says which CLI's conversation would have to be carried over. */
+  ENGINE_UNKNOWN: "This session's provider is gone, so Orbit can't tell which engine it runs on.",
 } as const;
 
 /** The session's own state, as §5.2 judges it. */
@@ -69,8 +72,9 @@ export interface SessionMoveFacts {
   /** A merge recovery waiting on its owner (readMergeRecovery). */
   mergeRecoveryOpen: boolean;
   retryAt: Date | null;
-  /** The runtime that runs it (sessionExecRuntime), which a move never changes. */
-  runtime: AgentProvider;
+  /** The engine that runs it (sessionEngine: Session.engine, or the old rules for a row without
+   *  one), which a move never changes; null when nobody can tell. */
+  runtime: AgentProvider | null;
 }
 
 export type SessionMoveVerdict =
@@ -91,6 +95,7 @@ export function sessionMoveVerdict(s: SessionMoveFacts): SessionMoveVerdict {
   if (s.coordinatesProject || s.dispatchOrigin === 'PROJECT_COORDINATOR') return refuse(MOVE_REFUSAL.COORDINATOR);
   if (s.taskId) return refuse(MOVE_REFUSAL.TASK);
   if (s.importSourceCwd != null) return refuse(MOVE_REFUSAL.IMPORTING);
+  if (s.runtime === null) return refuse(MOVE_REFUSAL.ENGINE_UNKNOWN);
   // How their conversations would carry over has not been verified. agy's lives in a per-session
   // gemini directory on the runner (docs/antigravity-runtime-contract.md §3.1), and a resume from
   // any other directory silently starts a new conversation (§4.3).
@@ -158,11 +163,12 @@ export function runnerIsOnline(
  * move only changes where the session belongs, and its next message waits for the runner.
  */
 export function moveTargetRefusal(
-  session: { runtime: AgentProvider; assignedRunnerId: string | null; runnerName: string },
+  session: { runtime: AgentProvider | null; assignedRunnerId: string | null; runnerName: string },
   target: MoveTargetFacts,
 ): string | null {
   if (!target.enabled) return 'This workspace is disabled.';
   if (!target.runnerId || !target.runner) return 'This workspace has no runner.';
+  if (session.runtime === null) return MOVE_REFUSAL.ENGINE_UNKNOWN;
   const runner = runnerLabel(target.runner);
   // As the New Session picker reads the report: an engine the runner says is not installed. No report,
   // or none for this engine, is a runner too old to say — not one that cannot run it.
