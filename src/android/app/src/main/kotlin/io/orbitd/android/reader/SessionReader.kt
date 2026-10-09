@@ -118,6 +118,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val otherInputHasKeyboard = WindowInsets.ime.getBottom(LocalDensity.current) > 0 && !composerFocused
         val composerHeight = if (otherInputHasKeyboard) 0.dp else if (maxHeight < 320.dp) maxHeight else maxHeight * 0.65f
+        val compact = maxWidth < 600.dp
         Column(Modifier.fillMaxSize()) {
             val session = state.session
             val detail = session?.snapshot?.detail
@@ -151,6 +152,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 val live = transcript.takeIf { displayedWindow.newerAfter == null }
                 val displayedLoading = state.loading
                 val targetSeq = state.targetSeq
+                // Folds away while a phone's composer holds the keyboard, with the rest of the chrome.
+                StickyQuestion(displayedRows, list, hidden = composerFocused && compact) { row -> model.show(row.event.seq) }
                 LazyColumn(Modifier.weight(1f).fillMaxWidth().nestedScroll(nested).pointerInput(model) {
                     // Do not consume the gesture: native selection/links still receive it.
                     // A touch pauses following so a live update cannot move text under a selection.
