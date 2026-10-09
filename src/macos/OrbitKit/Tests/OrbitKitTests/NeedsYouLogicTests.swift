@@ -180,6 +180,69 @@ final class NeedsYouLogicTests: XCTestCase {
         XCTAssertNil(NeedsYouLogic.below(rows: [], side: nil))
     }
 
+    /// A version waiting for its paused coordinator is not counted (project 34cygPTQe5LPUT7tdUAzG,
+    /// the owner's decision of 2026-10-09): its folded card is in the conversation, but nobody is
+    /// asking the reader anything yet. The bar over this conversation counts the evidence cards the
+    /// console still holds open by `EvidenceDecisions.isOpen` (`ConsoleModel.openBelowRows`), and
+    /// neither a waiting version nor one handed to the coordinator is open — the same version is
+    /// counted the moment it is the reader's question. Nor does the row count it: the server leaves
+    /// it out of `pendingApprovals`, and the console header, the Needs-you grouping, the banner and
+    /// the menu bar read that count and nothing from the queue — so a coordinator paused on its
+    /// weekly limit says "Retrying", never "Waiting for approval".
+    func testAVersionWaitingForTheCoordinatorIsNotCounted() {
+        let project = "34cygPTQe5LPUT7tdUAzG"
+        let coordinatorID = "34cucZFGh0i7pUbWKZlgG"
+        func row(_ taskId: String) -> EvidenceDecisionRow {
+            EvidenceDecisionRow(taskId: taskId, title: "Queue cards for the coordinator", projectId: project,
+                                criterion: EvidenceDecisionCriterion(key: "cards", text: "Decisions match."),
+                                evidenceRevision: "1", submittedAt: "2026-10-09T11:59:30.000Z",
+                                claim: "Revisions wait while the coordinator is paused.", gaps: [],
+                                citations: [], decidability: EvidenceDecisionDecidability(decidable: true),
+                                independence: EvidenceDecisionIndependence(independent: true))
+        }
+        // The bar's rows as the console builds them: one per delivered evidence card still open.
+        func bar(_ queue: EvidenceDecisionQueue, _ tasks: [String]) -> WaitingBelow? {
+            let rows = tasks.compactMap { task -> BelowRow? in
+                let standing = EvidenceDecisions.standing(queue: queue, projectId: project,
+                                                          sessionId: coordinatorID, taskId: task,
+                                                          evidenceRevision: "1")
+                guard EvidenceDecisions.isOpen(standing) else { return nil }
+                let card = DeliveredDecisionCard(kind: .evidenceDecision(taskID: task, evidenceRevision: "1"))
+                return BelowRow(rowID: card.id, isQuestion: true)
+            }
+            return NeedsYouLogic.below(rows: rows, side: .below)
+        }
+        let paused = EvidenceDecisionQueue(
+            decidingSessionId: coordinatorID, count: 0, pending: [],
+            waitingOnCoordinator: [row("queued")],
+            sentToCoordinator: [SentToCoordinatorRow(taskId: "handed", title: "Send waited revisions",
+                                                     projectId: project, evidenceRevision: "1",
+                                                     deliveredAt: "2026-10-09T12:05:00.000Z")])
+        XCTAssertNil(bar(paused, ["queued", "handed"]),
+                     "no \"open question\" bar over a folded card or a Sent line")
+        let asked = EvidenceDecisionQueue(decidingSessionId: coordinatorID, count: 1, pending: [row("queued")])
+        XCTAssertEqual(bar(asked, ["queued"])?.text, "1 open question below",
+                       "the same version, once it is the reader's question, is counted")
+
+        // The coordinator's own row: FAILED on its weekly limit with the reset's retry armed, and
+        // nothing counted, because the server counts only `pending`.
+        let now = ThinkingSummary.date("2026-10-09T12:02:00.000Z")!
+        let coordinator = Session(id: coordinatorID, title: "Evidence waits for the coordinator",
+                                  status: .failed, runState: .failed, agentId: "orbit",
+                                  assignedRunnerId: "runner", pendingApprovals: 0, branch: nil,
+                                  updatedAt: nil, projectId: project, projectTitle: "Evidence waits",
+                                  error: "You've hit your weekly limit · resets Oct 12, 7pm (Asia/Shanghai)",
+                                  lastTurnAt: "2026-10-09T10:08:46.000Z",
+                                  retryAt: "2026-10-12T11:00:00.000Z")
+        XCTAssertEqual(SessionHeader.statusWord(for: coordinator, now: now), "Retrying")
+        XCTAssertEqual(SessionHeader.subtitle(for: coordinator, now: now)?.hasPrefix("Retrying · Open"), true)
+        let groups = SessionGrouping.group([coordinator])
+        XCTAssertTrue(groups.needsYou.isEmpty, "not in Needs you")
+        XCTAssertNil(NeedsYouLogic.banner(waiting: groups.needsYou))
+        XCTAssertEqual(MenuBar.summary(from: [coordinator]).needsYou, 0)
+        XCTAssertTrue(NeedsYouLogic.byAgent([coordinator]).isEmpty)
+    }
+
     // MARK: the four owner items (contract §7.6 V13)
 
     /// A project's coordinator conversation carrying one thing the account owner has to answer.
