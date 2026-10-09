@@ -271,4 +271,89 @@ final class EvidenceDecisionCopyParityTests: XCTestCase {
                        "decided.decision === 'CONFIRM' ? DECISION_CONFIRM_ACTION : DECISION_SEND_BACK_ACTION",
                        "which action word the receipt's line quotes")
     }
+
+    // MARK: while the coordinator is paused
+
+    /// The folded card a version waiting for its coordinator is drawn as, the note the card it opens
+    /// into carries, and the words for why it waits — the project's copy section, which the four
+    /// clients say word for word (project 34cygPTQe5LPUT7tdUAzG).
+    func testTheQueuedCardsWordsMatchTheWebCard() throws {
+        let web = try flatWebCard()
+        assertDeclares(web, "EVIDENCE_DECISION_QUEUED_HEADING", EvidenceDecisions.queuedHeading,
+                       "the folded card's heading")
+        assertDeclares(web, "EVIDENCE_DECISION_QUEUED_NOTE", EvidenceDecisions.queuedNote,
+                       "what the folded card says under why it waits")
+        assertDeclares(web, "DECISION_DECIDE_MYSELF_ACTION", EvidenceDecisions.decideMyselfAction,
+                       "the folded card's one way in")
+        assertDeclares(web, "EVIDENCE_DECISION_QUEUED_OPEN_NOTE", EvidenceDecisions.queuedOpenNote,
+                       "what the opened card says under why it waits")
+        assertDeclares(web, "EVIDENCE_DECISION_COORDINATOR_PAUSED", EvidenceDecisions.coordinatorPaused,
+                       "why it waits while the coordinator is paused")
+        assertDeclares(web, "EVIDENCE_DECISION_COORDINATOR_BACK", EvidenceDecisions.coordinatorBack,
+                       "why it waits once the coordinator is back")
+        assertDeclares(web, "DECISION_PAUSE_FIVE_HOUR_LIMIT", EvidenceDecisions.pauseFiveHourLimit,
+                       "the 5-hour window")
+        assertDeclares(web, "DECISION_PAUSE_WEEKLY_LIMIT", EvidenceDecisions.pauseWeeklyLimit,
+                       "the weekly window")
+        assertDeclares(web, "DECISION_PAUSE_USAGE_LIMIT", EvidenceDecisions.pauseUsageLimit,
+                       "a usage limit that names no window")
+        assertDeclares(web, "EVIDENCE_DECISION_SENT_TO_COORDINATOR", EvidenceDecisions.sentToCoordinator,
+                       "the line a version that waited leaves once it is handed over")
+    }
+
+    /// The pause line's spellings and the sent line, compared whole: this end's rendering with the
+    /// web template's own interpolations put back. The clock is each end's receipt clock, so it goes
+    /// back as the web's interpolation rather than being compared as text.
+    func testThePauseAndSentLinesMatchTheWebTemplates() throws {
+        let web = try flatWebCard()
+        let resets = "2026-10-12T11:00:00.000Z"
+        let at = EvidenceDecisions.receiptTime(resets)
+        let paused = (EvidenceDecisions.coordinatorPaused, "${EVIDENCE_DECISION_COORDINATOR_PAUSED}")
+        let window = (EvidenceDecisions.pauseWeeklyLimit, "${pause.window}")
+
+        let both = EvidenceDecisions.pauseLine(.paused(window: EvidenceDecisions.pauseWeeklyLimit,
+                                                       retryAt: resets))
+        assertContains(web, "`\(template(both, [paused, window, (at, "${at}")]))`",
+                       "the pause line with its window and its reset")
+        let windowOnly = EvidenceDecisions.pauseLine(.paused(window: EvidenceDecisions.pauseWeeklyLimit,
+                                                             retryAt: nil))
+        assertContains(web, "`\(template(windowOnly, [paused, window]))`",
+                       "the pause line with its window and no retry armed")
+        let retries = EvidenceDecisions.pauseLine(.paused(window: nil, retryAt: resets))
+        assertContains(web, "`\(template(retries, [paused, (at, "${at}")]))`",
+                       "the pause line of a failure that is not a usage limit, with its retry")
+        XCTAssertEqual(EvidenceDecisions.pauseLine(.paused(window: nil, retryAt: nil)),
+                       EvidenceDecisions.coordinatorPaused)
+        XCTAssertEqual(EvidenceDecisions.pauseLine(.back), EvidenceDecisions.coordinatorBack)
+
+        let delivered = "2026-10-09T12:05:00.000Z"
+        let sent = EvidenceDecisions.sentLine(delivered)
+        assertContains(web, "`\(template(sent, [(EvidenceDecisions.sentToCoordinator, "${EVIDENCE_DECISION_SENT_TO_COORDINATOR}"), (EvidenceDecisions.receiptTime(delivered), "${decisionReceiptTime(deliveredAt, now)}")]))`",
+                       "the line a version that waited leaves")
+    }
+
+    /// Which window the line names is the transcript's own judgment at both ends: the web card maps
+    /// `quotaWindowKind` onto the three words, and that function keys on the same two phrases
+    /// `AutoRetryLogic.quotaWindowKind` does — so a phone and a browser name one window for one
+    /// failure, and the line names the window the quota card above it names.
+    func testThePauseWindowIsTheTranscriptsOwnJudgmentAtBothEnds() throws {
+        let web = try flatWebCard()
+        assertContains(web, "FIVE_HOUR: DECISION_PAUSE_FIVE_HOUR_LIMIT", "the 5-hour window's word")
+        assertContains(web, "WEEKLY: DECISION_PAUSE_WEEKLY_LIMIT", "the weekly window's word")
+        assertContains(web, "OTHER: DECISION_PAUSE_USAGE_LIMIT", "the word for a window nobody named")
+
+        let judgment = try String(contentsOf: try repoRoot().appendingPathComponent(
+            "src/web/src/lib/quotaWindow.ts"), encoding: .utf8)
+        let phrases: [(String, String, AutoRetryLogic.QuotaWindow)] = [
+            ("hit your session limit", "FIVE_HOUR", .fiveHour),
+            ("hit your weekly limit", "WEEKLY", .weekly),
+        ]
+        for (phrase, kind, swift) in phrases {
+            XCTAssertTrue(judgment.contains("m.includes('\(phrase)')) return '\(kind)'"),
+                          "quotaWindow.ts no longer keys \(kind) on \(phrase.debugDescription)")
+            XCTAssertEqual(AutoRetryLogic.quotaWindowKind("You've \(phrase) · resets 7pm (UTC)"), swift)
+        }
+        XCTAssertTrue(judgment.contains("return 'OTHER'"))
+        XCTAssertEqual(AutoRetryLogic.quotaWindowKind("You've hit your usage limit."), .other)
+    }
 }
