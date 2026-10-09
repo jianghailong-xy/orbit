@@ -63,7 +63,8 @@ fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: 
 
 fun settingsTitle(page: String?, record: String? = null): String = when (page) {
     "share" -> ShareCopy.title(record?.substringBefore(':') ?: "SESSION")
-    "profile" -> "Edit profile"; "password" -> "Change password"; "providers" -> "Providers"
+    "profile" -> "Edit profile"; "password" -> "Change password"
+    "providers" -> record?.takeIf { it.startsWith("key:") }?.let { providerKeyTitle(it.removePrefix("key:")) } ?: "Providers"
     "workspace" -> "Workspace settings"; "runners" -> "Runners"; "sharing" -> "Shared links"; "access-tokens" -> AccessTokens.TITLE
     "admin" -> "Admin"; "notifications" -> "Notifications"; "about" -> "About"; else -> "Settings"
 }
