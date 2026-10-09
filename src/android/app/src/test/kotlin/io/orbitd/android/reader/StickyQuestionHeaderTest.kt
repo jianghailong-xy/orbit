@@ -85,6 +85,21 @@ class StickyQuestionHeaderTest {
         named("↑ Your question", "Second question")
     }
 
+    /** The header sits in the list's flow, yet its coming and going leaves the line being read where it was (A06's prepend guarantee). */
+    @Test fun theHeaderComingAndGoingLeavesTheReadLineInPlace() {
+        show()
+        scrollTo(15)
+        header.assertCountEquals(1)
+        val line = compose.onNodeWithText("Answer 20")
+        val top = line.fetchSemanticsNode().boundsInRoot.top
+        compose.runOnIdle { hidden = true }
+        header.assertCountEquals(0)
+        assertEquals(top, line.fetchSemanticsNode().boundsInRoot.top, 1f)
+        compose.runOnIdle { hidden = false }
+        header.assertCountEquals(1)
+        assertEquals(top, line.fetchSemanticsNode().boundsInRoot.top, 1f)
+    }
+
     private fun named(label: String, line: String) {
         val bar = hasAnyAncestor(hasContentDescription("Jump to your last question"))
         compose.onNode(hasText(label) and bar, useUnmergedTree = true).assertIsDisplayed()

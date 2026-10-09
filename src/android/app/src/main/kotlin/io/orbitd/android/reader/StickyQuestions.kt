@@ -9,6 +9,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
@@ -167,6 +168,9 @@ internal fun topLineItem(items: List<LazyListItemInfo>, top: Int): String? =
 /** Scroll state the header derives from, mutated per frame without recomposing; only the named question redraws. */
 private class QuestionRuler { var anchor: String? = null }
 
+/** Whether the header was last shown, and its last measured height: what the list is scrolled by when it comes or goes. */
+private class HeaderShift { var shown = false; var height = 0f }
+
 /**
  * The sticky "↑ Your question" header (iOS `ConsoleView.stickyQuestion`, web's `.chat-sticky-question`):
  * the newest question above the fold, in flow above the transcript, stepping back through earlier
@@ -188,9 +192,20 @@ internal fun StickyQuestion(rows: List<TranscriptRow>, list: LazyListState, hidd
         }.distinctUntilChanged().collect { stuck = it }
     }
     val row = questions.row(stuck)
+    // In the list's flow, as on iOS, so a jump lands below the header rather than under it. Its coming and going
+    // moves the list's top by its height, though, so the list is scrolled by as much in the same frame: the line
+    // being read stays where it was (A06's prepend guarantee) instead of jumping by a header.
+    val shift = remember(list) { HeaderShift() }
+    val shown = !hidden && row != null
+    SideEffect {
+        if (shown != shift.shown) {
+            shift.shown = shown
+            if (shift.height > 0f) list.dispatchRawDelta(if (shown) shift.height else -shift.height)
+        }
+    }
     if (hidden || row == null) return
     val (label, text) = remember(row) { StickySummary.of(row.event) }
-    Column(Modifier.fillMaxWidth().testTag("sticky-question")) {
+    Column(Modifier.fillMaxWidth().onSizeChanged { shift.height = it.height.toFloat() }.testTag("sticky-question")) {
         Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer)
             .clickable(role = Role.Button) { jump(row) }.semantics { contentDescription = "Jump to your last question" }
             .padding(horizontal = 16.dp, vertical = 7.dp),
