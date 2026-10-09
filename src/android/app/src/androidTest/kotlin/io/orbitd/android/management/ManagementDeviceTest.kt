@@ -63,7 +63,7 @@ class ManagementDeviceTest {
     @Volatile private var runnerOnline = false
     /** The runner's selfUpdate report (JSON); null is a runner too old to report one. */
     @Volatile private var runnerSelfUpdate: String? = null
-    /** Runners served instead of the one controlled remote, for the Edit case; DELETE and reorder change it. */
+    /** Runners served instead of the one controlled remote, for the list case; DELETE and reorder change it. */
     @Volatile private var fleet: List<String>? = null
     /** The remote reports Antigravity's Google accounts and more accounts of Claude Code (A13c). */
     @Volatile private var accountsPass = false
@@ -508,10 +508,10 @@ class ManagementDeviceTest {
     }
 
     /**
-     * Edit on the runners list with three runners: the first row (not the last) is removed and Edit stays on; the row
-     * that moved into its place is dragged by its handle below the next one. One order goes out and the rows stand in
-     * it. Before the handles were dropped with their rows, the removed row's handle lay over this one and the drag
-     * could start on the removed id and crash.
+     * The runners list with three runners and no Edit mode (iOS 91316c246, A13-11): the first row (not the last) is removed from
+     * its ⋯ menu, asked first; the row that moved into its place is dragged by its handle below the next one. One order goes
+     * out and the rows stand in it. Before the handles were dropped with their rows, the removed row's handle lay over this one
+     * and the drag could start on the removed id and crash.
      */
     @Test fun runnersListRemovesARowThenReordersTheNextByDragging() {
         start()
@@ -522,21 +522,26 @@ class ManagementDeviceTest {
                 role = "ADMIN"; runnerOnline = true; fleet = listOf(alpha, bravo, charlie)
                 signIn(server); settings()
                 click(hasText("Runners") and hasClickAction()); await("Charlie box")
-                click(hasText("Edit") and hasClickAction())
-                capture("runners-edit")
-                compose.onAllNodes(hasText("Remove") and hasClickAction()).onFirst().performClick()
+                compose.onAllNodes(hasText("Edit") and hasClickAction()).assertCountEquals(0)
+                capture("runners-handles")
+                click(hasContentDescription("More for Alpha box"), scroll = false)
+                capture("runners-row-menu")
+                click(hasText("Remove…") and hasClickAction(), scroll = false)
+                await("Remove “Alpha box”?")
+                compose.onNode(hasText("Cancel") and hasAnyAncestor(isDialog())).assertExists()
+                capture("runners-remove-confirm")
                 click(hasText("Remove Runner") and hasClickAction() and hasAnyAncestor(isDialog()), scroll = false)
                 compose.waitUntil(10_000) { calls.contains("DELETE /api/runners/$alpha") && compose.onAllNodesWithText("Alpha box", substring = true).fetchSemanticsNodes().isEmpty() }
                 compose.waitForIdle()
-                capture("runners-edit-removed")
-                compose.onNodeWithContentDescription("Reorder Bravo box").performTouchInput {
-                    down(centerRight - androidx.compose.ui.geometry.Offset(8f, 0f))
+                capture("runners-removed")
+                compose.onNodeWithTag("runner-handle:$bravo").performTouchInput {
+                    down(center)
                     repeat(30) { moveBy(androidx.compose.ui.geometry.Offset(0f, height / 10f)) }
                     up()
                 }
                 compose.waitUntil(10_000) { calls.contains("POST /api/runners/reorder") }
                 compose.waitForIdle()
-                capture("runners-edit-dragged")
+                capture("runners-dragged")
                 assertEquals(listOf(charlie, bravo), fleet)
                 assertEquals("One order per drag", 1, calls.count { it == "POST /api/runners/reorder" })
                 fun top(name: String) = compose.onAllNodesWithText(name, substring = true).onFirst().fetchSemanticsNode().boundsInRoot.top

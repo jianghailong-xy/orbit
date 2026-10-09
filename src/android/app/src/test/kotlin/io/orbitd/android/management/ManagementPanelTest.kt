@@ -121,15 +121,15 @@ class ManagementPanelTest {
         compose.onAllNodesWithText("nothing to paste", substring = true).assertCountEquals(0)
     }
 
-    @Test fun editModeMovesARunnerByDraggingItsHandleAndSendsTheOrderOnce() {
+    /** No Edit mode (iOS 91316c246, A13-11): a row is dragged by its handle at any time, and the order goes out once. */
+    @Test fun aRunnerIsMovedByDraggingItsHandleWithNoEditMode() {
         fixture.secondRunner = true
         val api = api()
         compose.setContent { RunnersList(api, revision) {} }
         await("Spare box")
-        compose.onNode(hasText("Edit") and hasClickAction()).performClick()
-        // The row merges its handle ("≡", at its right edge) into one node; the drag starts on the handle.
-        compose.onNodeWithContentDescription("Reorder Old alias").assert(hasCustomAction("Move down")).performTouchInput {
-            down(centerRight - androidx.compose.ui.geometry.Offset(8f, 0f))
+        compose.onAllNodes(hasText("Edit") and hasClickAction()).assertCountEquals(0)
+        compose.onNodeWithTag("runner-handle:${fixture.RUNNER}").performTouchInput {
+            down(center)
             repeat(30) { moveBy(androidx.compose.ui.geometry.Offset(0f, 20f)) }
             up()
         }
@@ -137,6 +137,34 @@ class ManagementPanelTest {
         compose.waitUntil(60_000) { fixture.runnerOrder == listOf(fixture.RUNNER_TWO, fixture.RUNNER) }
         compose.waitForIdle()
         assertEquals("One order goes out per drag", 1, fixture.calls.count { it == "POST runners/reorder" })
+    }
+
+    /** Each row opens its runner, TalkBack moves it with the row's own actions, and Remove… is in its ⋯ menu, asked
+     * first with Cancel beside it — all without an Edit mode. */
+    @Test fun aRunnerRowOpensMovesForTalkBackAndRemovesFromItsMenu() {
+        fixture.secondRunner = true
+        val api = api()
+        val opened = mutableListOf<String>()
+        compose.setContent { RunnersList(api, revision) { opened += it } }
+        await("Spare box")
+        compose.onNode(hasText("Old alias") and hasClickAction()).assert(hasCustomAction("Move down")).assert(!hasCustomAction("Move up"))
+        compose.onNode(hasText("Spare box") and hasClickAction()).assert(hasCustomAction("Move up")).assert(!hasCustomAction("Move down"))
+        val down = compose.onNode(hasText("Old alias") and hasClickAction()).fetchSemanticsNode().config[SemanticsActions.CustomActions]
+            .first { it.label == "Move down" }
+        compose.runOnIdle { down.action() }
+        compose.waitUntil(60_000) { fixture.runnerOrder == listOf(fixture.RUNNER_TWO, fixture.RUNNER) }
+        compose.onNode(hasText("Spare box") and hasClickAction()).performClick()
+        compose.runOnIdle { assertEquals(listOf(fixture.RUNNER_TWO), opened) }
+        compose.onNodeWithContentDescription("More for Spare box").performClick()
+        compose.onNode(hasText("Remove…") and hasClickAction()).performClick()
+        compose.onNodeWithText("Remove “Spare box”?").assertExists()
+        compose.onNode(hasText("Cancel") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
+        compose.waitForIdle()
+        assertTrue("Cancel removes nothing", fixture.removedRunners.isEmpty())
+        compose.onNodeWithContentDescription("More for Spare box").performClick()
+        compose.onNode(hasText("Remove…") and hasClickAction()).performClick()
+        compose.onNode(hasText(RunnerCopy.REMOVE) and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
+        compose.waitUntil(60_000) { fixture.removedRunners == setOf(fixture.RUNNER_TWO) }
     }
 
     private fun hasCustomAction(label: String) = SemanticsMatcher("has custom action $label") { node ->
@@ -214,34 +242,40 @@ class ManagementPanelTest {
     }
 
     /**
-     * A row removed in Edit mode leaves no handle behind. The next row moves into its place, and a drag on that row's
-     * handle moves that row. The handles were kept by id and never dropped: the removed row's handle lay over the next
-     * row's, a drag could start on the removed id, and moving it past half a row ran removeAt(-1). Which of two
-     * overlapping handles was found first followed hash order, so both orders are run.
+     * A removed row leaves no handle behind. The next row moves into its place, and a drag on that row's handle moves
+     * that row. The handles were kept by id and never dropped: the removed row's handle lay over the next row's, a drag
+     * could start on the removed id, and moving it past half a row ran removeAt(-1). Which of two overlapping handles
+     * was found first followed hash order, so both orders are run.
      */
     @Test fun aRemovedRowLeavesNoHandleBehindForTheNextRowsDrag() {
         fixture.secondRunner = true
         val api = api()
         var round by mutableStateOf(0)
         compose.setContent { key(round) { RunnersList(api, revision) {} } }
-        for ((order, next) in listOf(listOf(fixture.RUNNER, fixture.RUNNER_TWO) to "Spare box", listOf(fixture.RUNNER_TWO, fixture.RUNNER) to "Old alias")) {
+        val names = mapOf(fixture.RUNNER to "Old alias", fixture.RUNNER_TWO to "Spare box")
+        for (order in listOf(listOf(fixture.RUNNER, fixture.RUNNER_TWO), listOf(fixture.RUNNER_TWO, fixture.RUNNER))) {
             fixture.runnerOrder = order; fixture.removedRunners = emptySet()
             round++
-            await(next); compose.waitForIdle()
-            compose.onNode(hasText("Edit") and hasClickAction()).performClick()
-            compose.onAllNodes(hasText("Remove") and hasClickAction()).onFirst().performClick()
+            val next = order[1]
+            await(names.getValue(next)); compose.waitForIdle()
+            compose.onNodeWithContentDescription("More for ${names.getValue(order[0])}").performClick()
+            compose.onNode(hasText("Remove…") and hasClickAction()).performClick()
             compose.onNode(hasText(RunnerCopy.REMOVE) and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
-            compose.waitUntil(60_000) { fixture.removedRunners.size == 1 && compose.onAllNodes(hasContentDescription("Reorder", substring = true)).fetchSemanticsNodes().size == 1 }
+            compose.waitUntil(60_000) { fixture.removedRunners.size == 1 && compose.onAllNodes(hasTestTag("runner-handle:", substring = true)).fetchSemanticsNodes().size == 1 }
             compose.waitForIdle()
-            compose.onNodeWithContentDescription("Reorder $next").performTouchInput {
-                down(centerRight - androidx.compose.ui.geometry.Offset(8f, 0f))
+            compose.onNodeWithTag("runner-handle:$next").performTouchInput {
+                down(center)
                 repeat(30) { moveBy(androidx.compose.ui.geometry.Offset(0f, 20f)) }
                 up()
             }
             compose.waitForIdle()
-            compose.onNodeWithContentDescription("Reorder $next").assertExists()
+            compose.onNodeWithTag("runner-handle:$next").assertExists()
         }
         assertEquals("A list of one sends no order", 0, fixture.calls.count { it == "POST runners/reorder" })
+    }
+
+    private fun hasTestTag(prefix: String, substring: Boolean) = SemanticsMatcher("test tag starting $prefix") { node ->
+        node.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)?.let { if (substring) it.startsWith(prefix) else it == prefix } == true
     }
 
     /** A photo far longer than it is high, zoomed in all the way, still draws (it is no layout size). */
