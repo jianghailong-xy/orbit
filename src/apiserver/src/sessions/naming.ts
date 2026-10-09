@@ -159,8 +159,17 @@ function joinText(blocks: { text?: unknown }[] | undefined): string | undefined 
   return texts.length > 0 ? texts.join('') : undefined;
 }
 
-/** The server's own DeepSeek key: an OpenAI-compatible chat call in DeepSeek's JSON mode. */
-function deepSeekCall(apiKey: string, system: string, task: string): NamingCall {
+/**
+ * The server's own DeepSeek key: an OpenAI-compatible chat call in DeepSeek's JSON mode. Callers
+ * that want plain prose rather than a JSON object — the recap (sessions/recap.ts) does — turn that
+ * mode off and say how much room the answer needs.
+ */
+export function deepSeekCall(
+  apiKey: string,
+  system: string,
+  task: string,
+  opts: { json?: boolean; maxTokens?: number } = {},
+): NamingCall {
   const base = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, '');
   return {
     url: `${base}/chat/completions`,
@@ -168,8 +177,8 @@ function deepSeekCall(apiKey: string, system: string, task: string): NamingCall 
     body: {
       model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
       temperature: 0.2,
-      max_tokens: 200,
-      response_format: { type: 'json_object' },
+      max_tokens: opts.maxTokens ?? 200,
+      ...(opts.json === false ? {} : { response_format: { type: 'json_object' } }),
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: task },
@@ -187,8 +196,9 @@ const HELD_KEY_MAX_TOKENS = 2048;
  * auth that engine is handed — what ProvidersService.testConnection probes: Anthropic Messages, the
  * OpenAI Responses API (all Codex speaks), Chat Completions (Kimi), or Gemini's generateContent. No
  * JSON mode: not every vendor behind these serves one, and parseNaming finds the object in plain text.
+ * The recap spreads its own model over `key` before calling this, to fix a cheap one per dialect.
  */
-function heldKeyCall(key: HeldKey, system: string, task: string): NamingCall {
+export function heldKeyCall(key: HeldKey, system: string, task: string): NamingCall {
   const base = key.baseUrl.replace(/\/+$/, '');
   const bearer = { 'Content-Type': 'application/json', Authorization: `Bearer ${key.apiKey}` };
   switch (key.dialect) {
