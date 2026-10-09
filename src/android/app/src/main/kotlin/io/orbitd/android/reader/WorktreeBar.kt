@@ -118,7 +118,6 @@ private fun Pill(model: WorktreeModel, state: WorktreeState, d: JsonObject, bran
             HorizontalDivider()
             MergeRecoveryRow(recovery, working = d.string("mergeStatus") == "pending") { sheet = "recovery" }
         }
-        state.notice?.let { NoticeLine(it) { model.dismiss(it) } }
     }
     when (sheet) {
         "diff" -> WorktreeChanges(model, displayBranch) { sheet = null }
@@ -332,23 +331,6 @@ private fun FailureLine(message: String, manual: String?) {
         DropdownMenuItem(text = { Text("Copy failure reason") }, onClick = { clipboard.setText(AnnotatedString(message)); menu = false })
         manual?.let { command -> DropdownMenuItem(text = { Text("Copy manual merge command") }, onClick = { clipboard.setText(AnnotatedString(command)); menu = false }) }
     } }
-}
-
-/** What the last action came to. A failure stays until it is dismissed; anything else goes after a few seconds. */
-@Composable
-private fun NoticeLine(notice: WorktreeNotice, dismiss: () -> Unit) {
-    if (!notice.failure && !notice.inProgress) LaunchedEffect(notice.id) { delay(4_000); dismiss() }
-    val color = if (notice.failure) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-    Row(Modifier.fillMaxWidth().background((if (notice.failure) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface).copy(alpha = 0.06f))
-        .padding(horizontal = 10.dp, vertical = 6.dp).testTag("worktree-notice").semantics { liveRegion = LiveRegionMode.Polite },
-        verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(notice.message, color = color, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-            notice.detail?.let { SelectionContainer { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 6,
-                overflow = TextOverflow.Ellipsis) } }
-        }
-        if (notice.failure) TextButton(onClick = dismiss, modifier = Modifier.semantics { contentDescription = "Dismiss" }) { Text("✕") }
-    }
 }
 
 @Composable

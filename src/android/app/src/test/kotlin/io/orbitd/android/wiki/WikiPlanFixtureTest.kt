@@ -289,9 +289,9 @@ class WikiPlanFixtureTest {
         assertEquals(listOf("no such file"), wikiGateErrors(ApiError.parse(422, body.encodeToByteArray()))?.map { it.message })
         assertNull(wikiGateErrors(ApiError.parse(409, """{"code":"WIKI_PLAN_STALE","message":"stale"}""".encodeToByteArray())))
         assertNull(wikiGateErrors(NetworkException()))
-        // Any other refusal is the server's own sentence, or the web's fallback.
+        // Any other refusal is the server's own sentence, or what kind of failure it was (iOS d625d9809: failureReason).
         assertEquals("stale", wikiRefusal(ApiError.parse(409, """{"code":"WIKI_PLAN_STALE","message":"stale"}""".encodeToByteArray())))
-        assertEquals(WikiCopy.refused, wikiRefusal(NetworkException()))
+        assertEquals("the connection dropped", wikiRefusal(NetworkException()))
     }
 
     /** A failed job's draft the model wrote in a shape this build cannot read is dropped, never the plan's read with it. */
