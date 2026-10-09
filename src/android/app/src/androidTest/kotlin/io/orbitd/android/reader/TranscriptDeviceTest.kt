@@ -127,7 +127,7 @@ class TranscriptDeviceTest {
         awaitText("Related reading task")
         capture("review-image-task-destination")
         instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
-        awaitText("Session options")
+        awaitActions()
         val opened = java.util.concurrent.atomic.AtomicReference<String?>()
         val monitor = object : android.app.Instrumentation.ActivityMonitor() {
             override fun onStartActivity(intent: Intent): android.app.Instrumentation.ActivityResult? {
@@ -343,11 +343,11 @@ class TranscriptDeviceTest {
         assertTrue("Around endpoint must preserve the gap", compose.onAllNodesWithText("Jump to latest").fetchSemanticsNodes().isNotEmpty())
         // A05 toolbar/system back must return to the original reader, then the directory.
         instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("Session options").fetchSemanticsNodes().isNotEmpty() }
+        awaitActions()
         compose.onNodeWithContentDescription("Back").performClick()
         awaitText("Long conversation")
         compose.onNodeWithText("Long conversation").performClick()
-        awaitText("Session options")
+        awaitActions()
         control("{\"denial\":403}")
         compose.runOnIdle { app.realtime.refreshSession() }
         awaitText("Session unavailable")
@@ -356,7 +356,7 @@ class TranscriptDeviceTest {
         control("{\"denial\":0}")
         compose.onNodeWithText("Retry").performClick()
         compose.waitUntil(15_000) { app.realtime.state.value.session?.fresh == true }
-        compose.onNodeWithText("Session options").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Session actions").assertIsDisplayed().assertIsEnabled()
     }
 
     @Test fun toolOutputWorktreeAndSubagentReading() = journey("tools") {
@@ -539,6 +539,10 @@ class TranscriptDeviceTest {
         val top = bounds.top + location[1]
         File(evidence, "screen-positions.txt").appendText("windowTop=${bounds.top} decorY=${location[1]} screenTop=$top\n")
         return top
+    }
+    /** The reader is up: the session's ⋯ in the bar (A05-3) has its session to act on. */
+    private fun awaitActions() {
+        compose.waitUntil(15_000) { compose.onAllNodes(hasContentDescription("Session actions") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
     }
     private fun awaitText(text: String, substring: Boolean = false) {
         compose.waitUntil(15_000) { compose.onAllNodesWithText(text, substring = substring).fetchSemanticsNodes().isNotEmpty() }

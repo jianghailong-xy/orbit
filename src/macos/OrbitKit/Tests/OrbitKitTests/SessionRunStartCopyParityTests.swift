@@ -59,30 +59,30 @@ final class SessionRunStartCopyParityTests: XCTestCase {
         let server = try source(Self.refusal)
 
         // The line every branch ends on, declared once by the server (`const again`).
-        assertSays(server, "在那之前重新开工只会得到同一个拒绝。", in: Self.refusal)
+        assertSays(server, "Until then, a new start meets the same refusal.", in: Self.refusal)
 
         // SYNC_INTEGRATION_LINE — everything but `${line}`.
         let sync = SessionRunStart.nextStep(fixAction: "SYNC_INTEGRATION_LINE", ref: nil)
-        for run in ["前置已经落地了——缺的是它落地的提交不在",
-                    "上：前置的成果进了 upstream，而这条线还没吸收 upstream。先让这条线追上它（下一次任务落地时的 main 同步会做；等不及就从这条线的 tip 出发把 upstream 合进来、推回这条线，不 rebase、不 force push），再开工。在那之前重新开工只会得到同一个拒绝：新的开工从同一个 tip 起跑，要求的是同一组提交。"] {
+        for run in ["The dependency has landed — what is missing is its landed commit on ",
+                    ": the dependency's work reached upstream, and this line has not taken in upstream yet. Bring this line up to date with upstream first (the main sync at the next task landing does that; if it cannot wait, merge upstream into this line from its tip and push it back, with no rebase and no force push), then start it. Until then, a new start meets the same refusal: it begins from the same tip and asks for the same commits."] {
             assertSays(server, run, in: Self.refusal)
             XCTAssertTrue(sync.contains(run), "the port dropped \(run)")
         }
-        assertSays(server, "集成线 ", in: Self.refusal)
+        assertSays(server, "the integration line ", in: Self.refusal)
 
         // FIX_REF — the server's own fallback wording is in the file as well as this port's.
         let fixRef = SessionRunStart.nextStep(fixAction: "FIX_REF", ref: nil)
-        for run in ["解析的时候仓库里没有 ",
-                    "：它还不存在、已经被删掉，或者和项目绑定里的名字对不上。先把它建出来（这个项目在这条线上的第一次落地会创建它），或者把绑定的 integrationRef 改成实际存在的那一条，再开工。",
-                    "这次起跑要用的 ref"] {
+        for run in ["The repository had no ",
+                    " when it was resolved: it does not exist yet, it was deleted, or it does not match the name in the project's binding. Create it first (this project's first landing on this line creates it), or change the binding's integrationRef to the one that exists, then start it.",
+                    "ref for this run to start from"] {
             assertSays(server, run, in: Self.refusal)
             XCTAssertTrue(fixRef.contains(run), "the port dropped \(run)")
         }
 
         // The other two named actions, whole.
         for (action, run) in [
-            ("RESTORE_COMMIT", "执行它的 runner 的仓库里没有这次钉住的提交：把它取回或恢复到那个仓库里，再开工。"),
-            ("ENABLE_ISOLATION", "runner 没能在钉住的提交上建出独立的 worktree：确认这个工作区的 workDir 是 git 仓库、没有关掉 worktree 隔离，并按上面 runner 的原话排查 `git worktree add` 的报错，再开工。"),
+            ("RESTORE_COMMIT", "The repository of the runner that runs it does not have the pinned commit: fetch or restore it into that repository, then start it."),
+            ("ENABLE_ISOLATION", "The runner could not create a separate worktree at the pinned commit: check that this workspace's workDir is a git repository and that worktree isolation is not turned off, and work through the `git worktree add` error in the runner's own words above, then start it."),
         ] {
             assertSays(server, run, in: Self.refusal)
             XCTAssertTrue(SessionRunStart.nextStep(fixAction: action, ref: nil).contains(run),
@@ -90,8 +90,8 @@ final class SessionRunStartCopyParityTests: XCTestCase {
         }
 
         // Anything else: the server's generic line, with the action's own name in it.
-        assertSays(server, "按处置 ", in: Self.refusal)
-        assertSays(server, "修好之后再开工。", in: Self.refusal)
+        assertSays(server, "Fix it as ", in: Self.refusal)
+        assertSays(server, " says, then start it.", in: Self.refusal)
     }
 
     /// The machine-side sentences the card recognizes, taken from the server's file and handed to

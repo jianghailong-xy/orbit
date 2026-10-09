@@ -11,6 +11,7 @@ import {
   createManagedRunnerRuntime,
   type KubeClientFactory,
 } from './managed-runner-runtime';
+import { MANAGED_RUNNER_DEMAND, ManagedRunnerDemandService } from './managed-runner-demand';
 import { MANAGED_RUNNER_SIGN_IN } from './managed-runner-sign-in';
 import { ManagedRunnerAdmissionController, ManagedRunnerAdmissionGuard } from './managed-runner-admission.controller';
 import { ManagedRunnerController } from './managed-runner.controller';
@@ -22,8 +23,9 @@ import { ManagedRunnerService } from './managed-runner.service';
  * reading a profile or a kubeconfig, and the status facade and the refusing guard are all there is.
  * The gate itself comes from the global ManagedRunnerGateModule.
  *
- * Global for one export: the sign-in step AuthService.completeLogin calls (MANAGED_RUNNER_SIGN_IN),
- * which is this module's service, so AuthModule needs no import of it.
+ * Global for two exports, so their callers' modules need no import of this one: the sign-in step
+ * AuthService.completeLogin calls (MANAGED_RUNNER_SIGN_IN), and the demand hook the session paths
+ * call where work for a runner is recorded (MANAGED_RUNNER_DEMAND, managed-runner-demand.ts).
  */
 @Global()
 @Module({
@@ -45,7 +47,9 @@ import { ManagedRunnerService } from './managed-runner.service';
     },
     ManagedRunnerService,
     { provide: MANAGED_RUNNER_SIGN_IN, useExisting: ManagedRunnerService },
+    ManagedRunnerDemandService,
+    { provide: MANAGED_RUNNER_DEMAND, useExisting: ManagedRunnerDemandService },
   ],
-  exports: [MANAGED_RUNNER_SIGN_IN],
+  exports: [MANAGED_RUNNER_SIGN_IN, MANAGED_RUNNER_DEMAND],
 })
 export class ManagedRunnerModule {}

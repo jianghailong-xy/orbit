@@ -31,6 +31,9 @@ import io.orbitd.android.auth.openInSignInBrowser
 import io.orbitd.android.core.BuildIdentity
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.reader.SessionReader
+import io.orbitd.android.reader.WorktreeModel
+import io.orbitd.android.toast.OrbitToasts
+import io.orbitd.android.toast.ToastHost
 import io.orbitd.android.tasks.TasksScreen
 import io.orbitd.android.projects.ProjectsScreen
 import io.orbitd.android.wiki.PageBar
@@ -166,9 +169,12 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         }
         val route = navigation.current
         fun open(next: OrbitRoute) { keyboard?.hide(); focus.clearFocus(); navigation = navigation.push(next) }
+        // A drawer row: the destination already showing only closes the drawer, any other opens at its root (A05-8).
         fun select(key: String, root: OrbitRoute) {
             keyboard?.hide(); focus.clearFocus(); navigation = navigation.select(key, root); scope.launch { drawer.close() }
         }
+        // A page sending the reader to a destination: its root, whatever was showing.
+        fun land(key: String, root: OrbitRoute) { keyboard?.hide(); focus.clearFocus(); navigation = navigation.land(key, root) }
         LaunchedEffect(route, signedIn.handle, live.first) {
             if (live.first === signedIn.handle) app.realtime.selectSession(if (route.destination == Destination.SESSION) route.id else null)
         }
@@ -211,7 +217,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 icon = { Icon(painterResource(R.drawable.ic_workspace), null) },
                                 onClick = { select(workspace.id, OrbitRoute(Destination.WORKSPACE, workspace.id, workspace.id, origin = Origin.DRAWER)) })
                         }
-                        DrawerProjects(api, revision) { next -> scope.launch { drawer.close() }; open(next) }
+                        DrawerProjects(api, revision, navigation.section) { key, root -> select(key, root) }
                         Spacer(Modifier.height(24.dp))
                         val workspace = route.workspaceId ?: workspaces.firstOrNull()?.id
                         Button(onClick = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.DRAFT, workspaceId = workspace, origin = Origin.DRAWER)) },
@@ -232,9 +238,6 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         if (route.destination == Destination.WORKSPACE) IconButton(onClick = {
                             open(OrbitRoute(Destination.SETTINGS, id = "workspace", workspaceId = route.id))
                         }) { Icon(painterResource(R.drawable.ic_settings), "Workspace settings") }
-                        if (route.destination == Destination.SESSION && route.id != null) IconButton(onClick = {
-                            open(OrbitRoute(Destination.SETTINGS, id = "share", recordId = "SESSION:${route.id}"))
-                        }) { Icon(painterResource(R.drawable.ic_share), "Share session") }
                         PageBar.Actions(route, this)
                         if (navigation.canGoBack) IconButton(onClick = { scope.launch { focus.clearFocus(); drawer.open() } }) { Icon(painterResource(R.drawable.ic_menu), "Open navigation") }
                         IconButton(onClick = { app.realtime.refreshDirectory() }) { Icon(painterResource(R.drawable.ic_refresh), "Refresh directory") }
@@ -245,10 +248,12 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         CompositionLocalProvider(LocalReaderResources provides remember(signedIn.handle) { ReaderResources(app.session, signedIn.handle) }) {
                         holder.SaveableStateProvider(Wire.json.encodeToString(route)) {
                             when (route.destination) {
-                                Destination.WORKSPACES -> WorkspaceHome(data, { w -> select(w.id, OrbitRoute(Destination.WORKSPACE, w.id, w.id)) }) { app.realtime.refreshDirectory() }
+                                Destination.WORKSPACES -> WorkspaceHome(data, { w -> land(w.id, OrbitRoute(Destination.WORKSPACE, w.id, w.id)) }) { app.realtime.refreshDirectory() }
                                 Destination.WORKSPACE, Destination.FOLDER -> DirectoryScreen(route, data, api, ::open) { app.realtime.refreshDirectory() }
                                 Destination.SEARCH -> SearchScreen(api, ::open)
-                                Destination.SESSION -> SessionReader(app, signedIn.handle, route, api, data, ::open)
+                                Destination.SESSION -> SessionReader(app, signedIn.handle, route, api, data, ::open) {
+                                    navigation = navigation.dropSession(route.id!!)
+                                }
                                 Destination.DRAFT -> NewSessionComposer(app, signedIn.handle, route, data, ::open)
                                 Destination.TASKS, Destination.TASK, Destination.LIST -> TasksScreen(app, signedIn.handle, route, revision, ::open) { navigation = navigation.back() }
                                 Destination.PROJECTS, Destination.PROJECT -> ProjectsScreen(app, signedIn.handle, route, revision, ::open) { navigation = navigation.back() }
@@ -261,11 +266,11 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                     navigate = { change -> navigation = change(navigation) }, open = ::open)
                                 Destination.SETTINGS -> SettingsScreen(management, route, revision, ::open, { navigation = navigation.back() }, auth::logout,
                                     changed = { app.realtime.refreshDirectory() },
-                                    workspaceDeleted = { select("workspaces", OrbitRoute(Destination.WORKSPACES)) },
+                                    workspaceDeleted = { land("workspaces", OrbitRoute(Destination.WORKSPACES)) },
                                     deviceAlerts = { if (app.push.configured) app.push.notifications.allowed() else null },
                                     notifications = { NotificationSettings(app.push) }, about = { AboutSection(app.updates) })
                                 Destination.RUNNER -> RunnerScreen(management, route.id, route.recordId, revision, ::open, { navigation = navigation.back() }) {
-                                    select(it, OrbitRoute(Destination.WORKSPACE, it, it))
+                                    land(it, OrbitRoute(Destination.WORKSPACE, it, it))
                                 }
                                 Destination.BUILD -> BuildInformation { navigation = navigation.back() }
                                 else -> ObjectDestination(route, api, data, revision, ::open) { app.realtime.refreshDirectory() }
@@ -273,6 +278,25 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         }
                         }
                     }
+                    // A05-4: the app's one toast surface, under the bar and over every page, so an outcome outlives the
+                    // page that asked for it. A toast that names a session opens it — unless it is the page showing —
+                    // and following it takes the toast down.
+                    fun openSession(id: String) {
+                        if (route.destination != Destination.SESSION || !ObjectId.same(route.id, id)) open(OrbitRoute(Destination.SESSION, id, origin = Origin.LINK))
+                    }
+                    ToastHost(open = { toast -> OrbitToasts.dismiss(toast.id); toast.sessionId?.let(::openSession) },
+                        undo = { toast ->
+                            OrbitToasts.dismiss(toast.id)
+                            toast.sessionId?.let { SessionActions(api, app.processScope) { app.realtime.refreshDirectory(); app.realtime.refreshSession() }.restore(it, toast.subtitle) }
+                        },
+                        resolve = { toast ->
+                            val session = toast.sessionId; val conflict = toast.mergeConflict
+                            OrbitToasts.dismiss(toast.id)
+                            if (session != null && conflict != null) {
+                                openSession(session)
+                                WorktreeModel(api, session, app.processScope).resolveInSession(conflict.branch, conflict.target)
+                            }
+                        }, modifier = Modifier.widthIn(max = 560.dp))
                 }
             }
         }

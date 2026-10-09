@@ -60,21 +60,21 @@ final class SessionRunStartTests: XCTestCase {
     func testTheNextStepIsTheServersSentenceForThatAction() {
         let step = SessionRunStart.nextStep(fixAction: "FIX_REF",
                                             ref: "refs/heads/project/34bZ3i4AvgJaaow5E9tH")
-        XCTAssertTrue(step.hasPrefix("解析的时候仓库里没有 `refs/heads/project/34bZ3i4AvgJaaow5E9tH`："))
-        XCTAssertTrue(step.hasSuffix("在那之前重新开工只会得到同一个拒绝。"))
+        XCTAssertTrue(step.hasPrefix("The repository had no `refs/heads/project/34bZ3i4AvgJaaow5E9tH` when it was resolved:"))
+        XCTAssertTrue(step.hasSuffix("Until then, a new start meets the same refusal."))
     }
 
     /// The ref is quoted the way a branch is spelled, and a refusal about no ref says so instead of
     /// leaving a hole where one would be.
     func testTheNextStepNamesTheLineWhenThereIsOne() {
         XCTAssertTrue(SessionRunStart.nextStep(fixAction: "SYNC_INTEGRATION_LINE", ref: "refs/heads/project/x")
-            .contains("缺的是它落地的提交不在集成线 project/x上"))
+            .contains("what is missing is its landed commit on the integration line project/x:"))
         XCTAssertTrue(SessionRunStart.nextStep(fixAction: "SYNC_INTEGRATION_LINE", ref: nil)
-            .contains("缺的是它落地的提交不在这次起跑的线上"))
+            .contains("what is missing is its landed commit on the line this run starts from:"))
         XCTAssertTrue(SessionRunStart.nextStep(fixAction: "FIX_REF", ref: nil)
-            .contains("仓库里没有 这次起跑要用的 ref："))
+            .contains("The repository had no ref for this run to start from when it was resolved:"))
         XCTAssertEqual(SessionRunStart.nextStep(fixAction: "SOMETHING_NEW", ref: nil),
-                       "按处置 SOMETHING_NEW 修好之后再开工。在那之前重新开工只会得到同一个拒绝。")
+                       "Fix it as SOMETHING_NEW says, then start it. Until then, a new start meets the same refusal.")
     }
 
     /// The prose and the step are keyed on the same field, so a card cannot pair one action's

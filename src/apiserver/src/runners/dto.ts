@@ -12,6 +12,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { KIMI_REGIONS, type InstallEngine, type KimiRegion, type LoginEngine } from '@orbit/shared';
+import { IsPublicId } from '../common/public-id';
 
 export class CreateEnrollmentTokenDto {
   @IsOptional() @IsString() label?: string;
@@ -31,10 +32,11 @@ export class UpdateRunnerDto {
   @IsOptional() @IsInt() @Min(1) minFreeDiskMb?: number | null;
 }
 
-// The requested runner order. The service filters this list against the caller's
-// current runners and appends omitted runners, so stale clients cannot drop rows.
+// The requested runner order, in the public ids GET /runners hands out — decoded to the UUIDs the
+// service compares, so uniqueness holds across both spellings. The service filters this list against
+// the caller's current runners and appends omitted runners, so stale clients cannot drop rows.
 export class ReorderRunnersDto {
-  @IsArray() @IsString({ each: true }) @ArrayUnique() ids!: string[];
+  @IsArray() @IsPublicId({ each: true }) @ArrayUnique() ids!: string[];
 }
 
 /** The authorization code the user pasted back from the hosted OAuth callback page. */

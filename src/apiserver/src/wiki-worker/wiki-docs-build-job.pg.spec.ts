@@ -20,7 +20,10 @@
  *   7. a plan of version 27's shape (2026-10-09): sections of one document that name the same article are built side
  *      by side, and each is shown the article only once its read landed;
  *   8. a session condition whose projects are { id, title } — the read's spelling — is read as ids by every reader on
- *      the way: the plan's reads, the runner door's material and the build's own.
+ *      the way: the plan's reads, the runner door's material and the build's own;
+ *  11. a worker that stops while the build waits for its reads hands the job back (design §5.4): no REPO_OP_FAILED,
+ *      no read asked again — the third read, waiting for a slot, is never asked — nothing counted, and the next worker
+ *      takes the job over.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-docs-build-job.pg.spec.ts
  *
@@ -61,9 +64,10 @@ import { WikiService } from '../wiki/wiki.service';
 import { wikiDocsBuildJobRunner } from './wiki-docs-build-job';
 import { WIKI_DOCS_BUILD_SYSTEM_PROMPT } from './wiki-docs-writer';
 import { WikiJobExecutor } from './wiki-job-executor';
+import { WIKI_JOB_HANDED_BACK } from './wiki-jobs';
 import { WikiModelRequestQueue } from './wiki-model-queue.service';
 import { WikiModelStatusProbe } from './wiki-model-status';
-import { WikiRepoOps } from './wiki-repo-ops';
+import { WikiRepoOps, type WikiRepoOpClaim } from './wiki-repo-ops';
 import { readWikiSystemModel, type WikiSystemModelConfig } from './wiki-system-model';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
@@ -326,16 +330,22 @@ function readOne(tree: Tree, item: { path: string; maxChars?: number }): Record<
 /**
  * The space's runner: claims what its heartbeat would be handed and answers each operation from the tree — a
  * snapshot as the index of its paths and sizes (or skipped, when the space holds that commit), a read as the text.
+ * While `hold.reads` is set, a read it claimed is not answered — a runner whose fetch hangs — until the hold is lifted.
  */
-function playRunner(h: Harness, runnerId: string, tree: () => Tree): { ops: Array<{ kind: string; input: Record<string, unknown> }>; stop: () => Promise<void> } {
+function playRunner(h: Harness, runnerId: string, tree: () => Tree, hold: { reads: boolean } = { reads: false }): { ops: Array<{ kind: string; input: Record<string, unknown> }>; stop: () => Promise<void> } {
   const ops = new WikiRepoOps(h.prisma as unknown as PrismaService);
   const seen: Array<{ kind: string; input: Record<string, unknown> }> = [];
+  const held: WikiRepoOpClaim[] = [];
   let running = true;
   const loop = (async () => {
     while (running) {
       const claimed = await ops.dispatch({ runnerId, leaseOwner: randomUUID(), draining: false, capabilities: [WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY] }).catch(() => []);
-      for (const op of claimed) {
-        seen.push({ kind: op.kind, input: op.input });
+      for (const op of claimed) seen.push({ kind: op.kind, input: op.input });
+      for (const op of [...held.splice(0), ...claimed]) {
+        if (op.kind === 'read' && hold.reads) {
+          held.push(op);
+          continue;
+        }
         const at = tree();
         let result: Record<string, unknown>;
         if (op.kind === 'snapshot') {
@@ -1089,4 +1099,67 @@ test('a NUL in the model\'s answer, raw or as \\u0000: the build succeeds, the a
   } finally {
     h.model.answer = asWritten;
   }
+});
+
+// ── 11. a worker that stops while the build waits for its reads (2026-10-09) ─────────────────────────
+
+/** Three sections that each read a file of their own: one read more than `readsInFlight`, so one waits for a slot. */
+function threeReadsPlanFor(s: Scene): Record<string, unknown> {
+  const plan = planFor(s) as { docs: Array<{ sections: unknown[] }> };
+  const [overview] = plan.docs[0].sections;
+  plan.docs[0].sections = [
+    overview,
+    { title: '设计', kind: 'flow', covers: '一轮 turn 怎么投递。', length: 400, sources: { docs: [{ path: 'docs/design.md', section: '2. Delivery' }] } },
+    { title: '主循环', kind: 'flow', covers: 'runner 怎么领取工作。', length: 400, sources: { code: [{ path: 'src/runloop.go', symbols: ['runLoop'] }] } },
+    { title: '合同', kind: 'interface', covers: '会话的合同。', length: 400, sources: { contracts: [{ path: 'contracts/session.contract.json' }] } },
+  ];
+  return plan;
+}
+
+/** The job's row as a stop leaves it: where it is, whether a retry was put off, and what it counted and said. */
+async function jobAfterStop(h: Harness, jobId: string): Promise<{ state: string; next_attempt_at: Date | null; attempts: number; failure_kind: string | null; error: string | null }> {
+  return (await h.sql.query(
+    'SELECT "state", "next_attempt_at", "attempts", "failure_kind", "error" FROM "wiki_job" WHERE "id" = $1', [jobId],
+  )).rows[0];
+}
+
+async function repoOpsOf(h: Harness, jobId: string): Promise<Array<{ id: string; kind: string }>> {
+  return (await h.sql.query<{ id: string; kind: string }>('SELECT "id", "kind" FROM "wiki_repo_op" WHERE "job_id" = $1 ORDER BY "created_at", "id"', [jobId])).rows;
+}
+
+test('a worker that stops while the build waits for its reads hands the job back: no REPO_OP_FAILED, no read asked again, nothing counted, and the next worker takes it over (design §5.4)', { skip, timeout: 180_000 }, async () => {
+  const h = await boot();
+  await modelUp(h);
+  const s = await scene(h, 'stop-on-read');
+  const version = await draft(h, s, threeReadsPlanFor(s));
+  executor('canary', [s.owner.id]);
+  await confirm(h, s, version);
+  const [row] = await builds(h, s.spaceId);
+  const jobId = row.job_id!;
+  const HEAD = createHash('sha1').update(`head-${randomUUID()}`).digest('hex');
+  // A runner whose reads hang: the snapshot is answered, no read is.
+  const hold = { reads: true };
+  playRunner(h, s.runner.id, () => tree(HEAD), hold);
+  const first = worker(h);
+  await passes(first, async () => (await repoOpsOf(h, jobId)).filter((op) => op.kind === 'read').length === WIKI_DOCS_BUILD_JOB.readsInFlight,
+    'the build waiting on its reads, the third section\'s waiting for a slot');
+  const before = await repoOpsOf(h, jobId);
+
+  // SIGTERM: the worker stops, and the reads' waits are cancelled with it.
+  await first.executor.onModuleDestroy();
+  await first.queue.onModuleDestroy();
+  await delay(300);
+  assert.deepEqual(
+    { ...(await jobAfterStop(h, jobId)), asked: (await repoOpsOf(h, jobId)).slice(before.length).map((op) => op.kind) },
+    { state: 'queued', next_attempt_at: null, attempts: 0, failure_kind: null, error: WIKI_JOB_HANDED_BACK, asked: [] },
+    'the job is handed back — nothing settled, nothing counted, no REPO_OP_FAILED — and asks the runner for nothing more',
+  );
+
+  // The next worker takes the job over at once, and its replay finishes the build. The attempt the stop cut short is
+  // not counted (the owner's decision of 2026-10-09).
+  hold.reads = false;
+  const ended = await runToEnd(h, worker(h), jobId);
+  assert.equal(ended.state, 'succeeded', JSON.stringify(ended));
+  assert.equal((await jobAfterStop(h, jobId)).attempts, 0, 'the stop counted nothing');
+  assert.deepEqual([ended.report?.written, ended.report?.failed], [4, 0]);
 });

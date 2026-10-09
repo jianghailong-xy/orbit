@@ -3,16 +3,22 @@ package io.orbitd.android.reader
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.NetworkException
 import io.orbitd.android.directory.DirectoryApi
+import io.orbitd.android.navigation.ObjectId
+import io.orbitd.android.toast.OrbitToasts
+import io.orbitd.android.toast.ToastMergeConflict
+import io.orbitd.android.toast.ToastTone
+import io.orbitd.android.toast.toastTitle
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.*
 import java.util.UUID
 
-/** An outcome of a worktree action, said where the bar is: a failure stays until dismissed, the rest go by themselves. */
-internal data class WorktreeNotice(val message: String, val detail: String? = null, val failure: Boolean = false,
-    val key: String? = null, val inProgress: Boolean = false, val id: Long = System.nanoTime())
+/** An outcome of a worktree action (iOS `ToastRequest`). The app's toast says it, naming this session, and an
+ * operation's [key] makes its progress and its result one toast (A05-4). */
+internal data class WorktreeNotice(val message: String, val detail: String? = null, val tone: ToastTone = ToastTone.SUCCESS,
+    val key: String? = null, val inProgress: Boolean = false, val mergeConflict: ToastMergeConflict? = null)
 
-internal data class WorktreeState(val detail: JsonObject? = null, val busy: Boolean = false, val notice: WorktreeNotice? = null,
+internal data class WorktreeState(val detail: JsonObject? = null, val busy: Boolean = false,
     val diff: List<JsonObject> = emptyList(), val diffLoading: Boolean = false, val diffRefreshing: Boolean = false)
 
 /**
@@ -123,11 +129,9 @@ internal class WorktreeModel(private val api: DirectoryApi, private val id: Stri
             })
         } catch (cancel: CancellationException) { throw cancel }
         catch (error: Exception) { say(failure(failed, error)); return@act }
-        say(WorktreeNotice(done))
+        say(WorktreeNotice(done, tone = ToastTone.INFO))
         loadDetail()
     }
-
-    fun dismiss(notice: WorktreeNotice) { mutable.update { if (it.notice?.id == notice.id) it.copy(notice = null) else it } }
 
     /** Current-worktree bytes, never kept: reopening or retrying a preview reads the file as it is now. */
     suspend fun readFile(path: String): ByteArray = api.bytes(listOf("sessions", id, "worktree-file"), listOf("path" to path))
@@ -173,15 +177,19 @@ internal class WorktreeModel(private val api: DirectoryApi, private val id: Stri
         loadDetail()
     }
 
-    private fun say(notice: WorktreeNotice) = mutable.update { it.copy(notice = notice) }
+    /** The toast names this session and opens it; one operation of one session is one toast. */
+    private fun say(notice: WorktreeNotice) {
+        OrbitToasts.show(notice.message, toastTitle(mutable.value.detail?.string("title")), id, notice.detail, notice.tone,
+            mergeConflict = notice.mergeConflict, key = notice.key?.let { "$it:${ObjectId.canonical(id) ?: id}" }, inProgress = notice.inProgress)
+    }
 
     /** A failed merge or commit picked up again: say it is under way until its result takes the place. */
     private fun surfaceRetry(old: JsonObject?, new: JsonObject) {
         old ?: return
         if (old.string("mergeStatus") in setOf("conflict", "error") && new.string("mergeStatus") == "pending")
-            say(WorktreeNotice("Merging into ${new.string("mergeTarget") ?: "main"}…", key = "merge", inProgress = true))
+            say(WorktreeNotice("Merging into ${new.string("mergeTarget") ?: "main"}…", tone = ToastTone.INFO, key = "merge", inProgress = true))
         else if (old.string("commitStatus") == "error" && new.string("commitStatus") == "pending")
-            say(WorktreeNotice("Committing changes…", key = "commit", inProgress = true))
+            say(WorktreeNotice("Committing changes…", tone = ToastTone.INFO, key = "commit", inProgress = true))
     }
 
     companion object {
@@ -189,22 +197,29 @@ internal class WorktreeModel(private val api: DirectoryApi, private val id: Stri
         fun resultNotice(kind: String, detail: JsonObject): WorktreeNotice? {
             val trimmed = { key: String -> detail.string(key)?.trim()?.ifEmpty { null } }
             if (kind == "merge") {
-                (detail["mergeRecovery"] as? JsonObject)?.let { MergeRecovery.of(it) }?.let { return WorktreeNotice(it.title, key = "merge", failure = it.code != "READY") }
+                (detail["mergeRecovery"] as? JsonObject)?.let { MergeRecovery.of(it) }?.let {
+                    return WorktreeNotice(it.title, tone = if (it.code == "READY") ToastTone.INFO else ToastTone.WARNING, key = "merge")
+                }
                 val target = detail.string("mergeTarget") ?: "main"
                 return when (detail.string("mergeStatus")) {
                     "merged" -> WorktreeNotice("Merged into $target", key = "merge")
-                    "conflict" -> WorktreeNotice("Couldn't merge into ${WorktreeBarLogic.conflictTarget(detail.string("mergeTarget"),
-                        (detail["mergeTargets"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
-                        (detail["agent"] as? JsonObject)?.string("defaultMergeTarget"))}", trimmed("mergeError"), failure = true, key = "merge")
-                    "error" -> WorktreeNotice("Couldn't merge into $target", trimmed("mergeError"), failure = true, key = "merge")
+                    "conflict" -> {
+                        // The same branch and target the bar's Resolve in session hands the session.
+                        val onto = WorktreeBarLogic.conflictTarget(detail.string("mergeTarget"),
+                            (detail["mergeTargets"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
+                            (detail["agent"] as? JsonObject)?.string("defaultMergeTarget"))
+                        WorktreeNotice("Couldn't merge into $onto", trimmed("mergeError"), ToastTone.ERROR, key = "merge",
+                            mergeConflict = detail.string("branch")?.let { ToastMergeConflict(it, onto) })
+                    }
+                    "error" -> WorktreeNotice("Couldn't merge into $target", trimmed("mergeError"), ToastTone.ERROR, key = "merge")
                     else -> null
                 }
             }
             return when (detail.string("commitStatus")) {
                 "error" -> WorktreeNotice("Couldn't commit", WorktreeBarLogic.commitFailure(detail.string("commitStatus"), detail.string("commitError"),
-                    detail.string("commitResultMessage"))?.why, failure = true, key = "commit")
+                    detail.string("commitResultMessage"))?.why, ToastTone.ERROR, key = "commit")
                 "committed" -> WorktreeNotice("Changes committed", trimmed("commitResultMessage"), key = "commit")
-                "nochange" -> WorktreeNotice("No changes to commit", trimmed("commitResultMessage"), key = "commit")
+                "nochange" -> WorktreeNotice("No changes to commit", trimmed("commitResultMessage"), ToastTone.NEUTRAL, key = "commit")
                 else -> null
             }
         }
@@ -215,6 +230,6 @@ internal class WorktreeModel(private val api: DirectoryApi, private val id: Stri
                 ?: ((error.body as? JsonObject)?.get("error") as? JsonPrimitive)?.contentOrNull
             is NetworkException -> "Check your connection."
             else -> "Check your connection."
-        }, failure = true, key = key)
+        }, ToastTone.ERROR, key = key)
     }
 }

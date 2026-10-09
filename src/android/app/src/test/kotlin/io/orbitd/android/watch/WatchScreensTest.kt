@@ -330,44 +330,36 @@ class WatchScreensTest {
         compose.onAllNodesWithTag("session-watches").assertCountEquals(0)
     }
 
-    @Test fun aLoneTargetIsNamedWithWhereItStandsAndTheStripIsReadOnly() {
+    /** A08-6 (iOS 516ac3389): a wait on tasks alone is an eye on those tasks' rows in the Tasks card, so it draws no Watching card. */
+    @Test fun aWaitOnTasksAloneDrawsNoWatchingCard() {
         val target = f.target("T1", title = "Fix the login redirect", status = f.status("IN_PROGRESS", running = true))
         server.serve({ listOf(row("W1", targets = listOf(target))) })
         val store = store()
         load(store)
         show { WatchingCardStack(store, ObjectId.canonical("S1") ?: "S1", titles) { opened += it } }
-        await("session-watches")
-        compose.onNodeWithTag("watch-strip-line").assertTextContains("Watching", substring = true)
-            .assertTextContains("Fix the login redirect", substring = true).assertTextContains("Running", substring = true)
-        listOf("Pause", "Resume", "Stop", "Edit").forEach { compose.onAllNodesWithText(it).assertCountEquals(0) }
-        // A watch is not a process: nothing here borrows the Background processes tray's words.
-        compose.onAllNodesWithText("Background", substring = true, ignoreCase = true).assertCountEquals(0)
-        // Opened, the lone target is a row of its own, and its row is the way to it.
-        compose.onNodeWithTag("watch-strip-line").performClick()
-        await("watch-strip-target:W1:T1")
-        compose.onNodeWithTag("watch-strip-target:W1:T1").performClick()
-        assertEquals(listOf(OrbitRoute(Destination.TASK, "T1", origin = Origin.LINK)), opened)
-        compose.onNodeWithTag("watch-strip-line").performClick()
-        compose.onAllNodesWithTag("watch-strip-target:W1:T1").assertCountEquals(0)
+        compose.waitUntil(60_000) { store.state.value.summaries.isNotEmpty() }
+        compose.onAllNodesWithTag("session-watches").assertCountEquals(0)
     }
 
     @Test fun severalTargetsSayWhatTheWaitNeedsAndOpenToTheirRowsMetFirst() {
+        // A08-6: a session among the targets is what keeps a wait in the Watching card; its tasks are the Tasks card's eyes too.
         val targets = listOf(f.target("T1", title = "Schema", status = f.status("DONE")),
             f.target("T2", title = "Service", status = f.status("IN_PROGRESS", running = true)),
             f.target("T3", title = "Clients", state = "SATISFIED", status = f.status("DONE")),
             f.target("T4", title = "Docs", status = f.status("FAILED")),
+            f.target("S8", kind = "SESSION", status = f.status("AWAITING_INPUT")),
             f.target("T5", title = "Old", state = "GONE"))
         server.serve({ listOf(row("W1", targets = targets, lookedSecondsAgo = 720)) })
         val store = store()
         load(store)
         show { WatchingCardStack(store, "S1", titles) { opened += it } }
         await("session-watches")
-        compose.onNodeWithTag("watch-strip-line").assertTextContains("all 4 tasks", substring = true)
-            .assertTextContains("1 running · 1 failed · 2/4 done", substring = true)
+        compose.onNodeWithTag("watch-strip-line").assertTextContains("all 4 targets", substring = true)
+            .assertTextContains("1 running · 1 failed · 3/5 done", substring = true)
         compose.onNodeWithTag("watch-strip-line").performClick()
         await("watch-strip-target:W1:T3")
         compose.onNodeWithTag("watch-strip-stale:W1").assertTextEquals("Not checked for 12m — the resume may be late.")
-        val order = listOf("T3", "T1", "T2", "T4").map { compose.onNodeWithTag("watch-strip-target:W1:$it").fetchSemanticsNode().positionInRoot.y }
+        val order = listOf("T3", "T1", "T2", "T4", "S8").map { compose.onNodeWithTag("watch-strip-target:W1:$it").fetchSemanticsNode().positionInRoot.y }
         assertEquals("what the condition has met first, then the watch's own order", order.sorted(), order)
         compose.onAllNodesWithTag("watch-strip-target:W1:T5").assertCountEquals(0)
         compose.onNodeWithTag("watch-strip-target:W1:T2").assertTextContains("Service", substring = true).assertTextContains("Running", substring = true)
@@ -380,11 +372,16 @@ class WatchScreensTest {
         load(store)
         show { WatchingCardStack(store, "S1", titles) { opened += it } }
         await("session-watches")
-        compose.onNodeWithTag("watch-strip-line").assertTextContains("Review the contract", substring = true)
-            .assertTextContains("Waiting for your reply", substring = true)
+        compose.onNodeWithTag("watch-strip-line").assertTextContains("Watching", substring = true)
+            .assertTextContains("Review the contract", substring = true).assertTextContains("Waiting for your reply", substring = true)
+        listOf("Pause", "Resume", "Stop", "Edit").forEach { compose.onAllNodesWithText(it).assertCountEquals(0) }
+        // A watch is not a process: nothing here borrows the Background processes tray's words.
+        compose.onAllNodesWithText("Background", substring = true, ignoreCase = true).assertCountEquals(0)
         compose.onNodeWithTag("watch-strip-line").performClick()
         await("watch-strip-target:W1:S7")
         compose.onNodeWithTag("watch-strip-target:W1:S7").performClick()
         assertEquals(listOf(OrbitRoute(Destination.SESSION, "S7", origin = Origin.LINK)), opened)
+        compose.onNodeWithTag("watch-strip-line").performClick()
+        compose.onAllNodesWithTag("watch-strip-target:W1:S7").assertCountEquals(0)
     }
 }

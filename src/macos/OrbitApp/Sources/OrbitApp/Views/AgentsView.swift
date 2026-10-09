@@ -1241,6 +1241,8 @@ struct AgentConsoleDetail: View {
 /// input at full parity — the `+` menu, `!`-shell, slash autocomplete, attachments, and the
 /// model/permission/effort footer — instead of the simplified field it used to carry.
 struct NewSessionView: View {
+    /// Where the status cards end, room under the last one included (see the cards' scroll view).
+    private static let statusCardsEnd = "status-cards-end"
     let agent: Agent
     /// Runtime-reported default resolved before this draft is constructed.
     let defaultModel: String
@@ -1377,6 +1379,8 @@ struct NewSessionView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.horizontal, 24)
+                // The room above the band a list keeps under its last row (`fadesIntoComposerBand`).
+                .padding(.bottom, .composerBandFade)
             } else {
                 // Once a local command has produced output this is no longer an empty state. Replace
                 // the hero instead of showing both, and stack repeated commands vertically.
@@ -1388,19 +1392,23 @@ struct NewSessionView: View {
                             }
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(16)
+                        .padding([.horizontal, .top], 16)
+                        // The room the fade lies over (`fadesIntoComposerBand`), and where a new card
+                        // scrolls the list to: a scroll to the card itself would leave its end in the fade.
+                        Color.clear.frame(height: .composerBandFade).id(Self.statusCardsEnd)
                     }
+                    .fadesIntoComposerBand()
                     .defaultScrollAnchor(.center)
                     .onChange(of: draft.localStatusCards.count) {
-                        if let last = draft.localStatusCards.last {
-                            proxy.scrollTo(last.id, anchor: .bottom)
+                        if !draft.localStatusCards.isEmpty {
+                            proxy.scrollTo(Self.statusCardsEnd, anchor: .bottom)
                         }
                     }
                 }
             }
 
-            // Same band as the live console (its `Divider` replaces the one that used to be hand-rolled
-            // here), so the draft composer and the real one are inset and spaced identically.
+            // Same band as the live console, so the draft composer and the real one are inset and
+            // spaced identically.
             ComposerBand {
                 // createSession failures surface on the draft's statusMessage (mirrors ConsoleView).
                 if let msg = draft.statusMessage {

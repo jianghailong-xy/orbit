@@ -878,7 +878,7 @@ oauth2: "invalid_grant" "Malformed auth code."
 
 菜单、首次主题/数据选项/目录信任可能挡在正常 prompt 前，也可能在 OAuth 保存 token 后出现（现有登录完成录制即为后一种）。runner 在私有 Linux PTY 中设非空 `SSH_CONNECTION`、`TERM=xterm-256color`、4096 列，取 OSC 8 的完整目标（支持 BEL 和 ST 终止），等授权码提示后才上报链接。主题按 Enter；Terms 页仅在 `[x]` 时取消勾选，再 Tab、Tab、Enter 选 Done；信任的仅为空私有 cwd。写码前永久关闭这次 PTY 的公开输出，拒码重试也不重新打开；只在私有内存中识别固定页面/拒码标记。
 
-当前 runner 的成功条件是：本次 token 文件出现、完成首次设置并看到普通输入框、独立 `--print=/usage --output-format stream-json` 返回 `result.status=SUCCESS`。退出 0 不算成功。换号时旧 token 暂存在同目录的 0600 私有备份，失败或取消恢复，确认成功后删除；新尝试等待旧尝试清理完毕再启动。取消仅 SIGKILL 本次记录 PID 的进程组，不搜索其他 agy 进程。非 Linux 直接返回「Antigravity 的 Google 登录暂时只支持 Linux runner」。
+当前 runner 的成功条件是：本次 token 文件出现、完成首次设置并看到普通输入框、独立 `--print=/usage --output-format stream-json` 返回 `result.status=SUCCESS`。退出 0 不算成功。换号时旧 token 暂存在同目录的 0600 私有备份，失败或取消恢复，确认成功后删除；新尝试等待旧尝试清理完毕再启动。取消仅 SIGKILL 本次记录 PID 的进程组，不搜索其他 agy 进程。非 Linux 直接返回「Signing Antigravity in with Google works only on a Linux runner for now.」。
 现有 `login.go` 的 pipe relay 不能原样复用；需要 PTY、菜单/提示符识别、ANSI/OSC 8 解析、受保护回填、取消及成功后独立 probe。退出 0 不能当登录成功。与[官方 headless 说明](https://antigravity.google/docs/cli/headless/)要求先交互登录再使用缓存凭据一致。
 
 ### 16.2 凭据存储与隔离

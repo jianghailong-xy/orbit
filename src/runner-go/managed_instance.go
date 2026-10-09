@@ -106,17 +106,27 @@ func setManagedInstanceHeaders(header http.Header) {
 	}
 	header.Set(managedRunnerGenerationHeader, instance.Generation)
 	header.Set(managedRunnerPodUIDHeader, instance.PodUID)
+	// The instance protocol, and idle sleep (managed_sleep.go): this binary reports its workload and
+	// honours a sleep request, which only a managed instance is ever sent.
 	declared := header.Get(runnerCapabilitiesHeader)
-	for _, token := range strings.Split(declared, ",") {
-		if strings.TrimSpace(token) == managedRunnerInstanceCapabilityV1 {
-			return
+	for _, capability := range []string{managedRunnerInstanceCapabilityV1, managedRunnerSleepCapabilityV1} {
+		present := false
+		for _, token := range strings.Split(declared, ",") {
+			if strings.TrimSpace(token) == capability {
+				present = true
+				break
+			}
+		}
+		if present {
+			continue
+		}
+		if declared == "" {
+			declared = capability
+		} else {
+			declared += "," + capability
 		}
 	}
-	if declared == "" {
-		header.Set(runnerCapabilitiesHeader, managedRunnerInstanceCapabilityV1)
-	} else {
-		header.Set(runnerCapabilitiesHeader, declared+","+managedRunnerInstanceCapabilityV1)
-	}
+	header.Set(runnerCapabilitiesHeader, declared)
 }
 
 // managedInstanceEnv is the identity as KEY=VALUE pairs, for a child process whose environment is

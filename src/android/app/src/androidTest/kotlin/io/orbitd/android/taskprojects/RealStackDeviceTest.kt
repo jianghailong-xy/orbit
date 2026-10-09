@@ -20,6 +20,7 @@ import io.orbitd.android.*
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.projects.ProjectAttention
 import io.orbitd.android.projects.ProjectCrossings
 import io.orbitd.android.projects.ProjectDone
@@ -411,7 +412,11 @@ class RealStackDeviceTest {
         awaitTag("interaction-cards")
         compose.waitUntil(30_000) { runCatching { compose.onNodeWithTag("promotion:$promotion").assertIsDisplayed() }.isSuccess }
         capture("stack-merge-card")
-        compose.onNodeWithTag("promotion:$promotion:CONFIRM_MERGE").performScrollTo().performClick()
+        // A08-2: the merge is a preview in the conversation; Merge is pressed in the review it opens.
+        tap("promotion:$promotion:preview"); awaitTag("card-review")
+        compose.waitUntil(30_000) { compose.onAllNodes(hasTestTag("promotion:$promotion:CONFIRM_MERGE") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        capture("stack-merge-review")
+        compose.onNodeWithTag("promotion:$promotion:CONFIRM_MERGE").performClick()
         awaitTag("confirm:CONFIRM_MERGE"); capture("stack-merge-confirm"); compose.onNodeWithTag("confirm:CONFIRM_MERGE").performClick()
         fun state() = runCatching { get("/projects/$id/promotions/current").jsonObject }.getOrNull()
             ?.takeIf { it.text("promotionId") == promotion }?.text("state")
@@ -492,6 +497,8 @@ class RealStackDeviceTest {
         awaitScrollTo("project-detail", hasTestTag("start-request")); capture("stack-start-asked-0-row")
         tap("start-request:action")
         awaitTag("interaction-cards"); awaitScrollTo("transcript-list", hasTestTag(card))
+        // A08-2: the start card is a preview in the conversation, read and answered in the review it opens.
+        tap("$card:preview"); awaitTag("card-review")
         compose.waitUntil(60_000) { compose.onAllNodes(hasTestTag("$card:START") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("$card-asked").assertTextContains("${StartProjectCopy.coordinatorAsked} ", substring = true)
         capture("stack-start-asked-1-top")
@@ -702,5 +709,58 @@ class RealStackDeviceTest {
         record("after Retry", "${next.text("jobId")} ${next.text("state")} generation=${next["generation"]} retriedBy=${next.text("retriedBy")}")
         assertEquals("OWNER", next.text("retriedBy")); assertEquals(2, next.number("generation"))
         awaitText("Generation 2 · retried by you at"); capture("stack-landing-2-retried")
+    }
+
+    // MARK: A08c · a batch create's review and a merge-check change, answered on cards the stack runner's own doors filed
+    // (scripts/a11-stack/seed-a08c.mjs, from the main project's coordinator session). The answer is read back from the server here;
+    // finish-a08c.mjs then plays the runner's part (the batch created, the check written) and reads that back.
+
+    private val a08c by lazy { seed.obj("a08c")!! }
+    /** The card as the server holds it now, by the id the runner's door returned. */
+    private fun card(id: String) = get("/sessions/${a08c.text("sessionId")}/approvals").jsonArray.map { it.jsonObject }
+        .single { ObjectId.same(it.text("id"), id) }
+
+    /** A08-7: the batch's review lists its tasks by level and opens each one's page; its yes names the count, and the server
+     * records it on the card the runner filed. */
+    @Test fun s21_a08cTheBatchIsReviewedByLevelAndAllowedOnItsCard() = journey("stack-a08c-batch") {
+        val batch = a08c.obj("batch")!!
+        val before = card(batch.text("approvalId")!!); val key = "approval:${before.text("id")}"
+        record("GET approvals → the batch card", "${before.text("toolName")} ${before.text("status")} taskCount=${before.obj("input")?.obj("preview")?.number("taskCount")}")
+        assertEquals("PENDING", before.text("status"))
+        signIn(); open("orbit-session:${a08c.text("sessionId")}"); awaitTag("interaction-cards")
+        awaitScrollTo("transcript-list", hasTestTag("$key:preview")); capture("stack-a08c-batch-0-preview")
+        tap("$key:preview"); awaitTag("card-review"); awaitTag("batch-level:2")
+        compose.onNodeWithTag("card-review:title").assertTextEquals(CardPreviews.batchTitle(3))
+        batch.strings("titles").forEach { compose.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
+        capture("stack-a08c-batch-1-levels")
+        compose.onNodeWithTag("batch-row:3").performScrollTo().performClick(); awaitTag("batch-task-page:3")
+        capture("stack-a08c-batch-2-task-page")
+        compose.onNodeWithTag("batch-task-page:back").performScrollTo().performClick(); awaitTag("batch-level:1")
+        compose.waitUntil(30_000) { compose.onAllNodes(hasTestTag("$key:CREATE_BATCH") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("$key:CREATE_BATCH").assertTextEquals(BatchReview.createAction(3)).performClick()
+        compose.waitUntil(30_000) { card(before.text("id")!!).text("status") != "PENDING" }
+        val after = record("GET approvals → the batch card after Create 3 tasks", card(before.text("id")!!).let { "${it.text("status")} decidedAt=${it.text("decidedAt")}" })
+        assertTrue(after, after.startsWith("ALLOWED"))
+        awaitGone("card-review"); capture("stack-a08c-batch-3-recorded")
+    }
+
+    /** A08-8: the merge-check change offers no standing yes and no Deny — saying no is Chat about this — and Allow is recorded on
+     * the card the runner filed. */
+    @Test fun s22_a08cTheMergeCheckChangeIsAllowedWithNoStandingYes() = journey("stack-a08c-merge") {
+        val merge = a08c.obj("merge")!!
+        val before = card(merge.text("approvalId")!!); val key = "approval:${before.text("id")}"
+        record("GET approvals → the merge-check card", "${before.text("toolName")} ${before.text("status")} input=${before.obj("input")}")
+        assertEquals("PENDING", before.text("status"))
+        signIn(); open("orbit-session:${a08c.text("sessionId")}"); awaitTag("interaction-cards")
+        awaitScrollTo("transcript-list", hasTestTag(key))
+        compose.waitUntil(30_000) { compose.onAllNodes(hasTestTag("$key:ALLOW") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("$key:CHAT").assertExists()
+        compose.onNodeWithTag("$key:DENY").assertDoesNotExist(); compose.onNodeWithTag("$key:REMEMBER").assertDoesNotExist()
+        capture("stack-a08c-merge-0-card")
+        compose.onNodeWithTag("$key:ALLOW").performScrollTo().performClick()
+        compose.waitUntil(30_000) { card(before.text("id")!!).text("status") != "PENDING" }
+        val after = record("GET approvals → the merge-check card after Allow", card(before.text("id")!!).let { "${it.text("status")} decidedAt=${it.text("decidedAt")}" })
+        assertTrue(after, after.startsWith("ALLOWED"))
+        awaitText("Allowed · recorded by the server"); capture("stack-a08c-merge-1-recorded")
     }
 }

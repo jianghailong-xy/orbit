@@ -15,7 +15,13 @@
  *   6. a job of a kind this build runs no pipeline for stays queued;
  *   7. the retry limit (`jobs.retry.limit`, 2026-10-09): an error the build did not expect ends the job at its third
  *      attempt and its plan job with it; an infra failure ends it at its tenth, and its maintenance run with it; and a
- *      job the lease sweep puts back at the limit is ended by the next pass, never run again, its calls cancelled.
+ *      job the lease sweep puts back at the limit is ended by the next pass, never run again, its calls cancelled;
+ *   8. the stop (design §5.4): a job its worker stops is handed back whatever its pipeline ends with once stopped —
+ *      queued again at once, never settled, nothing counted (the owner's decision of 2026-10-09) — and asks the model
+ *      nothing new; a claim the stop overtakes hands back what it took instead of starting it;
+ *   9. a stop against a crash, in one space: the build a stop handed back is the next worker's first claim, ahead of a
+ *      lower-priority job of its space, its attempts as they were; the build whose worker crashed — its lease ran out,
+ *      nobody handed it back — is counted and backed off 0, 10, then 30 s, as before.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-jobs.pg.spec.ts
  *
@@ -36,7 +42,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { WikiJobReads } from '../wiki/wiki-job-reads';
 import { WikiJobExecutor, WikiJobInfraError, type WikiJobRunner } from './wiki-job-executor';
-import { claimWikiJobs, enqueueWikiJob } from './wiki-jobs';
+import { claimWikiJobs, enqueueWikiJob, reclaimExpiredWikiJobs } from './wiki-jobs';
 import { WikiModelRequestChannel } from './wiki-model-notify';
 import { enqueueWikiModelRequest, WIKI_MODEL_WAIT_LIMIT_ERROR as WAIT_LIMIT, wikiModelRequestSha256 } from './wiki-model-queue';
 import { wikiSmokeJobInput } from './wiki-smoke-job';
@@ -622,4 +628,205 @@ test('a job the lease sweep puts back at the limit is ended by the next pass and
   assert.deepEqual(await planJobRow(h, planJobId), { state: 'ended', outcome: 'failed', error: ended.error, job_id: jobId });
   const request = await h.prisma.wikiModelRequest.findUniqueOrThrow({ where: { id: call.id } });
   assert.equal(request.state, 'cancelled', 'no model time is spent on a call nobody will read');
+});
+
+// ── 8. the stop (design §5.4) ───────────────────────────────────────────────────────────────────
+
+/**
+ * What a job the stop handed back says on its row (contract `jobs.lease.handBack`), and what the lease sweep says of
+ * one nobody handed back (`jobs.lease.sweep`): pinned here word for word, as the contract states them.
+ */
+const HANDED_BACK = 'WORKER_STOPPED: the worker was stopped and handed this job back; the next one takes it over at once, without counting an attempt';
+const LEASE_EXPIRED = 'LEASE_EXPIRED: the worker holding this job stopped before settling it';
+
+test('a job its worker stops is handed back, whatever its pipeline ends with once stopped: queued at once, nothing counted, nothing new asked', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  await reset(h);
+  await modelUp(h);
+  // A pipeline waiting when the worker stops, which then does what a stopping pipeline still may: the next call of a
+  // fan-out, and the end the documents' build gives when it sees the stop between two sections.
+  let asked = '';
+  const { executor } = worker(h, {
+    runners: {
+      docs_build: async (context) => {
+        await new Promise<void>((resolve) => context.signal.addEventListener('abort', () => resolve(), { once: true }));
+        asked = await context.ask('docs_write', 'after-the-stop', { system: 's', prompt: 'p', maxTokens: 10 })
+          .then(() => 'answered', (error: Error) => error.name);
+        throw new Error('the build was stopped: the worker is shutting down');
+      },
+    },
+  });
+  // One attempt short of the limit an error the build did not expect is held to: the stop must not count as one.
+  const { jobId, planJobId } = await buildJob(h, h.owner.spaceId, { attempts: UNEXPECTED_MAX_ATTEMPTS - 1 });
+  assert.equal(await executor.runOnce(), 1);
+  await executor.onModuleDestroy();
+  const row = await jobRow(h, jobId);
+  assert.deepEqual(
+    {
+      state: row.state, lease: row.lease_deadline_at, nextAttemptAt: row.next_attempt_at, attempts: row.attempts, failureKind: row.failure_kind,
+      error: row.error, asked, requests: await h.prisma.wikiModelRequest.count({ where: { jobId } }), planJob: (await planJobRow(h, planJobId)).state,
+    },
+    {
+      state: 'queued', lease: null, nextAttemptAt: null, attempts: UNEXPECTED_MAX_ATTEMPTS - 1, failureKind: null,
+      error: HANDED_BACK, asked: 'WikiModelWaitCancelled', requests: 0, planJob: 'made',
+    },
+    'the job is back in the queue as it stood, due at once with why on its row, and the call after the stop never reached the queue',
+  );
+});
+
+test('a claim the stop overtakes hands back what it took, and starts nothing', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  await reset(h);
+  await modelUp(h);
+  const { jobId } = await buildJob(h, h.owner.spaceId, { attempts: 2 });
+  let ran = 0;
+  const { queue } = worker(h);
+  // SIGTERM comes while the pass's claim is on its way to the database: the claim still takes the job, and the stop's
+  // cancel has already gone past it.
+  let executor!: WikiJobExecutor;
+  const prisma = new Proxy(h.prisma, {
+    get(target, key) {
+      const value: unknown = Reflect.get(target, key);
+      if (typeof value !== 'function') return value;
+      const bound = (value as (...args: unknown[]) => unknown).bind(target);
+      if (key !== '$queryRaw') return bound;
+      return (strings: TemplateStringsArray, ...values: unknown[]) => {
+        if (Array.isArray(strings) && strings.join('?').includes(`SET "state" = 'running'`)) void executor.onModuleDestroy();
+        return bound(strings, ...values);
+      };
+    },
+  });
+  executor = new WikiJobExecutor(prisma as unknown as PrismaService, queue, { leaseMs: 400, renewMs: 100, pollMs: 30 }, {
+    docs_build: async () => {
+      ran += 1;
+      return {};
+    },
+  });
+  live.push({ queue, executor });
+  assert.equal(await executor.runOnce(), 0, 'the pass starts nothing');
+  const row = await jobRow(h, jobId);
+  assert.deepEqual(
+    { ran, state: row.state, attempts: row.attempts, lease: row.lease_deadline_at, nextAttemptAt: row.next_attempt_at, error: row.error },
+    { ran: 0, state: 'queued', attempts: 2, lease: null, nextAttemptAt: null, error: HANDED_BACK },
+    'what the claim took is handed back at once, unstarted and with nothing counted',
+  );
+});
+
+// ── 9. a stop against a crash, in one space (the owner's decision of 2026-10-09) ──────────────────────
+
+/** A worker whose runs end at once, each saying which kind it was, in the order they ran. */
+function recording(h: Harness): { ran: string[]; executor: WikiJobExecutor } {
+  const ran: string[] = [];
+  const record = (kind: string): WikiJobRunner => async () => {
+    ran.push(kind);
+    return {};
+  };
+  return { ran, executor: worker(h, { runners: { docs_build: record('docs_build'), articles: record('articles') } }).executor };
+}
+
+test('a build the stop handed back keeps its attempts and is the next worker\'s first claim, ahead of the articles of its space', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  await reset(h);
+  await modelUp(h);
+  // docs_build 79620f23 (2026-10-09): a build at priority 1 that had failed twice was running when a deploy stopped its
+  // worker, and its space's articles job at priority 0 was queued behind it. The sweep counted the stop as a lost
+  // attempt and backed the build off 30 s, so at 06:56Z the next worker took the articles first and the build waited
+  // 40 minutes more; the day's deploys had cost it three of its ten attempts.
+  const stopping = worker(h, {
+    runners: {
+      docs_build: async (context) => {
+        await new Promise<void>((resolve) => context.signal.addEventListener('abort', () => resolve(), { once: true }));
+        throw new Error('the build was stopped: the worker is shutting down');
+      },
+    },
+  });
+  const { jobId: build } = await buildJob(h, h.owner.spaceId, { attempts: 2 });
+  assert.equal(await stopping.executor.runOnce(), 1, 'the build runs');
+  const articles = await job(h, { kind: 'articles' });
+  await stopping.executor.onModuleDestroy();
+  const handedBack = await jobRow(h, build);
+  // What Activity reads meanwhile (jobs.read): the build first in line, nothing scheduled and nothing counted — the Runs
+  // card's `next in line`, never a `retrying in` — and the articles behind it.
+  const { jobs } = await new WikiJobReads(h.prisma as unknown as PrismaService).read(h.owner.id, h.owner.spaceId);
+  assert.deepEqual(
+    [build, articles].map((id) => {
+      const one = jobs.find((shown) => shown.id === id);
+      return one && { state: one.state, attempts: one.attempts, ahead: one.ahead, nextAttemptAt: one.nextAttemptAt, failureKind: one.failureKind, error: one.error };
+    }),
+    [
+      { state: 'queued', attempts: 2, ahead: 0, nextAttemptAt: null, failureKind: null, error: HANDED_BACK },
+      { state: 'queued', attempts: 0, ahead: 1, nextAttemptAt: null, failureKind: null, error: null },
+    ],
+    'Activity reads the build first in line, with nothing scheduled or counted, and the articles behind it',
+  );
+  // The next worker's first pass: the one its bootstrap runs at once.
+  const next = recording(h);
+  const claimed = await next.executor.runOnce();
+  await next.executor.whenIdle();
+  assert.deepEqual(
+    { claimed, ran: next.ran, attempts: (await jobRow(h, build)).attempts, articles: (await jobRow(h, articles)).state },
+    { claimed: 1, ran: ['docs_build'], attempts: 2, articles: 'queued' },
+    'the first pass takes the build, its attempts as they were, and the articles wait for their space',
+  );
+  assert.deepEqual(
+    {
+      state: handedBack.state, attempts: handedBack.attempts, nextAttemptAt: handedBack.next_attempt_at,
+      lease: handedBack.lease_deadline_at, failureKind: handedBack.failure_kind, error: handedBack.error,
+    },
+    { state: 'queued', attempts: 2, nextAttemptAt: null, lease: null, failureKind: null, error: HANDED_BACK },
+    'what the stop left: queued and due at once, nothing counted, and why on the row',
+  );
+});
+
+test('a build whose worker crashed is reclaimed as before: the lost attempt counted and backed off, so the articles of its space go first', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  await reset(h);
+  await modelUp(h);
+  // The same two jobs, but the build's worker died holding it — killed, or past its grace — so nothing handed the
+  // build back, and its lease ran out.
+  const { jobId: build } = await buildJob(h, h.owner.spaceId, { attempts: 2 });
+  const dead = await claimWikiJobs(h.prisma as unknown as PrismaService, {
+    workerId: randomUUID(), kinds: ['docs_build'], owners: [h.owner.id], limit: 1, leaseMs: 400,
+  });
+  assert.deepEqual(dead.map((one) => one.id), [build]);
+  const articles = await job(h, { kind: 'articles' });
+  await h.sql.query(`UPDATE "wiki_job" SET "lease_deadline_at" = now() - interval '1 second' WHERE "id" = $1`, [build]);
+  const next = recording(h);
+  const claimed = await next.executor.runOnce();
+  await next.executor.whenIdle();
+  const { rows: [swept] } = await h.sql.query<{ state: string; attempts: number; failure_kind: string | null; error: string | null; backoff: number }>(
+    `SELECT "state", "attempts", "failure_kind", "error", EXTRACT(EPOCH FROM ("next_attempt_at" - "updated_at"))::int AS "backoff"
+       FROM "wiki_job" WHERE "id" = $1`, [build]);
+  assert.deepEqual(
+    { claimed, ran: next.ran, build: swept, articles: (await jobRow(h, articles)).state },
+    {
+      claimed: 1, ran: ['articles'],
+      build: { state: 'queued', attempts: 3, failure_kind: 'infra', error: LEASE_EXPIRED, backoff: 30 },
+      articles: 'succeeded',
+    },
+    'a lease nobody handed back is a lost attempt: counted, backed off 30 s at the third, and the space runs its next job meanwhile',
+  );
+});
+
+test('the lease sweep counts each crash of a job one attempt, and backs it off by the attempts it had made: 0, 10, then 30 s', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  await reset(h);
+  const id = await job(h, { kind: 'docs_build', priority: 1 });
+  const swept: Array<{ attempts: number; backoff: number; error: string | null }> = [];
+  for (let crash = 1; crash <= 4; crash += 1) {
+    // A worker that died holding the job: running under a lease that ran out, never handed back.
+    await h.sql.query(
+      `UPDATE "wiki_job" SET "state" = 'running', "lease_owner" = $2::uuid, "lease_generation" = $3::uuid,
+         "lease_deadline_at" = now() - interval '1 second' WHERE "id" = $1`, [id, randomUUID(), randomUUID()]);
+    assert.ok((await reclaimExpiredWikiJobs(h.prisma as unknown as PrismaService, 10)).includes(id), `crash ${crash} is swept`);
+    swept.push((await h.sql.query<{ attempts: number; backoff: number; error: string | null }>(
+      `SELECT "attempts", EXTRACT(EPOCH FROM ("next_attempt_at" - "updated_at"))::int AS "backoff", "error"
+         FROM "wiki_job" WHERE "id" = $1`, [id])).rows[0]);
+  }
+  assert.deepEqual(swept, [
+    { attempts: 1, backoff: 0, error: LEASE_EXPIRED },
+    { attempts: 2, backoff: 10, error: LEASE_EXPIRED },
+    { attempts: 3, backoff: 30, error: LEASE_EXPIRED },
+    { attempts: 4, backoff: 30, error: LEASE_EXPIRED },
+  ]);
 });

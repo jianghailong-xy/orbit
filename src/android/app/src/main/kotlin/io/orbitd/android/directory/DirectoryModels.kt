@@ -7,6 +7,9 @@ import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 
 /** [position] is null until the workspace is first dragged into place (schema.prisma Workspace.position Int?). */
 @Serializable
@@ -37,7 +40,9 @@ data class DirectorySession(
     val name get() = title?.takeIf(String::isNotBlank) ?: "Untitled session"
     val stateLabel get() = when {
         pendingApprovals > 0 -> "Needs you · $pendingApprovals"
-        confirmationUnderReview != null -> "Under review"
+        // Its report is with its reviewer (A08-1; OrbitKit `underReviewLine`): drawn, not counted, and who has it.
+        confirmationUnderReview != null -> "Under review · ${(confirmationUnderReview["reviewerTitle"] as? JsonPrimitive)?.contentOrNull?.trim()
+            ?.ifEmpty { null } ?: "Reviewer"}"
         runState == "RUNNING" || status == "RUNNING" -> "Running"
         else -> (runState ?: status).lowercase().replace('_', ' ').replaceFirstChar(Char::uppercase)
     }
@@ -62,8 +67,16 @@ data class MoveTargets(val workspaceId: String? = null, val folderId: String? = 
 
 /** iOS's order (AgentListLogic.ordered): the server's — placed workspaces by position, then never-placed ones
  * (position null) oldest first — with the workspaces that have no runner moved to the bottom. */
-fun orderedWorkspaces(workspaces: List<DirectoryWorkspace>): List<DirectoryWorkspace> = workspaces.sortedWith(
-    compareBy<DirectoryWorkspace> { it.runnerId == null }.thenBy(nullsLast()) { it.position }.thenBy { it.createdAt })
+fun orderedWorkspaces(workspaces: List<DirectoryWorkspace>): List<DirectoryWorkspace> =
+    workspaces.sortedWith(workspaceOrder({ it.runnerId }, { it.position }, { it.createdAt }))
+
+/** The same order for the realtime directory's raw rows: Tasks' Set assignee and a task's Assignee picker (iOS `orderedAgents`). */
+fun orderedWorkspaceRows(rows: List<JsonObject>): List<JsonObject> = rows.sortedWith(workspaceOrder(
+    { (it["runnerId"] as? JsonPrimitive)?.contentOrNull }, { (it["position"] as? JsonPrimitive)?.intOrNull },
+    { (it["createdAt"] as? JsonPrimitive)?.contentOrNull }))
+
+private fun <T> workspaceOrder(runnerId: (T) -> String?, position: (T) -> Int?, createdAt: (T) -> String?) =
+    compareBy<T> { runnerId(it) == null }.thenBy(nullsLast()) { position(it) }.thenBy { createdAt(it) }
 
 enum class SessionView(val query: String, val label: String) { OPEN("open", "Open"), COMPLETED("completed", "Completed"), TRASH("trash", "Trash") }
 enum class Grouping { RECENCY, TAG }

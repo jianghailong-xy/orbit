@@ -59,6 +59,10 @@ type RunnerConfig struct {
 	MaxConcurrent int      `json:"maxConcurrent"`
 	// Fallback project directory for sessions whose agent carries no workDir. The
 	// server normally drives claude's cwd per session from the session's agent.
+	// Nothing the runner does in the background reads it: `orbit register` records
+	// whatever directory it ran in — on a Mac, often ~/Desktop or ~/Downloads, where
+	// every read by the runner or a child it starts has macOS ask the user, in the
+	// runner's name, for access.
 	WorkDir string `json:"workDir,omitempty"`
 	// AutoInstallEngines is the consent `orbit register` asks for once: may this runner
 	// install a missing coding CLI itself, the first time a session needs one? Absent in

@@ -229,43 +229,10 @@ private fun ContentsRow(title: String, icon: Int, lit: Boolean, tag: String, bad
     }
 }
 
-/** iOS's app toast (`model.showToast`): one short line that leaves by itself. Posted by a page, drawn by the
- * Wiki/Watch host, so it survives the page that posted it being popped. */
-object WikiToast {
-    private const val SHOWN_MS = 2_500L
-    internal var text by mutableStateOf<String?>(null)
-    private var subtitle by mutableStateOf<String?>(null)
-    private var serial by mutableStateOf(0)
-    private var postedAt = 0L
-    /** [subtitle]: the second line under it — the entry an answer was about (iOS `showToast(_:subtitle:)`). */
-    fun show(message: String, subtitle: String? = null) {
-        text = message; this.subtitle = subtitle; postedAt = android.os.SystemClock.elapsedRealtime(); serial++
-    }
-
-    @Composable
-    internal fun Host(modifier: Modifier = Modifier) {
-        val shown = text ?: return
-        // Its time runs whether or not a page is up to draw it: a toast never comes back with the next Wiki page.
-        val left = SHOWN_MS - (android.os.SystemClock.elapsedRealtime() - postedAt)
-        LaunchedEffect(serial) { if (left > 0) kotlinx.coroutines.delay(left); text = null }
-        if (left <= 0) return
-        Box(modifier.fillMaxSize().padding(bottom = 24.dp), contentAlignment = Alignment.BottomCenter) {
-            Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.inverseSurface, tonalElevation = 4.dp,
-                modifier = Modifier.testTag("wiki-toast").semantics { liveRegion = LiveRegionMode.Polite }) {
-                Column(Modifier.padding(horizontal = 18.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(shown, color = MaterialTheme.colorScheme.inverseOnSurface, style = WikiType.subtext)
-                    subtitle?.let { Text(it, color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.75f), style = WikiType.label,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                }
-            }
-        }
-    }
-}
-
-/** iOS's `.alert(WikiCopy.refused)`: what the server said when it refused a write, and OK. */
+/** iOS's `.alert(noticeTitle)` (d625d9809): what failed — "Couldn't save the entry" — over what the server said, and OK. */
 @Composable
-internal fun WikiRefusalAlert(notice: String?, dismiss: () -> Unit) {
+internal fun WikiRefusalAlert(title: String, notice: String?, dismiss: () -> Unit) {
     if (notice == null) return
-    AlertDialog(onDismissRequest = dismiss, title = { Text(WikiCopy.refused) }, text = { Text(notice) },
+    AlertDialog(onDismissRequest = dismiss, title = { Text(title) }, text = { Text(notice) },
         confirmButton = { TextButton(onClick = dismiss, modifier = Modifier.testTag("wiki-refusal-ok")) { Text("OK") } })
 }

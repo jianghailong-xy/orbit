@@ -301,7 +301,7 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 		return
 	}
 	if flow.engine == providerAntigravity && runtime.GOOS != "linux" {
-		report(LoginResultRequest{Status: loginFailed, Message: "Antigravity 的 Google 登录暂时只支持 Linux runner", Attempt: attempt})
+		report(LoginResultRequest{Status: loginFailed, Message: "Signing Antigravity in with Google works only on a Linux runner for now.", Attempt: attempt})
 		return
 	}
 	// An engine whose CLI keeps a login per directory can sign in another account; every other
@@ -530,6 +530,13 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 
 // stop cancels and joins every relay process started by this runner. The caller
 // must first stop heartbeat delivery so no new start can race with Wait.
+// inFlight counts the sign-ins running now, for the managed workload report (managed_sleep.go).
+func (r *loginRelay) inFlight() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.runs)
+}
+
 func (r *loginRelay) stop() {
 	r.mu.Lock()
 	for _, run := range r.runs {

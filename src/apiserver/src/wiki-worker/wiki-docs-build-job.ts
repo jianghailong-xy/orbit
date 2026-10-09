@@ -19,7 +19,7 @@ import {
 } from './wiki-docs-build';
 import { wikiDocCleanPath, type WikiDocRepo, type WikiDocShown, type WikiDocsPlanDoc } from './wiki-docs-writer';
 import { cutRunes } from './wiki-import-extract';
-import { WikiJobContentError, WikiJobInfraError, type WikiJobContext, type WikiJobRunner } from './wiki-job-executor';
+import { isWikiJobCancellation, WikiJobContentError, WikiJobInfraError, type WikiJobContext, type WikiJobRunner } from './wiki-job-executor';
 import { writeWikiJobProgress } from './wiki-jobs';
 import {
   readWikiRepoFiles,
@@ -28,6 +28,7 @@ import {
   waitForWikiRepoOp,
   wikiRepoStepsCanRun,
   WikiRepoOpRefused,
+  WikiRepoOpWaitCancelled,
   WikiRepoOpWaitTimedOut,
   type WikiRepoOps,
   type WikiRepoOpWait,
@@ -442,7 +443,7 @@ async function snapshotRepo(context: WikiJobContext, deps: WikiDocsBuildJobDeps,
 }
 
 /** Files read whole at the commit (`read`), from the cache where held: asked again when the read failed, and
- *  given up as the platform's after `readAttempts`. */
+ *  given up as the platform's after `readAttempts`. The worker stopping is no failed read: it is thrown as it is. */
 async function readFiles(
   context: WikiJobContext,
   deps: WikiDocsBuildJobDeps,
@@ -470,6 +471,8 @@ async function readFiles(
         signal: context.signal,
       });
     } catch (error) {
+      // Not asked again and not reworded: the executor hands the job back, nothing counted (design §5.4).
+      if (isWikiJobCancellation(error, context.signal)) throw error;
       last = (error as Error)?.message ?? String(error);
     }
   }
@@ -496,6 +499,8 @@ async function operation(
 ): Promise<WikiRepoOpWait> {
   const { job } = context;
   const timeoutMs = deps.repoWaitMs ?? WIKI_DOCS_BUILD_JOB.repoWaitSeconds * 1000;
+  // A stopping worker asks the runner for nothing more (design §5.4).
+  if (context.signal.aborted) throw new WikiRepoOpWaitCancelled(null);
   try {
     const { id } = await deps.repoOps.enqueueWikiRepoOp({ jobId: job.id, kind, input });
     return await waitForWikiRepoOp(deps.prisma, { id, ownerId: job.ownerId, timeoutMs, wake: deps.repoWake, signal: context.signal });

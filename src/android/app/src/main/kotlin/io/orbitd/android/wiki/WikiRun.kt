@@ -21,6 +21,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.directory.LoadingMessage
 import io.orbitd.android.navigation.OrbitRoute
+import io.orbitd.android.toast.OrbitToasts
 import kotlinx.coroutines.launch
 
 /** Where a press on a run's page goes (iOS `WikiRunActions`). */
@@ -40,6 +41,7 @@ internal fun WikiRunScreen(store: WikiStore, route: OrbitRoute, nav: WikiNav) {
     val scope = rememberCoroutineScope()
     var reverting by rememberSaveable { mutableStateOf(false) }
     var notice by rememberSaveable { mutableStateOf<String?>(null) }
+    var noticeTitle by rememberSaveable { mutableStateOf(WikiCopy.runRevertFailed) }
     LaunchedEffect(changesetId) { store.loadRun(changesetId) }
     PageBar.Bind(route, title = "")
     val run = state.run(changesetId)
@@ -52,7 +54,7 @@ internal fun WikiRunScreen(store: WikiStore, route: OrbitRoute, nav: WikiNav) {
                 reject = { id, reason ->
                     scope.launch {
                         val answer = store.reject(id, reason)
-                        if (answer != null) notice = answer else WikiToast.show(WikiModeCopy.rejected)
+                        if (answer != null) { noticeTitle = WikiCopy.entryRejectFailed; notice = answer } else OrbitToasts.show(WikiModeCopy.rejected)
                     }
                 }))
             // A run the server does not know: nothing to draw, and nothing said it cannot back.
@@ -67,10 +69,10 @@ internal fun WikiRunScreen(store: WikiStore, route: OrbitRoute, nav: WikiNav) {
             reverting = false
             scope.launch {
                 val answer = store.revert(run)
-                if (answer != null) notice = answer else { WikiToast.show(WikiModeCopy.reverted); nav.back() }
+                if (answer != null) { noticeTitle = WikiCopy.runRevertFailed; notice = answer } else { OrbitToasts.show(WikiModeCopy.reverted); nav.back() }
             }
         }, modifier = Modifier.testTag("wiki-run-revert-confirm")) { Text(WikiModeCopy.revertRunConfirm, color = MaterialTheme.colorScheme.error) } })
-    WikiRefusalAlert(notice) { notice = null }
+    WikiRefusalAlert(noticeTitle, notice) { notice = null }
 }
 
 /** How many rows a group shows before `Show N more` — the web drawer's number. */

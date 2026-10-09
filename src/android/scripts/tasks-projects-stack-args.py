@@ -42,6 +42,13 @@ for key, fields in (('closeAsked', ('coordinatorSessionId',)), ('closeDecline', 
     if key in seed['projects']:
         row = seed['projects'][key]
         compact['projects'][key] = {'id': row['id'], 'title': row['title'], **{field: row[field] for field in fields}}
+# A08c: the batch-create and merge-check cards seed-a08c.mjs filed through the runner's doors, when seeded.
+if 'a08c' in seed:
+    row = seed['a08c']
+    compact['a08c'] = {'sessionId': row['sessionId'], 'projectId': row['projectId'], 'projectTitle': row['projectTitle'],
+                       'batch': {'approvalId': row['batch']['approvalId'], 'taskCount': row['batch']['preview'].get('taskCount'),
+                                 'titles': [t['title'] for t in row['batch']['tasks']]},
+                       'merge': {'approvalId': row['merge']['approvalId'], 'proposed': row['merge']['input']['mergeCheckCommand']}}
 b64 = lambda text: base64.b64encode(text.encode()).decode()
 lines = {
     'a11Seed': json.dumps(compact, ensure_ascii=False, separators=(',', ':')),

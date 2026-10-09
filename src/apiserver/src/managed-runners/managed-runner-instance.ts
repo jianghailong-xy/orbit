@@ -128,9 +128,18 @@ export function managedRunnerInstanceVerdict(
   return { authorized: true, instance: { mappingId: mapping.id, generation, podUid: mapping.podUid } };
 }
 
-/** Whether an instance that authenticated may still be handed new work: re-read where work is handed out. */
-export function managedRunnerInstanceClaimable(mapping: ManagedRunnerInstanceRecord | null, instance: ManagedRunnerInstance): boolean {
-  if (!mapping || mapping.id !== instance.mappingId || NO_CLAIM_STATES.has(mapping.managementState)) return false;
+/**
+ * Whether an instance that authenticated may still be handed new work: re-read where work is handed
+ * out. `managed` is whether the switch is on: a drain is the manager's, so while management is off
+ * (frozen, docs/managed-runner-design.md "Default disabled gate") a mapping left DRAINING does not
+ * keep its running instance from working. The authorization above it holds either way.
+ */
+export function managedRunnerInstanceClaimable(
+  mapping: ManagedRunnerInstanceRecord | null,
+  instance: ManagedRunnerInstance,
+  managed = true,
+): boolean {
+  if (!mapping || mapping.id !== instance.mappingId || (managed && NO_CLAIM_STATES.has(mapping.managementState))) return false;
   const verdict = managedRunnerInstanceVerdict(mapping, {
     declared: true,
     generation: String(instance.generation),
