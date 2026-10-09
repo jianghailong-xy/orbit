@@ -83,11 +83,16 @@ type integrationResult struct {
 	// ancestor of the upstream tip this job fetched (migration 0346). It is the one fact the control
 	// plane lets such an answer out of a criterion's landing on — see J-S3 below.
 	SourceOnUpstream *bool
-	FilesChanged     *int
-	Checks           []IntegrationCheckResult
-	Conflicts        []string
-	ErrorCode        string
-	ErrorDetail      map[string]any
+	// SourceFullyApplied is set with NOTHING_TO_LAND too, and only there: true when the branch carried
+	// commits of its own and the base already had every one of them, false when it carried none
+	// (migration 0410). The two answers both push nothing, and the control plane has to be able to
+	// tell them apart — see J-S4 below.
+	SourceFullyApplied *bool
+	FilesChanged       *int
+	Checks             []IntegrationCheckResult
+	Conflicts          []string
+	ErrorCode          string
+	ErrorDetail        map[string]any
 }
 
 // integrationReporter is what runIntegrationJob tells about each step it reaches. The runloop
@@ -283,6 +288,9 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 			// with no commit, on a line ahead of main, held its criterion off LANDED for ever).
 			onUpstream := isAncestor(scratch, sourceSha, upstreamSha)
 			result.SourceOnUpstream = &onUpstream
+			// The branch carried no commit of its own, so none of it was applied anywhere (J-S4).
+			fullyApplied := false
+			result.SourceFullyApplied = &fullyApplied
 			return result
 		}
 		// Nothing to land, and the absorb commit is discarded with the worktree: a merge of
@@ -318,9 +326,37 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 		if cmd.SessionBaseSha != "" && isAncestor(scratch, cmd.SessionBaseSha, sourceSha) && !isAncestor(scratch, cmd.SessionBaseSha, fork) {
 			onto = cmd.SessionBaseSha
 		}
+		// Counted before the replay: afterwards the range is all that tells the two empty results
+		// below apart.
+		replayed := countCommits(scratch, onto, sourceSha)
 		rebased, conflicts, err := integrationRebase(scratch, base, onto, sourceSha)
 		if err != nil {
 			result.State, result.Phase, result.Conflicts = "CONFLICT", "REBASE", conflicts
+			return result
+		}
+		if rebased == base {
+			// THE REPLAY CAME BACK AT THE BASE, so there is nothing to push: the push would be a no-op
+			// and VERIFY would pass on it. That is what wrote a LANDED receipt for every task of a
+			// line rebuilt from main's tip after main had taken the project's work in by another
+			// route (2026-10-09, project 34PBlWiEZytRLTcPufJht). Each branch carried commits, git
+			// dropped every one as "patch contents already upstream", and the line never moved.
+			//
+			// Two branches come back here, and the control plane must not read them as one. One
+			// carried commits, and the base already had every one of them (`sourceFullyApplied`):
+			// the work is on the target, as copies rather than as these commits. The other carried
+			// none, because the session started on a commit the target does not have and made
+			// nothing, so J-S3 never saw an empty tip. That one is J-S3's empty branch, measured
+			// the same way (0300, 0346).
+			//
+			// Only on this path. A MERGE comes back at the base only when the source is already in
+			// it, and J-S4 merges such a source only after J-S2 absorbed the current upstream into the
+			// source itself. There the base is that absorb, a commit the target does not have yet,
+			// and pushing it is the landing.
+			result.State, result.Phase = "NOTHING_TO_LAND", "REBASE"
+			onUpstream := isAncestor(scratch, sourceSha, upstreamSha)
+			result.SourceOnUpstream = &onUpstream
+			fullyApplied := replayed > 0
+			result.SourceFullyApplied = &fullyApplied
 			return result
 		}
 		tested = rebased
@@ -927,12 +963,19 @@ func removeIntegrationWorktree(repoRoot, scratch string) {
 // on by going to look at the branch — and the promotion it was a step of went BLOCKED over a race
 // it would have won a moment later.
 func integrationFetch(repoRoot, remote, ref string) error {
+	return fetchRetryingRefLock(repoRoot, remote, ref)
+}
+
+// fetchRetryingRefLock runs `git fetch <args>` in dir, trying again while the only thing in the way
+// was another process holding a ref this fetch writes. Shared with the SOURCE resolution
+// (source.go), whose fetch moves the same remote-tracking refs.
+func fetchRetryingRefLock(dir string, args ...string) error {
 	var err error
 	for attempt := 0; attempt < integrationFetchLockAttempts; attempt++ {
 		if attempt > 0 {
 			integrationFetchLockPause(integrationFetchLockWait << (attempt - 1))
 		}
-		if _, err = git(repoRoot, "fetch", remote, ref); err == nil || !isRefLockConflict(err) {
+		if _, err = git(dir, append([]string{"fetch"}, args...)...); err == nil || !isRefLockConflict(err) {
 			return err
 		}
 	}
@@ -1039,25 +1082,26 @@ func runIntegrationJobAndReport(t *Transport, job IntegrationJobCommand) {
 		})
 	})
 	body := IntegrationJobResultRequest{
-		ClaimGeneration:  job.ClaimGeneration,
-		LeaseOwner:       job.LeaseOwner,
-		State:            result.State,
-		Phase:            result.Phase,
-		SourceSha:        result.SourceSha,
-		TargetShaBefore:  result.TargetShaBefore,
-		UpstreamSha:      result.UpstreamSha,
-		MainSyncSha:      result.MainSyncSha,
-		TestedSha:        result.TestedSha,
-		TestedTreeSha:    result.TestedTreeSha,
-		LandedSha:        result.LandedSha,
-		LandedTreeSha:    result.LandedTreeSha,
-		AheadOfUpstream:  result.AheadOfUpstream,
-		SourceOnUpstream: result.SourceOnUpstream,
-		FilesChanged:     result.FilesChanged,
-		Checks:           result.Checks,
-		Conflicts:        result.Conflicts,
-		ErrorCode:        result.ErrorCode,
-		ErrorDetail:      result.ErrorDetail,
+		ClaimGeneration:    job.ClaimGeneration,
+		LeaseOwner:         job.LeaseOwner,
+		State:              result.State,
+		Phase:              result.Phase,
+		SourceSha:          result.SourceSha,
+		TargetShaBefore:    result.TargetShaBefore,
+		UpstreamSha:        result.UpstreamSha,
+		MainSyncSha:        result.MainSyncSha,
+		TestedSha:          result.TestedSha,
+		TestedTreeSha:      result.TestedTreeSha,
+		LandedSha:          result.LandedSha,
+		LandedTreeSha:      result.LandedTreeSha,
+		AheadOfUpstream:    result.AheadOfUpstream,
+		SourceOnUpstream:   result.SourceOnUpstream,
+		SourceFullyApplied: result.SourceFullyApplied,
+		FilesChanged:       result.FilesChanged,
+		Checks:             result.Checks,
+		Conflicts:          result.Conflicts,
+		ErrorCode:          result.ErrorCode,
+		ErrorDetail:        result.ErrorDetail,
 	}
 	for attempt := 0; attempt < 5; attempt++ {
 		answer, err := t.integrationJobResult(job.JobID, body)

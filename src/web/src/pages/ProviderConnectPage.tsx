@@ -2,7 +2,6 @@ import { type ReactNode, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
-import { Button, Input, InputNumber, Select, Space, Spin, Switch } from 'antd';
 import { api } from '../api';
 import { presetModelsQuery, providersQuery, type PresetCatalogEntry } from '../lib/queries';
 import { PROVIDER_PRESETS, providerPreset, type ProviderPreset } from '@orbit/shared';
@@ -13,10 +12,19 @@ import {
   type ProviderRow,
 } from '../lib/providerAdmin';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
+import { DeepSeekBalanceSection } from '../components/DeepSeekBalance';
+import { hasDeepSeekBalance } from '../lib/deepseekBalance';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { NumberInput } from '../components/ui/NumberInput';
+import { PasswordInput } from '../components/ui/PasswordInput';
+import { Select } from '../components/ui/Select';
+import { Spinner } from '../components/ui/Spinner';
+import { Switch } from '../components/ui/Switch';
 import { providerDisplayLabel, runtimeSummary } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 
-// A model row while it's being edited in the form. contextWindow is a free InputNumber (null when
+// A model row while it's being edited in the form. contextWindow is a free number field (null when
 // blank) rather than the wire's optional number, so an empty cell round-trips cleanly.
 interface DraftModel {
   value: string;
@@ -77,7 +85,7 @@ export function ProviderConnectPage() {
   if (presetModels.isPending || providers.isPending) {
     return (
       <div style={{ padding: 48, textAlign: 'center' }}>
-        <Spin />
+        <Spinner />
       </div>
     );
   }
@@ -417,10 +425,12 @@ function ProviderForm({
 
       {isCustom && (
         <Step num={2} title="Endpoint" hideNum={!!editing}>
-          <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          <div className="provider-stack" style={{ gap: 8 }}>
             <Select<Runtime>
+              aria-label="API dialect"
               value={runtime}
-              onChange={(v) => {
+              onValueChange={(v) => {
+                if (!v) return;
                 setRuntime(v);
                 setProbeError(null);
               }}
@@ -438,7 +448,7 @@ function ProviderForm({
                 setProbeError(null);
               }}
             />
-          </Space>
+          </div>
           <div className="ps-hint">
             {runtime === 'codex'
               ? 'The API dialect this endpoint speaks, and its base URL (e.g. up to /v1).'
@@ -461,16 +471,13 @@ function ProviderForm({
       >
         {/* The field starts blank even when a key is stored — reading one back is a request of its
             own — so whether one exists is said by the placeholder, and Show fills it in. */}
-        <Input.Password
+        <PasswordInput
           placeholder={editing?.hasApiKey ? 'Leave blank to keep the current key' : 'Provider API key'}
           value={apiKey}
-          visibilityToggle={{
-            visible: keyVisible,
-            // On an empty field the eye means "show me the key this provider has", not "show me
-            // nothing" — it loads the stored one, same as the link below.
-            onVisibleChange: (v) =>
-              v && !apiKey && editing?.hasApiKey ? void reveal() : setKeyVisible(v),
-          }}
+          visible={keyVisible}
+          // On an empty field the eye means "show me the key this provider has", not "show me
+          // nothing" — it loads the stored one, same as the link below.
+          onVisibleChange={(v) => (v && !apiKey && editing?.hasApiKey ? void reveal() : setKeyVisible(v))}
           onChange={(e) => {
             setApiKey(e.target.value);
             setProbeError(null);
@@ -511,6 +518,10 @@ function ProviderForm({
         )}
       </Step>
 
+      {/* Right under the key: the balance is the account's that key belongs to. Only a saved key has
+          one — the server asks DeepSeek with what is stored, never with what is being typed. */}
+      {editing && hasDeepSeekBalance(editing) && <DeepSeekBalanceSection row={editing} />}
+
       <div className="provider-adv" style={{ marginTop: 20 }}>
         <div className={`provider-adv-head${advOpen ? ' open' : ''}`} onClick={() => setAdvOpen((v) => !v)}>
           <span className="pa-chev">▸</span>
@@ -519,7 +530,7 @@ function ProviderForm({
         </div>
         {advOpen && (
           <div className="provider-adv-body">
-            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            <div className="provider-stack" style={{ gap: 16 }}>
               {preset && (
                 <>
                   {/* Only when it isn't already a step of its own above. */}
@@ -604,27 +615,29 @@ function ProviderForm({
                             setModels(models.map((r, j) => (j === i ? { ...r, label: e.target.value } : r)))
                           }
                         />
-                        <InputNumber
+                        <NumberInput
+                          aria-label="Context window"
                           placeholder="200000"
                           value={m.contextWindow}
                           min={0}
                           style={{ width: 140, flex: 'none' }}
-                          onChange={(v) =>
+                          onValueChange={(v) =>
                             setModels(models.map((r, j) => (j === i ? { ...r, contextWindow: v } : r)))
                           }
                         />
                         <Button
-                          type="text"
+                          variant="text"
                           icon={<DeleteOutlined />}
+                          aria-label="Delete"
                           onClick={() => setModels(models.filter((_, j) => j !== i))}
                         />
                       </div>
                     ))}
                     <Button
-                      type="dashed"
+                      variant="dashed"
                       icon={<PlusOutlined />}
                       onClick={() => setModels([...models, { value: '', label: '', contextWindow: null }])}
-                      block
+                      style={{ width: '100%' }}
                     >
                       Add model
                     </Button>
@@ -651,7 +664,7 @@ function ProviderForm({
                   </div>
                 )}
               </Field>
-            </Space>
+            </div>
           </div>
         )}
       </div>
@@ -659,7 +672,7 @@ function ProviderForm({
       {/* Nobody adds a provider they want switched off, so this is an edit-time control. */}
       {editing && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 20 }}>
-          <Switch checked={enabled} onChange={setEnabled} />
+          <Switch checked={enabled} onCheckedChange={setEnabled} aria-label="Enabled" />
           <span>Enabled</span>
           <span style={{ color: 'var(--text-3)', fontSize: 12 }}>
             Disabled providers are hidden from the pickers.
@@ -671,7 +684,7 @@ function ProviderForm({
         <span style={{ color: 'var(--error)', fontSize: 12, lineHeight: 1.4 }}>
           {probing ? <span style={{ color: 'var(--text-3)' }}>Testing the connection…</span> : probeError}
         </span>
-        <Space>
+        <span className="prov-actions" style={{ gap: 8 }}>
           {probeError && (
             <Button loading={saveMut.isPending} onClick={() => saveMut.mutate()}>
               Save anyway
@@ -679,14 +692,14 @@ function ProviderForm({
           )}
           <Button onClick={() => navigate('/providers')}>Cancel</Button>
           <Button
-            type="primary"
+            variant="primary"
             disabled={!canSave}
             loading={probing || saveMut.isPending}
             onClick={() => canSave && void connect()}
           >
             {editing ? 'Save' : 'Connect'}
           </Button>
-        </Space>
+        </span>
       </div>
     </div>
   );

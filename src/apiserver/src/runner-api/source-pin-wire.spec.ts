@@ -50,9 +50,10 @@ interface Written {
 function stubPrisma(options: { updated: number; after: Record<string, unknown> }) {
   const writes: Written[] = [];
   const prisma = {
-    // The real guard runs against this: the token is hashed and looked up, exactly as in production,
-    // and the runner is a self-managed one: no managed runner mapping binds its credential.
-    runner: { findFirst: async () => RUNNER },
+    // The real guard runs against this: the token is hashed and looked up, exactly as in production —
+    // the runner of an account that is not disabled, and a self-managed one: no managed runner
+    // mapping binds its credential.
+    runner: { findFirst: async () => ({ ...RUNNER, owner: { disabledAt: null } }) },
     managedRunner: { findUnique: async () => null },
     session: {
       findFirst: async ({ where }: { where: Record<string, unknown> }) =>

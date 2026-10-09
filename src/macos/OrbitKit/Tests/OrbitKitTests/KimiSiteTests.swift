@@ -103,7 +103,10 @@ final class KimiSiteTests: XCTestCase {
             "global: { domain: '\(KimiSite.global.domain)', where: '\(KimiSite.global.place)' }",
             // The sentences that name a site, with the web's expression in its place.
             KimiSite.global.openPage.replacingOccurrences(of: "kimi.ai", with: "${KIMI_SITE[site].domain}"),
+            KimiSite.global.copyCodeAndOpen.replacingOccurrences(of: "kimi.ai", with: "${KIMI_SITE[site].domain}"),
             KimiSite.global.enterCode.replacingOccurrences(of: "kimi.ai", with: "<b>{KIMI_SITE[site].domain}</b>"),
+            // …and on a card adding an account (docs/mocks/kimi-accounts ④ / 02-ios ⑦).
+            KimiSite.global.enterCodeAdding.replacingOccurrences(of: "kimi.ai", with: "<b>{KIMI_SITE[site].domain}</b>"),
             KimiSite.global.useInstead.replacingOccurrences(of: "kimi.ai", with: "{KIMI_SITE[other].domain}"),
         ] {
             XCTAssertTrue(card.contains(literal), "RunnerSignIn.tsx no longer says \(literal)")

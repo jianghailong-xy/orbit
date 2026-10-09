@@ -1,0 +1,554 @@
+{
+ "webkit-light-desktop/notification-error.png": {
+  "differentPixels": 9929,
+  "maxChannelDelta": 220,
+  "pixelsBeyond2": 4888,
+  "pixelsAtMost2": 5041,
+  "allDifferencesBox": {
+   "x": 882,
+   "y": 2,
+   "width": 398,
+   "height": 190
+  },
+  "clustersBeyond2": [
+   {
+    "box": {
+     "x": 951,
+     "y": 33,
+     "width": 183,
+     "height": 14
+    },
+    "pixels": 1300,
+    "maxChannelDelta": 220
+   },
+   {
+    "box": {
+     "x": 1049,
+     "y": 88,
+     "width": 85,
+     "height": 10
+    },
+    "pixels": 463,
+    "maxChannelDelta": 153
+   },
+   {
+    "box": {
+     "x": 962,
+     "y": 88,
+     "width": 80,
+     "height": 13
+    },
+    "pixels": 439,
+    "maxChannelDelta": 153
+   },
+   {
+    "box": {
+     "x": 964,
+     "y": 131,
+     "width": 68,
+     "height": 12
+    },
+    "pixels": 423,
+    "maxChannelDelta": 217
+   },
+   {
+    "box": {
+     "x": 962,
+     "y": 70,
+     "width": 58,
+     "height": 10
+    },
+    "pixels": 335,
+    "maxChannelDelta": 150
+   },
+   {
+    "box": {
+     "x": 904,
+     "y": 16,
+     "width": 12,
+     "height": 146
+    },
+    "pixels": 317,
+    "maxChannelDelta": 49
+   },
+   {
+    "box": {
+     "x": 1253,
+     "y": 16,
+     "width": 12,
+     "height": 146
+    },
+    "pixels": 317,
+    "maxChannelDelta": 48
+   },
+   {
+    "box": {
+     "x": 1028,
+     "y": 70,
+     "width": 55,
+     "height": 10
+    },
+    "pixels": 262,
+    "maxChannelDelta": 153
+   },
+   {
+    "box": {
+     "x": 1123,
+     "y": 73,
+     "width": 42,
+     "height": 7
+    },
+    "pixels": 227,
+    "maxChannelDelta": 140
+   },
+   {
+    "box": {
+     "x": 919,
+     "y": 29,
+     "width": 21,
+     "height": 20
+    },
+    "pixels": 149,
+    "maxChannelDelta": 214
+   },
+   {
+    "box": {
+     "x": 1244,
+     "y": 59,
+     "width": 8,
+     "height": 52
+    },
+    "pixels": 124,
+    "maxChannelDelta": 19
+   },
+   {
+    "box": {
+     "x": 1092,
+     "y": 70,
+     "width": 22,
+     "height": 10
+    },
+    "pixels": 123,
+    "maxChannelDelta": 142
+   },
+   {
+    "box": {
+     "x": 951,
+     "y": 59,
+     "width": 8,
+     "height": 52
+    },
+    "pixels": 122,
+    "maxChannelDelta": 19
+   },
+   {
+    "box": {
+     "x": 951,
+     "y": 121,
+     "width": 7,
+     "height": 28
+    },
+    "pixels": 73,
+    "maxChannelDelta": 19
+   },
+   {
+    "box": {
+     "x": 1037,
+     "y": 121,
+     "width": 7,
+     "height": 28
+    },
+    "pixels": 73,
+    "maxChannelDelta": 19
+   },
+   {
+    "box": {
+     "x": 1235,
+     "y": 34,
+     "width": 12,
+     "height": 11
+    },
+    "pixels": 72,
+    "maxChannelDelta": 83
+   },
+   {
+    "box": {
+     "x": 1172,
+     "y": 70,
+     "width": 14,
+     "height": 10
+    },
+    "pixels": 69,
+    "maxChannelDelta": 138
+   }
+  ]
+ },
+ "webkit-dark-desktop/notification-error.png": {
+  "differentPixels": 8148,
+  "maxChannelDelta": 161,
+  "pixelsBeyond2": 4890,
+  "pixelsAtMost2": 3258,
+  "allDifferencesBox": {
+   "x": 883,
+   "y": 5,
+   "width": 397,
+   "height": 188
+  },
+  "clustersBeyond2": [
+   {
+    "box": {
+     "x": 951,
+     "y": 33,
+     "width": 183,
+     "height": 14
+    },
+    "pixels": 1295,
+    "maxChannelDelta": 161
+   },
+   {
+    "box": {
+     "x": 1049,
+     "y": 88,
+     "width": 85,
+     "height": 10
+    },
+    "pixels": 455,
+    "maxChannelDelta": 134
+   },
+   {
+    "box": {
+     "x": 962,
+     "y": 88,
+     "width": 80,
+     "height": 13
+    },
+    "pixels": 429,
+    "maxChannelDelta": 134
+   },
+   {
+    "box": {
+     "x": 964,
+     "y": 131,
+     "width": 68,
+     "height": 12
+    },
+    "pixels": 422,
+    "maxChannelDelta": 160
+   },
+   {
+    "box": {
+     "x": 901,
+     "y": 16,
+     "width": 16,
+     "height": 146
+    },
+    "pixels": 344,
+    "maxChannelDelta": 113
+   },
+   {
+    "box": {
+     "x": 1252,
+     "y": 16,
+     "width": 13,
+     "height": 146
+    },
+    "pixels": 338,
+    "maxChannelDelta": 113
+   },
+   {
+    "box": {
+     "x": 962,
+     "y": 70,
+     "width": 58,
+     "height": 10
+    },
+    "pixels": 335,
+    "maxChannelDelta": 132
+   },
+   {
+    "box": {
+     "x": 1028,
+     "y": 70,
+     "width": 55,
+     "height": 10
+    },
+    "pixels": 260,
+    "maxChannelDelta": 134
+   },
+   {
+    "box": {
+     "x": 1123,
+     "y": 73,
+     "width": 42,
+     "height": 7
+    },
+    "pixels": 227,
+    "maxChannelDelta": 121
+   },
+   {
+    "box": {
+     "x": 919,
+     "y": 29,
+     "width": 21,
+     "height": 20
+    },
+    "pixels": 148,
+    "maxChannelDelta": 147
+   },
+   {
+    "box": {
+     "x": 1092,
+     "y": 70,
+     "width": 22,
+     "height": 10
+    },
+    "pixels": 126,
+    "maxChannelDelta": 123
+   },
+   {
+    "box": {
+     "x": 951,
+     "y": 59,
+     "width": 8,
+     "height": 52
+    },
+    "pixels": 118,
+    "maxChannelDelta": 23
+   },
+   {
+    "box": {
+     "x": 1244,
+     "y": 59,
+     "width": 8,
+     "height": 52
+    },
+    "pixels": 118,
+    "maxChannelDelta": 23
+   },
+   {
+    "box": {
+     "x": 1235,
+     "y": 34,
+     "width": 12,
+     "height": 11
+    },
+    "pixels": 72,
+    "maxChannelDelta": 77
+   },
+   {
+    "box": {
+     "x": 1172,
+     "y": 70,
+     "width": 14,
+     "height": 10
+    },
+    "pixels": 69,
+    "maxChannelDelta": 121
+   },
+   {
+    "box": {
+     "x": 951,
+     "y": 121,
+     "width": 7,
+     "height": 28
+    },
+    "pixels": 67,
+    "maxChannelDelta": 23
+   },
+   {
+    "box": {
+     "x": 1037,
+     "y": 121,
+     "width": 7,
+     "height": 28
+    },
+    "pixels": 67,
+    "maxChannelDelta": 23
+   }
+  ]
+ },
+ "webkit-dark-phone/notification-error.png": {
+  "differentPixels": 8385,
+  "maxChannelDelta": 161,
+  "pixelsBeyond2": 5011,
+  "pixelsAtMost2": 3374,
+  "allDifferencesBox": {
+   "x": 0,
+   "y": 45,
+   "width": 390,
+   "height": 200
+  },
+  "clustersBeyond2": [
+   {
+    "box": {
+     "x": 63,
+     "y": 73,
+     "width": 183,
+     "height": 14
+    },
+    "pixels": 1295,
+    "maxChannelDelta": 161
+   },
+   {
+    "box": {
+     "x": 161,
+     "y": 128,
+     "width": 85,
+     "height": 10
+    },
+    "pixels": 455,
+    "maxChannelDelta": 134
+   },
+   {
+    "box": {
+     "x": 74,
+     "y": 128,
+     "width": 80,
+     "height": 13
+    },
+    "pixels": 429,
+    "maxChannelDelta": 134
+   },
+   {
+    "box": {
+     "x": 76,
+     "y": 179,
+     "width": 68,
+     "height": 12
+    },
+    "pixels": 422,
+    "maxChannelDelta": 160
+   },
+   {
+    "box": {
+     "x": 362,
+     "y": 56,
+     "width": 13,
+     "height": 162
+    },
+    "pixels": 370,
+    "maxChannelDelta": 113
+   },
+   {
+    "box": {
+     "x": 16,
+     "y": 56,
+     "width": 13,
+     "height": 162
+    },
+    "pixels": 369,
+    "maxChannelDelta": 113
+   },
+   {
+    "box": {
+     "x": 74,
+     "y": 110,
+     "width": 58,
+     "height": 10
+    },
+    "pixels": 335,
+    "maxChannelDelta": 132
+   },
+   {
+    "box": {
+     "x": 140,
+     "y": 110,
+     "width": 55,
+     "height": 10
+    },
+    "pixels": 260,
+    "maxChannelDelta": 134
+   },
+   {
+    "box": {
+     "x": 235,
+     "y": 113,
+     "width": 42,
+     "height": 7
+    },
+    "pixels": 227,
+    "maxChannelDelta": 121
+   },
+   {
+    "box": {
+     "x": 31,
+     "y": 69,
+     "width": 21,
+     "height": 20
+    },
+    "pixels": 148,
+    "maxChannelDelta": 147
+   },
+   {
+    "box": {
+     "x": 204,
+     "y": 110,
+     "width": 22,
+     "height": 10
+    },
+    "pixels": 126,
+    "maxChannelDelta": 123
+   },
+   {
+    "box": {
+     "x": 63,
+     "y": 99,
+     "width": 8,
+     "height": 52
+    },
+    "pixels": 118,
+    "maxChannelDelta": 23
+   },
+   {
+    "box": {
+     "x": 354,
+     "y": 99,
+     "width": 8,
+     "height": 52
+    },
+    "pixels": 118,
+    "maxChannelDelta": 23
+   },
+   {
+    "box": {
+     "x": 63,
+     "y": 161,
+     "width": 7,
+     "height": 44
+    },
+    "pixels": 99,
+    "maxChannelDelta": 23
+   },
+   {
+    "box": {
+     "x": 149,
+     "y": 161,
+     "width": 7,
+     "height": 44
+    },
+    "pixels": 99,
+    "maxChannelDelta": 23
+   },
+   {
+    "box": {
+     "x": 345,
+     "y": 74,
+     "width": 12,
+     "height": 11
+    },
+    "pixels": 72,
+    "maxChannelDelta": 77
+   },
+   {
+    "box": {
+     "x": 284,
+     "y": 110,
+     "width": 14,
+     "height": 10
+    },
+    "pixels": 69,
+    "maxChannelDelta": 121
+   }
+  ]
+ }
+}

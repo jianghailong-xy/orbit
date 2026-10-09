@@ -19,17 +19,7 @@ struct AccountPauseControls: View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let paused = AccountPause.isPaused(pausedUntil, now: context.date)
             VStack(alignment: .leading, spacing: 10) {
-                if paused, let date = pausedUntil.flatMap(RelativeTime.parse) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Label("Paused", systemImage: "pause.fill")
-                            .font(.orbitLabel.weight(.semibold))
-                        Spacer(minLength: 8)
-                        Text("Until \(date.formatted(date: .abbreviated, time: .shortened))")
-                            .font(.orbitMeta)
-                            .multilineTextAlignment(.trailing)
-                    }
-                    .foregroundStyle(Color.orange)
-                }
+                AccountPauseLine(pausedUntil: pausedUntil)
                 if canManage || signedInAction != nil {
                     ViewThatFits(in: .horizontal) {
                         HStack(spacing: 8) { buttons(paused: paused) }
@@ -74,11 +64,44 @@ struct AccountPauseControls: View {
     }
 }
 
-private struct AccountPauseSheet: View {
+/// An account's pause as a line of its row: Paused, and until when, in the pause's orange. A state,
+/// not a control — what resumes the account or changes the pause is the row's to offer — and nothing
+/// at all once the pause has run out.
+struct AccountPauseLine: View {
+    let pausedUntil: String?
+
+    var body: some View {
+        if let pausedUntil, let date = RelativeTime.parse(pausedUntil) {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                if AccountPause.isPaused(pausedUntil, now: context.date) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Label("Paused", systemImage: "pause.fill")
+                            .font(.orbitLabel.weight(.semibold))
+                        Spacer(minLength: 8)
+                        Text("Until \(date.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.orbitMeta)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    .foregroundStyle(Color.orange)
+                }
+            }
+        }
+    }
+}
+
+/// How long to pause an account for, and the press that does it. Raised by the account's own
+/// Pause… — a row's press, its swipe, or its long-press menu.
+struct AccountPauseSheet: View {
     @Environment(\.dismiss) private var dismiss
     let name: String
     let scope: String
     let save: (Int?) async -> String?
+
+    init(name: String, scope: String, save: @escaping (Int?) async -> String?) {
+        self.name = name
+        self.scope = scope
+        self.save = save
+    }
 
     @State private var hours = 2
     @State private var custom = false

@@ -116,8 +116,8 @@ final class SettingsCopyParityTests: XCTestCase {
         for label in [SettingsCopy.currentPassword, SettingsCopy.newPassword, SettingsCopy.confirmPassword] {
             assertSays(page, "label=\"\(label)\"", in: Self.profile)
         }
-        assertSays(page, "message: '\(SettingsCopy.passwordRule)'", in: Self.profile)
-        assertSays(page, "new Error('\(SettingsCopy.passwordsDoNotMatch)')", in: Self.profile)
+        assertSays(page, "? null : '\(SettingsCopy.passwordRule)'", in: Self.profile)
+        assertSays(page, "? null : '\(SettingsCopy.passwordsDoNotMatch)'", in: Self.profile)
         assertSays(page, "message.success('\(SettingsCopy.passwordChanged)')", in: Self.profile)
         assertSays(page, "> \(SettingsCopy.changePassword) </Button>", in: Self.profile)
     }
@@ -132,8 +132,13 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(page, "<h1 className=\"page-title\">\(SharedLinksList.title)</h1>", in: Self.sharedLinks)
         assertSays(page, "> \(SharedLinksList.subtitle) </p>", in: Self.sharedLinks)
         assertSays(page, "\(SharedLinksList.couldNotLoad) {linksQ.error.message}", in: Self.sharedLinks)
-        assertSays(page, "{ SESSION: '\(SharedLinksList.kindWord(.session))', TASK: '\(SharedLinksList.kindWord(.task))', PROJECT: '\(SharedLinksList.kindWord(.project))' }",
+        assertSays(page, "{ SESSION: '\(SharedLinksList.kindWord(.session))', TASK: '\(SharedLinksList.kindWord(.task))', PROJECT: '\(SharedLinksList.kindWord(.project))', WIKI: '\(SharedLinksList.kindWord(.wiki))' }",
                    in: Self.sharedLinks)
+        // A wiki has no status: its line is the kind alone, as the web's `rootWhere` says it.
+        assertSays(page, "if (link.kind === 'WIKI') return kind;", in: Self.sharedLinks)
+        XCTAssertEqual(SharedLinksList.whereLine(ShareLink(id: "l", kind: .wiki, token: "t",
+                                                           root: ShareRootSummary(id: "w", title: "orbit", slug: "orbit"))),
+                       SharedLinksList.kindWord(.wiki))
         // The paused line is one sentence on the phone; the web sets its first words apart in a span.
         let paused = SharedLinksList.whereLine(ShareLink(id: "l", kind: .session, token: "t", state: .paused,
                                                          root: ShareRootSummary(id: "r")))
@@ -165,7 +170,7 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(table, "title={`\(AccessTokensList.revokeTitle(token).replacingOccurrences(of: "NAME", with: "${token.name}"))`}",
                    in: Self.accessTokenTable)
         assertSays(table, "description=\"\(AccessTokensList.revokeDetail)\"", in: Self.accessTokenTable)
-        assertSays(table, "okText=\"\(AccessTokensList.revoke)\"", in: Self.accessTokenTable)
+        assertSays(table, "confirmText=\"\(AccessTokensList.revoke)\"", in: Self.accessTokenTable)
         assertSays(table, AccessTokensList.hint(token).replacingOccurrences(of: "HINT", with: "{token.tokenHint}"),
                    in: Self.accessTokenTable)
         assertSays(table, "return '\(AccessTokensList.workspacesLine(token))'", in: Self.accessTokenTable)

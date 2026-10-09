@@ -358,7 +358,9 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       },
     })).id;
     // A landing of the project's task, still queued: what the job list's Retry names (§2.2 J-T9). It
-    // names no session, so no runner of the census is ever handed it.
+    // names no session, so no runner of the census is ever handed it. It is also that task's one
+    // in-flight landing (`project_integration_job_task_inflight_key`): the landing the runner census's
+    // machine holds is of a task of its own (tenant-isolation-runner.pg.spec.ts).
     const integrationJobId = (await db.projectIntegrationJob.create({
       data: {
         projectId, ownerId, codebaseId: codebase.id, kind: 'LAND_TASK', taskId: projectTaskId,

@@ -15,7 +15,11 @@ export const unitScenarios = [
   ...['supported-modes', 'unsupported-modes-refused-before-launch'].map((name) => `TestDshPermissionPolicy/${name}`),
   'TestDshPermissionBridge',
   ...['allow-once-joins-the-bare-tool-call-id', 'reject', 'late-allow-after-stop-is-never-sent', 'closed-bridge-cancels-without-asking',
-    'unknown-tool-call-is-rejected', 'dont-ask-rejects-unasked', 'unknown-options-never-default-to-allow'].map((name) => `TestDshPermissionBridge/${name}`),
+    'unknown-tool-call-is-rejected', 'dont-ask-rejects-unasked', 'unknown-options-never-default-to-allow',
+    'auto-allows-a-routine-escalation-without-a-card', 'auto-leaves-a-high-impact-escalation-to-a-person',
+    'default-never-allows-an-escalation-itself'].map((name) => `TestDshPermissionBridge/${name}`),
+  'TestDshAutoRoutineEscalation',
+  'TestDshToolGate',
   'TestDshPermissionCard',
   'TestDshMCPServers',
   ...['orbit-server-and-session-identity', 'sse-entry-refused-before-launch', 'unverified-remote-refused', 'relative-command-refused',
@@ -38,13 +42,16 @@ export const regressionScenarios = [
 // The pinned official dsh against a scripted model, the real `orbit mcp` and a control-plane double.
 export const realScenarios = [
   'TestDshRealOrbitMCPAndAgentInstructions',
-  'TestDshRealThirdPartyMCPRunsUnasked',
+  'TestDshRealThirdPartyMCPAsksFirst',
   'TestDshRealApprovalAllowOnce',
   'TestDshRealApprovalReject',
   'TestDshRealApprovalStop',
   'TestDshRealApprovalDisconnect',
   'TestDshRealDontAskRejectsUnasked',
   'TestDshRealAutoWorkspaceBoundary',
+  'TestDshRealAutoRoutineEscalation',
+  'TestDshRealToolGateAsksInAuto',
+  'TestDshRealToolGateRefusesInDontAsk',
 ];
 export const goScenarios = [...unitScenarios, ...regressionScenarios, ...realScenarios];
 export const raceScenarios = [...unitScenarios, ...regressionScenarios];

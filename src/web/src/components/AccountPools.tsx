@@ -8,11 +8,11 @@ import {
   PlayCircleOutlined,
   TeamOutlined,
 } from '@ant-design/icons';
-import { Button, Checkbox, Input, Modal, Popconfirm, Radio, Segmented, Select, Tooltip } from 'antd';
 import { api } from '../api';
 import { accountIsPaused, usePauseClock } from '../lib/accountPause';
 import { AccountPauseActions, AccountPauseStatus } from './AccountPause';
 import { isLoginPool, loginLine, type CodexLogin } from '../lib/codexLogin';
+import { foldFromAnywhere } from '../lib/foldHead';
 import { encodeId, routeId } from '../lib/idCodec';
 import { planUsageRows } from '../lib/planUsage';
 import {
@@ -49,6 +49,15 @@ import { useToast } from '../lib/toast';
 import { CodexSignInModal } from './CodexSignIn';
 import { ProviderTile } from './ProviderGallery';
 import { PeopleStack, PersonMark, ReplaceKeyModal } from './SharedPool';
+import { Button } from './ui/Button';
+import { Checkbox } from './ui/Checkbox';
+import { Dialog } from './ui/Dialog';
+import { Input } from './ui/Input';
+import { MultiSelect } from './ui/MultiSelect';
+import { Popconfirm } from './ui/Popconfirm';
+import { Radio, RadioGroup } from './ui/Radio';
+import { Segmented } from './ui/Segmented';
+import { Tooltip } from './ui/Tooltip';
 
 // Which pool cards the user folded or unfolded, by pool id. A card nobody has touched follows the
 // window: open on a desktop, where its rows fit, and folded to its head line on a phone.
@@ -230,10 +239,10 @@ function MemberRow({
         {/* A mark rather than a word: beside Re-add key the pair would outgrow the column, and
             taking an account out is undone by adding it back. */}
         {onRemove && (
-          <Tooltip title="Remove from this pool">
+          <Tooltip content="Remove from this pool">
             <Button
               size="small"
-              type="text"
+              variant="text"
               danger
               icon={<DeleteOutlined />}
               onClick={onRemove}
@@ -337,15 +346,15 @@ function KeyRow({
       <div className="re-act">
         {canRemoveKey(pool, key) && <AccountPauseActions pool shared={hasPeople(pool)} name={member.label} until={member.pausedUntil} endpoint={poolPauseEndpoint(pool.id, member.id)} />}
         {replace && (
-          <Button size="small" type="primary" onClick={() => replace(key)}>
+          <Button size="small" variant="primary" onClick={() => replace(key)}>
             Replace key
           </Button>
         )}
         {toggle && (
-          <Tooltip title={key.enabled ? 'Disable — no session starts on it until you enable it' : 'Enable'}>
+          <Tooltip content={key.enabled ? 'Disable — no session starts on it until you enable it' : 'Enable'}>
             <Button
               size="small"
-              type="text"
+              variant="text"
               icon={key.enabled ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
               onClick={() => toggle(key, !key.enabled)}
               aria-label={`${key.enabled ? 'Disable' : 'Enable'} ${key.label}`}
@@ -356,18 +365,19 @@ function KeyRow({
           <Popconfirm
             title={`Remove ${key.label}?`}
             description="It is deleted from the Orbit server, and no session runs on it again."
-            okText="Remove"
-            okButtonProps={{ danger: true }}
+            confirmText="Remove"
+            danger
             onConfirm={() => remove(key)}
-          >
-            <Button
-              size="small"
-              type="text"
-              danger
-              icon={<DeleteOutlined />}
-              aria-label={`Remove ${key.label} from this pool`}
-            />
-          </Popconfirm>
+            trigger={
+              <Button
+                size="small"
+                variant="text"
+                danger
+                icon={<DeleteOutlined />}
+                aria-label={`Remove ${key.label} from this pool`}
+              />
+            }
+          />
         )}
       </div>
       {invalid && (
@@ -468,7 +478,7 @@ function LoginRow({
       <div className="re-act">
         <PoolPauseActions pool={pool} member={member} />
         {signInAgain && (
-          <Button size="small" type="primary" onClick={() => onSignIn!(login)}>
+          <Button size="small" variant="primary" onClick={() => onSignIn!(login)}>
             Sign in again
           </Button>
         )}
@@ -480,19 +490,20 @@ function LoginRow({
                 ? `Its sign-in is deleted from the Orbit server, and no session runs on it until you sign in again — ${pool.label} keeps running on its other account${others === 1 ? '' : 's'}.`
                 : 'Its sign-in is deleted from the Orbit server, and no session runs on this pool until you sign in again.'
             }
-            okText="Sign out"
-            okButtonProps={{ danger: true }}
+            confirmText="Sign out"
+            danger
             onConfirm={() => onSignOut!(login)}
-          >
-            <Button
-              size="small"
-              type="text"
-              danger
-              className="pool-signout"
-              icon={<LogoutOutlined />}
-              aria-label={`Sign out ${member.label}`}
-            />
-          </Popconfirm>
+            trigger={
+              <Button
+                size="small"
+                variant="text"
+                danger
+                className="pool-signout"
+                icon={<LogoutOutlined />}
+                aria-label={`Sign out ${member.label}`}
+              />
+            }
+          />
         )}
       </div>
       {signedOut && (
@@ -614,7 +625,9 @@ function PoolCard({
   const people = !!shared && hasPeople(shared);
   return (
     <div className={`re-card pool-card${collapsed ? ' collapsed' : ''}`} data-pool={pool.id}>
-      <div className="re-head">
+      {/* As a runner card's head: a press anywhere on it — the space after the name, the gauge —
+          is the toggle's (foldFromAnywhere), and Manage → stays its own. */}
+      <div className="re-head" onClick={foldFromAnywhere(onToggle)}>
         <button className="re-toggle" type="button" aria-expanded={!collapsed} onClick={onToggle}>
           <span className={`re-chev${collapsed ? '' : ' open'}`} aria-hidden="true">
             ▸
@@ -779,13 +792,24 @@ export function PoolAccountsModal({
   });
 
   return (
-    <Modal
+    <Dialog
       open
+      className="pool-dialog"
       title={pool ? `Add account to ${pool.label}` : 'Create an account pool'}
-      okText={pool ? 'Add' : 'Create pool'}
-      okButtonProps={{ disabled: picked.length === 0 || (!pool && !label.trim()), loading: save.isPending }}
-      onOk={() => save.mutate()}
-      onCancel={onClose}
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            disabled={picked.length === 0 || (!pool && !label.trim())}
+            loading={save.isPending}
+            onClick={() => save.mutate()}
+          >
+            {pool ? 'Add' : 'Create pool'}
+          </Button>
+        </>
+      }
     >
       {!pool && (
         <label className="pool-name">
@@ -794,7 +818,7 @@ export function PoolAccountsModal({
         </label>
       )}
       <AccountPickList listed={listed} picked={picked} onPick={setPicked} />
-    </Modal>
+    </Dialog>
   );
 }
 
@@ -828,8 +852,8 @@ function AccountPickList({
           <Checkbox
             checked={member || picked.includes(row.id)}
             disabled={!ok}
-            onChange={(e) =>
-              onPick((prev) => (e.target.checked ? [...prev, row.id] : prev.filter((id) => id !== row.id)))
+            onCheckedChange={(checked) =>
+              onPick((prev) => (checked ? [...prev, row.id] : prev.filter((id) => id !== row.id)))
             }
           />
           <ProviderTile slug={row.presetSlug ?? row.slug} label={row.label} size={24} />
@@ -913,16 +937,17 @@ export function NewPoolModal({ rows, onClose }: { rows: ProviderRow[]; onClose: 
   });
 
   return (
-    <Modal
+    <Dialog
       open
       width={520}
+      className="pool-dialog"
       title="New account pool"
-      onCancel={onClose}
+      onClose={onClose}
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
           <Button
-            type="primary"
+            variant="primary"
             disabled={!name.trim() || (engine === 'claude' && picked.length === 0)}
             loading={create.isPending}
             onClick={() => create.mutate()}
@@ -934,10 +959,11 @@ export function NewPoolModal({ rows, onClose }: { rows: ProviderRow[]; onClose: 
     >
       <div className="np-field">
         <span className="np-field-l">Engine</span>
-        <Segmented
+        <Segmented<'claude' | 'codex'>
           className="np-engine"
+          aria-label="Engine"
           value={engine}
-          onChange={(value) => setEngine(value as 'claude' | 'codex')}
+          onValueChange={setEngine}
           options={[
             {
               value: 'claude',
@@ -969,10 +995,10 @@ export function NewPoolModal({ rows, onClose }: { rows: ProviderRow[]; onClose: 
       {engine === 'codex' ? (
         <div className="np-field">
           <span className="np-field-l">Who can use it</span>
-          <Radio.Group name="new-pool-who" value={who} onChange={(e) => setWho(e.target.value as 'me' | 'people')}>
+          <RadioGroup<'me' | 'people'> name="new-pool-who" aria-label="Who can use it" value={who} onValueChange={setWho}>
             <Radio value="me">Just me</Radio>
             <Radio value="people">Me and people I add</Radio>
-          </Radio.Group>
+          </RadioGroup>
           {who === 'me' && (
             <div className="np-field-h">
               Sessions run on your own ChatGPT account — sign in with ChatGPT once the pool exists.
@@ -981,11 +1007,12 @@ export function NewPoolModal({ rows, onClose }: { rows: ProviderRow[]; onClose: 
           )}
           {who === 'people' && (
             <>
-              <Select
+              <MultiSelect
                 mode="tags"
                 className="np-people"
+                options={[]}
                 value={emails}
-                onChange={(next: string[]) => {
+                onValueChange={(next) => {
                   setEmails(next);
                   setTyping('');
                 }}
@@ -999,7 +1026,7 @@ export function NewPoolModal({ rows, onClose }: { rows: ProviderRow[]; onClose: 
               <div className="np-field-h">
                 They see it on their Providers page and in the session picker, and can start sessions on it.
               </div>
-              <Checkbox checked={canAdd} onChange={(e) => setCanAdd(e.target.checked)} className="np-can-add">
+              <Checkbox checked={canAdd} onCheckedChange={setCanAdd} className="np-can-add">
                 They can add their own keys
               </Checkbox>
             </>
@@ -1011,7 +1038,7 @@ export function NewPoolModal({ rows, onClose }: { rows: ProviderRow[]; onClose: 
           <AccountPickList listed={listed} picked={picked} onPick={setPicked} />
         </div>
       )}
-    </Modal>
+    </Dialog>
   );
 }
 
@@ -1024,7 +1051,7 @@ export function PoolHint({ rows, eligible }: { rows: ProviderRow[]; eligible: nu
         <b>{eligible} of your keys are Claude subscriptions.</b> Pool them, and each session starts
         on the one whose quota resets soonest, so none of it goes unused.
       </span>
-      <Button size="small" type="primary" onClick={() => setOpen(true)}>
+      <Button size="small" variant="primary" onClick={() => setOpen(true)}>
         Create a pool
       </Button>
       {open && <PoolAccountsModal rows={rows} onClose={() => setOpen(false)} />}

@@ -162,8 +162,7 @@ struct EngineSwitchSheet: View {
 
     private func trailing(_ engine: EngineChoice, greyed: Bool) -> String {
         guard let reason = engine.unavailable else { return engine.provider.note ?? engine.provider.modelLabel }
-        return greyed ? reason
-            : ["antigravity", "dsh", DshRuntime.connectFix].contains(engine.fixEngine ?? "") ? "\(reason) →" : "\(reason), sign in →"
+        return greyed ? reason : "\(reason)\(SessionProviderChoices.fixSuffix(engine.fixEngine))"
     }
 }
 

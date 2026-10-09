@@ -1,0 +1,27 @@
+{
+ "tests": [
+  112,
+  112
+ ],
+ "statusDifferences": [],
+ "failures": [],
+ "stats": [
+  {
+   "startTime": "2026-10-08T09:31:05.182Z",
+   "duration": 321029.174,
+   "expected": 101,
+   "skipped": 11,
+   "unexpected": 0,
+   "flaky": 0
+  },
+  {
+   "startTime": "2026-10-08T09:37:26.911Z",
+   "duration": 261829.105,
+   "expected": 101,
+   "skipped": 11,
+   "unexpected": 0,
+   "flaky": 0
+  }
+ ],
+ "identical": true
+}

@@ -54,6 +54,7 @@ import {
   WIKI_NEXT_MARKED,
   WIKI_NO_QUOTE_GIVEN,
   WIKI_OPEN_THE_ENTRY,
+  WIKI_OWNER_COMMENT,
   WIKI_REWRITE_PENDING,
   WIKI_VERDICT_CARD,
   WIKI_VERDICT_LIST,
@@ -615,6 +616,10 @@ function OpenLink({ open, className, children }: { open: WikiFootnoteOpen; class
  * the quote checked; the words, or the lines with the quoted one lit; what went wrong, if something did;
  * where the original is, and the way to it; and the entry it came through. On a phone it is the sheet,
  * and its one button opens the original.
+ *
+ * A VISITOR's card (a public wiki link, share-links §10) has no way to the original and no entry — the
+ * note it is handed names none — so it says no more than the verdict about a quote that did not check
+ * (the owner's line says to open the original), and a person's comment is the Owner's, never "yours".
  */
 export function WikiDocFootnoteCard({
   note,
@@ -623,6 +628,7 @@ export function WikiDocFootnoteCard({
   spaceSlug,
   docSlug,
   sheet = false,
+  visitor = false,
 }: {
   note: WikiDocFootnoteView;
   via: Map<string, WikiDocViaEntry>;
@@ -631,11 +637,12 @@ export function WikiDocFootnoteCard({
   /** The document it is a footnote of: its entry's drawer opens over it. */
   docSlug: string;
   sheet?: boolean;
+  visitor?: boolean;
 }) {
   const navigate = useNavigate();
-  const sub = wikiFootnoteSubLabel(note);
+  const sub = visitor && note.kind === 'task_comment' && note.label === 'USER' ? WIKI_OWNER_COMMENT : wikiFootnoteSubLabel(note);
   const open = wikiFootnoteOpen(note, github);
-  const problem = wikiFootnoteProblem(note);
+  const problem = visitor ? null : wikiFootnoteProblem(note);
   const entry = note.viaEntryId ? (via.get(note.viaEntryId) ?? null) : null;
   const code = note.kind !== 'design_doc' && wikiFootnoteIsRepo(note) && note.excerpt ? wikiExcerptLines(note, sheet ? WIKI_EXCERPT_LINES_PHONE : WIKI_EXCERPT_LINES) : null;
   const ok = note.verdict === 'verified';
@@ -710,13 +717,13 @@ export function WikiDocFootnoteCard({
 }
 
 /** The footnotes under the text (mock 23 ⑦): number, kind, where, the check; the words; what they came through. */
-function WikiDocFootnoteList({
+export function WikiDocFootnoteList({
   doc,
   via,
   lit,
   onOpen,
 }: {
-  doc: WikiDocView;
+  doc: Pick<WikiDocView, 'footnotes'>;
   via: Map<string, WikiDocViaEntry>;
   lit: number | null;
   onOpen: (n: number) => void;

@@ -1,7 +1,7 @@
 # Self-hosting Orbit
 
-This guide covers the included Docker Compose deployment: PostgreSQL, the control plane, web UI, backup
-sidecar, and nginx gateway. It is a practical starting point for one trusted team. Production operators remain
+This guide covers the included Docker Compose deployment: PostgreSQL, the control plane, the wiki worker, web UI,
+backup sidecar, and nginx gateway. It is a practical starting point for one trusted team. Production operators remain
 responsible for TLS, host security, monitoring, and off-host backups.
 
 For a fresh host, follow the [first-run checklist](first-run.md) through one completed task. Use the
@@ -85,6 +85,7 @@ Useful diagnostics:
 docker compose ps
 docker compose logs --tail=200 apiserver
 docker compose logs --tail=200 gateway
+docker compose logs --tail=200 wiki-worker
 ```
 
 ## 3. Put HTTPS in front
@@ -229,10 +230,13 @@ open it:
   and add them: their sessions reach the key through the control plane's pool gateway, and it never reaches
   their runners. No other kind of key can be shared with members.
 - Nothing limits how many accounts sign up, or what each one stores or runs.
-- An administrator cannot suspend an account or keep one person out. Deleting an account fails while it owns
-  runners, workspaces or tasks, and its owner can sign up again. Unlinking its Google account or resetting its
-  password does not stop someone with a Gmail or Workspace address either: their next Google sign-in links the
-  account again.
+- To keep someone out, disable their account: **Admin → Users → Disable**. They are signed out everywhere and
+  can no longer sign in, with their password or with Google, and their personal access tokens, runners and service
+  tokens are refused, all within 30 seconds. Their Google account cannot sign up again: it stays linked to the
+  disabled account. Nothing they own is deleted. **Enable** lets them back in: they sign in again, and their
+  personal access tokens and runners work as before. You cannot disable your own account or the last
+  administrator. Disable rather than delete: deleting an account still fails while it owns runners, workspaces or
+  tasks.
 - **Admin → Users** shows how each account signs in and when it was created, so unexpected sign-ups stand out.
 
 ### Testing and publishing the Google app
@@ -276,6 +280,7 @@ other review.
 | "That Google sign-in expired or was finished in a different browser" | The sign-in started at an address other than `PUBLIC_ORIGIN`, took more than ten minutes, or the browser blocked its cookie. |
 | "Google sign-in is turned off on this Orbit server" | The switch is off, or the client ID or the secret is not saved. |
 | **Admin → Sign-in** warns that the saved client secret cannot be decrypted; the badge reads **Off** while the switch is on | `PROVIDER_SECRET_KEY` changed since the secret was saved. Enter the client secret again under **Admin → Sign-in**. Until then Google sign-in fails. |
+| "This Orbit account is disabled. Ask an administrator to enable it again." | An administrator disabled the account. **Admin → Users → Enable** lets it back in. |
 
 The apiserver logs why a sign-in failed after Google sent the browser back, under `GoogleSignIn`
 (`docker compose logs apiserver | grep GoogleSignIn`). The lines carry Google's error code at most, nothing else
@@ -290,6 +295,33 @@ of the request:
   sign-in. The claim it names says how: `aud` names another client, and `exp` an expired token, which points
   at the apiserver's clock.
 
+## Wiki System model
+
+The `wiki-worker` service calls the wiki's System model: a model endpoint the deployment runs itself and that speaks
+the Anthropic Messages API, such as vLLM. It runs the apiserver image with another command, serves no port, and
+starts once the apiserver is healthy. It is the only service given the model's address and key; users' provider
+keys, subscriptions and account pools are not used for it.
+
+To configure it, set all three in `.env` and recreate the worker:
+
+```dotenv
+ORBIT_WIKI_MODEL_BASE_URL="http://192.168.1.20:8000"
+ORBIT_WIKI_MODEL_API_KEY="the key the endpoint expects"
+ORBIT_WIKI_MODEL="the model name it serves"
+```
+
+```bash
+docker compose up -d wiki-worker
+docker compose logs --tail=50 wiki-worker
+```
+
+The address must be reachable from inside the container, whose `127.0.0.1` is the container itself: for a model on
+the Docker host, use the host's LAN or tunnel address. The worker probes `{base}/health` every 10 seconds (200 or 404
+counts as up) and records the result. The wiki settings and health line show the model's name and its state, never
+its address or key; if the endpoint refuses the key, correct it and recreate the worker. See the
+[configuration reference](configuration.md#wiki-worker-and-system-model) for every variable. Until the wiki's jobs
+move to the server, the worker only probes the model and reports its state.
+
 ## Upgrading
 
 Review the release notes and create a verified backup before upgrading. Then fetch and check out the desired
@@ -301,8 +333,9 @@ git checkout <release-tag-or-reviewed-commit>
 docker compose up -d --build
 ```
 
-The control plane applies pending Prisma migrations on startup. Keep Postgres running unless the release notes
-explicitly require a database change outside the normal migration path.
+The control plane applies pending Prisma migrations on startup, and `wiki-worker`, which runs the same image,
+starts once it is healthy. Keep Postgres running unless the release notes explicitly require a database change
+outside the normal migration path.
 
 ## Production checklist
 

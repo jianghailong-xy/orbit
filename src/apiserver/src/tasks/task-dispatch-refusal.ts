@@ -61,10 +61,13 @@ import { hasResolvedSource } from '../projects/session-source';
  * THE PROJECT'S OWN ITEM
  * ======================
  * A task record and a coordinator message still leave the PROJECT silent about a line that cannot
- * be resolved — nothing on it says work has stopped until somebody reads a task. So the pin door,
- * in the transaction that refuses the session, also opens the project's `SOURCE_UNRESOLVED`
- * exception item (`raiseSourceUnresolvedBlocker`), one row per ref and code: SR50's kind, at the
- * single landing place migration 0231 declared for it.
+ * be resolved — nothing on it says work has stopped until somebody reads a task. So each door, in
+ * the transaction that records the refusal, also opens the project's `SOURCE_UNRESOLVED` exception
+ * item (`raiseSourceUnresolvedBlocker`), one row per ref and code: SR50's kind, at the single
+ * landing place migration 0231 declared for it. Both of them, because §10.3's claim is about the
+ * CODE and not about the gate that produced it: a checkout refusal names a line a person has to
+ * change exactly as a resolution refusal does, and a project page that counted only one of the two
+ * would go on saying nothing about half the ways a start stops.
  *
  * WHAT THIS DOES NOT DO
  * =====================

@@ -2023,6 +2023,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // INSERT, UPDATE or DELETE: the build reads every task row once and writes none, and the DROP
       // takes the index away inside the migration's own transaction, so no reader sees it missing.
       '0395_project_rollup_covering_idx_columns',
+      // Disabled accounts (0396): one ADD COLUMN of a nullable TIMESTAMP(3) `disabled_at` on `user`,
+      // with no default, so the ALTER is catalog-only, and nothing else — no index, constraint,
+      // function, trigger or type. `user` is not a preserved relation; no task, project, acceptance
+      // or DONE fence object is named, and no row is written or backfilled: every account reads NULL,
+      // enabled. 0394 was held by a branch not yet on main when it was numbered.
+      '0396_user_disabled_at',
       // `runner.login_region` (0397): one nullable TEXT column, no default, on `runner`, beside the
       // sign-in relay's `login_account` (0296) — which of Kimi Code's two sites the relay signs in
       // on. Read against every claim above: one `ADD COLUMN` statement and nothing else — no
@@ -2037,7 +2043,107 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // workspace_id_owner_id_key). No existing table, column, constraint, function, trigger or type
       // is altered or dropped; no task, project, acceptance or DONE fence object is named, and no
       // row is written.
-      '0399_managed_runner'],
+      '0399_managed_runner',
+      // The System model's state (0400): one new table, `wiki_model_status`, of exactly one row,
+      // with its primary key and four CHECKs (the single row, the closed set of states, a model
+      // named whenever one is configured, a reason exactly when the state is not up). Pure
+      // addition: no column, constraint, index, function, trigger or type of any table that
+      // exists is created, altered or dropped, so it is not another writer of the DONE fence and
+      // names none of the six preserved objects, neither 0177 relation, no `task`, `session` or
+      // `project` object and no `project_acceptance_*` one. No INSERT, UPDATE or DELETE: the
+      // wiki-worker writes the row on its first probe.
+      '0400_wiki_model_status',
+      // The server-executed wiki (0401): two new tables, `wiki_job` (a unit of server work, claimed
+      // like watch_delivery: a lease generation per claim, a compare-and-set per settle, one running
+      // job per space through a partial unique index) and `wiki_model_request` (the persisted model
+      // call queue: the unique `(job_id, step, unit, attempt)` identity, its own lease columns and a
+      // partial claim index), each with its CHECKs, foreign keys and indexes; `wiki_maintenance_run`
+      // loses NOT NULL on `task_id` and gains a nullable `job_id` with a CHECK that exactly one of
+      // the two is set, and `wiki_plan_job` gains the same nullable `job_id` with a CHECK that holds
+      // it to one maker once it is past queued/held. Read against every claim above: no function,
+      // trigger, type or enum is created, replaced or dropped — no CREATE OR REPLACE FUNCTION — so
+      // it is not another writer of the DONE fence and names none of the six preserved objects; no
+      // 0177 relation is altered (the DROP NOT NULL is on `wiki_maintenance_run`, which is not one,
+      // and it rewrites no stored row), and no `task`, `session`, `project` or `project_acceptance_*`
+      // object is named. No INSERT, UPDATE or DELETE: every statement is DDL, and the two CHECKs hold
+      // for every stored row as it stands.
+      '0401_wiki_job',
+      // The runner's repository operations (0402): four new tables and no change to anything that
+      // exists. `wiki_repo_op` is one repository question a job asks the machine its space's
+      // workspace runs on — its kind, its input, its state and the claim (lease_owner,
+      // claim_generation, claimed_at, heartbeat_at) a runner holds while it reads; `wiki_repo_op_fragment`
+      // stages the pieces of a snapshot too large for one request body under the operation that is
+      // uploading them; `wiki_repo_snapshot` is the space's index header (one row per space, replaced
+      // whole) and `wiki_repo_snapshot_fragment` its bytes. Read against every claim above: no
+      // function, trigger, type or enum is created, replaced or dropped — no CREATE OR REPLACE
+      // FUNCTION — so it is not another writer of the DONE fence and names none of the six preserved
+      // objects; no 0177 relation is altered and no `task`, `session`, `project` or
+      // `project_acceptance_*` object is named. No INSERT, UPDATE or DELETE: every statement is DDL,
+      // and the four tables carry no stored row to hold a CHECK to.
+      '0402_wiki_repo_op',
+      // Wiki links (0403): one nullable `wiki_space_id` on share_link, 0306's one-root CHECK replaced
+      // by the same CHECK over four columns, one composite foreign key to `wiki_space (id, owner_id)`
+      // (ON DELETE CASCADE) and one partial unique index. `share_link` is the only table altered and
+      // `wiki_space` is named only as the table the key references; no task, project, acceptance or
+      // DONE fence object, function, trigger or type is named, and no row is written or backfilled.
+      '0403_share_link_wiki_space',
+      // The plan drafted by the wiki-worker (0404): one nullable `author_job_id` on `wiki_plan` with 0325's
+      // `wiki_plan_author_chk` replaced by the same rule over one more column (a maintenance version names its
+      // session or its job, exactly one), one nullable JSONB `materials` on `wiki_plan_job` with its object CHECK,
+      // and 0338's `wiki_plan_job_made_chk` replaced by the same rule over the job a server-made one names. Only
+      // `wiki_plan` and `wiki_plan_job` are altered; no function, trigger, type, index or foreign key is created,
+      // replaced or dropped, so it is not another writer of the DONE fence and names none of the six preserved
+      // objects; no 0177 relation is altered and no `task`, `session`, `project` or `project_acceptance_*` object
+      // is named. No INSERT, UPDATE or DELETE: every stored row holds the new CHECKs as it held the old ones.
+      '0404_wiki_plan_server_draft',
+      // A plan job made by the wiki-worker's job (0405): 0338's `wiki_plan_job_made_chk` restated as the same CHECK
+      // over both of the row's makers, task_id and 0401's job_id, inside a DO block that replaces it only while it
+      // still reads the old way — after 0404, which restates it identically, it changes nothing. `wiki_plan_job` is
+      // the only table it can alter; no task, project, acceptance or DONE fence object, function, trigger or type is
+      // named, and no row is written.
+      '0405_wiki_plan_job_server_maker',
+      // The read cache (0406, owner 2026-10-08): one new table, `wiki_repo_file` — one file's whole text at
+      // (space, sha, path), so the same text is never read from the runner twice; `state` says what the answer
+      // was (found | cut | missing | too_large) and the composite foreign key to `wiki_space` deletes the rows
+      // with the space. No existing table is altered, and `wiki_repo_op_fragment`, which stages a read whose
+      // answer is too large for one request body, already exists (0402). Read against every claim above: no
+      // function, trigger, type or enum is created, replaced or dropped, so it is not another writer of the
+      // DONE fence and names none of the six preserved objects; no 0177 relation is altered and no `task`,
+      // `session`, `project` or `project_acceptance_*` object is named. No INSERT, UPDATE or DELETE: every
+      // statement is DDL, and the new table carries no stored row to hold a CHECK to.
+      '0406_wiki_repo_file',
+      // A maintenance run the wiki-worker's job executes (0407): one nullable `job_id` on `wiki_changeset` with a
+      // partial index over the rows that name one, and one nullable `author_job_id` on `wiki_plan_proposal` beside
+      // 0338's `author_session_id` — which loses NOT NULL — with a CHECK holding a proposal to exactly one author.
+      // Pure addition plus DROP NOT NULL on a column every stored row fills: every existing changeset and proposal
+      // keeps its session, no row is written or backfilled, no function, trigger or type is created or replaced,
+      // and none of the six preserved objects, the 0177 relations or `project_acceptance_*` is named.
+      '0407_wiki_maintain_job',
+      // Kimi Code accounts (0408): one nullable TEXT with no default on `workspace` (`kimi_account`,
+      // 0387's `antigravity_account` exactly), and on `session` one nullable TEXT with no default
+      // (`kimi_account`) and one BOOLEAN NOT NULL DEFAULT false (`kimi_account_pinned`) — 0387's pair
+      // exactly, catalog-only as a constant default is — with no index, no CHECK and no foreign key, and
+      // nothing else. `task`, `project` and `project_acceptance_criterion_definition` are not named, no
+      // `project_acceptance_*` object nor any of the six preserved triggers/functions is, and no function,
+      // trigger, enum or type is created — so it is not another writer of the DONE fence. No INSERT,
+      // UPDATE or DELETE: nothing is backfilled.
+      '0408_kimi_account',
+      // Why a promotion candidate is BLOCKED (0409): one nullable TEXT with no default on
+      // `project_promotion` (`blocked_reason`) and one CHECK holding it to ALREADY_LANDED, CHECK_FAILED,
+      // CONFLICT or ERROR, which every stored row satisfies because the column reads NULL in it. Only
+      // `project_promotion` is altered: `task`, `project` and `project_acceptance_*` are not named, none
+      // of the six preserved triggers/functions is, and no function, trigger, enum, type or index is
+      // created, replaced or dropped — so it is not another writer of the DONE fence. No INSERT, UPDATE
+      // or DELETE: nothing is backfilled.
+      '0409_promotion_blocked_reason',
+      // A landing that pushed nothing because the target already had the work (0410): one nullable
+      // BOOLEAN with no default and no constraint on `project_integration_job`
+      // (`source_fully_applied`), 0346's `source_on_upstream` exactly. Only that table is altered: no
+      // `task`, `project` or `project_acceptance_*` object nor any of the six preserved
+      // triggers/functions is named, and no function, trigger, enum, type, index or constraint is
+      // created, replaced or dropped — so it is not another writer of the DONE fence. No INSERT,
+      // UPDATE or DELETE: every stored job reads NULL.
+      '0410_integration_job_source_fully_applied'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

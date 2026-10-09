@@ -33,6 +33,7 @@ import {
   CLAUDE_ACCOUNT_REMOVE_V1,
   ANTIGRAVITY_ACCOUNT_REMOVE_V1,
   CODEX_ACCOUNT_REMOVE_V1,
+  KIMI_ACCOUNT_REMOVE_V1,
   LOGIN_RELAY_TIMEOUT_MS,
 } from '../runner-api/runner-api.controller';
 import { loginCodeRelay } from './login-code-relay';
@@ -446,6 +447,8 @@ export class RunnersService {
    * Kimi may be told which of its two sites to sign in on (`region`: kimi.com or kimi.ai, whose
    * accounts are separate). Naming none is the bare `kimi login` it always was, which goes wherever
    * the CLI decides; a runner too old to choose is refused at the heartbeat that would hand it over.
+   * Kimi keeps accounts too, so a site can come with an account or a new one's name: the start hands
+   * both over, and the new account signs in on that site.
    */
   async startLogin(ownerId: string, id: string, dto: StartLoginDto = {}): Promise<RunnerLoginState> {
     const engine: LoginEngine = dto.engine ?? 'claude';
@@ -965,6 +968,7 @@ const ACCOUNT_REMOVE_TOO_OLD: Record<string, string> = {
   codex: 'This runner is too old to remove a Codex account — update it, then try again.',
   claude: 'This runner is too old to remove a Claude account — update it, then try again.',
   antigravity: 'This runner is too old to remove an Antigravity account — update it, then try again.',
+  kimi: 'This runner is too old to remove a Kimi account — update it, then try again.',
 };
 
 /** The capability each engine's removal needs the runner to declare. */
@@ -972,6 +976,7 @@ const ACCOUNT_REMOVE_CAPABILITIES: Record<string, string> = {
   codex: CODEX_ACCOUNT_REMOVE_V1,
   claude: CLAUDE_ACCOUNT_REMOVE_V1,
   antigravity: ANTIGRAVITY_ACCOUNT_REMOVE_V1,
+  kimi: KIMI_ACCOUNT_REMOVE_V1,
 };
 
 /** Project a runner row onto the browser-facing account-removal view. */

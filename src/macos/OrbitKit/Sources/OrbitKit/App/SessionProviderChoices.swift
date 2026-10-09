@@ -47,9 +47,9 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
     /// Nil for anything else.
     public let note: String?
     /// The runner's own accounts of this engine, when it has signed in more than one: offered under
-    /// its row, so a session can start on another account than its workspace's. Codex, Claude and
-    /// Antigravity — the engines whose CLI keeps a login per directory (`Session.codexAccount`,
-    /// `.claudeAccount`, `.antigravityAccount`).
+    /// its row, so a session can start on another account than its workspace's. Codex, Claude,
+    /// Antigravity and Kimi — the engines whose CLI keeps a login per directory (`Session.codexAccount`,
+    /// `.claudeAccount`, `.antigravityAccount`, `.kimiAccount`).
     public let accounts: [AccountChoice]?
     /// Not a provider at all: the offer to connect one (DeepSeek Harness with no key yet). Always
     /// `unavailable`, never a session's provider, so no runtime's menu lists it.
@@ -221,6 +221,19 @@ public enum SessionProviderChoices {
         health?.installed == false ? "Not installed" : nil
     }
 
+    /// The arrow that closes a picker row's reason: where tapping the row goes.
+    ///
+    /// A sign-in this client can drive is a promise the row can keep, so those engines get ", sign
+    /// in →". What a runner is missing otherwise takes the bare arrow: an install (`opencode`
+    /// included, now that Orbit installs it), a runner update, a Harness key to paste, Antigravity's
+    /// install-or-key row, and OpenCode's own `auth login` — which asks which underlying provider to
+    /// use, so the relay's DTO can't express it (`EngineAuth.Remedy.runCommand`). Naming a sign-in
+    /// on those points at a button that isn't there, and the row already lands on the one that is.
+    public static func fixSuffix(_ fixEngine: String?) -> String {
+        ["antigravity", "dsh", DshRuntime.connectFix, "opencode"].contains(fixEngine ?? "")
+            ? " →" : ", sign in →"
+    }
+
     /// Why a pool none of whose credentials can run is greyed out, in the pool's own words: what it holds
     /// is what its reader can run on — its ChatGPT accounts first and its keys when none can (2026-10-03),
     /// built for one of the people its owner added the same way it is for its owner (web's
@@ -323,23 +336,30 @@ public enum SessionProviderChoices {
                               brandKey: DshRuntime.presetSlug, modelLabel: "", unavailable: "Add API key",
                               fixEngine: DshRuntime.connectFix, setup: true)]
             : []
-        // OpenCode, once the runner reports it installed — it has no sign-in to offer, so a machine
-        // without it has nothing to fix here either. Its own config first, then every key it may spend
-        // (`OpenCodeKeys`): it speaks each dialect a configured key does, so the same key is listed
-        // under its own engine above and here, as `opencode/<slug>` (web parity).
-        let openCode: [ProviderChoice] = health("opencode")?.installed == true
-            ? [ProviderChoice(slug: "opencode", label: AgentDefaults.providerName("opencode", configured: nil),
-                              kind: .engine, brandKey: nil,
-                              modelLabel: modelLabel(for: "opencode", configured: configured, catalog: catalog))]
-                + configured
-                    .filter { $0.runsOnOpenCode == true && !poolSlugs.contains($0.slug) }
-                    .map { provider in
-                        let choice = OpenCodeKeys.choice(provider.slug)
-                        return ProviderChoice(slug: choice, label: provider.label, kind: .byok,
-                                              brandKey: provider.presetSlug,
-                                              modelLabel: modelLabel(for: choice, configured: configured, catalog: catalog))
-                    }
-            : []
+        // OpenCode, installed or not: Orbit installs it, so a machine without it is a row the picker
+        // can send somewhere rather than an empty space — the same rule DSH and the login engines are
+        // listed under. It has no sign-in to offer (its own login picks an underlying provider
+        // interactively), so the row is never a pick until the CLI is there. Then its keys, which are
+        // only worth listing once it runs (`OpenCodeKeys`): it speaks each dialect a configured key
+        // does, so the same key is listed under its own engine above and here, as `opencode/<slug>`
+        // (web parity).
+        let openCodeInstalled = health("opencode")?.installed == true
+        let openCode: [ProviderChoice] = [
+            ProviderChoice(slug: "opencode", label: AgentDefaults.providerName("opencode", configured: nil),
+                           kind: .engine, brandKey: nil,
+                           modelLabel: modelLabel(for: "opencode", configured: configured, catalog: catalog),
+                           unavailable: openCodeInstalled ? nil : "Not installed",
+                           fixEngine: openCodeInstalled ? nil : "opencode")
+        ] + (openCodeInstalled
+             ? configured
+                 .filter { $0.runsOnOpenCode == true && !poolSlugs.contains($0.slug) }
+                 .map { provider in
+                     let choice = OpenCodeKeys.choice(provider.slug)
+                     return ProviderChoice(slug: choice, label: provider.label, kind: .byok,
+                                           brandKey: provider.presetSlug,
+                                           modelLabel: modelLabel(for: choice, configured: configured, catalog: catalog))
+                 }
+             : [])
         return engineChoices + poolChoices + byok + dshSetup + openCode
     }
 
@@ -420,6 +440,39 @@ public enum SessionProviderChoices {
         return EngineChoice(slug: slug,
                             label: slug == "dsh" ? "DeepSeek Harness" : AgentDefaults.providerName(slug, configured: nil),
                             brandKey: slug == "dsh" ? DshRuntime.presetSlug : enginePreset[slug], provider: provider)
+    }
+
+    /// The composer menu's own title: the engine this session runs on, and — while a standing pick
+    /// will carry the next turn to a different engine — where it is going (web `engineTitleFor`).
+    /// Every row under the title picks something for the next turn; this is the one fact none of
+    /// them states, and nothing here can move it.
+    public struct EngineTitle: Equatable, Sendable {
+        /// The CLI's own product name (`RunnerPageFormat.engineName`): `Claude Code`, not `Claude`,
+        /// because a BYOK session writes DeepSeek's models while Claude Code executes them.
+        public let name: String
+        /// The engine a held pick is taking the next turn to; nil when that is the engine already
+        /// running — two providers of one CLI read as the same title, and `A → A` says nothing.
+        public let nextName: String?
+
+        public init(name: String, nextName: String?) {
+            self.name = name
+            self.nextName = nextName
+        }
+
+        /// The whole title as one line — `Claude Code`, or `Claude Code → Codex` while a held pick
+        /// stands on another engine. Built here rather than in the composer so both clients (and the
+        /// tests) spell the arrow the same way.
+        public var label: String { [name, nextName].compactMap { $0 }.joined(separator: " → ") }
+    }
+
+    public static func engineTitle(provider: String,
+                                   configured: [ConfiguredProvider],
+                                   nextProvider: String? = nil) -> EngineTitle {
+        let runtime = executingRuntime(provider, configured: configured)
+        let name = RunnerPageFormat.engineName(runtime)
+        guard let nextProvider else { return EngineTitle(name: name, nextName: nil) }
+        let next = executingRuntime(nextProvider, configured: configured)
+        return EngineTitle(name: name, nextName: next == runtime ? nil : RunnerPageFormat.engineName(next))
     }
 
     /// `choices` grouped by the engine that runs them, in the order the engines first appear there

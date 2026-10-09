@@ -172,13 +172,14 @@ func TestDshAgentOverlay(t *testing.T) {
 		t.Fatal(err)
 	}
 	disabled := map[string]bool{}
-	var insert map[string]interface{}
+	inserts := map[string]map[string]interface{}{}
 	for _, row := range rows {
 		if row["disabled"] == true {
 			disabled[row["id"].(string)] = true
 		}
 		if list, ok := row["insert"].([]interface{}); ok {
-			insert = list[0].(map[string]interface{})
+			entry := list[0].(map[string]interface{})
+			inserts[entry["id"].(string)] = entry
 		}
 	}
 	for _, id := range dshDisabledAgentTools {
@@ -186,17 +187,38 @@ func TestDshAgentOverlay(t *testing.T) {
 			t.Fatalf("%s must be disabled: %s", id, data)
 		}
 	}
-	if insert == nil || mapValue(insert["config"])["text"] != text || !strings.HasPrefix(insert["name"].(string), "file:///") {
-		t.Fatalf("prompt section row = %+v", insert)
+	pluginSource := func(insert map[string]interface{}, want string) string {
+		t.Helper()
+		if insert == nil || !strings.HasPrefix(insert["name"].(string), "file:///") {
+			t.Fatalf("plugin row = %+v", insert)
+		}
+		plugin := strings.TrimPrefix(insert["name"].(string), "file://")
+		var manifest map[string]interface{}
+		raw, _ := os.ReadFile(filepath.Join(filepath.Dir(plugin), "package.json"))
+		if json.Unmarshal(raw, &manifest) != nil || manifest["name"] == "" || manifest["version"] != "1.0.0" {
+			t.Fatalf("a named plugin package needs a version: %s", raw)
+		}
+		source, _ := os.ReadFile(plugin)
+		if string(source) != want {
+			t.Fatalf("plugin source = %s", source)
+		}
+		return string(source)
 	}
-	plugin := strings.TrimPrefix(insert["name"].(string), "file://")
-	var manifest map[string]interface{}
-	raw, _ := os.ReadFile(filepath.Join(filepath.Dir(plugin), "package.json"))
-	if json.Unmarshal(raw, &manifest) != nil || manifest["name"] == "" || manifest["version"] != "1.0.0" {
-		t.Fatalf("a named plugin package needs a version: %s", raw)
+	prompt := inserts["orbit-append-system-prompt"]
+	if mapValue(prompt["config"])["text"] != text || !strings.Contains(pluginSource(prompt, dshAppendPromptPlugin), "interpolate: false") {
+		t.Fatalf("prompt section row = %+v", prompt)
 	}
-	if source, _ := os.ReadFile(plugin); string(source) != dshAppendPromptPlugin || !strings.Contains(string(source), "interpolate: false") {
-		t.Fatalf("plugin source = %s", source)
+	// The tool gate rides every session, with the runner's own patterns as its config.
+	gate := inserts["orbit-tool-gate"]
+	pluginSource(gate, dshToolGatePlugin)
+	config := mapValue(gate["config"])
+	if rules, _ := config["rules"].([]interface{}); len(rules) != len(dshToolGateRules) ||
+		config["heredoc"] != dshHeredoc.String() || config["interpreter"] != dshHeredocInterpreter.String() || config["message"] != dshGitMessage.String() {
+		t.Fatalf("tool gate config = %+v", config)
+	}
+	bare, err := prepareDshAgentConfigAt(input, &DshAgentOverlay{}, exe, filepath.Join(t.TempDir(), "bare"))
+	if err != nil || len(bare.Args) != 6 {
+		t.Fatalf("a session without an appended prompt still carries the gate: %+v, %v", bare.Args, err)
 	}
 	if !strings.Contains(strings.Join(spec.Env, "\n"), "DSH_AGENTS_HOME="+filepath.Join(spec.DshHome, "agents")) {
 		t.Fatal("user-level ~/.agents skills must not leak into the session")
@@ -829,9 +851,10 @@ func TestDshRealOrbitMCPAndAgentInstructions(t *testing.T) {
 		"agentsAndSkillsInContext": true, "tools": names, "tasksCreatedOnDouble": len(created), "commentsOnDouble": len(comments)})
 }
 
-// TestDshRealThirdPartyMCPRunsUnasked: a stdio server the agent configures is mounted only in
-// Auto, where it acts without any approval request even though it declares itself destructive.
-func TestDshRealThirdPartyMCPRunsUnasked(t *testing.T) {
+// TestDshRealThirdPartyMCPAsksFirst: dsh never asks before an MCP tool, whatever its annotations say
+// (P0), so Orbit's tool gate asks before every third-party MCP call. In Auto, the only mode that
+// mounts them, a refused call has no side effect and an allowed one acts once.
+func TestDshRealThirdPartyMCPAsksFirst(t *testing.T) {
 	node := os.Getenv("P4_NODE_BIN")
 	if !filepath.IsAbs(node) {
 		t.Skip("P4_NODE_BIN must name node; run scripts/test-dsh-mcp-approval.sh")
@@ -844,25 +867,31 @@ func TestDshRealThirdPartyMCPRunsUnasked(t *testing.T) {
 	log := filepath.Join(t.TempDir(), "third-party-mcp.ndjson")
 	h.job.Agent.McpConfig = map[string]interface{}{"thirdparty": map[string]interface{}{"command": node, "args": []interface{}{server},
 		"env": map[string]interface{}{"P0_MCP_LOG": log}}}
-	h.model.plans = []dshPlan{{tool: "mcp__thirdparty__record", args: map[string]interface{}{"value": "p4-third-party-effect"}}, {text: "P4 third-party answer"}}
+	h.model.plans = []dshPlan{
+		{tool: "mcp__thirdparty__record", args: map[string]interface{}{"value": "p4-refused-effect"}},
+		{tool: "mcp__thirdparty__record", args: map[string]interface{}{"value": "p4-third-party-effect"}},
+		{text: "P4 third-party answer"},
+	}
 	h.start()
 	h.send("t1", "message", "Call the third-party MCP tool.")
+	refused := h.waitCard(1)
+	if refused.Body["toolName"] != "mcp__thirdparty__record" {
+		t.Fatalf("card = %+v", refused.Body)
+	}
+	h.cp.decide(refused.ID, "DENIED")
+	h.cp.decide(h.waitCard(2).ID, "ALLOWED")
 	if done := h.settled("t1"); done.Status != stSucceeded {
 		t.Fatalf("turn = %+v", done)
 	}
 	data, _ := os.ReadFile(log)
-	if !strings.Contains(string(data), `"effect":"p4-third-party-effect"`) {
-		t.Fatalf("third-party MCP side effect = %s", data)
+	if strings.Contains(string(data), "p4-refused-effect") || strings.Count(string(data), `"effect":"p4-third-party-effect"`) != 1 {
+		t.Fatalf("third-party MCP side effects = %s", data)
 	}
-	if cards := h.cp.cards(); len(cards) != 0 {
-		t.Fatalf("dsh never asks before MCP tools, annotations notwithstanding: %+v", cards)
-	}
-	_, result := h.toolResult("t1", "mcp__thirdparty__record")
-	if result["status"] != "completed" {
-		t.Fatalf("result = %+v", result)
+	if cards := h.cp.cards(); len(cards) != 2 {
+		t.Fatalf("one card per third-party MCP call: %+v", cards)
 	}
 	h.end()
-	h.evidence(t.Name(), map[string]interface{}{"sideEffect": true, "approvalRequests": 0})
+	h.evidence(t.Name(), map[string]interface{}{"refusedEffect": false, "allowedEffect": true, "approvalRequests": 2})
 }
 
 // TestDshRealMCPTimeoutCancelsTheCall measures what the pinned dsh does to an ACP-mounted MCP call
@@ -882,6 +911,7 @@ func TestDshRealMCPTimeoutCancelsTheCall(t *testing.T) {
 	h.job.Agent.McpConfig = map[string]interface{}{"held": map[string]interface{}{"command": node, "args": []interface{}{server},
 		"env": map[string]interface{}{"P0_MCP_LOG": log}}}
 	h.model.plans = []dshPlan{{tool: "mcp__held__record", args: map[string]interface{}{"value": "hold"}}, {text: "P4 timeout answer"}}
+	h.cp.autoAllow["mcp__held__record"] = true // the tool gate asks first; this measures the call itself
 	h.start()
 	started := time.Now()
 	h.send("t1", "message", "Call the held MCP tool.")

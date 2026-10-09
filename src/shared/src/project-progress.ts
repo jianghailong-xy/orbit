@@ -128,6 +128,16 @@ export interface ProjectIntegrationInFlight<Instant = string> {
   startedAt: Instant;
   /** Last report from the runner; absent on older servers and null before a claim. */
   heartbeatAt?: Instant | null;
+  /**
+   * How long the job waited its turn before the claim, in ms — the same measurement the task row's
+   * landing carries (`LandTaskIntegrationView.waitMs`).
+   *
+   * The clock counts from the claim, so the minutes a reader watches are the minutes of WORK, and a
+   * job that sat in the queue for two and a half of them having run for four is a different story
+   * from one that has been running for six and a half. Absent on older servers and on a job still
+   * queued, whose whole elapsed time IS the wait.
+   */
+  waitMs?: number | null;
 }
 
 /**
@@ -583,10 +593,43 @@ export interface ProjectOpenItemRow<Instant = string> {
   chat?: OpenItemChat | null;
 }
 
+/**
+ * A question the coordinator put to the owner that has ended (§5.2 R10, R12): the owner answered
+ * it, or it was withdrawn. The card the conversation drew for it is drawn as this record — the
+ * question as it was asked, every option, what the owner chose and wrote, and where the answer went —
+ * so it survives a relaunch and reads the same on a device that never saw the question open.
+ */
+export interface ProjectClosedQuestion<Instant = string> {
+  itemId: string;
+  /** The question as it was asked: the same shape as an open row's `question`. */
+  question: CoordinatorQuestion;
+  /** When the coordinator asked it. */
+  askedAt: Instant;
+  resolution: 'ANSWERED' | 'WITHDRAWN';
+  /** Who ended it: the owner (`USER`), or the conversation that asked it (`COORDINATOR`). */
+  resolvedBy: 'USER' | 'COORDINATOR';
+  /** When it was answered or withdrawn — the moment the record is drawn at. */
+  resolvedAt: Instant;
+  /** What the owner answered: an option's index, their own words, or both. Null when withdrawn. */
+  answer: { option: number | null; text: string | null } | null;
+  /** The first coordinator conversation the answer was delivered to, and when. Null while none has
+   *  had it — no conversation was coordinating the project — and for a withdrawn question. */
+  delivery: { sessionId: string; at: Instant } | null;
+  /** The reason it was withdrawn with; null for an answered question. */
+  withdrawReason: string | null;
+}
+
 /** The project's open exceptions, split by who is expected to act (§4.8). */
 export interface ProjectOpenItemsView<Instant = string> {
   needsYou: Array<ProjectOpenItemRow<Instant>>;
   withCoordinator: Array<ProjectOpenItemRow<Instant>>;
+  /**
+   * The coordinator's questions that have ended — answered or withdrawn — newest first, at most 50
+   * (§4.8, §5.2 R10, R12). Kept out of `needsYou`: nobody owes anything about them, and a
+   * conversation draws each at the moment it ended, as the record its card became. Absent from a
+   * server that predates it.
+   */
+  closedQuestions?: Array<ProjectClosedQuestion<Instant>>;
   /**
    * Exceptions the coordinator closed in the last day, newest first (§4.7 H5): handled — its rerun
    * landed or passed, or it closed the item with a reason — or superseded by the new item its failed
@@ -760,6 +803,13 @@ export type PromotionState =
 /** What is being merged: the project's own branch, or one task's branch on a `MAIN` line (§3.2). */
 export type PromotionSourceKind = 'PROJECT_BRANCH' | 'TASK_BRANCH';
 
+/**
+ * Why a candidate is `BLOCKED`, as the job that blocked it answered (migration 0409): the source was
+ * already on the upstream, so there is nothing to merge; a check on the combined tree failed; the
+ * merge conflicted; or the job stopped before any check could answer.
+ */
+export type PromotionBlockedReason = 'ALREADY_LANDED' | 'CHECK_FAILED' | 'CONFLICT' | 'ERROR';
+
 /** One task a candidate would carry onto the upstream, as the card's Tasks row lists it (§3.6). */
 export interface PromotionTask {
   taskId: string;
@@ -801,6 +851,13 @@ export interface ProjectPromotionView<Instant = string> {
   checks: IntegrationCheckResult[];
   /** The paths the merge could not reconcile, empty unless the candidate is BLOCKED. */
   conflicts: string[];
+  /**
+   * Why a BLOCKED candidate is blocked, stored with the block rather than read off `checks` and
+   * `conflicts`: both are empty when there was nothing to merge, and when the job errored before a
+   * check ran. Null on a candidate blocked before the reason was recorded, and on one that is not
+   * blocked.
+   */
+  blockedReason: PromotionBlockedReason | null;
   /** Null until a check has passed; after that, the upstream tip that check ran against. */
   upstreamShaChecked: string | null;
   /** The tree the checks passed on, which is the tree that lands (M6). Null before they have. */

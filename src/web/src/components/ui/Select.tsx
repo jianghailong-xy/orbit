@@ -70,9 +70,15 @@ export function Select<Value extends string = string>({ options, value, onValueC
       }} className="orbit-select-trigger" aria-busy={loading || undefined} onKeyDown={(event) => {
         // Base UI moves focus into an opened list on the next animation frame. Until then the trigger
         // would restart the highlight (arrows) or close the list unselected (Enter), so hand these keys
-        // to the element focus is moving to; they then act as in the list, as with AntD.
+        // to the element focus is moving to; they then act as in the list, as with AntD. Tab and Shift+Tab
+        // would leave from the trigger rather than the list: Tab moves focus first and lets the browser
+        // tab on from there, Shift+Tab is handed over like the others.
         const list = popup.current;
-        if (!layer.open || !list || !['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) return;
+        if (!layer.open || !list || !['ArrowDown', 'ArrowUp', 'Enter', 'Tab'].includes(event.key)) return;
+        if (event.key === 'Tab' && !event.shiftKey) {
+          (list.querySelector<HTMLElement>('[data-highlighted]') ?? list).focus({ preventScroll: true });
+          return;
+        }
         event.preventDefault();
         event.stopPropagation();
         event.preventBaseUIHandler();
@@ -91,7 +97,7 @@ export function Select<Value extends string = string>({ options, value, onValueC
         onClick={() => { onValueChange(null); trigger.current?.focus(); }}><CloseCircleFilled aria-hidden /></button>}
     </span>
     <BaseSelect.Portal container={layer.container()}>
-      <BaseSelect.Positioner ref={positioner} anchor={anchor} alignItemWithTrigger={false} side={side} align={align} {...placement}
+      <BaseSelect.Positioner ref={positioner} anchor={anchor} alignItemWithTrigger={false} side={side} align={align} {...placement} positionMethod={layer.positionMethod}
         className="orbit-floating-positioner orbit-choice-positioner" data-match-width={matchTriggerWidth}
         style={{ zIndex: layer.zIndex, '--orbit-choice-anchor-width': anchorWidth === undefined ? undefined : `${anchorWidth}px` } as CSSProperties}>
         <BaseSelect.Popup ref={popup} className={`orbit-select-popup${popupClassName ? ` ${popupClassName}` : ''}`} style={popupStyle} finalFocus={returnFocus}>

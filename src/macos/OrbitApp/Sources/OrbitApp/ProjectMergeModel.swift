@@ -19,9 +19,13 @@ final class ProjectMergeModel: PromotionReviewSource {
     /// The merges already made, newest first — the timeline's rows.
     private(set) var merged: [ProjectPromotionView] = []
     private(set) var openItems: ProjectOpenItemsView?
+    /// What the project's line is landing, for the sheet's "who is in front of it" row (the card
+    /// under the sheet draws the same row off the page's own read). Kept as last read.
+    private(set) var landings: [ProjectLandTask] = []
     private var criteria: [ProjectCriteriaDocument.Item] = []
     private var mergedReadAt: Date?
     private var itemsReadAt: Date?
+    private var landingsReadAt: Date?
     private var criteriaReadAt: Date?
     /// Bumped by every read and press, so an older poll that lands after a press cannot put back
     /// the state the press moved the candidate out of.
@@ -54,15 +58,22 @@ final class ProjectMergeModel: PromotionReviewSource {
         let mergedDue = force || moved || mergedReadAt.map({ Date().timeIntervalSince($0) > 60 }) != false
         let itemsDue = force || (stage == .blocked && (moved || itemsReadAt.map({ Date().timeIntervalSince($0) > 20 }) != false))
         let criteriaDue = stage == .askingYou && (force || criteriaReadAt.map({ Date().timeIntervalSince($0) > 60 }) != false)
+        // The landings a blocked candidate may have to look past: the same read the page beside the
+        // sheet draws its card from, on the same 20-second clock as the item that holds it.
+        let landingsDue = force
+            || (stage == .blocked && (moved || landingsReadAt.map { Date().timeIntervalSince($0) > 20 } != false))
         let mergedRead: Task<[ProjectPromotionView], Error>? = mergedDue
             ? Task { try await api.mergedPromotions(projectID: projectID) } : nil
         let itemsRead: Task<ProjectOpenItemsView, Error>? = itemsDue
             ? Task { try await api.projectOpenItems(projectID: projectID) } : nil
+        let landingsRead: Task<ProjectIntegrationView, Error>? = landingsDue
+            ? Task { try await api.projectIntegration(projectID) } : nil
         let criteriaRead: Task<ProjectCriteriaDocument, Error>? = criteriaDue
             ? Task { try await api.projectCriteria(projectID: projectID) } : nil
         defer {
             mergedRead?.cancel()
             itemsRead?.cancel()
+            landingsRead?.cancel()
             criteriaRead?.cancel()
         }
         if let read = try? await mergedRead?.value, mine == generation {
@@ -72,6 +83,10 @@ final class ProjectMergeModel: PromotionReviewSource {
         if let items = try? await itemsRead?.value, mine == generation {
             openItems = items
             itemsReadAt = Date()
+        }
+        if let integration = try? await landingsRead?.value, mine == generation {
+            landings = integration.landTasks
+            landingsReadAt = Date()
         }
         if let document = try? await criteriaRead?.value, mine == generation {
             criteria = document.acceptanceCriteriaItems ?? []
@@ -88,6 +103,8 @@ final class ProjectMergeModel: PromotionReviewSource {
     var promotionItems: [ProjectOpenItemRow] {
         (openItems?.needsYou ?? []) + (openItems?.withCoordinator ?? [])
     }
+
+    var promotionLandings: [ProjectLandTask] { landings }
 
     /// Nil until the criteria have been read — "0 of 0 met" would be a claim nobody checked.
     var criteriaMet: (met: Int, total: Int)? {

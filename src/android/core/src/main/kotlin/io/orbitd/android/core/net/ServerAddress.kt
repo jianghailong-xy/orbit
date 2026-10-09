@@ -16,9 +16,12 @@ data class ServerAddress private constructor(val value: String) {
     }
 
     companion object {
-        /** HTTP is only for explicit loopback test fixtures, never a remote credential endpoint. */
+        /**
+         * HTTP is only for explicit loopback test fixtures, never a remote credential endpoint. An address typed without a
+         * scheme, such as the login page's orbitd.io, is HTTPS (iOS ServerURL takes a bare host too).
+         */
         fun parse(input: String, allowLoopbackHttp: Boolean = false): ServerAddress {
-            val text = input.trim()
+            val text = input.trim().let { if (it.isEmpty() || "://" in it) it else "https://$it" }
             val url = text.toHttpUrlOrNull() ?: throw InvalidServerAddress()
             if (text.any { it.isISOControl() } || '\\' in text ||
                 url.username.isNotEmpty() || url.password.isNotEmpty() ||

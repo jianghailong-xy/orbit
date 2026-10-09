@@ -1,0 +1,146 @@
+{
+  "approvalCards": [],
+  "controlPlane": null,
+  "facts": {
+    "cards": 0,
+    "file": "absent"
+  },
+  "modelRequests": 2,
+  "orbitEvents": [
+    {
+      "payload": {
+        "argv": [
+          "--profile",
+          "acp",
+          "--patch",
+          "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealDontAskRejectsUnasked3393655455/001/dsh-home/orbit.patch.json",
+          "--patch",
+          "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealDontAskRejectsUnasked3393655455/001/dsh-home/orbit-agent.patch.json"
+        ],
+        "cliVersion": "0.2.0-rc.2",
+        "configHash": "a33f386a44999fdc95fa6e688bf54e414afa05406a0ec352d2a1e98c9a844daa",
+        "dshHome": "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealDontAskRejectsUnasked3393655455/001/dsh-home",
+        "executable": "/tmp/orbit-dsh-p4-OFKGjI/install/node_modules/.bin/dsh",
+        "provider": "dsh",
+        "runtime": "acp",
+        "subtype": "launch"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "cliVersion": "0.2.0-rc.2",
+        "provider": "dsh",
+        "resumed": false,
+        "runtime": "acp",
+        "runtimeSessionId": "6188c160-4d4e-4404-a6e8-0b2d10960250",
+        "sessionId": "6188c160-4d4e-4404-a6e8-0b2d10960250",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "runtimeSessionId": "6188c160-4d4e-4404-a6e8-0b2d10960250",
+        "text": "Write the file."
+      },
+      "turn": "t1",
+      "type": "user"
+    },
+    {
+      "payload": {
+        "contextTokens": 47463,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "6188c160-4d4e-4404-a6e8-0b2d10960250",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_1",
+        "input": {
+          "content": "P4 dont ask",
+          "file_path": "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealDontAskRejectsUnasked3393655455/001/work/dont-ask.txt",
+          "justification": "P4 synthetic escalation",
+          "sandbox_permissions": "workspace-write"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "name": "write",
+        "runtimeSessionId": "6188c160-4d4e-4404-a6e8-0b2d10960250",
+        "status": "in_progress",
+        "toolCallId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "name": "write",
+        "provider": "dsh",
+        "reason": "Don't Ask refuses without asking",
+        "runtimeSessionId": "6188c160-4d4e-4404-a6e8-0b2d10960250",
+        "subtype": "permission_denied",
+        "toolCallId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "content": "Error: the user rejected escalating this operation to \"workspace-write\"; it stays denied, so stop and explain instead of working around it",
+        "isError": true,
+        "localTurnId": "t1",
+        "runtimeSessionId": "6188c160-4d4e-4404-a6e8-0b2d10960250",
+        "status": "failed",
+        "toolCallId": "call_p4_1",
+        "toolUseId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "messageId": "4eb427a3-77cf-458c-a70b-9d36d19ac19f",
+        "runtimeSessionId": "6188c160-4d4e-4404-a6e8-0b2d10960250",
+        "text": "P4 dont ask answer"
+      },
+      "turn": "t1",
+      "type": "assistant"
+    },
+    {
+      "payload": {
+        "contextTokens": 47519,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "6188c160-4d4e-4404-a6e8-0b2d10960250",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "contextTokens": 47519,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "numTurns": 1,
+        "runtimeSessionId": "6188c160-4d4e-4404-a6e8-0b2d10960250",
+        "stopReason": "end_turn",
+        "subtype": "completed"
+      },
+      "turn": "t1",
+      "type": "turn_end"
+    }
+  ],
+  "permissionMode": "dontAsk",
+  "scenario": "TestDshRealDontAskRejectsUnasked"
+}

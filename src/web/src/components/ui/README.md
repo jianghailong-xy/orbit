@@ -13,19 +13,20 @@
 
 | 导入 | 最小约定 |
 | --- | --- |
-| `Button` | `variant="default/primary/text/link"`，`size="small/middle/large"`，`danger`、`icon`、`loading`；其余为原生 button 属性，**`type` 是 button/submit/reset**，默认 button。ref 为 HTMLButtonElement。纯图标必须给可访问名称。loading 阻止再次激活，保留焦点并暴露 aria-busy；disabled 按原生规则退出 Tab 顺序。 |
+| `Button` | `variant="default/primary/dashed/text/link"`（dashed：虚线边框的默认按钮，如“添加模型”“添加变量”），`size="small/middle/large"`，`danger`、`icon`、`loading`；其余为原生 button 属性，**`type` 是 button/submit/reset**，默认 button。ref 为 HTMLButtonElement。纯图标必须给可访问名称。loading 阻止再次激活，保留焦点并暴露 aria-busy；disabled 按原生规则退出 Tab 顺序。 |
 | `LinkButton`（同 Button 文件） | 同一外观的原生 anchor，使用 href/target/rel/download 等原生属性和 HTMLAnchorElement ref；链接与操作按钮分别保持导航和提交语义。 |
 | `Input` | 原生 input 属性/ref，`size="small/middle/large"`、`invalid`、`prefix/suffix`。有装饰时 className/style 指向外壳，其他原生属性与 ref 仍指向 input；装饰区点击聚焦。标签和错误说明由调用方使用 label/aria-describedby 关联。 |
 | `Textarea` | 原生 textarea 属性，ref 即 HTMLTextAreaElement；`invalid`、rows、`variant="outlined/borderless"`、`autoSize`（`true` 或 `{minRows,maxRows}`）。保留选区、输入与拖拽调整尺寸；自动增高与会话输入约定见下文。 |
 | `Checkbox` | 必填 checked，onCheckedChange(boolean)、indeterminate、disabled、invalid；支持 name/value/form 和原生 input ref。文字作为 children，点击标签与 Space 切换。 |
-| `Radio` / `RadioGroup` | 组提供必填 value、onValueChange(value)、name、disabled；子项提供 value/children/disabled。组使用 aria-label 或 aria-labelledby 命名；箭头键跳过禁用项。variant="default/button"，size="small/middle"。 |
-| `Switch` | 必填 checked、onCheckedChange(boolean)，size="small/middle"、disabled、loading；使用 aria-label 或 aria-labelledby 命名，支持 name/value/form 和原生 input ref。 |
-| `Badge` | 原生 span 状态标签（替代 Tag），tone="default/info/success/warning/error/blue"、icon、children。使用可读文字表达状态。 |
+| `Radio` / `RadioGroup` | 组提供必填 value、onValueChange(value)、name、disabled；子项提供 value/children/disabled。组使用 aria-label 或 aria-labelledby 命名；箭头键跳过禁用项。variant="default/button"，size="small/middle"；按钮形态可设 `buttonStyle="outline/solid"`（默认 outline，solid 时选中项以主色填充，如暂停时长）。 |
+| `Switch` | 必填 checked、onCheckedChange(boolean)，size="small/middle"、disabled、loading；使用 aria-label 或 aria-labelledby 命名，支持 name/value/form 和原生 input ref。宽 44px（small 28px），且同被替换开关的 min-width 不会更窄：flex 行里旁边的长文字挤不窄它（P4.2）。 |
+| `Badge` | 原生 span 状态标签（替代 Tag），tone="default/info/success/warning/error/blue/green/orange/red/gold"（后四种是被替换标签的同名预设色，明暗主题各取其色板）、icon、children，其余为 span 属性（如 title）。使用可读文字表达状态；没有 ARIA 角色，测试按所在区域与文字定位。 |
 | `Spinner` | 原生 span，size="small/middle"（14/20px），role=status、默认 aria-label="Loading"；嵌入已有加载状态时可设 aria-hidden，避免重复播报。 |
 | `Avatar` | 原生 span 的圆形头像：`size`（px，默认 32）与文字 children，颜色/字号由调用方 style 给出。1px 透明边框、内容居中、行高为字号的 1.5714 倍。给 `src`（及可选 `alt`，默认空）时画图片：铺满边框内侧并按圆裁切，调用方背景在透明边框处仍可见；没有图片或图片加载失败时显示文字。 |
 | `Alert` | role=alert 的状态块：`type="error/warning"`、`title`、`description`、className/style。无说明时 8px/12px 内边距、14px 图标与文字垂直居中；带说明时 20px/24px 内边距、24px 图标顶对齐、16px 标题。8px 圆角。 |
 | `Segmented` | radiogroup 分段切换：受控 `value`/`onValueChange`、`options`（value/label/disabled）、aria-label。`size="middle"`（默认，28px 项、11px 文字内边距、6px 轨道圆角、4px 项圆角）或 `"small"`（任务面板的 20px 项、7px 内边距、4px/2px 圆角），轨道均 2px。切换时选中块从旧项滑到新项（0.3s），减少动态效果时直接切换；方向键在项间移动并选中，选中项是唯一的 Tab 停留点。 |
-| `PasswordInput` | Input 的密码形态（除 type 外同 Input 的 props）：末尾显示/隐藏开关同被替换字段——`role=button`、在 Tab 顺序中、Enter/Space 切换，名称为 Show/Hide 并以 aria-pressed 表示密码已显示；按下开关不夺走字段焦点与光标。`suffix` 排在开关之后，间隔 8px。 |
+| `PasswordInput` | Input 的密码形态（除 type 外同 Input 的 props）：末尾显示/隐藏开关同被替换字段——`role=button`、在 Tab 顺序中、Enter/Space 切换，名称为 Show/Hide 并以 aria-pressed 表示密码已显示；按下开关不夺走字段焦点与光标。`suffix` 排在开关之后，间隔 8px。默认自管显示状态；给 `visible` 时受控，开关经 `onVisibleChange(visible)` 请求变化（Provider 编辑页显示已保存的密钥前，先向服务器取回它）。 |
+| `NumberInput` | 数字字段（替代 InputNumber）：受控 `value: number \| null`（空为 null）与 `onValueChange`，`min`/`max`/`step`（默认 1）/`precision`，`size="small/middle"`、disabled、placeholder、id/name、aria-label/aria-labelledby、`onPressEnter`。行为同被替换字段：输入中只上报界内的数（文字保持原样）；失焦、回车或步进时收回界内并按精度取整（四舍五入远离零，十进制精确运算），精度默认取值与步长小数位的较大者（步长 0.5 时 3 显示为 3.0）；ArrowUp/ArrowDown 步进；指针悬停时末端出现 22px 宽的上下步进键，按住 600ms 后每 200ms 重复。`role=spinbutton` 并暴露 aria-valuemin/max/now。没有封装 Base UI NumberField：它在输入中就把界外值夹到边界并上报（被替换字段只在失焦时收回，如暂停时长输入 169 时“暂停”按钮保持禁用），且用 `Intl.NumberFormat` 按地区格式化显示（200000 会显示为 200,000），两者都是可见的行为差异。 |
 
 Button、Checkbox、Radio、Switch 的交互封装 Base UI；文本输入与标签/加载图形使用原生语义。Checkbox/Radio/Switch 的值由业务持有，公共 API 不提供 defaultChecked/defaultValue；需要 reset 的表单由父级重置受控值。Checkbox/Radio 的 className/style 指向标签，其他 DOM 属性指向可聚焦控件，input ref 的 focus 由 Base UI 转交可访问控件。不要读取隐藏 input 或第三方 DOM 结构。
 
@@ -45,6 +46,9 @@ P4.1（登录、初始化、个人资料、设置）按页面实际需要补齐�
 - `Field`（`Field.tsx` + `Field.css`）：被替换表单的纵向字段：标签在上（8px 间距），控件行至少 32px，下方是消息与 `extra` 说明。字段底部保留 24px；有消息时消息占用这 24px（单行 22px 不推动下方字段），多行才撑开；`extra` 在消息之后，至少 24px。消息出现时 0.1s 淡入并下移 5px，消失时同样淡出（减少动态效果时直接切换）。`id` 必填：标签指向它，消息与说明的 id 为 `${id}_help`、`${id}_extra`。children 是函数，拿到 `{ id, aria-invalid, aria-required, aria-describedby }` 交给控件；没有 `label` 时控件自带名称（复选框自己的文字）。`FieldFeedback status="success/error"` 是放在控件末尾（如 `PasswordInput` 的 `suffix`）的校验结果图标，0.2s 放大淡入。
 - `useFormFields(initial, rules, dependsOn)`（`useFormFields.ts`）：文本字段的值与校验，触发时机同被替换表单：改动某字段即校验该字段；某字段改动时，依赖它且已改动或校验过的字段一并重校验（确认密码跟随新密码）；提交时 `validate()` 校验全部并返回是否通过；`reset()` 回到初值并清除消息与改动记录；`checked(name)` 表示该字段已改动或校验过（此时才显示通过图标）。规则是 `(value, values) => message | null`，每条失败的规则一条消息；文案由业务给出。表单使用原生 `<form onSubmit>`（Enter 提交、浏览器自身的 type=email 约束保持不变），不新增表单框架。
 - `Table.css` + `TableScroll`（`Table.tsx`）：原生 `table.orbit-table` 的被替换数据表外观：半粗表头与 1px 分隔线、表头单元之间 1px 竖线、16px 单元格、行悬停底色、空表时一行居中浅色说明（`tr.orbit-table-empty > td > div`：说明限在可见宽度内，表格横向滚动时不随之移动）。`TableScroll` 是横向滚动盒：表格至少与盒同宽，内容更宽时横向滚动，并在还有内容的一侧画出与被替换表格相同的内阴影；滚动条颜色同被替换表格（因而用浏览器自身的覆盖式滚动条，不是全站 8px 自定义滚动条）；表头为空的列保留一个空格宽（被替换表格的测量行给每列放了空格）。列定义、排序、分页与选择都不在其中；需要时按实际需求再加。
+- `TableFrame` 与 `TableEmptyRow`（`Table.tsx`，P4.2）：表格与盒同宽、不横向滚动时（Provider 列表的密钥表、管理员的用户表）用 `TableFrame` 包住 `table.orbit-table`：表格 100% 宽、凸起表面；`loading` 时同被替换表格的加载遮罩——表格半透明、不可操作，上覆表面色薄层，中间一个 Spinner，并标 aria-busy。`TableEmptyRow colSpan` 是没有行时的一行：被替换表格的插图与“No data”，上下 32px。响应式列由页面按媒体查询决定渲染哪些 `th/td`，固定列宽用 `colgroup` 与 `table-layout: fixed`，不另设列模型。
+- `Descriptions`（`Descriptions.tsx` + `.css`，P4.2）：带边框的单列标签-值表（被替换的 bordered、small 描述列表）：`items`（key/label/children），标签是 `th scope=row`、浅底色（`--orbit-fill-alter`）与次要文字色，单元格 8px/16px 内边距；`labelWidth` 固定标签列宽，未给时按最长标签。注册确认页与 CLI 登录页使用。
+- `Result`（`Result.tsx` + `.css`，P4.2）：结果块（被替换 Result）：`status="success/info/warning"` 的 72px 状态图标居中，24px 标题与 14px 次要说明 `subTitle`。注册确认页与 CLI 登录页使用。
 
 ## Dialog、Drawer 和异步确认
 
@@ -55,7 +59,7 @@ P4.1（登录、初始化、个人资料、设置）按页面实际需要补齐�
 - 默认支持 Esc、单击/单指轻点遮罩和 Close 按钮；内部按下、外部释放不关闭。`closeOnEscape`、`closeOnOutsideClick`、`closable` 分别控制三种关闭方式。busy 阻止关闭请求并禁用 Close；调用方负责自己的提交按钮。隐藏 Close 时应提供可访问的退出按钮。
 - 默认聚焦弹层容器，避免手机打开时自动弹出软键盘；initialFocus 可指定原生 ref。默认返回先前焦点；从菜单、触摸入口或会卸载的节点打开时，传 `returnFocus` 指向稳定的触发按钮。不能通过读取第三方 DOM 找触发器。
 - 默认关闭后卸载正文；`keepMounted` 适用于需保留未提交表单值的场景，关闭时隐藏且退出可访问树。业务页面迁移时明确选择其现有生命周期。
-- ConfirmDialog：`onConfirm` 返回 Promise 时自动 pending，成功调用 `onClose(true)`；取消/Esc 调用 `onClose(false)`；遮罩不关闭。默认聚焦 Cancel。提交期间按钮/取消/Esc均被锁住，同一事件轮内的重复提交也会被阻止。throw/reject 会保留弹窗，以 role=alert 显示错误并恢复重试/取消；业务已经有 toast 时仍由业务保留。必须返回 mutateAsync/请求 Promise，不能用返回 void 的 mutate 冒充可等待提交。
+- ConfirmDialog：`kind="success"`（P4.2）是只需确认的通知：成功图标、只有确认键并默认聚焦它（管理员新建用户后显示一次性密码）；默认 `kind="confirm"`。`onConfirm` 返回 Promise 时自动 pending，成功调用 `onClose(true)`；取消/Esc 调用 `onClose(false)`；遮罩不关闭。默认聚焦 Cancel。提交期间按钮/取消/Esc均被锁住，同一事件轮内的重复提交也会被阻止。throw/reject 会保留弹窗，以 role=alert 显示错误并恢复重试/取消；业务已经有 toast 时仍由业务保留。必须返回 mutateAsync/请求 Promise，不能用返回 void 的 mutate 冒充可等待提交。
 
 `Popconfirm` 是锚定的小确认浮层（替代旧 Popconfirm，与模态 ConfirmDialog 并存）：`trigger` 为触发按钮；没有按钮时（如分享弹窗从菜单项发起的“关闭链接”）传 `anchor` 并受控 `open/onOpenChange`。`title`、`description`、`confirmText`/`cancelText`、`danger`、`confirmLoading`。`onConfirm` 返回 Promise 时确认键 loading，resolve 后关闭、reject 时保持打开；返回其它值时立即关闭（与旧组件的 onConfirm 约定相同）。定位、箭头、阴影与 Popover 相同，打开时聚焦浮层，Esc/外部点击关闭，`returnFocus` 指定关闭后的焦点；内容保留旧样式：警告图标、粗体标题、4px 间隔的说明、右对齐 8px 间距的小号按钮。
 
@@ -134,6 +138,8 @@ P3.2 试点据真实页面补齐：Select 家族根类名为 `.orbit-select`（�
 Combobox 的值、占位与搜索输入框放在同一个行盒 `.orbit-combobox-field` 中（与被替换选择器的 content 盒相同）：行高来自隐藏的不换行空格，同时给控件提供文字基线；输入框由 inset 撑满而非百分比高度（后者使输入文字低1px）；打开且有值时整个行盒（含业务的悬停底色）一起淡化到 .25。未选值时打开即高亮第一项，Enter 选它（旧选择器的 defaultActiveFirstOption）。
 
 浮层位置按被替换的 rc-trigger 计算：其每个 inset 向下取整（顶/左边缘 floor(锚点边+间距)，以底/右边缘定位的——在锚点上方/左侧或与锚点末端对齐——取对应 ceil），Floating UI 则四舍五入，小数部分≥.5 时会差1px，`useWholePixelOffsets` 用 Base UI 公开的 sideOffset/alignOffset 函数补齐。Menu、Select、Combobox、MultiSelect 的列表另用 `useDropdownPlacement`：与触发器起/止边对齐，超出视口时若另一边能显示更多则改对另一边，不沿触发器平移，并收窄到对齐一侧的剩余宽度（`--orbit-dropdown-room`）；与 rc-trigger 先按不受限宽度测量一样，列表在第一次越界前保持自然宽度，由那次越界决定本次打开的对齐边；`align="center"` 的菜单仍用 Base UI 平移。Tooltip、Popover、Popconfirm 越界时按各自避让留白滑回视口后再向下取整，箭头指向旧组件所指之处（未取整位置下所覆盖锚点段的中点，`--orbit-arrow-nudge`）。Popconfirm 与旧确认浮层一样贴视口边缘（无避让留白），最宽 100vw。与末端对齐的列表由旧组件的 right 定位，左缘保留列表宽度的小数部分；Base UI 取整后的余数以相对定位交还（`--orbit-dropdown-subpixel`），不改变定位层尺寸。
+
+浮层都放在页面坐标里，与旧组件挂在 body 上一样（`useFloating` 统一决定，各浮层的 Positioner 传 `positionMethod`）：挂进弹层（Dialog/Drawer/ConfirmDialog、Popover 内容、旧 Modal 里的 OverlayScope）的用 `fixed`，挂在 body 的保持 `absolute`（本身就是页面坐标，随页面滚动原生移动）。原因是 Base UI 在还没定位的浮层处于 `position: fixed` 时测量，再按指定方式套用第一次结果；挂进弹层的 `absolute` 浮层以弹层盒为定位参照，第一次定位会偏一个弹层原点，到下一次测量才回位。实际绘制的帧在下一次测量之后，但这一帧的 requestAnimationFrame 回调（Base UI 移动焦点、测量）读到的是偏移的位置；`fixed` 下从第一次起就在最终位置，也不被弹层宽度限制。逐帧检查是 `choices-first-frame.browser.mjs`，证据见 [overlay-first-frame](../../../../../docs/evidence/base-ui-migration/overlay-first-frame/README.md)。
 
 `MultiSelect` 使用字符串数组 value/onValueChange；搜索选项后保持列表打开，支持逐项移除、全清、分组和 maxTagCount。与被替换的多选一样，`mode="multiple"` 打开即高亮第一项（Enter 选它），打开期间箭头换成放大镜。`mode="tags"`、`open={false}`、`searchValue/onSearch`、`tokenSeparators={[',', ' ']}` 对应现有邮件输入：Enter 或失焦提交尾项，输入法组合期间不提交，值去重；格式校验和分享请求仍由业务负责。Backspace 删除数组末项，即使它在折叠计数内。
 

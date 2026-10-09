@@ -177,7 +177,7 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
   - README 首段
 
   快照按 sha 缓存，同一个 sha 只传一次。
-- 需要原文时按需读取：读指定 sha 上指定路径的片段，单个文件和单次请求都有上限。上限沿用现值：文档一节 4,200 字、合同 2,500 字、每节最多 22,000 字。
+- 需要原文时按需读取：读指定 sha 上指定路径的**整个文件**（owner 2026-10-08 定，见 §7）。以前这里是"片段"，单个文件和单次请求都有上限；那些上限（文档一节 4,200 字、合同 2,500 字、每节最多 22,000 字）现在只是服务端切取材料时的规则，不再限制读取。读到的原文按 `(space, sha, path)` 缓存，同一份不重复读。
 - 为什么不直接上传原文：
   - plan 起草要读本仓库约 27 MB 原文（113 篇文档、1,374 个源文件），远超 API 10 MB 的请求体上限（`src/apiserver/src/main.ts`）；
   - 真正写进 prompt 的只有几万字的摘要。
@@ -224,6 +224,7 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
   - 所有回写都按代数做比较并交换；
   - 租约 60 秒，执行中定期续租；
   - 过期回收：租约已过期的作业放回 queued。
+- 文章作业（`articles`）由维护运行的结束触发，规则见 §8（owner 2026-10-08 定）。
 - 同一个空间同一时间只跑一个作业，沿用隐藏列表 `maxConcurrent 1` 的语义。一个 worker 同时执行的作业数另有上限。作业大部分时间在等模型，真正压在 GPU 上的量由 §5.2 的队列决定。
 - `wiki_maintenance_run`、`wiki_plan_job`：增加 `job_id`，`task_id` 改为可空，用 CHECK 约束二者必有其一。健康状态和每日计数改为读运行行，不再读 Task 和 Session。
 
@@ -316,12 +317,19 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
 - **执行**：runner 在会话池之外的 goroutine 里执行，不占槽位。结果提交到 `POST /runner/wiki/repo-ops/:id/result`，按租约持有者加代数做校验，过期的回写返回 409 STALE_CLAIM。worker 通过 `pg_notify` 得知结果已到。
 - **种类**：
   - `snapshot`：fetch 后得到 sha，生成索引：路径和大小、文档标题、符号、可达提交集合、README 首段。超过 10 MB 的请求体上限时分片上传。
-  - `read`：给定 sha 和路径列表，返回有上限的文本片段，也包括脚注核对要用的整个文件；单个文件有上限。
+  - `read`：给定 sha 和路径列表，返回**指定 sha 上的整个文件**（owner 2026-10-08 定）。
+    - **单个文件的上限是 2 MB**（`repoOps.read.wholeFileBytes`）。更大的文件不是截断，而是"缺失并注明原因"：item 以 `found: false`、`reason: "too_large"` 和它的大小作答，服务端照缺失处理（文档构建与 plan 都把这一项记为 missing，原因写明）。
+    - **大文件像快照一样分片上传**：一次 read 的回答超过 `repoOps.fragments.inlineBytes`（4 MB）时，runner 把整个回答按 `repoOps.fragments.fragmentBytes` 分片，走 `POST /runner/wiki/repo-ops/:id/fragments` 暂存在 `wiki_repo_op_fragment` 上（与快照的索引同一套机制），结果里只写 sha、字节数、摘要和分片数；服务端按摘要和字节数拼回，拼不回就拒绝这次回写，什么都不落库。
+    - **服务端按 `(space, sha, path)` 缓存原文**（`wiki_repo_file`）：同一份原文只从 runner 读一次；命中缓存就不再下发 read。缓存只对 owner 可见，随空间删除；新的快照落地时，这个空间只保留它那个 sha 的条目。旧 runner 截断的回答单独记为 `cut`，只够旧 runner 那条路用，runner 升级后按未命中重新读。
+    - **每节材料的切取上限**（文档一节 `read.docSectionChars` 4,200 字、合同 `read.contractChars` 2,500 字、一节材料 `read.sectionChars` 22,000 字）仍然是**服务端切取材料时**的规则：P6 的 plan 和 P7 的文档构建照旧按这些数字给模型材料，它们不再是读取的上限。
+    - 服务端只为声明了 `wiki-repo-op-read/v1` 的 runner 下发整文件读取；这些 runner 的 read 回答也是整份文件。一次 read 装多少文件由服务端按快照给出的大小打包（`read.operationBytes`）。
   - `diff`：两个 sha 之间的 `--name-status -M`，以及新增的设计文档（`--diff-filter=AR -- docs/`）。
   - `anchors`：现有的锚点检查（`wiki_anchors.go`），直接复用。
 - **安全检查**：沿用现有检查：origin URL 要和空间的 `repo.urlNorm` 一致，根提交要匹配，否则报错。
-- **服务端缓存**：每个空间只保留最近一份快照及其片段，只对 owner 可见；空间删除时一起清理。
-- **旧 runner**：没声明这个能力的 runner，需要仓库的步骤会挂起，健康行提示升级 runner。
+- **服务端缓存**：每个空间只保留最近一份快照及其片段，只对 owner 可见；空间删除时一起清理。读到的原文同样只对 owner 可见，随空间删除，并跟着快照换代清理。
+- **旧 runner**：
+  - 没声明 `wiki-repo-op/v1` 的 runner，需要仓库的步骤会挂起，健康行提示升级 runner。
+  - 声明了 `wiki-repo-op/v1` 但没声明 `wiki-repo-op-read/v1` 的 runner 照旧只能读到每个文件的前 `read.boundedChars`（22,000）字：服务端照旧处理（截断的文本按今天的方式当作缺失并写明），健康行给出同一个原因 "Upgrade the runner to read the repository"。
 
 ## 8. 各流水线怎么搬
 
@@ -333,6 +341,13 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
 | plan 起草/修订 | 约 5,200 行 | plan 材料；聚类要移植 | 快照（索引）+ read | P6 |
 | 文档构建 docs build | 2,679 行 | 文档材料 | 快照 + read（片段、脚注） | P7 |
 | 维护 maintain | 3,252 行（含文档步骤） | 案卷 | 快照、diff、anchors | P8 |
+
+- **文章的触发（owner 2026-10-08 定）**：
+  - runner 模式下不变：维护运行自判据 3 第 3 版起不再重写主题文章，也没有别的东西自动重写。
+  - 服务端执行的账号（`server`，或 `canary` 名单内）：一次维护运行成功结束、记下了 op、且不在追赶期（追赶进行中或暂停时都不建）时，服务端给这个空间排一个 `articles` 作业。runner 跑的维护运行也算，触发点在服务端记录运行结束的地方（finish 路由）；P8 的服务端维护作业结束时调用同一个入口。
+  - 每个空间最多排一个，后台优先级 0，排在 owner 主动发起的请求之后；作业只重写指纹变了的主题。
+  - 文章的 ref 取该空间最近一份仓库快照的 sha；还没有快照时先请求一次，作业挂起等它。
+  - 对这样的账号，runner 门的文章三条路由回 `WIKI_SERVER_EXECUTES`，会话不再拿自己的 provider 写文章。
 
 agent 会话用的 wiki 工具（`wiki_search` / `wiki_get` / `wiki_propose`，见 `src/runner-go/wiki_tools.go`）不在本次范围内，保持不变。
 
@@ -357,6 +372,11 @@ agent 会话用的 wiki 工具（`wiki_search` / `wiki_get` / `wiki_propose`，�
   - 确定性部分（解析、门检查、配额、熔断）：对同一份输入逐字比较；
   - 生成部分：看门检查通过率、核实结论的分布、排队和执行耗时、token。
 - **回退**：把开关改回 `runner` 即可。服务端在途的作业和请求会被取消，游标的语义保证下一次会重新读取这些内容。
+  取消由 apiserver 启动时的一次清扫完成（`wiki-executor-sweep.ts`，合同 `jobs.executor.rollback`）：改执行器要重建 apiserver 和
+  wiki-worker，而 apiserver 正是被在途作业堵住触发器的那一方。逐种收尾：作业、它的模型请求（按 0401 约束清错和租约列）和仓库操作
+  置为 `cancelled`；`maintain` 作业的运行记为 `failed` / `infra`，不计连续失败；plan 作业以失败结束并保留来源；`verify` 留下的
+  `verifying` op 由下一场维护运行收养。双保险：触发器只在服务端执行该账号时才查 `unfinishedMaintainJob`，清扫未跑完时 runner
+  路径也不被在途作业堵住（2026-10-08 回退事故：一个没人收尾的 `maintain` 作业让空间两条路径都没有维护，直到人工取消）。
 - **收尾（P10）**：
   - 删除维护会话机制：claim 拒绝、干净启动、`wiki-maintenance-run/v1`，以及隐藏列表里任务的这种用法；
   - 删除 runner 侧的模型代码；

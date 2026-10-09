@@ -175,6 +175,11 @@ export async function readProjectIntegrationLines(
           state: lead.state === 'RUNNING' ? 'RUNNING' : 'QUEUED',
           startedAt: lead.claimedAt ?? lead.createdAt,
           heartbeatAt: lead.heartbeatAt,
+          waitMs: claimedWaitMs({
+            state: lead.state,
+            startedAt: lead.claimedAt ?? lead.createdAt,
+            queuedAt: lead.createdAt,
+          }),
         },
       } : {}),
     });
@@ -317,10 +322,24 @@ export async function readProjectIntegrationView(
         state: lead.state,
         startedAt: lead.startedAt,
         heartbeatAt: lead.heartbeatAt,
+        waitMs: claimedWaitMs(lead),
       }
       : null,
     inFlightJobs: jobs,
   };
+}
+
+/**
+ * What a claimed job waited its turn, for the row's "Waited …"; null for one still queued, whose
+ * whole elapsed time is that wait (its `startedAt` is the enqueue).
+ *
+ * The same measurement the task's own landing carries (`LandTaskIntegrationView.waitMs`), taken
+ * from the same two instants: the clock a reader watches on this line counts from the claim, so
+ * without this the minutes a job spent waiting for a runner read as minutes of work.
+ */
+function claimedWaitMs(job: { state: string; startedAt: Date; queuedAt: Date }): number | null {
+  if (job.state !== 'RUNNING') return null;
+  return Math.max(0, job.startedAt.getTime() - job.queuedAt.getTime());
 }
 
 /** One RUNNING or QUEUED job as `readInFlightJobs` reads it, before the limit is decided. */

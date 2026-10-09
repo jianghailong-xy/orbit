@@ -46,6 +46,7 @@ struct SettingsSheet: View {
                         case .settingsPage(let page):     SettingsPageView(page: page)
                         case .accountPool(let poolID):    AccountPoolSettingsPage(poolID: poolID)
                         case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)
+                        case .providerDetail(let providerID): ProviderDetailSettingsPage(providerID: providerID)
                         case .userDetail(let userID):     AdminUserDetailView(userID: userID)
                         default:                          EmptyView()
                         }
@@ -96,6 +97,8 @@ struct SettingsHomeView: View {
     @State private var orchestration = true
     /// The account's switch for smart model selection. Absent on the server means off.
     @State private var modelRouting = false
+    /// The account's switch for suggested replies. Absent on the server means on.
+    @State private var promptSuggestions = true
     @State private var seeded = false
     /// This device's own answer to "may Orbit alert you" — nil until asked.
     @State private var alertsAllowed: Bool?
@@ -158,6 +161,10 @@ struct SettingsHomeView: View {
         .onChange(of: modelRouting) { _, value in
             guard (model.user?.preferences?.smartModelSelection ?? false) != value else { return }
             Task { await model.savePreferences(UpdatePreferencesRequest(modelRouting: value)) }
+        }
+        .onChange(of: promptSuggestions) { _, value in
+            guard (model.user?.preferences?.suggestedReplies ?? true) != value else { return }
+            Task { await model.savePreferences(UpdatePreferencesRequest(promptSuggestions: value)) }
         }
         .onAppear(perform: seed)
         // Each row's value is its own read, so they are asked for side by side.
@@ -252,6 +259,20 @@ struct SettingsHomeView: View {
                     Image(systemName: SettingsHome.systemImage(row)).foregroundStyle(Color.primary)
                 }
             }
+        case .promptSuggestions:
+            // The same shape: what it does, and what each one costs, goes under the name.
+            Toggle(isOn: $promptSuggestions) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(SettingsHome.title(row)).foregroundStyle(Color.primary)
+                        Text(SettingsCopy.suggestedRepliesHint)
+                            .font(.orbitListSubtitle)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: SettingsHome.systemImage(row)).foregroundStyle(Color.primary)
+                }
+            }
         case .appearance:
             Picker(selection: $theme) {
                 Text("System").tag("system")
@@ -326,6 +347,7 @@ struct SettingsHomeView: View {
         permMode = PermissionMode(rawValue: p?.defaultPermissionMode ?? "") ?? AgentDefaults.defaultPermissionMode
         orchestration = p?.enableOrchestration ?? true
         modelRouting = p?.smartModelSelection ?? false
+        promptSuggestions = p?.suggestedReplies ?? true
     }
 }
 
@@ -894,10 +916,13 @@ private struct ProvidersSettingsPage: View {
         ProvidersOverviewForm(runners: model.runners?.runners ?? [],
                               pools: pools,
                               sharedPools: model.sharedPools?.pools ?? [],
-                              keys: model.agents?.configuredProviders ?? [])
+                              keys: model.agents?.configuredProviders ?? [],
+                              mine: model.agents?.personalProviders ?? [],
+                              balances: model.agents?.deepSeekBalances ?? [:])
             .navigationTitle(SettingsPage.providers.title)
             .task { await model.runners?.load() }
             .task { await model.agents?.load() }
+            .task { await model.agents?.loadDeepSeekBalances() }
             .task { await model.sharedPools?.load() }
             .task(id: codexPoolIDs) {
                 for id in codexPoolIDs { await model.sharedPools?.loadAccess(id) }
@@ -980,6 +1005,24 @@ private struct AccountPoolSettingsPage: View {
         model.sharedPools?.forget(pool.id)
         dismiss()
         return nil
+    }
+}
+
+/// A DeepSeek key's page, read-only: the key as the account's own list last read it, and the balance of
+/// its DeepSeek account — read with the list, and asked of DeepSeek again by Refresh or Retry.
+private struct ProviderDetailSettingsPage: View {
+    @Environment(AppModel.self) private var model
+    let providerID: String
+
+    var body: some View {
+        let key = PublicID.storageKey(providerID)
+        if let agents = model.agents,
+           let provider = agents.personalProviders.first(where: { $0.providerID.map(PublicID.storageKey) == key }) {
+            DeepSeekKeyPageView(key: provider, reading: agents.deepSeekBalances[providerID],
+                                refresh: { await agents.refreshDeepSeekBalance(providerID) })
+        } else {
+            ContentUnavailableView(ProvidersOverview.keyGone, systemImage: "key")
+        }
     }
 }
 

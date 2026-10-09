@@ -9,6 +9,8 @@ import { Prisma } from '@prisma/client';
 import { RunEventType } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { withSessionState } from '../sessions/session-state';
+import { WikiDocs } from '../wiki/wiki-docs';
+import { currentWikiRollout, wikiDisabledError, wikiOnFor } from '../wiki/wiki-rollout';
 import type { PutShareLinkDto } from './dto';
 import {
   effectiveProjectInclude,
@@ -32,22 +34,45 @@ import {
   type TaskShareCounts,
 } from './public-task';
 import {
+  type PublicWiki,
+  type PublicWikiDoc,
+  readPublicWiki,
+  readPublicWikiDoc,
+  wikiShareCounts,
+  type WikiShareCounts,
+  wikiSpaceName,
+} from './public-wiki';
+import {
   linkNotFound,
   linkState,
   mergeInclude,
   resolveInclude,
+  SHARE_ROOT_KINDS,
   type ShareInclude,
   type ShareLinkState,
   type ShareLinkStateReason,
   type ShareRootKind,
 } from './share-link';
 
+/** The column each kind of root is in. */
+const ROOT_COLUMN = {
+  SESSION: 'sessionId',
+  TASK: 'taskId',
+  PROJECT: 'projectId',
+  WIKI: 'wikiSpaceId',
+} as const satisfies Record<ShareRootKind, keyof Prisma.ShareLinkUncheckedCreateInput>;
+
 /** The column a root of each kind is named by, as a `where`/`data` fragment. */
-function rootColumn(kind: ShareRootKind, id: string): { sessionId: string } | { taskId: string } | { projectId: string } {
-  if (kind === 'SESSION') return { sessionId: id };
-  if (kind === 'TASK') return { taskId: id };
-  return { projectId: id };
+function rootColumn(kind: ShareRootKind, id: string): Partial<Record<(typeof ROOT_COLUMN)[ShareRootKind], string>> {
+  return { [ROOT_COLUMN[kind]]: id };
 }
+
+/**
+ * The kinds `GET /share-links` answers when the request names none: the three every client had
+ * before wiki links. A shipped app decodes a link's kind into a closed set and fails the whole list
+ * on one it does not know, so a kind added later reaches a client only once it asks for it by name.
+ */
+const LISTED_BY_DEFAULT: readonly ShareRootKind[] = ['SESSION', 'TASK', 'PROJECT'];
 
 /** Every read of a link takes the row and its root's minimal projection, in one query. */
 const LINK_SELECT = {
@@ -58,6 +83,7 @@ const LINK_SELECT = {
   sessionId: true,
   taskId: true,
   projectId: true,
+  wikiSpaceId: true,
   include: true,
   expiresAt: true,
   revokedAt: true,
@@ -73,6 +99,8 @@ const LINK_SELECT = {
   },
   task: { select: { id: true, title: true, status: true } },
   project: { select: { id: true, title: true, status: true } },
+  // The address is read to name the space by its repository's last part, never written out.
+  wikiSpace: { select: { id: true, slug: true, title: true, repoUrlNorm: true } },
 } satisfies Prisma.ShareLinkSelect;
 
 type LinkRow = Prisma.ShareLinkGetPayload<{ select: typeof LINK_SELECT }>;
@@ -82,10 +110,12 @@ const MAX_TOKEN_LENGTH = 256;
 /** How many times opening a link re-reads after losing a race for the root's one open slot. */
 const OPEN_ATTEMPTS = 3;
 
-/** A root as the owner's list and the dialog show it — enough to name it and say where it stands. */
+/** A root as the owner's list and the dialog show it — enough to name it and say where it stands. A
+ *  wiki space has no status; its slug is the owner's address for it (`/wiki/<slug>`). */
 export type ShareRootSummary =
   | { id: string; title: string; status: string; lifecycleState: string; completedAt: Date | string | null }
-  | { id: string; title: string; status: string };
+  | { id: string; title: string; status: string }
+  | { id: string; title: string; slug: string };
 
 /** How much a session link's two layers hold: Messages, and Tool calls and output. */
 export interface SessionShareCounts {
@@ -122,8 +152,9 @@ export interface OpenLink {
   sharedAt: Date;
   /** Set for a session root: the transcript the link serves. */
   sessionId: string | null;
-  /** Set for a task or a project root (public-task.ts / public-project.ts project it further). */
-  root: { id: string; title: string; status: string } | null;
+  /** Set for a task, a project or a wiki root (public-task.ts / public-project.ts / public-wiki.ts
+   *  project it further). A wiki's title is its name (`wikiSpaceName`), and it has no status. */
+  root: { id: string; title: string; status?: string } | null;
 }
 
 /** What a conversation's page carries besides its transcript: under a task link, the task it is a
@@ -133,9 +164,10 @@ export type ConversationContext =
   | { task: { id: string; title: string; runs: { sessionId: string }[] } }
   | (ProjectConversation & { scope: ProjectScope });
 
-function kindOf(row: { sessionId: string | null; taskId: string | null }): ShareRootKind {
+function kindOf(row: { sessionId: string | null; taskId: string | null; wikiSpaceId: string | null }): ShareRootKind {
   if (row.sessionId) return 'SESSION';
   if (row.taskId) return 'TASK';
+  if (row.wikiSpaceId) return 'WIKI';
   return 'PROJECT';
 }
 
@@ -151,9 +183,9 @@ function isUniqueViolation(error: unknown): boolean {
 
 /**
  * Public links: one row per link in `share_link` (migration 0306), one root per row — a session, a
- * task or a project. The owner's half opens, changes, lists and ends them; the public half turns a
- * token into what it opens, or into the one 404 a dead link answers with. docs/share-links-design.md
- * §3–§5 is the contract.
+ * task, a project or a wiki space (0403). The owner's half opens, changes, lists and ends them; the
+ * public half turns a token into what it opens, or into the one 404 a dead link answers with.
+ * docs/share-links-design.md §3–§5 and §10 are the contract.
  *
  * Every write is its own statement (db-write-inventory STATEMENT_UNITS). What would otherwise need a
  * transaction — two requests opening the same root at once — is settled by the partial unique index
@@ -161,7 +193,12 @@ function isUniqueViolation(error: unknown): boolean {
  */
 @Injectable()
 export class ShareLinksService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // A wiki link's pages are the owner's own document reads (public-wiki.ts). Defaulted so a spec
+    // that builds this by hand for another kind of root need not stand the wiki up.
+    private readonly wikiDocs: WikiDocs = undefined as unknown as WikiDocs,
+  ) {}
 
   // ── the owner's half ───────────────────────────────────────────────────────────────────────
 
@@ -172,12 +209,13 @@ export class ShareLinksService {
     ownerId: string,
     kind: ShareRootKind,
     rootId: string,
-  ): Promise<{ link: ShareLinkView | null; counts: SessionShareCounts | TaskShareCounts | ProjectShareCounts }> {
+  ): Promise<{ link: ShareLinkView | null; counts: SessionShareCounts | TaskShareCounts | ProjectShareCounts | WikiShareCounts }> {
     await this.ownedRoot(ownerId, kind, rootId);
     const row = await this.openRow(ownerId, kind, rootId);
     const link = row ? this.view(row, new Date()) : null;
     if (kind === 'SESSION') return { link, counts: await this.sessionCounts(rootId) };
     if (kind === 'TASK') return { link, counts: await taskShareCounts(this.prisma, rootId) };
+    if (kind === 'WIKI') return { link, counts: await wikiShareCounts(this.prisma, this.wikiDocs, ownerId, rootId) };
     return { link, counts: await projectShareCounts(this.prisma, rootId) };
   }
 
@@ -244,10 +282,18 @@ export class ShareLinksService {
     await this.end({ ownerId, ...rootColumn(kind, rootId) }, new Date());
   }
 
-  /** Every link the caller has made, ended ones included, newest first (Settings → Shared links). */
-  async list(ownerId: string): Promise<{ links: ShareLinkView[] }> {
+  /**
+   * Every link the caller has made, ended ones included, newest first (Settings → Shared links) — of
+   * the kinds asked for, or of LISTED_BY_DEFAULT when none are. A kind this server does not know is
+   * passed over, so a newer client asking for one gets what there is.
+   */
+  async list(ownerId: string, kinds?: readonly string[]): Promise<{ links: ShareLinkView[] }> {
+    const listed = kinds === undefined
+      ? LISTED_BY_DEFAULT
+      : SHARE_ROOT_KINDS.filter((kind) => kinds.includes(kind));
+    if (listed.length === 0) return { links: [] };
     const rows = await this.prisma.shareLink.findMany({
-      where: { ownerId },
+      where: { ownerId, OR: listed.map((kind) => ({ [ROOT_COLUMN[kind]]: { not: null } })) },
       select: LINK_SELECT,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
@@ -282,7 +328,11 @@ export class ShareLinksService {
     if (!row) throw linkNotFound();
     if (linkState(row, row.session?.deletedAt != null, new Date()).state !== 'ACTIVE') throw linkNotFound();
     const kind = kindOf(row);
-    const root = row.task ?? row.project;
+    // A wiki its owner does not have on this server (ORBIT_WIKI) is read by nobody, a visitor included.
+    if (kind === 'WIKI' && !wikiOnFor(currentWikiRollout(), row.ownerId)) throw linkNotFound();
+    const root = row.wikiSpace
+      ? { id: row.wikiSpace.id, title: wikiSpaceName(row.wikiSpace) }
+      : (row.task ?? row.project);
     const include = resolveInclude(kind, row.include);
     return {
       id: row.id,
@@ -291,7 +341,7 @@ export class ShareLinksService {
       include: kind === 'PROJECT' ? effectiveProjectInclude(include) : include,
       sharedAt: row.createdAt,
       sessionId: row.sessionId,
-      root: kind === 'SESSION' || !root ? null : { id: root.id, title: root.title, status: root.status },
+      root: kind === 'SESSION' || !root ? null : root,
     };
   }
 
@@ -311,6 +361,23 @@ export class ShareLinksService {
       readProjectScope(this.prisma, projectId, link.include),
     ]);
     return { root, scope };
+  }
+
+  /** A wiki link's root page: the space's written documents by category (public-wiki.ts). */
+  wikiPage(link: OpenLink): Promise<PublicWiki> {
+    const spaceId = this.rootOf(link, 'WIKI');
+    return readPublicWiki(this.wikiDocs, link.ownerId, { id: spaceId, name: link.root!.title });
+  }
+
+  /** One of a wiki link's written documents, with the link's layers and the wiki's name for the
+   *  page's breadcrumb — or the one 404, for a document the plan does not have or nobody has written. */
+  async wikiDoc(
+    link: OpenLink,
+    slug: string,
+  ): Promise<{ include: Required<ShareInclude>; wiki: { name: string }; doc: PublicWikiDoc }> {
+    const spaceId = this.rootOf(link, 'WIKI');
+    const doc = await readPublicWikiDoc(this.wikiDocs, link.ownerId, spaceId, link.include, slug);
+    return { include: link.include, wiki: { name: link.root!.title }, doc };
   }
 
   /** One of a project link's tasks, as a task link shows its task — with Task pages, and only a task
@@ -360,7 +427,7 @@ export class ShareLinksService {
     return readPublicTaskAttachment(this.prisma, this.rootOf(link, 'TASK'), link.include, id);
   }
 
-  private rootOf(link: OpenLink, kind: 'TASK' | 'PROJECT'): string {
+  private rootOf(link: OpenLink, kind: 'TASK' | 'PROJECT' | 'WIKI'): string {
     if (link.kind !== kind || !link.root) throw linkNotFound();
     return link.root.id;
   }
@@ -377,7 +444,8 @@ export class ShareLinksService {
   // ── rows ───────────────────────────────────────────────────────────────────────────────────
 
   /** The caller's root, or its kind's 404 — another account's root is not found, exactly as a
-   *  missing one is. Says whether a session root is in the trash. */
+   *  missing one is. Says whether a session root is in the trash. A wiki space is the wiki's own 404
+   *  (WIKI_DISABLED) first when the wiki is not on for the account, as every route of the wiki is. */
   private async ownedRoot(ownerId: string, kind: ShareRootKind, id: string): Promise<{ inTrash: boolean }> {
     if (kind === 'SESSION') {
       const session = await this.prisma.session.findFirst({ where: { id, ownerId }, select: { deletedAt: true } });
@@ -387,6 +455,13 @@ export class ShareLinksService {
     if (kind === 'TASK') {
       const task = await this.prisma.task.findFirst({ where: { id, ownerId }, select: { id: true } });
       if (!task) throw new NotFoundException('task not found');
+      return { inTrash: false };
+    }
+    if (kind === 'WIKI') {
+      const rollout = currentWikiRollout();
+      if (!wikiOnFor(rollout, ownerId)) throw wikiDisabledError(rollout);
+      const space = await this.prisma.wikiSpace.findFirst({ where: { id, ownerId }, select: { id: true } });
+      if (!space) throw new NotFoundException('no such wiki space');
       return { inTrash: false };
     }
     const project = await this.prisma.project.findFirst({ where: { id, ownerId }, select: { id: true } });
@@ -498,6 +573,7 @@ export class ShareLinksService {
         completedAt: session.completedAt,
       };
     }
+    if (row.wikiSpace) return { id: row.wikiSpace.id, title: wikiSpaceName(row.wikiSpace), slug: row.wikiSpace.slug };
     const root = (row.task ?? row.project)!;
     return { id: root.id, title: root.title, status: root.status };
   }

@@ -126,6 +126,8 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let claudeAccount: String?
     /// The same for its Antigravity sessions: one of the runner's Google accounts, or nil for Automatic.
     public let antigravityAccount: String?
+    /// The same for its Kimi Code sessions: one of the runner's Kimi accounts, or nil for Automatic.
+    public let kimiAccount: String?
 
     public let enableWorktree: Bool?
     /// Smart model selection (docs/model-routing-design.md §7.2): on, a fresh task run here gets the
@@ -146,7 +148,8 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         case description, appendSystemPrompt, systemPrompt, allowedTools, disallowedTools
         case maxTurns, maxBudgetUsd, targetRunnerId, targetLabels, runnerId, env, enabled
         case antigravityKeyAvailableByRunner
-        case autoInitGit, codexAccount, claudeAccount, antigravityAccount, enableWorktree, modelRouting, workDirExists, workDirIsGit
+        case autoInitGit, codexAccount, claudeAccount, antigravityAccount, kimiAccount, enableWorktree, modelRouting
+        case workDirExists, workDirIsGit
         case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup
     }
 
@@ -178,6 +181,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         codexAccount = try c.decodeIfPresent(String.self, forKey: .codexAccount)
         claudeAccount = try c.decodeIfPresent(String.self, forKey: .claudeAccount)
         antigravityAccount = try c.decodeIfPresent(String.self, forKey: .antigravityAccount)
+        kimiAccount = try c.decodeIfPresent(String.self, forKey: .kimiAccount)
         enableWorktree = try c.decodeIfPresent(Bool.self, forKey: .enableWorktree)
         modelRouting = try c.decodeIfPresent(Bool.self, forKey: .modelRouting)
         workDirExists = try c.decodeIfPresent(Bool.self, forKey: .workDirExists)
@@ -364,6 +368,9 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// accounts.
     public let antigravityAccount: String?
     public let antigravityAccountPinned: Bool?
+    /// The same pair for a session on the built-in Kimi Code engine: one of the runner's Kimi accounts.
+    public let kimiAccount: String?
+    public let kimiAccountPinned: Bool?
     public let pendingApprovals: Int?
     /// What `pendingApprovals` is counting, when one word says it better than "approval":
     /// `OWNER_CONFIRMATION` when everything counted is an OWNER_CONFIRMED task's run waiting for its
@@ -559,6 +566,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         claudeAccountPinned = try values.decodeIfPresent(Bool.self, forKey: .claudeAccountPinned)
         antigravityAccount = try values.decodeIfPresent(String.self, forKey: .antigravityAccount)
         antigravityAccountPinned = try values.decodeIfPresent(Bool.self, forKey: .antigravityAccountPinned)
+        kimiAccount = try values.decodeIfPresent(String.self, forKey: .kimiAccount)
+        kimiAccountPinned = try values.decodeIfPresent(Bool.self, forKey: .kimiAccountPinned)
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
         ownerItems = try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems)
@@ -629,6 +638,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 codexAccount: String? = nil, codexAccountPinned: Bool? = nil,
                 claudeAccount: String? = nil, claudeAccountPinned: Bool? = nil,
                 antigravityAccount: String? = nil, antigravityAccountPinned: Bool? = nil,
+                kimiAccount: String? = nil, kimiAccountPinned: Bool? = nil,
                 awaitingReplyFrom: [SessionRequestPeer]? = nil, owesReplyTo: [SessionRequestPeer]? = nil,
                 folderId: String? = nil,
                 confirmationUnderReview: ConfirmationUnderReview? = nil,
@@ -656,6 +666,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.claudeAccountPinned = claudeAccountPinned
         self.antigravityAccount = antigravityAccount
         self.antigravityAccountPinned = antigravityAccountPinned
+        self.kimiAccount = kimiAccount
+        self.kimiAccountPinned = kimiAccountPinned
         self.pendingApprovals = pendingApprovals
         self.waitingKind = waitingKind
         self.ownerItems = ownerItems
@@ -741,6 +753,8 @@ public struct SessionAgentRef: Codable, Equatable, Sendable, Identifiable {
     public var claudeAccount: String? = nil
     /// Its Antigravity account, the same way (`Agent.antigravityAccount`).
     public var antigravityAccount: String? = nil
+    /// Its Kimi Code account, the same way (`Agent.kimiAccount`).
+    public var kimiAccount: String? = nil
     /// Its environment, which can decide the account too — a config directory or a key of its own
     /// (`CodexAccounts.automaticOffered`). Carried by the detail payload's workspace row.
     public var env: [String: String]? = nil
@@ -1020,6 +1034,8 @@ public struct CreateSessionRequest: Codable, Sendable {
     public let claudeAccount: String?
     /// The same for a session on the built-in Antigravity engine: one of the runner's Google accounts.
     public let antigravityAccount: String?
+    /// The same for a session on the built-in Kimi Code engine: one of the runner's Kimi accounts.
+    public let kimiAccount: String?
     /// The folder the new session is filed in — one started from a folder's page lands in that
     /// folder (docs/session-folders-move-design.md §3.2). It has to be one of this workspace's
     /// folders, else the server answers 400. Nil omits it: the session is in no folder.
@@ -1029,7 +1045,8 @@ public struct CreateSessionRequest: Codable, Sendable {
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                 fastMode: Bool? = nil,
                 shell: Bool? = nil, attachmentIds: [String]? = nil, codexAccount: String? = nil,
-                claudeAccount: String? = nil, antigravityAccount: String? = nil, folderId: String? = nil) {
+                claudeAccount: String? = nil, antigravityAccount: String? = nil, kimiAccount: String? = nil,
+                folderId: String? = nil) {
         self.prompt = prompt
         self.title = title
         self.agentId = agentId
@@ -1044,6 +1061,7 @@ public struct CreateSessionRequest: Codable, Sendable {
         self.codexAccount = codexAccount
         self.claudeAccount = claudeAccount
         self.antigravityAccount = antigravityAccount
+        self.kimiAccount = kimiAccount
         self.folderId = folderId
     }
 }

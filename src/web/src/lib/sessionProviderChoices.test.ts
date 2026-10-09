@@ -4,6 +4,7 @@ import {
   currentProviderChoice,
   defaultModelLabel,
   engineChoices,
+  engineTitleFor,
   providerChoices,
   runtimeSummary,
   sameRuntimeChoices,
@@ -58,9 +59,9 @@ const catalog = {
 } as never;
 
 describe('providerChoices', () => {
-  it('offers login engines and hides Antigravity without a server-confirmed environment key', () => {
+  it('offers the engines and hides Antigravity without a server-confirmed environment key', () => {
     const choices = providerChoices([], catalog);
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi']);
+    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'opencode']);
     expect(choices.every((c) => c.kind === 'engine')).toBe(true);
   });
 
@@ -72,12 +73,23 @@ describe('providerChoices', () => {
       'kimi',
       'deepseek',
       'my-endpoint',
+      'opencode',
     ]);
-    expect(choices.slice(3).every((c) => c.kind === 'byok')).toBe(true);
+    expect(choices.filter((c) => c.kind === 'byok').map((c) => c.slug)).toEqual(['deepseek', 'my-endpoint']);
   });
 
-  it('never offers opencode as a choice — it is not a login engine', () => {
-    expect(providerChoices([], catalog).some((c) => c.slug === 'opencode')).toBe(false);
+  it('keeps opencode listed, with its reason, until the runner reports it installed', () => {
+    // Orbit installs it, so a machine without it is a row the picker can send somewhere — the same
+    // rule DSH and the login engines are listed under. It has no sign-in to relay, so the row is
+    // never a pick before the CLI is there, and it must not read as one.
+    for (const engines of [null, [{ engine: 'opencode' as const, installed: false, auth: 'unknown' as const }]]) {
+      const choices = providerChoices([], catalog, undefined, engines);
+      const row = choices.find((c) => c.slug === 'opencode');
+      expect(row).toMatchObject({ kind: 'engine', label: 'OpenCode', unavailable: 'Not installed', fixEngine: 'opencode' });
+      // An engine board row for it too, landing on that choice.
+      const board = engineChoices(choices, []).find((e) => e.slug === 'opencode');
+      expect(board).toMatchObject({ label: 'OpenCode', unavailable: 'Not installed', fixEngine: 'opencode' });
+    }
   });
 
   it('offers Antigravity as an engine, with the model the runner reports first', () => {
@@ -89,7 +101,7 @@ describe('providerChoices', () => {
       ],
     } as never;
     const choices = providerChoices([], withAgy, undefined, undefined, [], undefined, undefined, true);
-    expect(choices.map((choice) => choice.slug)).toEqual(['claude', 'codex', 'antigravity', 'kimi']);
+    expect(choices.map((choice) => choice.slug)).toEqual(['claude', 'codex', 'antigravity', 'kimi', 'opencode']);
     const row = choices.find((c) => c.slug === 'antigravity');
     expect(row).toMatchObject({ kind: 'engine', label: 'Antigravity', labelDetail: 'env key', glyphKey: 'antigravity' });
     expect(row?.modelLabel).toBe('Gemini 3.8 Flash');
@@ -100,7 +112,7 @@ describe('providerChoices', () => {
   it('uses the server key boolean instead of inferring availability from runner auth', () => {
     const ready = { supported: true, installed: true, version: 'agy 1.2.16', envKeyAvailable: true };
     const health = [{ engine: 'antigravity' as const, installed: true, auth: 'yes' as const }];
-    expect(providerChoices([gemini], catalog, undefined, health).map((c) => c.slug)).toEqual(['claude', 'codex', 'gemini', 'kimi']);
+    expect(providerChoices([gemini], catalog, undefined, health).map((c) => c.slug)).toEqual(['claude', 'codex', 'gemini', 'kimi', 'opencode']);
     expect(providerChoices([gemini], catalog, undefined, health, [], undefined, ready, false).some((c) => c.slug === 'antigravity')).toBe(false);
     expect(providerChoices([gemini], catalog, undefined, undefined, [], undefined, ready, true).find((c) => c.slug === 'antigravity')).toMatchObject({ labelDetail: 'env key' });
     expect(providerChoices([gemini], catalog).find((c) => c.slug === 'gemini')).toMatchObject({
@@ -158,7 +170,7 @@ describe('providerChoices', () => {
       { engine: 'codex', installed: false, auth: 'unknown' },
       { engine: 'kimi', installed: false, auth: 'unknown' },
     ]);
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'deepseek']);
+    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'deepseek', 'opencode']);
     // Hiding it would leave "why is Kimi missing?" with no answer anywhere in the product.
     expect(choices.find((c) => c.slug === 'kimi')?.unavailable).toBe('Not installed');
     expect(choices.find((c) => c.slug === 'codex')?.unavailable).toBe('Not installed');
@@ -181,7 +193,7 @@ describe('providerChoices', () => {
       { engine: 'codex', installed: true, auth: 'no' },
       { engine: 'kimi', installed: true, auth: 'unknown' },
     ]);
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi']);
+    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'opencode']);
     expect(choices.find((c) => c.slug === 'codex')?.unavailable).toBe('Not signed in');
     // `unknown` is a CLI that wouldn't answer, not a "no" — it stays pickable.
     expect(choices.find((c) => c.slug === 'kimi')?.unavailable).toBeUndefined();
@@ -224,18 +236,20 @@ describe('providerChoices', () => {
 
   it('offers every engine a runner has claimed nothing about', () => {
     // Never reported (older runner / first heartbeat still pending), and a partial report.
+    // OpenCode is the one exception: Orbit installs it, so a runner that has said nothing about it
+    // is a runner that hasn't got it, and the row says so.
     expect(providerChoices([], catalog, undefined, null).map((c) => c.slug)).toEqual([
       'claude',
       'codex',
       'kimi',
+      'opencode',
     ]);
     const partial = providerChoices([], catalog, undefined, [
       { engine: 'claude', installed: false, auth: 'no' },
     ]);
-    expect(partial.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi']);
-    // Only the engine the runner actually spoke about carries a reason.
-    expect(partial.find((c) => c.slug === 'claude')?.unavailable).toBe('Not installed');
-    expect(partial.filter((c) => c.unavailable)).toHaveLength(1);
+    expect(partial.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'opencode']);
+    // The engine the runner actually spoke about, and OpenCode, which it didn't and hasn't got.
+    expect(partial.filter((c) => c.unavailable).map((c) => c.slug)).toEqual(['claude', 'opencode']);
   });
 });
 
@@ -422,6 +436,61 @@ describe('the runner’s Antigravity (Google) accounts, under the Antigravity ch
       { id: 'default', label: 'Default', quota: 'env key' },
       { id: '5c2e91a0', label: 'Work', quota: 'gemini-5h 4% left', nearLimit: true },
     ]);
+  });
+});
+
+describe('the runner’s Kimi Code accounts, under the Kimi choice', () => {
+  const home = (id: string) => (id === 'default' ? '/root/.kimi-code' : `/root/.orbit/kimi-accounts/${id}`);
+  const kimi = (accounts: Array<{ id: string; name?: string; auth: 'yes' | 'no' | 'unknown' }>, auth: 'yes' | 'no' = 'yes') => [
+    { engine: 'claude' as const, installed: true, auth: 'yes' as const },
+    {
+      engine: 'kimi' as const,
+      installed: true,
+      auth,
+      kimiRegion: 'global' as const,
+      accounts: accounts.map((account) => ({ ...account, home: home(account.id) })),
+    },
+  ];
+  // Kimi's windows in the heartbeat's planUsage.kimi: Default's own, Work's under `accounts`. Default's
+  // coding share is above its month, which Kimi never reports (the share is part of the month), so that a
+  // row still weighing it would name it.
+  const usage = {
+    kimi: {
+      provider: 'kimi',
+      fiveHour: { utilization: 12 },
+      sevenDay: { utilization: 34 },
+      month: { utilization: 41 },
+      monthCode: { utilization: 88 },
+      accounts: {
+        '5c2e91a0': { provider: 'kimi', fiveHour: { utilization: 97 }, sevenDay: { utilization: 20 }, month: { utilization: 10 } },
+      },
+    },
+  } as never;
+  const accountsOf = (choices: ReturnType<typeof providerChoices>) => choices.find((choice) => choice.slug === 'kimi')?.accounts;
+
+  it('lists each account by the window that stops it, the month by its total', () => {
+    const choices = providerChoices(
+      [],
+      catalog,
+      undefined,
+      kimi([{ id: 'default', auth: 'yes' }, { id: '5c2e91a0', name: 'Work', auth: 'yes' }, { id: 'c0ffee42', auth: 'no' }]),
+      [],
+      usage,
+    );
+    expect(accountsOf(choices)).toEqual([
+      // Its month is the fullest of the windows drawn, though its 5-hour one has room; its coding share
+      // is never one of them.
+      { id: 'default', label: 'Default', quota: 'Monthly 41%' },
+      { id: '5c2e91a0', label: 'Work', quota: '5h 97%', nearLimit: true },
+      { id: 'c0ffee42', label: 'Account c0ffee42', unavailable: 'Not signed in' },
+    ]);
+  });
+
+  it('lists none for one account, or for an engine that cannot run', () => {
+    expect(accountsOf(providerChoices([], catalog, undefined, kimi([{ id: 'default', auth: 'yes' }]), [], usage))).toBeUndefined();
+    const blocked = providerChoices([], catalog, undefined, kimi([{ id: 'default', auth: 'no' }, { id: '5c2e91a0', auth: 'no' }], 'no'), [], usage);
+    expect(blocked.find((choice) => choice.slug === 'kimi')?.unavailable).toBe('Not signed in');
+    expect(accountsOf(blocked)).toBeUndefined();
   });
 });
 
@@ -626,6 +695,7 @@ describe('account pools among the choices', () => {
       'anthropic',
       'anthropic-2',
       'deepseek',
+      'opencode',
     ]);
     const tile = choices.find((c) => c.slug === 'claude-accounts')!;
     expect(tile).toMatchObject({ kind: 'pool', label: 'Claude accounts', poolSize: 2, glyphKey: 'anthropic' });
@@ -669,7 +739,7 @@ describe('shared pools among the choices', () => {
 
   it('offers one after the engines, wearing the Codex mark and counting its keys', () => {
     const choices = providerChoices(configured, catalog, undefined, undefined, [team]);
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'team-codex', 'deepseek']);
+    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'team-codex', 'deepseek', 'opencode']);
     const tile = choices.find((c) => c.slug === 'team-codex')!;
     expect(tile).toMatchObject({ kind: 'pool', label: 'Team Codex', poolSize: 3, poolUnit: 'key', glyphKey: 'openai' });
     // Its model is the Codex CLI's own.
@@ -838,15 +908,15 @@ describe('engineChoices', () => {
   const all = providerChoices(configured, catalog, undefined, undefined, [], undefined, undefined, true);
 
   it('lists each engine once, its keys folded into the engine that runs them', () => {
-    expect(engineChoices(all, configured).map((engine) => engine.slug)).toEqual(['claude', 'codex', 'antigravity', 'kimi']);
+    expect(engineChoices(all, configured).map((engine) => engine.slug)).toEqual(['claude', 'codex', 'antigravity', 'kimi', 'opencode']);
   });
 
   it("lands on the engine's own sign-in, unless a preferred provider of it can run", () => {
     const landing = (preferred: string[]) =>
       engineChoices(all, configured, preferred).map((engine) => engine.provider.slug);
-    expect(landing([])).toEqual(['claude', 'codex', 'antigravity', 'kimi']);
+    expect(landing([])).toEqual(['claude', 'codex', 'antigravity', 'kimi', 'opencode']);
     // The draft's pick first, then what the workspace last ran: each only where it runs.
-    expect(landing(['deepseek', 'moonshot'])).toEqual(['deepseek', 'codex', 'antigravity', 'moonshot']);
+    expect(landing(['deepseek', 'moonshot'])).toEqual(['deepseek', 'codex', 'antigravity', 'moonshot', 'opencode']);
   });
 
   it('skips a preferred provider that cannot run, and a signed-out engine, for one that can', () => {
@@ -886,12 +956,15 @@ describe('OpenCode and the keys it may spend', () => {
   ];
   const installed = [{ engine: 'opencode' as const, installed: true, auth: 'unknown' as const }];
 
-  it('offers nothing for OpenCode until the runner reports it installed', () => {
-    expect(providerChoices(configured, catalog).some((c) => runtimeForProvider(c.slug, configured) === 'opencode')).toBe(false);
-    expect(
-      providerChoices(configured, catalog, undefined, [{ engine: 'opencode', installed: false, auth: 'unknown' }])
-        .some((c) => c.slug === 'opencode'),
-    ).toBe(false);
+  it('offers its own row without the keys until the runner reports it installed', () => {
+    // The engine row is there either way — Orbit installs it — while the keys it would spend are
+    // each a session that would run on a CLI this machine hasn't got.
+    for (const engines of [null, [{ engine: 'opencode' as const, installed: false, auth: 'unknown' as const }]]) {
+      const rows = providerChoices(configured, catalog, undefined, engines)
+        .filter((c) => runtimeForProvider(c.slug, configured) === 'opencode');
+      expect(rows.map((c) => c.slug)).toEqual(['opencode']);
+      expect(rows[0]).toMatchObject({ unavailable: 'Not installed', fixEngine: 'opencode' });
+    }
   });
 
   it('lists its own config, then every key it may spend — each key under its own engine as well', () => {
@@ -914,5 +987,43 @@ describe('OpenCode and the keys it may spend', () => {
       'opencode/moonshot',
       'opencode/anthropic',
     ]);
+  });
+});
+
+describe('engineTitleFor', () => {
+  it('names the CLI that executes, not the vendor whose models it writes', () => {
+    // The composer menu's title answers "which engine runs this session". A BYOK provider writes
+    // its own models while Claude Code executes them, so the name is the CLI's.
+    expect(engineTitleFor('claude', [])).toMatchObject({ slug: 'claude', name: 'Claude Code', glyphKey: 'anthropic' });
+    expect(engineTitleFor('deepseek', [deepseek])).toMatchObject({
+      slug: 'claude',
+      name: 'Claude Code',
+      glyphKey: 'anthropic',
+    });
+    expect(engineTitleFor('my-endpoint', [custom]).name).toBe('Claude Code');
+  });
+
+  it('gives every other engine its own product name and mark', () => {
+    expect(engineTitleFor('codex', [])).toMatchObject({ name: 'Codex', glyphKey: 'openai' });
+    expect(engineTitleFor('kimi', [])).toMatchObject({ name: 'Kimi Code', glyphKey: 'moonshot' });
+    expect(engineTitleFor('opencode', []).name).toBe('OpenCode');
+    expect(engineTitleFor('antigravity', [])).toMatchObject({ name: 'Antigravity CLI', glyphKey: 'antigravity' });
+    expect(engineTitleFor('dsh', []).name).toBe('DeepSeek Harness');
+  });
+
+  it('takes the safe Claude fallback for a provider it cannot place', () => {
+    expect(engineTitleFor('nonsense', []).name).toBe('Claude Code');
+    expect(engineTitleFor(null, []).name).toBe('Claude Code');
+  });
+
+  it('says where a standing pick goes only when it changes the engine', () => {
+    // A pick that crosses CLIs is a transition worth printing.
+    expect(engineTitleFor('claude', [], 'codex')).toMatchObject({ name: 'Claude Code', nextName: 'Codex' });
+    expect(engineTitleFor('opencode', [], 'claude')).toMatchObject({ name: 'OpenCode', nextName: 'Claude Code' });
+    // Two providers of one CLI are the same engine — the title stays one name, and the Provider
+    // row below is where that pick is read.
+    expect(engineTitleFor('deepseek', [deepseek], 'claude').nextName).toBeNull();
+    expect(engineTitleFor('claude', [], 'deepseek').nextName).toBeNull();
+    expect(engineTitleFor('claude', [], null).nextName).toBeNull();
   });
 });

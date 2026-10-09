@@ -110,7 +110,10 @@ evidence.
   decided, undecidable, or whose dispatching session has ended is not delivered at all.
 - **Decision.** The dispatching session decides it with `task_evidence_decide` (CONFIRM, or
   SEND_BACK with a note). The decision door and its independence rule are unchanged: the run that
-  did the work still cannot decide it.
+  did the work still cannot decide it. A SEND_BACK's note is handed to the run that submitted the
+  revision as a platform turn of its own (`evidence-send-back:v1:<decisionId>`, delivered the way
+  the review is), so the next attempt learns what it has to show without anybody relaying it; the
+  decision, note included, is also on the revision in `task_evidence_list` for any session to read.
 - **Back to the owner.** While the dispatching session holds the revision, nobody else is asked: no
   card, no count. It holds it while the delivery turn exists, that session has not ended, and 30
   minutes have not passed since the delivery — read at read time, nothing scheduled. After that, or
@@ -249,9 +252,13 @@ comment carrying the command's output. Two consequences follow and are accepted:
   command that ran and returned the wrong code. The runner reports `-1` for all of them and it is
   compared like any other integer, so every one of them derives `FAILED`. Declaring
   `acceptanceTimeoutSeconds` changes when the timeout fires, never what it derives.
-- The reason a task failed is **not recorded**. Diagnosis is reading the session: the run's own
-  `error` carries `acceptance command exited N; expected M`, and the command's output is in the
-  session transcript where the shell turn ran.
+- The reason a task failed is **not recorded on the task**. Diagnosis is reading the session: the
+  run's own `error` carries `acceptance command exited N; expected M`, and the command's output is
+  in the session transcript where the shell turn ran. A task in a project also gets a `TASK_FAILED`
+  exception carrying the two codes, opened in the transaction that writes the `FAILED`
+  (`docs/project-integration-line-contract.md` §4.3 A). The run's brief
+  (`src/apiserver/src/tasks/task-execution-prompt.ts`) names these same places and says that no
+  comment carries the output.
 
 If the reserved turn cannot return a comparable result at all (an old runner omits the shell
 fields, the turn never reports one, or the declaration changes while the command runs), there is

@@ -32,7 +32,9 @@ output into a public report: expanded values can contain secrets.
 | `ORBIT_WATCHES_CANARY_OWNERS` | Optional; empty | Comma-separated account IDs enabled in Watch canary mode. | No; account identifiers are private diagnostic data | Recreate API |
 | `ORBIT_WIKI_MODE` → container `ORBIT_WIKI` | Optional; `on` | Wiki rollout: `on`, `canary`, or `off`. Disabled accounts receive `WIKI_DISABLED` and no Wiki tools/context. | No | Recreate API; no migration or runner release |
 | `ORBIT_WIKI_CANARY_OWNERS` | Optional; empty | Comma-separated account IDs enabled in Wiki canary mode. | No; account identifiers are private diagnostic data | Recreate API |
-| `DEEPSEEK_API_KEY` | Optional; empty disables title enrichment | Asynchronous session title/tag enrichment; independent of the coding runtime's credentials. | Yes | Recreate API |
+| `ORBIT_WIKI_EXECUTOR` | Optional; `runner` | How far the wiki's pipelines run on the server instead of in a runner's maintenance session: `runner`, `canary` (only the accounts `ORBIT_WIKI_EXECUTOR_CANARY_OWNERS` lists), or `server`. Read by both the API and `wiki-worker`; moving it back to `runner` stops new jobs being taken, and the API's start cancels whatever the server still had in flight for an account it no longer serves (contract `jobs.executor.rollback`, docs/wiki-contract.md §24.9). Requires a System model for the pipelines it moves. | No | Recreate API and `wiki-worker`; no migration or runner release |
+| `ORBIT_WIKI_EXECUTOR_CANARY_OWNERS` | Optional; empty | Comma-separated account IDs run by the server's worker in `ORBIT_WIKI_EXECUTOR=canary` mode. | No; account identifiers are private diagnostic data | Recreate API and `wiki-worker` |
+| `DEEPSEEK_API_KEY` | Optional; empty names sessions with their own provider | Asynchronous session title/tag enrichment. When empty, a session is named by its own provider instead: on a configured API key the server holds (title and tags; not a Claude subscription token or an internal-host endpoint), or, for an engine's own sign-in, by Claude Code or Codex from inside the process running the session (title only). | Yes | Recreate API |
 | `DEEPSEEK_BASE_URL` | Optional; `https://api.deepseek.com` | Endpoint for title/tag enrichment. | No; avoid credential-bearing URLs | Recreate API |
 | `DEEPSEEK_MODEL` | Optional; `deepseek-chat` | Model used for title/tag enrichment. | No | Recreate API |
 | `APNS_KEY` | Optional; empty disables push | Base64-encoded contents of the Apple `AuthKey_XXXX.p8` key. Push also needs the key/team identifiers. | Yes | Recreate API |
@@ -71,6 +73,37 @@ Two deployment values matter to it:
   again under **Admin → Sign-in**.
 
 See [Google sign-in](self-hosting.md#google-sign-in) for the Google Cloud console steps and who can sign in.
+
+### Wiki worker and System model
+
+The `wiki-worker` service runs the apiserver image with another command and calls the wiki's System model: the
+deployment's own endpoint speaking the Anthropic Messages API, such as vLLM. These variables are passed to
+`wiki-worker` only. The API container never receives the model's address or key; it reads the model's name and
+state from the status row the worker writes.
+
+| Variable | Required / default | Purpose | Secret? | Apply change |
+| --- | --- | --- | --- | --- |
+| `ORBIT_WIKI_MODEL_BASE_URL` | Optional; empty means no System model | The endpoint. Calls go to `{base}/v1/messages` and the worker probes `{base}/health` every 10 seconds. Use an address the `wiki-worker` container can reach. | No, but it is never shown to clients; avoid credential-bearing URLs | Recreate `wiki-worker` |
+| `ORBIT_WIKI_MODEL_API_KEY` | Required with the base URL | Sent as `Authorization: Bearer`. | Yes | Recreate `wiki-worker` |
+| `ORBIT_WIKI_MODEL` | Required with the base URL | The model name sent with every call; the only part of the configuration clients see. | No | Recreate `wiki-worker` |
+| `ORBIT_WIKI_MODEL_CONCURRENCY` | Optional; `4` | The most model requests in flight at once, across every wiki space. | No | Recreate `wiki-worker` |
+| `ORBIT_WIKI_EXECUTOR` | Optional; `runner` | The same executor switch the API reads (see above): which accounts' jobs this worker may claim. | No | Recreate `wiki-worker` (and the API, to move both together) |
+| `ORBIT_WIKI_EXECUTOR_CANARY_OWNERS` | Optional; empty | The same canary list the API reads. | No; account identifiers are private diagnostic data | Recreate both services |
+
+All three of the base URL, key, and model must be set; otherwise the System model reads as unconfigured and the
+worker calls nothing. The wiki settings and health line show the model's name and one of these states: up,
+unreachable, key refused, unconfigured, or wiki worker not running (no heartbeat for 60 seconds). A refused key
+(HTTP 401) stays refused until the worker restarts, so correct the key in `.env` and run
+`docker compose up -d wiki-worker`.
+
+The worker runs in Compose's default bridge network, where `127.0.0.1` is the container itself and
+`host.docker.internal` is not defined. For a model on the Docker host or a GPU machine, use its LAN or tunnel
+address, or give `wiki-worker` an `extra_hosts: ["host.docker.internal:host-gateway"]` entry in a Compose override.
+The names deliberately avoid `ANTHROPIC_*`: agent sessions carry those variables, and a deploy run from inside one
+would otherwise pick up the session's values.
+
+Until the wiki's jobs move to the server, the worker only probes the model and reports its state; wiki jobs still
+run on runners.
 
 ## PostgreSQL and backups
 

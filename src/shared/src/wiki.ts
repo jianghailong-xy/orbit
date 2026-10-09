@@ -191,6 +191,7 @@ export const WIKI_REFUSAL_CODES = [
   'WIKI_CURSOR_BEHIND',
   'WIKI_CURSOR_INVALID',
   'WIKI_ARTICLE_STALE',
+  'WIKI_SERVER_EXECUTES',
   'WIKI_PLAN_GATE',
   'WIKI_PLAN_STALE',
   'WIKI_PLAN_UNCONFIRMED',
@@ -1265,13 +1266,22 @@ export interface WikiAnchorList {
   next: string | null;
 }
 
-/** One anchor's check, as the runner reports it. */
+/**
+ * One anchor's check, as the runner reports it. `path` / `symbol` / `sha` are the identity of the
+ * anchor the reporter says it checked — the fields its type names. A report may leave them out (the
+ * runner's own CLI does), and then the server checks the type at the index alone; when they are
+ * there, the server applies the check only to the anchor they name (`anchorRules.verify.identity`).
+ */
 export interface WikiAnchorCheckInput {
   index: number;
   type: WikiGitAnchorType;
   state: 'verified' | 'changed' | 'missing';
   /** A symbol found: the sha256 of its region on the checked ref. */
   regionSha256?: string;
+  /** The identity a check may carry, per its type: a path anchor's path; a symbol's path and symbol; a commit's sha. */
+  path?: string;
+  symbol?: string;
+  sha?: string;
 }
 
 /** `POST /api/runner/wiki/spaces/:id/anchor-checks`. */
@@ -1495,6 +1505,15 @@ export interface WikiVerificationList {
   items: WikiVerificationItem[];
   /** Pass as `after` for the next page; null when this page is the last. */
   next: string | null;
+  /**
+   * Who verifies the ops this list would carry (contract `reviewModes.verification.servedBy`): `server`
+   * where the executor switch says the server runs for this account, in which case `items` is empty
+   * because the server's own job (`jobs.kindRuns.verify`) is the verifier and a session must not ask a
+   * model of its provider about them. Absent under the default `runner` mode, where the caller verifies.
+   */
+  servedBy?: 'server';
+  /** With `servedBy`: how many of the caller's ops are waiting, so a caller can wait for it to reach zero. */
+  waiting?: number;
 }
 
 /** One verdict, as `POST /api/runner/wiki/spaces/:id/verifications` takes it. */

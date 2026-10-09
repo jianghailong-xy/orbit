@@ -17,11 +17,14 @@ import {
   type RunnerHeartbeatRequest,
 } from '@orbit/shared';
 import { storeRefreshedCodexResetBlock } from '../runner-api/codex-reset-plan-usage';
-import { RunnerApiController, type RetryPlanTransaction } from '../runner-api/runner-api.controller';
+import { RunnerApiController, type RetryPlanTransaction, type UsageLimitTransaction } from '../runner-api/runner-api.controller';
 import { transactionDouble } from '../test-support/prisma-transaction-double';
+import { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from './account-move-capability';
 import { resolveProviderExec } from './custom-provider';
 import {
   accountAfterUsageLimit,
+  accountAfterUsageLimitAt,
+  accountBeforeDispatch,
   accountLabel,
   accountSwitchNotice,
   automaticAccount,
@@ -378,8 +381,8 @@ test("the gates' question — which account does this run spend — is its works
   assert.equal(runAccount('claude', { CLAUDE_CONFIG_DIR: WORK_HOME }, {}, ENGINES), WORK);
   assert.equal(runAccount('claude', { CLAUDE_CONFIG_DIR: '/srv/elsewhere' }, {}, ENGINES), null);
   assert.equal(runAccount('claude', { ANTHROPIC_AUTH_TOKEN: 'tok' }, { claudeAccount: WORK }, ENGINES), null);
-  // Kimi keeps one login for the whole machine: there is no account to judge a run by.
-  assert.equal(runAccount('kimi', { KIMI_CODE_HOME: WORK_HOME }, { claudeAccount: WORK }, ENGINES), undefined);
+  // OpenCode keeps no login of the machine's to choose: there is no account to judge a run by.
+  assert.equal(runAccount('opencode', { HOME: '/root' }, { claudeAccount: WORK }, ENGINES), undefined);
 
   const usage: PlanUsage = { provider: AgentProvider.CODEX, primary: window(100, DEFAULT_RESET), accounts: { [WORK]: work(8) } };
   const spent = (env: Record<string, string> | null) =>
@@ -547,6 +550,173 @@ test("a Claude session is picked and moved by its own accounts' quota, as a Code
     accountSwitchNotice('claude', { from: 'default', to: WORK }, { engines: ENGINES, accountNames: null }),
     'Switched to Work — the usage limit on Default is reached',
   );
+});
+
+test("a Kimi session is picked, moved and dispatched by its own accounts' quota, as a Claude one is", () => {
+  const now = new Date();
+  const KIMI_WORK_HOME = '/root/.orbit/kimi-accounts/3fa91c2e';
+  const engines: RunnerEngineHealth[] = [...ENGINES, {
+    engine: 'kimi',
+    installed: true,
+    auth: 'yes',
+    kimiRegion: 'mainland-cn',
+    accounts: [
+      { id: 'default', home: '/root/.kimi-code', auth: 'yes', kimiRegion: 'mainland-cn' },
+      { id: WORK, name: 'Work', home: KIMI_WORK_HOME, auth: 'yes', kimiRegion: 'global' },
+    ],
+  }];
+  // Default's coding month spent while its 5 hours read 0%: Work, with room, is where it goes.
+  const kimiUsage: PlanUsage = {
+    kimi: {
+      provider: AgentProvider.KIMI,
+      fiveHour: { utilization: 0, resetsAt: DEFAULT_RESET },
+      monthCode: { utilization: 100, resetsAt: DEFAULT_RESET },
+      accounts: {
+        [WORK]: { provider: AgentProvider.KIMI, fiveHour: { utilization: 19, resetsAt: WORK_RESET }, month: { utilization: 28, resetsAt: WORK_RESET } },
+      },
+    },
+  };
+  const automatic = { env: null, kimiAccount: null };
+  assert.equal(automaticAccount('kimi', automatic, engines, kimiUsage, now), WORK);
+  assert.deepEqual(accountBeforeDispatch('kimi', { account: 'default' }, automatic, engines, kimiUsage, now), { from: 'default', to: WORK });
+  assert.deepEqual(accountAfterUsageLimit('kimi', { account: 'default' }, automatic, engines, kimiUsage, now), { from: 'default', to: WORK });
+  assert.equal(accountAfterUsageLimit('kimi', { account: 'default', pinned: true }, automatic, engines, kimiUsage, now), null);
+  // The workspace's Kimi pick decides for its Kimi sessions, and its Claude pick does not.
+  assert.equal(automaticAccount('kimi', { ...automatic, kimiAccount: 'default' }, engines, kimiUsage, now), null);
+  assert.equal(automaticAccount('kimi', { ...automatic, claudeAccount: 'default' }, engines, kimiUsage, now), WORK);
+  // A workspace naming a model and key of its own spends no account: Orbit neither picks nor moves.
+  const ownModel = { KIMI_MODEL_NAME: 'kimi-for-coding', KIMI_MODEL_API_KEY: 'sk-test' };
+  assert.equal(automaticAccount('kimi', { env: ownModel }, engines, kimiUsage, now), null);
+
+  // What a gate judges is the account dispatch runs the session on, which it hands over as KIMI_CODE_HOME.
+  assert.equal(runAccount('kimi', null, { kimiAccount: WORK }, engines), WORK);
+  assert.equal(runAccount('kimi', { KIMI_CODE_HOME: KIMI_WORK_HOME }, {}, engines), WORK);
+  assert.equal(runAccount('kimi', null, { kimiAccount: GONE }, engines), 'default');
+  assert.equal(runAccount('kimi', ownModel, { kimiAccount: WORK }, engines), null);
+  assert.equal(runAccount('kimi', { KIMI_MODEL_API_KEY: 'sk-test' }, { kimiAccount: WORK }, engines), WORK);
+  const exec = resolveProviderExec({
+    declaredProvider: AgentProvider.KIMI,
+    declaredProviderBuiltin: true,
+    customRow: null,
+    workspaceEnv: { KIMI_CODE_HOME: '/srv/hand-typed', ORBIT_TEST: '1' },
+    kimiAccount: WORK,
+    runnerEngines: engines,
+  });
+  assert.deepEqual(exec.env, { KIMI_CODE_HOME: KIMI_WORK_HOME, ORBIT_TEST: '1' });
+  assert.deepEqual(planUsageBlockedUntil(kimiUsage, 'kimi', now, 'default'), new Date(DEFAULT_RESET));
+  assert.equal(planUsageBlockedUntil(kimiUsage, 'kimi', now, WORK), null);
+
+  // Stored the way Codex's and Claude's accounts are: each under an id a runner could have added.
+  const stored = sanitizePlanUsageAccounts({
+    kimi: { ...kimiUsage.kimi!, accounts: { ...kimiUsage.kimi!.accounts, default: work(1), '../x': work(2) } },
+  });
+  assert.deepEqual(Object.keys(stored.kimi!.accounts!), [WORK]);
+  assert.equal(stored.kimi!.monthCode!.utilization, 100, "Default's own window is untouched");
+});
+
+test('a session no other account has room for waits for the first account to free up, unless it or its workspace decides', () => {
+  const now = new Date();
+  // Both Claude accounts spent: Default's week until DEFAULT_RESET, Work's 5 hours until the later WORK_RESET.
+  const work5h = (utilization: number) => ({ provider: AgentProvider.CLAUDE, fiveHour: { utilization, resetsAt: WORK_RESET } });
+  const usage = (workUsed: number) => ({
+    claude: { provider: AgentProvider.CLAUDE, sevenDay: { utilization: 100, resetsAt: DEFAULT_RESET }, accounts: { [WORK]: work5h(workUsed) } },
+  });
+  const automatic = { env: null, claudeAccount: null };
+  const at = (account: string, workspace: Parameters<typeof accountAfterUsageLimitAt>[2] = automatic, workUsed = 100, pinned = false) =>
+    accountAfterUsageLimitAt('claude', { account, pinned }, workspace, ENGINES, usage(workUsed), now);
+  // On Work, Default comes back first; on Default, Work is the only other account there is.
+  assert.deepEqual(at(WORK), new Date(DEFAULT_RESET));
+  assert.deepEqual(at('default'), new Date(WORK_RESET));
+  // With room on the other one, now: accountAfterUsageLimit moves it there.
+  assert.deepEqual(at('default', automatic, 8), now);
+  // Picked by hand, or decided by its workspace: only its own account's reset says when.
+  assert.equal(at(WORK, automatic, 100, true), null);
+  assert.equal(at(WORK, { env: null, claudeAccount: WORK }), null);
+  assert.equal(at(WORK, { env: { CLAUDE_CONFIG_DIR: WORK_HOME }, claudeAccount: null }), null);
+});
+
+test("a usage limit no other account has room for is armed for the first account to free up, that one or another", async () => {
+  const controller = new RunnerApiController(
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
+  );
+  const runner = (planUsage: PlanUsage, capabilities: string[]) => ({ planUsage, engines: ENGINES, accountNames: null, accountPauses: null, capabilities });
+
+  // Claude's words without the reset time it usually adds, so the snapshot says when: Default's week
+  // comes back before Work's.
+  const claudeSpent: PlanUsage = {
+    claude: {
+      provider: AgentProvider.CLAUDE,
+      sevenDay: { utilization: 100, resetsAt: DEFAULT_RESET },
+      accounts: { [WORK]: { provider: AgentProvider.CLAUDE, sevenDay: { utilization: 100, resetsAt: WORK_RESET } } },
+    },
+  };
+  const claude = async (claudeAccount: string, pinned = false, capabilities = [CLAUDE_ACCOUNT_MOVE_V1]) => {
+    const tx = transactionDouble<RetryPlanTransaction>({
+      session: {
+        findUnique: async () => ({
+          ownerId: 'owner-1',
+          provider: AgentProvider.CLAUDE,
+          retryAttempts: 0,
+          codexAccount: null,
+          claudeAccount,
+          claudeAccountPinned: pinned,
+          kimiAccount: null,
+          poolSwitchNotice: null,
+          workspace: { env: null, codexAccount: null, claudeAccount: null, kimiAccount: null },
+        }),
+      },
+      runner: { findUnique: async () => runner(claudeSpent, capabilities) },
+    });
+    const plan = await (
+      controller as unknown as {
+        retryPlanFor(tx: RetryPlanTransaction, id: string, runnerId: string, text: string): Promise<{ retryAt?: Date | null; claudeAccount?: string }>;
+      }
+    ).retryPlanFor(tx, 'session-1', RUNNER.id, "You've hit your weekly limit");
+    assert.equal(plan.claudeAccount, undefined, 'moved onto a spent account');
+    return plan.retryAt;
+  };
+  assert.ok(withinJitterOf(await claude(WORK), DEFAULT_RESET), "a run on Work waited for Work's week while Default's came back first");
+  assert.ok(withinJitterOf(await claude('default'), DEFAULT_RESET), 'a run on Default waits for Default, which comes back first');
+  assert.ok(withinJitterOf(await claude(WORK, true), WORK_RESET), 'a run pinned to Work waits for Work');
+  assert.ok(withinJitterOf(await claude(WORK, false, []), WORK_RESET), 'a runner that cannot move it keeps it waiting on Work');
+
+  // Codex says it as the turn's error (usageLimitRetry), and the same holds.
+  const codexSpent: PlanUsage = { codex: { provider: AgentProvider.CODEX, primary: window(100, DEFAULT_RESET), accounts: { [WORK]: work(100) } } };
+  const codex = async (pinned: boolean) => {
+    const tx = transactionDouble<UsageLimitTransaction>({
+      workspace: { findUnique: async () => null },
+      runner: { findUnique: async () => runner(codexSpent, [CODEX_ACCOUNT_MOVE_V1]) },
+    });
+    const retry = await (
+      controller as unknown as {
+        usageLimitRetry(
+          tx: UsageLimitTransaction,
+          runnerId: string,
+          engine: 'codex' | 'kimi',
+          session: Record<string, unknown>,
+          text: string,
+        ): Promise<{ retryAt: Date; move?: unknown } | null>;
+      }
+    ).usageLimitRetry(tx, RUNNER.id, 'codex', {
+      ownerId: 'owner-1',
+      provider: AgentProvider.CODEX,
+      codexAccount: WORK,
+      codexAccountPinned: pinned,
+      kimiAccount: null,
+      kimiAccountPinned: false,
+      workspaceId: null,
+    }, CODEX_LIMIT);
+    assert.equal(retry?.move, undefined, 'moved onto a spent account');
+    return retry?.retryAt;
+  };
+  assert.ok(withinJitterOf(await codex(false), DEFAULT_RESET), 'a Codex run on Work waited for Work while Default came back first');
+  assert.ok(withinJitterOf(await codex(true), WORK_RESET), 'a Codex run pinned to Work waits for Work');
 });
 
 test('the line a moved session carries names both accounts the way the picker names them', () => {

@@ -59,8 +59,9 @@ type ProbedRunner = { id: string; engines?: RunnerEngineHealth[] | null; capabil
 /** Does the runner's own probe now say this engine is signed in? "unknown" is not a yes — the
  *  wait below is bounded precisely because a CLI that won't answer never becomes one. Given an
  *  account of an engine that keeps them, it is that account's own answer: the engine's is Default's,
- *  and says nothing about any other. Given Kimi's site, it is a login on that site: one moved from
- *  the other site was already signed in before, and that yes is the old login's. */
+ *  and says nothing about any other. Given Kimi's site, it is a login on that site — the account's own,
+ *  for an account: one moved from the other site was already signed in before, and that yes is the
+ *  old login's. */
 export function probeReportsSignedIn(
   runners: ProbedRunner[] | undefined,
   runnerId: string,
@@ -78,7 +79,8 @@ export function probeReportsSignedIn(
       return accounts.some(
         (a) =>
           a.auth === 'yes' &&
-          (account ? a.id === account : a.name?.trim() === accountName?.trim()),
+          (account ? a.id === account : a.name?.trim() === accountName?.trim()) &&
+          (!site || a.kimiRegion === site),
       );
     }
     // A named account must appear in the account list before this wait can end. Falling back to
@@ -163,7 +165,14 @@ export function RunnerSignIn({
     select: (list) => (list as ProbedRunner[]).find((r) => r.id === runnerId),
   });
   const choosesSite = !!kimiRunner.data?.capabilities?.includes(KIMI_LOGIN_REGION_V1);
-  const currentSite = kimiRunner.data?.engines?.find((e) => e.engine === 'kimi')?.kimiRegion;
+  // The site of the login this card signs in again: the account's own, Default's being the engine's.
+  // A card adding an account has none yet.
+  const kimiHealth = kimiRunner.data?.engines?.find((e) => e.engine === 'kimi');
+  const currentSite = accountName !== undefined
+    ? undefined
+    : account && account !== 'default'
+      ? kimiHealth?.accounts?.find((a) => a.id === account)?.kimiRegion
+      : kimiHealth?.kimiRegion;
   // Both sites can always be pressed. A runner too old to be told a site signs in where its CLI
   // decides — kimi.com, on an install Orbit made — so kimi.com goes to it unnamed; kimi.ai is named
   // either way, and such a runner is refused it in words that say to update it (RunnerApiController).
@@ -404,11 +413,14 @@ export function RunnerSignIn({
   }
 
   // Device flow: the code goes to the browser, not back through here, so all we can do is show
-  // both halves and wait for the CLI to finish approving itself.
+  // both halves and wait for the CLI to finish approving itself. The code comes first, and the one
+  // press both copies it and opens the page it goes into (VS Code's "Copy & Continue to GitHub"), so
+  // what is left over there is a paste.
   if (status === 'awaiting_approval' && s?.url) {
     // Kimi's page belongs to one of its two sites, named so the user knows which account it wants.
     const site = engine === 'kimi' ? kimiSiteOf(s.url) : null;
     const other: KimiRegion = site === 'global' ? 'mainland-cn' : 'global';
+    const userCode = s.userCode;
     const cancelLink = (
       <button className="rsi-link" onClick={() => cancel.mutate()} type="button">
         Cancel
@@ -416,11 +428,12 @@ export function RunnerSignIn({
     );
     return (
       <div className="rsi">
-        <a className="rsi-open" href={s.url} target="_blank" rel="noopener noreferrer">
-          <ExportOutlined /> {site ? `Open the ${KIMI_SITE[site].domain} sign-in page` : 'Open the sign-in page'}
-        </a>
         <div className="rsi-hint">
-          {adding ? (
+          {adding && site ? (
+            <>
+              Sign in with the <b>{KIMI_SITE[site].domain}</b> account you are adding, then enter this one-time code:
+            </>
+          ) : adding ? (
             <>
               Sign in <b>with the other account</b>, then enter this one-time code:
             </>
@@ -429,10 +442,28 @@ export function RunnerSignIn({
               Sign in with your <b>{KIMI_SITE[site].domain}</b> account there, then enter this one-time code:
             </>
           ) : (
-            'Sign in there, then enter this one-time code:'
+            'Enter this one-time code on the sign-in page:'
           )}
         </div>
-        <div className="rsi-usercode">{s.userCode}</div>
+        <div className="rsi-usercode">{userCode}</div>
+        <a
+          className="rsi-open"
+          href={s.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => {
+            if (userCode) void navigator.clipboard?.writeText(userCode).catch(() => undefined);
+          }}
+        >
+          <ExportOutlined />{' '}
+          {userCode
+            ? site
+              ? `Copy Code & Open ${KIMI_SITE[site].domain}`
+              : 'Copy Code & Open Sign-In Page'
+            : site
+              ? `Open the ${KIMI_SITE[site].domain} sign-in page`
+              : 'Open the sign-in page'}
+        </a>
         <div className="rsi-row">
           <LoadingOutlined /> Waiting for you to approve it…
         </div>
@@ -513,7 +544,7 @@ export function RunnerSignIn({
               key={region}
               className="rsi-site"
               type="button"
-              disabled={start.isPending || kimiRunner.isPending}
+              disabled={start.isPending || kimiRunner.isPending || (adding && !accountName.trim())}
               onClick={() => begin(kimiSiteToName(region))}
             >
               <span className="rsi-site-name">

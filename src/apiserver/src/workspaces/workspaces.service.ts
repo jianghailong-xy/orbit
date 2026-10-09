@@ -93,6 +93,7 @@ export class WorkspacesService {
         codexAccount: dto.codexAccount ?? null,
         claudeAccount: dto.claudeAccount ?? null,
         antigravityAccount: dto.antigravityAccount ?? null,
+        kimiAccount: dto.kimiAccount ?? null,
         enabled: dto.enabled ?? true,
         autoInitGit: dto.autoInitGit ?? false,
         enableWorktree: dto.enableWorktree ?? false,
@@ -297,6 +298,7 @@ export class WorkspacesService {
       codexAccount: dto.codexAccount,
       claudeAccount: dto.claudeAccount,
       antigravityAccount: dto.antigravityAccount,
+      kimiAccount: dto.kimiAccount,
       modelRouting: dto.modelRouting,
       modelRoutingProviders: modelRoutingEngines(dto.modelRoutingProviders),
     };

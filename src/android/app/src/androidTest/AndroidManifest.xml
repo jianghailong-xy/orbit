@@ -2,4 +2,23 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- The on-device HTTP fixture also needs permission on Android 10. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <application android:label="A07 receiver">
+        <activity android:name="io.orbitd.android.composer.ShareReceiver" android:exported="true" android:label="A07 receiver">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
+        <!-- A12's TalkBack check: a silent speech engine that writes down what TalkBack says. The device script makes it
+             the default engine only for an A12_TALKBACK=1 run and restores the previous one. -->
+        <service android:name="io.orbitd.android.wiki.TalkBackSpeechRecorder" android:exported="true" android:label="A12 speech recorder">
+            <intent-filter>
+                <action android:name="android.intent.action.TTS_SERVICE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data android:name="android.speech.tts" android:resource="@xml/a12_speech_recorder" />
+        </service>
+    </application>
 </manifest>

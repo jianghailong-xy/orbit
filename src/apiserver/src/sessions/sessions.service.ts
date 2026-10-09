@@ -153,6 +153,7 @@ import {
   enqueueBeautifySession,
   MAX_KNOWN_TAGS_PROMPTED,
   makeBranchName,
+  sanitizeTitle,
   titleFromAttachments,
   titleFromPrompt,
 } from './naming';
@@ -190,6 +191,7 @@ import {
   usableProviderScope,
 } from '../providers/custom-provider';
 import { ownsModel } from '../providers/preset-overlay';
+import { sessionHeldKey } from '../providers/held-key';
 import {
   newTerminalResumeHandoffOwner,
   pendingWorktreeOperationMayBeExecuting,
@@ -659,6 +661,8 @@ interface AccountSwitchWrite {
   claudeAccountPinned?: boolean;
   antigravityAccount?: string;
   antigravityAccountPinned?: boolean;
+  kimiAccount?: string;
+  kimiAccountPinned?: boolean;
 }
 
 @Injectable()
@@ -853,6 +857,12 @@ export class SessionsService {
     ) {
       throw new BadRequestException('antigravityAccount must be "default" or the id of one of the runner\'s accounts');
     }
+    if (
+      dto.kimiAccount != null &&
+      (typeof dto.kimiAccount !== 'string' || !ACCOUNT_ID_PATTERN.test(dto.kimiAccount))
+    ) {
+      throw new BadRequestException('kimiAccount must be "default" or the id of one of the runner\'s accounts');
+    }
     // The session runs on a runner. Prefer an explicit pin; otherwise derive it from
     // the chosen workspace's machine (workspaces belong to a runner) — picking a workspace is
     // enough to know which machine + project dir to run in.
@@ -917,6 +927,7 @@ export class SessionsService {
           codexAccount: true,
           claudeAccount: true,
           antigravityAccount: true,
+          kimiAccount: true,
           managedRunnerDefault: { select: { runnerId: true } },
         },
       });
@@ -939,6 +950,7 @@ export class SessionsService {
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
         select: {
           enableWorktree: true, enabled: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true,
+          kimiAccount: true,
           managedRunnerDefault: { select: { runnerId: true } },
         },
       });
@@ -1174,11 +1186,11 @@ export class SessionsService {
       const unavailable = dshRuntimeUnavailable(targetRunner.engines);
       if (unavailable) throw new ConflictException(unavailable);
     }
-    // The Codex, Claude or Antigravity account this session runs on: the one picked for it — which
-    // pins it there — else, when its workspace leaves the account to Orbit, the runner's account whose
-    // quota resets soonest (automaticAccount), which Orbit may move it off when that account's usage
-    // limit stops it. Stored here; a Codex or Claude conversation lives in that account's directory.
-    // Null runs on the workspace's.
+    // The Codex, Claude, Antigravity or Kimi account this session runs on: the one picked for it —
+    // which pins it there — else, when its workspace leaves the account to Orbit, the runner's account
+    // whose quota resets soonest (automaticAccount), which Orbit may move it off when that account's
+    // usage limit stops it. Stored here; a Codex, Claude or Kimi conversation lives in that account's
+    // directory. Null runs on the workspace's.
     const automatic = (engine: AccountEngine) =>
       provider === engine && providerBuiltin && targetRunner
         ? automaticAccount(
@@ -1193,6 +1205,7 @@ export class SessionsService {
     const codexAccount = dto.codexAccount ?? automatic(AgentProvider.CODEX);
     const claudeAccount = dto.claudeAccount ?? automatic(AgentProvider.CLAUDE);
     const antigravityAccount = dto.antigravityAccount ?? automatic(AgentProvider.ANTIGRAVITY);
+    const kimiAccount = dto.kimiAccount ?? automatic(AgentProvider.KIMI);
     const refusal =
       targetRunner &&
       signedOutEngineRefusal({
@@ -1205,6 +1218,7 @@ export class SessionsService {
           ...(codexAccount ? { codexAccount } : {}),
           ...(claudeAccount ? { claudeAccount } : {}),
           ...(antigravityAccount ? { antigravityAccount } : {}),
+          ...(kimiAccount ? { kimiAccount } : {}),
         },
         runner: targetRunner,
       });
@@ -1270,6 +1284,8 @@ export class SessionsService {
         claudeAccountPinned: dto.claudeAccount != null,
         antigravityAccount,
         antigravityAccountPinned: dto.antigravityAccount != null,
+        kimiAccount,
+        kimiAccountPinned: dto.kimiAccount != null,
         workspaceId: dto.workspaceId,
         assignedRunnerId,
         taskId: dto.taskId,
@@ -1353,10 +1369,10 @@ export class SessionsService {
       this.realtime.publishWorkspaceChanged(session.id, session.workspaceId, false);
     }
     // Only unnamed sessions need cosmetic naming. Task runs and user-supplied titles never call
-    // DeepSeek, and neither does a session with no words to read — its file names stand.
+    // a model, and neither does a session with no words to read — its file names stand.
     // The branch is deliberately left as-is when the display title is later improved.
     if (!hasExplicitTitle && !attachmentsAlone) {
-      void this.beautifySessionLater(ownerId, session.id, dto.prompt, title);
+      void this.beautifySessionLater(session, dto.prompt, title);
     }
     // Title ownership/provenance is an internal synchronization mechanism, not a public setting.
     const {
@@ -1639,18 +1655,23 @@ export class SessionsService {
 
   /**
    * Background naming for a session that started with a prompt-derived title: a cleaner display
-   * title, plus a couple of semantic tags to file it under. The shared bounded queue prevents a
-   * create burst from fan-out calling DeepSeek. Swap the title only while it is still the exact
-   * fallback we wrote, so a user rename (or any concurrent change) is never clobbered. Re-publishes
-   * the session so live clients pick up both. Fire-and-forget: never awaited, swallows all errors.
+   * title, plus a couple of semantic tags to file it under. Asked of DeepSeek on the server's key
+   * when one is configured; otherwise of the session's own provider, when the server holds its key
+   * (sessionHeldKey). A session on an engine's own sign-in has no key here, and is named by its runner
+   * through that engine instead (the claim's `naming`). The shared bounded queue prevents a create
+   * burst from fanning out calls. Swap the title only while it is still the exact fallback we wrote,
+   * so a user rename (or any concurrent change) is never clobbered. Re-publishes the session so live
+   * clients pick up both. Fire-and-forget: never awaited, swallows all errors.
    */
   private async beautifySessionLater(
-    ownerId: string,
-    sessionId: string,
+    session: { id: string; ownerId: string; provider: string; providerBuiltin: boolean; model: string | null },
     prompt: string,
     fallbackTitle: string,
   ): Promise<void> {
+    const { id: sessionId, ownerId } = session;
     try {
+      const key = process.env.DEEPSEEK_API_KEY?.trim() ? undefined : await sessionHeldKey(this.prisma, session);
+      if (key === null) return;
       // The owner's own vocabulary, offered to the model as reuse candidates. System tags are
       // colors ("Red"), not semantics, so they are never candidates and are never auto-applied.
       const known = await this.prisma.sessionTag.findMany({
@@ -1662,6 +1683,7 @@ export class SessionsService {
       const { title, tags } = await enqueueBeautifySession({
         prompt,
         knownTags: known.map((t) => t.name),
+        key,
       });
       let changed = false;
       if (title && title !== fallbackTitle) {
@@ -1678,6 +1700,24 @@ export class SessionsService {
     } catch {
       // best-effort; the raw fallback title simply stays
     }
+  }
+
+  /**
+   * The title the engine running a session gave it (POST /runner/sessions/:id/naming): set only while
+   * the session still reads `replaces` — the title its claim carried — and no project owns its title,
+   * the same compare-and-set beautifySessionLater makes, so a rename made in the meantime stands.
+   * Returns whether it landed, after announcing it.
+   */
+  async applyEngineTitle(sessionId: string, replaces: string, title: string): Promise<boolean> {
+    const named = sanitizeTitle(title);
+    if (!named || named === replaces) return false;
+    const res = await this.prisma.session.updateMany({
+      where: { id: sessionId, title: replaces, titleManagedByProject: false },
+      data: { title: named },
+    });
+    if (res.count === 0) return false;
+    this.realtime.publishSessionUpdated(sessionId);
+    return true;
   }
 
   /**
@@ -3705,9 +3745,40 @@ export class SessionsService {
    *
    * `events` is the transcript's TAIL page — the newest `limit` (default 200) — with `hasMore`,
    * not the whole history: a coordinator's transcript is megabytes, and the anonymous door was
-   * handing all of it to whoever asked. Older events page in over getSharedEventPage.
+   * handing all of it to whoever asked. Older events page in over getSharedEventPage, and newer
+   * ones over getSharedEventsAfter.
    */
   async getSharedTranscript(sessionId: string, opts: { limit?: number; maxPayload?: number } = {}) {
+    const head = await this.sharedHead(sessionId);
+    // A share is another historical transcript reader, so it observes the same replay contract as
+    // the authenticated page/SSE paths. In particular, do not expose live-only rows accidentally
+    // persisted by an older API during a rolling deployment (or spend a public response on their
+    // repeated foreground-shell snapshots). The page query is the owner's own (eventPage).
+    const { events, hasMore } = await this.eventPage(sessionId, opts);
+    return { ...head, events, hasMore };
+  }
+
+  /**
+   * What a shared session has added since `after`, a seq its public page already holds, and how it
+   * stands now: the root's header fields with the events just newer than that seq, oldest first,
+   * and `after` the cursor to the rest, null once they reach the newest. A page following a live
+   * session asks this every few seconds, so one read both grows its tail and redraws its state.
+   *
+   * The header is read first. A run that ends between the two reads is then still running in this
+   * answer, and the page asks once more; read the other way round, the answer could say the run is
+   * over while its last events are not in it.
+   */
+  async getSharedEventsAfter(
+    sessionId: string,
+    opts: { after: number; limit?: number; maxPayload?: number },
+  ) {
+    const head = await this.sharedHead(sessionId);
+    return { ...head, ...(await this.eventPageAfter(sessionId, opts)) };
+  }
+
+  /** A shared session's header — what its public page says of it above the transcript — and nothing
+   *  else about it (see getSharedTranscript). A trashed session is the link's 404. */
+  private async sharedHead(sessionId: string) {
     const session = await this.prisma.session.findFirst({
       where: { id: sessionId, deletedAt: null },
       select: {
@@ -3724,11 +3795,6 @@ export class SessionsService {
     });
     if (!session) throw linkNotFound();
     const stateful = withSessionState(session);
-    // A share is another historical transcript reader, so it observes the same replay contract as
-    // the authenticated page/SSE paths. In particular, do not expose live-only rows accidentally
-    // persisted by an older API during a rolling deployment (or spend a public response on their
-    // repeated foreground-shell snapshots). The page query is the owner's own (eventPage).
-    const { events, hasMore } = await this.eventPage(session.id, opts);
     return {
       title: session.title,
       workspaceName: session.workspace?.name ?? null,
@@ -3739,8 +3805,6 @@ export class SessionsService {
       lifecycleState: stateful.lifecycleState,
       filingState: stateful.filingState,
       createdAt: session.createdAt,
-      events,
-      hasMore,
     };
   }
 
@@ -3930,18 +3994,9 @@ export class SessionsService {
       select: { id: true },
     });
     if (!session) throw new NotFoundException('session not found');
-    const take = Math.min(Math.max(Math.trunc(opts.limit ?? 200), 1), 500);
     const after = Math.trunc(opts.after);
-    const [rows, older] = await Promise.all([
-      this.prisma.$queryRaw<PageRow[]>`
-        SELECT seq, type, payload, turn_id AS "turnId", created_at AS "createdAt"
-        FROM run_event
-        WHERE session_id = ${id}::uuid
-          AND seq > ${after}
-          AND ${replayableEventSql}
-        ORDER BY seq ASC
-        LIMIT ${take + 1}
-      `,
+    const [newer, older] = await Promise.all([
+      this.eventPageAfter(id, opts),
       this.prisma.$queryRaw<{ found: boolean }[]>`
         SELECT EXISTS (
           SELECT 1 FROM run_event
@@ -3951,13 +4006,36 @@ export class SessionsService {
         ) AS "found"
       `,
     ]);
-    const hasNewer = rows.length > take;
-    const events = hasNewer ? rows.slice(0, take) : rows;
     const hasOlder = older[0]?.found === true;
     return {
-      events: events.map((e) => toPageEvent(e, opts.maxPayload)),
+      events: newer.events,
       hasMore: hasOlder,
-      before: hasOlder ? (events[0]?.seq ?? after + 1) : null,
+      before: hasOlder ? (newer.events[0]?.seq ?? after + 1) : null,
+      after: newer.after,
+    };
+  }
+
+  /** getEventPageAfter's newer half, for a session the caller has already resolved — by owner there,
+   *  by share link in getSharedEventsAfter: `limit` events with seq above `after`, oldest first, and
+   *  the cursor to the page after them, null once they reach the newest event. */
+  private async eventPageAfter(
+    id: string,
+    opts: { after: number; limit?: number; maxPayload?: number },
+  ): Promise<Pick<TranscriptPage, 'events' | 'after'>> {
+    const take = Math.min(Math.max(Math.trunc(opts.limit ?? 200), 1), 500);
+    const rows = await this.prisma.$queryRaw<PageRow[]>`
+      SELECT seq, type, payload, turn_id AS "turnId", created_at AS "createdAt"
+      FROM run_event
+      WHERE session_id = ${id}::uuid
+        AND seq > ${Math.trunc(opts.after)}
+        AND ${replayableEventSql}
+      ORDER BY seq ASC
+      LIMIT ${take + 1}
+    `;
+    const hasNewer = rows.length > take;
+    const events = hasNewer ? rows.slice(0, take) : rows;
+    return {
+      events: events.map((e) => toPageEvent(e, opts.maxPayload)),
       after: hasNewer ? events[events.length - 1].seq : null,
     };
   }
@@ -4959,7 +5037,7 @@ export class SessionsService {
     const workspace = session.workspaceId
       ? await tx.workspace.findUnique({
           where: { id: session.workspaceId },
-          select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true },
+          select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true },
         })
       : null;
     const move = accountBeforeDispatch(
@@ -7897,7 +7975,7 @@ export class SessionsService {
       next.changed && next.providerBuiltin && isAccountEngine(next.provider) ? next.provider : null;
     if (account !== undefined && !engine) {
       throw new BadRequestException(
-        "an account goes with a switch onto the built-in Codex, Claude or Antigravity engine — a session already there moves with PATCH /sessions/:id/account",
+        "an account goes with a switch onto the built-in Codex, Claude, Antigravity or Kimi engine — a session already there moves with PATCH /sessions/:id/account",
       );
     }
     if (!engine) return {};
@@ -7911,7 +7989,8 @@ export class SessionsService {
         codexAccountPinned: true,
         claudeAccountPinned: true,
         antigravityAccountPinned: true,
-        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true } },
+        kimiAccountPinned: true,
+        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
         assignedRunner: { select: { engines: true, accountPauses: true, planUsage: true, capabilities: true } },
       },
     });
@@ -8128,6 +8207,7 @@ export class SessionsService {
         claudeAccount: accounts.claudeAccount ?? session.claudeAccount ?? session.workspace?.claudeAccount,
         antigravityAccount:
           accounts.antigravityAccount ?? session.antigravityAccount ?? session.workspace?.antigravityAccount,
+        kimiAccount: accounts.kimiAccount ?? session.kimiAccount ?? session.workspace?.kimiAccount,
         runnerEngines: session.assignedRunner?.engines,
       });
       if (exec.provider === AgentProvider.DSH && (!session.assignedRunner?.capabilitiesReportedAt ||
@@ -8346,14 +8426,16 @@ export class SessionsService {
           claudeAccountPinned: true,
           antigravityAccount: true,
           antigravityAccountPinned: true,
-          workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true } },
+          kimiAccount: true,
+          kimiAccountPinned: true,
+          workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
           assignedRunner: { select: { engines: true, accountNames: true, accountPauses: true, planUsage: true, capabilities: true } },
         },
       });
       const engine: AccountEngine | null = isAccountEngine(session.provider) ? session.provider : null;
       if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin) || !session.assignedRunner) {
         throw new BadRequestException(
-          "only a session on the built-in Codex, Claude or Antigravity engine runs on one of its runner's accounts",
+          "only a session on the built-in Codex, Claude, Antigravity or Kimi engine runs on one of its runner's accounts",
         );
       }
       const runner = session.assignedRunner;
@@ -8756,6 +8838,7 @@ export class SessionsService {
     mergeTargets: true,
     claudeAccount: true,
     codexAccount: true,
+    kimiAccount: true,
     // At most one, by the unique index behind Project.coordinatorSessionId. Nothing in the database
     // keeps a coordinator in its workspace since 0164, so the move is what has to.
     coordinatorForProject: { select: { id: true } },
@@ -8774,7 +8857,7 @@ export class SessionsService {
       },
     },
     workspace: {
-      select: { env: true, claudeAccount: true, codexAccount: true, enableWorktree: true, defaultMergeTarget: true },
+      select: { env: true, claudeAccount: true, codexAccount: true, kimiAccount: true, enableWorktree: true, defaultMergeTarget: true },
     },
     assignedRunner: { select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true } },
   } satisfies Prisma.SessionSelect;

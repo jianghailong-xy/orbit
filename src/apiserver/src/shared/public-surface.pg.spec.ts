@@ -14,7 +14,9 @@
  *       X-Robots-Tag: noindex, nofollow;
  *   (d) one address that spends one link's budget is refused 429 — another address on that link,
  *       and the same address on another link, are not;
- *   (e) a session in the trash cannot be shared, and the refusal writes no token.
+ *   (e) a session in the trash cannot be shared, and the refusal writes no token;
+ *   (f) `/events?after=` reads what the session added since a seq, oldest first with a cursor to the
+ *       rest, and the root's header as it stands now.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/shared/public-surface.pg.spec.ts
  *
@@ -455,6 +457,44 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
     assert.equal(typeof minted.json.shareToken, 'string');
     assert.equal((await shareOf(live)).shareToken, minted.json.shareToken);
     assert.equal((await visit(encodeURIComponent(minted.json.shareToken))).status, 200);
+  });
+
+  await t.test('(f) `after` reads what the session added since a seq, with its header as it stands now', async () => {
+    // Newer than a seq, oldest first, past the noise and the live-only row; the cursor says where the
+    // rest start, and is null once the page reaches the newest event.
+    const first = await visit(at('/events?after=598&limit=3'));
+    assert.equal(first.status, 200, first.body.toString());
+    assert.deepEqual(seqs(first), [599, 600, 602]);
+    assert.equal(first.json.after, 602);
+    const rest = await visit(at('/events?after=602&limit=3'));
+    assert.deepEqual(seqs(rest), [604, 606]);
+    assert.equal(rest.json.after, null);
+    const caughtUp = await visit(at('/events?after=606'));
+    assert.deepEqual(seqs(caughtUp), []);
+    assert.equal(caughtUp.json.after, null);
+    const trimmed = await visit(at(`/events?after=600&limit=1&maxPayload=${CAP}`));
+    assert.deepEqual(seqs(trimmed), [602]);
+    assert.equal(trimmed.json.events[0].truncated, true);
+
+    // The header is the root's — its fields, as the root answers them, and nothing else.
+    const root = await visit(at(''));
+    assert.deepEqual(Object.keys(rest.json).sort(), [...OLD_FIELDS, 'agentName', 'events', 'after'].sort());
+    for (const field of [...OLD_FIELDS, 'agentName']) assert.deepEqual(rest.json[field], root.json[field], field);
+
+    // A conversation that moves on: the next read holds what it added and how it stands now.
+    const liveToken = newToken();
+    const live = await conversation('Still going', { shareToken: liveToken });
+    await event(live, 1, RunEventType.USER, { text: 'go on' });
+    const on = (path: string) => `${encodeURIComponent(liveToken)}${path}`;
+    const waiting = await visit(on('/events?after=1'));
+    assert.deepEqual(seqs(waiting), []);
+    assert.equal(waiting.json.runState, 'AWAITING_INPUT');
+    await db.session.update({ where: { id: live }, data: { status: RunStatus.RUNNING } });
+    await event(live, 2, RunEventType.ASSISTANT, { text: 'going on' });
+    const moved = await visit(on('/events?after=1'));
+    assert.deepEqual(seqs(moved), [2]);
+    assert.equal(moved.json.events[0].payload.text, 'going on');
+    assert.equal(moved.json.runState, 'RUNNING');
   });
 
   await t.test('(c) …and so did every other /shared answer this run received', () => {

@@ -51,6 +51,11 @@ func TestMain(m *testing.M) {
 	if dir := os.Getenv(fakeVerifyClaudeDirEnv); dir != "" {
 		os.Exit(runFakeVerifyClaude(dir))
 	}
+	// A Kimi Code process refreshing its token under Kimi's lock, beside the runner's own refresh
+	// (kimi_refresh_lock_test.go).
+	if os.Getenv(fakeKimiCLIEnv) != "" {
+		os.Exit(runFakeKimiCLI())
+	}
 	// This binary as the real `orbit hook …`, when a real agy runs an Antigravity session's approval
 	// gate (antigravity_approval_contract_test.go): the hooks name the runner's own executable, which
 	// under test is this one. Ahead of the MCP stand-in, whose variable the hooks inherit through agy.
@@ -114,9 +119,9 @@ func clearCallingSession() {
 // fakeStep is one instruction of a fake CLI script: emit a frame, or block until one
 // arrives. Steps run in order; the process outlives the last one.
 type fakeStep struct {
-	// Emit: system_init | assistant | tool_use | tool_result | result | control_request |
-	// control_response | replay_user | local_command_stdout | task_notification | stop_reading |
-	// eof (eof exits, closing stdout).
+	// Emit: system_init | assistant | thinking_delta | thinking | tool_use | tool_result |
+	// result | prompt_suggestion | control_request | control_response | replay_user |
+	// local_command_stdout | task_notification | stop_reading | eof (eof exits, closing stdout).
 	//
 	// task_notification is a background task's lifecycle report, which Claude sends as a
 	// user-role message holding one bare string — the same shape as its local-command output.
@@ -387,6 +392,20 @@ func fakeFrame(s fakeStep, sessionID, lastReqID, model string) (string, error) {
 		return marshalFrame(init), nil
 	case "assistant":
 		return assistantFrame(sessionID, map[string]interface{}{"type": "text", "text": s.Text}), nil
+	case "thinking_delta":
+		// One chunk of reasoning as --include-partial-messages streams it.
+		return marshalFrame(map[string]interface{}{
+			"type": "stream_event", "session_id": sessionID, "parent_tool_use_id": nil,
+			"event": map[string]interface{}{
+				"type": "content_block_delta", "index": 0,
+				"delta": map[string]interface{}{"type": "thinking_delta", "thinking": s.Text},
+			},
+		}), nil
+	case "thinking":
+		// The block that closes it. Claude's own carries no text and a signature in its place.
+		return assistantFrame(sessionID, map[string]interface{}{
+			"type": "thinking", "thinking": s.Text, "signature": "EqQBCkYIBxgCKkA",
+		}), nil
 	case "tool_use":
 		input := s.Input
 		if input == nil {
@@ -438,6 +457,13 @@ func fakeFrame(s fakeStep, sessionID, lastReqID, model string) (string, error) {
 		return marshalFrame(map[string]interface{}{
 			"type": "result", "subtype": subtype, "is_error": s.IsError,
 			"num_turns": numTurns, "result": s.Text, "session_id": sessionID,
+		}), nil
+	case "prompt_suggestion":
+		// What --prompt-suggestions writes after a turn's result: the CLI's guess at the next
+		// user message, in Text.
+		return marshalFrame(map[string]interface{}{
+			"type": "prompt_suggestion", "suggestion": s.Text,
+			"uuid": "00000000-0000-4000-8000-000000000001", "session_id": sessionID,
 		}), nil
 	case "control_request":
 		req := map[string]interface{}{"subtype": s.Subtype}

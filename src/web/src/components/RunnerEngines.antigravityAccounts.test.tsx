@@ -161,7 +161,8 @@ function mount(r: Runner) {
 const all = (el: ParentNode, selector: string) => [...el.querySelectorAll<HTMLElement>(selector)];
 const engineRow = (page: ParentNode) => page.querySelector<HTMLElement>('[data-engine="antigravity"]')!;
 const accountRows = (page: ParentNode) => all(page, '.re-acct');
-const tags = (row: Element) => all(row, '.ant-tag').map((tag) => tag.textContent?.trim());
+/** What a row says of its state: the words in its status slot (a status label is text, with no role). */
+const tags = (row: Element) => all(row, '.re-status').map((status) => status.textContent?.trim()).filter(Boolean);
 const labelOf = (b: Element) => b.textContent?.trim() || b.getAttribute('aria-label');
 const buttons = (row: Element) => all(row, ':scope > .re-act button').map(labelOf);
 const button = (el: ParentNode, label: string) => {
@@ -277,7 +278,7 @@ describe('two Google accounts on one runner', () => {
     let ok: HTMLButtonElement | undefined;
     await act(async () => {
       await vi.waitFor(() => {
-        ok = all(document, '.ant-popconfirm button').find((b) => b.textContent?.trim() === 'Remove') as HTMLButtonElement;
+        ok = all(document, '[role="dialog"] button').find((b) => b.textContent?.trim() === 'Remove') as HTMLButtonElement;
         expect(ok).toBeDefined();
       }, { timeout: 20_000, interval: 20 });
     });

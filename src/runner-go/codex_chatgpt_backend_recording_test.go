@@ -22,8 +22,10 @@ package main
 //     request sent again on the access token that came back;
 //   - usage limit: a 429 `usage_limit_reached` naming `resets_at` — codex reports usageLimitExceeded and
 //     does not ask again;
-//   - rate limit: a 429 `rate_limit_exceeded` — codex does not ask again either, which is why the gateway
-//     waits one out on the same login itself.
+//   - rate limit: a 429 `rate_limit_exceeded` naming a `retry-after` — codex waits that long and sends the
+//     turn again, as many times as its stream retry budget allows, and then fails the turn as
+//     responseTooManyFailedAttempts. That is codex 0.161 (openai/codex#49441, which made such a 429
+//     retryable when it carries the server's advice); up to 0.160 it failed the turn on the first 429.
 //
 // Before a turn codex 0.158 asks the backend where the account's workspace lives
 // (GET <backend>/wham/accounts/check): the recorder answers NO_CONSTRAINT, a personal workspace's
@@ -31,11 +33,23 @@ package main
 // recorder answers 426, on which codex goes to HTTPS at once.
 //
 // With ORBIT_RECORD_CODEX_CHATGPT_FIXTURE=<file> it writes the four exchanges to that file, which
-// src/apiserver/src/providers/pool-login-gateway.pg.spec.ts replays through the real gateway. Re-record
-// it when codex is upgraded:
+// src/apiserver/src/providers/pool-login-gateway.pg.spec.ts replays through the real gateway. The one
+// checked in is codex 0.158's, whose rateLimit verdict — one request, no retry — that spec reads as the
+// gateway's premise that codex does not retry a 429; a recording on 0.161 or later no longer says so.
+// Re-record it when codex is upgraded:
 //
 //   env -u ORBIT_SESSION_ID -u ORBIT_TASK_ID -u ORBIT_AGENT_ID \
 //     ORBIT_RECORD_CODEX_CHATGPT_FIXTURE=$PWD/../apiserver/src/providers/fixtures/codex-chatgpt-backend-recording.json \
+//     go test -run TestRealCodexOnAChatGPTLogin -count=1 .
+//
+// With ORBIT_RECORD_CODEX_CHATGPT_STARTUP_FIXTURE=<file> it writes, separately, the ChatGPT-backend
+// calls codex makes for itself around the turn — workspace routing, the plugin and settings reads, the
+// model list, the analytics — which the login gateway's own allowed paths (codex-login-gateway.ts
+// loginGatewayAllows) are held to. That fixture is codex-version-independent of the turn's and can be
+// re-recorded on its own (the checked-in turn fixture is pinned to 0.158 and must not be disturbed):
+//
+//   env -u ORBIT_SESSION_ID -u ORBIT_TASK_ID -u ORBIT_AGENT_ID \
+//     ORBIT_RECORD_CODEX_CHATGPT_STARTUP_FIXTURE=$PWD/../apiserver/src/providers/fixtures/codex-chatgpt-startup-recording.json \
 //     go test -run TestRealCodexOnAChatGPTLogin -count=1 .
 //
 // It skips without a `codex` on PATH.
@@ -60,6 +74,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -79,6 +94,9 @@ const (
 	// Where the window headers say the spent limit resets: far enough ahead that a replay of the fixture
 	// is never looking at a reset that has passed.
 	recordedResetsAt = int64(4102444800) // 2100-01-01T00:00:00Z
+	// How many times codex sends a failed turn again (codex-rs model-provider-info
+	// DEFAULT_STREAM_MAX_RETRIES): the default stream_max_retries, which nothing here or in Orbit sets.
+	codexStreamMaxRetries = 5
 )
 
 func recordedJWT(claims map[string]interface{}) string {
@@ -134,6 +152,8 @@ type recordedCodexVerdict struct {
 type chatgptRecordedExchange struct {
 	Request  recordedExchange `json:"request"`
 	Response recordedAnswer   `json:"response"`
+	// When the recorder answered: before codex could have read any of the answer.
+	at time.Time
 }
 
 type chatgptRecording struct {
@@ -166,6 +186,17 @@ type chatgptRecording struct {
 	} `json:"rateLimit"`
 }
 
+// The ChatGPT backend calls a codex signed in with a ChatGPT login makes for itself around a turn —
+// workspace routing, the plugin and settings reads, the model list, the turn's analytics — recorded
+// apart from the turn so the gateway's own path list (codex-login-gateway.ts loginGatewayAllows) can be
+// held to what the CLI actually asks for.
+type chatgptStartupRecording struct {
+	Note    string                    `json:"note"`
+	Codex   string                    `json:"codex"`
+	Account string                    `json:"account"`
+	Startup []chatgptRecordedExchange `json:"startup"`
+}
+
 // chatgptRecorder stands where https://chatgpt.com/backend-api and the token endpoint stand, keeping
 // every request codex sends and every answer it gives the turn's requests.
 type chatgptRecorder struct {
@@ -192,6 +223,7 @@ func recordedHeaders(r *http.Request) [][2]string {
 }
 
 func (rec *chatgptRecorder) answer(w http.ResponseWriter, r *http.Request, body []byte, status int, headers [][2]string, out []byte) {
+	at := time.Now()
 	for _, h := range headers {
 		w.Header().Add(h[0], h[1])
 	}
@@ -204,6 +236,7 @@ func (rec *chatgptRecorder) answer(w http.ResponseWriter, r *http.Request, body 
 			Method: r.Method, Path: r.URL.RequestURI(), Headers: recordedHeaders(r), BodyBase64: base64.StdEncoding.EncodeToString(body),
 		},
 		Response: recordedAnswer{Status: status, Headers: headers, BodyBase64: base64.StdEncoding.EncodeToString(out)},
+		at:       at,
 	})
 }
 
@@ -369,7 +402,7 @@ func runChatGPTScenario(t *testing.T, exe string, server *httptest.Server, caFil
 		}
 	}
 	request("initialize", map[string]interface{}{
-		"clientInfo":   map[string]interface{}{"name": "orbit", "title": "Orbit", "version": "0.1.0"},
+		"clientInfo":   map[string]interface{}{"name": codexClientName, "title": "Codex CLI", "version": "0.1.0"},
 		"capabilities": map[string]interface{}{"experimentalApi": true},
 	})
 	send(map[string]interface{}{"method": "initialized", "params": map[string]interface{}{}})
@@ -492,6 +525,22 @@ func (rec *chatgptRecorder) exchanges(method, path string) []chatgptRecordedExch
 	return found
 }
 
+// The ChatGPT-backend calls codex made for itself: everything but the token endpoint and the turn's own
+// requests (the websocket probe included), in the order they arrived.
+func (rec *chatgptRecorder) startup() []chatgptRecordedExchange {
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	var found []chatgptRecordedExchange
+	for _, exchange := range rec.seen {
+		path := strings.SplitN(exchange.Request.Path, "?", 2)[0]
+		if path == "/oauth/token" || strings.HasPrefix(path, "/backend-api/codex/responses") {
+			continue
+		}
+		found = append(found, exchange)
+	}
+	return found
+}
+
 func TestRealCodexOnAChatGPTLogin(t *testing.T) {
 	t.Parallel()
 	exe, err := exec.LookPath("codex")
@@ -563,10 +612,52 @@ func TestRealCodexOnAChatGPTLogin(t *testing.T) {
 		t.Fatalf("codex on usage_limit_reached: %+v", usageVerdict)
 	}
 
-	// A rate limit: not asked again either.
+	// A rate limit naming a retry-after: asked again once the 2s it names have passed, each time, until the
+	// stream retry budget is spent — and then the turn fails as responseTooManyFailedAttempts.
 	rateRec, rateVerdict := record("rateLimit")
-	if rateVerdict.Requests != 1 || rateVerdict.TurnStatus != "failed" {
+	if rateVerdict.Requests != 1+codexStreamMaxRetries || !rateVerdict.WillRetry || rateVerdict.TurnStatus != "failed" ||
+		fmt.Sprint(rateVerdict.CodexErrorInfo) != "map[responseTooManyFailedAttempts:map[httpStatusCode:429]]" {
 		t.Fatalf("codex on rate_limit_exceeded: %+v", rateVerdict)
+	}
+	limited := rateRec.exchanges(http.MethodPost, responses)
+	for i := 1; i < len(limited); i++ {
+		if waited := limited[i].at.Sub(limited[i-1].at); waited < 2*time.Second {
+			t.Fatalf("codex asked again %v after a 429 whose retry-after named 2s", waited)
+		}
+	}
+
+	// What codex asks the ChatGPT backend for itself, around the turn — the paths the login gateway's own
+	// list (codex-login-gateway.ts loginGatewayAllows) exists to forward. Asserted here so a codex that
+	// stopped asking for them is noticed rather than leaving that list unmeasured.
+	startup := turnRec.startup()
+	if !slices.ContainsFunc(startup, func(exchange chatgptRecordedExchange) bool {
+		return strings.SplitN(exchange.Request.Path, "?", 2)[0] == "/backend-api/wham/accounts/check"
+	}) {
+		var paths []string
+		for _, exchange := range startup {
+			paths = append(paths, exchange.Request.Path)
+		}
+		t.Fatalf("codex never asked for the workspace routing among %v", paths)
+	}
+	if startupTarget := os.Getenv("ORBIT_RECORD_CODEX_CHATGPT_STARTUP_FIXTURE"); startupTarget != "" {
+		version, _ := exec.Command(exe, "--version").Output()
+		recording := chatgptStartupRecording{
+			Note: "Written by src/runner-go/codex_chatgpt_backend_recording_test.go from a real codex app-server " +
+				"signed in with a fake ChatGPT login against a recorder: the calls it makes for itself around a " +
+				"turn. Read by src/apiserver/src/providers/codex-login-gateway.spec.ts, which holds the gateway's " +
+				"own allowed paths (loginGatewayAllows) to it. Re-record on a codex upgrade.",
+			Codex:   strings.TrimSpace(string(version)),
+			Account: recordedChatGPTAccount,
+			Startup: startup,
+		}
+		data, err := json.MarshalIndent(recording, "", "  ")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(startupTarget, append(data, '\n'), 0o644); err != nil {
+			t.Fatalf("writing the startup fixture: %v", err)
+		}
+		t.Logf("recorded %s's startup to %s", recording.Codex, startupTarget)
 	}
 
 	target := os.Getenv("ORBIT_RECORD_CODEX_CHATGPT_FIXTURE")

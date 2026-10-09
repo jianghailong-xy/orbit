@@ -65,12 +65,34 @@ public enum KimiSite: String, CaseIterable, Sendable, Identifiable {
         return health.kimiRegion.flatMap(KimiSite.init(rawValue:))
     }
 
+    /// The site one of Kimi's accounts signed in on, as its probe last reported: each account's own,
+    /// since two accounts can be on different sites. Nil before its first sign-in, and for every other
+    /// engine's accounts.
+    public static func site(of account: RunnerEngineAccount?) -> KimiSite? {
+        account?.kimiRegion.flatMap(KimiSite.init(rawValue:))
+    }
+
+    /// The site a sign-in card marks Current: that of the login it signs in again — the account's own
+    /// (`site(of:)`), Default's being the engine's — and none on a card adding an account, which has no
+    /// login yet (web RunnerSignIn `currentSite`).
+    public static func current(on runner: Runner?, account: String?, adding: Bool) -> KimiSite? {
+        guard !adding else { return nil }
+        guard let account, account != CodexAccounts.defaultID else { return current(on: runner) }
+        return site(of: runner?.engines?.first { $0.engine == "kimi" }?.accounts?.first { $0.id == account })
+    }
+
     // MARK: words (web RunnerSignIn.tsx)
 
     public static let question = "Which Kimi account are you signing in with?"
     public static let separateAccounts = "The two sites keep separate accounts — pick the one you signed up on."
     public static let currentMark = "Current"
     public var openPage: String { "Open the \(domain) sign-in page" }
+    /// The device code's one press — copy it, open the page it goes into — naming the site.
+    public var copyCodeAndOpen: String { "Copy Code & Open \(domain)" }
     public var enterCode: String { "Sign in with your \(domain) account there, then enter this one-time code:" }
+    /// The same step on a card adding an account: the account wanted is the new one, on this site.
+    public var enterCodeAdding: String {
+        "Sign in with the \(domain) account you are adding, then enter this one-time code:"
+    }
     public var useInstead: String { "Use \(domain) instead" }
 }

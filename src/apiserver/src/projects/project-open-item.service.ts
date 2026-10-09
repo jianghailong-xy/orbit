@@ -20,6 +20,7 @@ import {
   type OpenItemHandling,
   type OpenItemOutcome,
   type ProjectDoneNotReadyBody,
+  type ProjectClosedQuestion,
   type ProjectDoneRequestDeclineBody,
   type ProjectDoneRequestDeclined,
   type ProjectDoneRequestFiled,
@@ -59,6 +60,7 @@ import {
   primaryAction,
   openItemChat,
   openItemFacts,
+  type LandedFix,
   openItemMessage,
   openItemOwed,
   openItemTurnId,
@@ -373,19 +375,26 @@ export interface PromotionCheckRetried {
 
 /** The project's open exceptions, split by who is expected to act (§4.8), and the coordinator's
  *  open requests to start it and to record it done — beside them rather than among them
- *  (`ProjectOpenItemsView`) — plus what the coordinator closed in the last day (§4.7 H5). */
+ *  (`ProjectOpenItemsView`) — plus what the coordinator closed in the last day (§4.7 H5) and the
+ *  questions that have ended (§5.2 R10, R12). */
 export interface ProjectOpenItems {
   needsYou: OpenItemRow[];
   withCoordinator: OpenItemRow[];
   startRequest: OpenItemRow | null;
   doneRequest: OpenItemRow | null;
   settled: OpenItemRow[];
+  closedQuestions: ProjectClosedQuestion<Date>[];
 }
 
 /** How far back `settled` reaches, and how many it holds at most (§4.7 H5): enough for the card a
  *  conversation drew to be seen changing state, not a history of the project. */
 const SETTLED_WITHIN_MS = 24 * 60 * 60 * 1_000;
 const SETTLED_SHOWN = 20;
+
+/** How many ended questions the read carries (§4.8): a count and not a window of days, because a
+ *  question's record is drawn wherever it ended, and a quiet week must not take the last ones
+ *  out of the conversation they were asked in. */
+const CLOSED_QUESTIONS_SHOWN = 50;
 
 /** The item stopped being owed to the coordinator while its turn was being written. */
 class OpenItemNoLongerOwed extends Error {}
@@ -556,6 +565,7 @@ export class ProjectOpenItemService {
         projectId: true,
         ownerId: true,
         handlingJobId: true,
+        integrationJobId: true,
         project: { select: { coordinatorEnabled: true, coordinatorSessionId: true } },
       },
     });
@@ -596,6 +606,7 @@ export class ProjectOpenItemService {
       return;
     }
     const clientTurnId = openItemTurnId(item.id, item.assignedAt);
+    const fixed = await this.landedFixesOf(item.id, item.integrationJobId);
     try {
       const turn = await this.sessions.createTurn(item.ownerId, sessionId, {
         clientTurnId,
@@ -607,6 +618,8 @@ export class ProjectOpenItemService {
           taskId: item.taskId,
           promotionId: item.promotionId,
           payload: item.payload,
+          landedFixes: fixed.landedFixes,
+          failedSourceSha: fixed.failedSourceSha,
         }),
         intent: 'NEXT_TURN',
       }, {
@@ -651,6 +664,47 @@ export class ProjectOpenItemService {
       }
       throw error;
     }
+  }
+
+  /**
+   * The fixes of this item whose landing is in, and the commit the item's own failed landing was
+   * handed (§4.4 X-D4 5). Read only from rows that no longer change — a fix task's id and its latest
+   * landing job once that job has ended — so the same key words the same text (G6). A landing that
+   * answered about a branch the work did not end on is followed by the generation it queued, so the
+   * latest job is the one that counts; a `NOTHING_TO_LAND` counts only with the receipt it writes
+   * when the task has no work of its own anywhere.
+   */
+  private async landedFixesOf(
+    itemId: string,
+    failedJobId: string | null,
+  ): Promise<{ landedFixes: LandedFix[]; failedSourceSha: string | null }> {
+    const fixes = await this.prisma.task.findMany({ where: { fixesOpenItemId: itemId }, select: { id: true } });
+    if (fixes.length === 0) return { landedFixes: [], failedSourceSha: null };
+    const jobs = await this.prisma.projectIntegrationJob.findMany({
+      where: { taskId: { in: fixes.map((fix) => fix.id) }, kind: 'LAND_TASK' },
+      orderBy: [{ generation: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+      select: {
+        id: true, taskId: true, state: true, targetRef: true, landedSha: true, receiptIds: true, finishedAt: true,
+      },
+    });
+    const latest = new Map<string, (typeof jobs)[number]>();
+    for (const job of jobs) if (job.taskId && !latest.has(job.taskId)) latest.set(job.taskId, job);
+    const landedFixes = [...latest.values()]
+      .filter((job) => job.state === 'LANDED' || job.state === 'ALREADY_LANDED'
+        || (job.state === 'NOTHING_TO_LAND' && job.receiptIds.length > 0))
+      .sort((a, b) => (a.finishedAt?.getTime() ?? 0) - (b.finishedAt?.getTime() ?? 0) || a.id.localeCompare(b.id))
+      .map((job) => ({
+        taskId: job.taskId!,
+        jobId: job.id,
+        state: job.state,
+        targetRef: job.targetRef,
+        landedSha: job.landedSha,
+      }));
+    if (landedFixes.length === 0) return { landedFixes, failedSourceSha: null };
+    const failed = failedJobId
+      ? await this.prisma.projectIntegrationJob.findUnique({ where: { id: failedJobId }, select: { sourceSha: true } })
+      : null;
+    return { landedFixes, failedSourceSha: failed?.sourceSha ?? null };
   }
 
   /**
@@ -2808,7 +2862,64 @@ export class ProjectOpenItemService {
       startRequest: view.find((row) => row.kind === START_REQUEST_KIND) ?? null,
       doneRequest: view.find((row) => row.kind === DONE_REQUEST_KIND) ?? null,
       settled: settledView,
+      closedQuestions: await this.closedQuestions(projectId),
     };
+  }
+
+  /**
+   * The questions this project's coordinator asked that have ended, newest first (§4.8, §5.2 R10,
+   * R12): answered by the owner, or withdrawn. Each carries the question as it was asked and what
+   * became of it, so the card the conversation drew is drawn as the record it became — after a
+   * relaunch, and on a device that never saw it open — instead of vanishing with the open row.
+   *
+   * Where the answer went is the first ANSWER delivery (§5.2 R11 may add one per later
+   * coordinator); none yet is an answer still waiting for this project's next coordinator.
+   */
+  private async closedQuestions(projectId: string): Promise<ProjectClosedQuestion<Date>[]> {
+    const rows = await this.prisma.projectOpenItem.findMany({
+      where: {
+        projectId,
+        kind: 'COORDINATOR_QUESTION',
+        state: 'RESOLVED',
+        resolution: { in: ['ANSWERED', 'WITHDRAWN'] },
+      },
+      orderBy: [{ resolvedAt: 'desc' }, { id: 'desc' }],
+      take: CLOSED_QUESTIONS_SHOWN,
+      select: {
+        id: true,
+        payload: true,
+        createdAt: true,
+        resolution: true,
+        resolvedBy: true,
+        resolvedAt: true,
+        resolutionNote: true,
+        answer: true,
+        deliveries: {
+          where: { purpose: 'ANSWER' },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          take: 1,
+          select: { sessionId: true, createdAt: true },
+        },
+      },
+    });
+    return rows.map((row) => {
+      const answered = row.resolution === 'ANSWERED';
+      const answer = answered ? (row.answer as unknown as OwnerAnswer | null) : null;
+      const [delivered] = row.deliveries;
+      return {
+        itemId: row.id,
+        question: row.payload as unknown as CoordinatorQuestion,
+        askedAt: row.createdAt,
+        resolution: answered ? 'ANSWERED' : 'WITHDRAWN',
+        resolvedBy: row.resolvedBy === 'COORDINATOR' ? 'COORDINATOR' : 'USER',
+        resolvedAt: row.resolvedAt!,
+        answer: answer ? { option: answer.option ?? null, text: answer.text ?? null } : null,
+        delivery: answered && delivered
+          ? { sessionId: delivered.sessionId, at: delivered.createdAt }
+          : null,
+        withdrawReason: answered ? null : row.resolutionNote,
+      };
+    });
   }
 
   /**

@@ -121,10 +121,26 @@ export class UpdatePreferencesDto {
   @IsOptional()
   @IsBoolean()
   modelRouting?: boolean;
+
+  /**
+   * Whether this account's Claude sessions offer the engine's guess at the next message once a
+   * turn ends (common/prompt-suggestions-switch.ts). Each guess is one more request on the
+   * session's account, so it can be turned off. Default on (absent = on), so the switch is only
+   * ever written to turn it off. Read at spawn: a running engine keeps what it started with.
+   */
+  @IsOptional()
+  @IsBoolean()
+  promptSuggestions?: boolean;
 }
 
 /** Set a user's access role (admin area). */
 export class UpdateRoleDto {
   @IsIn(['MEMBER', 'ADMIN'])
   role!: 'MEMBER' | 'ADMIN';
+}
+
+/** Disable an account, or enable it again (admin area, docs/google-sign-in-design.md §5.5). */
+export class SetDisabledDto {
+  @IsBoolean()
+  disabled!: boolean;
 }

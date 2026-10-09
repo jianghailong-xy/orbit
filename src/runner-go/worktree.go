@@ -878,6 +878,14 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 		return nil, nil, nil
 	}
 	files := diffFiles(wt.Path, baseSha, "HEAD")
+	if len(files) > maxChangedFiles {
+		// Same bound as the live diff, for the same reason (maxChangedFiles): the finalize
+		// payload goes through the same body limit, and a base this old reports an upstream's
+		// work rather than this session's.
+		logln(fmt.Sprintf("finalize diff for %s spans %d files — reporting the first %d, without patches",
+			wt.Session, len(files), maxChangedFiles))
+		return files[:maxChangedFiles], nil, nil
+	}
 	patchOut, _ := git(wt.Path, "diff", baseSha+"..HEAD")
 	return files, buildFilePatches(files, splitPatch(patchOut)), nil
 }
@@ -1007,6 +1015,16 @@ func (ops worktreeGitOps) stagedLiveDiff(wt *Worktree, withPatch bool) ([]Change
 	}
 	statusOut, _ := ops.runEnv(wt.Path, env, "diff", "--cached", "--name-status", baseSha)
 	files := parseNumstat(numOut, statusOut)
+	if len(files) > maxChangedFiles {
+		// A diff this wide is a moved base rather than this session's work: ship the list and
+		// skip the patches with it, whose `git diff` is hundreds of MB of output. Said out loud
+		// once per turn (the stats-only heartbeat callers run every 30s and stay quiet).
+		if withPatch {
+			logln(fmt.Sprintf("live diff for %s spans %d files — reporting the first %d, without patches",
+				wt.Session, len(files), maxChangedFiles))
+		}
+		return files[:maxChangedFiles], nil
+	}
 	if !withPatch {
 		return files, nil
 	}
@@ -1079,6 +1097,16 @@ func parseStatInt(s string) int {
 const (
 	maxFilePatchBytes  = 64 * 1024
 	maxTotalPatchBytes = 512 * 1024
+	// maxChangedFiles bounds how many ENTRIES that upload may carry, which is the other half
+	// of the same bound: the caps above limit the text, not the number of objects. The list is
+	// a diff against the session's fork point, so it is the session's own work only while that
+	// fork is near its tree — a worktree that merged a long-moved upstream reports every file
+	// the upstream gained (39,501 on 2026-10-08, project tip × main, dominated by
+	// docs/evidence/**). One object per file pushed turn-complete past the control plane's
+	// 10MB JSON body limit, every completion was answered 413, the turn was never ACKed, and
+	// the inbox lease re-delivered it every five minutes — a session that looped for hours,
+	// billing turns, with its acceptance shell turn never queued.
+	maxChangedFiles = 2000
 )
 
 // splitPatch breaks a combined `git diff` into per-file unified-diff segments, keyed by each

@@ -500,6 +500,10 @@ export function resolveProviderExec(args: {
    *  Workspace.antigravityAccount), read the same way: resolved into the ORBIT_ANTIGRAVITY_GOOGLE_DIR
    *  injected below, which the runner reads to pick the sign-in the session's agy runs on. */
   antigravityAccount?: string | null;
+  /** The Kimi Code account slot this session runs on (Session.kimiAccount ?? Workspace.kimiAccount),
+   *  read the same way: resolved into the KIMI_CODE_HOME injected below, the directory Kimi Code keeps
+   *  its whole login in. */
+  kimiAccount?: string | null;
   /** Runner.engines of the assigned runner: where each account's directory is reported. */
   runnerEngines?: unknown;
   /** The owner's configured keys (openCodeKeyRows), for an OpenCode session whose model names one
@@ -554,7 +558,8 @@ export function resolveProviderExec(args: {
   // the sign-in card (RunnerSignIn) rather than the control plane holding a credential for it.
   const provider = execRuntime(args);
   // A session on an account other than Default runs in that account's own directory — a Codex
-  // CODEX_HOME, a Claude Code CLAUDE_CONFIG_DIR, an Antigravity Google sign-in's Gemini directory.
+  // CODEX_HOME, a Claude Code CLAUDE_CONFIG_DIR, an Antigravity Google sign-in's Gemini directory, a
+  // Kimi Code KIMI_CODE_HOME.
   // Built-in only: a configured provider brings its own key, so no sign-in on the machine is spent.
   // The chosen account replaces any such variable typed into the workspace's env.
   const accountId = isAccountEngine(provider) ? args[ACCOUNT_CHOICE[provider]] : undefined;

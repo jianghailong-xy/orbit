@@ -45,18 +45,35 @@ public enum SessionProjectCopy {
     /// What either press opens, for a reader who cannot see the card it will put up.
     public static let startHint = "Opens the start card: the criteria, the plan and how it runs."
 
+    /// A runner that has stopped reporting, in this row's own scale: "no report for 11m", or "no
+    /// report yet" for a claim nothing has come back from — the same fact the project page's row
+    /// states as `ProjectPage.landingNoReport`, and never a verdict about the work. Web's
+    /// `landingSilentWord`.
+    public static func landingSilentWord(minutes: Int?) -> String {
+        minutes.map { "no report for \($0)m" } ?? "no report yet"
+    }
+
     /// The project page's landing line, shortened for a row that is not redrawn every second:
     /// "Merge to main · queued · 13m", "Landing · checking · 4m · <task>". Nil when nothing is in
     /// flight; a server that sends only the count gets "Landing · N jobs". Web: `sessionProjectLandingLine`.
+    ///
+    /// A job whose runner has stopped reporting says so in the state slot — "no report for 11m", or
+    /// "no report yet" for one that has never reported, off the same claim lease the project page's
+    /// row reads it with (`ProjectPage.landingNoReport`). A fact about the REPORTS: a silent job is
+    /// never called a timed-out one here, because a timeout is the job's own verdict and it lives in
+    /// the server's `blockingReason`.
     public static func landingLine(_ integration: ProjectListIntegration?, now: Date) -> SessionLine? {
         let count = integration?.activeJobCount ?? 0
         guard let job = integration?.inFlight else {
             return count > 0 ? SessionLine(text: "Landing · \(count) \(count == 1 ? "job" : "jobs")", tone: .queued) : nil
         }
         let heartbeat = job.heartbeatAt.flatMap(RelativeTime.parse)
-        let running = job.state == "RUNNING" && heartbeat.map { now.timeIntervalSince($0) > 600 } != true
+        let silent = job.state == "RUNNING" && (heartbeat.map { now.timeIntervalSince($0) > 600 } ?? true)
+        let running = job.state == "RUNNING" && !silent
         let word = ProjectPage.integrationJobWords[job.kind ?? ""] ?? "Integration"
-        let state = job.state == "RUNNING" ? (ProjectPage.integrationPhaseWords[job.phase ?? ""] ?? "running") : "queued"
+        let state = job.state != "RUNNING" ? "queued"
+            : silent ? landingSilentWord(minutes: heartbeat.map { Int(max(0, now.timeIntervalSince($0)) / 60) })
+                : (ProjectPage.integrationPhaseWords[job.phase ?? ""] ?? "running")
         let text = [count > 1 ? "\(word) \(count) jobs" : word, state,
                     ProjectAttention.elapsedLabel(job.startedAt, now: now), count > 1 ? nil : job.taskTitle]
             .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")

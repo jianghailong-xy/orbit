@@ -11,6 +11,7 @@ import { randomBytes } from 'node:crypto';
 import { generateToken, hashPassword, sha256, verifyPassword } from '../common/crypto.util';
 import { MANAGED_RUNNER_SIGN_IN, type ManagedRunnerSignIn } from '../managed-runners/managed-runner-sign-in';
 import { PrismaService } from '../prisma/prisma.service';
+import { accountDisabled } from './disabled-accounts';
 import { PatService } from './pat.service';
 
 /** Refresh-token lifetime (sliding — each rotation issues a fresh one with a new window). */
@@ -38,6 +39,9 @@ export class AuthService {
     if (!user || !verifyPassword(password, user.passwordHash ?? NO_PASSWORD)) {
       throw new UnauthorizedException('invalid credentials');
     }
+    // Only past the password (docs/google-sign-in-design.md §5.5): that an account is disabled is said
+    // to whoever holds its password, and to nobody guessing one.
+    if (user.disabledAt) throw accountDisabled();
     return this.completeLogin(user);
   }
 
@@ -130,8 +134,16 @@ export class AuthService {
    */
   async refresh(refreshToken: string) {
     const tokenHash = sha256(refreshToken);
-    const row = await this.prisma.refreshToken.findUnique({ where: { tokenHash } });
+    const row = await this.prisma.refreshToken.findUnique({
+      where: { tokenHash },
+      include: { user: { select: { disabledAt: true } } },
+    });
     if (!row) throw new UnauthorizedException('invalid refresh token');
+    // A disabled account (docs/google-sign-in-design.md §5.5) is told so whatever became of the token:
+    // disabling it revoked every one, and a client presenting one is owed the reason, not a replay.
+    // `user` is a required relation, so a stored token always comes with one; the optional read is
+    // for stand-ins that answer with the token row alone, which the check after the claim still covers.
+    if (row.user?.disabledAt) throw accountDisabled();
     if (row.revokedAt) {
       // A consumed/revoked token replayed → treat as theft: revoke every live token for the user.
       await this.prisma.refreshToken.updateMany({
@@ -152,6 +164,8 @@ export class AuthService {
     if (claimed.count !== 1) throw new UnauthorizedException('invalid refresh token');
     const user = await this.prisma.user.findUnique({ where: { id: row.userId } });
     if (!user) throw new UnauthorizedException('invalid refresh token');
+    // Disabled since the token was read.
+    if (user.disabledAt) throw accountDisabled();
     return this.tokenFor(user.id, user.email, user.name);
   }
 

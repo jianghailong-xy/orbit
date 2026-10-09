@@ -40,6 +40,14 @@ struct ProjectLandingRow: View {
                     Text(line.clockLabel).foregroundStyle(.secondary)
                     Text(line.clock).fontWeight(.semibold).monospacedDigit().foregroundStyle(ink)
                 }
+                // The other half of "how long is this taking": what it waited for a runner before
+                // any of the elapsed time began.
+                if let wait = line.wait {
+                    HStack(spacing: 4) {
+                        Text(ProjectPage.landingWaitLabel).foregroundStyle(.secondary)
+                        Text(wait).fontWeight(.semibold).monospacedDigit().foregroundStyle(.secondary)
+                    }
+                }
                 Spacer(minLength: 8)
                 if let updated = line.updated { Text(updated).foregroundStyle(.secondary) }
             }

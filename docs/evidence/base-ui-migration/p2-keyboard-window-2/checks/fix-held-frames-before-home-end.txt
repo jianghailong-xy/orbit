@@ -1,0 +1,728 @@
+
+Running 24 tests using 1 worker
+
+  ✘   1 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held (1.9s)
+  ✘   2 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held (1.6s)
+  ✘   3 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held (1.5s)
+  ✘   4 [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held (1.7s)
+  ✘   5 [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held (1.6s)
+  ✘   6 [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held (1.5s)
+  ✘   7 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held (2.1s)
+  ✘   8 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held (1.7s)
+  ✘   9 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held (1.6s)
+  ✘  10 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held (1.5s)
+  ✘  11 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held (1.7s)
+  ✘  12 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held (1.7s)
+  ✘  13 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held (2.2s)
+  ✘  14 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held (1.5s)
+  ✘  15 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held (1.4s)
+  ✘  16 [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held (1.4s)
+  ✘  17 [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held (1.6s)
+  ✘  18 [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held (1.5s)
+  ✘  19 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held (1.6s)
+  ✘  20 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held (1.6s)
+  ✘  21 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held (1.5s)
+  ✘  22 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held (1.4s)
+  ✘  23 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held (1.7s)
+  ✘  24 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held (1.5s)
+
+
+  1) [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "command"
+    Received: "file"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "command"
+    Received: "file"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "file"
+    Received: "command"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "command"
+    Received: "file"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-chromium-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "command"
+    Received: "file"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-chromium-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "file"
+    Received: "command"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-chromium-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "command"
+    Received: "file"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-chromium-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "command"
+    Received: "file"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-chromium-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "file"
+    Received: "command"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-chromium-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  10) [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "command"
+    Received: "file"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-chromium-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  11) [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "command"
+    Received: "file"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-chromium-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  12) [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "file"
+    Received: "command"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-chromium-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  13) [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "command"
+    Received: "file"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  14) [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "command"
+    Received: "file"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  15) [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "file"
+    Received: "command"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  16) [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "command"
+    Received: "file"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-webkit-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  17) [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "command"
+    Received: "file"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-webkit-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  18) [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "file"
+    Received: "command"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-webkit-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  19) [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "command"
+    Received: "file"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  20) [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "command"
+    Received: "file"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  21) [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "file"
+    Received: "command"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  22) [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "command"
+    Received: "file"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-webkit-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  23) [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "command"
+    Received: "file"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-webkit-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  24) [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "file"
+    Received: "command"
+
+      135 |     if ('output' in expected) {
+      136 |       const [label, text] = expected.output ?? [];
+    > 137 |       if (label) expect(after.outputs[label]).toBe(text);
+          |                                               ^
+      138 |       else expect(after.outputs).toEqual(before.outputs);
+      139 |     }
+      140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);
+        at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47
+
+    Error Context: ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-webkit-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  24 failed
+    [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held 
+    [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held 
+    [chromium-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held 
+    [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held 
+    [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held 
+    [chromium-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held 
+    [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held 
+    [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held 
+    [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held 
+    [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held 
+    [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held 
+    [chromium-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held 
+    [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held 
+    [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held 
+    [webkit-light-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held 
+    [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held 
+    [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held 
+    [webkit-light-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held 
+    [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held 
+    [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held 
+    [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held 
+    [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ⏎ End ⏎ with frames held 
+    [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↓ End ⏎ with frames held 
+    [webkit-dark-phone] › docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:107:3 › menu ↑ Home ⏎ with frames held 
+[WebServer] (node:3115304) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+(node:3115429) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3115618) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3115738) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3115955) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3116375) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3116586) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3116936) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3117175) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3117427) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3117624) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3117879) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3118293) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3118655) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3119001) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3119219) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3119603) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3119987) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3120318) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3120545) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3120990) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3121269) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3121584) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3121845) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3122194) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)

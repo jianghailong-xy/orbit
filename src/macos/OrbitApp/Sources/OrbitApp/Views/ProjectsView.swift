@@ -2220,7 +2220,8 @@ struct OwnerStartProjectSheet: View {
                 onDraft: { edited = $0 },
                 onStart: { await start(request, draft) },
                 onViewTasks: onViewTasks,
-                error: error)
+                error: error,
+                graph: store.graph)
         } else if store.confirmationUnread || store.integrationUnread {
             Text(AcceptanceConfirmations.staleExplanation(nil) ?? "")
                 .font(.orbitLabel)

@@ -23,6 +23,18 @@ class ServerAddressTest {
         assertTrue(runCatching { ServerAddress.parse("http://127.0.0.1.attacker.test", true) }.isFailure)
     }
 
+    @Test fun anAddressTypedWithoutASchemeIsHttps() {
+        // The login page starts on orbitd.io and takes a host as iOS ServerURL does (fdeb033ad), but never assumes HTTP.
+        assertEquals(ServerAddress.parse("https://orbitd.io"), ServerAddress.parse("orbitd.io"))
+        assertEquals("https://example.test/team/", ServerAddress.parse(" example.test/team/api ").value)
+        assertEquals("https://localhost:2086/", ServerAddress.parse("localhost:2086", true).value)
+        for (input in listOf("user:secret@example.test", "example.test?token=secret", "example.test/#secret", " ")) {
+            val error = runCatching { ServerAddress.parse(input) }.exceptionOrNull()
+            assertTrue(input, error is InvalidServerAddress)
+            assertFalse(error!!.toString().contains("secret"))
+        }
+    }
+
     @Test fun endpointSegmentsCannotEscapeTheInstanceOrBecomeQueries() {
         val server = ServerAddress.parse("https://example.test/prefix")
         assertEquals("/prefix/api/sessions/https:%2F%2Fother.test%2F%3Ftoken=secret", server.endpoint(listOf("sessions", "https://other.test/?token=secret"), emptyList()).encodedPath)

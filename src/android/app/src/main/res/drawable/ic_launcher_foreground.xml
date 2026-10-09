@@ -1,0 +1,11 @@
+<!-- Orbit's existing src/web/public/favicon.svg, expressed as Android vector paths. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <group android:translateX="22" android:translateY="22">
+        <group android:rotation="-26" android:pivotX="32" android:pivotY="32">
+            <path android:pathData="M4,32A28,12.5 0,1 0,60,32A28,12.5 0,1 0,4,32" android:strokeColor="#995B8BFF" android:strokeWidth="3.4" android:fillColor="@android:color/transparent" />
+            <path android:pathData="M50.6,25.6A5.4,5.4 0,1 0,61.4,25.6A5.4,5.4 0,1 0,50.6,25.6" android:fillColor="#3370FF" />
+        </group>
+        <path android:pathData="M25,20H39Q45,20 45,26V38Q45,44 39,44H25Q19,44 19,38V26Q19,20 25,20" android:fillColor="#3370FF" />
+        <path android:pathData="M25,27.5L30,32L25,36.5 M33,35.8H39.5" android:strokeColor="#FFFFFFFF" android:strokeWidth="2.9" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="@android:color/transparent" />
+    </group>
+</vector>

@@ -1,0 +1,2036 @@
+{
+ "stats": {
+  "startTime": "2026-10-08T04:04:01.676Z",
+  "duration": 149788.337,
+  "expected": 65,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ },
+ "errors": [],
+ "tests": [
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 4326,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "943f44a7e513de406625ea77b9d7e86edf500735577b5ae8078373ceb58f3d12"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ee9d1d2e7337d21ecaefdf98cd135f5fecb7037358fec4790073aa71ed09491c"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a91790b3581681b11f074c4c94dd4157688f1537e97e2a124f5c15a90896026b"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "466bd833e29c1a5a2571485e39ca9207d5e3fa44a0bed39bfdb746c7689252e6"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1814,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "943f44a7e513de406625ea77b9d7e86edf500735577b5ae8078373ceb58f3d12"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "20a12bdbe9e3cb08e5e954f5f1749045538a528999880eb6f503dc83cbed88eb"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "1e0c2af03d95f3dd1917ea3391890f7440eb5f7b6a1b0ce9748a8c7cd0bf3bb7"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a58de73dcb4a3c0095897f86aed453b16feaf70a0b2ace2a8a5ad05c74e96fc5"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduced motion attachment has no transition and dismisses cleanly",
+   "location": "choices-lifecycle.browser.mjs:115",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 775,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reduced-motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2ed078e263df459b0bbd47800d66637274da0cf2b565527752fc0f84eaee4aad"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduced motion expiry has no transition and dismisses cleanly",
+   "location": "choices-lifecycle.browser.mjs:115",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 872,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reduced-motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3ac55c530665855870a62e3ba73223bff9e071b816ecf6d857187142cd439214"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduced motion search has no transition and dismisses cleanly",
+   "location": "choices-lifecycle.browser.mjs:115",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 892,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reduced-motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7dd87db6f44689c4cfbd1a4e6f9417a499f2ae4af188476d791c911ef2337f99"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduced motion multiple has no transition and dismisses cleanly",
+   "location": "choices-lifecycle.browser.mjs:115",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 887,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reduced-motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f7305d38793c55724fb5f37d6730ac2315c2099de948b6b2f4f045ae8ce71e9a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduced motion popover has no transition and dismisses cleanly",
+   "location": "choices-lifecycle.browser.mjs:115",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 833,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reduced-motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0deab6f87166bc8e7100acbd10d07fded4c2b7d3911b1f0d4f66b4c96f68b53f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduced motion tooltip has no transition and dismisses cleanly",
+   "location": "choices-lifecycle.browser.mjs:115",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 824,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reduced-motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f7a8c6fa875ca868b582f1cf266d402b49217453763be64a299a13a55f655555"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal attachment can reopen during exit without stale unmount",
+   "location": "choices-lifecycle.browser.mjs:132",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1513,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reopen",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "35e8f0c3dbb62ce76c860ba86a5efd84db85e5710e35b2d37261bf09f305bf65"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal expiry can reopen during exit without stale unmount",
+   "location": "choices-lifecycle.browser.mjs:132",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1596,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reopen",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "20d7a350bc6615c27d4572c02c55546b9c9a1e09286c3c7fa89fa8a74e184624"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal search can reopen during exit without stale unmount",
+   "location": "choices-lifecycle.browser.mjs:132",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1592,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reopen",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9789ab31d89aa8775eea57d120cd442348b0d1f575f285e7b6948997dcbb42df"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal popover can reopen during exit without stale unmount",
+   "location": "choices-lifecycle.browser.mjs:132",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1587,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "reopen",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "964068c882462a5824d5967acc600ceb05498152f746fcdebc25edca96e6222d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal bottom entrance and exit motion matches attachment",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1937,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "a683c428399086efbe8de4b6f26b14f7ab75970332cafedab8600093e841fe31"
+      },
+      {
+       "name": "antd-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "173c076a69f830b321d99e82f7e63cbe853ab8791beb8c909ba0e17442972422"
+      },
+      {
+       "name": "orbit-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "77d6777250fdca2b67202dd9511752abe6ee0b627ecce88645acb27fe7bfca5b"
+      },
+      {
+       "name": "orbit-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "444c14a0794589c104b8232f17afc0392d94e37b1f115571afc8907074a60aae"
+      },
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "fd90ff8b818b2787b5bcdd642eca81fbf0f826ce522ce9f53e66ae4ed46a907b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal top entrance and exit motion matches attachment",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2207,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "522f6e1026af00ace87dd41a192f666ac2502f06653ebbeacfe14496c88470f7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal flipped entrance and exit motion matches attachment",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2280,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "95f397e15c45206775ae8f06c3e39d609d9e5890b09c98b248b5f82cfa41638e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal bottom entrance and exit motion matches expiry",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2007,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "56ef1743a0030c7319932590e0eb9268f9a34ec8c27bcc7e17b76445253b6da7"
+      },
+      {
+       "name": "antd-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b240c9c057c6cef3b7fc1c623e52aec8c70dd801fa199f66765dfa31625b145f"
+      },
+      {
+       "name": "orbit-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "8c1412dacb2d8748c2add839f32b08b1fde2715fd79d8a7b3d2b46cb2151da83"
+      },
+      {
+       "name": "orbit-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "88fc4e1aa7bee2b7a86fd91679ca7238c1299fdf40eb6901d8a214bb0dcbdf46"
+      },
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a55504b513eb7b3a5c6a98e4b5800d5b5e73a9c0576d3cac8f4b903e9bcdd8fd"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal top entrance and exit motion matches expiry",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2266,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "47590c6f655f42e8fb7aefd15293a84e75785fbd47d7c3b7f0e116b20d050791"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal flipped entrance and exit motion matches expiry",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2140,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5c8f5453b774062d4bdb8e4a96f63c101633adc817febe4953b918d247951172"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal bottom entrance and exit motion matches search",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1907,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "42b9af1d0cf3a70c9851d81e425d22ddbf48b1444e567bf95f9c107651d8f335"
+      },
+      {
+       "name": "antd-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "00755dd6907705f753115538d6982f891a2a8c8a885faa7c09086d215ab6a0a1"
+      },
+      {
+       "name": "orbit-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "68b6084e89138e3ec7b22552cccf0a3d66dcf740c8eba241a4d88d537acb36d4"
+      },
+      {
+       "name": "orbit-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b5cfee266db3f48a66bef64a6d4dd4970457a5871820307440c0279ff7bf2132"
+      },
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "92a20b2357ee0c32787760e09b535c01346f3db2d28f1773426078e5f7db916a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal top entrance and exit motion matches search",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2374,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0b44d1a9c67246bcb9cc88362685870d5cd42075f357ba81ecf70698d767ce10"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal flipped entrance and exit motion matches search",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2170,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f9d1428cc1cbf4f98b3e0a59141cc2b74ffe8a1805e5765b4724e5703c96b293"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal bottom entrance and exit motion matches multiple",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1923,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "8630646ca929858f1deb021ef72514e8cc8d17ab58f970629b51c29753e49e74"
+      },
+      {
+       "name": "antd-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "c3726fd3cfaa7ccd6da5664f1958c19b9c0ae9adb178f0db88d26a69d744f0ee"
+      },
+      {
+       "name": "orbit-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "64dbb117523b7f0e4ebf6e3e0a98a14d39cac98b032ee7595f60f171e08445eb"
+      },
+      {
+       "name": "orbit-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b5c8826f1445504720223896d6812aba48bf5aa78c667f4cecb328e970602456"
+      },
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "96ed16ec7b59fe38264a0143d068c4d0a4430d1232c1c93f92ad73acc19493f6"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal top entrance and exit motion matches multiple",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2381,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "8a0e6edce479ef8b8a92969363e75e70aea17c7d8dba4ee597d77395bc00d0f4"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal flipped entrance and exit motion matches multiple",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2976,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "141afe0be8fe94fadc8aa470c0d1eff618f254409c6c352f89e49532b2a5b52e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal bottom entrance and exit motion matches popover",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1994,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "c90c6499e649cdfb6d459d686c8197848a8242e33b5725633ce4376d16f438fb"
+      },
+      {
+       "name": "antd-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "8a8b8fc31790bfab8b81ee4695379fea2c321cea519a235530a3620bb303f4c2"
+      },
+      {
+       "name": "orbit-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "42cfd6ad48770ef9378f1333140441659b9552d5b8d96e504e233c5bf7c0daab"
+      },
+      {
+       "name": "orbit-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "1aa924b64d8d238f21dda30c4cddfb835e1dd527c04c0558dd4eedcbab748b79"
+      },
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "daa0a45f330609419028431e259aec8b4919099de72d8e968801f255ddac9118"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal top entrance and exit motion matches popover",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2039,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2e40a3a07e2803772c932e63862a68689100f62cfe705fc55e35f216770acdd0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal flipped entrance and exit motion matches popover",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2042,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0d037dd1d2148a458796348f2884a5ce5c1ad7c833826dbce59f90ab27b8b380"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal bottom entrance and exit motion matches tooltip",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2214,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "67557eaede5573b6e734cebfe930f284a0d579169a5f3ea5aacc23b087f4f361"
+      },
+      {
+       "name": "antd-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "7f0c68e3693654e50d85fd5232928e1c5e50279fa0dab9dd49f047bd8a862828"
+      },
+      {
+       "name": "orbit-enter-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "f76cdad927e7d8f67a67274e3867ae6f76ae632a1dd578d140f20baaa8a147c4"
+      },
+      {
+       "name": "orbit-exit-midpoint",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "e0282ae20e796e0b499915953baac04ee1ee64f6285b20111a2009ed4f489195"
+      },
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "23676436defb10e65b20781efb5d14e9dd8b03dbb8609ba7f3eeb797f1e9a805"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal top entrance and exit motion matches tooltip",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2138,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7d4cb02e0edc70596d28fb90074f00b56f4c004074791ed050453961d4b14951"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "normal flipped entrance and exit motion matches tooltip",
+   "location": "choices-motion.browser.mjs:104",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2197,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "38f2304dfc6b920bf1d287a8e99952b8d52cae9af4e800b32458418588b83d42"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "popover center zoom origin matches",
+   "location": "choices-motion.browser.mjs:141",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2250,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "dde6b97313841334329e1c6d94b7628a05ba76d11ebc83ebeec910e844e13b59"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "popover end zoom origin matches",
+   "location": "choices-motion.browser.mjs:141",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2194,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c197e161968cc4f70b6a88e82bd22d8a9789677fd9de27a642c2a3588bae77f6"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "tooltip center zoom origin matches",
+   "location": "choices-motion.browser.mjs:141",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2266,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "34173bfeca4fcc9337d2b9429e9ddabacb1c6d134104a18ae01e509b5be5e530"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "tooltip end zoom origin matches",
+   "location": "choices-motion.browser.mjs:141",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2229,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ea8db6b38f48d0b7ec5b94d2e54e41b6e7133835cbbc9248d01823364503f7ed"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "submenu left edge zoom matches and stays in view",
+   "location": "choices-motion.browser.mjs:160",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2856,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "91a5990e2349265598819f36c0a9ad6e0f7d9f32daf95cd6ec832709a9664a96"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "submenu right edge zoom matches and stays in view",
+   "location": "choices-motion.browser.mjs:160",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2943,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "motion",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a02a978b015767d3db545570a268113859951944f3045f06fdac7bd6a1aa4416"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "expiry dims the current value while open and restores it on Escape",
+   "location": "choices-open-value.browser.mjs:31",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2248,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-expiry-open-value",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "5a4ecabedd5483a9f63de864aaf96050c410b427ef0956c4e7259b8226899a20"
+      },
+      {
+       "name": "orbit-expiry-open-value",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "5a4ecabedd5483a9f63de864aaf96050c410b427ef0956c4e7259b8226899a20"
+      },
+      {
+       "name": "open-value",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "04385d43abb2c4696eccc708f31cb068107cac8d3254388cf02b7f2295c4a33a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "account dims the current value while open and restores it on Escape",
+   "location": "choices-open-value.browser.mjs:31",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2182,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-account-open-value",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "0b7a13aee2cf9300a585e473bad7da76a56c54351b65a4195ff2278bd52db9bb"
+      },
+      {
+       "name": "orbit-account-open-value",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "0b7a13aee2cf9300a585e473bad7da76a56c54351b65a4195ff2278bd52db9bb"
+      },
+      {
+       "name": "open-value",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "fe4b92f46555849477bd3da628e39ab0cec357e5f979336c73b2261b3a72154e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "search dims the current value while open and restores it on Escape",
+   "location": "choices-open-value.browser.mjs:31",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2303,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-search-open-value",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "dbf4901789fc204c0fe9ba67d306906094577b49571ea592fac48cda551ba887"
+      },
+      {
+       "name": "orbit-search-open-value",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "ecef1c54c17abca089c9805e598c06b1a66b4ad002cf10e5a99bdd8765e297b3"
+      },
+      {
+       "name": "open-value",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "04385d43abb2c4696eccc708f31cb068107cac8d3254388cf02b7f2295c4a33a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "attachment matches the current surface, density and option states",
+   "location": "choices.browser.mjs:83",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2305,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-attachment-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "85153560e2332deff9d2ca28e3f89e35eaa81421d88a981861cd3be3c5d48f9b"
+      },
+      {
+       "name": "orbit-attachment-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "412a43ae903d90b97fcb6782aba6aeaf0a571f59e000f03433ad3af185a0f065"
+      },
+      {
+       "name": "appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e2d8c47297ab97d910b79a45e9bc778aa42d9d6140ae8217b92d51972fdc6b8e"
+      },
+      {
+       "name": "menu-glyphs",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2abaf0c3f1899c5a549239a1cd098a2f87ef1e56f0b52388753fab8b0119cece"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "access matches the current surface, density and option states",
+   "location": "choices.browser.mjs:83",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2405,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-access-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "5b0d26d1cdfd3dde4a96afde8100cc4c6363ec98526cb91256aab506b0ef4e81"
+      },
+      {
+       "name": "orbit-access-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b516a73aa2054b71a711baa1a751e5811877272ddbdc0081957554ae3f7325d1"
+      },
+      {
+       "name": "appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c790363e278257742108cafadf9073e0a097920d8a46a5efc6177b09a2bfdcf2"
+      },
+      {
+       "name": "menu-glyphs",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9fcb41e6405a1b2ddb009b9f20088b2a68481d76e2f8d16ad0a5298d59a9b29e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "expiry matches the current surface, density and option states",
+   "location": "choices.browser.mjs:83",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2634,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-expiry-closed",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "1581a02c974ef2dfad61cd4915cf2b3d8721f9c74d6b8f10fcf2a8dd27f56899"
+      },
+      {
+       "name": "antd-expiry-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "69724657a63044ccb173cde36f377e2f5051b42eedb2a0b8357bf1b84d5e6385"
+      },
+      {
+       "name": "orbit-expiry-closed",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "1581a02c974ef2dfad61cd4915cf2b3d8721f9c74d6b8f10fcf2a8dd27f56899"
+      },
+      {
+       "name": "orbit-expiry-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "69724657a63044ccb173cde36f377e2f5051b42eedb2a0b8357bf1b84d5e6385"
+      },
+      {
+       "name": "appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6fdc35ff9bb87f7d3011153b7e9f9887aed2be92b9c3cf5078ad2e9a6215a2c8"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "account matches the current surface, density and option states",
+   "location": "choices.browser.mjs:83",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2821,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-account-closed",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "545fb87cc3ab0a4083b241448e2914c8f3755b329e7dcc0ff0847a5e071e6f07"
+      },
+      {
+       "name": "antd-account-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "45cf2931c176f08f656eb691256859f1004ded7cb20f59c70525e0d333c44db7"
+      },
+      {
+       "name": "orbit-account-closed",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "545fb87cc3ab0a4083b241448e2914c8f3755b329e7dcc0ff0847a5e071e6f07"
+      },
+      {
+       "name": "orbit-account-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "45cf2931c176f08f656eb691256859f1004ded7cb20f59c70525e0d333c44db7"
+      },
+      {
+       "name": "appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0afd835fe9649ecf667b2ba7e111429a96c8dbc979e19e09edf123b6dd48dcdf"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "search matches the current surface, density and option states",
+   "location": "choices.browser.mjs:83",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2714,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-search-closed",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "988e08cf9b8722986fdd2039b1a20f7040914a93e80060930634b05367b506e6"
+      },
+      {
+       "name": "antd-search-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "69724657a63044ccb173cde36f377e2f5051b42eedb2a0b8357bf1b84d5e6385"
+      },
+      {
+       "name": "orbit-search-closed",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "988e08cf9b8722986fdd2039b1a20f7040914a93e80060930634b05367b506e6"
+      },
+      {
+       "name": "orbit-search-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "69724657a63044ccb173cde36f377e2f5051b42eedb2a0b8357bf1b84d5e6385"
+      },
+      {
+       "name": "appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9164efcfd2944e3a9a5166e3e3253c4db24e654fd19333aec9c6dc94e99cf54c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "popover matches the current surface, density and option states",
+   "location": "choices.browser.mjs:83",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2205,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-popover-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "0e23507b84fd416c35ee33628cc30c7f611eb05650fe886a43d97bcae39c211b"
+      },
+      {
+       "name": "antd-popover-context",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "a3e601be218c27643eff8890a8f7e72a6037145a87d2df2e7b54bfde517322fa"
+      },
+      {
+       "name": "orbit-popover-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "0e23507b84fd416c35ee33628cc30c7f611eb05650fe886a43d97bcae39c211b"
+      },
+      {
+       "name": "orbit-popover-context",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "a3e601be218c27643eff8890a8f7e72a6037145a87d2df2e7b54bfde517322fa"
+      },
+      {
+       "name": "appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "efb2251edc0b8bff898cae22fa3c8ed54ab14cc25996c580da2608b73835b040"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "tooltip matches the current surface, density and option states",
+   "location": "choices.browser.mjs:83",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2338,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-tooltip-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "083018af1a521ca65a8814dcf8e74453eb37a1d7f8131962be77e35632cc4fb5"
+      },
+      {
+       "name": "antd-tooltip-context",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "0ea2d6d35446780c38d57a4dd37479d7517b97a0557d0ce337a0ce5eaa272040"
+      },
+      {
+       "name": "orbit-tooltip-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "083018af1a521ca65a8814dcf8e74453eb37a1d7f8131962be77e35632cc4fb5"
+      },
+      {
+       "name": "orbit-tooltip-context",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "0ea2d6d35446780c38d57a4dd37479d7517b97a0557d0ce337a0ce5eaa272040"
+      },
+      {
+       "name": "appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "41b209a6586ef872c4af39d0577eaac6a641c013fbf9b74bc638c018156079f4"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "empty, disabled, hover and focus choice surfaces match the existing states",
+   "location": "choices.browser.mjs:158",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 11489,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-expiry-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "4fed8634b53cfff78ba1f8722a823768cc48e89671fd57f61f03a35e25349260"
+      },
+      {
+       "name": "orbit-expiry-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "4fed8634b53cfff78ba1f8722a823768cc48e89671fd57f61f03a35e25349260"
+      },
+      {
+       "name": "antd-expiry-empty",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "6b2f68a4f7d64a66eead6ad54208ef0033c4bb85f1ce08c0097e647415ecee93"
+      },
+      {
+       "name": "orbit-expiry-empty",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "53c872bee3aafd2ea071687a0a44698ef4650b8bff40dc16cc0f96868e1ea88a"
+      },
+      {
+       "name": "antd-expiry-focus",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b80b9fae9698f3d9f291c9011eadc26f0cfe0312478f41d8dacdc8406606f44d"
+      },
+      {
+       "name": "orbit-expiry-focus",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b80b9fae9698f3d9f291c9011eadc26f0cfe0312478f41d8dacdc8406606f44d"
+      },
+      {
+       "name": "antd-search-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "da8d22b98c086043d1601888f36c00caccc43822c5ee9428893bf5febd239501"
+      },
+      {
+       "name": "orbit-search-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "da8d22b98c086043d1601888f36c00caccc43822c5ee9428893bf5febd239501"
+      },
+      {
+       "name": "antd-search-empty",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "6b2f68a4f7d64a66eead6ad54208ef0033c4bb85f1ce08c0097e647415ecee93"
+      },
+      {
+       "name": "orbit-search-empty",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "53c872bee3aafd2ea071687a0a44698ef4650b8bff40dc16cc0f96868e1ea88a"
+      },
+      {
+       "name": "antd-search-focus",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "8b7589e4fc56effac3076be29c7e7129fe7ce93027f6e04c52723b7e4e04e343"
+      },
+      {
+       "name": "orbit-search-focus",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "8b7589e4fc56effac3076be29c7e7129fe7ce93027f6e04c52723b7e4e04e343"
+      },
+      {
+       "name": "choice-states",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "09fe14c152d8305c470291200ee1b9a1d88214702fe18e424dfdcee63acbafc3"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu arrows, disabled items, submenu, checkbox and focus return work",
+   "location": "choices.browser.mjs:198",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1232,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "keyboard-menu",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "723692d528c63ed61fd07e5a0001f78b5ce8cd61c7bb4f8a6883bed78f758d02"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus",
+   "location": "choices.browser.mjs:231",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1658,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "pointer-menu",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ae5cf5c91c54ae7a370f803e1e0d5e9e36bc8b5b329571f20b5da7900d506f36"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "select supports arrows, Enter, clear, empty, disabled and empty-string account values",
+   "location": "choices.browser.mjs:263",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1452,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "select",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9016eb424fca175a5c48eb975ca9ec399a2f5b608ed1d5f35edf680213e86e90"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "search preserves selection, filters groups, handles no results, composition and explicit clear",
+   "location": "choices.browser.mjs:292",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1707,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "search",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "97a3ed479253a2ded3663964de1f9db68ef65e914f479514801c98b3e36ae8c1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "remote search accepts server labels and resets an action picker without local filtering",
+   "location": "choices.browser.mjs:323",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1174,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "remote-search",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d1e0607554d9e46087eee9b61968b116e9b8be9eaacdb5f895cce41a8a6a550e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Dialog owns choices, top-layer Escape, Tab and theme",
+   "location": "choices.browser.mjs:343",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2775,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "choices-in-dialog",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "810c8771445ce24e9df0908d5118920161565f8c15cf94e5aedfe067d4a54608"
+      },
+      {
+       "name": "nested-choices",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "legacy Modal owns choices, top-layer Escape, Tab and theme",
+   "location": "choices.browser.mjs:343",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2880,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "choices-in-dialog",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "c13f9be9c1193ae62e97083941e877a446dc068b41843f23d8d4e4ea4ee59082"
+      },
+      {
+       "name": "nested-choices",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "961974b994e72e1b26f3107443ebf99d2e0704f1167f4a724dc930ccecd2b679"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary",
+   "location": "choices.browser.mjs:381",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3335,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "legacy-tab-baseline",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "8a4a69f32fc6b2705fcf6c39247da0a82ddbe2da309d44c3e0cf8602372c7ffc"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover",
+   "location": "choices.browser.mjs:400",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2299,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "popover-tooltip",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e0b29a3a60e5f2ef0a20587c4f5c79f92a76c58e1fbbb403a6f189e5a2b954f1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "open choices follow the live system theme without losing selection",
+   "location": "choices.browser.mjs:435",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2081,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "live-theme",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "47b997a061bbebee6890eda1ca3c3b6b7f9591869ee547d0f49927de690ec42b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner",
+   "location": "choices.browser.mjs:453",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2924,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "dialog-boundaries",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "multiple chip appearance matches current labels and email fields",
+   "location": "choices.browser.mjs:486",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 6202,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-multiple-default",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b7fa5fa0dd2a44a22408112b45f6b60d694f2adaf493b85f6ee7a58f131e31f9"
+      },
+      {
+       "name": "antd-multiple-options",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "7f666f79e08b1510f62624dc4377dfc6f1cae6b6c04a3c7b3a368bf31b20ed41"
+      },
+      {
+       "name": "orbit-multiple-default",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b7fa5fa0dd2a44a22408112b45f6b60d694f2adaf493b85f6ee7a58f131e31f9"
+      },
+      {
+       "name": "orbit-multiple-options",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "a3c846dbfb2e1095d3b41d22dfb673f206662ee0a6e8294f0211bd24a3c5e22f"
+      },
+      {
+       "name": "antd-multiple-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "470b6550ec4ad83f00753cda30ca3887a3b5660617d422cb6a7e3ad0e035ec59"
+      },
+      {
+       "name": "orbit-multiple-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "470b6550ec4ad83f00753cda30ca3887a3b5660617d422cb6a7e3ad0e035ec59"
+      },
+      {
+       "name": "multi-appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ad2b4a412d76e600ea28ced69360c0468ace79090bdc3a528928ac95030215ad"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "tags chip appearance matches current labels and email fields",
+   "location": "choices.browser.mjs:486",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3383,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "antd-tags-default",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "9694665abc918289abed801b3766ba2b62d0ff5788879216721393439fb45a19"
+      },
+      {
+       "name": "orbit-tags-default",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "9694665abc918289abed801b3766ba2b62d0ff5788879216721393439fb45a19"
+      },
+      {
+       "name": "antd-tags-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "6f2cbbccbbe428b39db27a366e4e6d66d596b2c5fc6d968fe8244e4d3aff9557"
+      },
+      {
+       "name": "orbit-tags-disabled",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "6f2cbbccbbe428b39db27a366e4e6d66d596b2c5fc6d968fe8244e4d3aff9557"
+      },
+      {
+       "name": "multi-appearance",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "48948583a67c3c5eaa4e6e503be582c51ca32eab80fb657fc0ab80714d5c9bd0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+   "location": "choices.browser.mjs:515",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1725,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "multiple-labels",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "12aa37d5e9012d39fd4cd07e9f8bdf46633e20b758109e6c45e307c202995340"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion",
+   "location": "choices.browser.mjs:552",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1601,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "email-tags",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "bca4a211111d6395b7e9300f7d3398adc7958a2f273e587b049a3cc4c7dd39ba"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+   "location": "choices.browser.mjs:592",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1768,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "multi-dialog-and-row",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e91cfc4852a4e582fa32cff84eede2cf6c6e1679a4b6198c3299e56337ccfad2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "search option touch selects once and preserves input focus",
+   "location": "choices.browser.mjs:631",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1147,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "search-touch",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ea0b7a5890019671d18a56a439323f477f9ef256216a72fc2ca67361a871e19b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen",
+   "location": "choices.browser.mjs:642",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1682,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "long-tooltip",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "a88bfbc59d0cdcafe05b749602f51a758a0b692f8302723d2b7d0c92e46df7ba"
+      },
+      {
+       "name": "plan-usage-sized-popover",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "2aa41d01edad72f78e81bc86a0f891babd63aa6b7f2ddfb2312c7958ed2da5f1"
+      },
+      {
+       "name": "tooltip-and-popover-edges",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a8ceb197536e31f6f61c208a7100909adb185ec1ec47e9d0e546cdcf63ba8aab"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

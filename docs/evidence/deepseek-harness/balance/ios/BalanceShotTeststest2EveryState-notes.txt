@@ -1,0 +1,19 @@
+states-light: Settings row 9 label="Providers" value="" frame=(16.0, 713.0, 370.0, 52.0) hittable=true
+loading-light: row 9 label="DeepSeek Slow, deepseek-v4-pro" value="" frame=(16.0, 594.0, 370.0, 70.33333333333337) hittable=true
+loading-light: amounts on screen: []
+low-light: row 9 label="DeepSeek Team, deepseek-v4-pro, ¥0.42" value="" frame=(16.0, 312.66666666666663, 370.0, 70.33333333333331) hittable=true
+key-rejected-light: row 9 label="DeepSeek Old key, deepseek-v4-pro, Unavailable" value="" frame=(16.0, 383.0, 370.0, 70.33333333333331) hittable=true
+key-rejected-light: amounts on screen: []
+key-rejected-retried: amounts on screen: []
+network-light: row 9 label="DeepSeek Direct, deepseek-v4-flash, Unavailable" value="" frame=(16.0, 453.3333333333333, 370.0, 70.33333333333331) hittable=true
+network-light: amounts on screen: []
+multi-light: row 9 label="DeepSeek Intl, deepseek-v4-pro, ¥110.00 · $5.00" value="" frame=(16.0, 523.6666666666667, 370.0, 70.33333333333337) hittable=true
+states-dark: Settings row 9 label="Providers" value="" frame=(16.0, 713.0, 370.0, 52.0) hittable=true
+loading-dark: row 9 label="DeepSeek Slow, deepseek-v4-pro" value="" frame=(16.0, 594.0, 370.0, 70.33333333333337) hittable=true
+loading-dark: amounts on screen: []
+low-dark: row 9 label="DeepSeek Team, deepseek-v4-pro, ¥0.42" value="" frame=(16.0, 312.66666666666663, 370.0, 70.33333333333331) hittable=true
+key-rejected-dark: row 9 label="DeepSeek Old key, deepseek-v4-pro, Unavailable" value="" frame=(16.0, 383.0, 370.0, 70.33333333333331) hittable=true
+key-rejected-dark: amounts on screen: []
+network-dark: row 9 label="DeepSeek Direct, deepseek-v4-flash, Unavailable" value="" frame=(16.0, 453.3333333333333, 370.0, 70.33333333333331) hittable=true
+network-dark: amounts on screen: []
+multi-dark: row 9 label="DeepSeek Intl, deepseek-v4-pro, ¥110.00 · $5.00" value="" frame=(16.0, 523.6666666666667, 370.0, 70.33333333333337) hittable=true

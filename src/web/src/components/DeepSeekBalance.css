@@ -1,0 +1,224 @@
+/* The DeepSeek account balance (DeepSeekBalance.tsx), on the Providers list and on a DeepSeek key's
+   edit page. */
+
+/* The list row's line, under the row's own .prov-runtime lines. */
+.dsb-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.dsb-line b {
+  font-weight: 600;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+.dsb-sep {
+  color: var(--text-4);
+}
+.dsb-amounts {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.dsb-line.low,
+.dsb-line.low b {
+  color: var(--error);
+}
+.dsb-line.fail {
+  color: var(--warning);
+}
+
+/* The edit page's section. */
+.dsb-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: var(--bg-raised);
+}
+.dsb-card.low {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+}
+.dsb-card.fail {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.dsb-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.dsb-alert + .dsb-cur .dsb-top {
+  margin-top: 14px;
+}
+.dsb-cap {
+  margin-bottom: 2px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.dsb-total {
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+.dsb-total.minor {
+  font-size: 20px;
+}
+.dsb-total.low {
+  color: var(--error);
+}
+.dsb-total .cur {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-3);
+}
+.dsb-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.dsb-split {
+  margin-top: 10px;
+}
+.dsb-bar {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--fill-muted);
+}
+.dsb-bar .g {
+  background: var(--brand-border);
+}
+.dsb-bar .t {
+  background: var(--brand);
+}
+.dsb-legend {
+  display: flex;
+  gap: 18px;
+  margin-top: 7px;
+  font-size: 12px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.dsb-legend i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 2px;
+}
+.dsb-legend .gk {
+  background: var(--brand-border);
+}
+.dsb-legend .tk {
+  background: var(--brand);
+}
+.dsb-legend b {
+  margin-left: 4px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.dsb-cur + .dsb-cur {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+.dsb-note {
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+.dsb-shared {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.dsb-shared b {
+  font-weight: 600;
+  color: var(--text-2);
+}
+.dsb-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.dsb-alert .ic {
+  flex: none;
+  margin-top: 3px;
+  font-size: 15px;
+}
+.dsb-alert .t {
+  font-weight: 600;
+}
+.dsb-alert .d {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.dsb-card.low .dsb-alert .ic,
+.dsb-card.low .dsb-alert .t {
+  color: var(--error);
+}
+.dsb-card.fail .dsb-alert .ic,
+.dsb-card.fail .dsb-alert .t {
+  color: var(--warning);
+}
+.dsb-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.dsb-hint {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.dsb-unknown-row {
+  margin-top: 12px;
+  align-items: center;
+}
+.dsb-unknown {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+/* Loading: the card's shape with nothing in it — not a 0 that a number later replaces. */
+.dsb-skel {
+  height: 12px;
+  border-radius: 4px;
+  background: var(--fill-muted);
+}
+.dsb-skel-head {
+  width: 220px;
+}
+.dsb-skel.dsb-skel-total {
+  width: 140px;
+  height: 24px;
+  margin-top: 4px;
+}
+.dsb-skel-legend {
+  display: flex;
+  gap: 18px;
+  margin-top: 9px;
+}
+.dsb-skel-legend .dsb-skel:first-child {
+  width: 110px;
+}
+.dsb-skel-legend .dsb-skel:last-child {
+  width: 130px;
+}

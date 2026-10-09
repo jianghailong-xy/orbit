@@ -78,6 +78,13 @@ final class WikiModel {
     /// Activity's banners for them (design §12.3.3). Read for Activity, and only those.
     private(set) var otherPlans: [String: WikiPlanState] = [:]
     @ObservationIgnored private var otherPlansRead = false
+    /// The space on screen's server runs and their calls (`GET /wiki/spaces/:id/jobs`, P9): Activity's Runs band and a
+    /// run's page. Nil until read, and from a control plane that predates the read.
+    private(set) var jobs: WikiJobsRead?
+    /// The deployment's System model, and whether the server executes this account's wiki (`GET /wiki/system-model`):
+    /// what the settings page reads to name the model instead of a provider. Nil until read, and from an older
+    /// control plane — which runs nothing on the server.
+    private(set) var systemModel: WikiSystemModelStatus?
 
     private let api: APIClient
     @ObservationIgnored private var nudgeTask: Task<Void, Never>?
@@ -319,6 +326,65 @@ final class WikiModel {
             guard currentSpace?.id == space.id else { return }
             activityState.fail()
         }
+    }
+
+    /// The server's runs of the space on screen (contract `jobs.read`): newest first, each with its newest calls. A
+    /// server from before the read answers 404, which reads as none — Activity then draws no Runs band.
+    func loadJobs() async {
+        guard let space = currentSpace else {
+            jobs = nil
+            return
+        }
+        do {
+            let read = try await api.wikiJobs(spaceID: space.id)
+            // Another space was picked while this one was reading: its own read owns the band.
+            guard currentSpace?.id == space.id else { return }
+            if read != jobs { jobs = read }
+        } catch APIError.http(let status, _) where status == 404 {
+            if currentSpace?.id == space.id { jobs = nil }
+        } catch {
+            // Keep what is on screen; the next pass reads it again.
+        }
+    }
+
+    /// The space on screen's runs, when the read in hand is that space's.
+    var currentJobs: [WikiJob]? {
+        guard let jobs, let space = currentSpace, PublicID.storageKey(jobs.spaceId) == PublicID.storageKey(space.id) else { return nil }
+        return jobs.jobs
+    }
+
+    /// One of the space on screen's runs, by its id.
+    func job(_ id: String) -> WikiJob? {
+        currentJobs?.first { PublicID.storageKey($0.id) == PublicID.storageKey(id) }
+    }
+
+    /// Whether a run of the space on screen is still on its way: what the Runs band and a run's page read again for.
+    var jobsUnderWay: Bool {
+        (currentJobs ?? []).contains { $0.state == .queued || $0.state == .running || $0.state == .waiting }
+    }
+
+    /// The deployment's System model and the executor switch as it stands for this account (contract `systemModel.read`).
+    func loadSystemModel() async {
+        do {
+            let read = try await api.wikiSystemModel()
+            if read != systemModel { systemModel = read }
+        } catch APIError.http(let status, _) where status == 404 {
+            systemModel = nil
+        } catch {
+            // Keep what is on screen.
+        }
+    }
+
+    /// The System model while the server executes this account's wiki: what the settings page draws instead of the
+    /// provider. Nil under runner, and before the read is in.
+    var serverModel: WikiSystemModelStatus? {
+        systemModel?.executor?.serverExecutes == true ? systemModel : nil
+    }
+
+    /// Whether the server executes this account's wiki (contract `jobs.executor.read`): the plan's empty card
+    /// names the System model instead of the provider while it does. False under runner, and before the read is in.
+    var serverExecutes: Bool {
+        systemModel?.executor?.serverExecutes == true
     }
 
     /// Every space's queue, which is what the drawer's number and the banner count.
@@ -689,18 +755,28 @@ final class WikiModel {
     /// caller's toast used to wait on all four requests and arrive seconds late, often on whatever
     /// page the owner had moved to by then. The card leaves the queue at once (`answered`) and the
     /// reads catch the queue, the drawer's count and the home page up behind it.
+    ///
+    /// Landing is not the same as applying: the server answers 200 for an op it could not apply too,
+    /// recording `conflict` or `withdrawn` on it, and the answer is read for that. Such an answer is a
+    /// refusal like any other — the card is not answered here, and the queue is read again.
     func decide(_ card: WikiLogic.ReviewCard, _ action: WikiDecideAction,
                 reason: WikiRejectReason? = nil, edited: WikiEntryChanges? = nil) async -> String? {
         busy = true
         defer { busy = false }
+        let answer: WikiChangeset
         do {
-            _ = try await api.decideWikiChangeset(
+            answer = try await api.decideWikiChangeset(
                 card.changeset.id,
                 WikiDecideRequest(decisions: [WikiDecision(opId: card.op.id, action: action,
                                                            edited: edited, reason: reason)]))
         } catch {
             await reloadAfterWrite()
             return Self.refusal(error)
+        }
+        if let refusal = WikiLogic.decisionRefusal(WikiLogic.recordedDecision(answer, opID: card.op.id),
+                                                   op: card.op.op, action: action) {
+            await reloadAfterWrite()
+            return refusal
         }
         answered.insert(card.op.id)
         Task { [weak self] in

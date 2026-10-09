@@ -2,7 +2,8 @@ import SwiftUI
 import OrbitKit
 
 // Activity (design §12.3.2, mock 31 ②): what the Wiki home says besides its content — the status line,
-// what waits on the owner, the decisions, the changes and the agents' use — in the home's order, which
+// what waits on the owner, the server's runs (mock 35 ④, P9), the decisions, the changes and the agents' use — in
+// the home's order, which
 // `WikiLogic.ActivityBand` holds to the web's `WikiActivityPage.tsx`. Its bar is Review's: back, the title
 // and the space's name under it. The screen reads `AppModel.wiki` and decides where a press goes; the page
 // draws what it is given.
@@ -16,11 +17,13 @@ struct WikiActivityActions {
     /// The status line's Set up and View run.
     var openSettings: () -> Void = {}
     var openSession: (String) -> Void = { _ in }
+    /// A server run's page: its row on the Runs band, or View run for a run the server's job made.
+    var openJob: (String) -> Void = { _ in }
 }
 
 /// Activity's page: the status line; the banners — every space's proposals, the space's plan, the plans of
-/// the other spaces that wait on the owner; then Recent decisions, Recently changed with what came after the
-/// reader last looked, and Agents used the wiki.
+/// the other spaces that wait on the owner; the server's runs; then Recent decisions, Recently changed with what
+/// came after the reader last looked, and Agents used the wiki.
 struct WikiActivityPage: View {
     let content: WikiHomeContent
     /// The space's name, under the title.
@@ -28,6 +31,8 @@ struct WikiActivityPage: View {
     let banners: [WikiSpaceLogic.ActivityBanner]
     /// When the reader last looked (`WikiSeenLog`): nil until it is read, and nothing is marked before then.
     var seen: Double? = nil
+    /// The server's runs of the space, newest first: nil until read, and from a control plane before the read.
+    var jobs: [WikiJob]? = nil
     var now: Date = Date()
     var actions = WikiActivityActions()
 
@@ -72,6 +77,23 @@ struct WikiActivityPage: View {
                     .listRowInsets(EdgeInsets())
                     .listRowSeparator(.hidden)
             }
+        case .runs:
+            // Drawn while the server executes the account's wiki, or once it ran something for the space.
+            if WikiRunsLogic.shown(serverExecutes: content.health?.serverExecutes == true, jobs: jobs) {
+                Section {
+                    runsHeader
+                    if let jobs, !jobs.isEmpty {
+                        ForEach(jobs) { job in
+                            Button { actions.openJob(job.id) } label: {
+                                WikiRunListRow(row: WikiRunsLogic.row(job, now: now))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    } else {
+                        rows.empty(WikiRunsCopy.none)
+                    }
+                }
+            }
         case .recentDecisions:
             Section {
                 rows.bandHeader(WikiCopy.recentDecisions, count: content.recentDecisions.count)
@@ -106,6 +128,26 @@ struct WikiActivityPage: View {
         }
     }
 
+    /// The Runs band's heading, a band heading's shape: the System model and its state beside it, as the web
+    /// card's head says them — never where the model answers.
+    private var runsHeader: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(WikiRunsCopy.runs)
+                .font(.orbitSubtext.weight(.bold))
+                .foregroundStyle(Color.primary)
+            if let model = content.health?.systemModel {
+                Text(WikiRunsCopy.systemModelLabel(model.model))
+                    .font(.orbitLabel)
+                    .foregroundStyle(Color.secondary)
+                    .lineLimit(1)
+                WikiModelStateText(model: model).font(.orbitLabel)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 14)
+        .listRowSeparator(.hidden)
+    }
+
     /// How many rows came after the reader last looked: none before the stamp is read.
     private var newRows: Int { seen.map { content.newRows(seen: $0) } ?? 0 }
 
@@ -124,7 +166,12 @@ struct WikiActivityPage: View {
                 case wikiStatusSettingsURL:
                     actions.openSettings()
                 case wikiStatusRunURL:
-                    if let session = content.health?.maintenance.lastRun?.sessionId { actions.openSession(session) }
+                    // A run the server's job made has no session: its page is the run's call log.
+                    if let job = content.health?.maintenance.lastRun?.jobId {
+                        actions.openJob(job)
+                    } else if let session = content.health?.maintenance.lastRun?.sessionId {
+                        actions.openSession(session)
+                    }
                 default:
                     return .systemAction
                 }
@@ -176,11 +223,12 @@ struct WikiActivityView: View {
 
     var body: some View {
         if let wiki = model.wiki {
-            TimelineView(.periodic(from: .now, by: 60)) { context in
+            // A minute's clock, every few seconds while a run is on its way: its waits count up as the web's do.
+            TimelineView(.periodic(from: .now, by: wiki.jobsUnderWay ? 5 : 60)) { context in
                 if let content = wiki.activity, let space = wiki.currentSpace {
                     WikiActivityPage(content: content, spaceName: name(of: space, in: wiki),
                                      banners: banners(wiki, space: space, now: context.date),
-                                     seen: seen, now: context.date, actions: actions(wiki))
+                                     seen: seen, jobs: wiki.currentJobs, now: context.date, actions: actions(wiki))
                 } else {
                     WikiHomePlaceholder(wiki: wiki, state: wiki.activityState) { await wiki.loadActivity() }
                 }
@@ -194,11 +242,18 @@ struct WikiActivityView: View {
                 await wiki.loadPlan()
                 await wiki.loadDocsDirectory()
                 await wiki.loadOtherPlans()
+                await wiki.loadJobs()
+                // A run on its way is read again every few seconds, as the web card reads it.
+                while !Task.isCancelled, wiki.jobsUnderWay {
+                    try? await Task.sleep(for: .seconds(5))
+                    await wiki.loadJobs()
+                }
             }
             .refreshable {
                 await wiki.loadActivity()
                 await wiki.loadPlan()
                 await wiki.loadOtherPlans()
+                await wiki.loadJobs()
             }
         } else {
             ProgressView()
@@ -228,7 +283,8 @@ struct WikiActivityView: View {
             openRun: { id in model.push(.wikiRun(changesetID: id)) },
             openBanner: { banner in open(banner.to, wiki) },
             openSettings: { model.push(.wikiSettings) },
-            openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) })
+            openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) },
+            openJob: { id in model.push(.wikiJob(jobID: id)) })
     }
 
     /// A banner's way: Review over every space; or a space's plan, or its settings — another space's first

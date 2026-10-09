@@ -85,6 +85,23 @@ describe('RunnerSignIn on a runner with an earlier sign-in on record', () => {
     expect(html).toContain('ZXHO-K06HC');
     expect(html).toContain('href="https://auth.openai.com/codex/device"');
   });
+
+  // The code comes first, and the one press both copies it and opens the page it goes into (VS Code's
+  // "Copy & Continue to GitHub"), so all that is left over there is a paste.
+  it('puts the one-time code first, above the press that copies it and opens its page', () => {
+    const html = open(
+      loginState({
+        status: 'awaiting_approval',
+        engine: 'codex',
+        url: 'https://auth.openai.com/codex/device',
+        userCode: 'ZXHO-K06HC',
+      }),
+    );
+
+    expect(html).toContain('Enter this one-time code on the sign-in page:');
+    expect(html.indexOf('ZXHO-K06HC')).toBeGreaterThan(-1);
+    expect(html.indexOf('ZXHO-K06HC')).toBeLessThan(html.indexOf('Copy Code &amp; Open Sign-In Page'));
+  });
 });
 
 // What ends the wait for the runner to re-report after a sign-in lands. Getting this wrong is
@@ -319,27 +336,27 @@ describe('RunnerSignIn for Kimi', () => {
 
   it('names the site of the page the code is for, and offers the other one', () => {
     const html = kimi(device('https://www.kimi.ai/code/authorize_device?user_code=7K06-QP86'));
-    expect(html).toContain('Open the kimi.ai sign-in page');
+    expect(html).toContain('Copy Code &amp; Open kimi.ai');
     expect(html).toContain('Sign in with your <b>kimi.ai</b> account there, then enter this one-time code:');
     expect(html).toContain('7K06-QP86');
     expect(html).toContain('Use kimi.com instead');
 
     const com = kimi(device('https://www.kimi.com/code/authorize_device?user_code=7K06-QP86'));
-    expect(com).toContain('Open the kimi.com sign-in page');
+    expect(com).toContain('Copy Code &amp; Open kimi.com');
     expect(com).toContain('Use kimi.ai instead');
   });
 
   it('offers the other site on a runner too old to be told it as well', () => {
     const html = kimi(device('https://www.kimi.com/code/authorize_device?user_code=7K06-QP86'), runner({ capabilities: [] }));
-    expect(html).toContain('Open the kimi.com sign-in page');
+    expect(html).toContain('Copy Code &amp; Open kimi.com');
     expect(html).toContain('Use kimi.ai instead');
     expect(html).toContain('Cancel');
   });
 
   it("leaves a page of neither site unnamed, as every other engine's is", () => {
     const html = kimi(device('https://auth.example.test/verify?user_code=7K06-QP86'));
-    expect(html).toContain('Open the sign-in page');
-    expect(html).toContain('Sign in there, then enter this one-time code:');
+    expect(html).toContain('Copy Code &amp; Open Sign-In Page');
+    expect(html).toContain('Enter this one-time code on the sign-in page:');
     expect(html).not.toContain('instead');
   });
 
@@ -362,5 +379,33 @@ describe('RunnerSignIn for Kimi', () => {
     expect(probeReportsSignedIn(on('global'), RUNNER, 'kimi', undefined, undefined, 'global')).toBe(true);
     // No site to wait for: the engine's own answer, as before.
     expect(probeReportsSignedIn(on('mainland-cn'), RUNNER, 'kimi')).toBe(true);
+  });
+
+  it("waits for an account's login on the site just signed in on, the account's own", () => {
+    const WORK = '5c2e91a0';
+    const on = (work: KimiRegion) => [
+      {
+        id: RUNNER,
+        engines: [
+          {
+            engine: 'kimi' as const,
+            installed: true,
+            // The engine's site is Default's, already on the site Work is moving to.
+            auth: 'yes' as const,
+            kimiRegion: 'global' as const,
+            accounts: [
+              { id: 'default', home: '/root/.kimi-code', auth: 'yes' as const, kimiRegion: 'global' as const },
+              { id: WORK, name: 'Work', home: `/root/.orbit/kimi-accounts/${WORK}`, auth: 'yes' as const, kimiRegion: work },
+            ],
+          },
+        ],
+      },
+    ];
+    // Work moving from kimi.com to kimi.ai: its yes before the runner re-probes is kimi.com's.
+    expect(probeReportsSignedIn(on('mainland-cn'), RUNNER, 'kimi', WORK, undefined, 'global')).toBe(false);
+    expect(probeReportsSignedIn(on('global'), RUNNER, 'kimi', WORK, undefined, 'global')).toBe(true);
+    // A new account, by its name, on the site it is added on.
+    expect(probeReportsSignedIn(on('mainland-cn'), RUNNER, 'kimi', undefined, 'Work', 'mainland-cn')).toBe(true);
+    expect(probeReportsSignedIn(on('mainland-cn'), RUNNER, 'kimi', undefined, 'Work', 'global')).toBe(false);
   });
 });

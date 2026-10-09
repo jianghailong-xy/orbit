@@ -312,6 +312,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // The public links a caller turns off in one request (`POST /share-links/turn-off`, 0306): each
   // is a `share_link` row's own id, the one its list hands out and `DELETE /share-links/:id` takes.
   'shareLinkIds',
+  // The wiki space a public link is rooted at (`share_link.wiki_space_id`, 0403): the space's own id,
+  // the one `/wiki/spaces/:id/share` takes. An address, never a fence.
+  'wikiSpaceId',
   // Owner Ratification's durable decision, reusable authority and two-phase action ledgers. These
   // all name rows a caller can inspect or hand back; whether the named authority is still valid is
   // decided by the database from its immutable scope, not by preserving UUID spelling.
@@ -563,6 +566,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // one (a history reference with no foreign key). Addresses a reader follows — never a fence.
   'jobId',
   'requestedByUserId',
+  // A plan version the wiki-worker's plan job drafted (migration 0404): the wiki_job that wrote it, where a
+  // session's draft names its session. A history reference with no foreign key — an address, never a fence.
+  'authorJobId',
   // A confirmation request's review (migration 0370, docs/owner-confirmation-review-contract.md
   // §3.4): the review row, the REVIEW record a decision was made against, the run the request came
   // from and the session that reviews it. Addresses a reader follows; the request itself keeps its
@@ -571,6 +577,12 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'reviewRecordId',
   'runSessionId',
   'reviewerSessionId',
+  // The repository operations (migration 0402): the fragments of an operation's snapshot, staged
+  // while it runs. `opId` is the operation's own id twice over — the runner is handed it in the
+  // heartbeat command and hands it back as the route's `:id` (`PublicIdPipe`, either spelling) —
+  // and this column is that same address on the fragment rows. Never a fence: the stop-the-old-
+  // claim comparison is on (`lease_owner`, `claim_generation`), not on this.
+  'opId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner

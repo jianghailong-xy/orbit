@@ -1,0 +1,35 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.config.mjs --project chromium-dark-desktop'",
+ "env": {},
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "runner": "run-chunks.py (inside one mcp__orbit__bg_run job)",
+ "commit": "f162a2f9de3cb4bdea8e9a6120dd28a8e2184328",
+ "webTree": "d8ae59f026644577041afea38b5994da1eef0f9f",
+ "dirtyWeb": "",
+ "startedAt": "2026-10-08T03:29:31.367803+00:00",
+ "endedAt": "2026-10-08T03:31:22.602383+00:00",
+ "loadAverage": {
+  "start": [
+   66.7392578125,
+   42.60546875,
+   28.0263671875
+  ],
+  "end": [
+   55.3115234375,
+   45.89990234375,
+   30.91357421875
+  ]
+ },
+ "exitCode": 0,
+ "outputSha256": "a8de1c9eda6893670a9bcd97abf59a2ad712ffddff97459548bfa25e651086ab",
+ "outputBytes": 8932,
+ "raw": "/var/tmp/kw2-246921c8/runs/held-frames-rebased-chromium-dark-desktop",
+ "stats": {
+  "expected": 49,
+  "unexpected": 0,
+  "skipped": 0,
+  "flaky": 0,
+  "duration": 110851.24799999999,
+  "samples": 49
+ }
+}

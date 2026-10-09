@@ -1,0 +1,35 @@
+/* Result: 48px/32px of room, the status icon at 72px in the status colour, a 24px title on a 32px
+   line and a 14px subtitle in the tertiary text colour, all centred. */
+.orbit-result {
+  padding: 48px 32px;
+}
+.orbit-result-icon {
+  margin-bottom: 24px;
+  text-align: center;
+}
+.orbit-result-icon > .anticon {
+  font-size: 72px;
+}
+.orbit-result[data-status='success'] .orbit-result-icon {
+  color: var(--orbit-badge-success);
+}
+.orbit-result[data-status='info'] .orbit-result-icon {
+  color: var(--orbit-control-primary);
+}
+.orbit-result[data-status='warning'] .orbit-result-icon {
+  color: var(--orbit-badge-warning);
+}
+.orbit-result-title {
+  margin-block: 8px;
+  color: var(--text-1);
+  font-size: 24px;
+  /* The replaced title's 32px line, in pixels: the build would round a 1.3333 ratio short of it. */
+  line-height: 32px;
+  text-align: center;
+}
+.orbit-result-subtitle {
+  color: var(--text-3);
+  font-size: 14px;
+  line-height: 1.5714285714285714;
+  text-align: center;
+}

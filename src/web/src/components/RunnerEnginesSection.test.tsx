@@ -255,6 +255,27 @@ describe("each engine's sign-in, quota and way to its sign-in", () => {
     expect(out.map((row) => [row.quota, row.quotaNote])).toEqual([[[], '—'], [[], '—']]);
   });
 
+  it('says a Kimi login whose plan has no quota limit apart from one whose read found nothing', () => {
+    // The runner read the account and the answer held no window: no quota limit, not a failed
+    // read — Codex's windowless snapshot here is what a failed one still reads as.
+    const rows = rowsOf(
+      render(
+        runner({
+          planUsage: {
+            kimi: { provider: 'kimi', fetchedAt: new Date().toISOString() },
+            codex: { provider: 'codex', fetchedAt: new Date().toISOString() },
+          } as PlanUsage,
+          engines: [health({ engine: 'kimi' }), health({ engine: 'codex' })],
+        }),
+      ),
+    );
+    expect(rows.map((row) => [row.name, row.quota, row.quotaNote])).toEqual([
+      ['Kimi Code', [], 'No quota limit'],
+      ['Codex', [], 'No quota reported'],
+      ['Antigravity CLI', [], '—'],
+    ]);
+  });
+
   it('reads a window past its reset as the fresh one it now is', () => {
     const html = render(
       wikova({

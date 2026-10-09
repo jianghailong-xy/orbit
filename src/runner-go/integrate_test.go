@@ -924,11 +924,165 @@ func TestIntegrationNothingToLandMeasuresWhereTheTipIs(t *testing.T) {
 	}
 }
 
+// TestIntegrationNothingToLandWhenEveryCommitIsAlreadyOnTheTarget is the 2026-10-09 incident (project
+// 34PBlWiEZytRLTcPufJht). Main had taken the project's work in by another route, the line was rebuilt
+// from main's tip, and every task's branch was handed to it again. Each branch carried commits of its
+// own, and the rebase dropped every one of them ("patch contents already upstream"). The replay came
+// back AT the base, the push moved nothing, and the job reported LANDED with a receipt for a landing
+// that put nothing anywhere.
+//
+// The answer is NOTHING_TO_LAND, and nothing is pushed. It reports what was measured. The branch was
+// not empty: every commit it carried was already in the base it was replayed onto
+// (`sourceFullyApplied`). Its tip is not on the upstream (`sourceOnUpstream`), because what is there
+// are copies of its commits, not the commits. Two lines give that answer: the incident's, AT main, and
+// one ahead of main whose own commits already carry the change. The control plane reads them
+// differently, so both shapes are pinned here.
+//
+// The control changes one fact: one more commit, which the target does not have. That commit is
+// replayed and lands, and nothing is said about the branch being applied.
+func TestIntegrationNothingToLandWhenEveryCommitIsAlreadyOnTheTarget(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name            string
+		lineAheadOfMain bool
+	}{
+		{name: "the line at main", lineAheadOfMain: false},
+		{name: "a line ahead of main", lineAheadOfMain: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newIntegrationRepo(t)
+			fork := r.rev("main")
+			// The task's branch: a commit of its own, made before its change reached the target.
+			r.checkoutNew("task/applied", "main")
+			r.write("feature.txt", "the task's change\n")
+			r.commit("task: the change")
+			r.push("task/applied")
+			// The same change reaches the target by another route, as a commit of its own: on main, which
+			// the line is then rebuilt from, or on a line that is ahead of main.
+			if tc.lineAheadOfMain {
+				r.checkoutNew("project/line", "main")
+			} else {
+				r.checkout("main")
+			}
+			r.write("feature.txt", "the task's change\n")
+			r.commit("the same change, by another route")
+			if tc.lineAheadOfMain {
+				r.push("project/line")
+			} else {
+				r.push("main")
+				r.checkoutNew("project/line", "main")
+				r.push("project/line")
+			}
+			r.checkout("main")
+			before := r.originRev("refs/heads/project/line")
+
+			command := r.command("task/applied", "project/line")
+			command.SessionBaseSha = fork
+			var phases []string
+			result := runIntegrationJob(command, func(phase string, _ *IntegrationUpstreamMoved) {
+				phases = append(phases, phase)
+			})
+			if result.State != "NOTHING_TO_LAND" || result.Phase != "REBASE" {
+				t.Fatalf("state = %s / %s (%s), want NOTHING_TO_LAND / REBASE", result.State, result.Phase, result.ErrorCode)
+			}
+			if result.SourceFullyApplied == nil || !*result.SourceFullyApplied {
+				t.Fatalf("sourceFullyApplied = %v, want a measured true: the branch carried a commit, and the "+
+					"target already had its change", result.SourceFullyApplied)
+			}
+			if result.SourceOnUpstream == nil || *result.SourceOnUpstream {
+				t.Fatalf("sourceOnUpstream = %v, want a measured false: the upstream holds a copy of the "+
+					"task's commit, not the commit", result.SourceOnUpstream)
+			}
+			if slices.Contains(phases, "PUSH") || slices.Contains(phases, "VERIFY") {
+				t.Fatalf("phases = %v: nothing was there to push, so nothing was pushed or verified", phases)
+			}
+			if got := r.originRev("refs/heads/project/line"); got != before {
+				t.Fatalf("the target moved: %s -> %s", before, got)
+			}
+			if result.LandedSha != "" || result.TestedSha != "" {
+				t.Fatalf("landed %q, tested %q: an answer that landed nothing names nothing landed",
+					result.LandedSha, result.TestedSha)
+			}
+			if atMain := result.TargetShaBefore == result.UpstreamSha; atMain == tc.lineAheadOfMain {
+				t.Fatalf("target %s, upstream %s: the fixture is not the line it names", result.TargetShaBefore, result.UpstreamSha)
+			}
+
+			// The control: one more commit, which the target does not have.
+			r.checkout("task/applied")
+			r.write("more.txt", "work the target does not have\n")
+			r.commit("task: more")
+			r.push("task/applied")
+			r.checkout("main")
+			landed := runIntegrationJob(command, silent)
+			if landed.State != "LANDED" {
+				t.Fatalf("control state = %s (%s %s), want LANDED", landed.State, landed.ErrorCode, landed.Phase)
+			}
+			if landed.SourceFullyApplied != nil || landed.SourceOnUpstream != nil {
+				t.Fatalf("a landing reported measurements nobody asked it for: applied %v, on upstream %v",
+					landed.SourceFullyApplied, landed.SourceOnUpstream)
+			}
+			if commits, err := git(r.work, "rev-list", "--count", before+".."+landed.LandedSha); err != nil || commits != "1" {
+				t.Fatalf("commits added to the target = %q (%v), want the one it did not have", commits, err)
+			}
+			if body, _ := git(r.work, "show", landed.LandedSha+":more.txt"); body != "work the target does not have" {
+				t.Fatalf("the landed commit does not carry the new work: %q", body)
+			}
+		})
+	}
+}
+
+// TestIntegrationNothingToLandForAnEmptyRangeTheTargetLacks covers the other way a replay comes back AT
+// the base: there was nothing to replay. The session started on a commit the line does not have
+// (another branch's work) and committed nothing. J-S3's "already contained" does not fire for that
+// tip, and J-S4 replays an empty range. Before this, the result was pushed (a push that moved
+// nothing), verified, and reported LANDED, with a receipt for work the branch never carried. It is
+// NOTHING_TO_LAND, measured as NOT applied, so the control plane reads it exactly as it reads J-S3's
+// empty branch (0300, 0346).
+func TestIntegrationNothingToLandForAnEmptyRangeTheTargetLacks(t *testing.T) {
+	t.Parallel()
+	r := newIntegrationRepo(t)
+	r.checkoutNew("project/line", "main")
+	r.push("project/line")
+	before := r.originRev("refs/heads/project/line")
+	r.checkoutNew("other/work", "main")
+	r.write("other.txt", "another branch's work\n")
+	sessionBase := r.commit("another branch's commit")
+	r.push("other/work")
+	r.checkoutNew("orbit/idle", sessionBase)
+	r.push("orbit/idle")
+	r.checkout("main")
+
+	command := r.command("orbit/idle", "project/line")
+	command.SessionBaseSha = sessionBase
+	var phases []string
+	result := runIntegrationJob(command, func(phase string, _ *IntegrationUpstreamMoved) {
+		phases = append(phases, phase)
+	})
+	if result.State != "NOTHING_TO_LAND" || result.Phase != "REBASE" {
+		t.Fatalf("state = %s / %s (%s), want NOTHING_TO_LAND / REBASE", result.State, result.Phase, result.ErrorCode)
+	}
+	if result.SourceFullyApplied == nil || *result.SourceFullyApplied {
+		t.Fatalf("sourceFullyApplied = %v, want a measured false: the branch carried no commit of its own",
+			result.SourceFullyApplied)
+	}
+	if result.SourceOnUpstream == nil || *result.SourceOnUpstream {
+		t.Fatalf("sourceOnUpstream = %v, want a measured false: the tip is a commit main does not have",
+			result.SourceOnUpstream)
+	}
+	if slices.Contains(phases, "PUSH") || slices.Contains(phases, "VERIFY") {
+		t.Fatalf("phases = %v: nothing was there to push, so nothing was pushed or verified", phases)
+	}
+	if got := r.originRev("refs/heads/project/line"); got != before {
+		t.Fatalf("the target moved: %s -> %s", before, got)
+	}
+}
+
 // TestIntegrationJobReportsTheTipOnTheUpstream: the measurement is only a fact once the control
 // plane has it, so this follows it onto the wire — the result POSTed for the job carries
 // `sourceOnUpstream: true`. And only that answer does: a landing is not asked the question, and its
 // result says nothing about it rather than a false the control plane would have to tell apart from
-// a measured one.
+// a measured one. The same goes for `sourceFullyApplied`, which every NOTHING_TO_LAND carries: false
+// for the empty branch, true for a branch whose every commit the target already had.
 func TestIntegrationJobReportsTheTipOnTheUpstream(t *testing.T) {
 	t.Parallel()
 	report := func(t *testing.T, job IntegrationJobCommand) map[string]interface{} {
@@ -964,14 +1118,27 @@ func TestIntegrationJobReportsTheTipOnTheUpstream(t *testing.T) {
 	r.write("work.txt", "a commit of its own\n")
 	r.commit("task work")
 	r.push("task/work")
+	// A branch whose one commit the line already has, by another route.
+	r.checkoutNew("task/applied", "main")
+	r.write("line.txt", "landed on the line, not yet on main\n")
+	r.commit("the line's change, made again on the task's branch")
+	r.push("task/applied")
 	r.checkout("main")
 
 	empty := r.command("orbit/rollout", "project/line")
 	empty.JobID = "job-empty"
 	empty.SessionBaseSha = fork
 	sent := report(t, empty)
-	if sent["state"] != "NOTHING_TO_LAND" || sent["sourceOnUpstream"] != true {
-		t.Fatalf("result = %#v, want NOTHING_TO_LAND with sourceOnUpstream true", sent)
+	if sent["state"] != "NOTHING_TO_LAND" || sent["sourceOnUpstream"] != true || sent["sourceFullyApplied"] != false {
+		t.Fatalf("result = %#v, want NOTHING_TO_LAND with sourceOnUpstream true and sourceFullyApplied false", sent)
+	}
+
+	applied := r.command("task/applied", "project/line")
+	applied.JobID = "job-applied"
+	applied.SessionBaseSha = fork
+	sent = report(t, applied)
+	if sent["state"] != "NOTHING_TO_LAND" || sent["sourceFullyApplied"] != true || sent["sourceOnUpstream"] != false {
+		t.Fatalf("result = %#v, want NOTHING_TO_LAND with sourceFullyApplied true and sourceOnUpstream false", sent)
 	}
 
 	landing := r.command("task/work", "project/line")
@@ -981,8 +1148,10 @@ func TestIntegrationJobReportsTheTipOnTheUpstream(t *testing.T) {
 	if sent["state"] != "LANDED" {
 		t.Fatalf("result = %#v, want LANDED", sent)
 	}
-	if _, present := sent["sourceOnUpstream"]; present {
-		t.Fatalf("a landing reported a measurement nobody asked it for: %#v", sent)
+	for _, field := range []string{"sourceOnUpstream", "sourceFullyApplied"} {
+		if _, present := sent[field]; present {
+			t.Fatalf("a landing reported a measurement nobody asked it for (%s): %#v", field, sent)
+		}
 	}
 }
 

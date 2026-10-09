@@ -44,8 +44,12 @@ antd 的声明与锁定版本没有变化：`src/web/package.json` 的 declared 
 | --- | --- |
 | [2026-10-07.json](2026-10-07.json) | 机器可读的增量记录。以后的批次和 P6 的 `--check-owners` 直接读它。 |
 | [2026-10-07b.json](2026-10-07b.json) | 协调者对第一份记录里 4 个问题的判定：9 个点的 owner。第一份记录保持原样。 |
+| [2026-10-07c.json](2026-10-07c.json) | 协调者 2026-10-08 判定：main 带来、不在 P4.2 页面里的未归属点。`ProjectDoneConversation.test.tsx` → P6（只是固定数据里的 “antd migration” 字样，先例是 `ProjectWhyNotDoneGate.test.tsx`）；`StartProjectCard.test.tsx` → P4.3b；`WorkspaceView.neverStarted.test.tsx`、`WorkspaceView.promptSuggestion.test.tsx` → P5.3；`WikiReviewPage.decided.test.tsx`、`WikiShareButton.tsx`、`SharedWikiPage.tsx`、`SharedWikiPage.test.tsx` → P4.4；index.css 的两行 `.ant-dropdown-menu-item.composer-engine-title` → P5.3；提到 `.ant-radio-group` 的一行注释 → P4.3a。同批报出、落在 P4.2 页面里的 `DeepSeekBalance.tsx`、`RunnerEngines.accountFold.test.tsx`、`AdminUsersPage.disable.test.tsx` 由 P4.2 直接迁移，不在记录里。由 [P4.2](orbit-task:34Za39Feocgj42rrBYwzl) 按协调者要求登记，扫描对象是 P4.2 的交付。 |
+| [2026-10-07d.json](2026-10-07d.json) | [P2 跟进（第 2 批窗口）](../p2-keyboard-window-2/README.md)登记 `ChoicesFixture.tsx` 新增的 antd `Popconfirm` 导入（Popconfirm 基线的 AntD 参照），owner 仍为 P6，条目 status 为 `amended`；由 `../p2-keyboard-window-2/build-inventory-record.py` 生成。 |
+| [2026-10-08.json](2026-10-08.json) | [浮层第一帧位置](../overlay-first-frame/README.md)登记 `ChoicesFixture.tsx` 新增的 antd `Drawer` 导入（第一帧检查「抽屉内」位置的 AntD 参照），owner 仍为 P6，条目 status 为 `amended`（重述 07d 的条目）；由 `../overlay-first-frame/build-inventory-record.py` 生成。 |
 | [build-record.py](build-record.py) | 由审计 JSON 和 git 历史算出事实，再合入手工归属表（owner 与理由）生成记录。有使用点缺决定时直接失败退出。 |
 | [build-decision.py](build-decision.py) | 从第一份记录复制 9 个待定条目的事实，写入协调者判定的 owner，生成 `2026-10-07b.json`。 |
+| [build-record-c.py](build-record-c.py) | 只读入排在它前面的两份记录，算出仍未归属的点，再从审计 JSON、P0.1 基线和 git blame 取出它们的事实，写入协调者的判定，生成 `2026-10-07c.json`。有点缺判定，或判定对不上任何点，都直接失败。 |
 | [verify-record.mjs](verify-record.mjs) | 按读取顺序逐份核对记录与审计是否一致，并做反向对照：拿掉新增/改动、拿掉重新归属、单独检查 P0.1 基线；补充记录必须排在被补充的记录之后。 |
 | `src/web/scripts/audit-antd.mjs --check-owners` | 新增的只读检查模式；原有的默认、`--json`、`--check-retired` 输出逐字节不变。 |
 | [checks/](checks/) | 本次实际输出，详见文末[复现与验证](#复现与验证)。 |
@@ -59,6 +63,7 @@ antd 的声明与锁定版本没有变化：`src/web/package.json` 的 declared 
     - `new`：P0.1 之后出现；
     - `changed`：P0.1 已有，多了 antd 符号或命中；
     - `reassigned`：P0.1 已有，原 owner 已完成或已拆分。
+    - `amended`（`2026-10-07d.json` 起）：重述已登记条目（`amends` 所指记录中的同一路径）的当前事实，owner 不变，`added` 相对该条目计算。它不是归属所必需，所以 `verify-record.mjs` 第 3 项（拿掉新增/改动或重新归属的条目后的反向对照）不适用。
   - 其余字段：`category`、`types`、`antdImports`、`hitKinds`（tip 上的事实），`added`（相对 P0.1 增加的部分），`introducedBy`，`p01Owner`，`owner`，`reason`；可选 `reviewPhase`、`action`、`pending`。
 - `css`：只针对 `src/web/src/index.css`，按命中**原文**对照，不用行号（P0.1 的行号规则见 `css-ownership.json` 的 `rule`）。字段有 `kind`、`text`、`count`、`lines`（tip 行号，仅供定位）、`status`、`type`、`introducedBy`、`p01Group`、`owner`、`reason`。
 - `introducedBy[]`：引入这处使用的提交，带 `commit`、`short`、`date`、`subject` 和 `line`。`line: "main"` 表示提交来自 main，由 “Merge refs/heads/main into refs/heads/project/…” 或任务分支内的 main 合并带进项目线。`line: "project"` 表示本迁移项目自己的提交（P0–P3 各批）。算法见 `build-record.py` 的 `project_line()`：沿项目分支 first-parent 走，main 吸收合并只算 main。

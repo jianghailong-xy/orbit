@@ -1,4 +1,5 @@
-import type { ProjectIntegrationInFlight, ProjectPromotionView } from '@orbit/shared';
+import type { ProjectIntegrationInFlight, ProjectLandTask, ProjectPromotionView } from '@orbit/shared';
+import { JOB_PHASES } from '../components/ProjectPanoramaHeader';
 import { sessionTimeSections, type GroupableSession } from './sessionGrouping';
 
 /**
@@ -132,8 +133,60 @@ export function promotionChecksSummary(promotion: ProjectPromotionView): { text:
   };
 }
 
-/** D's reason with its files: `2 files conflict with main: a.go, b.go`, three named at most. */
+/** The word the card prints before `promotionBlockedBy`'s sentence. */
+export const BLOCKED_BY = 'Blocked by';
+
+/**
+ * WHO IS IN FRONT OF THIS MERGE, when the project's own line is busy — the sentence that turns
+ * "Coordinator is resolving it" into an answer.
+ *
+ * A blocked candidate says why IT cannot merge (`promotionBlockedLine`); this says what the platform
+ * is doing about the branch until it can. The landings a project has in flight are the project's own
+ * read (`ProjectIntegrationView.landTasks`), and one of them is holding the line this merge has to
+ * go through — it targets either the branch the candidate merges FROM or the branch it merges INTO.
+ * Its `blockingReason` is the server's sentence about what holds THAT landing, and it names the job
+ * or the task in front of it, so the chain is read off two rows rather than inferred here: nothing
+ * in this function looks at a clock, a heartbeat or a task status.
+ *
+ * Null when the line is doing nothing on those branches: a card with nothing to name says nothing,
+ * rather than inventing a step to point at.
+ */
+export function promotionBlockedBy(
+  promotion: ProjectPromotionView,
+  landings: readonly ProjectLandTask[] | null | undefined,
+): string | null {
+  const sameBranch = (a: string, b: string): boolean => shortRef(a) === shortRef(b);
+  const holding = (landings ?? []).find((landing) => {
+    const job = landing.integration?.landTask;
+    if (!job || (job.state !== 'QUEUED' && job.state !== 'RUNNING')) return false;
+    return sameBranch(job.targetRef, promotion.sourceRef) || sameBranch(job.targetRef, promotion.upstreamRef);
+  });
+  const job = holding?.integration.landTask;
+  if (!holding || !job) return null;
+  const state = job.state === 'RUNNING'
+    ? (job.phase ? JOB_PHASES[job.phase] ?? 'running' : 'running')
+    : 'queued';
+  const parts = [
+    `“${holding.taskTitle}” is landing on the project line`,
+    state,
+    job.blockingReason?.summary ?? null,
+  ].filter((part): part is string => part !== null);
+  return parts.join(' · ');
+}
+
+/**
+ * D's reason with its files: `2 files conflict with main: a.go, b.go`, three named at most.
+ *
+ * The reason the job gave comes first (`blockedReason`, migration 0409): a candidate whose branch
+ * is already on main, and one whose job errored, are blocked with no checks and no conflicts, and
+ * reading those two arrays said a check had failed when none had run. A candidate blocked before the
+ * reason was recorded has none, and is read off the two arrays as it always was.
+ */
 export function promotionBlockedLine(promotion: ProjectPromotionView): string {
+  if (promotion.blockedReason === 'ALREADY_LANDED') {
+    return `nothing to merge — ${shortRef(promotion.sourceRef)} is already on ${shortRef(promotion.upstreamRef)}`;
+  }
+  if (promotion.blockedReason === 'ERROR') return 'the merge stopped on an error — no check failed';
   if (promotion.conflicts.length === 0) return 'the checks on the combined tree did not pass';
   const n = promotion.conflicts.length;
   const files = promotion.conflicts.slice(0, 3).join(', ');
@@ -168,8 +221,11 @@ export function moreTasks(more: number): string | null {
 
 export type PromotionEventTone = 'needsYou' | 'working' | 'blocked' | 'quiet';
 
-/** D's reason in a few words, for a line too short for the files. */
+/** D's reason in a few words, for a line too short for the files — the job's own reason first, as
+ *  in `promotionBlockedLine`. */
 export function promotionBlockedReason(promotion: ProjectPromotionView): string {
+  if (promotion.blockedReason === 'ALREADY_LANDED') return 'nothing to merge';
+  if (promotion.blockedReason === 'ERROR') return 'check errored';
   return promotion.conflicts.length > 0 ? `${plural(promotion.conflicts.length, 'file')} conflict` : 'checks failed';
 }
 

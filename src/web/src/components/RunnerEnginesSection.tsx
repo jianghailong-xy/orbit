@@ -1,12 +1,11 @@
 import { RightOutlined } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Button } from 'antd';
 import { Link } from 'react-router-dom';
 import { accountToStartOn, withEnginePlanUsage, type ReportedEngine, type RunnerEngineHealth } from '@orbit/shared';
 import { api } from '../api';
 import { accountNameOf, accountPlanUsage, engineKeepsAccounts, runsOnEnvKey } from '../lib/engineAccounts';
 import { encodeId } from '../lib/idCodec';
-import { bindingPlanUsageRow, currentPlanUsageRows, planUsageSnapshotForProvider } from '../lib/planUsage';
+import { bindingPlanUsageRow, currentPlanUsageRows, kimiNoQuotaLimit, planUsageSnapshotForProvider } from '../lib/planUsage';
 import { formatResetTime } from '../lib/providerPools';
 import { runnersQuery } from '../lib/queries';
 import {
@@ -15,6 +14,7 @@ import {
   RUNNER_ENGINES_OFFLINE_FOOTER,
   RUNNER_ENGINE_NOT_INSTALLED,
   RUNNER_ENGINE_NO_QUOTA,
+  RUNNER_ENGINE_NO_QUOTA_LIMIT,
   RUNNER_ENGINE_SIGNED_IN,
   RUNNER_ENGINE_SIGNED_OUT,
   runnerEngineAccountsSignedIn,
@@ -27,6 +27,7 @@ import { useToast } from '../lib/toast';
 import { ProviderTile } from './ProviderGallery';
 import { rowKindOf } from './RunnerEngines';
 import type { Runner } from './TasksSidePanel';
+import { Button } from './ui/Button';
 
 /** Where an engine's sign-in and accounts live: its card on Providers, opened at this engine. */
 export const engineSignInHref = (runnerId: string, engine: ReportedEngine) =>
@@ -52,7 +53,7 @@ export function useEngineUpdate(runnerId: string) {
  * every CLI on it. Providers is a page about identity, where every other control is scoped to a
  * (runner, engine) pair; the one runner-scoped button sat there next to the link that says
  * runner-scoped things are over here. The mismatch was visible in the output: the update summary
- * named OpenCode, which Providers deliberately has no row for.
+ * named every CLI the pass had touched, beside rows that are one engine each.
  *
  * So the split is by what an action changes. What's *available* — Install, Sign in — stays on
  * Providers, one › away on every row. What *version* is installed belongs to the machine, next to
@@ -278,7 +279,9 @@ function EngineLine({ runner, health }: { runner: Runner; health: RunnerEngineHe
             </div>
           ))
         ) : (
-          <span className="rd-engine-muted">{signedIn ? RUNNER_ENGINE_NO_QUOTA : '—'}</span>
+          <span className="rd-engine-muted">
+            {signedIn ? (kimiNoQuotaLimit(snapshot) ? RUNNER_ENGINE_NO_QUOTA_LIMIT : RUNNER_ENGINE_NO_QUOTA) : '—'}
+          </span>
         )}
       </div>
       <RightOutlined className="rd-engine-chevron" />

@@ -310,15 +310,22 @@ public struct ProjectIntegrationInFlight: Codable, Equatable, Sendable {
     /// What "for how long" counts from: the claim for a running job, the enqueue for a queued one.
     public let startedAt: String
     public let heartbeatAt: String?
+    /// How long the job waited for a runner before the claim, in ms — the other half of "how long is
+    /// this taking", since `startedAt` is the claim: a job that waited two and a half minutes and has
+    /// run for four is a different story from one running for six and a half. Nil on a server that
+    /// predates it and on a job still queued, whose whole clock IS that wait.
+    public let waitMs: Int?
 
     public init(taskTitle: String? = nil, state: String, startedAt: String,
-                kind: String? = nil, phase: String? = nil, heartbeatAt: String? = nil) {
+                kind: String? = nil, phase: String? = nil, heartbeatAt: String? = nil,
+                waitMs: Int? = nil) {
         self.taskTitle = taskTitle
         self.kind = kind
         self.phase = phase
         self.state = state
         self.startedAt = startedAt
         self.heartbeatAt = heartbeatAt
+        self.waitMs = waitMs
     }
 
     public init(from decoder: Decoder) throws {
@@ -329,6 +336,89 @@ public struct ProjectIntegrationInFlight: Codable, Equatable, Sendable {
         state = try c.decodeIfPresent(String.self, forKey: .state) ?? "QUEUED"
         startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt) ?? ""
         heartbeatAt = try c.decodeIfPresent(String.self, forKey: .heartbeatAt)
+        waitMs = try c.decodeIfPresent(Int.self, forKey: .waitMs)
+    }
+}
+
+/// One task's newest landing on the project's integration view (§2.7a, `landTasks`), as the
+/// project's own read publishes it.
+///
+/// Only the fields the project page draws: what the job is doing, which branch it is doing it on,
+/// and — when it is waiting — the server's sentence about what holds it. The task page's own read
+/// (`TaskDetailPage`) carries the rest of the landing there.
+public struct ProjectLandTask: Codable, Equatable, Sendable {
+    public let taskId: String
+    public let taskTitle: String
+    /// The task's newest `LAND_TASK`; nil for a task with none, which is most of them.
+    public let landTask: LandTaskIntegrationView?
+
+    public init(taskId: String, taskTitle: String, landTask: LandTaskIntegrationView? = nil) {
+        self.taskId = taskId
+        self.taskTitle = taskTitle
+        self.landTask = landTask
+    }
+
+    private enum Keys: String, CodingKey { case taskId, taskTitle, integration }
+    private enum IntegrationKeys: String, CodingKey { case landTask }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        taskId = try c.decode(String.self, forKey: .taskId)
+        taskTitle = try c.decodeIfPresent(String.self, forKey: .taskTitle) ?? ""
+        let integration = try? c.nestedContainer(keyedBy: IntegrationKeys.self, forKey: .integration)
+        landTask = try integration?.decodeIfPresent(LandTaskIntegrationView.self, forKey: .landTask)
+    }
+}
+
+/// A landing attempt, as its own job row says it — `state`, the runner's `phase`, the ref it was
+/// frozen against, and why it is waiting.
+public struct LandTaskIntegrationView: Codable, Equatable, Sendable {
+    public let jobId: String
+    public let state: String
+    /// The runner's step, or the one the attempt stopped at; nil before its first report.
+    public let phase: String?
+    /// The full ref the job froze at enqueue, e.g. `refs/heads/project/<id>`.
+    public let targetRef: String
+    public let blockingReason: LandTaskBlockingReason?
+
+    public init(jobId: String, state: String, phase: String? = nil, targetRef: String,
+                blockingReason: LandTaskBlockingReason? = nil) {
+        self.jobId = jobId
+        self.state = state
+        self.phase = phase
+        self.targetRef = targetRef
+        self.blockingReason = blockingReason
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        jobId = try c.decodeIfPresent(String.self, forKey: .jobId) ?? ""
+        state = try c.decodeIfPresent(String.self, forKey: .state) ?? "QUEUED"
+        phase = try c.decodeIfPresent(String.self, forKey: .phase)
+        targetRef = try c.decodeIfPresent(String.self, forKey: .targetRef) ?? ""
+        blockingReason = try c.decodeIfPresent(LandTaskBlockingReason.self, forKey: .blockingReason)
+    }
+}
+
+/// Why a landing is waiting, or why it stopped: the server's code and the one sentence it writes
+/// for it. Rendered as it arrives — a client never derives one of these from a task's status.
+public struct LandTaskBlockingReason: Codable, Equatable, Sendable {
+    public let code: String
+    public let summary: String
+    /// The job holding it: the running one for a serial wait, the conflicted one for a sync wait.
+    public let jobId: String?
+
+    public init(code: String, summary: String, jobId: String? = nil) {
+        self.code = code
+        self.summary = summary
+        self.jobId = jobId
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        code = try c.decodeIfPresent(String.self, forKey: .code) ?? ""
+        summary = try c.decodeIfPresent(String.self, forKey: .summary) ?? ""
+        jobId = try c.decodeIfPresent(String.self, forKey: .jobId)
     }
 }
 
@@ -437,6 +527,10 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
     /// The OLDEST job those two counts count, described; nil when there is none. What the Work
     /// overview card's live landing line is drawn from.
     public let inFlight: ProjectIntegrationInFlight?
+    /// Each of the project's current landings, newest attempt per task (§2.7a): what the line is
+    /// doing right now, and for a blocked promotion card, which of them is holding the branch.
+    /// Empty on a server that predates it.
+    public let landTasks: [ProjectLandTask]
     /// Every job the two counts count, in `inFlight`'s order — running first, then the queue oldest
     /// first — so the first is the job `inFlight` describes. What pressing the landing row lists.
     /// Nil from a server that predates it, which is not the same as none in flight.
@@ -447,7 +541,8 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
                 integratingCount: Int = 0, queuedCount: Int = 0, mergeCheckOnTip: String = "UNKNOWN",
                 inFlight: ProjectIntegrationInFlight? = nil, locked: Bool = false,
                 startedAt: String? = nil, mergeCheckCommand: String? = nil,
-                escalationSeconds: Int? = nil, inFlightJobs: [ProjectIntegrationJob]? = nil) {
+                escalationSeconds: Int? = nil, landTasks: [ProjectLandTask] = [],
+                inFlightJobs: [ProjectIntegrationJob]? = nil) {
         self.line = line
         self.ref = ref
         self.upstreamRef = upstreamRef
@@ -461,6 +556,7 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
         self.queuedCount = queuedCount
         self.mergeCheckOnTip = mergeCheckOnTip
         self.inFlight = inFlight
+        self.landTasks = landTasks
         self.inFlightJobs = inFlightJobs
     }
 
@@ -479,6 +575,7 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
         queuedCount = try c.decodeIfPresent(Int.self, forKey: .queuedCount) ?? 0
         mergeCheckOnTip = try c.decodeIfPresent(String.self, forKey: .mergeCheckOnTip) ?? "UNKNOWN"
         inFlight = try c.decodeIfPresent(ProjectIntegrationInFlight.self, forKey: .inFlight)
+        landTasks = try c.decodeIfPresent([ProjectLandTask].self, forKey: .landTasks) ?? []
         // A list this build cannot read is an older server's absence, not a failed integration
         // read: the landing row and How it runs still draw from the rest.
         inFlightJobs = try? c.decodeIfPresent([ProjectIntegrationJob].self, forKey: .inFlightJobs)
