@@ -92,6 +92,11 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
     val repair = if (event.type == "error" || event.type == "assistant") AntigravityRepair.of(shown.body().trim())?.takeIf { console?.executesAntigravity == true } else null
     Column(Modifier.fillMaxWidth().background(bg).padding(10.dp).testTag(row.key), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (repair != null && console != null) { AntigravityRepairCard(repair, console); return@Column }
+        if (event.type == "auto_retry" && console != null) {
+            AutoRetryCard(AutoRetryNotice(shown.body(), shown.fields.string("variant") == "quota", shown.fields["stale"] == JsonPrimitive(true),
+                shown.fields["afterUserMsg"] == JsonPrimitive(true)), console)
+            return@Column
+        }
         if (!detailOnly) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text(title, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.labelMedium)
             // A workflow's agents done out of all, an agent's tool calls.

@@ -89,8 +89,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val worktree = remember(handle, route.id) { WorktreeModel(api, route.id!!, app.processScope) }
     // What the conversation's repair cards act through: the session's freshest detail, its runner, the composer (A07-4).
     val latestOpen by rememberUpdatedState(open)
-    val console = remember(handle, route.id) { SessionConsole(app, handle, composer, app.processScope) { runner, engine ->
-        latestOpen(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) } }
+    val console = remember(handle, route.id) { SessionConsole(app, handle, route.id!!, composer, app.processScope, reloadDetail = { worktree.loadDetail() },
+        openRunner = { runner, engine -> latestOpen(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) },
+        openSession = { latestOpen(OrbitRoute(Destination.SESSION, it)) }) }
     val list = rememberLazyListState()
     var follow by rememberSaveable { mutableStateOf(route.recordId == null) }
     var placed by remember(model) { mutableStateOf(false) }
@@ -163,6 +164,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     LaunchedEffect(snapshotDetail) { snapshotDetail?.let(worktree::offer) }
     val worktreeState by worktree.state.collectAsState()
     LaunchedEffect(worktreeState.detail, snapshotDetail) { console.detail = worktreeState.detail ?: snapshotDetail }
+    // What a Retry re-sends when it is the reader's: the newest message of a person the window holds.
+    LaunchedEffect(rows) { console.lastUser = rows.lastOrNull { it.event.type == "user" && it.event.personWords().isNotBlank() }?.event }
     // An Antigravity failure said here is read against the runner and the providers, once, when it first appears.
     val antigravityFailure = remember(rows, snapshotDetail) {
         rows.any { it.event.type in setOf("error", "assistant") && AntigravityRepair.of(it.event.body().trim()) != null } ||

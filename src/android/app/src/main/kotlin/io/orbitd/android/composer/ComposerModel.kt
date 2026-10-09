@@ -168,6 +168,25 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
             } finally { mutable.update { it.copy(busy = false, waiting = false) } }
         }
     }
+    /** A message the box never held — the auto-retry card's Continue (A07-12) — sent as anything typed is: written to the outbox
+     * before the POST, replayed under the same clientTurnId, and handed back to the box only if the server refuses it. */
+    suspend fun sendMessage(text: String) {
+        if (!state.value.loaded || state.value.busy || state.value.waiting || state.value.draft.pending != null || target != null) return
+        mutable.update { it.copy(busy = true, error = null, notice = null) }
+        try {
+            val endpoint = sendEndpoint(api.detail())
+            val config = state.value.draft.resumeConfig
+            val id = UUID.randomUUID().toString()
+            val body = buildJsonObject {
+                if (endpoint == "resume") { config.filterKeys { it != "account" }.forEach { (k, v) -> put(k, v) }; config["account"]?.let { put("account", it) } }
+                put("clientTurnId", id); put("content", text); put("kind", "message"); putJsonArray("attachmentIds") {}
+            }
+            val pending = PendingSend(id, endpoint, body, text)
+            mutable.update { it.copy(draft = it.draft.copy(pending = pending)) }
+            try { persist() } catch (e: Exception) { mutable.update { it.copy(draft = it.draft.copy(pending = null)) }; throw e }
+            transmit(pending, firstAttempt = true)
+        } finally { mutable.update { it.copy(busy = false) } }
+    }
     fun retrySend() {
         if (state.value.busy || state.value.waiting) return
         if (state.value.acknowledgementPending) {
