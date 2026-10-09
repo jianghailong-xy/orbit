@@ -32,7 +32,26 @@ internal object ProjectShell {
     /** The status the project-scoped session reads answer with, instead of their rows (Quiet's failure case). */
     @Volatile var quietStatus = 200
 
-    fun reset() { calls.clear(); started = true; startRequest = false; quietStatus = 200 }
+    // A11-9: Launch's merge into main. Off by default, which answers as the server does for a project asking nothing.
+    /** The candidate `promotions/current` answers, or null for none (an empty body). */
+    @Volatile var promotion: String? = null
+    /** The merges `promotions/merged` lists. */
+    @Volatile var merged = "[]"
+    /** Whether the landing in flight is the merge check (CHECK_PROMOTION) rather than a task landing on the branch. */
+    @Volatile var mergeCheck = false
+    /** An open item that holds the candidate, as `open-items` lists it. */
+    @Volatile var holder: String? = null
+    /** Launch's acceptance criteria, as its document carries them. */
+    @Volatile var criteria: String? = null
+    /** What the three merge presses answer: 200 moves the candidate on, anything else refuses with the server's sentence. */
+    @Volatile var pressStatus = 200
+    /** Every write's body, by `METHOD path`. */
+    val bodies = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    fun reset() {
+        calls.clear(); started = true; startRequest = false; quietStatus = 200
+        promotion = null; merged = "[]"; mergeCheck = false; holder = null; criteria = null; pressStatus = 200; bodies.clear()
+    }
 
     private fun ago(minutes: Long) = Instant.now().minusSeconds(minutes * 60).toString()
     private val workspaces = """[
@@ -46,7 +65,8 @@ internal object ProjectShell {
             "agentId":"$workspace","createdAt":"${ago(600)}","lastTurnAt":"$lastTurnAt","pendingApprovals":$approvals,"tags":[],
             "capabilities":{"canComplete":${lifecycle == "OPEN"},"canRestore":${lifecycle != "OPEN"}}$extra}"""
     private fun session(id: String) = when (id) {
-        COORD -> row(COORD, "Coordinate launch", ALPHA, "AWAITING_INPUT", ""","lastAssistantText":"Planning the release",${member("COORDINATOR")}""", lastTurnAt = ago(30))
+        COORD -> row(COORD, "Coordinate launch", ALPHA, "AWAITING_INPUT", ""","lastAssistantText":"Planning the release","projectId":"$LAUNCH",${member("COORDINATOR")}""",
+            lastTurnAt = ago(30))
         WORKER -> row(WORKER, "Wire tests", ALPHA, "RUNNING", ""","lastToolUse":"Bash",${member("TASK")}""", lastTurnAt = ago(2))
         WAITING -> row(WAITING, "Quota retry", BETA, "AWAITING_INPUT", ""","waitingKind":"OWNER_CONFIRMATION",${member("TASK")}""", lastTurnAt = ago(10), approvals = 1)
         PLAIN -> row(PLAIN, "Plain notes", ALPHA, "AWAITING_INPUT", ""","lastAssistantText":"Notes kept"""")
@@ -59,11 +79,22 @@ internal object ProjectShell {
         "startedAt":${if (started) "\"2026-10-02T00:00:00Z\"" else "null"}},
         {"id":"$QUIET","title":"Quiet","status":"OPEN","createdAt":"2026-10-01T00:00:00Z","buckets":{},"attention":{},"startedAt":"2026-10-02T00:00:00Z"}]"""
     private val integration get() = """{"line":"PROJECT_BRANCH","ref":"project/launch","integratingCount":1,"queuedCount":0,
-        "inFlight":{"kind":"LAND_TASK","state":"RUNNING","phase":"CHECK","taskTitle":"Wire the page","startedAt":"${ago(3)}","heartbeatAt":"${ago(0)}"}}"""
-    private val openItems get() = if (!startRequest) """{"needsYou":[],"withCoordinator":[]}""" else """{"needsYou":[],"withCoordinator":[],
+        "inFlight":${if (mergeCheck) """{"kind":"CHECK_PROMOTION","state":"RUNNING","phase":"CHECK","startedAt":"${ago(7)}","heartbeatAt":"${ago(0)}"}"""
+            else """{"kind":"LAND_TASK","state":"RUNNING","phase":"CHECK","taskTitle":"Wire the page","startedAt":"${ago(3)}","heartbeatAt":"${ago(0)}"}"""}}"""
+    private val openItems get() = if (!startRequest) """{"needsYou":[],"withCoordinator":[${holder.orEmpty()}]}""" else """{"needsYou":[],"withCoordinator":[],
         "startRequest":{"itemId":"start-1","waitingSince":"${ago(130)}","startRequest":{"criteriaDigest":"digest-1","why":"Everything is filed.",
         "settings":{"line":"PROJECT_BRANCH","automatic":true,"maxConcurrentTasks":3,"mergeCheckCommand":null,"projectBranchName":"project/launch"}}}}"""
-    private val project = """{"id":"$LAUNCH","title":"Launch","status":"OPEN","goal":"Ship it.","createdAt":"2026-10-01T00:00:00Z","_count":{"tasks":8}}"""
+    private val project get() = """{"id":"$LAUNCH","title":"Launch","status":"OPEN","goal":"Ship it.","createdAt":"2026-10-01T00:00:00Z","_count":{"tasks":8}${
+        criteria?.let { ""","acceptanceCriteriaItems":$it""" }.orEmpty()}}"""
+
+    /** A press on Launch's candidate: the door's answer is the candidate in its next state, or the server's refusal. */
+    private fun press(door: String): ApiResponse {
+        if (pressStatus != 200) return ApiResponse(pressStatus, """{"message":"The candidate moved on","code":"PROMOTION_MOVED_ON"}""".encodeToByteArray())
+        val now = promotion ?: return ApiResponse(404, """{"message":"No such candidate"}""".encodeToByteArray())
+        val next = when (door) { "confirm" -> "CONFIRMED"; "decline" -> "DECLINED"; else -> "CANCELLED" }
+        promotion = now.replace(Regex("\"state\":\"[A-Z]+\""), "\"state\":\"$next\"")
+        return ok(promotion!!)
+    }
 
     private fun ok(body: String) = ApiResponse(200, body.encodeToByteArray())
 
@@ -74,6 +105,7 @@ internal object ProjectShell {
         if (path == "auth/login") return@HttpTransport ok("""{"accessToken":"a05d-access","refreshToken":"a05d-refresh","user":{"id":"u1","email":"owner@a05d.test","name":"Owner"}}""")
         val query = api.query.joinToString("&") { (k, v) -> "$k=$v" }
         calls += "$method $path" + if (query.isEmpty()) "" else "?$query"
+        api.body?.let { bodies["$method $path"] = it.decodeToString() }
         val view = api.query.firstOrNull { it.first == "view" }?.second ?: "open"
         val scoped = api.query.firstOrNull { it.first == "projectId" }?.second?.let { id -> ids.firstOrNull { ObjectId.same(it, id) } }
         when {
@@ -90,6 +122,9 @@ internal object ProjectShell {
             path == "projects/$LAUNCH" -> ok(project)
             path == "projects/$LAUNCH/integration" -> ok(integration)
             path == "projects/$LAUNCH/open-items" -> ok(openItems)
+            path == "projects/$LAUNCH/promotions/current" -> promotion?.let(::ok) ?: ApiResponse(200, ByteArray(0))
+            path == "projects/$LAUNCH/promotions/merged" -> ok(merged)
+            method == "POST" && path.startsWith("projects/$LAUNCH/promotions/") -> press(path.substringAfterLast('/'))
             path.startsWith("projects/") -> ok("{}")
             path.startsWith("wiki/") -> ApiResponse(404, """{"code":"WIKI_DISABLED","message":"The wiki is off."}""".encodeToByteArray())
             method == "GET" -> ok("[]")
