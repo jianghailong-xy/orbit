@@ -1,16 +1,18 @@
-import { useNavigate } from 'react-router-dom';
-import { useRef, type ReactNode } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { DeleteOutlined, EditOutlined } from '@ant-design/icons';
+import { DeleteOutlined, DownOutlined, EditOutlined } from '@ant-design/icons';
 import { api } from '../api';
 import { isLoginPool } from '../lib/codexLogin';
 import { routeId } from '../lib/idCodec';
-import { providersQuery, runnersQuery } from '../lib/queries';
+import { providersQuery, publishedRunnerVersionQuery, runnersQuery, workspacesQuery } from '../lib/queries';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { poolEligibleCount, poolRefusals, providerPoolsQuery } from '../lib/providerPools';
+import { latestRunnerVersion, runnerAttention, type AttentionWorkspace } from '../lib/runnerAttention';
 import { providerDisplayLabel } from '../lib/sessionProviderChoices';
 import { ownPoolWithAccess, poolAccessQuery, sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
-import { AccountPools, PoolHint } from '../components/AccountPools';
+import { AccountPools, NewPoolModal, PoolHint } from '../components/AccountPools';
+import { EngineOverview, NeedsAttention } from '../components/InfrastructureOverview';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
 import { RunnerEngines } from '../components/RunnerEngines';
 import { DshRunnerStatus } from '../components/DshRunnerStatus';
@@ -18,6 +20,7 @@ import { DeepSeekBalanceLine } from '../components/DeepSeekBalance';
 import { hasDeepSeekBalance } from '../lib/deepseekBalance';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
+import { Menu, type MenuItem } from '../components/ui/Menu';
 import { Popconfirm } from '../components/ui/Popconfirm';
 import { TableEmptyRow, TableFrame } from '../components/ui/Table';
 import { useIsMobile, useMediaQuery } from '../lib/useMediaQuery';
@@ -38,31 +41,59 @@ interface KeyColumn {
 const WIDE_KEYS_QUERY = '(min-width: 768px)';
 
 /**
- * Where a workspace's model comes from — two kinds of identity, in the order a new user has them.
+ * Where the user's agents run, and whose model quota they spend — what the Runners and Providers
+ * pages used to split between them, on one page (docs/mocks/infrastructure-page).
  *
- * First the engines signed in on their own machines (RunnerEngines): those spend the subscription
- * signed into that runner and need nothing pasted, which is what most sessions actually run on.
- * Then their personal (BYOK) providers — an API key on the account, usable from every runner and
- * billed per token. Adding or editing one of those happens on its own page (ProviderConnectPage),
- * so a vendor's setup stays deep-linkable.
+ * At the top, what needs a person and what each engine can run on (NeedsAttention, EngineOverview),
+ * read from the lists the sections below show.
  *
- * Between the two, the account pools (AccountPools): several of those keys' Claude subscriptions
- * dispatched under one name, and the shared pools the user is in — several people's OpenAI keys under
- * one name. Its head makes a new one of either kind. Before there is an account pool, the keys list
- * also opens with the offer to make one — but only when at least two keys could join, since a pool of
- * one is the key.
+ * Then the machines (RunnerEngines), each with the engines signed in on it: a subscription there is
+ * spent only by sessions on that machine and needs nothing pasted, which is what most sessions
+ * actually run on. Each card is also where its machine is renamed, reordered and deleted.
+ *
+ * Then the API keys on the account — usable from every machine and billed per token. Adding or
+ * editing one happens on its own page (ProviderConnectPage), so a vendor's setup stays deep-linkable.
+ * Before there is an account pool, the list opens with the offer to make one — but only when at least
+ * two keys could join, since a pool of one is the key.
+ *
+ * Last the account pools (AccountPools): several of those keys' Claude subscriptions dispatched under
+ * one name, a Codex pool of the user's ChatGPT accounts, and the shared pools they are in.
+ *
+ * The head's Add makes any of the three. `/runners` and `/providers` land here (App.tsx), and
+ * `#keys` / `#pools` bring that section into view.
  */
-export function ProvidersPage() {
+export function InfrastructurePage() {
   const message = useToast();
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const { hash } = useLocation();
   const isMobile = useIsMobile();
   const wide = useMediaQuery(WIDE_KEYS_QUERY);
-  const runnerSection = useRef<HTMLDivElement>(null);
+  const machineSection = useRef<HTMLDivElement>(null);
+  const keySection = useRef<HTMLDivElement>(null);
+  const poolSection = useRef<HTMLDivElement>(null);
   const runners = useQuery(runnersQuery());
-  const geminiReady = ((runners.data ?? []) as Runner[]).filter(
-    (runner) => runner.online && runner.antigravity?.supported && runner.antigravity.installed === true,
+  const machines = (runners.data ?? []) as Runner[];
+  const online = machines.filter((runner) => runner.online);
+  const busySlots = online.reduce((n, runner) => n + (runner.activeSessions ?? 0), 0);
+  const allSlots = online.reduce((n, runner) => n + (runner.maxConcurrent ?? 0), 0);
+  const geminiReady = online.filter(
+    (runner) => runner.antigravity?.supported && runner.antigravity.installed === true,
   ).length;
+  // What each machine's card says it needs a person for: read from the machine's workspaces, and the
+  // newest release anyone can see.
+  const workspaces = (useQuery(workspacesQuery()).data ?? []) as Array<
+    AttentionWorkspace & { runnerId?: string | null }
+  >;
+  const latestVersion = latestRunnerVersion(useQuery(publishedRunnerVersionQuery()).data, machines);
+  const nowMs = Date.now();
+  const attentionOf = (runner: Runner) =>
+    runnerAttention({
+      runner,
+      workspaces: workspaces.filter((workspace) => workspace.runnerId === runner.id),
+      nowMs,
+      latestVersion,
+    });
   const providers = useQuery({ queryKey: PROVIDERS_LIST_KEY, queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE) });
   // Which account is busy moves with sessions, not with provider edits, so nothing pushes it: read
   // again while the page is open.
@@ -84,6 +115,18 @@ export function ProvidersPage() {
   ];
   const eligible = poolEligibleCount(providers.data ?? []);
   const refusals = poolRefusals(providers.data ?? []);
+  const [creatingPool, setCreatingPool] = useState(false);
+  // What needs attention and what each engine can run on are read from every list on the page, so
+  // they wait for all of them: an engine called Not set up before its keys arrived would be wrong.
+  const settled = !runners.isPending && !providers.isPending && !pools.isPending && !shared.isPending;
+
+  // A section named in the address comes into view once everything above it has its height — the
+  // top of the page included, which is read from the pools too.
+  const target = hash === '#keys' ? keySection : hash === '#pools' ? poolSection : null;
+  const arrived = target !== null && settled;
+  useEffect(() => {
+    if (arrived) target?.current?.scrollIntoView({ block: 'start' });
+  }, [arrived, target]);
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => api(`${PROVIDERS_BASE}/${id}`, { method: 'DELETE' }),
@@ -96,6 +139,42 @@ export function ProvidersPage() {
     },
     onError: (e: Error) => message.error("Couldn't delete the provider", e.message),
   });
+
+  const addItems: MenuItem[] = [
+    {
+      key: 'machine',
+      textValue: 'Register a machine',
+      label: (
+        <span className="infra-add">
+          <b>Register a machine</b>
+          <span>Run agents on a computer you own, on its subscriptions</span>
+        </span>
+      ),
+      onSelect: () => navigate('/runners/register'),
+    },
+    {
+      key: 'key',
+      textValue: 'Connect an API key',
+      label: (
+        <span className="infra-add">
+          <b>Connect an API key</b>
+          <span>Usable from every machine, billed per token</span>
+        </span>
+      ),
+      onSelect: () => navigate('/providers/new'),
+    },
+    {
+      key: 'pool',
+      textValue: 'New account pool',
+      label: (
+        <span className="infra-add">
+          <b>New account pool</b>
+          <span>Several accounts behind one name</span>
+        </span>
+      ),
+      onSelect: () => setCreatingPool(true),
+    },
+  ];
 
   const columns: KeyColumn[] = [
     {
@@ -113,18 +192,18 @@ export function ProvidersPage() {
                 <div>Runs on the Antigravity CLI</div>
                 <div>
                   <span style={geminiReady === 0 ? { color: 'var(--warning)' } : undefined}>
-                    {geminiReady === 0 ? 'Not ready on any runner' : `Ready on ${geminiReady} runner${geminiReady === 1 ? '' : 's'}`}
+                    {geminiReady === 0 ? 'Not ready on any machine' : `Ready on ${geminiReady} machine${geminiReady === 1 ? '' : 's'}`}
                   </span>{' '}
-                  <a className="re-link" href="#provider-runners" onClick={(event) => {
+                  <a className="re-link" href="#machines" onClick={(event) => {
                     event.preventDefault();
-                    runnerSection.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    machineSection.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                   }}>
-                    See runners ↑
+                    See machines ↑
                   </a>
                 </div>
               </div>
             )}
-            {p.runtime === 'dsh' && <DshRunnerStatus runners={(runners.data ?? []) as Runner[]} />}
+            {p.runtime === 'dsh' && <DshRunnerStatus runners={machines} />}
             {p.runtime === 'claude' && p.presetSlug === 'deepseek' && (
               <div className="prov-runtime">
                 <div>Runs on Claude Code</div>
@@ -150,7 +229,7 @@ export function ProvidersPage() {
     // page, and its long URL is exactly what pushes the table past the viewport.
     ...(wide
       ? [
-          { key: 'models', title: 'Models', width: 70, cell: (p: ProviderRow) => (p.models?.length ? `${p.models.length}` : '—') },
+          { key: 'models', title: 'Models', width: 96, cell: (p: ProviderRow) => (p.models?.length ? `${p.models.length}` : '—') },
           { key: 'baseUrl', title: 'Endpoint', width: 200, cell: (p: ProviderRow) => <code className="prov-endpoint">{p.baseUrl}</code> },
           {
             key: 'enabled',
@@ -240,57 +319,91 @@ export function ProvidersPage() {
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
       <div className="prov-page-head">
         <h1 className="page-title" style={{ marginBottom: 0 }}>
-          Providers
+          Infrastructure
         </h1>
-        {/* Still only about keys: an engine gets its identity from the Sign in on its own row. */}
-        <Button variant="primary" onClick={() => navigate('/providers/new')}>
-          Add provider
-        </Button>
+        <Menu
+          align="end"
+          items={addItems}
+          trigger={
+            <Button variant="primary">
+              Add <DownOutlined />
+            </Button>
+          }
+        />
         <div className="prov-page-sub">
-          Where your workspaces&apos; models come from — the CLIs signed in on your machines, and the
-          API keys on your account.
+          Where your agents run, and whose model quota they spend.
         </div>
       </div>
 
-      <div ref={runnerSection} id="provider-runners"><RunnerEngines /></div>
+      {settled && (
+        <>
+          <NeedsAttention runners={machines} pools={poolList} />
+          <EngineOverview runners={machines} keys={providers.data ?? []} pools={poolList} />
+        </>
+      )}
+
+      <div ref={machineSection} id="machines">
+        <RunnerEngines
+          attentionOf={attentionOf}
+          head={
+            <div className="re-sec-head">
+              <h3>Machines</h3>
+              <span className="re-sec-sub">
+                Subscriptions signed in here are spent only by sessions on that machine.
+              </span>
+              {machines.length > 0 && (
+                <span className="re-sec-count">
+                  {machines.length} machine{machines.length === 1 ? '' : 's'} · {busySlots} / {allSlots} slots busy
+                </span>
+              )}
+            </div>
+          }
+        />
+      </div>
+
+      <div ref={keySection} id="keys">
+        <div className="re-sec-head" style={{ marginTop: 28 }}>
+          <h3>API keys</h3>
+          <span className="re-sec-sub">
+            On your account and usable from every machine — billed per token.
+          </span>
+        </div>
+
+        {pools.isSuccess && pools.data.length === 0 && eligible >= 2 && (
+          <PoolHint rows={providers.data ?? []} eligible={eligible} />
+        )}
+
+        {providers.isLoading ? (
+          keysTable([], true)
+        ) : (providers.data?.length ?? 0) === 0 ? (
+          <div className="provider-empty">
+            <h3>No keys yet</h3>
+            <p>Pick a provider and paste your API key — or skip it and sign a machine in above.</p>
+            <ProviderGallery />
+          </div>
+        ) : (
+          <>
+            {keysTable(providers.data ?? [])}
+            {/* The gallery stays on the page once the list isn't empty: it's how another vendor gets
+                connected, and it's where "which of these do I already have?" gets answered. */}
+            <div className="provider-more">
+              <h3>Connect another provider</h3>
+              <ProviderGallery />
+            </div>
+          </>
+        )}
+      </div>
 
       {/* A pool that exists is always shown, whatever its keys have since become: hiding it would
           leave sessions dispatching to something the page no longer lets you see or delete. The
           section stands with none too: its head is where a pool is made. */}
-      {!pools.isPending && !shared.isPending && (
-        <AccountPools pools={poolList} refusals={refusals} rows={providers.data ?? []} />
-      )}
-
-      <div className="re-sec-head" style={{ marginTop: 28 }}>
-        <h3>Your API keys</h3>
-        <span className="re-sec-sub">
-          On your account and usable from every runner — billed per token.
-        </span>
+      <div ref={poolSection} id="pools">
+        {!pools.isPending && !shared.isPending && (
+          <AccountPools pools={poolList} refusals={refusals} rows={providers.data ?? []} />
+        )}
       </div>
 
-      {pools.isSuccess && pools.data.length === 0 && eligible >= 2 && (
-        <PoolHint rows={providers.data ?? []} eligible={eligible} />
-      )}
-
-      {providers.isLoading ? (
-        keysTable([], true)
-      ) : (providers.data?.length ?? 0) === 0 ? (
-        <div className="provider-empty">
-          <h3>No keys yet</h3>
-          <p>Pick a provider and paste your API key — or skip it and sign a runner in above.</p>
-          <ProviderGallery />
-        </div>
-      ) : (
-        <>
-          {keysTable(providers.data ?? [])}
-          {/* The gallery stays on the page once the list isn't empty: it's how another vendor gets
-              connected, and it's where "which of these do I already have?" gets answered. */}
-          <div className="provider-more">
-            <h3>Connect another provider</h3>
-            <ProviderGallery />
-          </div>
-        </>
-      )}
+      {creatingPool && <NewPoolModal rows={providers.data ?? []} onClose={() => setCreatingPool(false)} />}
     </div>
   );
 }

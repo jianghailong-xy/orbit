@@ -7,8 +7,8 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProviderBalance } from '@orbit/shared';
 import { api } from '../api';
+import { InfrastructurePage } from '../pages/InfrastructurePage';
 import { ProviderConnectPage } from '../pages/ProviderConnectPage';
-import { ProvidersPage } from '../pages/ProvidersPage';
 import { deepseekBalanceKey } from '../lib/deepseekBalance';
 import { PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { DeepSeekBalanceLine, DeepSeekBalanceSection } from './DeepSeekBalance';
@@ -130,7 +130,7 @@ describe('the DeepSeek account balance', () => {
   };
   const balanceRequests = () => apiMock.mock.calls.map(([path]) => path as string).filter((path) => path.includes('/balance'));
 
-  describe('the line under a DeepSeek row on the Providers list', () => {
+  describe('the line under a DeepSeek row on Infrastructure’s API keys', () => {
     it('says it is checking until the server answers — with no number in the meantime', async () => {
       await show(<DeepSeekBalanceLine row={row()} />);
       expect(text()).toBe('Checking account balance…');
@@ -303,7 +303,7 @@ describe('the DeepSeek account balance', () => {
       row({ id: 'proxy', slug: 'proxy', label: 'Proxy', presetSlug: null, baseUrl: 'https://llm-proxy.example.com/v1' }),
     ];
 
-    it('the Providers list gives every DeepSeek key a balance line — and the same balance to keys that share it', async () => {
+    it('Infrastructure’s API keys give every DeepSeek key a balance line — and the same balance to keys that share it', async () => {
       const shared = ok();
       answers.ds = async () => shared;
       answers.dsh = async () => shared;
@@ -312,7 +312,7 @@ describe('the DeepSeek account balance', () => {
       client.setQueryData(PROVIDERS_LIST_KEY, [row(), harness, ...others]);
       client.setQueryData(['providers', 'pools'], []);
       client.setQueryData(['providers', 'shared-pools'], []);
-      await show(<ProvidersPage />);
+      await show(<InfrastructurePage />);
       const lineOf = (name: string) =>
         [...container.querySelectorAll('tr')]
           .find((tr) => tr.querySelector('.prov-cell-name')?.textContent === name)

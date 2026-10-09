@@ -35,7 +35,7 @@ import { Switch } from './ui/Switch';
 
 /**
  * What a Codex pool's people and its API keys (organization/project OpenAI API keys several people run
- * Codex on) add to the pool page and the Providers page: who can use it and how it is shared, and the
+ * Codex on) add to the pool page and Infrastructure: who can use it and how it is shared, and the
  * ways a key goes in — "Add a key", and "Replace key" for one OpenAI refused. The key a person pastes goes
  * to the server once and is never shown again: from then on it is `sk-…` and its last four characters.
  */
@@ -182,7 +182,7 @@ export function WhoCanUseItCard({
           />
           <span className="who-mode-h">
             {people
-              ? `They see ${pool.label} on their Providers page and in the session picker.`
+              ? `They see ${pool.label} on their Infrastructure page and in the session picker.`
               : 'Nobody else in Orbit sees this pool or its accounts.'}
           </span>
         </div>
@@ -507,7 +507,7 @@ function SharePoolModal({
         <>
           <ul className="pa-facts">
             <li>
-              <b>They see {pool.label}</b> on their Providers page and in the session picker, and can start
+              <b>They see {pool.label}</b> on their Infrastructure page and in the session picker, and can start
               sessions on it.
             </li>
             <li>

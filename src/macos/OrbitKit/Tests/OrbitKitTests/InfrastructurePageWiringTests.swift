@@ -1,14 +1,15 @@
 import Foundation
 import XCTest
 
-/// SwiftUI doesn't exist on Linux, so nothing here compiles the app shells. These hold the Runners
-/// list and a runner's pages to the effect mocks they were built from (ios-list.png, ios-detail.png)
-/// by reading the source they now *are*: a row whose label is the label colour and which pushes by
-/// hand, Add Runner wired under the rows, the page's sections in the mocks' order, the engine
-/// and name pages one push away on whichever stack the record rides — and every word and rule taken
-/// from OrbitKit (`RunnerAttention`, `RunnerPageCopy`, `RunnerPageFormat`), where it is tested.
-/// Each check reads the slice of the file it is about, so a match somewhere else can't pass it.
-final class RunnersPageWiringTests: XCTestCase {
+/// SwiftUI doesn't exist on Linux, so nothing here compiles the app shells. These hold the
+/// Infrastructure page and a machine's pages to the effect mocks they were built from
+/// (docs/mocks/infrastructure-page/03-ios.png, ios-detail.png) by reading the source they now *are*:
+/// the page's blocks in the mock's order, a row whose label is the label colour and which pushes by
+/// hand, Add Runner wired under the rows, the record's sections in the mocks' order, the engine and
+/// name pages one push away on whichever stack the record rides — and every word and rule taken from
+/// OrbitKit (`Infrastructure`, `RunnerAttention`, `RunnerPageCopy`, `RunnerPageFormat`), where it is
+/// tested. Each check reads the slice of the file it is about, so a match somewhere else can't pass it.
+final class InfrastructurePageWiringTests: XCTestCase {
     private struct SourceMissing: Error, CustomStringConvertible {
         let path: String
         var description: String {
@@ -61,20 +62,98 @@ final class RunnersPageWiringTests: XCTestCase {
     }
 
     private static let runnersFile = "Views/SkillsRunnersView.swift"
-    /// Every file a runner's list and pages are drawn from.
-    private static let pageFiles = [runnersFile, "Views/RunnerPageParts.swift", "Views/RunnerEnginePage.swift",
-                                    "Views/RunnerNamePage.swift", "Views/AddRunnerSheet.swift"]
+    private static let sectionsFile = "Views/InfrastructureSections.swift"
+    /// Every file the Infrastructure page and a machine's pages are drawn from.
+    private static let pageFiles = [runnersFile, sectionsFile, "Views/RunnerPageParts.swift",
+                                    "Views/RunnerEnginePage.swift", "Views/RunnerNamePage.swift",
+                                    "Views/AddRunnerSheet.swift"]
 
     private func runners() throws -> String { try appSource(Self.runnersFile) }
 
-    /// Settings' runners list, and the Runners section's pushing row.
+    /// The Infrastructure page: the section's list on every shell, and Settings' page on a phone.
     private func lists() throws -> [(name: String, code: String)] {
         let text = try runners()
         return [
-            ("Settings' list", code(try slice(text, from: "struct RunnersSettingsList: View {",
-                                               to: "/// How a `RunnersModel` list shows its load outcome"))),
-            ("the Runners section", code(try slice(text, from: "struct RunnersListView: View {", to: "#if os(iOS)"))),
+            ("the Infrastructure page", code(try slice(text, from: "struct RunnersListView: View {",
+                                                       to: "/// How a `RunnersModel` list shows its load outcome"))),
         ]
+    }
+
+    // MARK: the page (03-ios.png)
+
+    /// Top to bottom: Needs you — only while something does — and what each engine can run on, both once
+    /// every list has answered; the machines, Add Runner, the account pools, the API keys. Its title is
+    /// the section's, and it reads each of its lists side by side.
+    func testThePageHoldsTheMocksBlocksInOrder() throws {
+        let page = try XCTUnwrap(try lists().first?.code)
+        let body = try slice(page, from: "List(selection:", to: ".orbitRevealSurface()")
+        try assertInOrder(body, ["if lists.settled {", "if !attention.isEmpty {", "InfrastructureNeedsYouSection(",
+                                 "InfrastructureEnginesSection(engines: lists.engines, install: install)",
+                                 "ForEach(runners.runners)", "RunnerSectionHeader(Infrastructure.machines,",
+                                 "Text(Infrastructure.machinesDetail)", "RunnerAddSection { addingRunner = true }",
+                                 "InfrastructurePoolsSection(memberPools: lists.memberPools, ownPools: lists.ownPools,",
+                                 "InfrastructureKeysSection(keys: lists.keys, balances: model.agents?.deepSeekBalances ?? [:],"],
+                          "the page's blocks")
+        XCTAssertTrue(page.contains(".navigationTitle(AppSection.runners.title)"))
+        // The machines are read again while the page is up, so a row's Offline and its "N / M running"
+        // never come from two different reads' worth of time.
+        try assertInOrder(page, ["await runners.load()", "while !Task.isCancelled {",
+                                 "try? await Task.sleep(for: .seconds(15))", "await runners.load()"],
+                          "the page's machines, read again while it is up")
+        for read in [".task { await self.model.agents?.reloadPools() }",
+                     ".task { await self.model.agents?.loadOwnKeys() }", ".task { await self.model.sharedPools?.load() }",
+                     "await self.model.sharedPools?.loadAccess(id)",
+                     // A DeepSeek key's row ends with its account's balance (936ebbd3c's Providers rows).
+                     ".task { await self.model.agents?.loadDeepSeekBalances() }"] {
+            XCTAssertTrue(page.contains(read), "the page reads \(read)")
+        }
+    }
+
+    /// A DeepSeek key's row ends with its account's balance and, where the page is a stack's (iOS), opens
+    /// the key's page — from Settings' stack and from the Infrastructure section's own — as the row of
+    /// Settings → Providers did before the two pages became one (936ebbd3c).
+    func testADeepSeekKeysRowEndsWithItsBalanceAndOpensItsPage() throws {
+        let sections = code(try appSource(Self.sectionsFile))
+        let keys = try slice(sections, from: "struct InfrastructureKeysSection: View {", to: "\n}\n")
+        for piece in ["var balances: [String: ProviderBalanceReading] = [:]",
+                      "if let id = DeepSeekBalance.key(for: key, mine: keys)?.providerID {",
+                      "Button { open(.providerDetail(providerID: id)) } label: {",
+                      "} else if let balance, let value = DeepSeekBalance.rowValue(DeepSeekBalance.state(balance)) {"] {
+            XCTAssertTrue(keys.contains(piece), "the API keys section lost `\(piece)`")
+        }
+        for stack in ["Views/SettingsSheet.swift", "Views/CompactShell.swift"] {
+            XCTAssertTrue(code(try appSource(stack))
+                .contains("case .providerDetail(let providerID): ProviderDetailSettingsPage(providerID: providerID)"),
+                          "\(stack) has no destination for a DeepSeek key's page")
+        }
+    }
+
+    /// The two blocks at the top are OrbitKit's rules over the page's own lists — the account's own keys
+    /// (GET /providers/mine) among them — and wait for every list's answer, as the web's do.
+    func testTheTopBlocksAreTheWebsRulesOverThePagesLists() throws {
+        let sections = code(try appSource(Self.sectionsFile))
+        let read = try slice(sections, from: "struct InfrastructureLists {", to: "struct InfrastructureNeedsYouSection: View {")
+        for piece in ["keys = model.agents?.ownKeys ?? []", "SharedPools.ownPoolWithAccess(pool, access)",
+                      "settled = states.allSatisfy { state in state.map { $0.hasLoaded || $0.lastLoadFailed } ?? false }",
+                      "Infrastructure.attention(runners: runners, memberPools: memberPools.map(SharedPools.asProviderPool),",
+                      "Infrastructure.engines(runners: runners, keys: keys,"] {
+            XCTAssertTrue(read.contains(piece), "the page's lists lost \(piece)")
+        }
+        let agents = code(try appSource("AgentsModel.swift"))
+        XCTAssertTrue(agents.contains("ownKeys = try await api.personalProviders()"),
+                      "the keys are the account's own, as the web page reads them")
+        // Every press stays in the app: an engine's page, a machine's record, a pool's page.
+        let page = try XCTUnwrap(try lists().first?.code)
+        let presses = try slice(page, from: "private func openAttention(",
+                                to: "model.push(.runnerEngine(runnerID: runnerID, engine: engine))")
+        for piece in ["openEngine(runnerID, engine.rawValue)", "model.selectedRunnerID = runnerID",
+                      "model.push(.runnerDetail(runnerID: runnerID))",
+                      "model.push(own ? .accountPool(poolID: poolID) : .sharedPool(poolID: poolID))",
+                      "guard let runner = Infrastructure.installTarget(model.runners?.runners ?? []) else {",
+                      "addingRunner = true", "openEngine(runner.id, engine.rawValue)"] {
+            XCTAssertTrue(presses.contains(piece), "the page's presses lost \(piece)")
+        }
+        XCTAssertFalse(page.contains("openURL"), "nothing on the page opens the web")
     }
 
     private func detail() throws -> String {
@@ -106,14 +185,17 @@ final class RunnersPageWiringTests: XCTestCase {
         }
     }
 
-    /// ②–⑤ Dot, name, `N/M` and its bar, the second line, and the third line only when something needs
-    /// a person — every word of it `RunnerAttention`'s.
+    /// ②–⑤ Dot, name, the slots' bar — or Offline — then "2 / 4 running · 1 engine signed out" in amber
+    /// (03-ios.png), and the third line only when something needs a person — `RunnerAttention`'s.
     func testTheRowIsTheMocksRow() throws {
         let row = code(try slice(try runners(), from: "struct RunnerRow: View {", to: "struct RunnerDetailView: View {"))
         for piece in ["RunnerStatusDot(presence: RunnerPageFormat.presence(runner, now: now))",
                       "if let slots = RunnerPageFormat.slots(runner, now: now) {",
                       "RunnerSlotBar(slots: slots)",
-                      "Text(RunnerAttention.runnerListSubtitle(runner, nowMs: nowMs))",
+                      "Text(RunnerPageCopy.RUNNER_OFFLINE)",
+                      "Text(Infrastructure.machineLine(runner, now: now))",
+                      "let signedOut = !Infrastructure.signedOutEngines(runner).isEmpty",
+                      ".foregroundStyle(signedOut ? RunnerInk.amber : Color.secondary)",
                       "if let line = RunnerAttention.listAttentionLine(items) {",
                       "Image(systemName: \"exclamationmark.triangle.fill\")",
                       "RunnerInk.attention(RunnerPageFormat.listTone(items) ?? .warn)",

@@ -8,11 +8,11 @@ import { api, ApiError } from '../api';
 import { encodeId } from '../lib/idCodec';
 import type { ProviderPool } from '../lib/providerPools';
 import type { SharedPool, SharedPoolKey, SharedPoolPerson } from '../lib/sharedPools';
+import { InfrastructurePage } from './InfrastructurePage';
 import { ProviderPoolPage } from './ProviderPoolPage';
-import { ProvidersPage } from './ProvidersPage';
 
 /**
- * A shared pool — several people's OpenAI API keys under one name — on /providers and on its own page,
+ * A shared pool — several people's OpenAI API keys under one name — on /infrastructure and on its own page,
  * mounted for real against a fake API: the card and what each key's row says, what each person may do
  * there (an admin, the contributor of a key, a member with no key), and how a pool is made and a key
  * goes in, is refused, and is replaced. The key typed is sent once and never shown again.
@@ -126,7 +126,7 @@ interface Sent {
   body?: unknown;
 }
 
-describe('a shared pool on /providers and on its own page', { timeout: 30_000 }, () => {
+describe('a shared pool on /infrastructure and on its own page', { timeout: 30_000 }, () => {
   let container: HTMLDivElement;
   let root: Root;
   let client: QueryClient;
@@ -160,7 +160,7 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
           <MemoryRouter initialEntries={[at]}>
             <Probe />
             <Routes>
-              <Route path="/providers" element={<ProvidersPage />} />
+              <Route path="/infrastructure" element={<InfrastructurePage />} />
               <Route path="/providers/pools/:id" element={<ProviderPoolPage />} />
             </Routes>
           </MemoryRouter>
@@ -237,6 +237,8 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
 
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    // Going back from a pool's page brings the page's pools into view (#pools); jsdom has no scrolling.
+    Element.prototype.scrollIntoView = vi.fn();
     path = '';
     shared = [team(WIKOVA)];
     sent = [];
@@ -279,7 +281,7 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
   });
 
   it("heads the pools with the shared one: Codex, SHARED, its people, and the key a session starts on next", async () => {
-    await mount('/providers');
+    await mount('/infrastructure');
     const cards = container.querySelectorAll<HTMLElement>('.pool-sec .pool-card');
     expect(cards).toHaveLength(2);
     const [card, claude] = cards;
@@ -303,7 +305,7 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
   });
 
   it("gives each key a row: whose it is and its fingerprint, where it stands, and what the others spent of its cap", async () => {
-    await mount('/providers');
+    await mount('/infrastructure');
     const status = (label: string) => rowOf(label).querySelector('.pool-status')?.textContent;
     const money = (label: string) => rowOf(label).querySelector('.pool-key-money .re-quota-head')?.textContent;
     expect(rowOf('orbit-org-1').querySelector('.re-name')?.textContent).toBe('orbit-org-1youNEXT');
@@ -334,7 +336,7 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
 
   it('says a key OpenAI put out of budget is out of budget, and counts it as no session can start on it', async () => {
     shared = [teamWithOutOfBudget()];
-    await mount('/providers');
+    await mount('/infrastructure');
     expect(rowOf('chen-org-2').querySelector('.pool-status')?.textContent).toBe('Out of budget · resets Sep 30');
     // The one OpenAI put out of budget and the one at its cap are both out; the other two can run.
     expect(container.querySelector('.pool-sec .pool-card .re-summary')?.textContent).toBe('2 of 6 accounts available');
@@ -355,7 +357,7 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
       contributor: { userId: CHEN, name: NAMES[CHEN], you: false },
     };
     shared = [{ ...board, keys: [spent] }];
-    await mount('/providers');
+    await mount('/infrastructure');
     expect(container.querySelector('.pool-sec .pool-card .pool-gauge')?.textContent).toBe(
       'All out of budget · resets Sep 30',
     );
@@ -371,7 +373,7 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
 
   it('shows somebody who may not replace a refused key who can, and no button', async () => {
     shared = [team(LIN)];
-    await mount('/providers');
+    await mount('/infrastructure');
     // Somebody its maker added reads whose the pool is and the keys they run on — its people and its
     // gauge are on its page.
     const head = container.querySelector<HTMLElement>('.pool-sec .pool-card .re-head')!;
@@ -388,7 +390,7 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
   });
 
   it('replaces a refused key from its card with a working one, sending it once', async () => {
-    await mount('/providers');
+    await mount('/infrastructure');
     await click(button('Replace key', rowOf('wikova-backup')));
     expect(nameOf(dialog())).toBe('Replace wikova-backup');
     await type(dialog()!.querySelector<HTMLInputElement>('input[aria-label="Key"]'), NEW_KEY);
@@ -399,12 +401,12 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
   });
 
   it('makes a shared Codex pool with the people it names, and opens it', async () => {
-    await mount('/providers');
+    await mount('/infrastructure');
     await click(button('New pool'));
     const modal = dialog()!;
     expect(nameOf(modal)).toBe('New account pool');
     expect(modal.querySelector('[role="radiogroup"][aria-label="Engine"] [role="radio"][aria-checked="true"]')?.textContent?.trim()).toBe('Codex');
-    // "Just me" is a pool of one's own ChatGPT account (ProvidersPage.codexLogin.test.tsx); shared, a
+    // "Just me" is a pool of one's own ChatGPT account (InfrastructurePage.codexLogin.test.tsx); shared, a
     // Codex pool holds the people's OpenAI API keys.
     await click(radio('Me and people I add', modal));
     await type(fieldInput('Name', modal), 'Team Codex');
@@ -503,7 +505,7 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
     await click(button('Leave pool'));
     await click(button('Leave', document.body.querySelector('[role="dialog"]')!));
     expect(sent).toEqual([{ method: 'POST', path: `${AT}/leave` }]);
-    expect(path).toBe('/providers');
+    expect(path).toBe('/infrastructure');
   });
 
   it('takes the press away from a member once neither rule lets them put anything in', async () => {

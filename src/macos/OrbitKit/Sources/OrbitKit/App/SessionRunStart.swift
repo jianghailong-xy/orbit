@@ -284,7 +284,7 @@ public enum SessionRunStart {
 
     /// The same advice every not-installed card in the app gives, character for character
     /// (`EngineAuth.antigravityBody(.notInstalled)`, `DshRuntime.Repair.notInstalled.detail`).
-    static let installAdvice = "Install it from Providers, then send your message again."
+    static let installAdvice = "Install it from Infrastructure, then send your message again."
 
     /// The engine a not-installed failure names, when that is what the runner said. The runner's
     /// sentence is `<name> isn't installed on this runner and installing it failed (…)`, and the
