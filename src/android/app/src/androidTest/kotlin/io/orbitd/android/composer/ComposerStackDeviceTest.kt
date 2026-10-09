@@ -123,6 +123,8 @@ class ComposerStackDeviceTest {
         }
         compose.waitUntil(60_000) { has(hasTestTag("composer-model")) }
     }
+    /** The transcript is a lazy list that opens on its latest row: bring a row further up into view before reading it. */
+    private fun reveal(matcher: SemanticsMatcher) { compose.onNodeWithTag("transcript-list").performScrollToNode(matcher); compose.waitForIdle() }
     private fun openModelMenu() {
         compose.waitUntil(30_000) { has(hasTestTag("composer-model") and isEnabled()) }
         compose.onNodeWithTag("composer-model").performClick()
@@ -133,7 +135,11 @@ class ComposerStackDeviceTest {
         File(output, "a07c-identity.txt").writeText("sha=${BuildConfig.SOURCE_SHA}\ndirty=${BuildConfig.SOURCE_DIRTY}\nserver=$server\n" +
             "scope=isolated Orbit stack (server trees of ${seed["sourceSha"]?.jsonPrimitive?.content}), test account ${arg("ownerEmail")}; not production\n")
         try { block(); File(output, "$name-result.txt").writeText("PASS\n") }
-        catch (error: Throwable) { capture("$name-failed"); reads += "FAILED: $error"; File(output, "$name-result.txt").writeText(error.stackTraceToString()); throw error }
+        catch (error: Throwable) {
+            capture("$name-failed"); reads += "FAILED: $error"; File(output, "$name-result.txt").writeText(error.stackTraceToString())
+            runCatching { File(output, "$name-failed-tree.txt").writeText(compose.onRoot().printToString(Int.MAX_VALUE)) }
+            throw error
+        }
         finally { File(output, "$name-readback.txt").writeText(reads.joinToString("\n")); runBlocking { app.session.logout() } }
     }
 
@@ -156,8 +162,11 @@ class ComposerStackDeviceTest {
         buttons[buttons.fetchSemanticsNodes().indexOfFirst { it.boundsInRoot.left >= 0f }].performClick()
         openModelMenu()
         compose.waitUntil(30_000) { has(hasText("Antigravity — Not signed in →") and hasAnyAncestor(isDialog())) }
-        val rows = dialogTexts().map { it.removePrefix("✓ ") }
-        File(output, "a07c-stack-menu.txt").writeText(rows.joinToString("\n"))
+        val all = dialogTexts()
+        File(output, "a07c-stack-menu.txt").writeText(all.joinToString("\n"))
+        reads += "A07-13: the menu is titled ${compose.onNodeWithTag("composer-engine-title").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Text)}"
+        // The Provider section: below its heading, under the menu's own title (the draft's engine, A07-13).
+        val rows = all.drop(all.indexOf("Provider") + 1).map { it.removePrefix("✓ ") }
         fun at(row: String) = rows.indexOfFirst { it == row || it.startsWith("$row | ") }.also { assertTrue("row $row in $rows", it >= 0) }
         val engines = listOf("Claude", "Codex", "Antigravity — Not signed in →", "Kimi").map(::at)
         assertEquals("A07-3: the engines in iOS's order", engines.sorted(), engines)
@@ -195,9 +204,13 @@ class ComposerStackDeviceTest {
         val moved = awaitServer(path, "re-sent and answered") { d -> d.jsonObject["retryAt"] in listOf(null, JsonNull) &&
             d.jsonObject.field("status") == "AWAITING_INPUT" && (d.jsonObject["numTurns"] as? JsonPrimitive)?.intOrNull?.let { it >= 2 } == true }
         keep("a07c-stack-quota-session", moved)
-        compose.waitUntil(60_000) { !has(hasTestTag("auto-retry-switch")) }
-        awaitText("a11-stack fake engine")
+        compose.waitUntil(60_000) { runCatching { reveal(hasText("a11-stack fake engine", substring = true)) }.isSuccess }
         capture("a07c-stack-auto-retry-answered")
+        // The card the session moved past is history: still there, and nothing on it to press.
+        reveal(hasTestTag("auto-retry-card"))
+        compose.waitUntil(30_000) { !has(hasTestTag("auto-retry-switch")) }
+        assertTrue(compose.onAllNodes(hasAnyAncestor(hasTestTag("auto-retry-card")) and hasClickAction()).fetchSemanticsNodes().isEmpty())
+        capture("a07c-stack-auto-retry-history")
     }
 
     /** A07-8: a FAILED turn, the provider picked after it held for the resume, and Retry re-sends the message on that pick. */
@@ -272,7 +285,8 @@ class ComposerStackDeviceTest {
     /** A07-1: a Markdown and a text file the session sent, downloaded from the server and read in the app. */
     @Test fun s6_aMarkdownAndATextFileOpenInTheApp() = journey("a07c-stack-files") {
         signIn(); openSession("files")
-        awaitText("release-notes.md"); appClick("release-notes.md")
+        compose.waitUntil(60_000) { has(hasTestTag("transcript-list")) }
+        reveal(hasText("release-notes.md")); appClick("release-notes.md")
         awaitText("4 lines"); awaitText("Release notes")
         capture("a07c-stack-markdown-preview")
         appClick("Source"); awaitText("# Release notes")

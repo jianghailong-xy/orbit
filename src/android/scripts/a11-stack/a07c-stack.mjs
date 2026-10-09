@@ -11,6 +11,7 @@
 //         accounts of Claude Code and of Codex; Antigravity on a Google sign-in that lapsed; Codex Default holding reset credits
 //         (2 unless A07C_CREDITS says) — and its part in a reset the app asks for (docs/codex-rate-limit-reset-contract.md §6):
 //         the consume answered `reset`, then the refresh with one credit fewer. a07c-pool: Codex only.
+//   refresh  a new weekly-limit session and a new failed one in place of those a run answered (seed.json updated).
 //   dump  what the server now says of those runners, providers, pools, sessions and reset operations, as JSON (to argv[3]).
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -100,6 +101,17 @@ async function relay(token, command, log) {
 const mode = process.argv[2];
 const owner = await login('owner');
 const seed = readSeed();
+const state = (d) => d.runStatus ?? d.status;
+const detail = (id) => call('GET', `/sessions/${id}`, owner);
+const session = (body) => call('POST', '/sessions', owner, { workspaceId: seed.workspace.id, ...body });
+/** On the stack's own runner: a session the weekly-limit sentence stopped, its retry armed, and one whose turn failed. */
+async function stoppedSessions() {
+  const quota = await session({ title: 'A07c weekly limit', prompt: 'A07C-QUOTA: summarize the release notes' });
+  const fail = await session({ title: 'A07c failed turn', prompt: 'A07C-FAIL: draft the changelog' });
+  const armed = await until('the weekly limit to arm the retry', async () => { const d = await detail(quota.id); return d.retryAt && state(d) === 'AWAITING_INPUT' ? d : null; });
+  const failed = await until('the failed turn to settle', async () => { const d = await detail(fail.id); return ['FAILED', 'AWAITING_INPUT'].includes(state(d)) && d.numTurns > 0 ? d : null; });
+  return { quota: { id: quota.id, title: 'A07c weekly limit', retryAt: armed.retryAt }, fail: { id: fail.id, title: 'A07c failed turn', status: state(failed) } };
+}
 
 if (mode === 'seed') {
   const deepseek = await call('POST', '/providers/mine', owner, { label: 'DeepSeek', runtime: 'claude', baseUrl: ENDPOINT,
@@ -124,9 +136,6 @@ if (mode === 'seed') {
   const listed = await call('GET', '/runners', owner);
   const runnerId = (name) => listed.find((r) => r.name === name).id;
 
-  const ws = seed.workspace.id;
-  const session = (body) => call('POST', '/sessions', owner, { workspaceId: ws, ...body });
-  const detail = (id) => call('GET', `/sessions/${id}`, owner);
   // On the runner's own Codex sign-in (Default): the account its reset credits belong to.
   const codexSession = await call('POST', '/sessions', owner, { workspaceId: workspaces['a07c-engines'].id, title: 'A07c Codex reset',
     prompt: 'A07c: the Codex reset card', provider: 'codex', codexAccount: 'default' });
@@ -138,8 +147,7 @@ if (mode === 'seed') {
     const job = res.ok ? JSON.parse((await res.text()) || 'null') : null;
     return job?.sessionId ? job.sessionId : null;
   }, { timeoutMs: 120_000, everyMs: 1_000 });
-  const quota = await session({ title: 'A07c weekly limit', prompt: 'A07C-QUOTA: summarize the release notes' });
-  const fail = await session({ title: 'A07c failed turn', prompt: 'A07C-FAIL: draft the changelog' });
+  const stopped = await stoppedSessions();
   const upload = async (name, mime, text) => {
     const form = new FormData();
     form.append('file', new Blob([text], { type: mime }), name);
@@ -151,9 +159,6 @@ if (mode === 'seed') {
   const log = await upload('build.log', 'text/plain', '> Task :app:test\nBUILD SUCCESSFUL in 4m\n3 actionable tasks\n');
   const files = await session({ title: 'A07c files', prompt: 'A07c: two files attached', attachmentIds: [notes.id, log.id] });
 
-  const state = (d) => d.runStatus ?? d.status;
-  const armed = await until('the weekly limit to arm the retry', async () => { const d = await detail(quota.id); return d.retryAt && state(d) === 'AWAITING_INPUT' ? d : null; });
-  const failed = await until('the failed turn to settle', async () => { const d = await detail(fail.id); return ['FAILED', 'AWAITING_INPUT'].includes(state(d)) && d.numTurns > 0 ? d : null; });
   await until('the files session to answer', async () => state(await detail(files.id)) === 'AWAITING_INPUT');
   const onPool = await detail(pooled.id);
   seed.a07c = {
@@ -164,14 +169,17 @@ if (mode === 'seed') {
     sharedPool: { id: pool.id, slug: pool.slug, label: pool.label, keys: (pool.keys ?? []).map((k) => ({ id: k.id, label: k.label })) },
     sessions: { codex: { id: codexSession.id, title: 'A07c Codex reset' },
       pool: { id: pooled.id, title: 'A07c shared pool', poolKeyId: onPool.poolKeyId ?? null, status: state(onPool) },
-      quota: { id: quota.id, title: 'A07c weekly limit', retryAt: armed.retryAt },
-      fail: { id: fail.id, title: 'A07c failed turn', status: state(failed) },
+      ...stopped,
       files: { id: files.id, title: 'A07c files', attachments: [notes.id, log.id] } },
     how: 'a07c-stack.mjs seed: POST /providers/mine, /providers/shared-pools(+keys), /runner/register, /runner/heartbeat, /workspaces, ' +
       'GET /runner/sessions/claim, POST /attachments, /sessions',
   };
   writeFileSync(seedFile, JSON.stringify(seed, null, 2));
   console.log(JSON.stringify(seed.a07c, null, 2));
+} else if (mode === 'refresh') {
+  Object.assign(seed.a07c.sessions, await stoppedSessions());
+  writeFileSync(seedFile, JSON.stringify(seed, null, 2));
+  console.log(JSON.stringify(seed.a07c.sessions, null, 2));
 } else if (mode === 'run') {
   const registered = JSON.parse(readFileSync(tokens, 'utf8'));
   const log = (line) => console.log(`${new Date().toISOString()} ${line}`);
@@ -196,6 +204,6 @@ if (mode === 'seed') {
     codexRateLimitReset: await call('GET', `/runners/${a07c.enginesRunner.id}/codex-rate-limit-reset`, owner).catch((error) => ({ error: error.message })) };
   writeFileSync(process.argv[3] ?? '/dev/stdout', JSON.stringify(out, null, 2) + '\n');
 } else {
-  console.error('usage: node a07c-stack.mjs seed|run|dump [out.json]');
+  console.error('usage: node a07c-stack.mjs seed|refresh|run|dump [out.json]');
   process.exit(2);
 }
