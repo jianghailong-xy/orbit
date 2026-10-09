@@ -32,6 +32,7 @@ import { Observable, Subject, filter, map, mergeMap } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { sessionEngine } from '../providers/session-engine';
 import { PushService } from '../push/push.service';
+import { enqueueRecap } from '../sessions/recap';
 import { deriveSessionCapabilities } from '../sessions/session-state';
 import { readWorktreeArtifactRequest } from '../sessions/worktree-artifact';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
@@ -72,6 +73,17 @@ const CANCEL_MAX_AGE_MS = 60 * 60_000; // stop redelivering a cancel after an ho
  * backfill exists to remove, so the honest degradation is back to handing over nothing.
  */
 const TURN_PREFIX_MAX_CHARS = 64_000;
+
+/**
+ * How much of a reply preview rides in a summary. The list row clips its own two previews to the
+ * same length in SQL (`SessionsService.PREVIEW_LEN`), and the summary is those same two fields on
+ * the same row: a client folds it in verbatim, so the two have to agree on the text or a row's
+ * preview would change length every time an update landed. Counted in code points, as `left()`
+ * counts them, so a clip never splits a surrogate pair.
+ */
+const PREVIEW_LEN = 200;
+const previewText = (text: string | null | undefined): string | null =>
+  text == null || text.length <= PREVIEW_LEN ? (text ?? null) : [...text].slice(0, PREVIEW_LEN).join('');
 
 /** One session's streamed-but-unpersisted text for the turn in flight. `null` is a kind that blew
  *  past TURN_PREFIX_MAX_CHARS and stays abandoned until the next boundary clears it. */
@@ -447,6 +459,14 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     const status = event.payload as { final?: boolean; retryAt?: string | null };
     if (event.type === RunEventType.STATUS && status.final && !status.retryAt) {
       void this.push.notifySessionSettled(runId);
+      // The same settlement, one line later, asks for the session's last recap (sessions/recap.ts):
+      // this branch is the one event per finalization — /turn-complete's failure, the runner's
+      // /finalize, the reaper's forceFinalize, a spent retry — so hooking here covers every way a
+      // session ends rather than the doors that happen to end it. `finalize` is what a settle that
+      // arrives inside the two-minute window needs: the pass ignores the window, and the write is
+      // what the session list draws next. Fire and forget, like the push above it: the pass is
+      // queued and this call returns, and nothing the pass can meet may fail a settlement.
+      void enqueueRecap({ db: this.prisma, sessionId: runId, finalize: true }).catch(() => undefined);
     }
   }
 
@@ -962,6 +982,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         sourceRefusalCode: true,
         sourceRefusalDetail: true,
         lastTurnAt: true,
+        // What the row previews, and the recap the list prefers to it: an already-open list
+        // learns a new reply (or a fresh recap) from this event alone, so a summary that omitted
+        // them would leave every row on screen previewing the turn before the one just finished.
+        lastAssistantText: true,
+        lastUserText: true,
+        recapText: true,
+        recapAt: true,
         // The engine it runs on, and what the old rules derive it from for a row that has none.
         engine: true,
         provider: true,
@@ -1044,6 +1071,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       awaitingReplyFrom: peers?.awaitingReplyFrom ?? [],
       owesReplyTo: peers?.owesReplyTo ?? [],
       lastTurnAt: s.lastTurnAt ? s.lastTurnAt.toISOString() : null,
+      // The two previews, clipped the way the list's own query clips them, and the recap beside
+      // them. Null as a value, not "unchanged": a preview the server cleared has to clear on the
+      // row holding this summary, and a recap the session does not have is a null.
+      lastAssistantText: previewText(s.lastAssistantText),
+      lastUserText: previewText(s.lastUserText),
+      recapText: s.recapText ?? null,
+      recapAt: s.recapAt ? s.recapAt.toISOString() : null,
       // Read fresh with the status it qualifies: the same summary has to be able to say both
       // "failed, retrying at 12:04" and, once the retries are spent, "failed, nothing coming".
       retryAt: s.retryAt ? s.retryAt.toISOString() : null,

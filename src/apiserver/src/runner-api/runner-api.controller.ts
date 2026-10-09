@@ -178,6 +178,7 @@ import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
 import { type CreateTaskBatchItemDto } from '../tasks/dto';
+import { enqueueRecap, recapDue } from '../sessions/recap';
 import { normalizeStoredRememberRules } from '../sessions/remember-rules';
 import {
   APPROVAL_ABANDONED_STATUS,
@@ -5634,6 +5635,12 @@ export class RunnerApiController {
       // T5: this turn's numbers, events and tool calls are committed now, so its spend is a fact.
       // A steer settles only its own row and books no turn, cost or tool call.
       await this.attemptBudgets?.meterQuietly(sessionId, new Date());
+      // And the rolling recap (sessions/recap.ts) may fold the turn that just committed into the
+      // session's one-line summary. Off the response path in both halves — the due check is two
+      // reads and the pass may wait on a model — because a list line is cosmetic and the runner
+      // is blocked on this reply. A settle the two-minute window skips is what `recapDue` is for;
+      // a session's LAST settle does not come through here at all (RealtimeService.publish).
+      void this.recapAfterTurn(sessionId);
     }
     if (
       'taskReclaimed' in finalized
@@ -5694,6 +5701,22 @@ export class RunnerApiController {
       this.queue.notifySessionQueued();
     }
     return { ok: true, status: finalized.status };
+  }
+
+  /**
+   * Ask for a rolling recap after a completed turn, without waiting for one. The due check is read
+   * here rather than left to the pass so a throttled settle never takes a queue slot, and the pass
+   * re-reads both it and the cursor on its own — a race costs one skipped run, never a wrong recap.
+   * NEVER rejects and is never awaited: a recap is cosmetic, and the settle that asked for it has
+   * already answered the runner by the time this runs.
+   */
+  private async recapAfterTurn(sessionId: string): Promise<void> {
+    try {
+      if (!(await recapDue({ db: this.prisma, sessionId }))) return;
+      await enqueueRecap({ db: this.prisma, sessionId });
+    } catch {
+      // The generator already swallows every failure of its own; this covers the reads around it.
+    }
   }
 
   @UseGuards(RunnerAuthGuard)

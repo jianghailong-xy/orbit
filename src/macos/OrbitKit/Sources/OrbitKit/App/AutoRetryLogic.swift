@@ -198,19 +198,39 @@ public enum AutoRetryLogic {
             takenOver: takenOver)
     }
 
+    /// Which of an account's quota windows a usage-limit failure says ran out — web's
+    /// `quotaWindowKind` (`lib/quotaWindow.ts`).
+    public enum QuotaWindow: Equatable, Sendable {
+        case fiveHour, weekly, other
+    }
+
     /// The window that ran out, in the runtime's own terms. Keyed on the whole phrase the runtime
     /// uses ("hit your weekly limit"), not on "weekly limit" loose in the text: naming the wrong
     /// window tells the user to wait days for a quota that comes back in hours. Codex names no
-    /// window at all and falls through to the generic wording.
+    /// window at all and is `other`.
+    ///
+    /// One judgment for both places that name the window: this card's title, and the pause line of
+    /// an evidence version waiting for its coordinator (`EvidenceDecisions.coordinatorPause`), so the
+    /// line can never name another window than the card above it. Whether a failure is a usage
+    /// limit at all is `EngineErrors.isUsageLimitErrorText`'s answer, not this one's.
+    public static func quotaWindowKind(_ message: String) -> QuotaWindow {
+        let m = message.lowercased()
+        if m.contains("hit your session limit") { return .fiveHour }
+        if m.contains("hit your weekly limit") { return .weekly }
+        return .other
+    }
+
+    /// The card's words for that window.
     ///
     /// The runtime calls its 5-hour window a "session limit", but here that reads as a limit on the
     /// Orbit session the card sits in — the one noun this product uses for something else entirely.
     /// Titled by its length instead; the runtime's own phrasing survives in the body.
     static func quotaWindow(_ message: String) -> (title: String, what: String) {
-        let m = message.lowercased()
-        if m.contains("hit your session limit") { return ("5-hour limit reached", "The 5-hour quota") }
-        if m.contains("hit your weekly limit") { return ("Weekly limit reached", "The weekly quota") }
-        return ("Usage limit reached", "The quota")
+        switch quotaWindowKind(message) {
+        case .fiveHour: return ("5-hour limit reached", "The 5-hour quota")
+        case .weekly:   return ("Weekly limit reached", "The weekly quota")
+        case .other:    return ("Usage limit reached", "The quota")
+        }
     }
 
     /// "in 27 sec" / "in 11 min" / "in 2 hr" / "in 2 days" — the felt distance, next to the absolute
