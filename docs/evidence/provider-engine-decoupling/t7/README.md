@@ -19,10 +19,12 @@ once in light and once in dark.
 `capture-log.txt` is the capture run's own log: the tree it built, every shot, the texts read off the page, the
 task-pin writes it sent, and any request the fake API left unanswered.
 
-The last capture ran on the merge of T6 (bd0ce46f1). Against the capture before it (528923b14), 76 of 78 raw
-shots are pixel-identical and every text read off the page is the same. The two that differ are the builds
-workspace's editor, light and dark, where the text's anti-aliasing moved (no channel more than 16 of 255). So
-`7-workspace-engines-*.png` is made from bd0ce46f1, and the other composites still name 528923b14.
+The capture on the merge of T6 (bd0ce46f1) matched the capture before it (528923b14) in 76 of 78 raw shots, pixel
+for pixel, and in every text read off the page. The two that differ are the builds workspace's editor, light and
+dark, where the text's anti-aliasing moved (no channel more than 16 of 255). So `7-workspace-engines-*.png` is
+made from bd0ce46f1, and the other composites still name 528923b14. The last capture ran on the merge of the
+project tip (8e3a5c008: T4, main, T6). All 78 raw shots are pixel-identical to bd0ce46f1's. Its log, the one
+here, differs only in one read the fixtures now answer (`GET /api/auth/capabilities`).
 
 ## How the screens were made
 
@@ -75,5 +77,5 @@ worktree's absolute paths.
 - Board 7: the model name is in the console's monospace, as today.
 - Board 8: the generic card keeps today's quote of the runtime's message, and the re-send block under its button;
   each turn's time shows under its card. The run-never-started card, below ①, uses the same sentences.
-- The fake API leaves two reads unanswered: `GET /api/auth/capabilities` (a capability probe the pages do without)
-  and the release task's `GET /api/tasks/:id/owner-confirmation` (that task is not owner-confirmed).
+- The fake API leaves one read unanswered: the release task's `GET /api/tasks/:id/owner-confirmation` (that task
+  is not owner-confirmed).

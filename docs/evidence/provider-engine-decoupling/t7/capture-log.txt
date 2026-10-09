@@ -1,4 +1,4 @@
-tree under capture: bd0ce46f19536aedec4c6ebe8c1aa8697bbe64d2 Merge T6 (e6295abe7) into T7
+tree under capture: 8e3a5c0089d05ae38e5da28d97b97ccb80885164 Merge the project tip (fd36f7899: T4, main, T6) into T7
 new light: lands on "Claude Code\n▾"
 new light: engines ["Claude Code\nDeepSeek V4 Pro","Codex\ngpt-5.6-sol","Kimi Code\nNot installed","Antigravity CLI\nGemini 3.8 Flash","O\nOpenCode\nManaged by OpenCode","DeepSeek Harness\nDeepSeek V4 Pro","+\nConnect a provider…"]
 shot new-hero-light.png
@@ -11,24 +11,24 @@ shot new-claude-provider-light.png
 new light opencode menu: ["O","OpenCode","Provider","Own sign-in","Managed by OpenCode","Effort","Default"]
 new light opencode providers: ["On hpc","OpenCode's own sign-in","opencode auth","API keys","DeepSeek","DeepSeek 2","Gemini","Kimi (Moonshot)","Z.AI (GLM)","Claude Max isn’t here: a subscription token runs on Claude Code only."]
 shot new-opencode-provider-light.png
-new light: page errors [] unanswered ["GET /api/auth/capabilities"]
+new light: page errors [] unanswered []
 nokey light: engines ["Claude Code\nOpus 5.5","Codex\ngpt-5.6-sol","Kimi Code\nNot installed","Antigravity CLI\nGemini 3.8 Flash","O\nOpenCode\nManaged by OpenCode","DeepSeek Harness\nConnect a DeepSeek key","+\nConnect a provider…"]
 nokey light: DeepSeek Harness links "/providers/new/deepseek"
 shot new-nokey-light.png
-nokey light: page errors [] unanswered ["GET /api/auth/capabilities"]
+nokey light: page errors [] unanswered []
 switch light dsh menu: ["DeepSeek Harness","Provider","DeepSeek","DeepSeek V4 Pro","DeepSeek V4 Flash","Effort","Default"]
 switch light dsh providers: ["API keys","DeepSeek","DeepSeek 2"]
 shot switch-dsh-provider-light.png
 switch light note: "The turn in flight finishes on DeepSeek. Your next one uses DeepSeek 2."
 shot switch-note-light.png
-switch light dsh: page errors [] unanswered ["GET /api/tasks/2zwQZ2hd93IvLb59t6pdr/owner-confirmation","GET /api/auth/capabilities"]
+switch light dsh: page errors [] unanswered ["GET /api/tasks/2zwQZ2hd93IvLb59t6pdr/owner-confirmation"]
 switch light claude menu: ["Claude Code","Provider","Default","Opus 5.5","Sonnet 5.5","Haiku 4.5","Effort","Default","Speed","Standard"]
 shot switch-title-light.png
-switch light claude: page errors [] unanswered ["GET /api/auth/capabilities"]
+switch light claude: page errors [] unanswered []
 switch light deleted menu: ["DeepSeek Harness","Provider","Key deleted","DeepSeek V4 Pro","DeepSeek V4 Flash","Effort","Default"]
 switch light deleted providers: ["This session's key","D","deepseek-harness","Deleted","API keys","DeepSeek","DeepSeek 2"]
 shot switch-deleted-light.png
-switch light deleted: page errors [] unanswered ["GET /api/auth/capabilities"]
+switch light deleted: page errors [] unanswered []
 pin light engines: ["Assignee's","Claude Code","Claude Code","Codex","Kimi Code","Antigravity CLI","O","OpenCode","DeepSeek Harness"]
 shot pin-engine-light.png
 pin light dsh providers: ["Engine default","first DeepSeek key","Your DeepSeek keys","DeepSeek","DeepSeek 2"]
@@ -51,16 +51,16 @@ shot ws-builds-light.png
 workspace light: page errors [] unanswered []
 cards light card-dsh-nokey: ["DeepSeek Harness needs a DeepSeek key","This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again.","Update the API key","Retry — re-send my last message"]
 shot card-dsh-nokey-light.png
-cards light card-dsh-nokey: page errors [] unanswered ["GET /api/auth/capabilities"]
+cards light card-dsh-nokey: page errors [] unanswered []
 cards light card-dsh-invalid: ["DeepSeek rejected this API key","Update the DeepSeek key “DeepSeek 2” in Infrastructure, then send your message again.","Update the API key","Retry — re-send my last message"]
 shot card-dsh-invalid-light.png
-cards light card-dsh-invalid: page errors [] unanswered ["GET /api/auth/capabilities"]
+cards light card-dsh-invalid: page errors [] unanswered []
 cards light card-claude-rejected: ["Provider authentication failed","Failed to authenticate. API Error: 401 {\"error\":{\"message\":\"Authentication Fails, Your api key: ****0000 is invalid\",\"type\":\"authentication_error\"}}","The DeepSeek key “DeepSeek” was rejected. Update it in Infrastructure, then send your message again.","Update the API key","Why is CI red?","Retry — re-send my last message"]
 shot card-claude-rejected-light.png
-cards light card-claude-rejected: page errors [] unanswered ["GET /api/auth/capabilities"]
+cards light card-claude-rejected: page errors [] unanswered []
 cards light card-never-started: ["This run never started","FROM ORBIT","DeepSeek Harness needs a DeepSeek key","This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again.","Open Infrastructure","No engine ran · your message is still here"]
 shot card-never-started-light.png
-cards light card-never-started: page errors [] unanswered ["GET /api/auth/capabilities"]
+cards light card-never-started: page errors [] unanswered []
 shot board-new-hero-light.png
 shot board-new-dsh-provider-light.png
 shot board-new-claude-provider-light.png
@@ -92,24 +92,24 @@ shot new-claude-provider-dark.png
 new dark opencode menu: ["O","OpenCode","Provider","Own sign-in","Managed by OpenCode","Effort","Default"]
 new dark opencode providers: ["On hpc","OpenCode's own sign-in","opencode auth","API keys","DeepSeek","DeepSeek 2","Gemini","Kimi (Moonshot)","Z.AI (GLM)","Claude Max isn’t here: a subscription token runs on Claude Code only."]
 shot new-opencode-provider-dark.png
-new dark: page errors [] unanswered ["GET /api/auth/capabilities"]
+new dark: page errors [] unanswered []
 nokey dark: engines ["Claude Code\nOpus 5.5","Codex\ngpt-5.6-sol","Kimi Code\nNot installed","Antigravity CLI\nGemini 3.8 Flash","O\nOpenCode\nManaged by OpenCode","DeepSeek Harness\nConnect a DeepSeek key","+\nConnect a provider…"]
 nokey dark: DeepSeek Harness links "/providers/new/deepseek"
 shot new-nokey-dark.png
-nokey dark: page errors [] unanswered ["GET /api/auth/capabilities"]
+nokey dark: page errors [] unanswered []
 switch dark dsh menu: ["DeepSeek Harness","Provider","DeepSeek","DeepSeek V4 Pro","DeepSeek V4 Flash","Effort","Default"]
 switch dark dsh providers: ["API keys","DeepSeek","DeepSeek 2"]
 shot switch-dsh-provider-dark.png
 switch dark note: "The turn in flight finishes on DeepSeek. Your next one uses DeepSeek 2."
 shot switch-note-dark.png
-switch dark dsh: page errors [] unanswered ["GET /api/tasks/2zwQZ2hd93IvLb59t6pdr/owner-confirmation","GET /api/auth/capabilities"]
+switch dark dsh: page errors [] unanswered ["GET /api/tasks/2zwQZ2hd93IvLb59t6pdr/owner-confirmation"]
 switch dark claude menu: ["Claude Code","Provider","Default","Opus 5.5","Sonnet 5.5","Haiku 4.5","Effort","Default","Speed","Standard"]
 shot switch-title-dark.png
-switch dark claude: page errors [] unanswered ["GET /api/auth/capabilities"]
+switch dark claude: page errors [] unanswered []
 switch dark deleted menu: ["DeepSeek Harness","Provider","Key deleted","DeepSeek V4 Pro","DeepSeek V4 Flash","Effort","Default"]
 switch dark deleted providers: ["This session's key","D","deepseek-harness","Deleted","API keys","DeepSeek","DeepSeek 2"]
 shot switch-deleted-dark.png
-switch dark deleted: page errors [] unanswered ["GET /api/auth/capabilities"]
+switch dark deleted: page errors [] unanswered []
 pin dark engines: ["Assignee's","Claude Code","Claude Code","Codex","Kimi Code","Antigravity CLI","O","OpenCode","DeepSeek Harness"]
 shot pin-engine-dark.png
 pin dark dsh providers: ["Engine default","first DeepSeek key","Your DeepSeek keys","DeepSeek","DeepSeek 2"]
@@ -132,16 +132,16 @@ shot ws-builds-dark.png
 workspace dark: page errors [] unanswered []
 cards dark card-dsh-nokey: ["DeepSeek Harness needs a DeepSeek key","This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again.","Update the API key","Retry — re-send my last message"]
 shot card-dsh-nokey-dark.png
-cards dark card-dsh-nokey: page errors [] unanswered ["GET /api/auth/capabilities"]
+cards dark card-dsh-nokey: page errors [] unanswered []
 cards dark card-dsh-invalid: ["DeepSeek rejected this API key","Update the DeepSeek key “DeepSeek 2” in Infrastructure, then send your message again.","Update the API key","Retry — re-send my last message"]
 shot card-dsh-invalid-dark.png
-cards dark card-dsh-invalid: page errors [] unanswered ["GET /api/auth/capabilities"]
+cards dark card-dsh-invalid: page errors [] unanswered []
 cards dark card-claude-rejected: ["Provider authentication failed","Failed to authenticate. API Error: 401 {\"error\":{\"message\":\"Authentication Fails, Your api key: ****0000 is invalid\",\"type\":\"authentication_error\"}}","The DeepSeek key “DeepSeek” was rejected. Update it in Infrastructure, then send your message again.","Update the API key","Why is CI red?","Retry — re-send my last message"]
 shot card-claude-rejected-dark.png
-cards dark card-claude-rejected: page errors [] unanswered ["GET /api/auth/capabilities"]
+cards dark card-claude-rejected: page errors [] unanswered []
 cards dark card-never-started: ["This run never started","FROM ORBIT","DeepSeek Harness needs a DeepSeek key","This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again.","Open Infrastructure","No engine ran · your message is still here"]
 shot card-never-started-dark.png
-cards dark card-never-started: page errors [] unanswered ["GET /api/auth/capabilities"]
+cards dark card-never-started: page errors [] unanswered []
 shot board-new-hero-dark.png
 shot board-new-dsh-provider-dark.png
 shot board-new-claude-provider-dark.png
