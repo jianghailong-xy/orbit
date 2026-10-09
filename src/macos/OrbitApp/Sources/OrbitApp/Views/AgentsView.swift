@@ -1344,8 +1344,9 @@ struct NewSessionView: View {
                            currentProviderChoice.fixEngine != nil {
                             Button {
                                 if let rid = agent.runnerId {
-                                    if let url = draft.webFixURL(engine: currentProviderChoice.fixEngine ?? "", runnerID: rid) { openURL(url) }
-                                    else { app.route(to: .runner(rid)) }
+                                    let engine = currentProviderChoice.fixEngine ?? ""
+                                    if let url = draft.webFixURL(engine: engine) { openURL(url) }
+                                    else { app.openRunnerEngine(rid, engine: engine) }
                                 }
                             } label: {
                                 Text("\(blocker) on this runner · Fix it")
@@ -1458,13 +1459,13 @@ struct NewSessionView: View {
         #endif
         .sheet(isPresented: $showEnginePicker) {
             // The draft's own runnerID is only set for a live session, so take the agent's — it is
-            // the machine this draft would run on, and the one whose Engines section fixes a row.
+            // the machine this draft would run on, and the one whose engine page fixes a row.
             EngineSwitchSheet(
                 engines: engines, current: currentEngine, agentName: agent.name,
                 onSelect: { slug in draft.pickDraftProvider(slug) },
                 onFixRunner: agent.runnerId.map { rid in { engine in
-                    if let url = draft.webFixURL(engine: engine, runnerID: rid) { openURL(url) }
-                    else { app.route(to: .runner(rid)) }
+                    if let url = draft.webFixURL(engine: engine) { openURL(url) }
+                    else { app.openRunnerEngine(rid, engine: engine) }
                 } })
         }
     }

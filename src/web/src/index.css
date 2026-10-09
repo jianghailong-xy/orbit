@@ -997,8 +997,8 @@ button.toast--pill:focus-visible {
     opacity: 1;
   }
 }
-/* A Workspace row while the list is arranged: it opens nothing, and the Runners page's drag handle
-   stands in the folder's column. */
+/* A Workspace row while the list is arranged: it opens nothing, and a drag handle like a machine
+   card's on Infrastructure stands in the folder's column. */
 .tp-item.editing {
   cursor: default;
 }
@@ -1718,48 +1718,12 @@ button.toast--pill:focus-visible {
   background: var(--error-bg);
 }
 
-/* ---- Runners page (the runner list, moved out of the sidebar) ---- */
-.runners-head {
-  max-width: 920px;
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
+/* ---- Machines: Infrastructure's machine cards, a machine's page, Add a runner, Rotate token ---- */
 .runners-empty {
   max-width: 920px;
   margin: 24px auto 0;
   color: var(--text-3);
   font-size: 14px;
-}
-.runners-list {
-  max-width: 920px;
-  margin: 16px auto 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.runner-card {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  cursor: pointer;
-  background: var(--bg-raised);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-.runner-card:hover {
-  border-color: var(--brand-border);
-  box-shadow: 0 2px 8px rgba(51, 112, 255, 0.08);
-}
-.runner-card.dragging {
-  border-color: var(--brand-border);
-  box-shadow: 0 8px 24px rgba(31, 35, 41, 0.16);
-  opacity: 0.78;
 }
 .runner-drag-handle {
   display: flex;
@@ -1799,51 +1763,10 @@ button.toast--pill:focus-visible {
   align-self: flex-start;
   margin-top: 5px;
 }
-.runner-meta {
-  flex: 1;
-  min-width: 0;
-}
-.runner-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-1);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .runner-sub {
   font-size: 12px;
   color: var(--text-3);
   margin-top: 2px;
-}
-.runner-kebab {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  cursor: pointer;
-  color: var(--text-3);
-  font-size: 15px;
-  flex: none;
-  /* Always reserve the slot so revealing the kebab on hover doesn't shift
-     the version number and chevron; only fade visibility. */
-  visibility: hidden;
-  opacity: 0;
-  transition: opacity 0.15s ease, visibility 0.15s ease;
-}
-.runner-kebab:hover {
-  background: var(--bg-hover-strong);
-  color: var(--text-1);
-}
-.runner-card:hover .runner-kebab,
-.runner-card.menu-open .runner-kebab {
-  visibility: visible;
-  opacity: 1;
 }
 /* Slot utilization: a thin track with a fill proportional to live sessions. */
 .runner-util {
@@ -1864,14 +1787,6 @@ button.toast--pill:focus-visible {
 }
 .runner-util.full .runner-util-fill {
   background: var(--warning-solid);
-}
-.runner-tags {
-  font-size: 12px;
-  color: var(--text-4);
-  margin-top: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 /* The third line: what this machine needs a person for. When it wraps on a narrow screen, the
    triangle stays with its first line. */
@@ -1895,17 +1810,6 @@ button.toast--pill:focus-visible {
   margin-top: 2.5px;
   font-size: 11px;
 }
-.runner-version {
-  font-size: 12px;
-  color: var(--text-3);
-  flex: none;
-}
-/* Always-visible navigation affordance; the whole card is clickable. */
-.runner-chevron {
-  color: var(--dot-idle);
-  font-size: 12px;
-  flex: none;
-}
 .runner-token-box {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px;
@@ -1918,7 +1822,7 @@ button.toast--pill:focus-visible {
 }
 
 /* ---- Skills page (skills/commands a runner reported, grouped per machine) ---- */
-/* Center the content column to match Runners / session pages (920px). */
+/* Center the content column to match a machine's page / session pages (920px). */
 .skills-page {
   max-width: 920px;
   margin: 0 auto;
@@ -2307,145 +2211,6 @@ button.toast--pill:focus-visible {
   border: 1px dashed var(--border);
   border-radius: 10px;
   text-align: center;
-}
-/* The engine CLIs on this machine. Same panel-with-hairlines shape as the agent list below:
-   both answer "what is on this machine", so they read as one page rather than two widgets. */
-.rd-engine-list {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--bg-raised);
-  overflow: hidden;
-}
-.rd-engine-list > * + * {
-  border-top: 1px solid var(--border-subtle);
-}
-.rd-engine-row {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1.1fr) minmax(0, 1fr) 190px 12px;
-  grid-template-areas: 'mark main auth quota chevron';
-  gap: 12px;
-  align-items: center;
-  padding: 11px 14px;
-  color: inherit;
-  transition: background 0.12s ease;
-}
-.rd-engine-row:hover {
-  color: inherit;
-  background: var(--bg-hover);
-}
-.rd-engine-row > .provider-tile {
-  grid-area: mark;
-}
-.rd-engine-main {
-  grid-area: main;
-  min-width: 0;
-}
-.rd-engine-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-1);
-}
-.rd-engine-version {
-  margin-top: 1px;
-  font-size: 12.5px;
-  color: var(--text-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* Same amber as the Providers row's note, for the same reason: drift needs a person eventually,
-   which is not the same as being down. */
-.rd-engine-note {
-  color: var(--text-4);
-}
-.rd-engine-note.warn {
-  color: var(--warning);
-  font-weight: 500;
-}
-.rd-engine-auth {
-  grid-area: auth;
-  font-size: 12.5px;
-}
-.rd-engine-auth.ok {
-  color: var(--success);
-}
-.rd-engine-auth.warn {
-  color: var(--warning);
-  font-weight: 500;
-}
-.rd-engine-auth.muted,
-.rd-engine-muted {
-  color: var(--text-3);
-}
-.rd-engine-quota {
-  grid-area: quota;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-  font-size: 12.5px;
-}
-/* Whose windows these are, when the engine has several accounts: the one a new session starts on. */
-.rd-quota-next {
-  margin-bottom: 4px;
-  font-size: 11px;
-  color: var(--text-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.rd-quota-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 11.5px;
-  color: var(--text-2);
-}
-.rd-quota.near .rd-quota-pct {
-  color: var(--warning);
-  font-weight: 600;
-}
-.rd-quota-bar {
-  height: 4px;
-  margin-top: 3px;
-  border-radius: 2px;
-  background: var(--border-subtle);
-  overflow: hidden;
-}
-.rd-quota-bar > span {
-  display: block;
-  height: 100%;
-  border-radius: 2px;
-  background: var(--brand);
-}
-.rd-quota.near .rd-quota-bar > span {
-  background: var(--warning-solid);
-}
-.rd-engine-chevron {
-  grid-area: chevron;
-  font-size: 11px;
-  color: var(--text-4);
-}
-/* An engine row needs about 560px for its five columns. Narrower — a phone, or the left column
-   beside Capacity on a tablet — its quota takes a line of its own, and a quota line that would only
-   hold "—" is left out. Measured on the section, not the viewport: the column it sits in is what
-   runs out of room. */
-.rd-engines {
-  container: rd-engines / inline-size;
-}
-@container rd-engines (max-width: 560px) {
-  .rd-engine-row {
-    grid-template-columns: 24px minmax(0, 1fr) auto 12px;
-    grid-template-areas:
-      'mark main auth chevron'
-      '. quota quota .';
-    row-gap: 8px;
-  }
-  .rd-engine-quota.empty {
-    display: none;
-  }
 }
 /* The run's report sits above the rows it summarizes, not inside any one of them. */
 .rd-engine-relay {
@@ -15014,7 +14779,8 @@ button.chat-jump-start:hover {
 }
 
 /* ============================================================================
-   Provider onboarding — logo gallery + guided add flow (ProvidersPage).
+   Infrastructure (InfrastructurePage, InfrastructureOverview) and provider
+   onboarding — logo gallery + guided add flow (ProviderGallery, ProviderConnectPage).
    ========================================================================== */
 .prov-page-head {
   display: flex;
@@ -15027,6 +14793,147 @@ button.chat-jump-start:hover {
   flex-basis: 100%;
   color: var(--text-3);
   font-size: 12px;
+}
+/* Infrastructure's Add: each choice says what it makes under its name. */
+.infra-add {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-width: 300px;
+  padding: 3px 0;
+  white-space: normal;
+}
+.infra-add b {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.infra-add span {
+  font-size: 12px;
+  color: var(--text-3);
+}
+/* Infrastructure's top: what needs a person, a line each with its way out at the end — amber for what
+   is broken, grey for a machine that is only away. A sign-in opens under its own line. */
+.infra-attn {
+  margin-top: 18px;
+  padding: 4px 14px;
+  border: 1px solid var(--warning-border);
+  border-radius: 12px;
+  background: var(--warning-bg);
+}
+.infra-attn-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 9px 0;
+  font-size: 13px;
+  color: var(--text-1);
+}
+.infra-attn-row + .infra-attn-row {
+  border-top: 1px solid color-mix(in srgb, var(--warning-border) 60%, transparent);
+}
+.infra-attn-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warning-solid);
+}
+.infra-attn-dot.idle {
+  background: var(--text-4);
+}
+.infra-attn-text {
+  flex: 1;
+  min-width: 0;
+}
+.infra-attn-text b {
+  font-weight: 600;
+}
+.infra-attn-sub {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.infra-attn-row > .re-panel {
+  flex-basis: 100%;
+  margin: 2px 0 0 17px;
+  background: var(--bg-raised);
+}
+/* What each engine can run on: a card per engine, two to a row. */
+.infra-engines {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 640px) {
+  .infra-engines {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.infra-engine {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+}
+.infra-engine.none {
+  background: var(--bg-subtle);
+}
+.infra-engine-main {
+  flex: 1;
+  min-width: 0;
+}
+.infra-engine-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.infra-engine-state {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--fill-muted);
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+}
+.infra-engine-state.ready {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.infra-engine-src {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.infra-engine-src b {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.infra-engine-src.none {
+  display: block;
+  color: var(--text-3);
+}
+.infra-engine-src a {
+  color: var(--brand);
+}
+/* The model a key starts on, beside the key's own name. */
+.infra-model {
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--fill-muted);
+  color: var(--text-3);
+  font-size: 11px;
+  white-space: nowrap;
 }
 .provider-gallery {
   display: grid;
@@ -15266,9 +15173,10 @@ button.chat-jump-start:hover {
 }
 
 /* ============================================================================
-   Providers → "On your runners": the engine CLIs signed in on each machine.
-   A different kind of identity from the API keys below (one machine, one
-   subscription, nothing pasted), hence its own section rather than more rows.
+   Infrastructure → "Machines": the engine CLIs signed in on each machine (the
+   same rows on a machine's own page). A different kind of identity from the API
+   keys below (one machine, one subscription, nothing pasted), hence its own
+   section rather than more rows.
    ========================================================================== */
 .re-sec {
   margin-top: 22px;
@@ -15445,9 +15353,9 @@ button.chat-jump-start:hover {
   color: var(--text-2);
   transition: color 0.15s, transform 0.15s;
 }
-/* Lit wherever a press would fold the card — anywhere on its head but Manage. */
+/* Lit wherever a press would fold the card — anywhere on its head but Details, the handle and ⋯. */
 .re-runner-card .re-chev.open,
-.re-runner-card .re-head:hover:not(:has(.re-manage:hover)) .re-chev {
+.re-runner-card .re-head:hover:not(:has(.re-manage:hover, .re-drag:hover, .re-machine-menu:hover)) .re-chev {
   color: var(--brand);
 }
 .re-runner-copy {
@@ -15492,22 +15400,52 @@ button.chat-jump-start:hover {
   flex: none;
   align-items: center;
   min-height: 44px;
-  margin: 0 14px 0 8px;
+  margin: 0 4px 0 8px;
 }
 .re-runner-card .re-manage:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 3px;
   border-radius: 4px;
 }
+/* The card is the machine too: it moves by the handle at its head's start, its own actions sit behind
+   the ⋯ at the end, and under its name are how busy it is and what it needs a person for. */
+.re-runner-card.dragging {
+  position: relative;
+  box-shadow: 0 8px 24px rgba(31, 35, 41, 0.16);
+}
+.re-runner-card .re-drag {
+  margin: 0 -8px 0 6px;
+}
+.re-runner-card .re-drag + .re-toggle {
+  border-radius: 0;
+}
+.re-runner-copy .runner-util {
+  display: block;
+  margin-top: 3px;
+}
+.re-runner-copy .runner-attention {
+  margin-top: 2px;
+}
+.re-runner-card .re-machine-menu {
+  flex: none;
+  margin-right: 10px;
+}
 @container re-card (max-width: 600px) {
   .re-runner-card .re-head {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
     column-gap: 8px;
-    padding: 0 14px;
+    padding: 0 14px 0 6px;
+  }
+  .re-runner-card .re-drag {
+    grid-row: 1;
+    grid-column: 1;
+    align-self: start;
+    margin: 13px 0 0;
   }
   .re-runner-card .re-toggle {
-    grid-column: 1 / -1;
+    grid-row: 1;
+    grid-column: 2 / -1;
     align-items: flex-start;
     min-height: 54px;
     padding: 10px 0 0;
@@ -15519,11 +15457,17 @@ button.chat-jump-start:hover {
     order: 2;
   }
   .re-runner-status {
+    grid-column: 2;
     margin-left: 17px;
   }
   .re-runner-card .re-manage {
-    grid-column: 2;
+    grid-column: 3;
     margin: 0;
+  }
+  .re-runner-card .re-machine-menu {
+    grid-column: 4;
+    align-self: center;
+    margin: 0 -6px 0 0;
   }
 }
 
@@ -16104,7 +16048,7 @@ button.chat-jump-start:hover {
 }
 
 /* ============================================================================
-   Providers → "Account pools": several Claude subscriptions under one name. The
+   Infrastructure → "Account pools": several Claude subscriptions under one name. The
    runner cards' skeleton (fold, head, three-column rows), with a status column
    wide enough for "Unavailable · usage unreadable" (185px measured — the widest
    a member's tag gets; "Unavailable · key refused" is 151px and "Spent · resets
@@ -16905,7 +16849,7 @@ button.chat-jump-start:hover {
 }
 @media (max-width: 700px) {
   /* The quota is what an account's row is about: a line of its own under the name, bars and resets
-     kept — as a runner's accounts have it on Providers. */
+     kept — as a runner's accounts have it on Infrastructure. */
   .pool-row .re-quota.pool-login-quota {
     display: block;
     grid-column: 1 / -1;
@@ -17395,7 +17339,7 @@ button.chat-jump-start:hover {
   background: var(--bg-hover);
 }
 /* An engine the runner has but isn't signed into: the identity reads as unavailable, while the
-   reason doubles as the link to the Providers page that fixes it. */
+   reason doubles as the link to the row in Infrastructure that fixes it. */
 .np-unavailable .np-mark,
 .np-unavailable .np-row-name {
   opacity: 0.5;

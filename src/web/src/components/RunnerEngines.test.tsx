@@ -677,6 +677,7 @@ describe('the "On your runners" section', () => {
     const html = render([]);
 
     expect(html).toContain('Already pay for Claude, Codex or Kimi?');
-    expect(html).toContain('Add a runner');
+    // Straight to registering one: the list it used to send to is this page now.
+    expect(html).toMatch(/<a href="\/runners\/register"[^>]*><button[^>]*><span>Register a machine<\/span><\/button><\/a>/);
   });
 });

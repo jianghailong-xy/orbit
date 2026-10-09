@@ -7,7 +7,7 @@ import { useToast } from '../lib/toast';
 import type { Runner } from './TasksSidePanel';
 
 /**
- * Where a DeepSeek Harness key can run, under its row in Providers.
+ * Where a DeepSeek Harness key can run, under its row in Infrastructure's API keys.
  *
  * The key itself is the credential, so a runner is never "signed in" to Harness; what varies per
  * machine is whether the server will hand it a Harness session at all (dshRunnerState). A runner
@@ -32,7 +32,7 @@ export function DshRunnerStatus({ runners }: { runners: Runner[] }) {
       <div>Runs on DeepSeek Harness</div>
       <div>
         <span style={ready === 0 ? { color: 'var(--warning)' } : undefined}>
-          {ready === 0 ? 'Not ready on any runner' : `Ready on ${ready} runner${ready === 1 ? '' : 's'}`}
+          {ready === 0 ? 'Not ready on any machine' : `Ready on ${ready} machine${ready === 1 ? '' : 's'}`}
         </span>
       </div>
       {states.map(({ runner, state }) => {

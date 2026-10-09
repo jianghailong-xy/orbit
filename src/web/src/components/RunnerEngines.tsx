@@ -1,7 +1,24 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { DeleteOutlined, DownloadOutlined, EditOutlined, EllipsisOutlined, LoadingOutlined, LoginOutlined, PauseOutlined, PlayCircleOutlined, PlusOutlined, WarningOutlined } from '@ant-design/icons';
+import { DeleteOutlined, DownloadOutlined, EditOutlined, EllipsisOutlined, HolderOutlined, KeyOutlined, LoadingOutlined, LoginOutlined, PauseOutlined, PlayCircleOutlined, PlusOutlined, WarningFilled, WarningOutlined } from '@ant-design/icons';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import {
   accountToStartOn,
   withEnginePlanUsage,
@@ -20,6 +37,9 @@ import { accountIsPaused, usePauseClock } from '../lib/accountPause';
 import { AccountPauseActions, AccountPauseStatus, type AccountPauseControls } from './AccountPause';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
+import { useConfirm } from './ui/ConfirmDialog';
+import { Dialog } from './ui/Dialog';
+import { Input } from './ui/Input';
 import { Menu, type MenuItem } from './ui/Menu';
 import { Popconfirm } from './ui/Popconfirm';
 import { routeId, encodeId } from '../lib/idCodec';
@@ -40,8 +60,10 @@ import {
   planUsageSnapshotForProvider,
   type PlanUsageDisplayRow,
 } from '../lib/planUsage';
+import { DSH_STATE_LABEL, dshRunnerState } from '../lib/dshRuntime';
 import { formatResetTime } from '../lib/providerPools';
 import { runnersQuery } from '../lib/queries';
+import { listAttentionLine, type AttentionItem } from '../lib/runnerAttention';
 import { RUNNER_ENGINE_NO_QUOTA_LIMIT, RUNNER_ENGINE_RENEW, runnerEngineNext } from '../lib/runnerCopy';
 import { loginExpiresLine, signedOutNote } from '../lib/accountLogin';
 import { foldFromAnywhere } from '../lib/foldHead';
@@ -50,6 +72,7 @@ import { ENGINE_PRESET, ENGINE_SLUGS } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 import { ProviderTile } from './ProviderGallery';
 import { ENGINE_NAME, GoogleSignInTerms, KIMI_SITE, RunnerSignIn } from './RunnerSignIn';
+import { useRunnerTokenRotation } from './RunnerTokenRotation';
 import type { Runner } from './TasksSidePanel';
 
 const ENGINES = Object.keys(ENGINE_NAME) as LoginEngine[];
@@ -88,7 +111,7 @@ const EXPANDED_KEY = 'orbit:providers-expanded-runners';
 const OPEN_ACCOUNTS_KEY = 'orbit:providers-open-accounts';
 
 /** One engine's accounts on one runner, as OPEN_ACCOUNTS_KEY remembers them. */
-const accountsGroup = (runnerId: string, engine: string) => `${runnerId}/${engine}`;
+export const accountsGroup = (runnerId: string, engine: string) => `${runnerId}/${engine}`;
 
 function readExpanded(key = EXPANDED_KEY): string[] {
   try {
@@ -97,6 +120,28 @@ function readExpanded(key = EXPANDED_KEY): string[] {
   } catch {
     return [];
   }
+}
+
+function writeExpanded(next: string[], key = EXPANDED_KEY): string[] {
+  try {
+    localStorage.setItem(key, JSON.stringify(next));
+  } catch {
+    // Private mode / full quota: the fold still works, it just won't outlive the page.
+  }
+  return next;
+}
+
+/** The groups of accounts open under their rows, on every runner (accountsGroup), as the user left
+ *  them: Infrastructure's machine cards and a machine's own page fold the same groups. */
+export function useOpenAccounts() {
+  const [openAccounts, setOpenAccounts] = useState<string[]>(() => readExpanded(OPEN_ACCOUNTS_KEY));
+  const foldAccounts = (group: string, open: boolean) =>
+    setOpenAccounts((prev) =>
+      prev.includes(group) === open
+        ? prev
+        : writeExpanded(open ? [...prev, group] : prev.filter((x) => x !== group), OPEN_ACCOUNTS_KEY),
+    );
+  return [openAccounts, foldAccounts] as const;
 }
 
 /** What one row is saying. The install relay outranks the probe: it is newer than the last
@@ -135,6 +180,16 @@ export function rowKindOf(
   // The CLI wouldn't say. Never render this as signed in — that is the whole reason the probe
   // has three states instead of a boolean.
   return 'unknown';
+}
+
+/** One engine on one machine as its row reads it: the runner's own report — for Antigravity with its
+ *  install and credential taken from the server's answer (`runner.antigravity`) once it has one. */
+export function engineHealthOf(runner: Runner, engine: RowEngine): RunnerEngineHealth | undefined {
+  const reported = runner.engines?.find((e) => e.engine === engine);
+  const state = engine === 'antigravity' ? runner.antigravity : undefined;
+  return state && state.installed != null
+    ? { ...reported, engine, installed: state.installed, version: state.version ?? reported?.version, auth: reported?.auth ?? (state.envKeyAvailable ? 'yes' : 'unknown'), authSource: state.authSource ?? reported?.authSource } as RunnerEngineHealth
+    : reported;
 }
 
 
@@ -451,6 +506,7 @@ function EngineRow({
   signIn,
   onSignIn,
   focused,
+  machinePage,
   next,
   open,
   onFold,
@@ -465,6 +521,8 @@ function EngineRow({
   onSignIn: (panel: string | null) => void;
   /** This is the row a deep link came here for: mark it and bring it into view. */
   focused?: boolean;
+  /** On the machine's own page, where the way to update its engines is the page's, not this row's. */
+  machinePage?: boolean;
   /** The account a session nobody picked one for starts on (accountToStartOn), of a group. */
   next?: string | null;
   /** Whether this engine's accounts are listed under it, or folded into it. */
@@ -787,10 +845,16 @@ function EngineRow({
           </div>
           {/* Points at the machine rather than naming a shell command: that is where updating
               lives now, and telling someone to open a terminal for something the UI can do was
-              only ever a symptom of the button being on the wrong page. */}
+              only ever a symptom of the button being on the wrong page. On that page its Update
+              engines is already above, and the link would only lead back to it. */}
           <div className="re-panel-hint">
-            Orbit tries every 30 min.{' '}
-            <Link to={`/runners/${encodeId(runner.id)}`}>Update this machine’s engines →</Link>
+            Orbit tries every 30 min.
+            {!machinePage && (
+              <>
+                {' '}
+                <Link to={`/runners/${encodeId(runner.id)}`}>Update this machine’s engines →</Link>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1265,6 +1329,9 @@ function RunnerEngineCard({
   collapsed,
   onToggle,
   focusEngine,
+  attention,
+  menuItems,
+  dragDisabled,
   openAccounts,
   onFoldAccounts,
 }: {
@@ -1273,6 +1340,13 @@ function RunnerEngineCard({
   onToggle: () => void;
   /** The engine a deep link named for this runner, if this is the runner it named. */
   focusEngine?: InstallEngine | null;
+  /** What this machine needs a person for (runnerAttention), most severe first. */
+  attention: AttentionItem[];
+  /** The machine's own actions, behind its ⋯ (given that button, where a dialog they open gives
+   *  focus back): rename it, rotate its token, delete it. */
+  menuItems: (trigger: RefObject<HTMLButtonElement | null>) => MenuItem[];
+  /** While a new order is being saved, the cards stay where they are. */
+  dragDisabled: boolean;
   /** The groups of accounts the user opened, on every runner (accountsGroup). */
   openAccounts: string[];
   /** The engine whose group folded — a RowEngine, since a row is one, and only an engine that
@@ -1280,16 +1354,50 @@ function RunnerEngineCard({
   onFoldAccounts: (engine: RowEngine, open: boolean) => void;
 }) {
   const [signIn, setSignIn] = useState<string | null>(null);
-  const engines = runner.engines ?? null;
+  const { attributes, listeners, setActivatorNodeRef, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: runner.id, disabled: dragDisabled });
+  const kebab = useRef<HTMLButtonElement>(null);
   const name = runner.displayName || runner.name;
-  const meta = [runner.hostname !== name && runner.hostname, runner.version && `v${runner.version}`]
+  // How many of its slots are taken, ahead of where it is: an offline machine takes none, and its
+  // header says Offline instead.
+  const max = runner.maxConcurrent ?? 0;
+  const active = runner.activeSessions ?? 0;
+  const busy = !!runner.online && max > 0;
+  const meta = [
+    busy && `${active} / ${max} running`,
+    runner.hostname !== name && runner.hostname,
+    runner.version && `v${runner.version}`,
+  ]
     .filter(Boolean)
     .join(' · ');
   const failed = runner.install?.status === 'failed' && runner.install.engine !== 'antigravity';
+  // Under its name, folded or not: the first two things this machine needs a person for. Nothing for
+  // an offline one, whose header already says what there is to say.
+  const attentionLine = listAttentionLine(attention);
+  const attentionTone = attention.slice(0, 2).some((item) => item.tone === 'bad') ? 'bad' : 'warn';
+  const attentionId = useId();
 
   return (
-    <div className={`re-card re-runner-card${runner.online ? '' : ' offline'}${collapsed ? ' collapsed' : ''}`}>
+    <div
+      ref={setNodeRef}
+      // Translate, not Transform: an open card is many times a folded one's height, and the scale a
+      // transform carries would stretch one into the other's slot while it is dragged past.
+      style={{ transform: CSS.Translate.toString(transform), transition, zIndex: isDragging ? 1 : undefined }}
+      className={`re-card re-runner-card${runner.online ? '' : ' offline'}${collapsed ? ' collapsed' : ''}${isDragging ? ' dragging' : ''}`}
+    >
       <div className="re-head" onClick={foldFromAnywhere(onToggle)}>
+        <button
+          ref={setActivatorNodeRef}
+          type="button"
+          className="runner-drag-handle re-drag"
+          title="Drag to reorder"
+          aria-label={`Reorder ${name}`}
+          disabled={dragDisabled}
+          {...attributes}
+          {...listeners}
+        >
+          <HolderOutlined />
+        </button>
         {/* The toggle is its own button rather than the whole header: the header also holds a
             link, and a link inside a button is neither valid nor operable by keyboard. A press
             anywhere else on the header — the summary, the space around it — is the toggle's
@@ -1299,6 +1407,7 @@ function RunnerEngineCard({
           type="button"
           aria-expanded={!collapsed}
           aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${name}`}
+          aria-describedby={attentionLine ? attentionId : undefined}
           onClick={onToggle}
         >
           {/* Leads the row, in the column the engine rows below put their icon in: one place
@@ -1318,6 +1427,17 @@ function RunnerEngineCard({
           <span className="re-runner-copy">
             <span className="re-runner">{name}</span>
             {meta && <span className="re-runner-meta">{meta}</span>}
+            {busy && (
+              <span className={`runner-util${active >= max ? ' full' : ''}`} title={`${active} of ${max} slots in use`}>
+                <span className="runner-util-fill" style={{ width: `${Math.min(100, (active / max) * 100)}%` }} />
+              </span>
+            )}
+            {attentionLine && (
+              <span id={attentionId} className={`runner-attention ${attentionTone}`}>
+                <WarningFilled />
+                <span>{attentionLine}</span>
+              </span>
+            )}
           </span>
         </button>
         {(!runner.online || collapsed) && (
@@ -1334,116 +1454,229 @@ function RunnerEngineCard({
             CLI on the machine — so its object is the runner, and this is a page about identity
             where everything else is scoped to one (runner, engine) pair. It lives behind this
             link, next to the machine's own version and slots. */}
-        <Link className="re-manage" aria-label={`Manage ${name}`} to={`/runners/${encodeId(runner.id)}`}>
-          Manage →
+        <Link className="re-manage" aria-label={`Details of ${name}`} to={`/runners/${encodeId(runner.id)}`}>
+          Details →
         </Link>
+        <Menu
+          align="end"
+          items={menuItems(kebab)}
+          trigger={
+            <Button
+              ref={kebab}
+              size="small"
+              variant="text"
+              className="re-machine-menu"
+              icon={<EllipsisOutlined />}
+              aria-label={`More actions for ${name}`}
+              title="More actions"
+            />
+          }
+        />
       </div>
-      {collapsed ? null : engines ? (
-        rowEnginesOf(engines).map((engine) => {
-          const reported = engines.find((e) => e.engine === engine);
-          const state = engine === 'antigravity' ? runner.antigravity : undefined;
-          const health = state && state.installed != null
-            ? { ...reported, engine, installed: state.installed, version: state.version ?? reported?.version, auth: reported?.auth ?? (state.envKeyAvailable ? 'yes' : 'unknown'), authSource: state.authSource ?? reported?.authSource } as RunnerEngineHealth
-            : reported;
-          const accounts = accountRowsOf(engine, health, runner.install);
-          // Read across the whole group, since a repeat is a fact about two of its rows.
-          const repeats = duplicateAccounts(accounts);
-          // The accounts under a row are an engine's own, and only an engine that keeps them has
-          // any. OpenCode keeps none — its row is the install, and nothing else follows it.
-          const accountEngine: AccountEngine | null = engineKeepsAccounts(engine) ? engine : null;
-          // The same question the server asks when a session starts with no account picked.
-          const next =
-            accountEngine && accounts.length > 0
-              ? accountToStartOn(accountEngine, accounts, withEnginePlanUsage(runner.planUsage, runner.engines), new Date())
-              : null;
-          const open = openAccounts.includes(accountsGroup(runner.id, engine));
-          return (
-            <Fragment key={engine}>
-              <EngineRow
-                runner={runner}
-                engine={engine}
-                health={health}
-                accounts={accounts}
-                signIn={signIn}
-                onSignIn={setSignIn}
-                focused={engine === focusEngine}
-                next={next}
-                open={open}
-                onFold={(opened) => onFoldAccounts(engine, opened)}
-              />
-              {accountEngine !== null && open && accounts.map((account, index) => (
-                <AccountRow
-                  key={account.id}
-                  runner={runner}
-                  engine={accountEngine}
-                  account={account}
-                  defaultName={accountNameOf(accounts.find((entry) => entry.id === 'default') ?? { id: 'default' })}
-                  next={account.id === next}
-                  duplicateOf={repeats.get(account.id)}
-                  lastOfGroup={index === accounts.length - 1}
-                  envKey={runsOnEnvKey(health, account)}
-                  signIn={signIn}
-                  onSignIn={setSignIn}
-                />
-              ))}
-            </Fragment>
-          );
-        })
-      ) : (
-        // Never three rows of "Unknown": this runner hasn't told us anything, which is a
-        // different fact from "nothing is installed" and has a different fix.
-        <>
-          <div className="re-unreported">
-            This runner hasn&apos;t reported its engines yet. Update it to the latest version — an
-            older runner can&apos;t be signed in or installed from here.
-          </div>
-          <div className="re-row" data-engine="antigravity"><div className="re-id"><ProviderTile slug="antigravity" label="Antigravity" size={28} /><div className="re-name">Antigravity</div></div><Badge>Update runner</Badge><div className="re-login-note">Update this runner to sign in with Google.</div></div>
-        </>
+      {!collapsed && (
+        <MachineEngines
+          runner={runner}
+          signIn={signIn}
+          onSignIn={setSignIn}
+          focusEngine={focusEngine}
+          openAccounts={openAccounts}
+          onFoldAccounts={onFoldAccounts}
+        />
       )}
     </div>
   );
 }
 
+/** The sign-in panel of an engine's own login on this machine: its row's, or — where the row heads
+ *  its accounts — Default's, which is that login. What the machine page's Needs Attention opens for
+ *  an engine that is signed out. */
+export function ownSignInPanel(runner: Runner, engine: LoginEngine): string {
+  return accountRowsOf(engine, engineHealthOf(runner, engine), runner.install).length > 0
+    ? accountPanel(engine, 'default')
+    : engine;
+}
+
+/** A CLI on the machine that has no row above — DeepSeek Harness, which runs every session on an API
+ *  key — as the machine's own page lists it: what is installed, whether it is being kept current, and
+ *  whether the machine can run Harness at all (dshRunnerState). It has no quota and nothing to press,
+ *  so it is one line. */
+function CliRow({ runner, health }: { runner: Runner; health: RunnerEngineHealth }) {
+  const name = ENGINE_CLI_NAME[health.engine] ?? health.engine;
+  const note = health.installed ? updateNoteOf(health.update) : null;
+  const harness = health.engine === 'dsh' ? dshRunnerState(runner) : null;
+  const status = harness
+    ? harness === 'ready' ? 'Uses API keys' : DSH_STATE_LABEL[harness]
+    : health.installed ? null : 'Not installed';
+  return (
+    <div className="re-row" data-engine={health.engine}>
+      <div className="re-id">
+        <ProviderTile slug={health.engine === 'dsh' ? 'deepseek-harness' : health.engine} label={name} size={28} />
+        <div style={{ minWidth: 0 }}>
+          <div className="re-name">{name}</div>
+          {/* A CLI that isn't there has no version to show; its status says it is missing. */}
+          {health.installed && (
+            <div className="re-meta">
+              {health.version ? engineVersionNumber(health.version) : 'version not reported'}
+              {note && (
+                <span className={`re-upd${note.tone === 'warn' && runner.online ? ' warn' : ''}`} title={health.update?.message}>
+                  {' '}
+                  · {note.text}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="re-status">{status && <Badge>{status}</Badge>}</div>
+    </div>
+  );
+}
+
 /**
- * The Providers page's first section: the engine CLIs signed in on the user's own machines.
+ * One machine's engines: a row each, with its accounts under it, and on every row what can be done
+ * there — Sign in, Install, Add account, and each account's own menu. A machine's card here holds
+ * them under its head, and the machine's own page (RunnerDetailPage) under its Engines, as
+ * `machinePage`: there every other CLI the machine reports is listed too (CliRow), because that
+ * page's Update engines updates all of them.
+ *
+ * The sign-in panel open among the rows is the holder's to keep, so that something beside them can
+ * open one: the machine page's Needs Attention does (ownSignInPanel). So are the groups of accounts
+ * open under their rows (useOpenAccounts), which a sign-in opened from beside them has to open too.
+ */
+export function MachineEngines({
+  runner,
+  signIn,
+  onSignIn,
+  focusEngine,
+  openAccounts,
+  onFoldAccounts,
+  machinePage = false,
+}: {
+  runner: Runner;
+  /** The sign-in panel open on this machine, if any: an engine's, or one of its accounts'. */
+  signIn: string | null;
+  onSignIn: (panel: string | null) => void;
+  /** The engine a deep link came here for: its row is marked and brought into view. */
+  focusEngine?: InstallEngine | null;
+  /** The groups of accounts the user opened, on every runner (accountsGroup). */
+  openAccounts: string[];
+  /** The engine whose group folded — a RowEngine, since a row is one, and only an engine that
+   *  keeps accounts ever draws the toggle that calls this. */
+  onFoldAccounts: (engine: RowEngine, open: boolean) => void;
+  /** Laid out on the machine's own page, under the controls that update every CLI on it. */
+  machinePage?: boolean;
+}) {
+  const engines = runner.engines ?? null;
+  if (!engines) {
+    // Never three rows of "Unknown": this runner hasn't told us anything, which is a
+    // different fact from "nothing is installed" and has a different fix.
+    return (
+      <>
+        <div className="re-unreported">
+          This runner hasn&apos;t reported its engines yet. Update it to the latest version — an
+          older runner can&apos;t be signed in or installed from here.
+        </div>
+        <div className="re-row" data-engine="antigravity"><div className="re-id"><ProviderTile slug="antigravity" label="Antigravity" size={28} /><div className="re-name">Antigravity</div></div><Badge>Update runner</Badge><div className="re-login-note">Update this runner to sign in with Google.</div></div>
+      </>
+    );
+  }
+  const rows = rowEnginesOf(engines);
+  const rowed = new Set<string>(rows);
+  return (
+    <>
+      {rows.map((engine) => {
+        const health = engineHealthOf(runner, engine);
+        const accounts = accountRowsOf(engine, health, runner.install);
+        // Read across the whole group, since a repeat is a fact about two of its rows.
+        const repeats = duplicateAccounts(accounts);
+        // The accounts under a row are an engine's own, and only an engine that keeps them has
+        // any. OpenCode keeps none — its row is the install, and nothing else follows it.
+        const accountEngine: AccountEngine | null = engineKeepsAccounts(engine) ? engine : null;
+        // The same question the server asks when a session starts with no account picked.
+        const next =
+          accountEngine && accounts.length > 0
+            ? accountToStartOn(accountEngine, accounts, withEnginePlanUsage(runner.planUsage, runner.engines), new Date())
+            : null;
+        const open = openAccounts.includes(accountsGroup(runner.id, engine));
+        return (
+          <Fragment key={engine}>
+            <EngineRow
+              runner={runner}
+              engine={engine}
+              health={health}
+              accounts={accounts}
+              signIn={signIn}
+              onSignIn={onSignIn}
+              focused={engine === focusEngine}
+              machinePage={machinePage}
+              next={next}
+              open={open}
+              onFold={(opened) => onFoldAccounts(engine, opened)}
+            />
+            {accountEngine !== null && open && accounts.map((account, index) => (
+              <AccountRow
+                key={account.id}
+                runner={runner}
+                engine={accountEngine}
+                account={account}
+                defaultName={accountNameOf(accounts.find((entry) => entry.id === 'default') ?? { id: 'default' })}
+                next={account.id === next}
+                duplicateOf={repeats.get(account.id)}
+                lastOfGroup={index === accounts.length - 1}
+                envKey={runsOnEnvKey(health, account)}
+                signIn={signIn}
+                onSignIn={onSignIn}
+              />
+            ))}
+          </Fragment>
+        );
+      })}
+      {machinePage &&
+        engines
+          .filter((health) => !rowed.has(health.engine))
+          .map((health) => <CliRow key={health.engine} runner={runner} health={health} />)}
+    </>
+  );
+}
+
+/**
+ * Infrastructure's first section, Machines: the engine CLIs signed in on the user's own machines.
  *
  * These are a different kind of identity from the API keys below — they live on one machine and
  * spend the subscription signed into there, rather than on the account and billed per token — so
  * they get their own section rather than extra rows in the same table.
+ *
+ * Each card is also the machine itself: dragged by its handle into the order every runner list uses,
+ * and renamed, its token rotated or the machine deleted from its ⋯.
+ * `head` replaces the section's own heading, and `attentionOf` puts under each machine's name what it
+ * needs a person for — an update it can't make itself among them (InfrastructurePage's Machines).
  */
-export function RunnerEngines() {
+export function RunnerEngines({
+  head,
+  attentionOf,
+}: {
+  head?: ReactNode;
+  attentionOf?: (runner: Runner) => AttentionItem[];
+} = {}) {
+  const [confirm, confirmation] = useConfirm();
+  const message = useToast();
+  const qc = useQueryClient();
   const [expanded, setExpanded] = useState<string[]>(readExpanded);
-  const [openAccounts, setOpenAccounts] = useState<string[]>(() => readExpanded(OPEN_ACCOUNTS_KEY));
-  const write = (next: string[], key = EXPANDED_KEY) => {
-    try {
-      localStorage.setItem(key, JSON.stringify(next));
-    } catch {
-      // Private mode / full quota: the fold still works, it just won't outlive the page.
-    }
-    return next;
-  };
+  const [openAccounts, foldAccounts] = useOpenAccounts();
   const toggle = (id: string) =>
-    setExpanded((prev) => write(prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  const foldAccounts = (group: string, open: boolean) =>
-    setOpenAccounts((prev) =>
-      prev.includes(group) === open
-        ? prev
-        : write(open ? [...prev, group] : prev.filter((x) => x !== group), OPEN_ACCOUNTS_KEY),
-    );
+    setExpanded((prev) => writeExpanded(prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
   // Where a "Not signed in" row in the new-session picker sends the user: this exact engine on
-  // this exact machine — the same link the machine's own page carries on every row it draws
-  // (engineSignInHref), so any engine a card can render is one a link can name. Cards start
-  // folded, so the one row they came for is exactly what's hidden — arriving opens that card,
-  // and that engine's accounts in it, and the open sticks, because it is the same edit they'd
-  // have made by hand.
+  // this exact machine, any engine a card can render. Cards start folded, so the one row they came
+  // for is exactly what's hidden — arriving opens that card, and that engine's accounts in it, and
+  // the open sticks, because it is the same edit they'd have made by hand.
   const [params] = useSearchParams();
   const focusRunner = routeId(params.get('runner'));
   const engineParam = params.get('engine');
   const focusEngine: InstallEngine | null = ROW_ENGINES.find((e) => e === engineParam) ?? null;
   useEffect(() => {
     if (!focusRunner) return;
-    setExpanded((prev) => (prev.includes(focusRunner) ? prev : write([...prev, focusRunner])));
+    setExpanded((prev) => (prev.includes(focusRunner) ? prev : writeExpanded([...prev, focusRunner])));
     if (focusEngine) foldAccounts(accountsGroup(focusRunner, focusEngine), true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusRunner, focusEngine]);
@@ -1487,19 +1720,115 @@ export function RunnerEngines() {
     0,
   );
 
+  const [renaming, setRenaming] = useState<Runner | null>(null);
+  const [renameVal, setRenameVal] = useState('');
+  // The ⋯ button the rename was asked from, where focus returns once the dialog closes.
+  const [renameFrom, setRenameFrom] = useState<RefObject<HTMLButtonElement | null> | undefined>();
+  const renameInput = useRef<HTMLInputElement>(null);
+  const rotation = useRunnerTokenRotation();
+  const renameMut = useMutation({
+    mutationFn: ({ id, displayName }: { id: string; displayName: string }) =>
+      api(`/runners/${id}`, { method: 'PATCH', body: { displayName } }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: runnersQuery().queryKey });
+      setRenaming(null);
+    },
+    onError: (e: Error) => message.error("Couldn't rename the machine", e.message),
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => api(`/runners/${id}`, { method: 'DELETE' }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
+    onError: (e: Error) => message.error("Couldn't delete the machine", e.message),
+  });
+  const reorderMut = useMutation({
+    mutationFn: (ids: string[]) => api<Runner[]>('/runners/reorder', { method: 'POST', body: { ids } }),
+    // Moved at once, and put back if the server refuses: a card that waited for the round trip
+    // would jump back under the pointer first.
+    onMutate: async (ids) => {
+      await qc.cancelQueries({ queryKey: runnersQuery().queryKey });
+      const previous = qc.getQueryData<Runner[]>(runnersQuery().queryKey);
+      if (previous) {
+        const rank = new Map(ids.map((id, index) => [id, index]));
+        qc.setQueryData<Runner[]>(
+          runnersQuery().queryKey,
+          [...previous]
+            .sort(
+              (a, b) =>
+                (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+            )
+            .map((runner, position) => ({ ...runner, position })),
+        );
+      }
+      return { previous };
+    },
+    onError: (e: Error, _ids, context) => {
+      if (context?.previous) qc.setQueryData(runnersQuery().queryKey, context.previous);
+      message.error("Couldn't reorder the machines", e.message);
+    },
+    onSuccess: (data) => qc.setQueryData(runnersQuery().queryKey, data),
+    onSettled: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
+  });
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const onDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id || reorderMut.isPending) return;
+    const from = list.findIndex((runner) => runner.id === active.id);
+    const to = list.findIndex((runner) => runner.id === over.id);
+    if (from < 0 || to < 0) return;
+    reorderMut.mutate(arrayMove(list, from, to).map((runner) => runner.id));
+  };
+  const submitRename = () => {
+    if (renaming) renameMut.mutate({ id: renaming.id, displayName: renameVal.trim() });
+  };
+  // `trigger` is the card's ⋯ button: what a dialog opened from the menu gives focus back to.
+  const menuOf = (r: Runner, trigger: RefObject<HTMLButtonElement | null>): MenuItem[] => [
+    {
+      key: 'rename',
+      icon: <EditOutlined />,
+      label: 'Rename',
+      onSelect: () => {
+        setRenameVal(r.displayName || r.name);
+        setRenameFrom(trigger);
+        setRenaming(r);
+      },
+    },
+    { key: 'rotate', icon: <KeyOutlined />, label: 'Rotate token', onSelect: () => rotation.confirmRotate(r, trigger) },
+    { type: 'separator', key: 'divider' },
+    {
+      key: 'delete',
+      icon: <DeleteOutlined />,
+      label: 'Delete',
+      danger: true,
+      onSelect: () =>
+        void confirm({
+          title: `Delete “${r.displayName || r.name}”?`,
+          description: 'This removes the machine from your account. Register it again to add it back.',
+          confirmText: 'Delete',
+          danger: true,
+          cancelText: 'Cancel',
+          onConfirm: () => deleteMut.mutateAsync(r.id),
+          returnFocus: trigger,
+        }),
+    },
+  ];
+
   return (
     <div className="re-sec">
-      <div className="re-sec-head">
-        <h3>On your runners</h3>
-        <span className="re-sec-sub">
-          Use subscriptions signed in on your machines.
-        </span>
-        {list.length > 0 && (
-          <span className="re-sec-count">
-            {list.length} runner{list.length === 1 ? '' : 's'} · {ready} signed in
+      {head ?? (
+        <div className="re-sec-head">
+          <h3>On your runners</h3>
+          <span className="re-sec-sub">
+            Use subscriptions signed in on your machines.
           </span>
-        )}
-      </div>
+          {list.length > 0 && (
+            <span className="re-sec-count">
+              {list.length} runner{list.length === 1 ? '' : 's'} · {ready} signed in
+            </span>
+          )}
+        </div>
+      )}
       {list.length === 0 ? (
         <div className="re-empty">
           <div className="re-empty-logos">
@@ -1514,26 +1843,67 @@ export function RunnerEngines() {
           </div>
           <h4>Already pay for Claude, Codex or Kimi?</h4>
           <p>
-            Add a runner and sign its CLIs in — your workspaces then run on the subscription you
-            already have, with no API key.
+            Register a machine and sign its CLIs in — your workspaces then run on the subscription
+            you already have, with no API key.
           </p>
-          <Link to="/runners">
-            <Button>Add a runner</Button>
+          <Link to="/runners/register">
+            <Button>Register a machine</Button>
           </Link>
         </div>
       ) : (
-        list.map((runner) => (
-          <RunnerEngineCard
-            key={runner.id}
-            runner={runner}
-            collapsed={!expanded.includes(runner.id)}
-            onToggle={() => toggle(runner.id)}
-            focusEngine={runner.id === focusRunner ? focusEngine : null}
-            openAccounts={openAccounts}
-            onFoldAccounts={(engine, open) => foldAccounts(accountsGroup(runner.id, engine), open)}
-          />
-        ))
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          <SortableContext items={list.map((runner) => runner.id)} strategy={verticalListSortingStrategy}>
+            {list.map((runner) => (
+              <RunnerEngineCard
+                key={runner.id}
+                runner={runner}
+                collapsed={!expanded.includes(runner.id)}
+                onToggle={() => toggle(runner.id)}
+                focusEngine={runner.id === focusRunner ? focusEngine : null}
+                attention={attentionOf?.(runner) ?? []}
+                menuItems={(trigger) => menuOf(runner, trigger)}
+                dragDisabled={reorderMut.isPending}
+                openAccounts={openAccounts}
+                onFoldAccounts={(engine, open) => foldAccounts(accountsGroup(runner.id, engine), open)}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
       )}
+
+      <Dialog
+        className="runner-dialog"
+        title="Rename machine"
+        open={renaming !== null}
+        onClose={() => setRenaming(null)}
+        initialFocus={renameInput}
+        returnFocus={renameFrom}
+        footer={
+          <>
+            <Button onClick={() => setRenaming(null)}>Cancel</Button>
+            <Button variant="primary" loading={renameMut.isPending} onClick={submitRename}>
+              Save
+            </Button>
+          </>
+        }
+      >
+        <Input
+          ref={renameInput}
+          value={renameVal}
+          onChange={(e) => setRenameVal(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.nativeEvent.isComposing) submitRename();
+          }}
+          placeholder={renaming?.name}
+          maxLength={60}
+        />
+        <div style={{ marginTop: 8, color: 'var(--text-3)', fontSize: 12 }}>
+          Leave empty to use the machine name{renaming ? ` (${renaming.name})` : ''}.
+        </div>
+      </Dialog>
+
+      {confirmation}
+      {rotation.dialogs}
     </div>
   );
 }

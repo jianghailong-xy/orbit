@@ -172,7 +172,7 @@ export const EventFullCtx = createContext<((seq: number) => Promise<any>) | null
  * What a sign-in failure card should tell this session's viewer, and how to act on it. The
  * remedy depends on where the credentials live, which the transcript can't know: a built-in
  * provider runs on the runner's own runtime login (fix it on that machine), any
- * other slug is a configured API key (fix it in Providers). WorkspaceView supplies this; the
+ * other slug is a configured API key (fix it in Infrastructure). WorkspaceView supplies this; the
  * shared/public page and the static export leave it null, so the card there degrades to the
  * diagnosis alone — a logged-out viewer can neither sign that runner in nor retry.
  */
@@ -210,7 +210,7 @@ export interface AuthErrorHelp {
   onNeedRetryText?: () => void;
   /** Whether the window holds words of the reader's to send, like `AutoRetryHelp`'s. */
   retryWordsAreTheReaders?: boolean;
-  /** Open Providers — the other way back in, and the only one when the rejected credential is
+  /** Open Infrastructure — the other way back in, and the only one when the rejected credential is
    *  a configured key rather than a login on the runner. */
   onUseApiKey?: () => void;
 }
@@ -244,13 +244,13 @@ export function DshRepairCard({ repair, help, seq }: { repair: DshRepair; help: 
       </div>
       <div className="chat-authfix-desc">
         {repair === 'needsKey'
-          ? 'This session has no DeepSeek Harness key to run on. Add or re-enable the key in Providers, then send your message again.'
+          ? 'This session has no DeepSeek Harness key to run on. Add or re-enable the key in Infrastructure, then send your message again.'
           : repair === 'invalidKey'
-            ? 'Update the key in Providers, then send your message again. Connecting a key does not check it — the first request does.'
+            ? 'Update the key in Infrastructure, then send your message again. Connecting a key does not check it — the first request does.'
             : repair === 'updateRunner'
               ? `${machine} runs Orbit runner ${help.runnerVersion || 'an unknown version'}, which predates DeepSeek Harness. The runner updates itself when no session is running on it.`
               : repair === 'notInstalled'
-                ? 'Install it from Providers, then send your message again.'
+                ? 'Install it from Infrastructure, then send your message again.'
                 : 'DeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only. Move this work to a runner that can.'}
       </div>
       <div className="chat-authfix-actions">
@@ -299,10 +299,10 @@ export function AntigravityRepairCard({ repair, help, seq }: {
       </div>
       <div className="chat-authfix-desc">
         {repair === 'needsKey'
-          ? 'Sign in with Google on this runner, or connect a Gemini API key in Providers.'
+          ? 'Sign in with Google on this runner, or connect a Gemini API key in Infrastructure.'
           : repair === 'updateRunner'
             ? `${machine} runs Orbit runner ${help.runnerVersion || 'an unknown version'}; Antigravity needs 0.1.209 or newer. The runner updates itself when no session is running on it, and this session starts then.`
-            : 'Install it from Providers, then send your message again.'}
+            : 'Install it from Infrastructure, then send your message again.'}
       </div>
       {repair === 'needsKey' && help.provider === 'antigravity' && (
         help.googleLogin === 'available' && help.runnerId
@@ -318,7 +318,7 @@ export function AntigravityRepairCard({ repair, help, seq }: {
         ) : (
           <>
             {repair === 'notInstalled' && help.onInstall && <button className="chat-authfix-go" type="button" onClick={help.onInstall} disabled={help.installDisabled}>Install</button>}
-            {help.onOpenProviders && <button className="chat-authfix-retry" type="button" onClick={help.onOpenProviders}>Open in Providers</button>}
+            {help.onOpenProviders && <button className="chat-authfix-retry" type="button" onClick={help.onOpenProviders}>Open in Infrastructure</button>}
           </>
         )}
       </div>
@@ -1899,7 +1899,7 @@ function ToolFailureCard({
 
 /**
  * The providers whose credentials live on the runner itself (the engines in doctor.go), so the
- * remedy is a sign-in on that machine rather than a key to fix in Providers.
+ * remedy is a sign-in on that machine rather than a key to fix in Infrastructure.
  */
 const LOCAL_LOGIN = new Set(['claude', 'codex', 'kimi', 'opencode', 'antigravity']);
 
@@ -1975,7 +1975,7 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
       ) : help ? (
         <>
           <div className="chat-authfix-desc">
-            The API key for <code>{help.provider}</code> was rejected. Update it in Providers, then
+            The API key for <code>{help.provider}</code> was rejected. Update it in Infrastructure, then
             send your message again.
           </div>
           {help.onUseApiKey && (

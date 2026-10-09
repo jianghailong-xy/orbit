@@ -155,7 +155,7 @@ final class SessionRunStartTests: XCTestCase {
         let card = try XCTUnwrap(SessionRunStart.card(for: session(.failed, error: runner),
                                                       runnerName: "longdeMac-mini.local"))
         XCTAssertEqual(card.why, "OpenCode isn't installed on longdeMac-mini.local")
-        XCTAssertEqual(card.body, "Install it from Providers, then send your message again.")
+        XCTAssertEqual(card.body, "Install it from Infrastructure, then send your message again.")
         XCTAssertEqual(card.body, SessionRunStart.installAdvice)
         XCTAssertEqual(card.actions.map(\.kind), [.openRunner])
     }

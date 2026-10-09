@@ -2,7 +2,7 @@ import XCTest
 @testable import OrbitKit
 
 /// A DeepSeek key's account balance as this client reads it: what GET /providers/mine/:id/balance
-/// answers decodes, what each answer comes to on Settings → Providers and on the key's page — and that
+/// answers decodes, what each answer comes to on Infrastructure's API keys and on the key's page — and that
 /// no answer short of DeepSeek's own balance is ever drawn as an amount. Mirrors web's
 /// deepseekBalance.test.ts and DeepSeekBalance.test.tsx where the two overlap.
 final class DeepSeekBalanceTests: XCTestCase {
@@ -181,7 +181,7 @@ final class DeepSeekBalanceTests: XCTestCase {
         // The pickers' catalogue (GET /providers) carries neither, so nothing there reads as a DeepSeek key.
         XCTAssertFalse(DeepSeekBalance.applies(to: ConfiguredProvider(slug: "deepseek", label: "DeepSeek", runtime: "claude",
                                                                       presetSlug: "deepseek")))
-        // Settings → Providers lists the pickers' catalogue, which has neither: a row is matched by slug.
+        // The pickers' catalogue has neither: a row is matched by slug.
         let row = ConfiguredProvider(slug: "deepseek-harness", label: "DeepSeek Harness", runtime: "dsh",
                                      presetSlug: "deepseek-harness")
         XCTAssertEqual(DeepSeekBalance.key(for: row, mine: mine)?.providerID, "p2")

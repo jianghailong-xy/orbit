@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// A small capitalised tag: NEXT, ADMIN — and SHARED, in the brand colour. The account pools' rows wear it
-/// (ProviderPoolViews, iOS), and so do an engine page's account rows, on the Mac as well (RunnerEnginePage).
+/// (InfrastructureSections, and the pool pages in ProviderPoolViews, iOS), and so do an engine page's
+/// account rows, on the Mac as well (RunnerEnginePage).
 struct PoolChip: View {
     let text: String
     var brand = false

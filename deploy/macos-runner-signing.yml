@@ -1,0 +1,26 @@
+# Signs the macOS runner binaries this deployment publishes at /dl with its Developer ID
+# (docs/release-process.md, "macOS runner signature"). A deployment opts in from its .env, which
+# every Compose command in the checkout reads, the upgrade skill's included:
+#
+#   COMPOSE_FILE=docker-compose.yml:deploy/macos-runner-signing.yml
+#   ORBIT_MACOS_SIGNING_P12=/root/orbit-signing/developer-id.p12
+#   ORBIT_MACOS_SIGNING_PASSWORD_FILE=/root/orbit-signing/developer-id.password
+#
+# Both files stay on the host, outside the checkout. The web build reads them as BuildKit secrets,
+# which reach only the step that signs and never an image layer. The build argument carries the
+# .p12's path, not its contents: it marks a build that signs, so turning signing on or off rebuilds
+# the binaries rather than reusing ones built the other way.
+services:
+  web:
+    build:
+      args:
+        ORBIT_MACOS_SIGNING: "${ORBIT_MACOS_SIGNING_P12:?set ORBIT_MACOS_SIGNING_P12 to the Developer ID .p12}"
+      secrets:
+        - orbit_macos_signing_p12
+        - orbit_macos_signing_password
+
+secrets:
+  orbit_macos_signing_p12:
+    file: "${ORBIT_MACOS_SIGNING_P12:?set ORBIT_MACOS_SIGNING_P12 to the Developer ID .p12}"
+  orbit_macos_signing_password:
+    file: "${ORBIT_MACOS_SIGNING_PASSWORD_FILE:?set ORBIT_MACOS_SIGNING_PASSWORD_FILE to a file holding the .p12's password}"
