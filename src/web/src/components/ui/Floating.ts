@@ -111,6 +111,33 @@ export function useDropdownPlacement(open: boolean, anchor: RefObject<Element | 
   return { sideOffset, alignOffset, positioner, collisionPadding: 0, collisionAvoidance: { side: 'flip', align: 'none' } as const };
 }
 
+/**
+ * A submenu placed as rc-trigger placed the replaced one (rc-menu's `rightTop`). It starts at its item's right
+ * edge, rounded down. If it would cross the layout viewport's right edge and ending at the item's left edge
+ * shows at least as much of it, it ends there instead, its left edge rounded down; it is never slid into view
+ * or moved below its item. Laid out from its left edge, it narrows to the room up to the layout viewport's edge
+ * (--orbit-submenu-room), its labels wrapping.
+ *
+ * Base UI's flip decides by the visual viewport less its collision padding, then tries the other axis, so the
+ * side rc-trigger did not take is offered to it out of reach and the flip lands on the one rc-trigger took.
+ * The vertical alignment is still Base UI's flip and shift.
+ */
+export function useSubmenuPlacement(anchor: RefObject<Element | null>) {
+  const positioner = useRef<HTMLDivElement>(null);
+  const sideOffset = ({ side, positioner: { width } }: OffsetData) => {
+    const rect = anchor.current?.getBoundingClientRect();
+    if (!rect) return 0;
+    const right = document.documentElement.clientWidth;
+    const shown = (x: number) => Math.max(0, Math.min(right, x + width) - Math.max(0, x));
+    const flipped = rect.right + width > right && shown(rect.left - width) >= shown(rect.right);
+    if (flipped !== (side === 'left')) return 1e6; // out of reach
+    const x = flipped ? Math.floor(rect.left - width) : Math.floor(rect.right);
+    positioner.current?.style.setProperty('--orbit-submenu-room', `${right - x}px`);
+    return flipped ? rect.left - width - x : x - rect.right;
+  };
+  return { positioner, sideOffset, collisionAvoidance: { fallbackAxisSide: 'none' } as const };
+}
+
 /** The anchor's exact width while open; Base UI's own --anchor-width is snapped to device pixels. */
 export function useAnchorWidth(open: boolean, anchor: RefObject<HTMLElement | null>): number | undefined {
   const [width, setWidth] = useState<number>();

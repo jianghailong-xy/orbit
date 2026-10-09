@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactElement, type ReactNode } from 'react';
 import { Menu as BaseMenu } from '@base-ui/react/menu';
 import { CheckOutlined, RightOutlined } from '@ant-design/icons';
-import { useDropdownPlacement, useFloating, type FloatingProps } from './Floating';
+import { useDropdownPlacement, useFloating, useSubmenuPlacement, type FloatingProps } from './Floating';
 import './Floating.css';
 
 interface MenuAction {
@@ -54,9 +54,11 @@ function handOver(event: ReactKeyboardEvent<HTMLElement> & { preventBaseUIHandle
 
 function Submenu({ item, contents, container, zIndex }: { item: MenuAction; contents: ReactNode; container: () => HTMLElement | undefined; zIndex: number }) {
   const layer = useFloating({});
+  const anchor = useRef<HTMLDivElement>(null);
   const popup = useRef<HTMLDivElement>(null);
+  const { positioner, ...placement } = useSubmenuPlacement(anchor);
   return <BaseMenu.SubmenuRoot open={layer.open} onOpenChange={layer.setOpen}>
-    <BaseMenu.SubmenuTrigger className="orbit-menu-item" label={item.textValue} onKeyDown={(event) => {
+    <BaseMenu.SubmenuTrigger ref={anchor} className="orbit-menu-item" label={item.textValue} onKeyDown={(event) => {
       // Opened from the keyboard, the submenu highlights its first item before focus moves into it; until then
       // the parent menu would take these keys, an arrow, Home or End moving to another of its items for the next
       // Enter to run. Opened by hover, nothing in it is highlighted and the keys stay the parent's.
@@ -68,7 +70,7 @@ function Submenu({ item, contents, container, zIndex }: { item: MenuAction; cont
       handOver(event, target, ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter', ' ', 'ArrowLeft', 'Tab']);
     }}>{contents}<RightOutlined className="orbit-menu-submenu-icon" aria-hidden /></BaseMenu.SubmenuTrigger>
     <BaseMenu.Portal container={container()}>
-      <BaseMenu.Positioner side="right" align="start" sideOffset={4} collisionPadding={8} positionMethod={layer.positionMethod} className="orbit-floating-positioner" style={{ zIndex: zIndex + 1 }}>
+      <BaseMenu.Positioner ref={positioner} side="right" align="start" {...placement} collisionPadding={8} positionMethod={layer.positionMethod} className="orbit-floating-positioner" style={{ zIndex: zIndex + 1 }}>
         <BaseMenu.Popup ref={popup} className="orbit-menu" onClick={(event) => event.stopPropagation()}><Items items={item.children!} container={container} zIndex={zIndex + 1} /></BaseMenu.Popup>
       </BaseMenu.Positioner>
     </BaseMenu.Portal>
