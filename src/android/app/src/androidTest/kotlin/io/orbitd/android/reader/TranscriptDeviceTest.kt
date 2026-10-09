@@ -387,7 +387,12 @@ class TranscriptDeviceTest {
         compose.onNodeWithText("Close diff").performClick()
         compose.onNodeWithTag("session-details").performScrollToNode(hasText("BUILD SUCCESSFUL", substring = true))
         compose.onNodeWithText("BUILD SUCCESSFUL", substring = true).assertIsDisplayed()
-        compose.onNodeWithTag("session-details").performScrollToNode(hasText("Checking references"))
+        // An agent is named by its kind and opens to its progress rather than output (iOS's background rows, A06c).
+        compose.onNodeWithTag("session-details").performScrollToNode(hasText("Review documentation"))
+        compose.onNodeWithText("Agent").assertIsDisplayed()
+        compose.onNodeWithTag("session-details").performScrollToNode(hasText("Show progress"))
+        compose.onNodeWithText("Show progress").performClick()
+        compose.onNodeWithTag("session-details").performScrollToNode(hasText("No progress reported yet."))
         capture("background-work")
         compose.onNodeWithText("Close session details").performClick()
     }
