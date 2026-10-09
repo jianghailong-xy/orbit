@@ -36,6 +36,44 @@ export const CODEX_OAUTH_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
 export const ACCESS_TOKEN_REFRESH_WINDOW_MS = 5 * 60_000;
 
 /**
+ * What a login pool's session token may reach through the gateway, and nothing else: the turn
+ * (POST /responses) plus the ChatGPT backend calls the official CLI makes when it is signed in
+ * itself — the pre-turn workspace routing, the plugin and settings reads, and the turn's analytics.
+ * Those paths are the backend's own, minus the `/backend-api` its base carries (recorded off codex
+ * 0.162 signed in with a ChatGPT login: docs/evidence/codex-fixture or runner-go
+ * codex_chatgpt_backend_recording_test.go). A configured provider's codex never sends them — a session
+ * runs its codex on the session token as an API key — so they are here for a caller that means to
+ * reach the backend on the account deliberately. `gatewayAllows` (pool-gateway.service.ts) is the
+ * API-key side's, which has none of these.
+ */
+export const LOGIN_GATEWAY_PATHS = [
+  { method: 'POST', path: '/responses' },
+  { method: 'GET', path: '/wham/accounts/check' },
+  { method: 'GET', path: '/wham/settings/user' },
+  { method: 'GET', path: '/codex/models' },
+  { method: 'GET', path: '/ps/plugins/list' },
+  { method: 'GET', path: '/ps/plugins/suggested/codex' },
+  { method: 'GET', path: '/ps/plugins/installed' },
+  { method: 'GET', path: '/plugins/featured' },
+  { method: 'POST', path: '/ps/mcp' },
+  { method: 'POST', path: '/codex/analytics-events/events' },
+] as const;
+
+/** Whether a login pool's token may have `method` `path` (a path under the gateway prefix) forwarded. */
+export function loginGatewayAllows(method: string, path: string): boolean {
+  return LOGIN_GATEWAY_PATHS.some((allowed) => allowed.method === method && allowed.path === path);
+}
+
+/**
+ * The ChatGPT backend a login's non-turn paths live under: the Codex base (CHATGPT_CODEX_BASE) without
+ * its trailing `/codex`, because `wham/`, `ps/`, `plugins/` and the analytics events sit on the backend
+ * root while the turn and the models list sit under `/codex`. The turn keeps the base as it is.
+ */
+export function loginBackendBase(codexBase: string): string {
+  return codexBase.replace(/\/codex\/?$/, '');
+}
+
+/**
  * When a spent subscription names no reset at all — neither `resets_at` nor a window at 100% with a reset
  * of its own nor `retry-after` — the session is held this long, the length of the subscription's shorter
  * window, and asked again: a wrong guess costs one more 429, never a request on another account.
