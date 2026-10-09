@@ -68,6 +68,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             next.recordId != null && next.recordId == route.recordId) model.openRecord(next.recordId)
         else open(next)
     }
+    // The worktree bar's model: its own reads while an outcome is pending or the session is live, and the store's as they land.
+    val worktree = remember(handle, route.id) { WorktreeModel(api, route.id!!, app.processScope) }
     val list = rememberLazyListState()
     var follow by rememberSaveable { mutableStateOf(route.recordId == null) }
     var placed by remember(model) { mutableStateOf(false) }
@@ -108,6 +110,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             }
     }
     val transcript = state.session?.transcript
+    val snapshotDetail = state.session?.snapshot?.detail
+    LaunchedEffect(snapshotDetail) { snapshotDetail?.let(worktree::offer) }
+    LaunchedEffect(worktree, state.denied) {
+        if (!state.denied) worktree.poll { (worktree.state.value.detail ?: snapshotDetail)?.let { it.string("runStatus") ?: it.string("status") } in
+            setOf("RUNNING", "AWAITING_INPUT", "INTERRUPTED") }
+    }
     // A06-5: the viewport changing size under a pinned reader (keyboard, a taller composer, the sticky
     // header) asks for the tail again; nothing else re-anchors the bottom of a list that shrank.
     val viewport = remember(model) { TranscriptViewport() }
@@ -208,6 +216,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 }
                 }
                 SessionWatches(app, handle, route.id!!, open = open)
+                // The session's code output, folded with the rest of the chrome while a phone's composer is focused.
+                if (!(composerFocused && compact)) Box(Modifier.padding(horizontal = 16.dp)) { WorktreeBar(worktree, openLink) }
                 // Keep the composer and its activity-result launchers alive while card forms use the IME.
                 // The chip's Open task › pushes the task over this run, so Back returns to it.
                 Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
