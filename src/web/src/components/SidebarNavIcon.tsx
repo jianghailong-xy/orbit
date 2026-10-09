@@ -36,12 +36,6 @@ const glyphs = {
       <path d="M1.5 14.5h21M12 17.5v4M7.5 21.5h9" />
     </>
   ),
-  // powerplug
-  providers: (
-    <>
-      <path d="M8 2.5v5M16 2.5v5M5.5 7.5h13v3a6.5 6.5 0 0 1-13 0ZM12 17v4.5" />
-    </>
-  ),
 };
 
 export function SidebarNavIcon({ name }: { name: keyof typeof glyphs }) {

@@ -126,7 +126,7 @@ describe('a session with no SOURCE refusal', () => {
     );
     expect(card.cause).toBe('ENGINE_NOT_INSTALLED');
     expect(card.why).toBe('DeepSeek Harness isn’t installed on longdeMac-mini.local');
-    expect(card.body).toBe('Install it from Providers, then send your message again.');
+    expect(card.body).toBe('Install it from Infrastructure, then send your message again.');
     expect(card.actions).toEqual(['install', 'open-runner']);
   });
 

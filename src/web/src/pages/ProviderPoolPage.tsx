@@ -80,7 +80,7 @@ export function ProviderPoolPage() {
     onSuccess: () => {
       refresh();
       message.success('Pool deleted');
-      navigate('/providers');
+      navigate('/infrastructure#pools');
     },
     onError: (e: Error) => message.error("Couldn't delete the pool", e.message),
   });
@@ -101,8 +101,8 @@ export function ProviderPoolPage() {
   if (!pool) {
     return (
       <div className="provider-form">
-        <Link className="provider-back" to="/providers">
-          ‹ All providers
+        <Link className="provider-back" to="/infrastructure#pools">
+          ‹ Infrastructure
         </Link>
         <div style={{ marginTop: 16, color: 'var(--text-3)' }}>That pool no longer exists.</div>
       </div>
@@ -111,8 +111,8 @@ export function ProviderPoolPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      <Link className="provider-back" to="/providers">
-        ‹ All providers
+      <Link className="provider-back" to="/infrastructure#pools">
+        ‹ Infrastructure
       </Link>
       <div className="pool-page-head">
         <div style={{ minWidth: 0 }}>
@@ -248,7 +248,7 @@ function CodexPoolPage({
     onSuccess: () => {
       refresh();
       message.success(mine ? 'Pool deleted' : `You left ${pool.label}`);
-      navigate('/providers');
+      navigate('/infrastructure#pools');
     },
     onError: (e: Error) => message.error(mine ? "Couldn't delete the pool" : "Couldn't leave the pool", e.message),
   });
@@ -285,8 +285,8 @@ function CodexPoolPage({
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      <Link className="provider-back" to="/providers">
-        ‹ All providers
+      <Link className="provider-back" to="/infrastructure#pools">
+        ‹ Infrastructure
       </Link>
       <div className="pool-page-head">
         <div style={{ minWidth: 0 }}>

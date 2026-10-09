@@ -16,8 +16,8 @@ import { useNow } from './WatchParts';
 import { Button, LinkButton } from './ui/Button';
 import './DeepSeekBalance.css';
 
-// The DeepSeek account balance behind a DeepSeek key, on the Providers list (one line under the row)
-// and on the key's edit page (a section under the key). Every amount on screen is DeepSeek's own
+// The DeepSeek account balance behind a DeepSeek key, on Infrastructure's API keys (one line under the
+// row) and on the key's edit page (a section under the key). Every amount on screen is DeepSeek's own
 // answer; while there is none it says so — loading, or why it failed — and never draws a 0.
 
 const NOTE =
@@ -37,7 +37,7 @@ function useBalance(row: ProviderRow) {
   return { view, ask, asking: refresh.isPending };
 }
 
-/** The row's line on the Providers list: the total, or why there isn't one. */
+/** The row's line on Infrastructure's API keys: the total, or why there isn't one. */
 export function DeepSeekBalanceLine({ row }: { row: ProviderRow }) {
   const { view, ask, asking } = useBalance(row);
   const now = useNow(30_000);
