@@ -1367,6 +1367,13 @@ model Session {
   // Materialized from the owning agent. Only needed to distinguish first-class Kimi from a
   // stale old-replica write that still uses the former custom-provider slug `kimi`.
   providerBuiltin      Boolean   @default(false) @map("provider_builtin")
+  // The engine — the CLI on the runner that produces this session's runtimeSessionId (claude, codex,
+  // kimi, antigravity, opencode, dsh) — while `provider` is only where its credential comes from
+  // (migration 0414, docs/provider-engine-contract.md §1.1). Written at insert, and never changed
+  // after that: the database refuses it (session_engine_immutable), and a new engine is a new session.
+  // NULL only on a row an older API replica wrote or one the backfill could not place; every door
+  // derives those by the old rules (providers/session-engine.ts), and a claim records what it derived.
+  engine               String?
   // Only for a session whose provider is an account pool (migration 0268): the ModelProvider its last
   // claim dispatched on, which the next claim stays on until that member is spent or refused
   // (QueueService.resolvePoolMember). No relation: a member deleted or taken out of the pool matches
@@ -4547,6 +4554,11 @@ model Task {
   // the next run start a fresh session rather than continue the last one, since a session's
   // provider is fixed for its lifetime (see TasksService.runAgentOnTask).
   provider         String?
+  // The engine pin beside the credential pin (migration 0414, docs/provider-engine-contract.md §1.2):
+  // which CLI the task's runs execute on. Backfilled from the provider pin, so a pinned task means what
+  // it meant before; an older replica's run on exactly the pinned credential takes it at insert
+  // (session_engine_from_task_pin).
+  engine           String?
   model            String?
   // Suggested tier, separate from the model pin. The migration checks S/M/L/XL or NULL.
   modelHint        String?     @map("model_hint")

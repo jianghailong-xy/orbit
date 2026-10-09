@@ -214,14 +214,25 @@ test('P1b dsh dispatch: capability filters preserve configured dsh keyword colli
     user: { findUnique: async () => ({ role: 'ADMIN' }) },
     modelProvider: { findMany: async (query: unknown) => { seen.push(query); return [{ slug: 'harness-key' }]; } },
   };
+  // A session recorded on the runtime is filtered by that alone (migration 0414); the collisions are
+  // preserved where they still decide anything, on a row without an engine.
   assert.deepEqual(await providerDispatchWhereOn(db as never, ownerId, AgentProvider.DSH), {
     OR: [
-      { provider: AgentProvider.DSH, providerBuiltin: true },
-      { provider: { in: ['harness-key'] }, providerBuiltin: false },
+      { engine: AgentProvider.DSH },
+      { AND: [
+        { engine: null },
+        { OR: [
+          { provider: AgentProvider.DSH, providerBuiltin: true },
+          { provider: { in: ['harness-key'] }, providerBuiltin: false },
+        ] },
+      ] },
     ],
   });
   assert.deepEqual(seen[0], { where: { runtime: AgentProvider.DSH, enabled: true, OR: [{ ownerId: null }, { ownerId }] }, select: { slug: true } });
   assert.deepEqual(await providerDispatchWhereOn(db as never, ownerId, AgentProvider.ANTIGRAVITY), {
-    provider: { in: ['antigravity', 'harness-key'] },
+    OR: [
+      { engine: AgentProvider.ANTIGRAVITY },
+      { AND: [{ engine: null }, { provider: { in: ['antigravity', 'harness-key'] } }] },
+    ],
   });
 });
