@@ -41,15 +41,17 @@ class SessionRunStartTest {
 
     @Test fun theNextStepIsTheServersSentenceForThatAction() {
         val step = SessionRunStart.nextStep("FIX_REF", "refs/heads/project/34bZ3i4AvgJaaow5E9tH")
-        assertTrue(step.startsWith("解析的时候仓库里没有 `refs/heads/project/34bZ3i4AvgJaaow5E9tH`："))
-        assertTrue(step.endsWith("在那之前重新开工只会得到同一个拒绝。"))
+        assertTrue(step.startsWith("The repository had no `refs/heads/project/34bZ3i4AvgJaaow5E9tH` when it was resolved:"))
+        assertTrue(step.endsWith("Until then, a new start meets the same refusal."))
     }
 
     @Test fun theNextStepNamesTheLineWhenThereIsOne() {
-        assertTrue(SessionRunStart.nextStep("SYNC_INTEGRATION_LINE", "refs/heads/project/x").contains("缺的是它落地的提交不在集成线 project/x上"))
-        assertTrue(SessionRunStart.nextStep("SYNC_INTEGRATION_LINE", null).contains("缺的是它落地的提交不在这次起跑的线上"))
-        assertTrue(SessionRunStart.nextStep("FIX_REF", null).contains("仓库里没有 这次起跑要用的 ref："))
-        assertEquals("按处置 SOMETHING_NEW 修好之后再开工。在那之前重新开工只会得到同一个拒绝。", SessionRunStart.nextStep("SOMETHING_NEW", null))
+        assertTrue(SessionRunStart.nextStep("SYNC_INTEGRATION_LINE", "refs/heads/project/x")
+            .contains("what is missing is its landed commit on the integration line project/x:"))
+        assertTrue(SessionRunStart.nextStep("SYNC_INTEGRATION_LINE", null).contains("what is missing is its landed commit on the line this run starts from:"))
+        assertTrue(SessionRunStart.nextStep("FIX_REF", null).contains("The repository had no ref for this run to start from when it was resolved:"))
+        assertEquals("Fix it as SOMETHING_NEW says, then start it. Until then, a new start meets the same refusal.",
+            SessionRunStart.nextStep("SOMETHING_NEW", null))
     }
 
     @Test fun theProseFollowsTheActionTheServerSent() {

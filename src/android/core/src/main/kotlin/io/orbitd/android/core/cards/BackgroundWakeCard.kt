@@ -18,14 +18,14 @@ object BackgroundWakeCard {
     const val tailLines = 8
     const val undelivered = "The session has not confirmed it received this."
     const val rawSummary = "What the agent received"
-    // The words iOS and the web draw on the card itself in Chinese (iOS dfd3224a4, `BackgroundWakeCopyParityTests`).
-    const val details = "详情"
-    const val jobDetails = "任务详情"
-    const val outputTail = "输出末尾"
-    const val expandOutput = "展开输出"
-    const val collapseOutput = "收起输出"
+    // The words iOS and the web draw on the card itself, in English since bab3256a7 (`BackgroundWakeCopyParityTests`).
+    const val details = "Details"
+    const val jobDetails = "Job details"
+    const val outputTail = "Output tail"
+    const val expandOutput = "Show full output"
+    const val collapseOutput = "Show less"
     const val sentIntoThisTurn = "Sent into this turn"
-    const val sentIntoThisTurnHere = "已送达当前轮次"
+    const val sentIntoThisTurnHere = "Sent into this turn"
 
     fun jobs(wake: JsonObject) = wake.objects("jobs")
     fun wakeups(wake: JsonObject) = wake.objects("wakeups")
@@ -104,7 +104,7 @@ object BackgroundWakeCard {
         }
     }
 
-    /** The receipt as this card says it: the delivery's words kept, the confirmed one said in Chinese (iOS dfd3224a4). */
+    /** The receipt as this card says it: the delivery's own words, the confirmed one included, as iOS and the web say it (bab3256a7). */
     fun steerReceipt(state: String?) = if (state == sentIntoThisTurn) sentIntoThisTurnHere else state
 
     /** "8s", "12m", "2h 5m", "3d" — a span (OrbitKit `WatchProjection.duration`). */

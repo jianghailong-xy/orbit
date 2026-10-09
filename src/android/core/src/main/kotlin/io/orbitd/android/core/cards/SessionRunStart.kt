@@ -76,21 +76,26 @@ object SessionRunStart {
     /** The server's own next step for a refusal (`dispatchRefusalNextStep`), which the project's blocker carries as its required
      * action. */
     fun nextStep(fixAction: String?, ref: String?): String {
-        val again = "在那之前重新开工只会得到同一个拒绝。"
-        val line = ref?.let { "集成线 ${branchName(it)}" } ?: "这次起跑的线"
+        val again = "Until then, a new start meets the same refusal."
+        val line = ref?.let { "the integration line ${branchName(it)}" } ?: "the line this run starts from"
         return when (fixAction) {
-            "SYNC_INTEGRATION_LINE" -> "前置已经落地了——缺的是它落地的提交不在${line}上：前置的成果进了 upstream，而这条线还没吸收 " +
-                "upstream。先让这条线追上它（下一次任务落地时的 main 同步会做；等不及就从这条线的 tip 出发把 " +
-                "upstream 合进来、推回这条线，不 rebase、不 force push），再开工。" +
-                "在那之前重新开工只会得到同一个拒绝：新的开工从同一个 tip 起跑，要求的是同一组提交。"
-            "FIX_REF" -> "解析的时候仓库里没有 ${ref?.let { "`$it`" } ?: "这次起跑要用的 ref"}：" +
-                "它还不存在、已经被删掉，或者和项目绑定里的名字对不上。先把它建出来" +
-                "（这个项目在这条线上的第一次落地会创建它），或者把绑定的 integrationRef 改成实际存在的那一条，" +
-                "再开工。" + again
-            "RESTORE_COMMIT" -> "执行它的 runner 的仓库里没有这次钉住的提交：把它取回或恢复到那个仓库里，再开工。" + again
-            "ENABLE_ISOLATION" -> "runner 没能在钉住的提交上建出独立的 worktree：确认这个工作区的 workDir 是 git 仓库、" +
-                "没有关掉 worktree 隔离，并按上面 runner 的原话排查 `git worktree add` 的报错，再开工。" + again
-            else -> "按处置 ${fixAction.orEmpty()} 修好之后再开工。" + again
+            "SYNC_INTEGRATION_LINE" -> "The dependency has landed — what is missing is its landed commit on ${line}: the dependency's work " +
+                "reached upstream, and this line has not taken in upstream yet. Bring this line up to date with " +
+                "upstream first (the main sync at the next task landing does that; if it cannot wait, merge upstream " +
+                "into this line from its tip and push it back, with no rebase and no force push), then start it. " +
+                "Until then, a new start meets the same refusal: it begins from the same tip and asks for the same " +
+                "commits."
+            "FIX_REF" -> "The repository had no ${ref?.let { "`$it`" } ?: "ref for this run to start from"} when " +
+                "it was resolved: it does not exist yet, it was deleted, or it does not match the name in the " +
+                "project's binding. Create it first (this project's first landing on this line creates it), or " +
+                "change the binding's integrationRef to the one that exists, then start it. " + again
+            "RESTORE_COMMIT" -> "The repository of the runner that runs it does not have the pinned commit: fetch or restore it " +
+                "into that repository, then start it. " + again
+            "ENABLE_ISOLATION" -> "The runner could not create a separate worktree at the pinned commit: check that " +
+                "this workspace's workDir is a git repository and that worktree isolation is not turned off, " +
+                "and work through the `git worktree add` error in " +
+                "the runner's own words above, then start it. " + again
+            else -> "Fix it as ${fixAction.orEmpty()} says, then start it. " + again
         }
     }
 
