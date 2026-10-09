@@ -100,9 +100,7 @@ final class ProjectMergeModel: PromotionReviewSource {
         current?.promotionId == promotionID ? current : nil
     }
 
-    var promotionItems: [ProjectOpenItemRow] {
-        (openItems?.needsYou ?? []) + (openItems?.withCoordinator ?? [])
-    }
+    var promotionOpenItems: ProjectOpenItemsView? { openItems }
 
     var promotionLandings: [ProjectLandTask] { landings }
 

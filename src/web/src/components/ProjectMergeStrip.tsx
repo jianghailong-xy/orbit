@@ -15,6 +15,7 @@ import {
   decidePromotion,
   promotionCriteriaLine,
   promotionHeading,
+  promotionItem,
   resolvingPress,
   type PromotionProjectView,
 } from './ProjectPromotionCard';
@@ -134,8 +135,9 @@ export function ProjectMergeStrip({
   const landing = line
     ? listed ? <LandingRowButton line={line} onPress={() => setJobsOpen(true)} /> : <LandingRow line={line} />
     : null;
-  const rows = [...(items.data?.needsYou ?? []), ...(items.data?.withCoordinator ?? [])];
-  const item = current ? rows.find((row) => row.promotionId === current.promotionId) ?? null : null;
+  const item = current ? promotionItem(items.data, current.promotionId) : undefined;
+  // Who has it, or null when the read came back and nobody does — then there is no press to draw.
+  const resolving = resolvingPress(item, now);
   const inFront = current ? promotionBlockedBy(current, integration.data?.landTasks ?? null) : null;
   const press = (door: 'confirm' | 'decline' | 'cancel'): void => {
     if (current) decide.mutate({ door, candidate: current });
@@ -198,10 +200,12 @@ export function ProjectMergeStrip({
           <div className="session-project-merge-status">{promotionBlockedLine(current)}</div>
           {/* Who is in front of it, off the same project read this strip already holds. */}
           {inFront ? <div className="session-project-merge-blocked-by">{inFront}</div> : null}
-          <div className={`session-project-merge-press${item && item.assignee !== 'COORDINATOR' ? ' is-yours' : ''}`}>
-            {resolvingPress(item, now).spinning ? <span className="promotion-spin" aria-hidden="true" /> : null}
-            {resolvingPress(item, now).label}
-          </div>
+          {resolving ? (
+            <div className={`session-project-merge-press${item && item.assignee !== 'COORDINATOR' ? ' is-yours' : ''}`}>
+              {resolving.spinning ? <span className="promotion-spin" aria-hidden="true" /> : null}
+              {resolving.label}
+            </div>
+          ) : null}
           <div className="session-project-merge-foot">
             <button type="button" className="session-project-merge-link" onClick={() => setDetailsOpen(true)}>
               {`${DETAILS} ›`}

@@ -323,6 +323,7 @@ import {
   ProjectPromotionReceipt,
   promotionChatBanner,
   promotionChatContext,
+  promotionItem,
   promotionRecordMoment,
 } from './ProjectPromotionCard';
 import { ProjectMergeStrip, ProjectMergeTimelineRow } from './ProjectMergeStrip';
@@ -5293,7 +5294,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (blockedAt === null) return [];
     const anchor = decisionReceiptAnchor(transcriptEvents, blockedAt);
     if (anchor === null) return [];
-    const rows = [...(openItems.data?.needsYou ?? []), ...(openItems.data?.withCoordinator ?? [])];
     return [{
       anchor,
       moment: blockedAt,
@@ -5302,7 +5302,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         <ProjectPromotionCard
           projectId={coordinatedProjectId}
           promotion={current}
-          item={rows.find((row) => row.promotionId === current.promotionId) ?? null}
+          item={promotionItem(openItems.data, current.promotionId)}
           project={null}
           now={Date.now()}
           onChat={chatAboutThis}
