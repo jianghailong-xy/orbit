@@ -234,6 +234,11 @@ internal class ProjectPageState {
     var cursor by mutableStateOf<String?>(null)
     var loadingMore by mutableStateOf(false)
     var share by mutableStateOf<JsonObject?>(null)
+    /** What has been asked about work crossing into or out of this project (`ProjectCrossings`); unread only while no read has answered. */
+    var crossings by mutableStateOf<List<JsonObject>?>(null)
+    var crossingsUnread by mutableStateOf(false)
+    /** The crossing an answer is on its way for: its row says so and takes no second press, and no other row takes one either. */
+    var answeringCrossing by mutableStateOf<String?>(null)
     var busy by mutableStateOf(false)
     /** At most as the stepper has it while the write it will make waits for the presses to stop. */
     var pendingConcurrency by mutableStateOf<Int?>(null)
@@ -272,6 +277,10 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
     val resources = LocalReaderResources.current ?: remember(handle) { ReaderResources(app.session, handle) }
     val link = rememberReaderLinkHandler(resources, open)
     var dialog by remember { mutableStateOf<ProjectDialog?>(null) }
+    // The crossing whose second press is showing, and the answer it would give (true: approve) — one at a time — and the door's
+    // refusal of that answer, on the row it was given on.
+    var crossingAsk by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
+    var crossingRefusal by remember { mutableStateOf<Pair<String, ProjectCrossings.Refusal>?>(null) }
     var menu by remember { mutableStateOf(false) }
     var now by remember { mutableStateOf(Instant.now()) }
     val listState = rememberLazyListState()
@@ -294,6 +303,7 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
                 val queue = async { runCatching { api.ready(id) } }
                 val tasks = async { runCatching { api.taskWindow(id, maxOf(100, state.tasks.size)) }.getOrNull() }
                 val share = async { runCatching { api.share(id) }.getOrNull() }
+                val crossings = async { runCatching { api.crossings(id) }.getOrNull() }
                 document.await().onSuccess { state.document = it; state.missing = false; state.loadFailed = false }.onFailure { failure ->
                     if (failure is CancellationException) throw failure
                     if (failure is ApiError && failure.status in setOf(403, 404)) { state.missing = true; state.document = null } else state.loadFailed = true
@@ -306,6 +316,7 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
                 queue.await().onSuccess { state.queue = it; state.queueUnread = false }.onFailure { if (it is CancellationException) throw it; state.queueUnread = true }
                 tasks.await()?.let { (items, cursor) -> state.tasks = items; state.cursor = cursor }
                 share.await()?.let { state.share = it }
+                crossings.await().let { if (it != null) { state.crossings = it; state.crossingsUnread = false } else state.crossingsUnread = state.crossings == null }
             }
         } finally { state.refreshing = false }
     }
@@ -488,6 +499,28 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
                 } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { } finally { state.loadingMore = false }
             }
         })
+        // Last, where the web draws it (iOS `crossingsSection`).
+        crossingsSection(state, connected, crossingAsk, crossingRefusal, ask = { row, approve -> crossingRefusal = null; crossingAsk = row.text("id")?.let { it to approve } },
+            cancel = { crossingAsk = null; crossingRefusal = null }) { row, approve ->
+            // The second press: the answer goes with the key of the crossing it was given on. Taken, the question closes over the
+            // re-read row — a confirmed move reads as moved; refused, it stays open beside the door's own code and reason.
+            val rowId = row.text("id")
+            if (rowId != null && state.answeringCrossing == null) {
+                state.answeringCrossing = rowId
+                app.processScope.launch {
+                    val refusal = try { api.decideCrossing(id, row, approve); null }
+                        catch (cancel: CancellationException) { throw cancel }
+                        catch (failure: Exception) { ProjectCrossings.refusal(failure) }
+                        finally { state.answeringCrossing = null }
+                    if (refusal != null) crossingRefusal = rowId to refusal
+                    else {
+                        crossingAsk = null; crossingRefusal = null
+                        app.realtime.refreshDirectory()
+                        if (state.attached) load(settled = true)
+                    }
+                }
+            }
+        }
     }
 
     state.notice?.let { message -> AlertDialog(onDismissRequest = { state.notice = null }, title = { Text("Couldn't do that") }, text = { Text(message) },
@@ -1126,4 +1159,124 @@ private fun LazyListScope.tasksSection(state: ProjectPageState, doc: JsonObject,
     if (state.cursor != null) item(key = "tasks-more") {
         TextButton(onClick = loadMore, enabled = !state.loadingMore, modifier = Modifier.fillMaxWidth()) { if (state.loadingMore) CircularProgressIndicator(Modifier.size(16.dp)) else Text("Load more tasks") }
     }
+}
+
+/** Work asked across this project's line, in either direction — the account owner's to answer, and nobody else's (iOS
+ * `crossingsSection`, web's `ProjectCrossingsCard.tsx`): drawn once the project is an end of a crossing, or when the read failed
+ * with nothing to show. */
+private fun LazyListScope.crossingsSection(state: ProjectPageState, connected: Boolean, asking: Pair<String, Boolean>?,
+    refused: Pair<String, ProjectCrossings.Refusal>?, ask: (JsonObject, Boolean) -> Unit, cancel: () -> Unit, answer: (JsonObject, Boolean) -> Unit) {
+    val rows = state.crossings
+    if (!rows.isNullOrEmpty()) {
+        item(key = "crossings-head") { SectionHead(ProjectCrossings.title, ProjectCrossings.waiting(ProjectCrossings.waitingCount(rows)), Modifier.testTag("crossings-head")) }
+        items(ProjectCrossings.ordered(rows), key = { "crossing:${it.text("id")}" }) { row ->
+            val id = row.text("id")
+            val mine = asking?.first == id
+            CrossingRow(row, if (mine) asking?.second else null, busy = state.answeringCrossing == id,
+                locked = state.answeringCrossing != null && state.answeringCrossing != id, connected = connected,
+                refusal = if (mine && refused?.first == id) refused?.second else null, ask = { ask(row, it) }, cancel = cancel, answer = { answer(row, it) })
+        }
+    } else if (state.crossingsUnread) item(key = "crossings-unread") {
+        SectionHead(ProjectCrossings.title)
+        Text("⚠ ${ProjectCrossings.unreadable}", Modifier.testTag("crossings-unread"), style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** One crossing (iOS `ProjectCrossingRow`, web's `CrossingRow`): where it stands — the server's state beside what it is called, and
+ * the kind — then what it is about, both ends by title and id, what follows from the state, a move's criteria and the reason given.
+ * A question offers two presses; the second names the subject and both ends, says what the answer does, shows the crossing key it
+ * echoes, and sends it. A refusal stays on its row with the door's own code and reason, the second press still open. */
+@Composable
+private fun CrossingRow(row: JsonObject, confirming: Boolean?, busy: Boolean, locked: Boolean, connected: Boolean, refusal: ProjectCrossings.Refusal?,
+    ask: (Boolean) -> Unit, cancel: () -> Unit, answer: (Boolean) -> Unit) {
+    val id = row.text("id")
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    val mono = SpanStyle(fontFamily = FontFamily.Monospace, color = secondary)
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp).testTag("crossing:$id"), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            CodeTag(row.text("state").orEmpty())
+            Text(ProjectCrossings.label(row.text("state").orEmpty()), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            CodeTag(row.text("kind").orEmpty())
+        }
+        if (ProjectCrossings.isMove(row)) Text(buildAnnotatedString {
+            withStyle(SpanStyle(color = secondary)) { append("${ProjectCrossings.moveSubjectLabel}: ") }
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(ProjectCrossings.subjectTitle(row)) }
+            ProjectCrossings.subjectId(row)?.let { withStyle(mono) { append(" $it") } }
+        }, Modifier.testTag("crossing:$id:subject"))
+        else Text(row.text("title").orEmpty())
+        Text(buildAnnotatedString {
+            fun end(project: JsonObject?, code: String) {
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(project?.text("title") ?: ProjectCrossings.unnamedProject) }
+                withStyle(mono) { append(" $code") }
+                project?.text("status")?.let { withStyle(SpanStyle(color = secondary)) { append(" · $it") } }
+            }
+            end(row.obj("fromProject"), ProjectCrossings.fromId(row))
+            withStyle(SpanStyle(color = secondary)) { append(ProjectCrossings.arrow) }
+            end(row.obj("toProject"), ProjectCrossings.toId(row))
+        }, style = MaterialTheme.typography.labelMedium)
+        Text(ProjectCrossings.meaning(row), Modifier.testTag("crossing:$id:meaning"), style = MaterialTheme.typography.labelMedium, color = secondary)
+        if (ProjectCrossings.isMove(row)) {
+            row.obj("requestedCriterion")?.let { CrossingCriterion(ProjectCrossings.moveRequestedCriterionLabel, it.text("text") ?: ProjectCrossings.moveCriterionGone, it.text("key").orEmpty()) }
+            row.obj("withdrawnCriterion")?.let { CrossingCriterion(ProjectCrossings.moveWithdrawnCriterionLabel, it.text("text").orEmpty(), it.text("key").orEmpty(),
+                ProjectCrossings.moveWithdrawnCriterionNote) }
+        }
+        row.text("reason")?.let { Text(ProjectCrossings.reasonGiven(it), style = MaterialTheme.typography.labelMedium, color = secondary) }
+        refusal?.let { refused ->
+            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.error.copy(alpha = 0.08f), RoundedCornerShape(8.dp)).padding(8.dp)
+                .testTag("crossing:$id:refusal"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("⚠ ${ProjectCrossings.notRecorded}", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error)
+                Text(buildAnnotatedString {
+                    refused.code?.let { withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) { append("$it ") } }
+                    append(refused.message)
+                }, style = MaterialTheme.typography.labelMedium)
+            }
+        }
+        if (ProjectCrossings.isAnswerable(row.text("state"))) {
+            if (confirming != null) {
+                val prompt = ProjectCrossings.prompt(row, confirming)
+                val tint = if (confirming) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                Column(Modifier.fillMaxWidth().background(tint.copy(alpha = 0.07f), RoundedCornerShape(8.dp)).padding(10.dp).testTag("crossing:$id:confirm"),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(ProjectCrossings.question(prompt), fontWeight = FontWeight.SemiBold)
+                    Text(prompt.consequence, style = MaterialTheme.typography.labelMedium, color = secondary)
+                    Text(buildAnnotatedString {
+                        withStyle(SpanStyle(color = secondary)) { append("${ProjectCrossings.crossingKeyLabel} ") }
+                        withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) { append(ProjectCrossings.shortKey(row.text("crossingKey").orEmpty())) }
+                    }, style = MaterialTheme.typography.labelMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Button(onClick = { answer(confirming) }, enabled = !busy && !locked && connected, modifier = Modifier.testTag("crossing:$id:answer"),
+                            colors = ButtonDefaults.buttonColors(containerColor = tint)) {
+                            if (busy) { CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary); Spacer(Modifier.width(6.dp)) }
+                            Text(ProjectCrossings.confirmLabel(prompt))
+                        }
+                        OutlinedButton(onClick = cancel, enabled = !busy, modifier = Modifier.testTag("crossing:$id:cancel")) { Text(ProjectCrossings.cancel) }
+                    }
+                }
+            } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { ask(true) }, enabled = !locked, modifier = Modifier.testTag("crossing:$id:approve")) { Text(ProjectCrossings.approveAsk) }
+                OutlinedButton(onClick = { ask(false) }, enabled = !locked, modifier = Modifier.testTag("crossing:$id:refuse")) {
+                    Text(ProjectCrossings.refuseAsk, color = if (locked) Color.Unspecified else MaterialTheme.colorScheme.error) }
+            }
+        }
+    }
+    HorizontalDivider()
+}
+
+/** The server's own value as a chip: the state's word comes beside it, never instead of it. */
+@Composable
+private fun CodeTag(code: String) = Text(code, Modifier.background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f), RoundedCornerShape(5.dp))
+    .padding(horizontal = 6.dp, vertical = 1.dp), style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold,
+    color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+/** A move's criterion: what the task would count towards over there, or what it counts towards here now. */
+@Composable
+private fun CrossingCriterion(label: String, text: String, key: String, note: String? = null) {
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    Text(buildAnnotatedString {
+        withStyle(SpanStyle(color = secondary)) { append("$label: ") }
+        append(text)
+        withStyle(SpanStyle(fontFamily = FontFamily.Monospace, color = secondary)) { append(" $key") }
+        note?.let { withStyle(SpanStyle(color = secondary)) { append(" $it") } }
+    }, style = MaterialTheme.typography.labelMedium)
 }

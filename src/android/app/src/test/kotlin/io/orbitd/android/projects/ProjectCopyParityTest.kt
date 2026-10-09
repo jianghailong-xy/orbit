@@ -36,6 +36,7 @@ class ProjectCopyParityTest {
     @Test fun startWords() = assertIn(StartProjectCopy, swift("${kit}StartProject.swift", "${kit}ProjectRunSettings.swift", "${kit}CriteriaDecision.swift"))
     @Test fun runSettingsWords() = assertIn(RunSettings, swift("${kit}ProjectRunSettings.swift", "${kit}StartProject.swift"))
     @Test fun markdownWords() = assertIn(ProjectMarkdown, swift("${kit}ShareMarkdown.swift"))
+    @Test fun crossingsWords() = assertIn(ProjectCrossings, swift("${kit}ProjectCrossings.swift"))
     @Test fun attentionWords() {
         val source = swift("${kit}ProjectAttention.swift")
         // The one composed chip: Swift interpolates the start's own word, and so does Kotlin.

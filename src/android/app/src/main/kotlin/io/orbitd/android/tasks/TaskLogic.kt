@@ -400,6 +400,14 @@ object TaskDetailCopy {
         "DENIED" to "refusing is final for this crossing — file the work yourself if you change your mind",
         "APPLIED" to "this answer has been spent; it authorises nothing further",
     )
+    /** What each state means for a request to move this task (iOS 779471b97), where `crossingStateMeaning` speaks for a filing: the
+     * task is already filed, so "not filed anywhere until you answer" would be false of it. */
+    val moveTaskStateMeaning = mapOf(
+        "PENDING" to "the task stays in its project until you answer, and confirming moves it",
+        "APPROVED" to "the task has not moved: this yes was recorded without moving it",
+        "DENIED" to "refusing is final for this request, and the task stays where it is",
+        "APPLIED" to "the task was moved when this request was confirmed",
+    )
     const val followTask = "Follow task"
     const val loadingWatches = "Loading watches…"
     const val watchesUnavailable = "Couldn’t load watches."
@@ -802,7 +810,8 @@ object TaskDetailLogic {
         val crossing = view.obj("crossing") ?: return absent(TaskDetailCopy.crossingLabel, view.text("crossingAbsentReason"))
         val state = crossing.text("state").orEmpty()
         val notes = buildList {
-            TaskDetailCopy.crossingStateMeaning[state]?.let(::add)
+            // A request to move the task reads as a move.
+            (if (crossing.text("kind") == "MOVE_TASK") TaskDetailCopy.moveTaskStateMeaning else TaskDetailCopy.crossingStateMeaning)[state]?.let(::add)
             val from = crossing.obj("from")?.text("title"); val to = crossing.obj("to")?.text("title")
             if (from != null && to != null) add("$from → $to")
             crossing.text("code")?.let { code -> add(listOfNotNull(code, crossing.text("requiredAction")).joinToString(" ")) }

@@ -130,6 +130,19 @@ class TaskLogicTest {
         assertEquals("Nothing is blocking where this work counts.", noticed[3].text)
     }
 
+    /** A request to move this task reads as a move (iOS 779471b97, TaskDetailLogicTests): the task stays in its project until the
+     * owner answers, which a filing's "not filed anywhere" would deny; a filing and a dependency keep their words. */
+    @Test fun aMoveRequestIsReadAsAMove() {
+        fun notes(kind: String?, state: String) = TaskDetailLogic.attributionRows(json("""{"owning":null,"owningAbsentReason":"FILED_UNDER_NO_PROJECT",
+            "discovery":null,"crossing":{${kind?.let { "\"kind\":\"$it\"," } ?: ""}"state":"$state","from":{"projectId":"p1","title":"From","status":"OPEN"},
+            "to":{"projectId":"p2","title":"To","status":"OPEN"},"code":null,"requiredAction":null},"blocker":null}"""), ZoneOffset.UTC, Locale.US)[2].notes
+        assertEquals(listOf("the task stays in its project until you answer, and confirming moves it", "From → To"), notes("MOVE_TASK", "PENDING"))
+        assertEquals("the task has not moved: this yes was recorded without moving it", notes("MOVE_TASK", "APPROVED").first())
+        assertEquals("refusing is final for this request, and the task stays where it is", notes("MOVE_TASK", "DENIED").first())
+        assertEquals("the task was moved when this request was confirmed", notes("MOVE_TASK", "APPLIED").first())
+        for (kind in listOf("FILE_TASK", "DEPEND_ON_TASK", null)) assertEquals("the work is not filed anywhere until you answer", notes(kind, "PENDING").first())
+    }
+
     @Test fun dependenciesShowTheComponentOrTheDirectEdgesUntilItArrives() {
         val detail = json("""{"id":"t","title":"Current","status":"OPEN","dependencyState":"BLOCKED",
             "dependsOn":[{"dependsOnTask":{"id":"p","title":"Before","status":"DONE"}},{"dependsOnTask":{"id":"q","title":"Other","status":"OPEN"}}],
