@@ -1075,7 +1075,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if body == "" {
 			return toolResult("body is required", true)
 		}
-		raw, err := s.t.commentTask(id, s.agentID, body)
+		raw, err := s.t.commentTask(id, s.agentID, s.sessionID, body)
 		if err != nil {
 			return toolResult("comment failed: "+err.Error(), true)
 		}

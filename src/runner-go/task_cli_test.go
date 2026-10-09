@@ -557,10 +557,10 @@ func TestTaskCLIRejectsArbitraryDescriptionAndBodyFiles(t *testing.T) {
 }
 
 func TestTaskCLICommentReadsStdinAndAuthorsAsAgentInSession(t *testing.T) {
-	var gotAgent string
+	var gotAgent, gotSession string
 	var gotBody map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAgent = r.Header.Get("X-Orbit-Agent-Id")
+		gotAgent, gotSession = r.Header.Get("X-Orbit-Agent-Id"), r.Header.Get("X-Orbit-Session-Id")
 		_ = json.NewDecoder(r.Body).Decode(&gotBody)
 		_, _ = w.Write([]byte(`{"id":"comment-1"}`))
 	}))
@@ -573,9 +573,10 @@ func TestTaskCLICommentReadsStdinAndAuthorsAsAgentInSession(t *testing.T) {
 	if err := cmdTaskCLI([]string{"comment", "task-1", "--body-file", "-", "--json"}, strings.NewReader("done\n"), &out); err != nil {
 		t.Fatal(err)
 	}
-	// In-session, the comment is authored by the acting agent (same as the MCP path).
-	if gotAgent != "agent-1" || gotBody["body"] != "done\n" {
-		t.Fatalf("agent = %q body = %#v", gotAgent, gotBody["body"])
+	// In-session, the comment is authored by the acting agent and names its session (same as the
+	// MCP path).
+	if gotAgent != "agent-1" || gotSession != "session-1" || gotBody["body"] != "done\n" {
+		t.Fatalf("agent = %q session = %q body = %#v", gotAgent, gotSession, gotBody["body"])
 	}
 }
 
