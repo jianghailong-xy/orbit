@@ -2210,7 +2210,17 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // six preserved triggers/functions is named, and no function, trigger, type, index or constraint is
       // created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
       // DELETE: every stored session reads NULL.
-      '0418_session_recap'],
+      '0418_session_recap',
+      // The provider/engine data migration's bookkeeping (0419, renumbered from 0417 before landing;
+      // docs/provider-engine-contract.md §7.6): two new tables, `provider_engine_migration_run` (one row per
+      // execution of the application-layer migration, with
+      // a partial unique index allowing one completion marker per version) and `provider_engine_migration_report`
+      // (its per-row report, run_id → the run ON DELETE CASCADE, a CHECK on the action, an index on run and
+      // id). No existing table, column, constraint, index, function, trigger or type is created, replaced,
+      // altered or dropped, and no row is written: the API server fills both when it starts. `task`,
+      // `project`, every `project_acceptance_*` object and the six preserved triggers/functions are named
+      // nowhere, so it is not another writer of the DONE fence.
+      '0419_provider_engine_migration'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

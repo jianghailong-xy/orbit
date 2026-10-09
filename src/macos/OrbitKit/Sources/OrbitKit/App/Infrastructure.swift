@@ -25,6 +25,8 @@ public enum Infrastructure {
     public static let ready = "Ready"
     public static let notSetUp = "Not set up"
     public static let subscription = "Subscription"
+    /// OpenCode's sign-in on a machine, which is its own rather than a subscription's.
+    public static let ownSignIn = "Own sign-in"
     public static let apiKey = "API key"
     public static let pool = "Pool"
     /// An engine nothing can pay for. The web goes on to offer a key too; adding a key happens on the web.
@@ -37,8 +39,9 @@ public enum Infrastructure {
     public static let disabled = "Disabled"
     public static let signedOutDetail = "Sessions there can’t use it"
 
+    /// "Antigravity CLI is signed out on HPC": the engine by its CLI's name, as every list on the page names it.
     public static func signedOutLine(engine: LoginEngine, machine: String) -> String {
-        "\(engine.displayName) is signed out on \(machine)"
+        "\(ProviderEngines.cliName(engine.rawValue)) is signed out on \(machine)"
     }
 
     public static func offlineLine(machine: String) -> String { "\(machine) is offline" }
@@ -104,7 +107,7 @@ public enum Infrastructure {
                 let machine = RunnerPageFormat.displayName(runner)
                 return Attention(kind: .signedOut(runnerID: runner.id, engine: engine),
                                  line: signedOutLine(engine: engine, machine: machine),
-                                 names: [engine.displayName, machine], detail: signedOutDetail)
+                                 names: [ProviderEngines.cliName(engine.rawValue), machine], detail: signedOutDetail)
             }
         }
         let offline = runners.filter { $0.online != true }.map { runner -> Attention in
@@ -146,7 +149,56 @@ public enum Infrastructure {
 
     // MARK: - What each engine can run on
 
-    /// One engine and what can pay for it now (web's `EngineOverview` card).
+    /// One engine and what can pay for it now (web's `EngineOverview` card), for every engine a session can
+    /// run on — OpenCode and DeepSeek Harness among them.
+    public struct EngineCard: Equatable, Sendable, Identifiable {
+        /// "claude", "codex", "kimi", "antigravity", "opencode" or "dsh".
+        public let engine: String
+        /// Each machine online signed in to it — "Mac Studio ×2" for two of its accounts; for OpenCode,
+        /// each one its own sign-in is set up on. None for DeepSeek Harness, which signs in nowhere.
+        public let machines: [String]
+        /// API key: the enabled keys that run on it, with the model a session there starts on.
+        public let keys: [Engine.Key]
+        /// Pool: its pools that can start a session.
+        public let pools: [String]
+
+        /// Its CLI's own name: "Antigravity CLI".
+        public var name: String { ProviderEngines.cliName(engine) }
+        /// What its machines are: OpenCode's own sign-in, every other engine's subscription.
+        public var machinesLabel: String { engine == "opencode" ? Infrastructure.ownSignIn : Infrastructure.subscription }
+        /// Ready with any source at all; Not set up without.
+        public var ready: Bool { !machines.isEmpty || !keys.isEmpty || !pools.isEmpty }
+        public var id: String { engine }
+    }
+
+    /// Every engine, and what can pay for it now: the machines online signed in to it, by how many of their
+    /// accounts; each enabled key under every engine the server says it runs on (`engines`) — a DeepSeek
+    /// key under Claude Code, OpenCode and DeepSeek Harness, a Claude subscription token under Claude Code
+    /// alone — with the model a session on it starts on there; its pools that can start a session (one
+    /// that is unavailable is in Needs you instead).
+    public static func engineCards(runners: [Runner], keys: [ConfiguredProvider],
+                                   pools: [ProviderPool]) -> [EngineCard] {
+        let online = runners.filter { $0.online == true }
+        let harness = harnessModel(online)
+        return ProviderEngines.names.map { engine, _ in
+            // DeepSeek Harness has no sign-in on a machine: it runs on DeepSeek keys alone.
+            let machines = engine == "dsh" ? [] : online.compactMap { runner -> String? in
+                let count = logins(runner, engine)
+                guard count > 0 else { return nil }
+                let name = RunnerPageFormat.displayName(runner)
+                return count > 1 ? "\(name) ×\(count)" : name
+            }
+            let engineKeys = keys.filter { $0.enabled != false && ProviderEngines.of($0).contains(engine) }
+                .map { Engine.Key(label: $0.label, model: engine == "dsh" ? harness : defaultModel($0)) }
+            let enginePools = pools.filter {
+                $0.unavailable == nil && (ProviderPools.runsCodex($0) ? "codex" : "claude") == engine
+            }
+            return EngineCard(engine: engine, machines: machines, keys: engineKeys, pools: enginePools.map(\.label))
+        }
+    }
+
+    /// One of the four engines a machine signs in, and what can pay for it now: its `EngineCard`, as the
+    /// app's overview draws it until it lists all six.
     public struct Engine: Equatable, Sendable, Identifiable {
         /// A key that runs on the engine, and the model a session on it starts on.
         public struct Key: Equatable, Sendable {
@@ -157,7 +209,7 @@ public enum Infrastructure {
         public let engine: LoginEngine
         /// Subscription: each machine online signed in to it — "Mac Studio ×2" for two of its accounts.
         public let machines: [String]
-        /// API key: the enabled keys whose runtime it is.
+        /// API key: the enabled keys that run on it.
         public let keys: [Key]
         /// Pool: its pools that can start a session.
         public let pools: [String]
@@ -167,24 +219,12 @@ public enum Infrastructure {
         public var id: String { engine.rawValue }
     }
 
-    /// Every engine, and what can pay for it now: the machines online signed in to it, by how many of their
-    /// accounts; the account's enabled keys that run on it — DeepSeek's under Claude Code — each with its
-    /// model; its pools that can start a session (one that is unavailable is in Needs you instead).
+    /// The cards of the four engines a machine signs in (`engineCards`).
     public static func engines(runners: [Runner], keys: [ConfiguredProvider], pools: [ProviderPool]) -> [Engine] {
-        let online = runners.filter { $0.online == true }
-        return LoginEngine.allCases.map { engine in
-            let machines = online.compactMap { runner -> String? in
-                let count = logins(runner, engine)
-                guard count > 0 else { return nil }
-                let name = RunnerPageFormat.displayName(runner)
-                return count > 1 ? "\(name) ×\(count)" : name
+        engineCards(runners: runners, keys: keys, pools: pools).compactMap { card in
+            LoginEngine(rawValue: card.engine).map {
+                Engine(engine: $0, machines: card.machines, keys: card.keys, pools: card.pools)
             }
-            let engineKeys = keys.filter { $0.enabled != false && $0.runtime == engine.rawValue }
-                .map { Engine.Key(label: keyLabel($0.label, presetSlug: $0.presetSlug), model: defaultModel($0)) }
-            let enginePools = pools.filter {
-                $0.unavailable == nil && (ProviderPools.runsCodex($0) ? LoginEngine.codex : .claude) == engine
-            }
-            return Engine(engine: engine, machines: machines, keys: engineKeys, pools: enginePools.map(\.label))
         }
     }
 
@@ -195,11 +235,14 @@ public enum Infrastructure {
     }
 
     /// How many logins of this engine a session on this machine can run on (web's `loginsOn`): each
-    /// account signed in, or the engine's own answer where it reports no accounts. Antigravity's Default
-    /// on the machine's own Gemini key counts, as it does on the machine's page (`runsOnEnvKey`).
-    static func logins(_ runner: Runner, _ engine: LoginEngine) -> Int {
-        guard let health = engineHealth(runner, engine), health.installed == true,
-              !(engine == .antigravity && runner.antigravity?.supported == false) else { return 0 }
+    /// account signed in, or the engine's own answer where it reports no accounts — for OpenCode, whether
+    /// its own sign-in (`opencode auth login`) is set up there. Antigravity's Default on the machine's own
+    /// Gemini key counts, as it does on the machine's page (`runsOnEnvKey`).
+    static func logins(_ runner: Runner, _ engine: String) -> Int {
+        let login = LoginEngine(rawValue: engine)
+        let health = login.flatMap { engineHealth(runner, $0) } ?? runner.engines?.first { $0.engine == engine }
+        guard let health, health.installed == true,
+              !(login == .antigravity && runner.antigravity?.supported == false) else { return 0 }
         let accounts = health.accounts ?? []
         if accounts.isEmpty { return health.auth == "yes" ? 1 : 0 }
         return accounts.filter {
@@ -216,11 +259,23 @@ public enum Infrastructure {
         return label.flatMap { $0.isEmpty ? nil : $0 } ?? model
     }
 
-    /// What a key is called (web's `providerDisplayLabel`): the runtime's name for the Gemini preset left
-    /// under its own name, and whatever its owner named it otherwise.
-    public static func keyLabel(_ label: String, presetSlug: String?) -> String {
-        presetSlug == "gemini" && label == "Gemini" ? "Antigravity" : label
+    /// The model a DeepSeek Harness session starts on, by the name its catalogue gives it (web's
+    /// `harnessModelOf`). Not a key's own: Harness lists its models on each machine, whichever DeepSeek key
+    /// it runs on (docs/provider-engine-contract.md §2.2) — read off the first machine online that can run
+    /// it and has reported them, and with none, no name.
+    static func harnessModel(_ online: [Runner]) -> String? {
+        for runner in online {
+            guard DshRuntime.state(of: runner) == .ready, let catalog = runner.modelCatalog?.dsh, !catalog.isEmpty
+            else { continue }
+            let model = runner.runtimeDefaultModels?["dsh"]
+            return catalog.first { $0.value == model }?.label ?? catalog[0].label
+        }
+        return nil
     }
+
+    /// What a key is called: the name its owner gave it, a Gemini key's too — a key is no engine's to be
+    /// named after (web's `key.label`).
+    public static func keyLabel(_ label: String, presetSlug: String?) -> String { label }
 
     // MARK: - A machine's row
 

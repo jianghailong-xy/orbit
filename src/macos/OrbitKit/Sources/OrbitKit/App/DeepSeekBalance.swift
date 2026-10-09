@@ -41,6 +41,8 @@ public enum DeepSeekBalance {
     public static let changeKeyOnWeb = "Change the key on the web, then retry."
     public static let providerHeader = "Provider"
     public static let runsOn = "Runs on"
+    /// The web key page's list of the engines a key works with, a row each.
+    public static let worksWith = "Works with"
     public static let defaultModel = "Default model"
     public static let endpoint = "Endpoint"
 
@@ -196,13 +198,16 @@ public enum DeepSeekBalance {
 
     // MARK: the key itself
 
-    /// The engine a DeepSeek key's sessions run on, as Providers names it.
+    /// The engines a key's sessions can run on, by their CLIs' names, default first: a DeepSeek key's
+    /// Claude Code, OpenCode and DeepSeek Harness.
+    public static func engines(of provider: ConfiguredProvider) -> [String] {
+        ProviderEngines.of(provider).map(ProviderEngines.cliName)
+    }
+
+    /// The same engines as one value — "Claude Code · OpenCode · DeepSeek Harness" — for a row with room
+    /// for one.
     public static func engine(of provider: ConfiguredProvider) -> String {
-        switch provider.runtime {
-        case "dsh": return "DeepSeek Harness"
-        case "codex": return "Codex"
-        default: return "Claude Code"
-        }
+        engines(of: provider).joined(separator: " · ")
     }
 
     /// The host a key's endpoint is on — `api.deepseek.com` — which is all of it a phone's row has room for.

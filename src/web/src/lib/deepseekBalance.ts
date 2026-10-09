@@ -1,5 +1,5 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ProviderBalance, ProviderBalanceAmount, ProviderBalanceFailure } from '@orbit/shared';
+import { isDeepSeekKey, type ProviderBalance, type ProviderBalanceAmount, type ProviderBalanceFailure } from '@orbit/shared';
 import { api } from '../api';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from './providerAdmin';
 
@@ -10,21 +10,13 @@ import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from './provider
 /** Where DeepSeek takes a top-up. Orbit can't top up for anyone; it only links there. */
 export const DEEPSEEK_TOP_UP_URL = 'https://platform.deepseek.com/top_up';
 
-const DEEPSEEK_PRESETS = ['deepseek', 'deepseek-harness'];
-
 /**
- * Whether a row has a DeepSeek account balance to show: a key the server can ask with, and a key of
- * DeepSeek's — one of its two presets, or a custom endpoint on DeepSeek's own host. The server
- * applies the same test (deepseek-balance.ts) and refuses any other row.
+ * Whether a row has a DeepSeek account balance to show: a key the server can ask with, and a DeepSeek
+ * key — the shared rule (isDeepSeekKey) the server's balance read applies too (deepseek-balance.ts),
+ * which refuses any other row. Every engine the key runs on spends that one account.
  */
 export function hasDeepSeekBalance(row: Pick<ProviderRow, 'presetSlug' | 'baseUrl' | 'hasApiKey'>): boolean {
-  if (!row.hasApiKey) return false;
-  if (row.presetSlug) return DEEPSEEK_PRESETS.includes(row.presetSlug);
-  try {
-    return new URL(row.baseUrl).hostname.toLowerCase() === 'api.deepseek.com';
-  } catch {
-    return false;
-  }
+  return row.hasApiKey && isDeepSeekKey(row);
 }
 
 /** Under the providers list's key, so saving or deleting a provider reads its balance again. */

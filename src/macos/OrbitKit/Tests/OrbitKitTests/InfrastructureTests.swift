@@ -52,27 +52,30 @@ final class InfrastructureTests: XCTestCase {
 
     private func fleet() throws -> [Runner] { [try macStudio(), try hpc(), try thinkPad()] }
 
+    /// A key as GET /providers/mine lists it, with the engines the server says it runs on, default first.
     private func key(_ label: String, runtime: String = "claude", preset: String? = "anthropic",
                      models: [(String, String)] = [("claude-opus-5", "Claude Opus 5"), ("claude-sonnet-5", "Claude Sonnet 5")],
-                     defaultModel: String? = "claude-opus-5", enabled: Bool = true) -> ConfiguredProvider {
+                     defaultModel: String? = "claude-opus-5", enabled: Bool = true,
+                     engines: [String] = ["claude", "opencode"]) -> ConfiguredProvider {
         ConfiguredProvider(slug: label.lowercased(), label: label, runtime: runtime,
                            models: models.map { ConfiguredProviderModel(value: $0.0, label: $0.1) },
-                           defaultModel: defaultModel, presetSlug: preset, enabled: enabled)
+                           defaultModel: defaultModel, presetSlug: preset, enabled: enabled, engines: engines)
     }
 
     private var anthropic: ConfiguredProvider { key("Anthropic (Claude)") }
     private var anthropicWork: ConfiguredProvider { key("Anthropic · Work", defaultModel: "claude-sonnet-5") }
-    private var deepseek: ConfiguredProvider {
-        key("DeepSeek", preset: "deepseek", models: [("deepseek-v4-pro", "DeepSeek V4 Pro"), ("deepseek-v4-flash", "DeepSeek V4 Flash")],
-            defaultModel: "deepseek-v4-pro")
+    private var deepseek: ConfiguredProvider { deepseek("DeepSeek") }
+    private func deepseek(_ label: String) -> ConfiguredProvider {
+        key(label, preset: "deepseek", models: [("deepseek-v4-pro", "DeepSeek V4 Pro"), ("deepseek-v4-flash", "DeepSeek V4 Flash")],
+            defaultModel: "deepseek-v4-pro", engines: ["claude", "opencode", "dsh"])
     }
     private var moonshot: ConfiguredProvider {
         key("Kimi (Moonshot)", runtime: "kimi", preset: "moonshot", models: [("kimi-k2.7-code", "Kimi K2.7 Code")],
-            defaultModel: "kimi-k2.7-code")
+            defaultModel: "kimi-k2.7-code", engines: ["kimi", "opencode"])
     }
     private var openAIOff: ConfiguredProvider {
         key("OpenAI", runtime: "codex", preset: "openai", models: [("gpt-5.6-sol", "GPT-5.6 Sol")],
-            defaultModel: "gpt-5.6-sol", enabled: false)
+            defaultModel: "gpt-5.6-sol", enabled: false, engines: ["codex", "opencode"])
     }
 
     private func claudePool(unavailable: String? = nil) -> ProviderPool {
@@ -147,6 +150,9 @@ final class InfrastructureTests: XCTestCase {
              "engines":[{"engine":"antigravity","installed":true,"auth":"no"}]}
             """# }
         XCTAssertEqual(Infrastructure.signedOutEngines(try runner(json("available"))), [.antigravity])
+        let line = attention([try runner(json("available"))])[0]
+        XCTAssertEqual(says(line), "Antigravity CLI is signed out on Box · Sessions there can’t use it")
+        XCTAssertEqual(line.names, ["Antigravity CLI", "Box"], "the engine by its CLI's name, as every list names it")
         XCTAssertEqual(Infrastructure.signedOutEngines(try runner(json("needs_update"))), [])
         XCTAssertEqual(Infrastructure.signedOutEngines(try runner(json("unsupported_platform"))), [])
     }
@@ -172,13 +178,79 @@ final class InfrastructureTests: XCTestCase {
         XCTAssertEqual(engines[3], Infrastructure.Engine(engine: .antigravity, machines: [], keys: [], pools: []))
     }
 
-    /// A key is listed under the engine it runs on, beside the model it starts on; one switched off is
-    /// nothing an engine can run on.
-    func testAKeyIsUnderTheEngineItRunsOn() {
-        let engines = Infrastructure.engines(runners: [], keys: [deepseek, moonshot, openAIOff], pools: [])
-        XCTAssertEqual(engines[0].keys, [.init(label: "DeepSeek", model: "DeepSeek V4 Pro")])
-        XCTAssertEqual(engines[2].keys, [.init(label: "Kimi (Moonshot)", model: "Kimi K2.7 Code")])
-        XCTAssertFalse(engines[1].ready, "an OpenAI key switched off")
+    /// Every engine a session can run on is a card, by its CLI's name in the pickers' order — the same keys
+    /// again under each engine they run on: OpenCode runs every one of them, DeepSeek Harness the DeepSeek
+    /// key. The app's four cards are the four a machine signs in.
+    func testEveryEngineIsACardWithEveryKeyThatRunsOnIt() throws {
+        let cards = Infrastructure.engineCards(runners: try fleet(), keys: [anthropic, anthropicWork, deepseek],
+                                               pools: [claudePool()])
+        XCTAssertEqual(cards.map(\.name), ["Claude Code", "Codex", "Kimi Code", "Antigravity CLI", "OpenCode", "DeepSeek Harness"])
+        XCTAssertEqual(cards.map(\.ready), [true, true, true, false, true, true])
+        let three: [Infrastructure.Engine.Key] = [.init(label: "Anthropic (Claude)", model: "Claude Opus 5"),
+                                                  .init(label: "Anthropic · Work", model: "Claude Sonnet 5"),
+                                                  .init(label: "DeepSeek", model: "DeepSeek V4 Pro")]
+        XCTAssertEqual(cards[0].keys, three)
+        XCTAssertEqual(cards[4], Infrastructure.EngineCard(engine: "opencode", machines: [], keys: three, pools: []))
+        // Harness lists its models on each machine, and none here has reported them: the key, and no model.
+        XCTAssertEqual(cards[5], Infrastructure.EngineCard(engine: "dsh", machines: [],
+                                                           keys: [.init(label: "DeepSeek", model: nil)], pools: []))
+        let four = Infrastructure.engines(runners: try fleet(), keys: [anthropic, anthropicWork, deepseek], pools: [claudePool()])
+        XCTAssertEqual(four.map(\.engine.rawValue), cards.prefix(4).map(\.engine))
+        XCTAssertEqual(four.map(\.keys), cards.prefix(4).map(\.keys))
+    }
+
+    /// A key is listed under every engine it runs on, beside the model it starts on there; one switched off
+    /// is nothing any engine can run on.
+    func testAKeyIsUnderEveryEngineItRunsOn() {
+        let cards = Infrastructure.engineCards(runners: [], keys: [deepseek, moonshot, openAIOff], pools: [])
+        XCTAssertEqual(cards[0].keys, [.init(label: "DeepSeek", model: "DeepSeek V4 Pro")])
+        XCTAssertEqual(cards[2].keys, [.init(label: "Kimi (Moonshot)", model: "Kimi K2.7 Code")])
+        XCTAssertEqual(cards[4].keys, [.init(label: "DeepSeek", model: "DeepSeek V4 Pro"),
+                                       .init(label: "Kimi (Moonshot)", model: "Kimi K2.7 Code")])
+        XCTAssertEqual(cards[5].keys, [.init(label: "DeepSeek", model: nil)])
+        XCTAssertFalse(cards[1].ready, "an OpenAI key switched off")
+    }
+
+    /// A DeepSeek Harness session's model is a machine's Harness catalogue's — the same for every DeepSeek
+    /// key — where Claude Code and OpenCode start each key on its own list's default.
+    func testAHarnessSessionsModelIsFromAMachinesCatalogue() throws {
+        let box = try runner(#"""
+        {"id":"hpc","name":"HPC","online":true,"capabilities":["provider:dsh"],
+         "engines":[{"engine":"dsh","installed":true,"auth":"unknown","version":"0.2.0-rc.2"}],
+         "modelCatalog":{"dsh":[{"value":"[\"deepseek\", \"deepseek-v4-pro\"]","label":"DeepSeek V4 Pro"},
+                                {"value":"[\"deepseek\", \"deepseek-v4-flash\"]","label":"DeepSeek V4 Flash"}]},
+         "runtimeDefaultModels":{"dsh":"[\"deepseek\", \"deepseek-v4-flash\"]"}}
+        """#)
+        let cards = Infrastructure.engineCards(runners: [box], keys: [deepseek, deepseek("DeepSeek 2")], pools: [])
+        XCTAssertEqual(cards[5].keys, [.init(label: "DeepSeek", model: "DeepSeek V4 Flash"),
+                                       .init(label: "DeepSeek 2", model: "DeepSeek V4 Flash")])
+        XCTAssertEqual(cards[0].keys.map(\.model), ["DeepSeek V4 Pro", "DeepSeek V4 Pro"])
+        XCTAssertEqual(cards[4].keys.map(\.model), ["DeepSeek V4 Pro", "DeepSeek V4 Pro"])
+    }
+
+    /// A Claude subscription token is under Claude Code alone, as the server answers for it, and its line
+    /// says what it is; OpenCode runs the API key beside it.
+    func testASubscriptionTokenIsUnderClaudeCodeAlone() {
+        let max = key("Claude Max", engines: ["claude"])
+        let cards = Infrastructure.engineCards(runners: [], keys: [max, anthropicWork], pools: [])
+        XCTAssertEqual(cards[0].keys.map(\.label), ["Claude Max", "Anthropic · Work"])
+        XCTAssertEqual(cards[4].keys.map(\.label), ["Anthropic · Work"])
+        XCTAssertEqual(ProvidersOverview.keyLine(max), "Claude Code · subscription token")
+        XCTAssertEqual(ProvidersOverview.keyLine(anthropicWork), "Claude Code · OpenCode")
+    }
+
+    /// OpenCode's machines are the ones its own sign-in is set up on, beside the keys it runs.
+    func testOpenCodesOwnSignInIsWhereItIsSetUp() throws {
+        let hpc = try runner(#"""
+        {"id":"hpc","name":"HPC","online":true,"engines":[{"engine":"opencode","installed":true,"auth":"yes","version":"1.18.35"}]}
+        """#)
+        let mac = try runner(#"""
+        {"id":"mac","name":"Mac Studio","online":true,"engines":[{"engine":"opencode","installed":true,"auth":"no","version":"1.18.35"}]}
+        """#)
+        let openCode = Infrastructure.engineCards(runners: [hpc, mac], keys: [moonshot], pools: [])[4]
+        XCTAssertEqual(openCode.machinesLabel, "Own sign-in")
+        XCTAssertEqual(openCode.machines, ["HPC"])
+        XCTAssertEqual(openCode.keys, [.init(label: "Kimi (Moonshot)", model: "Kimi K2.7 Code")])
     }
 
     /// Not set up on what cannot be used now: a machine offline, a key switched off, a pool nothing can
@@ -221,7 +293,7 @@ final class InfrastructureTests: XCTestCase {
         XCTAssertEqual(Infrastructure.defaultModel(key("A", defaultModel: "")), "Claude Opus 5")
         XCTAssertEqual(Infrastructure.defaultModel(key("A", defaultModel: "claude-haiku-5")), "claude-haiku-5")
         XCTAssertNil(Infrastructure.defaultModel(key("A", models: [], defaultModel: nil)))
-        XCTAssertEqual(Infrastructure.keyLabel("Gemini", presetSlug: "gemini"), "Antigravity")
+        XCTAssertEqual(Infrastructure.keyLabel("Gemini", presetSlug: "gemini"), "Gemini", "a Gemini key keeps its own name")
         XCTAssertEqual(Infrastructure.keyLabel("My Gemini", presetSlug: "gemini"), "My Gemini")
         XCTAssertEqual(Infrastructure.keyLabel("Gemini", presetSlug: nil), "Gemini")
     }

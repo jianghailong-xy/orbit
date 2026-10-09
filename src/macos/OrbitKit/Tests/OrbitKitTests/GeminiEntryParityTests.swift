@@ -20,9 +20,14 @@ final class GeminiEntryParityTests: XCTestCase {
 
     func testPickerLabelsAndReadinessMatchWeb() throws {
         let web = try source("src/web/src/lib/sessionProviderChoices.ts")
-        for text in ["env key", "Antigravity CLI", "Update runner", "Not installed"] {
+        for text in ["env key", "Update runner", "Not installed"] {
             XCTAssertTrue(web.contains(text), "web picker lost \(text)")
         }
+        // The engine by its CLI's own name, from the web's table of them, which the picker titles an
+        // Antigravity session with.
+        XCTAssertTrue(try source("src/web/src/lib/runnerEngines.ts")
+                          .contains("antigravity: '\(ProviderEngines.cliName("antigravity"))',"),
+                      "web lost the Antigravity CLI's name")
         XCTAssertTrue(web.contains("PROVIDER_PRESETS"), "the no-catalogue label comes from Gemini's preset")
         XCTAssertTrue(try source("src/shared/src/providerPresets.ts").contains("Gemini 3.8 Flash"))
         XCTAssertTrue(web.contains("antigravityKeyAvailable"))
