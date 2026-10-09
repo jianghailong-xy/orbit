@@ -337,6 +337,12 @@ describe('Antigravity’s sign-in and Gemini keys', () => {
     expect(loginOf(engineProviders(ANTIGRAVITY, sources({ antigravity: ready, antigravityKeyAvailable: true })))).toMatchObject({
       labelDetail: 'env key',
     });
+    // A Gemini key keeps its own name and Google Gemini's mark, whichever engine runs it.
+    for (const engine of [ANTIGRAVITY, OPENCODE]) {
+      expect(engineProviders(engine, sources({ configured: [gemini] })).find((c) => c.slug === 'gemini')).toMatchObject({
+        label: 'Gemini', kind: 'key', glyphKey: 'gemini',
+      });
+    }
     // A Gemini key keeps the name its owner gave it.
     expect(engineProviders(ANTIGRAVITY, sources({ configured: [{ ...gemini, label: 'Work Gemini' }] }))[0].label).toBe('Work Gemini');
   });
@@ -926,11 +932,12 @@ describe('a Codex pool somebody was added to, in their picker', () => {
 });
 
 describe('runtimeSummary', () => {
-  it('says which CLI a vendor on its own API runs on, and the dialect of the rest', () => {
-    expect(runtimeSummary('antigravity')).toBe('Runs on the Antigravity CLI');
-    expect(runtimeSummary('kimi')).toBe('Runs on the Kimi CLI');
+  it('names the protocol a key’s endpoint speaks, never an engine — a key runs on several', () => {
+    expect(runtimeSummary('antigravity')).toBe('Gemini API');
+    expect(runtimeSummary('kimi')).toBe('Moonshot API');
     expect(runtimeSummary('codex')).toBe('OpenAI-compatible');
     expect(runtimeSummary('claude')).toBe('Anthropic-compatible');
+    expect(runtimeSummary('dsh')).toBe('Anthropic-compatible');
   });
 });
 

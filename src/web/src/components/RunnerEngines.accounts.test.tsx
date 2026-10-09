@@ -158,13 +158,14 @@ describe('a runner with two Codex accounts', () => {
     // Its one action; the head itself is the button that folds its accounts.
     expect(rows(head, '.re-act button').map(labelOf)).toEqual(['Add account']);
 
-    // The other engines are untouched rows, each still with its own tag.
+    // The other engines are untouched rows, each still with its own tag, by the CLI's own name.
     const engineRows = rows(page, '.re-row:not(.re-acct)');
     expect(engineRows.map((row) => row.querySelector('.re-name')?.textContent)).toEqual([
       'Claude Code',
       'Codex',
-      'Antigravity',
+      'Antigravity CLI',
       'Kimi Code',
+      'DeepSeek Harness',
     ]);
     expect(tags(engineRows[0])).toEqual(['Signed in']);
     expect(tags(engineRows[3])).toEqual(['Signed in']);

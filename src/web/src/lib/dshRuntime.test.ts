@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AgentProvider, derivePermissionSemantics, DSH_PERMISSION_MODES, type RunnerEngineHealth } from '@orbit/shared';
 import { DSH_CONNECT_HREF, dshRepair, dshRunnerState } from './dshRuntime';
-import { engineChoices, engineProviders, type ChoiceSources } from './sessionProviderChoices';
+import { engineChoices, engineProviders, runtimeSummary, type ChoiceSources } from './sessionProviderChoices';
 import { supportsRunnerSlashAssets, slashAssetMatchesEngine } from './slashCommands';
 import {
   clampPermissionModeForModel,
@@ -141,6 +141,10 @@ describe('DeepSeek Harness in the pickers, by the engine', () => {
     expect(providerEngines('deepseek-harness', [harness, deepseek])).toEqual(['dsh', 'claude', 'opencode']);
     expect(providerEngines('deepseek', [harness, deepseek])).toEqual(['claude', 'opencode', 'dsh']);
     expect(defaultEngineOf('deepseek', [harness, deepseek])).toBe('claude');
+    // Whichever engine runs them, both rows speak Anthropic's protocol: that is what their pages say,
+    // never an engine.
+    expect(runtimeSummary('dsh')).toBe('Anthropic-compatible');
+    expect(runtimeSummary('claude')).toBe('Anthropic-compatible');
     // The legacy built-in `dsh`: DeepSeek Harness on the key its workspace's environment holds.
     expect(providerEngines('dsh', [])).toEqual(['dsh']);
   });
