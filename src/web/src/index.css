@@ -12042,6 +12042,10 @@ button.chat-jump-start:hover {
   gap: 8px;
   margin: 4px 0 2px;
 }
+/* The mark leads here: it carries its own `margin-left: auto` for the cards whose head it ends. */
+.answered-question-provenance .criteria-provenance {
+  margin-left: 0;
+}
 .answered-question-asked {
   margin-left: auto;
   font-size: 12px;
@@ -12094,7 +12098,7 @@ button.chat-jump-start:hover {
   margin-top: 6px;
   padding: 6px 10px;
   border-radius: 8px;
-  background: var(--bg);
+  background: var(--bg-raised);
   color: var(--text-1);
   white-space: pre-wrap;
 }

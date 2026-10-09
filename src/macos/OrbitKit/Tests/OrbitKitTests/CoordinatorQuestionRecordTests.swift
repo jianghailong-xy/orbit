@@ -267,6 +267,30 @@ final class CoordinatorQuestionRecordTests: XCTestCase {
         XCTAssertTrue(CoordinatorQuestions.receipts(nil).isEmpty)
     }
 
+    /// The read is newest first; records are adopted oldest first, so two answered between the same
+    /// two rows are drawn after the same row in the order they were answered.
+    func testRecordsAreAdoptedOldestFirst() {
+        func ended(_ id: String, _ at: String) -> ProjectClosedQuestion {
+            ProjectClosedQuestion(itemId: id, question: Self.question, askedAt: Self.askedAt,
+                                  resolvedAt: at, answer: .init(option: 0))
+        }
+        let read = ProjectOpenItemsView(closedQuestions: [
+            ended("second", "2026-10-09T00:29:36.000Z"), ended("first", "2026-10-09T00:29:23.000Z"),
+            ended("yesterday", "2026-10-08T14:05:00.000Z"),
+        ])
+        XCTAssertEqual(CoordinatorQuestions.receipts(read).map(\.record.itemId), ["yesterday", "first", "second"])
+
+        var state = TranscriptState()
+        state.items = [.assistant(AssistantBubble(id: "asked", text: "…", streamingText: "", seq: 1, turnId: "t",
+                                                  ts: "2026-10-09T00:10:00.000Z"))]
+        let cards = CoordinatorQuestions.receipts(read).dropFirst().map {
+            DeliveredDecisionCard(kind: .coordinatorQuestionRecord(record: $0.record), placement: .at($0.moment))
+        }
+        let rows = TranscriptRows.build(state: state, statusCards: [], canPageOlder: false,
+                                        showWorkingIndicator: false, decisionCards: Array(cards))
+        XCTAssertEqual(rows.map(\.id), ["asked", "question-record-first", "question-record-second", "transcript-bottom"])
+    }
+
     /// Placed by `ReceiptAnchor`, the rule every record in the conversation is placed by: after the
     /// last row at or before the moment it ended, at the head when it is older than every row.
     func testTheTranscriptDrawsTheRecordWhereItEnded() {

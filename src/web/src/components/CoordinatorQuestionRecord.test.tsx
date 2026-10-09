@@ -210,6 +210,14 @@ describe('where the conversation draws it', () => {
     ).toEqual([{ record: old, placement: 'head' }]);
   });
 
+  it('two answered between the same messages read in the order they were answered', () => {
+    // The read is newest first; the conversation draws both after the same event, top-down.
+    const first = record({ itemId: 'first', resolvedAt: '2026-10-09T00:29:23.000Z' });
+    const second = record({ itemId: 'second', resolvedAt: '2026-10-09T00:29:36.000Z' });
+    const rows = closedQuestionRows({ needsYou: [], withCoordinator: [], closedQuestions: [second, first] }, events);
+    expect(rows.map((row) => [row.record.itemId, row.placement])).toEqual([['first', 2], ['second', 2]]);
+  });
+
   it('draws nothing for a read that predates the records', () => {
     expect(closedQuestionRows({ needsYou: [], withCoordinator: [] }, events)).toEqual([]);
     expect(closedQuestionRows(null, events)).toEqual([]);

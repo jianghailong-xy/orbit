@@ -160,8 +160,19 @@ public enum CoordinatorQuestions {
         public var id: String { "question-record-\(record.itemId)" }
     }
 
+    /// Oldest first — the read is newest first — because records that ended between the same two
+    /// rows are drawn after the same row in the order they are adopted, and read top-down in the
+    /// order they happened.
     public static func receipts(_ items: ProjectOpenItemsView?) -> [Receipt] {
-        (items?.closedQuestions ?? []).map(Receipt.init(record:))
+        let oldestFirst = (items?.closedQuestions ?? []).reversed().enumerated()
+            .map { (offset: $0.offset, record: $0.element, at: ThinkingSummary.date($0.element.resolvedAt)) }
+        return oldestFirst
+            .sorted { a, b in
+                if ReceiptAnchor.ascending(a.at, b.at) { return true }
+                if ReceiptAnchor.ascending(b.at, a.at) { return false }
+                return a.offset < b.offset
+            }
+            .map { Receipt(record: $0.record) }
     }
 
     /// The answer THIS device just sent, as the record the read will publish: what was asked, what
