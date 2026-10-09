@@ -202,6 +202,22 @@ function liveCoordinator(project: { coordinatorSessionId: string | null; coordin
 }
 
 /**
+ * The project's newest task activity, for the header's "last activity". Raw SQL rather than
+ * `task.aggregate({ _max })` — the same reason the run_event high-water reads are raw: Prisma
+ * compiles an aggregate into a MAX over an OFFSET subquery the planner cannot flatten, so the
+ * ordering cannot be pushed into `task_project_activity_idx` and the read becomes every task the
+ * project has (measured on a 200k-task project: 3087 buffers, 19 ms warm, all of it per public
+ * page view). `max("updated_at")` over the same index is one tuple in 4 buffers.
+ */
+async function maxTaskUpdatedAt(prisma: PrismaService, ownerId: string, projectId: string): Promise<Date | null> {
+  const [row] = await prisma.$queryRaw<Array<{ at: Date | null }>>(Prisma.sql`
+    SELECT max("updated_at") AS "at"
+      FROM "task" WHERE "owner_id" = ${ownerId}::uuid AND "project_id" = ${projectId}::uuid
+  `);
+  return row?.at ?? null;
+}
+
+/**
  * The public projection of project `projectId` (owned by `ownerId`), with the layers `include`
  * turns on. A project gone since its link was resolved is the one 404.
  */
@@ -222,7 +238,9 @@ export async function readPublicProject(
     owners.taskPage(ownerId, projectId, { limit: TASKS_PAGE }),
     readCriterionSatisfaction(prisma, ownerId, projectId),
     readCriterionLanding(prisma, ownerId, projectId),
-    prisma.task.aggregate({ where: { ownerId, projectId }, _max: { updatedAt: true } }),
+    // The project's newest task activity, with max(updated_at) pushed into the index rather than
+    // scanned out of every task (maxTaskUpdatedAt has the measurement).
+    maxTaskUpdatedAt(prisma, ownerId, projectId),
   ]);
   const chain = panorama.shape.form === 'chain' && panorama.shape.taskCount > 0
     ? await readProjectBlockingLeaderboard(prisma, ownerId, projectId, CHAIN_RANKING)
@@ -237,7 +255,7 @@ export async function readPublicProject(
     title: project.title,
     status: project.status,
     createdAt: project.createdAt,
-    lastActivityAt: lastActivity._max.updatedAt ?? null,
+    lastActivityAt: lastActivity,
     taskCount: panorama.shape.taskCount,
     overview: {
       buckets: publicBuckets(panorama.buckets),
