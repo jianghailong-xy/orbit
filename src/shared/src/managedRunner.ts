@@ -66,6 +66,48 @@ export const MANAGED_RUNNER_INSTANCE_FENCED = 'MANAGED_RUNNER_INSTANCE_FENCED';
 /** 503, retryable: the manager has not recorded this generation's Pod yet. */
 export const MANAGED_RUNNER_INSTANCE_PENDING = 'MANAGED_RUNNER_INSTANCE_PENDING';
 
+/**
+ * Idle sleep (docs/managed-runner-design.md, "Provisioning retry wake and sleep" 7 and 8). A managed
+ * runner that declares this capability reports its workload in every heartbeat it sends as the
+ * authorized instance, and honours a sleep request: when it has nothing to do it stops claiming,
+ * drains and exits on its own, so its Pod ends with the kubelet's report of the stop — the proof the
+ * manager needs before it releases compute. A runner that does not declare it is never put to sleep.
+ */
+export const MANAGED_RUNNER_SLEEP_CAPABILITY = 'managed-runner-sleep-v1';
+
+/** What a managed runner's instance says it is doing, in its heartbeat (`managedWorkload`). */
+export interface ManagedRunnerWorkload {
+  /** Turns in flight: claimed turns, and turns an engine runs on its own. */
+  activeTurns: number;
+  /** Background processes of its sessions it is tracking: jobs, services and watches. */
+  backgroundJobs: number;
+  /** Work its heartbeats handed it that is still running (landings, merges, commits, uploads,
+   *  scans, resets), and sign-ins and installs in progress. */
+  operations: number;
+  /** Events buffered for the control plane and not yet acknowledged by it. */
+  unflushedEvents: number;
+  /** How long, in whole seconds, all four have been zero; 0 while any is not. */
+  idleSeconds: number;
+  /** The `requestedAt` of a sleep request this instance, idle, is ready to honour: its acceptance.
+   *  Sent only while all four counts are zero; it exits only once the answer is `confirmed`. */
+  sleepReady?: string;
+}
+
+/** In a heartbeat response to the authorized instance of a draining mapping: stop for sleep. */
+export interface ManagedRunnerSleepRequest {
+  /** When the manager asked, ISO 8601: the request's identity, echoed back in `sleepReady`. */
+  requestedAt: string;
+  /** True once the control plane has recorded this instance's acceptance: stop claiming, drain and
+   *  exit. Until then the request can still be withdrawn, and the instance keeps running. */
+  confirmed?: boolean;
+}
+
+/** WAITING_CAPACITY: the environment's fixed budget has no room for this runner now. Retryable by itself. */
+export const MANAGED_RUNNER_CAPACITY_UNAVAILABLE = 'MANAGED_RUNNER_CAPACITY_UNAVAILABLE';
+
+/** 409 to an explicit sleep: the runner has work in flight or queued, and sleep never interrupts work. */
+export const MANAGED_RUNNER_BUSY = 'MANAGED_RUNNER_BUSY';
+
 /** What the owner asked of the managed runner. */
 export type ManagedRunnerDesiredState = 'RUNNING' | 'SLEEPING' | 'DELETED';
 

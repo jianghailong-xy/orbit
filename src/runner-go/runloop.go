@@ -1172,7 +1172,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// Heartbeat-delivered work may spawn git subprocesses that outlive the heartbeat
 	// goroutine itself. Stop dispatching it as soon as drain begins and join anything
 	// already running before a self-update replaces this process image.
-	var heartbeatOps sync.WaitGroup
+	// Counted as well as joined: a managed instance reports how much of it is running (managed_sleep.go).
+	var heartbeatOps countedOps
 	// The sign-in relay reclaims the slot an add-account attempt leaves empty; a slot one of this
 	// runner's live sessions is stuck to is not one it may take away.
 	login := &loginRelay{liveSessionIDs: pool.sessionIDs}
@@ -1184,6 +1185,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	resetConsumer := newCodexResetConsumer(codexUsageProbe)
 	resetConsumer.wakeHeartbeat = beatNow
 	resets := newCodexResetRelay(resetCtx, t, resetConsumer.execute, &heartbeatOps)
+	// A managed instance's side of idle sleep (managed_sleep.go); unused by a self-managed runner.
+	sleeper := newManagedSleep()
+	managedWorkload := func() ManagedWorkload { return managedWorkloadCounts(pool, &heartbeatOps, login, install) }
 	go func() {
 		defer close(hbDone)
 		ticker := time.NewTicker(heartbeatInterval)
@@ -1216,6 +1220,11 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			runtimeDefaultModels := hbRuntimeDefaultModels
 			modelSnapshotMu.Unlock()
 			sent := time.Now()
+			var workload *ManagedWorkload
+			if currentManagedInstance() != nil {
+				report := sleeper.report(managedWorkload())
+				workload = &report
+			}
 			resp, supervisors, err := sendHeartbeatCycle(pool, telemetry, HeartbeatRequest{
 				Status: "ONLINE", Version: version,
 				LeaseOwner: t.leaseOwner, Draining: draining,
@@ -1229,6 +1238,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				RunsAsRoot:           &runsAsRoot,
 				ReposRoot:            machineReposRoot,
 				SelfUpdate:           selfUpdateReport(),
+				ManagedWorkload:      workload,
 			}, t.heartbeat)
 			if err != nil {
 				logln("heartbeat failed:", err)
@@ -1240,6 +1250,19 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					loopCancel()
 				}
 				return
+			}
+			// Idle sleep: accept the manager's request while there is still nothing to do here, and stop
+			// once the control plane confirms that acceptance — never on the request alone, which the
+			// manager may still withdraw. A process already draining for another reason accepts nothing.
+			if currentManagedInstance() != nil {
+				stop, beat := sleeper.answer(resp.ManagedSleep, managedWorkload().idle() && loopCtx.Err() == nil)
+				if beat {
+					beatNow()
+				}
+				if stop {
+					logln("the control plane confirmed this managed runner's sleep; stopping claims and draining before exit")
+					loopCancel()
+				}
 			}
 			// The Codex rate-limit reset step a claim holds for this process, if any. Its freshness
 			// counts from when this heartbeat was sent, which is no later than the renewal of the

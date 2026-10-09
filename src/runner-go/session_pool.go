@@ -659,6 +659,30 @@ func (p *sessionPool) turnsInFlightLocked() int {
 	return n
 }
 
+// turnsInFlight is turnsInFlightLocked for a caller that does not hold the lock: the managed
+// workload report (managed_sleep.go).
+func (p *sessionPool) turnsInFlight() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.turnsInFlightLocked()
+}
+
+// backgroundJobTotal counts every background process this pool knows of: the shells an engine started,
+// the jobs, services and watches this runner hosts, and the hosted jobs no supervisor holds right now.
+// The managed workload report treats any of them as work a sleep would end.
+func (p *sessionPool) backgroundJobTotal() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	n := 0
+	for _, jobs := range p.bgJobs {
+		n += len(jobs)
+	}
+	for _, jobs := range p.hostless {
+		n += len(jobs)
+	}
+	return n
+}
+
 // closeForUpdate is the only way a self-update gets to stop this runner: it succeeds only while no
 // turn is in flight, and from then on no turn begins here. Otherwise it reports how many turns are
 // running and changes nothing, and the update waits for a later check.

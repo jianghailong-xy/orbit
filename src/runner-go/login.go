@@ -530,6 +530,13 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 
 // stop cancels and joins every relay process started by this runner. The caller
 // must first stop heartbeat delivery so no new start can race with Wait.
+// inFlight counts the sign-ins running now, for the managed workload report (managed_sleep.go).
+func (r *loginRelay) inFlight() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.runs)
+}
+
 func (r *loginRelay) stop() {
 	r.mu.Lock()
 	for _, run := range r.runs {
