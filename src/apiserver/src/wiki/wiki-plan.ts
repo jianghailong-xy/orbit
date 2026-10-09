@@ -136,6 +136,31 @@ interface PlanSources {
   sessions: PlanSessions | null;
 }
 
+const PROJECT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+
+/**
+ * The projects a session condition names, as ids, whichever way they are spelled. A version stores each
+ * project as the id its reference resolved to (`resolve`); a read of a version names each as { id, title }
+ * (`views`, contract `plan.reads.version`). A reader that got the read's shape once passed the objects
+ * on as ids: `::uuid[]` refused them with 22P02, and the server's maintenance run wrote no document (P10,
+ * 2026-10-09). So every reader of a condition takes its projects through here: a stored id is that id, a
+ * read's { id, title } is its id, and anything else names no project and is left out. The order and any
+ * repeat are kept, because the documents' fingerprint lists the projects as the read lists them.
+ */
+export function wikiPlanProjectIds(projects: unknown): string[] {
+  if (!Array.isArray(projects)) return [];
+  return projects.flatMap((project) => {
+    const id = typeof project === 'string' ? project : (project !== null && typeof project === 'object' ? (project as { id?: unknown }).id : null);
+    return typeof id === 'string' && PROJECT_ID.test(id) ? [id.toLowerCase()] : [];
+  });
+}
+
+/** A section's sources as a version stores them, its session condition's projects read by `wikiPlanProjectIds`. */
+function planSourcesOf(stored: unknown): PlanSources {
+  const sources = stored as PlanSources;
+  return sources.sessions ? { ...sources, sessions: { ...sources.sessions, projects: wikiPlanProjectIds(sources.sessions.projects) } } : sources;
+}
+
 interface PlanSection {
   /** Null until `assignKeys` gives it one. */
   key: string | null;
@@ -814,7 +839,7 @@ function contentOf(row: VersionRow): PlanContent {
         kind: section.kind as WikiPlanSectionKind,
         covers: section.covers,
         length: section.length,
-        sources: section.sources as unknown as PlanSources,
+        sources: planSourcesOf(section.sources),
         extra: section.extra as Record<string, unknown>,
       })),
     })),
@@ -1099,7 +1124,7 @@ export class WikiPlans {
     const ids = new Set<string>();
     for (const row of rows) {
       for (const doc of row.docs) {
-        for (const section of doc.sections) (section.sources as unknown as PlanSources).sessions?.projects.forEach((id) => ids.add(id));
+        for (const section of doc.sections) planSourcesOf(section.sources).sessions?.projects.forEach((id) => ids.add(id));
       }
     }
     const titles = ids.size === 0
@@ -1143,7 +1168,7 @@ export class WikiPlans {
         protected: doc.protected,
         extra: doc.extra as Record<string, unknown>,
         sections: doc.sections.map((section) => {
-          const sources = section.sources as unknown as PlanSources;
+          const sources = planSourcesOf(section.sources);
           return {
             id: section.id,
             key: section.key,

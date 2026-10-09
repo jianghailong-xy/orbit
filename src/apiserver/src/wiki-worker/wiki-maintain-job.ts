@@ -12,7 +12,7 @@ import {
 } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
 import { listWikiAnchorsForJob } from '../wiki/wiki-anchors';
-import { gatherDocMaterial, type StoredSessionCondition } from '../wiki/wiki-docs-material';
+import { gatherDocMaterial, storedSessionCondition, type StoredSessionCondition } from '../wiki/wiki-docs-material';
 import { wikiDocsAffected } from '../wiki/wiki-docs-affected';
 import type { WikiDocs } from '../wiki/wiki-docs';
 import { ownerEnvLiterals } from '../wiki/wiki-dossier';
@@ -1144,9 +1144,10 @@ class WikiMaintainRun {
         },
       })),
     }));
+    // The read names each project { id, title }: the material takes them as ids (`storedSessionCondition`).
     const conditions = new Map<string, StoredSessionCondition | null>();
     for (const doc of planVersion.docs) {
-      for (const section of doc.sections) conditions.set(`${doc.slug}#${section.key}`, (section.sources?.sessions ?? null) as StoredSessionCondition | null);
+      for (const section of doc.sections) conditions.set(`${doc.slug}#${section.key}`, storedSessionCondition(section.sources?.sessions));
     }
     const repo = this.snapshotRepo(head, this.snapshot!.files, this.snapshot!.sizes);
     const summary = await runWikiDocsBuild({
