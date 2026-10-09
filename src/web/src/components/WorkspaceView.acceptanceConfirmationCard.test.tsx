@@ -618,9 +618,13 @@ describe('the start card in WorkspaceView', { timeout: 60_000 }, () => {
     await openSettlementReview();
     const card = (): HTMLElement => reviewForm()!.querySelector<HTMLElement>('.start-card')!;
     expect(reviewForm()!.querySelectorAll('.settlement-card.start-card')).toHaveLength(1);
-    // The plan by level, off the dependency graph: A starts with the project, B after it.
-    expect([...card().querySelectorAll('.start-card-level')].map((level) => level.textContent))
-      .toEqual(['1Athe sealNow', '2Bthe card']);
+    // The plan by level, off the dependency graph: A starts with the project, B after it. The graph is
+    // the card's own read, answered after the card is drawn: on a wide screen nothing else is waited
+    // for first, so the list is waited for here.
+    await waitForUi(() => {
+      expect([...card().querySelectorAll('.start-card-level')].map((level) => level.textContent))
+        .toEqual(['1Athe sealNow', '2Bthe card']);
+    });
     // One setting changed on the card before the press: at most 5 tasks, not the suggested 3.
     const count5 = card().querySelector<HTMLInputElement>('.start-card-count input')!;
     await act(async () => {
