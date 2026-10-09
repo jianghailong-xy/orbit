@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
@@ -91,10 +92,9 @@ private fun Pill(model: WorktreeModel, state: WorktreeState, d: JsonObject, bran
             Row(Modifier.heightIn(min = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 // The branch and its summary open the diff; copying is the long press, so a tap never copies by surprise.
                 Box(Modifier.weight(1f)) {
-                    Row(Modifier.combinedClickable(enabled = true, onClickLabel = if (files.isNotEmpty()) "View diff" else null,
+                    BranchSummary(Modifier.combinedClickable(enabled = true, onClickLabel = if (files.isNotEmpty()) "View diff" else null,
                         onLongClickLabel = "Copy branch name", onLongClick = { menu = true },
-                        onClick = { if (files.isNotEmpty()) sheet = "diff" else menu = true }),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        onClick = { if (files.isNotEmpty()) sheet = "diff" else menu = true })) {
                         BranchPill(displayBranch, copied)
                         Text(statText(add, del, files.size, primary == WorktreeBarLogic.Primary.MERGE), fontFamily = FontFamily.Monospace,
                             style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -124,6 +124,27 @@ private fun Pill(model: WorktreeModel, state: WorktreeState, d: JsonObject, bran
         "diff" -> WorktreeChanges(model, displayBranch) { sheet = null }
         // Once the recovery is gone — merged, or cleared — its review closes itself.
         "recovery" -> if (recovery != null) MergeRecoveryReview(model, d, recovery, open) { sheet = null } else LaunchedEffect(Unit) { sheet = null }
+    }
+}
+
+/**
+ * The branch and its summary share the row as iOS's HStack shares it: the shorter is offered half and takes what
+ * it needs, the other gets the rest, so on a phone both truncate rather than the branch leaving the summary none.
+ */
+@Composable
+private fun BranchSummary(modifier: Modifier, content: @Composable () -> Unit) = Layout(content, modifier) { measurables, constraints ->
+    val (branch, summary) = measurables
+    val gap = 8.dp.roundToPx()
+    val room = (constraints.maxWidth - gap).coerceAtLeast(0)
+    val branchFirst = branch.maxIntrinsicWidth(constraints.maxHeight) <= summary.maxIntrinsicWidth(constraints.maxHeight)
+    val loose = constraints.copy(minWidth = 0)
+    val first = (if (branchFirst) branch else summary).measure(loose.copy(maxWidth = room / 2))
+    val second = (if (branchFirst) summary else branch).measure(loose.copy(maxWidth = room - first.width))
+    val (left, right) = if (branchFirst) first to second else second to first
+    val height = maxOf(left.height, right.height)
+    layout(left.width + gap + right.width, height) {
+        left.place(0, (height - left.height) / 2)
+        right.place(left.width + gap, (height - right.height) / 2)
     }
 }
 

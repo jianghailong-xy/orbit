@@ -96,6 +96,16 @@ class WorktreeBarTest {
         compose.onNodeWithText("Merged into develop").assertIsDisplayed()
     }
 
+    /** On a phone the branch and its summary share what Merge leaves (iOS's HStack): both truncate, neither vanishes. */
+    @Test @Config(qualifiers = "w360dp-h640dp") @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun onAPhoneTheBranchAndItsSummaryShareTheRow() {
+        show()
+        compose.onNodeWithText("Merge to main").assertIsDisplayed()
+        listOf("orbit/a06c-worktree-85cfd1", "+12 −3 · 4 files · committed").forEach { text ->
+            compose.onNodeWithText(text, useUnmergedTree = true).assertIsDisplayed()
+        }
+    }
+
     @Test fun aConflictIsHandedToTheSessionAndAnErrorRetries() {
         detail = session("mergeStatus" to JsonPrimitive("conflict"), "mergeError" to JsonPrimitive("CONFLICT (content): src/reader/Bar.kt"),
             "mergeTarget" to JsonPrimitive("main"))
