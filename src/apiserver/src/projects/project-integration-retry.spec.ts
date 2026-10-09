@@ -442,6 +442,79 @@ test('a candidate in flight, waiting on the owner\'s merge, ended, never checked
   assert.match(conflicted.message, /only a project branch that changed answers one/);
 });
 
+test('a timed-out running check is rerun from CHECKING as well as BLOCKED, ending the lost job first (J-T9)', () => {
+  // The production shape (2026-10-09): the candidate is CHECKING and its check is RUNNING but the
+  // runner will never report — the door ends the lost job and requeues the check, it does not wait
+  // for a result that is never coming.
+  for (const promotionState of ['BLOCKED', 'CHECKING'] as const) {
+    assert.deepEqual(decidePromotionRetry(candidate({
+      promotionState,
+      newestJob: { id: 'check-9', kind: 'CHECK_PROMOTION', generation: 3, state: 'RUNNING', checks: [], timedOut: true },
+    })), {
+      ok: true,
+      retryOfJobId: 'check-9',
+      failureClass: 'ERROR',
+      handle: ['item-9'],
+      endsTimedOutJob: true,
+    }, promotionState);
+  }
+  // Without the timedOut fact a RUNNING check is in flight, whatever state the candidate is in.
+  const stillRunning = candidateRefusal(candidate({
+    promotionState: 'CHECKING',
+    newestJob: { id: 'check-9', kind: 'CHECK_PROMOTION', generation: 3, state: 'RUNNING', checks: [], timedOut: false },
+  }));
+  assert.equal(stillRunning.code, INTEGRATION_RETRY_IN_FLIGHT);
+  assert.match(stillRunning.message, /is already RUNNING/);
+  const queued = candidateRefusal(candidate({
+    promotionState: 'BLOCKED',
+    newestJob: { id: 'check-8', kind: 'CHECK_PROMOTION', generation: 2, state: 'QUEUED', checks: [], timedOut: false },
+  }));
+  assert.equal(queued.code, INTEGRATION_RETRY_IN_FLIGHT);
+  // A stale `timedOut: true` on anything but a RUNNING job changes nothing: the failed check is
+  // rerun the ordinary way, and no timed-out job is ended.
+  assert.deepEqual(decidePromotionRetry(candidate({
+    promotionState: 'BLOCKED',
+    newestJob: { id: 'check-7', kind: 'CHECK_PROMOTION', generation: 1, state: 'CHECK_FAILED', checks: [RED], timedOut: true },
+  })), { ok: true, retryOfJobId: 'check-7', failureClass: 'CHECK_FAILED', handle: ['item-9'] });
+});
+
+test('a timed-out check is not a licence to touch a candidate whose merge is in flight, and the owner may press without an item', () => {
+  // CONFIRMED / RECHECKING with a timed-out newest job is the LAND_PROMOTION that died: this door
+  // re-runs the CHECK, never a confirmed merge.
+  for (const state of ['CONFIRMED', 'RECHECKING'] as const) {
+    const refused = candidateRefusal(candidate({
+      promotionState: state,
+      newestJob: { id: 'land-2', kind: 'LAND_PROMOTION', generation: 2, state: 'RUNNING', checks: [], timedOut: true },
+    }));
+    assert.equal(refused.code, INTEGRATION_RETRY_NOT_APPLICABLE, state);
+    assert.match(refused.message, /that job is the merge itself/);
+    assert.match(refused.message, /abandon door \(J-T10\)/);
+  }
+  // The owner may press a timed-out check with no item of theirs — nothing has opened one yet —
+  // exactly as for a timed-out landing; their press of an ordinary blocked candidate still
+  // requires an item to be theirs, and a healthy RUNNING check is in flight for everybody.
+  const ownerNoItem = candidate({
+    promotionState: 'CHECKING',
+    requester: 'OWNER',
+    openItems: [],
+    newestJob: { id: 'check-9', kind: 'CHECK_PROMOTION', generation: 3, state: 'RUNNING', checks: [], timedOut: true },
+  });
+  assert.deepEqual(decidePromotionRetry(ownerNoItem), {
+    ok: true, retryOfJobId: 'check-9', failureClass: 'ERROR', handle: [], endsTimedOutJob: true,
+  });
+  const ownerHealthy = candidateRefusal({
+    ...ownerNoItem,
+    newestJob: { id: 'check-9', kind: 'CHECK_PROMOTION', generation: 3, state: 'RUNNING', checks: [], timedOut: false },
+  });
+  assert.equal(ownerHealthy.code, INTEGRATION_RETRY_IN_FLIGHT);
+  const ownerNoItemBlocked = candidateRefusal({
+    ...ownerNoItem,
+    promotionState: 'BLOCKED',
+    newestJob: { id: 'check-1', kind: 'CHECK_PROMOTION', generation: 1, state: 'CHECK_FAILED', checks: [RED] },
+  });
+  assert.equal(ownerNoItemBlocked.code, INTEGRATION_RETRY_OWNER_ONLY);
+});
+
 test('a blocked candidate\'s item names the door that checks it again, and that the merge stays the owner\'s or Automatic\'s', () => {
   const told = openItemMessage({
     id: '01a0f5c9-0000-7000-8000-000000000005',

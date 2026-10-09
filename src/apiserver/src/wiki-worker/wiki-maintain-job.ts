@@ -46,17 +46,17 @@ import {
   assembleWikiMaintainProposal,
   parseWikiMaintainProposal,
   wikiMaintainPlanOf,
+  wikiMaintainProposalPaths,
   wikiMaintainProposalPrompt,
   wikiMaintainProposalRedo,
   WIKI_MAINTAIN_PROPOSAL,
   type WikiMaintainPlanRead,
   type WikiMaintainProposalItem,
-  type WikiMaintainProposalRepo,
   type WikiNewDesignDoc,
   type WikiUnplacedEntry,
 } from './wiki-maintain-plan';
 import { cutRunes, parseWikiImportAnswer, WikiImportRepo, wikiImportIsObject } from './wiki-import-extract';
-import { WikiPlanRepo, type WikiPlanSnapshotIndex } from './wiki-plan-repo';
+import { type WikiPlanSnapshotIndex } from './wiki-plan-repo';
 import { type WikiAnchorCheckInput, type WikiRepoFileRead } from '@orbit/shared';
 import {
   readWikiRepoFiles,
@@ -227,7 +227,6 @@ interface WikiMaintainSnapshot {
   files: string[];
   sizes: Map<string, number>;
   about: string;
-  gate: WikiPlanRepo;
   anchors: WikiImportRepo;
 }
 
@@ -371,8 +370,9 @@ class WikiMaintainRun {
    * The pipeline in order (`wikiMaintainRun.steps`), answering where it stopped, or null.
    *
    * The repository step is this pipeline's `checkout` and more: a snapshot of origin/main through the
-   * space's runner names the commit, lists every file with its size, and carries the headings, symbols,
-   * contracts and reachable commits the checks below read — where the runner fetched a checkout and read it.
+   * space's runner names the commit, lists every file with its size, and carries the reachable commits the
+   * checks below read, and a file a check reads is read whole at that commit — where the runner fetched a
+   * checkout and read it.
    */
   private async steps(): Promise<WikiMaintainStop | null> {
     let step = 'repo';
@@ -482,7 +482,6 @@ class WikiMaintainRun {
       files,
       sizes,
       about: typeof raw.readme === 'string' ? cutRunes(raw.readme, WIKI_MAINTAIN_JOB.aboutMaxChars) : '',
-      gate: new WikiPlanRepo(raw),
       anchors: new WikiImportRepo({ files, commits: raw.commits ?? [] }, '', repositoryName(this.context.repo.urlNorm)),
     };
     this.jobContext.log(`the repository at ${snapshot.sha.slice(0, 12)} (${files.length} files)`);
@@ -1392,7 +1391,9 @@ class WikiMaintainRun {
       if (items.length === WIKI_MAINTAIN_PROPOSAL.itemsMax) break;
       items.push({ id: `K${items.length + 1}`, entry });
     }
-    const repo = this.proposalRepo();
+    // The answer's references are checked in the files at the snapshot's commit, as the runner checks them in its
+    // checkout (`wikiDocRepo`), not against the snapshot's index.
+    const repo = this.snapshotRepo(head, this.snapshot!.files, this.snapshot!.sizes);
     const prompt = wikiMaintainProposalPrompt(this.plan, items);
     let problems: string[] = [];
     for (let round = 1; round <= WIKI_MAINTAIN_PROPOSAL.roundsMax; round += 1) {
@@ -1407,6 +1408,13 @@ class WikiMaintainRun {
         return out;
       }
       const answer = parseWikiMaintainProposal(text);
+      try {
+        await repo.prepare(wikiMaintainProposalPaths(answer));
+      } catch (error) {
+        if (isWikiJobCancellation(error, this.jobContext.signal)) throw error;
+        out.error = cutRunes((error as Error).message, 400);
+        return out;
+      }
       const { request, problems: check } = assembleWikiMaintainProposal(this.plan, answer, items, repo);
       if (check.length > 0) {
         problems = check;
@@ -1440,17 +1448,6 @@ class WikiMaintainRun {
     out.error = cutRunes(`the proposal did not pass in ${WIKI_MAINTAIN_PROPOSAL.roundsMax} rounds: ${problems.join('; ')}`, 600);
     this.jobContext.log(`no proposal: ${out.error}`);
     return out;
-  }
-
-  /** The snapshot as the proposal's gate reads it. */
-  private proposalRepo(): WikiMaintainProposalRepo {
-    const gate = this.snapshot!.gate;
-    return {
-      hasDocSection: (path, section) => gate.hasDocSection(path, section),
-      hasPath: (path) => gate.hasPath(path),
-      hasSymbol: (path, symbol) => gate.hasSymbol(path, symbol),
-      hasContract: (path) => gate.hasContract(path),
-    };
   }
 
   private jobPrincipal(): WikiPrincipal {
