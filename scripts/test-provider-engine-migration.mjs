@@ -19,6 +19,7 @@ export const migrationPgSource = 'src/apiserver/src/providers/provider-engine-mi
 export const migrationPgNames = [
   'T4 provider-engine migration on PostgreSQL',
   "T4 a DeepSeek Harness row merges into the same owner's enabled DeepSeek key holding the same key on the same endpoint",
+  'T4 the shared rows fold among themselves, and what any admin names them by moves with them',
   'T4 a row with another key, on another endpoint, or with either side turned off converts where it stands, and one turned off stays off',
   'T4 several DeepSeek Harness rows of one owner each become a key, and the ones holding the same key become one',
   'T4 sessions, task pins, preferences, Wiki maintenance settings and workspace fallbacks naming an old slug name the key after, and nothing open names a retired slug',
@@ -52,19 +53,53 @@ export const regressionPgSources = [
   'src/apiserver/src/auth/access-tokens.pg.spec.ts',
 ];
 
+/** A named scenario, by its name: a name the lists above do not hold is refused here, not later. */
+function named(list, name) {
+  assert.ok(list.includes(name), `not a named scenario: ${name}`);
+  return name;
+}
+const pg = (name) => named(migrationPgNames, name);
+const api = (name) => named(apiCases['providers/provider-engine-migration'], name);
+
 /** Each acceptance criterion of the task, and the named scenarios that prove it. */
 export const criteria = {
-  'merged only when the same key is on the same endpoint and both are enabled': [migrationPgNames[1], migrationPgNames[2], migrationPgNames[12], apiCases['providers/provider-engine-migration'][0]],
-  'every other row converts where it stands, and a turned-off one stays off': [migrationPgNames[2]],
-  'several DeepSeek Harness rows of one owner': [migrationPgNames[3]],
-  'sessions, task pins, preferences and Wiki settings are rewritten': [migrationPgNames[4]],
-  'an old slug resolves as an alias to the key on DeepSeek Harness': [migrationPgNames[5], migrationPgNames[2]],
-  'the old OpenCode spelling is rewritten': [migrationPgNames[6], migrationPgNames[4]],
-  'running it again changes nothing': [migrationPgNames[10], migrationPgNames[11]],
-  'every fixture session resolves the same before and after (engine, key fingerprint, endpoint, model, runtime id)': [
-    migrationPgNames[9], apiCases['providers/provider-engine-migration'][1], apiCases['providers/provider-engine-migration'][2],
+  'merged only when the same key is on the same endpoint and both are enabled': [
+    pg("T4 a DeepSeek Harness row merges into the same owner's enabled DeepSeek key holding the same key on the same endpoint"),
+    pg('T4 a row with another key, on another endpoint, or with either side turned off converts where it stands, and one turned off stays off'),
+    pg('T4 the shared rows fold among themselves, and what any admin names them by moves with them'),
+    pg('T4 a row whose key cannot be read is left as it is, and the run stays incomplete until a start can read it'),
+    api('T4 endpoints compare with scheme and host lowercased and trailing slashes dropped, and nothing else'),
   ],
-  'a per-row report': [migrationPgNames[14], migrationPgNames[8], migrationPgNames[13]],
+  'every other row converts where it stands, and a turned-off one stays off': [
+    pg('T4 a row with another key, on another endpoint, or with either side turned off converts where it stands, and one turned off stays off'),
+  ],
+  'several DeepSeek Harness rows of one owner': [
+    pg('T4 several DeepSeek Harness rows of one owner each become a key, and the ones holding the same key become one'),
+  ],
+  'sessions, task pins, preferences and Wiki settings are rewritten': [
+    pg('T4 sessions, task pins, preferences, Wiki maintenance settings and workspace fallbacks naming an old slug name the key after, and nothing open names a retired slug'),
+    pg('T4 the shared rows fold among themselves, and what any admin names them by moves with them'),
+  ],
+  'an old slug resolves as an alias to the key on DeepSeek Harness': [
+    pg('T4 a retired slug resolves to its key on DeepSeek Harness at every door that takes a provider'),
+  ],
+  'the old OpenCode spelling is rewritten': [
+    pg('T4 the old OpenCode spelling becomes the key on OpenCode in sessions, task pins and preferences'),
+  ],
+  'running it again changes nothing': [
+    pg('T4 running it again changes nothing, and a start after the marker folds only the rows an older replica made'),
+    pg('T4 two replicas starting together: one migrates, the other waits for it and finds nothing left'),
+  ],
+  'every fixture session resolves the same before and after (engine, key fingerprint, endpoint, model, runtime id)': [
+    pg('T4 every fixture session resolves to the same engine, key, endpoint, model and runtime id before and after, and dispatch agrees'),
+    api("T4 a key fingerprint is a prefix of the trimmed key's SHA-256, never the key"),
+    api('T4 two resolutions are the same exactly when engine, key, endpoint, model, runtime id and dispatch are'),
+  ],
+  'a per-row report': [
+    pg('T4 the report lists every row it touched, in its table and in the log, and holds no key material'),
+    pg("T4 the backfill's leftovers are listed, and account pools and managed runners are left as they are"),
+    pg('T4 a rehearsal reports what a run would do and writes nothing'),
+  ],
 };
 
 export const guardNames = [

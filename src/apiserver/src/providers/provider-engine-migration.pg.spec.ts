@@ -304,6 +304,29 @@ test('T4 provider-engine migration on PostgreSQL', { timeout: 900_000 }, async (
     );
   });
 
+  await t.test('T4 the shared rows fold among themselves, and what any admin names them by moves with them', async () => {
+    const apiKey = `sk-${randomUUID()}`;
+    const target = await deepSeekKey(null, { apiKey, label: `Shared DeepSeek ${randomUUID().slice(0, 4)}` });
+    const row = await harnessRow(null, { apiKey });
+    const admin = await account('shared-admin', 'ADMIN', { defaultModels: { [row.slug]: 'opaque-acp-model' } });
+    const at = await machine(admin);
+    const onShared = await session(at, row.slug, { label: 'shared: an admin\'s session on a shared row', engine: AgentProvider.DSH });
+    const pin = await task(admin, { provider: row.slug, engine: AgentProvider.DSH });
+    // A personal key with the same key does not take a shared row in: owners are compared as they are.
+    const member = await account('shared-member');
+    await deepSeekKey(member, { apiKey });
+
+    const result = await migrate();
+    assert.equal(await keyRow(row.id), null);
+    assert.deepEqual(await alias(row.slug), { providerId: target.id, engine: AgentProvider.DSH, reason: 'MERGED' });
+    assert.deepEqual(await stored(onShared), { provider: target.slug, providerBuiltin: false, engine: AgentProvider.DSH, model: 'pinned-model' });
+    assert.deepEqual(await pins(pin), { provider: target.slug, engine: AgentProvider.DSH, model: null });
+    assert.deepEqual(await preferencesOf(admin), { [`dsh:${target.slug}`]: 'opaque-acp-model' });
+    const merged = result.lines.find((l) => l.step === 'dsh-row' && l.rowId === row.id)!;
+    assert.deepEqual([merged.action, merged.ownerId], ['MERGED', null]);
+    assert.ok(result.lines.some((l) => l.step === 'reference' && l.rowId === onShared && l.ownerId === admin && l.action === 'REWRITTEN'));
+  });
+
   await t.test('T4 a row with another key, on another endpoint, or with either side turned off converts where it stands, and one turned off stays off', async () => {
     const owner = await account('convert');
     const at = await machine(owner);
