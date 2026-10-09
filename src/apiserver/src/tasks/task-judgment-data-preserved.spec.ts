@@ -2203,7 +2203,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // nor any of the six preserved triggers/functions is named, and no function, trigger, type,
       // index or constraint is created, replaced or dropped, so it is not another writer of the DONE
       // fence. No INSERT, UPDATE or DELETE: every stored comment reads NULL.
-      '0416_task_comment_session_attempt'],
+      '0416_task_comment_session_attempt',
+      // A session's rolling recap (0418): three nullable columns with no default and no constraint on
+      // `session` (`recap_text` TEXT, `recap_at` TIMESTAMP(3), `recap_event_seq` INTEGER) — catalog-only.
+      // Only that table is altered: no `task`, `project` or `project_acceptance_*` object nor any of the
+      // six preserved triggers/functions is named, and no function, trigger, type, index or constraint is
+      // created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
+      // DELETE: every stored session reads NULL.
+      '0418_session_recap'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
