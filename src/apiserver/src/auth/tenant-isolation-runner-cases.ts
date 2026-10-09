@@ -315,6 +315,10 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     as: RUNNER,
     request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { delaySeconds: 120, reason: 'the census' } }),
   },
+  'POST /runner/sessions/:id/naming': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { replaces: 'not its title', title: 'named by the census' } }),
+  },
   'POST /runner/sessions/:id/turn-complete': {
     as: RUNNER,
     request: (of) => ({ params: { id: of.runner.turnSessionId }, body: { turnId: of.runner.shellTurnId, status: 'SUCCEEDED' } }),

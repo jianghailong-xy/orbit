@@ -740,6 +740,14 @@ type ImportResultRequest struct {
 	Title      string `json:"title,omitempty"`
 }
 
+// SessionNamingRequest reports the title an engine gave its session. Replaces is the title the
+// claim carried: the control plane renames the session only while it still reads exactly that, so
+// a rename the person made in the meantime stands.
+type SessionNamingRequest struct {
+	Replaces string `json:"replaces"`
+	Title    string `json:"title"`
+}
+
 // ImportResultResponse is the control plane's receipt: applied=false on a replayed ok (the
 // CAS matched nothing), failed=true when the session went to Trash.
 type ImportResultResponse struct {
@@ -1031,6 +1039,22 @@ type ClaimedSession struct {
 	// clean for (wiki_maintenance_session.go). A runner is handed one only once it declares
 	// wiki-maintenance-run/v1.
 	WikiMaintenance *WikiMaintenanceRun `json:"wikiMaintenance,omitempty"`
+	// Naming asks this runner to name the session through the engine running it, once its opening
+	// turn is underway (session_naming.go). The control plane sends it only while the session still
+	// carries the title cut from its prompt, it holds no key it could name the session with itself,
+	// and the engine has a way to answer from inside the process already running — Claude Code's
+	// generate_session_title, a Codex side thread. Absent from an older control plane, which names
+	// sessions itself or not at all.
+	Naming *SessionNamingJob `json:"naming,omitempty"`
+}
+
+// SessionNamingJob is what to name a session by. Description is the session's opening request,
+// already bounded; Instructions is Orbit's naming prompt, for an engine that takes a prompt of
+// Orbit's — the Codex side thread. Claude Code's generate_session_title brings a prompt of its own
+// and reads Description alone.
+type SessionNamingJob struct {
+	Description  string `json:"description"`
+	Instructions string `json:"instructions"`
 }
 
 // SessionSource is the frozen SOURCE snapshot: the INTENT (which repository, which line), frozen

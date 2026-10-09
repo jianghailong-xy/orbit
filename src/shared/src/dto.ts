@@ -1652,6 +1652,20 @@ export interface ClaimedSession {
    *  pinned to, and the clean start and guardrails it is started with. Only a runner that declares
    *  `wiki-maintenance-run/v1` is handed such a session at all. */
   wikiMaintenance?: WikiMaintenanceRun;
+  /** Asks the runner to name the session through the engine running it, once its opening turn is
+   *  underway (runner session_naming.go): present only while nothing else will name it and its engine
+   *  can answer from inside its own process. A runner that ignores it leaves the title it has. */
+  naming?: SessionNamingJob;
+}
+
+/** What a runner names a session by (ClaimedSession.naming), answered through
+ *  POST /runner/sessions/:id/naming. */
+export interface SessionNamingJob {
+  /** The session's opening request, bounded as every naming request is. */
+  description: string;
+  /** Orbit's naming prompt, for an engine that takes one of Orbit's — the Codex side thread. Claude
+   *  Code's generate_session_title brings its own and reads `description` alone. */
+  instructions: string;
 }
 
 export interface RunEventBatch {

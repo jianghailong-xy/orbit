@@ -22,20 +22,8 @@ import {
 import { selectPoolMember, spentUntil } from './pool-select';
 import { withPreset } from './preset-overlay';
 import { runsOnOpenCode, usableProviderScope } from './custom-provider';
+import { geminiApiModel, isInternalHost } from './held-key';
 import { pickFreeSlug, slugBase } from './provider-slug';
-
-/**
- * The Gemini API model agy calls for one of its own model names, which is what the connection test
- * has to ask for to probe the model a session runs. agy names a model by family and thinking level
- * (`gemini-3.8-flash-high`, or the base name and `--effort`) and maps it onto an API id itself;
- * measured on agy 1.2.16 that id is the base name for every model it lists except 3.1 Pro, which the
- * API still serves only as a preview (docs/antigravity-runtime-contract.md §9.2). A name agy does
- * not list is asked for as it is.
- */
-function geminiApiModel(model: string): string {
-  const base = model.replace(/-(low|medium|high|xhigh|max)$/, '');
-  return base === 'gemini-3.1-pro' ? 'gemini-3.1-pro-preview' : base;
-}
 
 /**
  * The slugs whose `model_provider` row is a compatibility guard, not a provider: migrations 0080 and
@@ -1015,18 +1003,7 @@ export class ProvidersService {
     if (u.protocol !== 'http:' && u.protocol !== 'https:') {
       throw new BadRequestException('Base URL must be http(s)');
     }
-    const host = u.hostname.toLowerCase();
-    const isInternal =
-      host === 'localhost' ||
-      host.endsWith('.localhost') ||
-      host === '0.0.0.0' ||
-      host === '::1' ||
-      /^127\./.test(host) ||
-      /^169\.254\./.test(host) ||
-      /^10\./.test(host) ||
-      /^192\.168\./.test(host) ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(host);
-    if (isInternal) throw new BadRequestException('Base URL host is not allowed');
+    if (isInternalHost(u.hostname)) throw new BadRequestException('Base URL host is not allowed');
     return raw;
   }
 
