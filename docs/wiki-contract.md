@@ -1181,8 +1181,8 @@ JSON 里是 `articles.serverExecution`、`articles.job` 与 `jobs.kindRuns.artic
   `max_tokens`：文章、总览、子主题 4096，起名 512（`articles.job`）。
 - **怎么结束**：拿起的主题全部写成或无变化就成功，报告就是 runner 的 summary（seeded、ref 与 refWhy、各主题的结果、written / unchanged /
   failed、调用数、token、校验统计）。有主题没写成（调用以作业自己的原因结束，或写入被拒，包括 `WIKI_ARTICLE_STALE`）：其余主题照常写完，
-  然后作业以 content 失败结束，报告留在作业行上——和命令以非 0 退出一样，下一个作业按当时的条目重写。平台的失败（请求等待超限、数据库、
-  worker 停机）按 infra 处理，重放时从计划重新开始。
+  然后作业以 content 失败结束，报告留在作业行上——和命令以非 0 退出一样，下一个作业按当时的条目重写。平台的失败（请求等待超限、数据库）
+  按 infra 处理；worker 停机不算失败，作业交还、不计次（§24.3）。两种情况重放时都从计划重新开始。
 - **runner 门**：见 §18.6 与 §18.7。
 
 ## 19. 维护作业：由事实建任务、`orbit wiki maintain` 与 `orbit wiki check`（判据 3）
@@ -1671,7 +1671,8 @@ JSON 里是 `plan.jobs.server`；迁移 `0404_wiki_plan_server_draft`；实现�
 - **进度与结束**：plan 作业照 21.7 记进度——第一次运行记 `started_at`，每轮记 `attempt`，plan 页读的就是这些；`wiki_job` 自己的进度是
   `{ planJobId, attempt, step }`。运行照 21.7 的规则结束 plan 作业（`WikiPlans.finishServerJob`）：成功时带上这个作业存下的本 space 的版本，
   失败时带最后一轮的错误、出错原因、报告和最后那份草稿；`wiki_job` 以 `{ kind, planJobId, outcome, version, error, plan }` 结束。平台的
-  失败——请求等待超限、space 的 runner 不在、worker 停机——不算草稿的失败：`wiki_job` 重试（24.4），plan 作业保持 running。`wiki_job`
+  失败——请求等待超限、space 的 runner 不在——不算草稿的失败：`wiki_job` 重试（24.4），plan 作业保持 running；worker 停机也不算，
+  `wiki_job` 交还、不计次（24.3），plan 作业同样保持 running。`wiki_job`
   结束了而 plan 作业没结束的，记为失败；开关不再把账号交给服务端时，还没开始的 `wiki_job` 被取消，plan 作业随之结束。
 - **runner 门归服务端**（`WIKI_SERVER_EXECUTES`，409）：找到 space 之后，不论谁来问，起草用的路由——`GET …/plan/job`、
   `POST …/plan/job/progress`、`POST …/plan/job/finish`、`GET …/plan/materials`、`POST …/plan/drafts`——一律拒绝，生成作业
@@ -2095,25 +2096,38 @@ JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5
 - 领取照 `watch_delivery`：一条 `UPDATE "wiki_job" … FROM (SELECT … FOR UPDATE SKIP LOCKED)`，候选是
   `state = 'queued' AND (next_attempt_at IS NULL OR next_attempt_at <= now())`、`attempts` 没到重试上限（§24.4）、本 build 认识的种类、本 worker 服务的账号（§24.5）、
   且**同一空间没有在跑的作业**；顺序是 `priority DESC, created_at, id`；每条给一个新的 `lease_generation`，`started_at` 取第一次领取。
-- 每次领取 `lease_deadline_at = now + 60s`，执行中每 20 秒续租一次；回写（成功、infra 重试、content 失败）都按代数比较并交换，
+- 每次领取 `lease_deadline_at = now + 60s`，执行中每 20 秒续租一次；回写（成功、infra 重试、content 失败、停机交还）都按代数比较并交换，
   被接管的旧进程写不进任何一行。
-- 过期回收：`running` 且租约过期的行回到 `queued`，`attempts + 1`，`next_attempt_at = now + 退避`（§24.4），`failure_kind = 'infra'`；
-  接管者从头跑这个作业，已经发出过的请求由请求行本身回答重放（§25.3）。
+- 过期回收：`running` 且租约过期的行回到 `queued`，`attempts + 1`，`next_attempt_at = now + 退避`（§24.4），`failure_kind = 'infra'`，
+  `error` 是 `LEASE_EXPIRED: the worker holding this job stopped before settling it`；接管者从头跑这个作业，已经发出过的请求由请求行本身
+  回答重放（§25.3）。回收碰到的都是没人交还的租约——worker 崩溃、被杀，或者没来得及交还就退出；停机交还的作业不经过回收（§24.3）。
 - 同一空间同时只跑一个作业：领取的谓词跳过一个在跑作业的空间，`wiki_job_space_running_key`（`space_id` 上的部分唯一索引）是数据库里
   同一条规则；两个调度器同时读表时，输的一方拿到的是空领取，不是错误。
 - 一个 worker 同时执行 `maxConcurrentPerWorker` = 4 个作业。
 
 ### 24.3 开机与停机
 
-- 开机先补跑一轮：worker 启动时立刻做一遍「回收 → 领取」，把上次死掉的 worker 留下的作业接起来。
-- SIGTERM（docker 30 秒宽限，设计 §5.4，owner 2026-10-07 定的方案 A：不等在途请求）：停止领取；取消在跑的作业，每个作业把自己的
-  租约截止时间设为现在并退出，让新进程的回收立刻接手；请求那一侧同理（§25.7）。
+- 开机先补跑一轮：worker 启动时立刻做一遍「回收 → 领取」，把上次停机交还的、或者死掉的 worker 留下的作业接起来。
+- SIGTERM（docker 30 秒宽限，设计 §5.4，owner 2026-10-07 定的方案 A：不等在途请求）：停止领取；取消在跑的作业，每个作业把自己
+  **交还**（`jobs.lease.handBack`）并退出。交还是一次按领取代数比较并交换的写入：行直接回到 `queued`，租约三列和 `next_attempt_at`
+  清空，`attempts` 不变，`failure_kind` 清空，`error` 写成 `WORKER_STOPPED: the worker was stopped and handed this job back; the next
+  one takes it over at once, without counting an attempt`。新进程第一轮领取就能拿到它，在同一空间里照常按 `priority DESC, created_at, id`
+  排序。请求那一侧照旧（§25.7）：已收到的写进 `partial`，租约截止时间设为现在，由请求的回收带着 partial 重新排队；重放按 `(step, unit)`
+  碰上原来的请求行，写入靠幂等键，不重复写。
+- **停机交还不计次、不退避**（owner 2026-10-09 定：部署打断不计入尝试次数）。在此之前，停机只把租约截止时间设为现在，回收把它当成
+  丢掉的租约，`attempts + 1` 再退避：2026-10-09 生产部署了 4 次，docs_build 79620f23 被打断 3 次；06:56Z 接手时它还在 30 秒的退避里，同空间
+  priority 0 的文章作业先被领走，它多等了 40 多分钟。停在仓库操作上等待的作业被停机打断时同样交还（§26.6）。只有被停机打断的那次
+  尝试能交还：worker 崩溃，或者交还没写进库就退出的，租约自然过期，照旧由回收计次、退避（§24.2）。
+- 交还的原因在读者那里：交还只写作业行，不写运行行和游标，`consecutive_failures` 不动，健康行不会因此变成 failing（维护作业的运行仍算
+  进行中）；Activity 的 Runs 卡把它画成排队中的一行和它排在第几，`nextAttemptAt` 为空，不显示「retrying in」，排队的行也不显示 `error`；
+  `orbit wiki import` 等待时把它当作「its last try said: …」打印，`attempts` 不变，部署不会让命令以「has failed 3 times」放弃等待。
 
 ### 24.4 失败与退避
 
 | 失败 | 处理 |
 | --- | --- |
-| infra（端点不可达、5xx、429、runner 离线、worker 重启、等待超限）| 回到 `queued`，`attempts + 1`，`next_attempt_at = now + backoffSeconds[attempts]`（0 / 10 / 30 秒；`attempts` 是这次失败之前已有的次数），不计入连续失败 |
+| infra（端点不可达、5xx、429、runner 离线、worker 崩溃即租约自然过期（§24.2）、等待超限）| 回到 `queued`，`attempts + 1`，`next_attempt_at = now + backoffSeconds[attempts]`（0 / 10 / 30 秒；`attempts` 是这次失败之前已有的次数），不计入连续失败 |
+| worker 停机（部署、重启时的 SIGTERM）| 不是失败：作业交还（§24.3），直接回到 `queued`，`attempts` 不变，不退避，不计入连续失败，也不向重试上限靠近（owner 2026-10-09 定）|
 | content（模型给不出可解析的结果、服务端拒绝）| 结束：`state = 'failed'`、`failure_kind = 'content'`、`ended_at`，计入连续失败 |
 | 作业的请求等待超过步骤上限 | 请求以 `other` 失败（§25.5），作业读到后按 infra 处理 |
 
@@ -2462,8 +2476,9 @@ JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` 
 
 - 作业要用仓库时 `waitForWikiRepoOpAsJob`：作业先落到 `waiting` / `waiting_for = 'repo'`，**交出租约**（等的是别的东西，
   就不该占着租约）；操作结算的通知（`wiki_repo_op` 通道）一到就把它放回 `queued`，领取用新代数接手，流水线从头重放，答案已经在缓存里。
-  等待本身超时（或 worker 停机）是 infra 失败：作业回 `queued`、`attempts + 1`、`failure_kind = 'infra'`、理由写在行上；
-  操作留在队列里给下一次尝试。轮询是兜底，不是主路径。worker 停机时等待立即结束（`WikiRepoOpWaitCancelled`），不再空转到超时。
+  等待本身超时是 infra 失败：作业回 `queued`、`attempts + 1`、`failure_kind = 'infra'`、理由写在行上；
+  操作留在队列里给下一次尝试。轮询是兜底，不是主路径。worker 停机时等待立即结束（`WikiRepoOpWaitCancelled`），不再空转到超时；
+  这不是失败，作业按 §24.3 交还：回 `queued`，`attempts` 不变，不退避，`error` 写明停机交还（owner 2026-10-09 定），操作同样留着给重放。
 - 导入的快照是例外（§5.1、契约 `import.server.snapshot`）：持着租约有上限地等，等不到就用 space 已有的快照或不带锚点，
   所以 runner 不在时，导入只是少了新快照，不会卡住。
 - **没人会收尾的操作由 worker 清扫**（`repoOps.abandoned`，2026-10-09）：wiki-worker 每一轮（领取之前，不管 `ORBIT_WIKI_EXECUTOR`
@@ -2541,9 +2556,9 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
 
 ### 27.4 失败与恢复（设计 §5.5）
 
-- **infra**：runner 不在或太旧、仓库操作超时、请求等过上限、worker 停机。运行行不结束，作业回 `queued` 按退避重试，
+- **infra**：runner 不在或太旧、仓库操作超时、请求等过上限、worker 崩溃（租约自然过期）。运行行不结束，作业回 `queued` 按退避重试，
   **不计入连续失败**（`consecutive_failures` 不动）。
 - **content**：模型给不出可用的答案、dry run 通过却被服务端拒绝、某一步自己的错误。运行以 failed 结束：
   游标按规则不动，`consecutive_failures` 加一，连续三次通知 owner；作业以 `failure_kind = content` 结束。
 - **worker 停机**：模型请求与仓库等待被中止（`WikiModelWaitCancelled` / `WikiRepoOpWaitCancelled`），运行不结算，
-  租约交回，下一个进程重放；已经答过的请求直接复用。
+  作业交还（§24.3）：立即回 `queued`，不计次、不退避（owner 2026-10-09 定），下一个进程重放；已经答过的请求直接复用。
