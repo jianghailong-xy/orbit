@@ -21,10 +21,11 @@
  *       volume is a conflict for an operator: nothing is replaced, deleted or created in its place;
  *   (7) a manager whose lease expired mid-pass is superseded by the next, and creates nothing twice;
  *   (8) another account can neither read nor act on the mapping, its runner or its volume;
- *   (9) releasing compute (a terminated Pod, on explicit retry) never deletes the runner row, its
- *       workspace or its volume, and a replacement waits for a stop proof;
+ *   (9) releasing compute (a Pod its kubelet reported stopped, on explicit retry) never deletes the
+ *       runner row, its workspace or its volume; the replacement is the next generation, with a new
+ *       credential, once the stopped Pod is deleted and its volume detached;
  *  (10) enrollment by runner name never takes over a managed runner, and the runner removal doors
- *       refuse it;
+ *       refuse it; a Pod that replaced the recorded one is not adopted: the mapping fences;
  *  (11) a missing environment profile leaves the feature unavailable, with nothing written;
  *  (12) the startup deadline fails a silent instance, and a retry waits on the same Pod;
  *  (13) over HTTP — the real controller, guards and main.ts's pipes, interceptors and filters — a
@@ -59,6 +60,7 @@ import {
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { RunnersService } from '../runners/runners.service';
 import { FakeKubeCluster, tripwireKubeClientFactory } from '../test-support/fake-kube-client';
+import { installManagedRunnerAdmission } from '../test-support/managed-runner-admission.fixture';
 import { testManagedRunnerProfile } from '../test-support/managed-runner-profile.fixture';
 import type { PersistentVolumeClaim, Pod, Secret } from './kube-client';
 import { refuseManagedRunnerDeletion } from './managed-runner-delete';
@@ -107,7 +109,8 @@ test('managed runner manager: unique mapping and idempotent reconciliation again
   /** One test world: a fake cluster, a test clock, manager replicas and the owner-facing service. */
   function world(lifecycle: Partial<ManagedRunnerProfile['lifecycle']> = {}) {
     const profile = testManagedRunnerProfile({ lifecycle });
-    const cluster = new FakeKubeCluster(profile.kubernetes.namespace);
+    // With the environment's single-Pod admission guard installed, as the manager requires.
+    const cluster = installManagedRunnerAdmission(new FakeKubeCluster(profile.kubernetes.namespace), prisma, profile);
     // Starting at the real time: the owner-facing status read judges heartbeat freshness on the real
     // clock, so a fixed start made (1)'s READY read unusable once that moment was 90 seconds past.
     const clock = { ms: Date.now() };
@@ -433,7 +436,9 @@ test('managed runner manager: unique mapping and idempotent reconciliation again
     {
       const w = world();
       const { ownerId, mapping } = await ready(w, 'pvc-missing-retry');
-      w.cluster.mutate<Pod>('pods', managedPodName(mapping.runnerId), (pod) => void (pod.status = { phase: 'Failed' }));
+      // Stopped by its kubelet's report: a stop the retry may release (a terminal phase the kubelet
+      // did not report is not proof, and fences instead — managed-runner-fencing.pg.spec.ts).
+      w.cluster.stopPod(managedPodName(mapping.runnerId), 1);
       assert.equal(await w.primary.reconcile(mapping.id), 'FAILED');
       w.cluster.remove('persistentvolumeclaims', mapping.pvcName);
       await w.service.retry(ownerId, 'retry-after-loss', (await mappingOf(ownerId)).revision);
@@ -519,7 +524,12 @@ test('managed runner manager: unique mapping and idempotent reconciliation again
     assert.equal(mine.revision, mapping.revision, 'the first owner’s mapping was not written by any of it');
     assert.equal(w.cluster.object('persistentvolumeclaims', mapping.pvcName)!.metadata.uid, mapping.pvcUid);
     assert.equal(w.cluster.object('pods', managedPodName(mapping.runnerId))!.metadata.uid, mapping.podUid);
-    assert.equal(w.cluster.calls.filter((c) => c.op !== 'get' && c.name?.includes(mapping.runnerId)).length, 3, 'the first owner’s objects were made once each, and never touched again');
+    // (A dry run — the admission guard's probe before the Pod — makes nothing.)
+    assert.equal(
+      w.cluster.calls.filter((c) => c.op !== 'get' && c.op !== 'dryRunCreate' && c.name?.includes(mapping.runnerId)).length,
+      3,
+      'the first owner’s objects were made once each, and never touched again',
+    );
 
     // The database fences the pairing itself: a mapping cannot name another owner's runner or workspace.
     await assert.rejects(
@@ -532,38 +542,49 @@ test('managed runner manager: unique mapping and idempotent reconciliation again
     );
   });
 
-  await t.test('(9) releasing compute never deletes the runner row, its workspace or its volume; a replacement waits for proof', async () => {
+  await t.test('(9) releasing compute never deletes the runner row, its workspace or its volume; the replacement is the next generation', async () => {
     const w = world();
     const { ownerId, mapping } = await ready(w, 'recycle');
     const runnerBefore = await db.runner.findUniqueOrThrow({ where: { id: mapping.runnerId } });
+    const credentialBefore = bootstrapCredentialOf(w.cluster.object<Secret>('secrets', managedSecretName(mapping.runnerId))!)!;
+    assert.equal(mapping.generation, 1);
 
-    // The instance stops; the mapping says so, and keeps everything.
-    w.cluster.mutate<Pod>('pods', managedPodName(mapping.runnerId), (pod) => void (pod.status = { phase: 'Failed' }));
+    // The instance stops, by its kubelet's report; the mapping says so, records the report, and keeps everything.
+    w.cluster.stopPod(managedPodName(mapping.runnerId), 1);
     assert.equal(await w.primary.reconcile(mapping.id), 'FAILED');
     const stopped = await mappingOf(ownerId);
     assert.equal((stopped.lastError as { code: string }).code, 'POD_TERMINATED');
+    assert.equal((stopped.fencingReceipt as { kind: string }).kind, 'OBSERVED_STOP', 'the kubelet’s report is the stop proof');
     assert.equal(w.cluster.count('delete'), 0, 'observing a stopped instance deletes nothing');
 
-    // An explicit retry releases the terminated Pod (by UID) — and only the Pod.
+    // An explicit retry releases the stopped Pod (by UID) and its retired Secret — and only those —
+    // and starts generation 2 once the volume has been detached.
     await w.service.retry(ownerId, 'retry-recycle', stopped.revision);
     const outcomes = await drive(w, ownerId);
-    assert.equal(outcomes.at(-1), 'FAILED', outcomes.join(' → '));
+    assert.equal(outcomes.at(-1), 'READY', outcomes.join(' → '));
     assert.equal(w.cluster.count('delete', 'pods'), 1, 'compute was released');
-    assert.equal(w.cluster.count('delete'), 1, 'and nothing else was deleted');
-    assert.equal(w.cluster.all('pods').length, 0);
+    assert.equal(w.cluster.count('delete', 'secrets'), 1, 'the retired generation’s Secret was replaced');
+    assert.equal(w.cluster.count('delete'), 2, 'and nothing else was deleted');
 
     const after = await mappingOf(ownerId);
-    assert.equal((after.lastError as { code: string }).code, 'PREDECESSOR_STOP_UNPROVEN', 'a replacement waits for a stop proof or fencing receipt');
-    assert.equal(after.generation, 1, 'the generation does not advance without that proof');
-    assert.equal(after.pvcUid, mapping.pvcUid);
+    assert.equal(after.generation, 2, 'the generation advanced on the proof');
+    assert.notEqual(after.podUid, mapping.podUid);
+    assert.equal(after.pvcUid, mapping.pvcUid, 'the same data volume');
     assert.equal(after.volumeHandle, mapping.volumeHandle);
-    assert.equal(created(w, 'pods', managedPodName(mapping.runnerId)), 1, 'no second instance');
+    const proof = after.fencingReceipt as { kind: string; retiredAt?: string; predecessor: { generation: number; podUid: string } };
+    assert.equal(proof.kind, 'OBSERVED_STOP');
+    assert.ok(proof.retiredAt, 'the proof records the retirement');
+    assert.deepEqual([proof.predecessor.generation, proof.predecessor.podUid], [1, mapping.podUid]);
+    const pod = w.cluster.object<Pod>('pods', managedPodName(mapping.runnerId))!;
+    assert.equal(pod.metadata.annotations!['orbit.dev/generation'], '2');
     assert.ok(w.cluster.object('persistentvolumeclaims', mapping.pvcName), 'the data volume stays');
-    assert.ok(w.cluster.object('secrets', managedSecretName(mapping.runnerId)), 'the bootstrap Secret stays');
+    const credentialAfter = bootstrapCredentialOf(w.cluster.object<Secret>('secrets', managedSecretName(mapping.runnerId))!)!;
+    assert.notEqual(credentialAfter, credentialBefore, 'generation 2 has a credential of its own');
 
     const runnerAfter = await db.runner.findUnique({ where: { id: mapping.runnerId } });
     assert.ok(runnerAfter, 'the runner row stays');
-    assert.equal(runnerAfter!.tokenHash, runnerBefore.tokenHash, 'its credential is not revoked');
+    assert.equal(runnerAfter!.tokenHash, sha256(credentialAfter), 'the runner row holds generation 2’s credential');
+    assert.notEqual(runnerAfter!.tokenHash, runnerBefore.tokenHash, 'generation 1’s credential no longer authenticates');
     const workspace = await db.workspace.findUniqueOrThrow({ where: { id: mapping.defaultWorkspaceId } });
     assert.equal(workspace.deletedAt, null, 'the default workspace stays');
 
@@ -604,8 +625,12 @@ test('managed runner manager: unique mapping and idempotent reconciliation again
     // Another Pod under the fixed name and generation, with another UID: not the recorded instance.
     w.cluster.remove('pods', managedPodName(mapping.runnerId));
     w.cluster.plant('pods', buildManagedPod({ ownerId, runnerId: mapping.runnerId, generation: 1, namespace: mapping.namespace }, mapping.pvcUid!, w.profile));
-    assert.equal(await w.primary.reconcile(mapping.id), 'FAILED');
-    assert.equal(((await mappingOf(ownerId)).lastError as { code: string }).code, 'PREDECESSOR_STOP_UNPROVEN');
+    assert.equal(await w.primary.reconcile(mapping.id), 'FENCING');
+    const fenced = await mappingOf(ownerId);
+    assert.equal(fenced.managementState, 'FENCING');
+    assert.equal((fenced.lastError as { code: string }).code, 'POD_REPLACED');
+    assert.equal(fenced.generation, 1, 'no new generation without proof');
+    assert.notEqual((await db.runner.findUniqueOrThrow({ where: { id: mapping.runnerId } })).tokenHash, after.tokenHash, 'the fenced generation’s credential stopped working');
     assert.equal(w.cluster.count('delete'), 0, 'the unrecorded Pod is reported, not deleted');
   });
 

@@ -106,6 +106,8 @@ func dshOrbitMCPEnv(job *ClaimedSession) []map[string]string {
 		pairs = append(pairs, "ORBIT_HOME="+home)
 	}
 	pairs = append(pairs, bgJobEnvPairs(job.SessionID)...)
+	// A managed runner's instance, which `orbit mcp` sends with the runner credential.
+	pairs = append(pairs, managedInstanceEnv()...)
 	env := make([]map[string]string, 0, len(pairs))
 	for _, pair := range pairs {
 		key, value, _ := strings.Cut(pair, "=")

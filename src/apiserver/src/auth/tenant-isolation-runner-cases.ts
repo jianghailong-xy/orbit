@@ -1550,4 +1550,10 @@ export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
   'POST /runner/device/poll':
     'the device code is the credential, found by its hash; it hands over only the runner the request\'s own '
     + 'approver made — runner-api.controller.ts:865',
+  'POST /managed-runner/admission':
+    'the managed runner admission webhook, called by the Kubernetes API server: its credential is the bearer token '
+    + 'whose SHA-256 the managed runner profile holds (404 with the feature off) — managed-runner-admission.controller.ts:56; '
+    + 'its body is an AdmissionReview whose ids are Kubernetes UIDs and names, and it reads only the managed_runner '
+    + 'rows owning the claims the reviewed Pod names, in the configured cluster and namespace, answering allowed or '
+    + 'not — managed-runner-admission.controller.ts:97',
 };

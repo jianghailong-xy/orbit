@@ -371,8 +371,10 @@ func codexProviderArgs(agentEnv map[string]string) []string {
 // does not reach `orbit mcp` however carefully the spawn sets it, and the bg_*
 // tools would report the transport as unavailable on a session that is serving
 // it perfectly well. ORBIT_WATCHES is here for the same reason: without it `orbit mcp` would list the
-// watch tools in a session whose owner has Watch off (watch_rollout.go).
-const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN"]`
+// watch tools in a session whose owner has Watch off (watch_rollout.go). The managed runner's
+// instance identity is here for the same reason: `orbit mcp` sends it with the runner credential,
+// which a managed runner's control plane refuses without it (managed_instance.go).
+const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN","ORBIT_MANAGED_RUNNER_GENERATION","ORBIT_MANAGED_RUNNER_POD_UID"]`
 
 // codexOrbitMCPServer is the name the config keys below register Orbit's own MCP server under —
 // the `serverName` Codex then reports on an elicitation, which is how an approval tells Orbit's

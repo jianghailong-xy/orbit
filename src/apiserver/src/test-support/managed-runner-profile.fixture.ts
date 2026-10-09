@@ -1,4 +1,11 @@
+import { createHash } from 'node:crypto';
+
 import type { ManagedRunnerProfile } from '../managed-runners/managed-runner-profile';
+
+/** The Kubernetes identity the fake cluster gives the manager's client, and the profile admits. */
+export const TEST_MANAGER_USERNAME = 'system:serviceaccount:orbit-managed-test:orbit-runner-manager';
+/** The bearer token a test plays the API server with when it calls the admission webhook. */
+export const TEST_ADMISSION_WEBHOOK_TOKEN = 'test-admission-webhook-token';
 
 /**
  * A complete, valid managed runner profile for tests. Every host is under `.invalid`, which never
@@ -28,6 +35,10 @@ export function testManagedRunnerProfile(overrides: { lifecycle?: Partial<Manage
         runner: { requests: { cpu: '1000m', memory: '2Gi' }, limits: { cpu: '2000m', memory: '4Gi' } },
         init: { requests: { cpu: '100m', memory: '64Mi' }, limits: { cpu: '200m', memory: '128Mi' } },
       },
+    },
+    admission: {
+      managerUsername: TEST_MANAGER_USERNAME,
+      webhookTokenSha256: createHash('sha256').update(TEST_ADMISSION_WEBHOOK_TOKEN).digest('hex'),
     },
     lifecycle: {
       maxAttempts: 3,

@@ -294,6 +294,8 @@ func (t *Transport) doVia(ctx context.Context, client *http.Client, method, path
 	req.Header.Set(runnerCLIVersionHeader, version)
 	if t.token != "" {
 		req.Header.Set("authorization", "Bearer "+t.token)
+		// A managed runner's credential is accepted only from the instance it was issued to.
+		setManagedInstanceHeaders(req.Header)
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
@@ -763,6 +765,7 @@ func (t *Transport) fetchAttachment(ctx context.Context, sessionID, attID string
 	}
 	if t.token != "" {
 		req.Header.Set("authorization", "Bearer "+t.token)
+		setManagedInstanceHeaders(req.Header)
 	}
 	resp, err := t.client.Do(req)
 	if err != nil {
@@ -846,6 +849,7 @@ func (t *Transport) uploadSessionAttachmentFile(ctx context.Context, sessionID s
 	req.Header.Set("content-type", writer.FormDataContentType())
 	if t.token != "" {
 		req.Header.Set("authorization", "Bearer "+t.token)
+		setManagedInstanceHeaders(req.Header)
 	}
 	resp, err := t.client.Do(req)
 	if err != nil {

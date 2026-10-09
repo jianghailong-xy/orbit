@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { sha256 } from '../common/crypto.util';
+import { authorizeManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -26,6 +27,9 @@ export class RunnerAuthGuard implements CanActivate {
     });
     if (!runner) throw new UnauthorizedException('invalid runner token');
 
+    // A managed runner's credential is accepted only from the instance the manager authorized
+    // (managed-runner-instance.ts); a self-managed runner is not asked.
+    req.managedRunnerInstance = await authorizeManagedRunnerInstance(this.prisma, runner.id, req.headers);
     req.runner = runner;
     return true;
   }
