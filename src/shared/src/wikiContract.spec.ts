@@ -1348,6 +1348,9 @@ describe('wiki contract', () => {
     expect(docs.material.rules).toEqual(WIKI_DOC_MATERIAL_RULES);
     expect(docs.material.records).toMatch(/sourceText/u);
     expect(docs.material.records).toMatch(/redacted/u);
+    // A condition's projects are ids whichever way the plan reached its reader: stored ids, or a read's { id, title } (2026-10-09).
+    expect(docs.material.projects).toMatch(/\{ id, title \}/u);
+    expect(docs.material.projects).toMatch(/22P02/u);
     expect(docs.build.rules).toEqual(WIKI_DOC_BUILD_RULES);
     expect(docs.build.cli).toMatch(/^orbit wiki docs build --space <id> \[--doc <slug>\] \[--section <key>\]/u);
     expect(docs.build.tool).toMatch(/^none/u);
@@ -1617,6 +1620,8 @@ describe('wiki contract', () => {
     // The job's numbers and words are the shared constants the worker runs by.
     expect(server.priority).toBe(WIKI_DOCS_BUILD_JOB.priority);
     expect(server.steps).toEqual({ ...WIKI_DOCS_BUILD_JOB.steps });
+    // A file is shown only once its read landed, a read another section started included (2026-10-09).
+    expect(server.shown).toMatch(/waits for that read/u);
     expect([server.maxTokens, server.repoWaitSeconds, server.readsInFlight, server.readAttempts])
       .toEqual([WIKI_DOCS_BUILD_JOB.maxTokens, WIKI_DOCS_BUILD_JOB.repoWaitSeconds, WIKI_DOCS_BUILD_JOB.readsInFlight, WIKI_DOCS_BUILD_JOB.readAttempts]);
     // Owner-initiated: above background maintenance (jobs.priority), as the import is.
@@ -1809,6 +1814,12 @@ describe('wiki contract', () => {
     expect(jobs.lease.seconds).toBe(WIKI_JOB.leaseSeconds);
     expect(jobs.lease.renewSeconds).toBe(WIKI_JOB.renewSeconds);
     expect(jobs.retry.backoffSeconds).toEqual([...WIKI_JOB.retryBackoffSeconds]);
+    // The retry limit (2026-10-09): no job is put back for ever, and an unexpected error gets the smaller limit.
+    expect(jobs.retry.maxAttempts).toBe(WIKI_JOB.maxAttempts);
+    expect(jobs.retry.unexpectedMaxAttempts).toBe(WIKI_JOB.unexpectedMaxAttempts);
+    expect(WIKI_JOB.unexpectedMaxAttempts).toBeLessThan(WIKI_JOB.maxAttempts);
+    expect(jobs.retry.limit).toMatch(/settleWikiJobRows/u);
+    expect(jobs.lease.claim).toContain('attempts < retry.maxAttempts');
     expect(jobs.concurrencyPerWorker).toBe(WIKI_JOB.maxConcurrentPerWorker);
     expect(jobs.pollSeconds).toBe(WIKI_JOB.pollSeconds);
     // The one-job-per-space rule is the claim's and the database's: a partial unique index over space_id.

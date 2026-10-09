@@ -53,7 +53,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { markersOf, splitSentences, wikiRepoPath, withoutMarkers } from './wiki-articles';
 import { docWithdrawReason } from './wiki-doc-withdrawal';
 import { wikiDocsAffected, withdrawDocSentencesByPath } from './wiki-docs-affected';
-import { conditionView, gatherDocMaterial, type StoredSessionCondition } from './wiki-docs-material';
+import { conditionView, gatherDocMaterial, storedSessionCondition } from './wiki-docs-material';
 import { ownerEnvLiterals } from './wiki-dossier';
 import { currentWikiExecutorSwitch, wikiExecutorServes } from './wiki-executor-switch';
 import { isWikiMaintenanceSession } from './wiki-maintenance-settings';
@@ -1108,7 +1108,7 @@ export class WikiDocs {
       select: { sources: true },
     });
     if (!section) throw new NotFoundException(`no section ${sectionKey} of document ${slug} in the space's confirmed plan`);
-    const condition = ((section.sources as unknown as { sessions?: StoredSessionCondition | null }) ?? {}).sessions ?? null;
+    const condition = storedSessionCondition(((section.sources ?? {}) as { sessions?: unknown }).sessions);
     const literals = await ownerEnvLiterals(this.prisma, ownerId);
     const gathered = await gatherDocMaterial(this.prisma, this.wiki, { ownerId, spaceId, condition, literals });
     return {

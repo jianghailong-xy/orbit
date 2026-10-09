@@ -36,6 +36,12 @@ compact = {
 for key in ('startAsked', 'startOwn'):
     if key in seed['projects']:
         compact['projects'][key] = {'id': seed['projects'][key]['id'], 'title': seed['projects'][key]['title']}
+# A11c: what the owner answers (seed-close.mjs) and the landing that stopped reporting (seed-stuck.mjs), when seeded.
+for key, fields in (('closeAsked', ('coordinatorSessionId',)), ('closeDecline', ('coordinatorSessionId',)), ('crossFrom', ()),
+                    ('crossTo', ('moves',)), ('runQueue', ('taskId',)), ('landingStuck', ('taskId', 'jobId'))):
+    if key in seed['projects']:
+        row = seed['projects'][key]
+        compact['projects'][key] = {'id': row['id'], 'title': row['title'], **{field: row[field] for field in fields}}
 b64 = lambda text: base64.b64encode(text.encode()).decode()
 lines = {
     'a11Seed': json.dumps(compact, ensure_ascii=False, separators=(',', ':')),

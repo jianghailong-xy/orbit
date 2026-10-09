@@ -37,6 +37,18 @@ export const WIKI_JOB = {
   maxConcurrentPerWorker: 4,
   /** The retryable backoff for an infra failure, in seconds, by the attempts already made (0, 10, 30). */
   retryBackoffSeconds: [0, 10, 30],
+  /**
+   * How many times a job is tried in all (contract `jobs.retry.limit`): when the attempt that makes this many
+   * fails as infra, the job ends failed instead of going back to the queue. With the backoff above, about
+   * four minutes of a runner that cannot be reached, and half an hour or more of a System model that stays away.
+   */
+  maxAttempts: 10,
+  /**
+   * The same limit for an error this build did not expect, one that is neither infra nor content: a failed
+   * assertion, a TypeError. It is retried as infra in case it was passing, but the attempt that makes this
+   * many ends the job, because another attempt would only run into it again.
+   */
+  unexpectedMaxAttempts: 3,
   /** How often the loop looks for due work when nothing has nudged it. */
   pollSeconds: 5,
 } as const;

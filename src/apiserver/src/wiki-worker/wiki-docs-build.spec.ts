@@ -12,6 +12,7 @@ import {
   type WikiDocsWriteAnswer,
   type WikiDocsWriteRequest,
 } from './wiki-docs-build';
+import { WikiDocsSnapshotRepo } from './wiki-docs-build-job';
 import { WIKI_DOCS_BUILD_SYSTEM_PROMPT, wikiDocCleanPath, type WikiDocRepo, type WikiDocShown, type WikiDocsPlanDoc, type WikiDocViewForOverview } from './wiki-docs-writer';
 
 /**
@@ -535,6 +536,39 @@ test('a section the plan gives no material is written from one call, its footnot
   assert.ok(h.model.prompts[0].includes('归并后没有可用材料') && !h.model.prompts[0].includes('做「归并」'));
   const s4 = h.server.written('s4');
   assert.deepEqual([s4.footnotes, s4.dispositions, s4.markdown], [[], [], '本篇只讲会话怎么运转，任务怎么派发另有专篇。']);
+});
+
+test('sections that name one file all wait for its read: a plan of v27\'s shape is built through the space\'s runner (2026-10-09)', async () => {
+  // Version 27 named docs/article-durable-agent-work.md in several sections of one document. The server reads the
+  // repository through the space's runner, so a read lands later than the sections that want it are started.
+  const article = 'docs/article-durable-agent-work.md';
+  const contents = files({ [article]: '# Durable agent work\n\nA turn outlives the runner that ran it.\n' });
+  const sizes = new Map(Object.entries(contents).map(([path, text]) => [path, Buffer.byteLength(text)]));
+  const reads: string[][] = [];
+  const repo = new WikiDocsSnapshotRepo(HEAD, sizes, [...sizes.keys()].sort(), async (paths) => {
+    reads.push([...paths]);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    return new Map(paths.map((path) => [path, { path, state: 'found' as const, text: contents[path], sizeBytes: sizes.get(path) ?? 0 }]));
+  });
+  const docs = plan();
+  docs[0].sections[1].sources.docs = [...(docs[0].sections[1].sources.docs ?? []), { path: article, section: null }];
+  docs[0].sections[2].sources.docs = [{ path: article, section: null }];
+  const h = harness();
+  const summary = await runWikiDocsBuild({
+    repo,
+    prepare: (paths) => repo.prepare(paths),
+    material: (doc, key) => h.server.material(doc, key),
+    view: (slug) => h.server.readView(slug),
+    write: (slug, request) => h.server.write(slug, request),
+    ask: (call) => h.model.ask(call),
+    model: 'qwen3.8-27b-fp8',
+    log: (message) => h.logs.push(message),
+  }, { spaceId: 'space-1', planVersion: 27, docs, stored: new Map() });
+  assert.deepEqual([summary.written, summary.failed], [3, 0], h.logs.join('\n'));
+  assert.equal(reads.flat().filter((path) => path === article).length, 1, 'the article is read once, for both sections');
+  for (const key of ['s2', 's3']) {
+    assert.ok(h.server.written(key).dispositions.some((disposition) => disposition.ref.startsWith(`${article}#L`)), `${key} was handed the article`);
+  }
 });
 
 test('the build reads only the files its sections name, and takes the material cap from the contract', async () => {

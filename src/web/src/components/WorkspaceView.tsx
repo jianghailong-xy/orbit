@@ -215,9 +215,11 @@ import {
 import { BackgroundShellsTray } from './BackgroundShellsTray';
 import { SessionCreatedTasksStrip } from './SessionCreatedTasksStrip';
 import { SessionWatchBadges, SessionWatchStrip } from './WatchRelations';
+import { WatchWakeNamesCtx } from './WatchWakeCard';
 import { OrbitLinkCardsProvider } from './OrbitLinkCard';
 import {
   ago,
+  sameResourceId,
   sessionWatching,
   watchingCountWord,
   watchingSessions,
@@ -871,9 +873,10 @@ const JUMP_TO_START_PAGES = 30;
 // same). The follow a content update triggers lands just after the rows grew, and the gap read in
 // between — the normal state while a reply streams — must not flash the button.
 const STRANDED_AFTER_MS = 400;
-// What the sticky bar calls a turn the person typed. A watch's wake carries its own label on its card
-// instead (`data-sticky-label`), since saying this above a card reading "not typed by you" is the
-// screen contradicting itself — which is what the account owner photographed on 2026-09-17.
+// What the sticky bar calls a turn the person typed. A card the control plane draws for a turn nobody
+// typed carries its own label instead (`data-sticky-label`), since saying this above a card reading
+// "not typed by you" is the screen contradicting itself — which is what the account owner
+// photographed on 2026-09-17, over a watch's wake.
 const STICKY_LABEL = 'Your question';
 // How long a cached /background scan stays fresh. `/background` scans the session's whole
 // tool-event history, so re-opening a session (or scrubbing the list) within this window paints
@@ -1789,7 +1792,7 @@ function StopSquareIcon({ className }: { className?: string }) {
   );
 }
 
-/** What withdrawing a queued wake costs: said beside the action, and again when it asks to confirm. */
+/** What withdrawing a queued wake costs, said when the action asks to confirm. */
 const WAKE_WITHDRAW_CONSEQUENCE =
   "If withdrawn, this session is not woken this time, and the watch won't send it again.";
 
@@ -1810,7 +1813,8 @@ const WAKE_WITHDRAW_CONSEQUENCE =
  *
  * A wake a watch queued leaves through the same door, but it was never anyone's to take back:
  * withdrawing it dead-letters the watch's delivery (WAKE_WITHDRAWN), so the session is not woken
- * and the watch does not send it again. The action says what it does, and the line what follows.
+ * and the watch does not send it again. The action says what it does, and the confirmation it asks
+ * for says what follows — not this line, which sits under the wake's one-line event.
  */
 export function QueuedTurnMeta({
   placement,
@@ -1837,11 +1841,7 @@ export function QueuedTurnMeta({
     : placement === 'steer'
       ? steerDeliveryState(undefined).label
       : 'Queued for next turn';
-  const why = delivery != null
-    ? deliveryFailureExplanation(deliveryCode, deliveryReason)
-    : wake && placement === 'queued'
-      ? WAKE_WITHDRAW_CONSEQUENCE
-      : undefined;
+  const why = delivery != null ? deliveryFailureExplanation(deliveryCode, deliveryReason) : undefined;
   return (
     <span className="chat-queued-meta" title={deliveryReason}>
       <span className={`chat-queued-tag${delivery != null ? ' chat-queued-tag-failed' : ''}`}>
@@ -2537,12 +2537,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         .map((card) => card.getAttribute('data-open-item'))
         .join(' '),
     );
-    // A turn a watch or the control plane queued is one of these too — it is where the answer under
-    // it starts, so it is where the bar has to point — but it is no bubble and nobody typed it, so
-    // its card hands over what to call it (`data-sticky-label` / `data-sticky-text`). Its queued
-    // twin in the tail is skipped like any queued turn: it hasn't been asked yet. A background
-    // job's news or a wakeup coming due is not one: it is a line inside the answer the agent is
-    // still giving (BackgroundWakeCard), so it carries no label and the bar keeps the question.
+    // A turn the control plane queued is one of these too — it is where the answer under it starts,
+    // so it is where the bar has to point — but it is no bubble and nobody typed it, so its card
+    // hands over what to call it (`data-sticky-label` / `data-sticky-text`). Its queued twin in the
+    // tail is skipped like any queued turn: it hasn't been asked yet. A watch's wake, a background
+    // job's news or a wakeup coming due is not one: it is a line inside the answer the agent is still
+    // giving (WatchWakeCard, BackgroundWakeCard), so it carries no label and the bar keeps the question.
     const bubbles = Array.from(
       el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued), [data-sticky-label]:not(.is-queued)'),
     ).filter((b) => !b.closest('.chat-subagent')); // ignore prompts nested in a sub-workspace transcript
@@ -5459,6 +5459,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     ...sessionCreatedTasksQuery(selectedId ?? ''),
     enabled: Boolean(selectedId) && !selectedTrashed,
   });
+  // What a watch's wake line calls the targets it names (WatchWakeCard), by either spelling of their
+  // ids: the title the watch itself carries for each target, else the row this conversation's Tasks
+  // card holds for it. Both reads are already on this page for the strips above the composer.
+  const wakeTargetName = useCallback(
+    (watchId: string, target: { kind: string; id: string }): string | undefined => {
+      const watches = Array.isArray(watchesForHeaderQ.data) ? (watchesForHeaderQ.data as WatchView[]) : [];
+      const watched = watches
+        .find((w) => sameResourceId(w.id, watchId))
+        ?.targets.find((t) => sameResourceId(t.targetResourceId, target.id));
+      if (watched?.targetTitle) return watched.targetTitle;
+      if (target.kind !== 'TASK') return undefined;
+      return createdTasks.data?.items.find((row) => sameResourceId(row.id, target.id))?.title;
+    },
+    [watchesForHeaderQ.data, createdTasks.data],
+  );
 
   // Allow/deny a pending tool-permission request; optimistically drop it (the
   // approval_resolved SSE also removes it), re-fetching to resync on failure.
@@ -9870,6 +9885,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             </div>
           ) : selectedId ? (
             <div className="workspace-sessions" ref={scrollRef}>
+              <WatchWakeNamesCtx.Provider value={wakeTargetName}>
               {/* A tail-first transcript always has more above it: while a page is in flight this
                   says so, and otherwise it is the way to the first message, which scrolling alone
                   never reaches (see jumpToStart). Pinned to the top of the viewport rather than
@@ -10237,6 +10253,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   )}
                 </div>
               )}
+              </WatchWakeNamesCtx.Provider>
             </div>
           ) : composing ? (
             // The provider hero is centered as a hero only while it's alone: .workspace-draft is a

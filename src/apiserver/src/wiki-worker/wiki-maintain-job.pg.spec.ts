@@ -22,7 +22,9 @@
  *      adopts its own region, never a page-mate's (the canary incident: per-entry indexes mapped back
  *      through one Map overwrote each other, and entries took the last entry's verdict for their index);
  *   6. an anchor verdict whose echo names another anchor than the one at its index fails the run as
- *      content: the run refuses to lay a verdict on a guess.
+ *      content: the run refuses to lay a verdict on a guess;
+ *   7. the documents step with a confirmed plan: it reads the plan through its read, where a section's projects are
+ *      { id, title }, and the section's material is found by the project's id (2026-10-09: 22P02, nothing written).
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-maintain-job.pg.spec.ts
  *
@@ -605,6 +607,108 @@ test('a server run reads, checks, proposes, advances, verifies and re-checks the
   const articles = jobs.filter((job) => job.kind === 'articles');
   assert.equal(articles.length, 1);
   assert.equal(articles[0]!.state, 'queued');
+});
+
+// ── The documents step, with a plan the owner confirmed ────────────────────────────────────────
+
+/**
+ * A writer's answer to each of the documents' prompts (wiki-docs-build-job.pg.spec.ts's): every piece handed to the
+ * merge adopted, every piece the write prompt lists cited in a sentence of its own with a verbatim quote, and the
+ * overview citing the first footnote it was given.
+ */
+function writerAnswer(prompt: string): string {
+  if (prompt.includes('做「归并」')) {
+    const ids = [...prompt.matchAll(/^\[([A-Z]\d+)\] /gmu)].map(([, id]) => id);
+    return `${ids.map((id) => `${id} | 采用 | 讲的正是本节`).join('\n')}\n现状：\n- 本节要点 [${ids[0] ?? 'S1'}]\n`;
+  }
+  if (prompt.includes('（概述，')) return '### 总览\n这篇讲 fixture 的端口怎么取[F1]。\n';
+  if (prompt.includes('补逐字引文')) return '';
+  if (!prompt.includes('# 任务：写文档')) return '?';
+  const materials = prompt.split('## 可用材料（只可引用这些，编号不变）\n')[1]?.split('\n\n## 写法')[0] ?? '';
+  const sentences: string[] = [];
+  const quotes: string[] = [];
+  for (const block of materials.split(/\n(?=\[[A-Z]\d+\] )/u)) {
+    const id = /^\[([A-Z]\d+)\] /u.exec(block)?.[1];
+    if (!id) continue;
+    const line = block.split('\n').slice(1).map((one) => one.trim()).find((one) => one.length >= 10 && !one.startsWith('```'));
+    sentences.push(`本节依据 ${id} 写成一句话[${id}]。`);
+    if (line) quotes.push(`[${id}] 「${Array.from(line).slice(0, 60).join('')}」`);
+  }
+  if (sentences.length === 0) return '### 约定\n本节只讲端口怎么取。\n';
+  return `### 本节\n${sentences.join('')}\n\n引文：\n${quotes.join('\n')}\n`;
+}
+
+test('the documents step reads the confirmed plan through its read, and a section whose projects are { id, title } gets its material', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  // A project of the owner's whose coordinator heard the owner's words about the fixture's port.
+  const coordinator = randomUUID();
+  await h.sql.query(
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","status","dispatch_origin","updated_at")
+     VALUES ($1,'the coordinator','p',$2,$2,$3,'RUNNING'::run_status,'USER',now())`,
+    [coordinator, h.ownerId, fx.workspaceId],
+  );
+  const projectId = randomUUID();
+  await h.sql.query(`INSERT INTO "project"("id","title","owner_id","coordinator_session_id","updated_at") VALUES ($1,'Fixture 端口',$2,$3,now())`, [projectId, h.ownerId, coordinator]);
+  const WORDS = '以后 fixture 里不要写死端口，一律从 fixture 的返回值里取，别的测试也照这样做。';
+  await h.sql.query(
+    `INSERT INTO "conversation_turn"("id","session_id","seq","client_turn_id","content","status","kind","send_intent","created_at")
+     VALUES ($1,$2,1,$3,$4,'ANSWERED','message','NEXT_TURN',now())`,
+    [randomUUID(), coordinator, randomUUID(), WORDS],
+  );
+  // The plan its owner confirmed: one document, an overview and the conventions taken from that project. The plan
+  // stores the project by its id; the run reads the plan through `WikiPlans.version`, which names it { id, title }.
+  const empty = { docs: [], code: [], contracts: [], sessions: null };
+  await h.prisma.wikiPlan.create({
+    data: {
+      spaceId: fx.spaceId, ownerId: h.ownerId, version: 1, status: 'confirmed', origin: 'owner', authorUserId: h.ownerId,
+      confirmedByUserId: h.ownerId, confirmedAt: new Date(), docsMin: 1, docsMax: 10, gate: {},
+      categories: [{ key: 'dev', title: 'Development', question: 'How it works', forAgents: true }],
+      docs: {
+        create: [{
+          position: 0, category: 'dev', slug: 'testing', title: '测试约定', question: '测试的端口怎么取？',
+          audience: ['新加入的开发者'], scopeIn: ['fixture 的端口'], lengthMin: 400, lengthMax: 4000,
+          sections: {
+            create: [
+              { position: 0, key: 'overview', title: '总览', kind: 'overview', covers: '这篇讲测试的端口。', length: 300, sources: empty },
+              {
+                position: 1, key: 'ports', title: '端口', kind: 'conventions', covers: 'fixture 的端口从哪里来。', length: 400,
+                sources: {
+                  ...empty,
+                  sessions: {
+                    projects: [projectId], since: null, until: null, keywords: ['fixture'], anchorPaths: [],
+                    entryKinds: [], topics: [], evidence: 'the owner on where a test takes its port',
+                  },
+                },
+              },
+            ],
+          },
+        }],
+      },
+    },
+  });
+  const view = await h.plans.version(h.ownerId, fx.spaceId, 1);
+  assert.deepEqual(view.docs[0].sections[1].sources.sessions?.projects, [{ id: projectId, title: 'Fixture 端口' }], 'the read names the project { id, title }');
+
+  const extract = extractor(fx, 2);
+  h.model.answer = (hit) => (hit.prompt.includes('==== CASE FILE ====') ? extract(hit) : writerAnswer(hit.prompt));
+  const page = pageOf(fx);
+  h.maintenance.dossierPage = (async () => page) as unknown as WikiMaintenance['dossierPage'];
+  const which = worker(h);
+  await pass(h, which, async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state));
+
+  const run = await runRow(h, fx.runId);
+  assert.equal(run.outcome, 'succeeded', run.error ?? '');
+  const docs = (run.report as { docs: Record<string, unknown> }).docs;
+  assert.equal(docs.error, undefined, `the documents step: ${String(docs.error)}`);
+  assert.equal(docs.planVersion, 1);
+  assert.deepEqual(docs.sections, { written: 2, unchanged: 0, failed: 0 });
+  // The conventions cite the owner's words, which only the condition's project finds.
+  const footnotes = await h.sql.query<{ kind: string; quote: string | null }>(
+    `SELECT f."kind", f."quote" FROM "wiki_doc_footnote" f JOIN "wiki_doc_sentence" t ON t."id" = f."sentence_id"
+       JOIN "wiki_doc_section" x ON x."id" = t."section_id" JOIN "wiki_doc" d ON d."id" = x."doc_id" WHERE d."space_id" = $1`, [fx.spaceId]);
+  assert.ok(footnotes.rows.some((note) => note.kind === 'turn' && (note.quote ?? '').includes('fixture')), JSON.stringify(footnotes.rows));
 });
 
 // ── The anchors of a page: every entry keeps its own checks ─────────────────────────────────────

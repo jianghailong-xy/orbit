@@ -64,6 +64,14 @@ P1b。见新增的 §23，迁移 `0400_wiki_model_status`，JSON 里是 `systemM
 只在服务端执行该账号时才查 `unfinishedMaintainJob`。见新增的 §24.9，JSON 里是 `jobs.executor.rollback`，实现在
 `src/apiserver/src/wiki/wiki-executor-sweep.ts`，pg spec 是 `wiki-executor-sweep.pg.spec.ts`。
 
+**服务端执行 · 文档两个 bug 与作业重试上限（2026-10-09）**：重开 canary 后生产上暴露的三处。一是会话条件的 `projects` 有两种写法——存下的版本
+是项目 id，plan 的读（`plan.reads.version`）是 `{ id, title }`——维护作业的文档步骤读的是后者，把对象当 id 传给 `::uuid[]`，报 22P02、
+一节也没写；现在每个读会话条件的地方都把两种写法统一读成 id 列表（`docs.material.projects`，§22.10）。二是服务端文档构建在两节同时用到
+同一个文件时，后一节等不到前一节的读取就展示它，报「was shown before it was read」，owner 确认的 v27 一直建不出来；现在一节要等别的节
+已经在读的文件读完（`docs.build.server.shown`，§22.13）。三是作业的 infra 重试没有上限，这样的断言错误每次空间空出来就再失败一次；
+现在最多试 `maxAttempts` = 10 次，意外的错误（断言、类型错误）最多 `unexpectedMaxAttempts` = 3 次，到上限就以失败结束，错误写在作业上，
+它的运行行或 plan 作业在同一个事务里收尾（`jobs.retry.limit`，§24.4）。
+
 **权威来源**
 
 | 来源 | 位置 |
@@ -1825,6 +1833,11 @@ runner 门在 `runner-api/runner-wiki-docs.controller.ts`；共享类型在 `src
   - 没有 `section` 400；plan 这篇没有这一节、或没有这篇 404；没有已确认的 plan `WIKI_PLAN_UNCONFIRMED`；别的会话 `WIKI_NOT_MAINTENANCE_SESSION`，
     不带会话头 400，别的 owner 的 space 404。
   - `condition`：已确认 plan 里这一节的会话条件，项目带现在的标题；没有会话条件时为 null，其余都空。
+  - **项目一律按 id 读**（`docs.material.projects`）：存下的版本里项目是它解析到的 id，plan 的读（`plan.reads.version`）里是
+    `{ id, title }`。读会话条件的每个地方都把两种写法读成 id，不是 id 的值不算任何项目：这个材料读、服务端的文档构建（22.13）、经 plan 的读
+    取条件的维护作业文档步骤、条目归节（22.12 的 `docs.affected.fit`），以及 plan 自己的读和门。runner 路径读 plan 的读，把项目 id 单独
+    排好序放进指纹（22.5），材料则从这个读来取，而这个读读的是存下的条件：两条路径上同一节点名的项目一样，拿到的材料也一样。
+    2026-10-09 之前，维护作业的文档步骤把读到的 `{ id, title }` 当 id 传给 `::uuid[]`，PostgreSQL 报 22P02，这一步一节也没写。
   - **条目引路**：space 里 active、锚点既非 changed 也非 missing、**符合**这一节来源条件的条目（`docs.affected.fit`）：关键词（标题、摘要、
     字段、别名里出现，每个 3 分）或锚点路径（在 `anchorPaths` 之下，2 分）命中，或者——属于 `entryKinds` 之一（没列就不限）——在 `topics`
     之一，或取自 `projects` 之一的会话或任务；主题、种类、项目各再加 1；分高的在前，同分取新，最多 `entriesPerSection` = 6 条。维护作业把
@@ -1921,6 +1934,10 @@ JSON 里是 `docs.build.server`、`jobs.kindRuns.docs_build` 与 `plan.jobs.serv
   编号对得上的标题，不找只是包含这个名字的标题，那可能是另一节。读取持有作业租约等待（`repoOps.waiting` 的例外），每次至多 300 秒；
   空间的 runner 不能领操作（`no_workspace` / `runner_missing` / `runner_offline`）或等待超时都是 infra 失败，稍后重试——只声明了
   `wiki-repo-op/v1` 的机器不算，它照旧跑，只是读得短。
+- **先读后展示**（`docs.build.server.shown`）：文件要读回来以后才展示，和 runner 的写入器一样（它展示时才 `git show`，不会展示没读的文件）。
+  一篇的节 `docs.build.rules.parallel` = 4 节同时写，常有两节点名同一个文件：后一节发现别的节已经在读这个文件时，要等那次读取落地，
+  不能自己不读、在读取回来之前就展示它。2026-10-09 之前就是这样：v27 一篇里有几节都点名 `docs/article-durable-agent-work.md`，
+  构建每次都以「was shown before it was read」失败。
 - **会话材料**：在进程里直接调 `wiki-docs-material.ts`，和 22.10 的材料读一样：条件挑出的条目、它们引用的记录、项目与时间窗与关键词找到的
   记录，都按 owner 的 workspace.env 脱敏、定位。
 - **调用**：每次调用是队列里的一条请求：系统提示与 runner 逐字相同，一条 user 消息，`max_tokens` 8192，step 是 `docs_merge`、`docs_write`、
@@ -2073,7 +2090,7 @@ JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5
 ### 24.2 领取、租约、回收
 
 - 领取照 `watch_delivery`：一条 `UPDATE "wiki_job" … FROM (SELECT … FOR UPDATE SKIP LOCKED)`，候选是
-  `state = 'queued' AND (next_attempt_at IS NULL OR next_attempt_at <= now())`、本 build 认识的种类、本 worker 服务的账号（§24.5）、
+  `state = 'queued' AND (next_attempt_at IS NULL OR next_attempt_at <= now())`、`attempts` 没到重试上限（§24.4）、本 build 认识的种类、本 worker 服务的账号（§24.5）、
   且**同一空间没有在跑的作业**；顺序是 `priority DESC, created_at, id`；每条给一个新的 `lease_generation`，`started_at` 取第一次领取。
 - 每次领取 `lease_deadline_at = now + 60s`，执行中每 20 秒续租一次；回写（成功、infra 重试、content 失败）都按代数比较并交换，
   被接管的旧进程写不进任何一行。
@@ -2098,6 +2115,17 @@ JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5
 | 作业的请求等待超过步骤上限 | 请求以 `other` 失败（§25.5），作业读到后按 infra 处理 |
 
 - 本 build 不认识的错误（不是作业自己抛的两类）按 infra 处理：宁可重试，不拿它去计空间的连续失败。
+- **重试上限**（`jobs.retry.limit`，2026-10-09）：没有作业会被无限地放回队列。第 `maxAttempts` = 10 次尝试以 infra 失败时，作业不再回队，
+  而是结束：`state = 'failed'`、`failure_kind = 'infra'`、`ended_at`，`attempts` 算上这一次，`error` 是「Ended after <n> attempts: <最后一次的错误>」
+  （至多 2,000 字），Activity 的 Runs 卡显示它（§24.8）。按上面的退避，大约是 runner 连不上四分钟、System model 不在半小时以上。
+  本 build 不认识的错误（断言不成立、类型错误这类）照样先按 infra 重试，以防只是偶发，但第 `unexpectedMaxAttempts` = 3 次时就这样结束，
+  错误里写明是意外的错误：再试只会再碰上它。2026-10-09 之前没有上限，docs_build 作业 79620f23 的写入器断言不成立，空间每空出来一次
+  就再失败一次。
+- 执行器结束它自己收尾的那次尝试；租约回收或仓库操作的等待把作业放回队列时已经到了上限的，领取不会再拿它（§24.2），worker 的下一轮把它
+  结束。两种情况都在同一个事务里收尾等着它的行，和回退清扫一样（§24.9，`wiki-worker/wiki-jobs.ts` 的 `settleWikiJobRows`）：它名下排队或
+  在跑的模型请求和仓库操作取消；maintain 作业的运行行记为 `failed` / `infra`、写上错误，不计连续失败，游标没动，下一次运行会重读这次没读完的
+  内容；plan_draft / plan_revise / docs_build 作业的 plan 作业以失败结束、写上错误，仍保留 `job_id`——plan 页显示起草或生成失败，owner 的
+  下次请求会建新的。
 
 ### 24.5 执行器开关 `jobs.executor`
 
@@ -2225,7 +2253,8 @@ op 在等），于是旧版 `orbit wiki verify` 读到空列表就正常退出�
   apiserver 而不是 worker：被堵住的触发器在 apiserver 这边；worker 是停止服务的一侧，而且不重建它时它本来也不会再领这些作业。
   每个写入都只匹配仍在途的行，所以清扫跑两遍、或者和正在收尾的 worker 撞上，都不会改动一次运行已经写下的话。
 - **作业本身**：`queued`、`running`、`waiting` 的 `wiki_job` 置为 `cancelled`，`ended_at` 记下，`waiting_for` 与租约三列清空，
-  `error` 写明原因（开关不再服务这个账号、作业在 apiserver 启动时被取消）。
+  `error` 写明原因（开关不再服务这个账号、作业在 apiserver 启动时被取消）。下面四条（请求、仓库操作、运行行、plan 作业）由
+  `settleWikiJobRows` 写，重试上限结束作业时用的是同一个函数（§24.4）。
 - **模型请求**：它名下 `queued`、`running` 的 `wiki_model_request` 置为 `cancelled`，`ended_at` 记下；按 0401 迁移的约束，
   `error`、`error_kind`、`partial` 连同退避的 `not_before` 和租约三列都清空（这些列是排队或在跑的行才有的）；已成功的行不动。
 - **仓库操作**：它名下 `queued`、`running` 的 `wiki_repo_op` 同样置为 `cancelled`、带上原因，认领（`lease_owner`、`claimed_at`、

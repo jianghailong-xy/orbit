@@ -11,10 +11,10 @@ import type { Runner } from './TasksSidePanel';
 /**
  * A wake a watch queued waits in the queued tail like any follow-up (docs/watch-contract.md §6). Drawn
  * as a queued message it put the watch's head line, raw id and whole JSON payload under the user's
- * name and filled the pane (owner's report, 2026-09-14). It is the watch's card there too — the one the
- * transcript draws once a runner takes it — with the words the agent will read folded away. And
- * nobody typed it: withdrawing it is not Cancel, and neither that nor Stop hands its words to the
- * composer as if they were the user's.
+ * name and filled the pane (owner's report, 2026-09-14). It is the watch's line there too — the one
+ * the transcript draws once a runner takes it, dashed — with the words the agent will read folded
+ * away. And nobody typed it: withdrawing it is not Cancel, and neither that nor Stop hands its words
+ * to the composer as if they were the user's.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -248,26 +248,25 @@ async function mountQueue(): Promise<void> {
 }
 
 describe('a wake a watch queued, in the queued tail', { timeout: 60_000 }, () => {
-  it('is the watch’s card with the queue’s line, and its JSON stays folded', async () => {
+  it('is the watch’s line with the queue’s line under it, and its JSON stays folded', async () => {
     await mountQueue();
 
     const card = mounted().querySelector<HTMLElement>('.watch-wake')!;
     expect(card.classList.contains('is-queued'), 'drawn as still queued').toBe(true);
-    expect(card.querySelector('.watch-wake-title')?.textContent?.trim()).toBe('Watch triggered');
+    expect(card.querySelector('.bgwake-title')?.textContent?.trim()).toBe('Watch triggered');
+    expect(card.querySelector('.bgwake-name')?.textContent).toBe('2 tasks');
     expect(card.querySelectorAll('.watch-wake-changed li')).toHaveLength(2);
-    // The delivered card's own line (Transcript.watchWake.test.tsx), down to when it was queued.
-    expect(card.querySelector('.watch-wake-meta')?.textContent).toMatch(
-      /^Queued by a watch, not typed by you · generation 1 · /,
-    );
+    // The delivered line's own fold (Transcript.watchWake.test.tsx); when it was queued is on the line.
+    expect(card.querySelector('.bgwake-meta')?.textContent).toBe('Queued by a watch, not typed by you · generation 1');
     expect(card.hasAttribute('data-seq'), 'a queued wake is no event for ⌘F to land on').toBe(false);
 
     // What the agent will read is kept whole, one closed disclosure away.
-    const raw = card.querySelector('details.watch-wake-raw')!;
+    const raw = card.querySelector('details.bgwake-raw')!;
     expect(raw.hasAttribute('open')).toBe(false);
     expect(raw.querySelector('pre')?.textContent).toBe(WAKE);
     // Outside it, none of the head line, the raw id or the payload is on the page.
     const shown = card.cloneNode(true) as HTMLElement;
-    shown.querySelector('details')!.remove();
+    shown.querySelector('details.bgwake-raw')!.remove();
     expect(shown.textContent).not.toContain('Orbit Watch');
     expect(shown.textContent).not.toContain(WATCH);
     expect(shown.textContent).not.toContain('latestSnapshot');
@@ -276,10 +275,11 @@ describe('a wake a watch queued, in the queued tail', { timeout: 60_000 }, () =>
       'no part of the wake is drawn as something the user typed',
     ).toBe(false);
 
-    // The queue's own line: its state, the action named for what it does, and what that costs.
-    const line = card.querySelector('.watch-wake-queued .chat-queued-meta')!;
+    // The queue's own line: its state and the action named for what it does. What that costs is
+    // said when the action asks to confirm (below), not under a one-line event.
+    const line = card.querySelector('.bgwake-queued .chat-queued-meta')!;
     expect(line.querySelector('.chat-queued-tag')?.textContent).toBe('Queued for next turn');
-    expect(line.querySelector('.chat-queued-why')?.textContent).toBe(CONSEQUENCE);
+    expect(line.querySelector('.chat-queued-why')).toBeNull();
     expect([...line.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Withdraw wake']);
 
     // The message typed behind it is drawn as it always was.
@@ -297,7 +297,7 @@ describe('a wake a watch queued, in the queued tail', { timeout: 60_000 }, () =>
   it('asks before withdrawing it, withdraws only it, and puts none of it in the composer', async () => {
     await mountQueue();
 
-    const withdraw = [...mounted().querySelectorAll('.watch-wake-queued a')].find((a) => a.textContent === 'Withdraw wake')!;
+    const withdraw = [...mounted().querySelectorAll('.watch-wake .bgwake-queued a')].find((a) => a.textContent === 'Withdraw wake')!;
     await click(withdraw);
 
     let dialog: HTMLElement | null = null;
