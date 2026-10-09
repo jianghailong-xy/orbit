@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { CheckOutlined, CopyOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Card, Skeleton, Tag, Typography } from 'antd';
+import { copyText } from '../lib/clipboard';
 import { taskAttributionQuery } from '../lib/queries';
 import {
   ABSENT_REASON_LABEL,
@@ -12,6 +13,12 @@ import {
   type TaskAttribution,
 } from '../lib/attribution';
 import { MOVE_TASK_STATE_MEANING } from './ProjectCrossingsCard';
+import { Alert } from './ui/Alert';
+import { Badge } from './ui/Badge';
+import { Card } from './ui/Card';
+import { Skeleton } from './ui/Skeleton';
+import { Tooltip } from './ui/Tooltip';
+import './ui/Typography.css';
 
 /**
  * Unit L7: where this task's work counts, and everything that follows from that.
@@ -37,11 +44,49 @@ import { MOVE_TASK_STATE_MEANING } from './ProjectCrossingsCard';
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div style={{ display: 'flex', gap: 12, padding: '6px 0', alignItems: 'flex-start' }}>
-      <Typography.Text type="secondary" style={{ minWidth: 132, flexShrink: 0 }}>
+      <span className="orbit-typography orbit-typography-secondary" style={{ minWidth: 132, flexShrink: 0 }}>
         {label}
-      </Typography.Text>
+      </span>
       <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
     </div>
+  );
+}
+
+/** How long the copy mark says Copied (the replaced text control's own beat). */
+const COPIED_MS = 3000;
+
+/** The id, in code, with its copy mark inside the code box after it: a link-coloured icon that says
+ *  what it does on hover, and turns into a check for a few seconds once the id is on the clipboard. */
+function CopyableId({ id }: { id: string }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const copy = () =>
+    void copyText(id).then((ok) => {
+      if (!ok) return;
+      setCopied(true);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), COPIED_MS);
+    });
+  const label = copied ? 'Copied' : 'Copy';
+  return (
+    <span className="orbit-typography">
+      <code>
+        {id}
+        <span className="orbit-typography-actions">
+          <Tooltip content={label}>
+            <button
+              type="button"
+              className={`orbit-typography-copy${copied ? ' orbit-typography-copy-success' : ''}`}
+              aria-label={label}
+              onClick={copy}
+            >
+              {copied ? <CheckOutlined aria-hidden /> : <CopyOutlined aria-hidden />}
+            </button>
+          </Tooltip>
+        </span>
+      </code>
+    </span>
   );
 }
 
@@ -53,13 +98,11 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 export function ProjectIdentity({ project }: { project: AttributionProjectRef }) {
   return (
     <span>
-      <Typography.Text strong>{project.title}</Typography.Text>{' '}
-      <Typography.Text code copyable={{ text: publicIdOf(project) }}>
-        {publicIdOf(project)}
-      </Typography.Text>{' '}
-      <Tag aria-label={`Project status ${project.status}`} title={`Project status ${project.status}`}>
+      <span className="orbit-typography"><strong>{project.title}</strong></span>{' '}
+      <CopyableId id={publicIdOf(project)} />{' '}
+      <Badge aria-label={`Project status ${project.status}`} title={`Project status ${project.status}`}>
         {project.status}
-      </Tag>
+      </Badge>
     </span>
   );
 }
@@ -68,9 +111,9 @@ export function ProjectIdentity({ project }: { project: AttributionProjectRef })
  *  never heard of is still visible rather than silently rendering as nothing at all. */
 function Absent({ reason }: { reason: string | null }) {
   return (
-    <Typography.Text type="secondary">
+    <span className="orbit-typography orbit-typography-secondary">
       {reason ? labelFor(ABSENT_REASON_LABEL, reason) : 'Not reported by this server build.'}
-    </Typography.Text>
+    </span>
   );
 }
 
@@ -93,9 +136,9 @@ export function TaskAttributionBody({ view }: { view: TaskAttribution }) {
                 FOUND, and finding it grants nothing about where it may be filed. The chip is
                 rendered from the server's own `authority` value so it cannot be dropped by a
                 client that forgets the rule. */}
-            <Tag aria-label="Evidence only — this does not decide where the work is filed">
+            <Badge aria-label="Evidence only — this does not decide where the work is filed">
               {view.discovery.authority === 'EVIDENCE_ONLY' ? 'EVIDENCE ONLY' : view.discovery.authority}
-            </Tag>
+            </Badge>
             {view.discovery.project ? (
               <div style={{ marginTop: 4 }}>
                 <ProjectIdentity project={view.discovery.project} />
@@ -103,8 +146,8 @@ export function TaskAttributionBody({ view }: { view: TaskAttribution }) {
             ) : null}
             {view.discovery.triggerEvent ? (
               <div>
-                <Typography.Text type="secondary">Trigger </Typography.Text>
-                <Typography.Text code>{view.discovery.triggerEvent}</Typography.Text>
+                <span className="orbit-typography orbit-typography-secondary">Trigger </span>
+                <span className="orbit-typography"><code>{view.discovery.triggerEvent}</code></span>
               </div>
             ) : null}
             {view.discovery.task ? <div>Task: {view.discovery.task.title}</div> : null}
@@ -120,33 +163,33 @@ export function TaskAttributionBody({ view }: { view: TaskAttribution }) {
       <Row label="Crossing">
         {view.crossing ? (
           <div>
-            <Tag aria-label={`Crossing ${view.crossing.state}`}>{view.crossing.state}</Tag>
-            <Typography.Text strong>
-              {labelFor(CROSSING_STATE_LABEL, view.crossing.state)}
-            </Typography.Text>
+            <Badge aria-label={`Crossing ${view.crossing.state}`}>{view.crossing.state}</Badge>
+            <span className="orbit-typography">
+              <strong>{labelFor(CROSSING_STATE_LABEL, view.crossing.state)}</strong>
+            </span>
             <div>
               {/* A request to MOVE a task that already exists is read as a move: the task stays
                   in its project until the owner answers, and confirming moves it, so a filing's
                   "not filed anywhere" would be false of it. The crossings card's own words, so
                   the two places that show the same request say the same thing. */}
-              <Typography.Text type="secondary">
+              <span className="orbit-typography orbit-typography-secondary">
                 {labelFor(
                   view.crossing.kind === 'MOVE_TASK' ? MOVE_TASK_STATE_MEANING : CROSSING_STATE_MEANING,
                   view.crossing.state,
                 )}
-              </Typography.Text>
+              </span>
             </div>
             {view.crossing.from && view.crossing.to ? (
               <div style={{ marginTop: 4 }}>
                 <ProjectIdentity project={view.crossing.from} />
-                <Typography.Text type="secondary"> → </Typography.Text>
+                <span className="orbit-typography orbit-typography-secondary"> → </span>
                 <ProjectIdentity project={view.crossing.to} />
               </div>
             ) : null}
             {view.crossing.code ? (
               <div>
-                <Typography.Text code>{view.crossing.code}</Typography.Text>{' '}
-                <Typography.Text code>{view.crossing.requiredAction}</Typography.Text>
+                <span className="orbit-typography"><code>{view.crossing.code}</code></span>{' '}
+                <span className="orbit-typography"><code>{view.crossing.requiredAction}</code></span>
               </div>
             ) : null}
           </div>
@@ -158,13 +201,13 @@ export function TaskAttributionBody({ view }: { view: TaskAttribution }) {
       <Row label="Blocked by">
         {view.blocker ? (
           <div>
-            <Tag aria-label={`Blocker ${view.blocker.kind}`}>{view.blocker.kind}</Tag>
-            <Typography.Text code>{view.blocker.code ?? 'UNKNOWN'}</Typography.Text>{' '}
-            <Typography.Text type="secondary">owner {view.blocker.owner}</Typography.Text>
+            <Badge aria-label={`Blocker ${view.blocker.kind}`}>{view.blocker.kind}</Badge>
+            <span className="orbit-typography"><code>{view.blocker.code ?? 'UNKNOWN'}</code></span>{' '}
+            <span className="orbit-typography orbit-typography-secondary">owner {view.blocker.owner}</span>
             <div>{view.blocker.requiredAction}</div>
-            <Typography.Text type="secondary">
+            <span className="orbit-typography orbit-typography-secondary">
               Next checked {new Date(view.blocker.nextCheckAt).toLocaleString()}
-            </Typography.Text>
+            </span>
           </div>
         ) : (
           <Absent reason={view.blockerAbsentReason} />
@@ -186,12 +229,11 @@ export function TaskAttributionCard({ taskId }: { taskId: string }) {
   return (
     <Card title="Attribution" size="small" style={{ marginTop: 16 }}>
       {attribution.isPending ? (
-        <Skeleton active title={false} paragraph={{ rows: 3 }} />
+        <Skeleton rows={3} />
       ) : attribution.isError ? (
         <Alert
           type="warning"
-          showIcon
-          message="Attribution boundary could not be loaded"
+          title="Attribution boundary could not be loaded"
           description={
             attribution.error instanceof Error ? attribution.error.message : undefined
           }

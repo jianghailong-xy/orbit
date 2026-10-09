@@ -32,6 +32,7 @@ import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
+import io.orbitd.android.management.LocalSmartSelection
 import io.orbitd.android.navigation.*
 import io.orbitd.android.projects.TaskDependencyGraphView
 import io.orbitd.android.taskprojects.*
@@ -444,7 +445,7 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
             mutate(fromSheet = "dependency", done = { closeSheet() }) { api.addDependency(id, prerequisite, revisionOf(task)) }
         }
         else -> if (current.startsWith("why:")) task.objects("sessions").firstOrNull { it.text("id") == current.removePrefix("why:") }?.let { run ->
-            TaskDetailLogic.runRoute(run)?.let { route -> RouteWhySheet(route, { modelName(it, task, data) }) { sheet = null } }
+            TaskDetailLogic.runRoute(run, LocalSmartSelection.current)?.let { route -> RouteWhySheet(route, { modelName(it, task, data) }) { sheet = null } }
         } ?: run { sheet = null }
     }
 }
@@ -500,8 +501,11 @@ private fun DetailsSection(task: JsonObject, data: TaskDetailData, workspaces: L
             listOf<Pair<String?, String>>(null to TaskListCopy.unassigned) + workspaces.map { it.text("id") to (it.text("name") ?: "Workspace") } +
                 listOfNotNull(currentAssignee?.takeIf { a -> workspaces.none { ObjectId.same(it.text("id"), a.text("id")) } }?.let { it.text("id") to (it.text("name") ?: it.text("id").orEmpty()) }),
             tag = "task-assignee") { patch(buildJsonObject { put("assigneeId", it?.let(::JsonPrimitive) ?: JsonNull) }) }
+        // The account's switch for smart model selection, off by default: then none of it is drawn here — no Suggested, no ✦
+        // placeholder, no coordinator's reason — as on the web and iOS (9fb3ae6ee).
+        val smartSelection = LocalSmartSelection.current
         val picks = TaskDetailLogic.modelHintPicks(task.objects("modelHintOptions"))
-        PickerRow(TaskDetailCopy.suggestedLabel, picks.firstOrNull { it.value == task.text("modelHint") }?.label ?: task.text("modelHint") ?: TaskDetailCopy.noSuggestion,
+        if (smartSelection) PickerRow(TaskDetailCopy.suggestedLabel, picks.firstOrNull { it.value == task.text("modelHint") }?.label ?: task.text("modelHint") ?: TaskDetailCopy.noSuggestion,
             enabled, picks.map { it.value to it.label }, details = picks.associate { it.value to it.detail }, tag = "task-suggested") { patch(TaskDetailLogic.modelHintRequest(it)) }
         val catalog = data.runner?.let { io.orbitd.android.composer.ComposerCatalog(it, data.providers) }
         val inherited = assignee?.text("provider") ?: assignee?.text("lastProvider")
@@ -514,7 +518,7 @@ private fun DetailsSection(task: JsonObject, data: TaskDetailData, workspaces: L
         }
         val effective = task.text("provider") ?: inherited ?: "claude"
         val models = catalog?.models(effective).orEmpty()
-        val unpinned = if (assignee?.flag("modelRouting") == true) TaskDetailCopy.smartSelectionPlaceholder else "Provider default"
+        val unpinned = if (smartSelection && assignee?.flag("modelRouting") == true) TaskDetailCopy.smartSelectionPlaceholder else "Provider default"
         PickerRow(TaskDetailCopy.modelLabel, task.text("model")?.let { m -> models.firstOrNull { it.text("value") == m }?.text("label") ?: m } ?: unpinned, enabled,
             listOf<Pair<String?, String>>(null to unpinned) + models.map { it.text("value") to (it.text("label") ?: it.text("value").orEmpty()) } +
                 listOfNotNull(task.text("model")?.takeIf { m -> models.none { it.text("value") == m } }?.let { it to it }), tag = "task-model") {
@@ -528,7 +532,7 @@ private fun DetailsSection(task: JsonObject, data: TaskDetailData, workspaces: L
         DetailRow(TaskDetailCopy.startAtLabel, TaskDetailLogic.scheduleValue(task.text("runAt")), "⌄", enabled, "task-start-at") { edit("schedule") }
         task.obj("creatorSession")?.let { source -> DetailRow(TaskDetailCopy.createdFromLabel, source.text("title") ?: TaskDetailCopy.untitledSession, "›", true, "task-created-from") {
             source.text("id")?.let { open(OrbitRoute(Destination.SESSION, it)) } } }
-        TaskDetailLogic.modelHintNote(task)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (smartSelection) TaskDetailLogic.modelHintNote(task)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         val creator = task.text("creatorName") ?: workspaces.firstOrNull { task.text("creatorType") == "AGENT" && ObjectId.same(it.text("id"), task.text("creatorId")) }?.text("name")
         TaskDetailLogic.createdFootnote(creator, task.text("createdAt"))?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
@@ -608,7 +612,8 @@ private fun RunRow(run: JsonObject, task: JsonObject, data: TaskDetailData, open
     val state = resolvedRunState(run)
     val color = when (state) { "RUNNING" -> LocalOrbitColors.current.running; "QUEUED", "AWAITING_INPUT" -> LocalOrbitColors.current.needsYou
         "SUCCEEDED" -> LocalOrbitColors.current.success; "FAILED" -> MaterialTheme.colorScheme.error; else -> MaterialTheme.colorScheme.onSurfaceVariant }
-    val route = TaskDetailLogic.runRoute(run)
+    val smartSelection = LocalSmartSelection.current
+    val route = TaskDetailLogic.runRoute(run, smartSelection)
     val name: (String) -> String = { modelName(it, task, data) }
     Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { run.text("id")?.let { open(OrbitRoute(Destination.SESSION, it)) } }.padding(vertical = 6.dp)
         .testTag("task-run:${run.text("id")}"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -621,7 +626,7 @@ private fun RunRow(run: JsonObject, task: JsonObject, data: TaskDetailData, open
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(TaskDetailLogic.runLabel(run), style = MaterialTheme.typography.bodySmall, color = color)
-                TaskDetailLogic.runModelLine(run, name)?.let { Text("· $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                TaskDetailLogic.runModelLine(run, smartSelection, name)?.let { Text("· $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false)) }
                 if (route?.flag("applied") == true) Text(TaskDetailLogic.routeTierTag(route), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
                     color = if (route.flag("escalated")) LocalOrbitColors.current.needsYou else LocalOrbitColors.current.running)

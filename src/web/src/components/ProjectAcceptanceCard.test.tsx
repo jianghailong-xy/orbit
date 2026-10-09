@@ -40,7 +40,7 @@ import {
 vi.mock('../api', () => ({ api: vi.fn(() => new Promise(() => {})) }));
 
 /** Static renders take the desktop branch. Mounted phone tests override this per test; answering
- * false for every other query also keeps antd's own breakpoint subscriptions deterministic. */
+ * false for every other query also keeps every other breakpoint subscription deterministic. */
 function stubViewport(phone: boolean): void {
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: phone && query === ACCEPTANCE_PHONE_QUERY,
@@ -248,8 +248,7 @@ async function click(element: HTMLElement): Promise<void> {
   await act(async () => element.click());
 }
 
-// The first antd render initializes its jsdom style registry before anything can be asserted, which
-// is why these cases are slower than their bodies; every assertion here is synchronous and bounded.
+// Every assertion here is synchronous and bounded.
 describe('ProjectAcceptanceCard', () => {
   it('heads the card with what it is, and says where a row\'s answer comes from', () => {
     const qc = client();
@@ -321,7 +320,11 @@ describe('ProjectAcceptanceCard', () => {
   it('renders while the read is in flight', () => {
     const qc = client();
 
-    expect(paint(qc)).toContain('ant-skeleton');
+    // The placeholder lines, and none of the states a read would have answered.
+    const html = paint(qc);
+    expect(html).toContain('orbit-skeleton-paragraph');
+    expect(html).not.toContain('could not be loaded');
+    expect(html).not.toContain('No criteria are stated');
   });
 
   it('renders the failure of the read as a failure', () => {
@@ -810,7 +813,7 @@ describe('ProjectAcceptanceCard on what the work has done', () => {
     // has done — a pill anywhere in here is the verdict rail 0229 deleted, coming back.
     const list = criteriaList(html);
     for (const shape of [
-      'ant-tag', 'ant-badge', 'ant-ribbon', 'ant-progress', 'role="progressbar"',
+      'orbit-badge', 'role="progressbar"',
       '<progress', '<meter', 'acceptance-row-badge', 'acceptance-row-verdict',
       'acceptance-meter', 'Unjudged',
     ]) {

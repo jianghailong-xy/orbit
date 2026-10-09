@@ -83,5 +83,7 @@
 @media (max-width: 960px) { .orbit-multi .orbit-combobox-input, .orbit-multi-measure { font-size: 16px; } }
 .orbit-multi-placeholder { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--orbit-control-disabled-text); pointer-events: none; white-space: nowrap; }
 .orbit-multi-option { position: relative; }
-.orbit-multi-option .orbit-select-option-label { padding-right: 20px; }
+/* As the replaced option: the text runs up to the check of a chosen option (14px) and to the
+   option's padding otherwise. */
+.orbit-multi-option[data-selected] .orbit-select-option-label { padding-right: 14px; }
 .orbit-multi-item-check { position: absolute; display: inline-flex; right: 12px; top: 50%; transform: translateY(-50%); color: var(--orbit-control-primary); font-size: 14px; }

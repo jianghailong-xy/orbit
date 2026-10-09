@@ -305,8 +305,10 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(load.contains("api.listSessions(view: .open, projectId: address.projectID)"))
         XCTAssertTrue(load.contains("api.listSessions(view: .completed, projectId: address.projectID)"))
         XCTAssertTrue(load.contains("let rows = try await openRead.value + completedRead.value"))
-        XCTAssertTrue(load.contains("projectSessions = SessionProjectMembers.members(of: address.projectID, in: rows)"),
-                      "one rule — this project's, never Trash, each once, newest first (SessionProjectMembersTests)")
+        XCTAssertTrue(load.contains("let kept = SessionFilter.removing(trashingSessions, from: rows)\n"
+                                    + "            projectSessions = SessionProjectMembers.members(of: address.projectID, in: kept)"),
+                      "one rule — this project's, never Trash, each once, newest first (SessionProjectMembersTests) — "
+                        + "over the read less the rows on their way to Trash")
         XCTAssertFalse(load.contains("view: address.view"))
         XCTAssertFalse(load.contains("view: .trash"))
         XCTAssertFalse(load.contains("agentID:"))

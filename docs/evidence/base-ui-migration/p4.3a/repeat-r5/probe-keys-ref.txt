@@ -1,0 +1,10 @@
+
+Running 2 tests using 1 worker
+
+KEYS-PROBE webkit-light-desktop [{"step":"loaded","scrollers":[],"bulkbar":null,"heads":[256.8,38],"firstRow":[294.8,44],"focus":"body[role=null].","docScroll":[0,0]},{"step":"checkbox focused","scrollers":[],"bulkbar":null,"heads":[256.8,38],"firstRow":[294.8,44],"focus":"input[role=null].ant-checkbox-input","docScroll":[0,0]},{"step":"space","scrollers":[],"bulkbar":[143.8,42],"heads":[194.8,38],"firstRow":[232.8,44],"focus":"input[role=null].ant-checkbox-input","docScroll":[0,0]},{"step":"two frames later","scrollers":[],"bulkbar":[143.8,42],"heads":[194.8,38],"firstRow":[232.8,44],"focus":"input[role=null].ant-checkbox-input","docScroll":[0,0]}]
+  ✓  1 [webkit-light-desktop] › ui-migration/p43a-keys-probe.browser.mjs:8:1 › keys probe (1.4s)
+KEYS-PROBE webkit-dark-desktop [{"step":"loaded","scrollers":[],"bulkbar":null,"heads":[256.8,38],"firstRow":[294.8,44],"focus":"body[role=null].","docScroll":[0,0]},{"step":"checkbox focused","scrollers":[],"bulkbar":null,"heads":[256.8,38],"firstRow":[294.8,44],"focus":"input[role=null].ant-checkbox-input","docScroll":[0,0]},{"step":"space","scrollers":[],"bulkbar":[143.8,42],"heads":[186.8,38],"firstRow":[224.8,44],"focus":"input[role=null].ant-checkbox-input","docScroll":[0,0]},{"step":"two frames later","scrollers":[],"bulkbar":[143.8,42],"heads":[186.8,38],"firstRow":[224.8,44],"focus":"input[role=null].ant-checkbox-input","docScroll":[0,0]}]
+  ✓  2 [webkit-dark-desktop] › ui-migration/p43a-keys-probe.browser.mjs:8:1 › keys probe (1.2s)
+
+  2 passed (4.8s)
+exit=0

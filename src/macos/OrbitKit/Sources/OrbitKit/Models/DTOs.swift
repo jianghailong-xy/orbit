@@ -911,9 +911,11 @@ public struct TurnAccepted: Codable, Sendable {
     public let routedToSessionId: String?
 }
 
-/// One still-PENDING user turn from GET /sessions/:id/turns. These rows have not entered the
-/// transcript event stream yet; clients render them as the cancellable queued tail and reconcile
-/// them again whenever `queued_turns_changed` arrives.
+/// One user turn from GET /sessions/:id/turns?view=active that no transcript event draws yet: the
+/// accepted head a runner has taken (or is about to), the turns queued behind it, and steers. These
+/// rows have not entered the transcript event stream; clients render the head where its echo will
+/// land and the rest as the queued tail, and reconcile them again whenever `queued_turns_changed`
+/// arrives.
 public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     public struct Attachment: Codable, Equatable, Sendable {
         public let id: String
@@ -926,6 +928,25 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
 
     public let turnId: String
     public let kind: String?
+    /// Where the server placed this turn, under the Session row lock — never inferred here:
+    /// `accepted` is the executable head, which a runner has taken or is about to and which nobody
+    /// can withdraw any more; `queued` waits behind it; `steer` is on its way into the turn already
+    /// running. Nil from a server that predates the active view, whose listing holds only queued
+    /// turns and steers, told apart by `kind` as they always were.
+    public let placement: String?
+    /// The accepted head: the runner's now, drawn where its echo will land rather than in the queue.
+    public var isAccepted: Bool { placement == "accepted" }
+    /// When the server filed the turn (ISO-8601) — the moment an accepted turn's placeholder carries
+    /// until its echo brings the runner's own (web: `AcceptedUserTurn.acceptedAt`).
+    public let createdAt: String?
+    /// For a steer, the executable turn it was written into.
+    public let targetTurnId: String?
+    /// The server's durable receipt for a message written into the running turn that never made it:
+    /// `failed`, or `unconfirmed` when nothing could say whether the engine read it — with the
+    /// receipt's own code and reason. Nil on every turn still on its way.
+    public let delivery: String?
+    public let deliveryCode: String?
+    public let deliveryReason: String?
     public let content: String
     /// Optional for rolling compatibility with a server that predates attachment refs on this list.
     public let attachments: [Attachment]?
@@ -988,9 +1009,17 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
                 taskStart: JSONValue? = nil,
                 projectStarted: JSONValue? = nil, sessionMessage: JSONValue? = nil,
                 sessionReplies: JSONValue? = nil, authoredByOrbit: Bool? = nil, confirmationReviewRequest: JSONValue? = nil,
-                confirmationReturn: JSONValue? = nil) {
+                confirmationReturn: JSONValue? = nil, placement: String? = nil, createdAt: String? = nil,
+                targetTurnId: String? = nil, delivery: String? = nil, deliveryCode: String? = nil,
+                deliveryReason: String? = nil) {
         self.turnId = turnId
         self.kind = kind
+        self.placement = placement
+        self.createdAt = createdAt
+        self.targetTurnId = targetTurnId
+        self.delivery = delivery
+        self.deliveryCode = deliveryCode
+        self.deliveryReason = deliveryReason
         self.content = content
         self.attachments = attachments
         self.openItemDelivery = openItemDelivery

@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
@@ -141,14 +140,12 @@ async function visit(path: string): Promise<void> {
   await act(async () => {
     root!.render(
       <QueryClientProvider client={qc}>
-        <AntApp>
-          <BrowserRouter>
-            <Routes>
-              <Route path="/tasks" element={<TaskListView />} />
-              <Route path="/tasks/:id" element={<TaskListView />} />
-            </Routes>
-          </BrowserRouter>
-        </AntApp>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/tasks" element={<TaskListView />} />
+            <Route path="/tasks/:id" element={<TaskListView />} />
+          </Routes>
+        </BrowserRouter>
       </QueryClientProvider>,
     );
   });
@@ -208,7 +205,7 @@ describe('the Tasks page scoped to one session', () => {
     await visit(`/tasks?createdIn=${SESSION}`);
     requested = [];
 
-    await click(chip()?.querySelector('.ant-tag-close-icon') ?? null);
+    await click(chip()?.querySelector('[role="button"][aria-label="Remove this filter"]') ?? null);
 
     expect(address()).toBe('/tasks');
     expect(chip()).toBeNull();

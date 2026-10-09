@@ -1,0 +1,53 @@
+== without the fix
+   ✓ Menu keys pressed before focus enters the open menu (18)
+     ✓ ["ArrowDown","ArrowDown","Enter"] with focus in the menu (the reference) 107ms
+     ✓ ["ArrowDown","Enter"] with focus in the menu (the reference) 20ms
+     ✓ ["ArrowDown","ArrowUp","Enter"] with focus in the menu (the reference) 25ms
+     ✓ ["Enter","ArrowDown","Enter"] with focus in the menu (the reference) 20ms
+     ✓ ["Enter","ArrowUp","Enter"] with focus in the menu (the reference) 20ms
+     ✓ ["Enter","Enter"] with focus in the menu (the reference) 16ms
+     ✓ ["ArrowUp","Enter"] with focus in the menu (the reference) 16ms
+     ✓ ["ArrowUp","ArrowUp","Enter"] with focus in the menu (the reference) 19ms
+     ✓ ["ArrowUp","ArrowDown","Enter"] with focus in the menu (the reference) 18ms
+     ✓ ["ArrowDown","ArrowDown","Enter"] before focus enters the menu runs what the reference runs 16ms
+     ✓ ["ArrowDown","Enter"] before focus enters the menu runs what the reference runs 14ms
+     ✓ ["ArrowDown","ArrowUp","Enter"] before focus enters the menu runs what the reference runs 15ms
+     ✓ ["Enter","ArrowDown","Enter"] before focus enters the menu runs what the reference runs 15ms
+     ✓ ["Enter","ArrowUp","Enter"] before focus enters the menu runs what the reference runs 14ms
+     ✓ ["Enter","Enter"] before focus enters the menu runs what the reference runs 14ms
+     ✓ ["ArrowUp","Enter"] before focus enters the menu runs what the reference runs 13ms
+     ✓ ["ArrowUp","ArrowUp","Enter"] before focus enters the menu runs what the reference runs 14ms
+     ✓ ["ArrowUp","ArrowDown","Enter"] before focus enters the menu runs what the reference runs 16ms
+     × lets ↑ and ↓ on its closed trigger reach the page, and keeps them once it is open 15ms
+     ✓ opens on the arrows by default 10ms
+   ✓ opening a task from a list (4)
+     ✓ writes the task’s own address, keeps the list behind it, and replaces rather than pushes 147ms
+     ✓ puts the list’s own address back when the panel closes 45ms
+     ✓ opens a task from the every-task view too, and closes back to it 43ms
+     ✓ keeps a list that the task’s own address was opened with — a pasted link is the same place 29ms
+   ✓ stepping down the list with the arrow keys (2)
+     ✓ moves the address with the cursor, replacing each time 45ms
+     ✓ leaves the multi-selection alone, though the address changes under it 50ms
+     × Space with a task open checks that task, not the row whose checkbox has focus 38ms
+     × Space on the open task’s own checkbox checks it once 32ms
+     ✓ Space with no task open is the focused checkbox’s own 20ms
+     × ↓ on the list’s title steps to the first task, and its menu stays shut 52ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected [ true, true ] to deeply equal [ true, false ]
+- Expected
++ Received
+AssertionError: expected [ false, false ] to deeply equal [ true, false ]
+- Expected
++ Received
+AssertionError: expected '/lists/2dwHTRTFRxWLTN' to be '/tasks/2dwHTRTFRxWLTd?list=2dwHTRTFRx…' // Object.is equality
+Expected: "/tasks/2dwHTRTFRxWLTd?list=2dwHTRTFRxWLTN"
+Received: "/lists/2dwHTRTFRxWLTN"
+AssertionError: expected 'true' to be 'false' // Object.is equality
+Expected: "false"
+Received: "true"
+      Tests  4 failed | 26 passed (30)
+== with the fix
+ Test Files  2 passed (2)
+      Tests  30 passed (30)
+tree back to HEAD c02e83a5b
+vitest exit without the fix: 1, with the fix: 0

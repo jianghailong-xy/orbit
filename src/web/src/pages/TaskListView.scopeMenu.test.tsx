@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
@@ -117,15 +116,13 @@ async function visit(path: string): Promise<void> {
   await act(async () => {
     root!.render(
       <QueryClientProvider client={qc}>
-        <AntApp>
-          <BrowserRouter>
-            <Routes>
-              <Route path="/tasks" element={<TaskListView />} />
-              <Route path="/tasks/:id" element={<TaskListView />} />
-              <Route path="/lists/:key" element={<TaskListView />} />
-            </Routes>
-          </BrowserRouter>
-        </AntApp>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/tasks" element={<TaskListView />} />
+            <Route path="/tasks/:id" element={<TaskListView />} />
+            <Route path="/lists/:key" element={<TaskListView />} />
+          </Routes>
+        </BrowserRouter>
       </QueryClientProvider>,
     );
   });
@@ -140,15 +137,20 @@ const click = async (el: Element | null | undefined): Promise<void> => {
   await settle();
 };
 const trigger = () => container.querySelector('h1.page-title .tasks-scope-trigger');
-/** The open menu's entries and group labels, top to bottom, as a reader scans it. */
+/** The open menu's entries and group labels, top to bottom, as a reader scans it: each item by its
+ *  role, each group by the label it is named by. */
 const menuLines = () =>
-  [...document.querySelectorAll('.tasks-scope-menu .ant-dropdown-menu-item, .tasks-scope-menu .ant-dropdown-menu-item-group-title')].map(
-    (el) => (el.textContent ?? '').trim(),
+  [...document.querySelectorAll('[role="menu"].tasks-scope-menu :is([role="menuitem"], [role="group"])')].map((el) =>
+    el.getAttribute('role') === 'group'
+      ? (document.getElementById(el.getAttribute('aria-labelledby') ?? '')?.textContent ?? '').trim()
+      : (el.textContent ?? '').trim(),
   );
 const menuItem = (text: string) =>
-  [...document.querySelectorAll('.tasks-scope-menu .ant-dropdown-menu-item')].find((el) =>
+  [...document.querySelectorAll('[role="menu"].tasks-scope-menu [role="menuitem"]')].find((el) =>
     el.textContent?.includes(text),
   );
+/** The scope on screen is the menu's selected entry. */
+const selected = (el: Element | undefined) => el?.hasAttribute('data-selected');
 
 describe('the Tasks page’s title', () => {
   it('opens every scope the sidebar used to hold, and counts the tasks in no list only once open', async () => {
@@ -175,7 +177,8 @@ describe('the Tasks page’s title', () => {
     expect(menuItem('Release')?.querySelector('.tp-list-dot')?.className).toBe('tp-list-dot running');
     expect(menuItem('下周计划')?.querySelector('.tp-list-dot')?.className).toBe('tp-list-dot ');
     expect(menuItem('NCE3')?.querySelector('.tp-list-dot')?.className).toBe('tp-list-dot done');
-    expect(menuItem('All tasks')?.classList.contains('ant-dropdown-menu-item-selected')).toBe(true);
+    expect(selected(menuItem('All tasks'))).toBe(true);
+    expect(selected(menuItem('Release'))).toBe(false);
   });
 
   it('opens a picked list, whose name the title then carries', async () => {
@@ -190,7 +193,8 @@ describe('the Tasks page’s title', () => {
   it('goes back to every task from a list', async () => {
     await visit(`/lists/${NCE3}`);
     await click(trigger());
-    expect(menuItem('NCE3')?.classList.contains('ant-dropdown-menu-item-selected')).toBe(true);
+    expect(selected(menuItem('NCE3'))).toBe(true);
+    expect(selected(menuItem('All tasks'))).toBe(false);
     await click(menuItem('All tasks'));
     expect(window.location.pathname).toBe('/tasks');
     expect(trigger()?.textContent).toBe('All tasks');
@@ -231,7 +235,7 @@ describe('taskScopeMenuItems', () => {
 
   it('draws no rule and no groups for an owner with no lists', () => {
     const items = taskScopeMenuItems([], 3, '/tasks');
-    expect(items.some((item) => (item as { type?: string })?.type === 'divider')).toBe(false);
+    expect(items.some((item) => (item as { type?: string })?.type === 'separator')).toBe(false);
     expect(items.map(labelText)).toEqual(['node', 'node']);
   });
 

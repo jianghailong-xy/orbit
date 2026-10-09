@@ -1,0 +1,745 @@
+argv: env P43A_SNAPSHOTS=/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots P43A_OUTPUT=/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-out npx playwright test --config ui-migration/p43a.config.mjs --update-snapshots=all
+tree: /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del
+head: 1750eca2224c1ebe36296baa6dbe98bbcd09f559
+uncommitted:
+?? src/web/ui-migration/p32-reference.config.mjs
+load: 9.00 11.65 12.71 6/5086 3419534
+disk: / 60245M available, TMPDIR /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/tmp
+started: 2026-10-08T18:37:24Z
+
+
+Running 104 tests using 1 worker
+
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-projects-folded.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-projects-running.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-projects-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-projects-no-match.png, writing actual.
+  ✓    1 [chromium-light-desktop] › ui-migration/p43a.browser.mjs:121:3 › P4.3a the Projects list › lanes, a folded lane, the open views, search and its clear (3.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-projects-history.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-projects-none-cancelled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-projects-none.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-projects-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-projects-failed.png, writing actual.
+  ✓    2 [chromium-light-desktop] › ui-migration/p43a.browser.mjs:185:3 › P4.3a the Projects list › history, an empty view, no open projects, loading and a failed read (4.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-header.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-status-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-status-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-status-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-status-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-delete-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-header-live.png, writing actual.
+  ✓    3 [chromium-light-desktop] › ui-migration/p43a.browser.mjs:241:3 › P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question (11.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-coordinator.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-coordinator-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-coordinator-replace.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-coordinator-unavailable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-coordinator-rebind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-coordinator-landing.png, writing actual.
+  ✓    4 [chromium-light-desktop] › ui-migration/p43a.browser.mjs:345:3 › P4.3a a project page › the coordinator: its menu and replace question, rebinding, choosing where it opens (4.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-run-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-run-settings-escalation.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-run-settings-edited.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-run-settings-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-run-settings-paused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-run-settings-locked.png, writing actual.
+  ✓    5 [chromium-light-desktop] › ui-migration/p43a.browser.mjs:415:3 › P4.3a a project page › How it runs: the merge check warning, a refused save, pausing and a locked line (4.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-overview-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-goal-chain.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-blockers.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-blocker-review.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-blocker-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-blocker-resolve.png, writing actual.
+  ✓    6 [chromium-light-desktop] › ui-migration/p43a.browser.mjs:471:3 › P4.3a a project page › the work overview, goal, chain, blockers and resolving one (3.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-open-items.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-run-queue.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-run-queue-resume.png, writing actual.
+  ✓    7 [chromium-light-desktop] › ui-migration/p43a.browser.mjs:540:3 › P4.3a a project page › open items and the run queue: run, and resuming a paused list (5.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-acceptance.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-acceptance-method.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-tasks.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-tasks-subtasks.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-tasks-stale.png, writing actual.
+  ✓    8 [chromium-light-desktop] › ui-migration/p43a.browser.mjs:575:3 › P4.3a a project page › acceptance criteria and the task plan with its subtasks (2.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-session-exception.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-session-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-session-handled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-session-handled-refused.png, writing actual.
+  ✓    9 [chromium-light-desktop] › ui-migration/p43a.browser.mjs:629:3 › P4.3a open items in the coordinator conversation › an exception card: the cancel question and marking it handled, refused (3.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-shared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-shared-criteria.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-shared-tasks.png, writing actual.
+  ✓   10 [chromium-light-desktop] › ui-migration/p43a.browser.mjs:680:3 › P4.3a a shared project › its public page (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-tasks-page.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-tasks-row-tooltip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-tasks-scope.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-tasks-failed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-tasks-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-tasks-labels.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-tasks-labels-picked.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-tasks-labelled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-tasks-created-in.png, writing actual.
+  ✓   11 [chromium-light-desktop] › ui-migration/p43a.browser.mjs:704:3 › P4.3a the Tasks page › the scope menu, status tabs, search, labels and the created-in chip (5.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-tasks-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-tasks-selected.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-tasks-run.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-tasks-assign.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-tasks-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-tasks-delete.png, writing actual.
+  ✓   12 [chromium-light-desktop] › ui-migration/p43a.browser.mjs:798:3 › P4.3a the Tasks page › selection, the bulk bar, the run and assign dialogs, and the stop and delete questions (11.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-task-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-task-attribution-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-task-attribution.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-task-attribution-copy.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-task-schedule.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-task-schedule-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-task-acceptance-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-task-acceptance-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-task-prerequisite.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-task-mentions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-desktop/p43a-task-mentions-tooltip.png, writing actual.
+  ✓   13 [chromium-light-desktop] › ui-migration/p43a.browser.mjs:880:3 › P4.3a a task page › loading, the schedule, the acceptance editor, attribution, a prerequisite question and mention deliveries (6.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-projects-folded.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-projects-running.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-projects-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-projects-no-match.png, writing actual.
+  ✓   14 [chromium-light-phone] › ui-migration/p43a.browser.mjs:121:3 › P4.3a the Projects list › lanes, a folded lane, the open views, search and its clear (2.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-projects-history.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-projects-none-cancelled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-projects-none.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-projects-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-projects-failed.png, writing actual.
+  ✓   15 [chromium-light-phone] › ui-migration/p43a.browser.mjs:185:3 › P4.3a the Projects list › history, an empty view, no open projects, loading and a failed read (4.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-header.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-status-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-status-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-status-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-status-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-delete-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-header-live.png, writing actual.
+  ✓   16 [chromium-light-phone] › ui-migration/p43a.browser.mjs:241:3 › P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question (11.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-coordinator.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-coordinator-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-coordinator-replace.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-coordinator-unavailable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-coordinator-rebind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-coordinator-landing.png, writing actual.
+  ✓   17 [chromium-light-phone] › ui-migration/p43a.browser.mjs:345:3 › P4.3a a project page › the coordinator: its menu and replace question, rebinding, choosing where it opens (4.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-run-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-run-settings-escalation.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-run-settings-edited.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-run-settings-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-run-settings-paused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-run-settings-locked.png, writing actual.
+  ✓   18 [chromium-light-phone] › ui-migration/p43a.browser.mjs:415:3 › P4.3a a project page › How it runs: the merge check warning, a refused save, pausing and a locked line (3.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-overview-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-goal-chain.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-blockers.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-blocker-review.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-blocker-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-blocker-resolve.png, writing actual.
+  ✓   19 [chromium-light-phone] › ui-migration/p43a.browser.mjs:471:3 › P4.3a a project page › the work overview, goal, chain, blockers and resolving one (3.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-open-items.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-run-queue.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-run-queue-resume.png, writing actual.
+  ✓   20 [chromium-light-phone] › ui-migration/p43a.browser.mjs:540:3 › P4.3a a project page › open items and the run queue: run, and resuming a paused list (5.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-acceptance.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-acceptance-method.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-acceptance-all.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-tasks.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-tasks-subtasks.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-tasks-stale.png, writing actual.
+  ✓   21 [chromium-light-phone] › ui-migration/p43a.browser.mjs:575:3 › P4.3a a project page › acceptance criteria and the task plan with its subtasks (2.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-session-exception.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-session-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-session-handled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-session-handled-refused.png, writing actual.
+  ✓   22 [chromium-light-phone] › ui-migration/p43a.browser.mjs:629:3 › P4.3a open items in the coordinator conversation › an exception card: the cancel question and marking it handled, refused (2.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-shared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-shared-criteria.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-shared-tasks.png, writing actual.
+  ✓   23 [chromium-light-phone] › ui-migration/p43a.browser.mjs:680:3 › P4.3a a shared project › its public page (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-tasks-page.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-tasks-scope.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-tasks-failed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-tasks-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-tasks-labels.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-tasks-labels-picked.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-tasks-labelled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-tasks-created-in.png, writing actual.
+  ✓   24 [chromium-light-phone] › ui-migration/p43a.browser.mjs:704:3 › P4.3a the Tasks page › the scope menu, status tabs, search, labels and the created-in chip (4.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-tasks-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-tasks-selected.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-tasks-run.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-tasks-assign.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-tasks-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-tasks-delete.png, writing actual.
+  ✓   25 [chromium-light-phone] › ui-migration/p43a.browser.mjs:798:3 › P4.3a the Tasks page › selection, the bulk bar, the run and assign dialogs, and the stop and delete questions (10.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-task-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-task-attribution-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-task-attribution.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-task-schedule.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-task-schedule-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-task-acceptance-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-task-acceptance-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-task-prerequisite.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-light-phone/p43a-task-mentions.png, writing actual.
+  ✓   26 [chromium-light-phone] › ui-migration/p43a.browser.mjs:880:3 › P4.3a a task page › loading, the schedule, the acceptance editor, attribution, a prerequisite question and mention deliveries (4.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-projects-folded.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-projects-running.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-projects-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-projects-no-match.png, writing actual.
+  ✓   27 [chromium-dark-desktop] › ui-migration/p43a.browser.mjs:121:3 › P4.3a the Projects list › lanes, a folded lane, the open views, search and its clear (2.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-projects-history.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-projects-none-cancelled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-projects-none.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-projects-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-projects-failed.png, writing actual.
+  ✓   28 [chromium-dark-desktop] › ui-migration/p43a.browser.mjs:185:3 › P4.3a the Projects list › history, an empty view, no open projects, loading and a failed read (4.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-header.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-status-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-status-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-status-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-status-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-delete-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-header-live.png, writing actual.
+  ✓   29 [chromium-dark-desktop] › ui-migration/p43a.browser.mjs:241:3 › P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question (11.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-coordinator.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-coordinator-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-coordinator-replace.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-coordinator-unavailable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-coordinator-rebind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-coordinator-landing.png, writing actual.
+  ✓   30 [chromium-dark-desktop] › ui-migration/p43a.browser.mjs:345:3 › P4.3a a project page › the coordinator: its menu and replace question, rebinding, choosing where it opens (4.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-run-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-run-settings-escalation.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-run-settings-edited.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-run-settings-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-run-settings-paused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-run-settings-locked.png, writing actual.
+  ✓   31 [chromium-dark-desktop] › ui-migration/p43a.browser.mjs:415:3 › P4.3a a project page › How it runs: the merge check warning, a refused save, pausing and a locked line (3.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-overview-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-goal-chain.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-blockers.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-blocker-review.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-blocker-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-blocker-resolve.png, writing actual.
+  ✓   32 [chromium-dark-desktop] › ui-migration/p43a.browser.mjs:471:3 › P4.3a a project page › the work overview, goal, chain, blockers and resolving one (3.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-open-items.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-run-queue.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-run-queue-resume.png, writing actual.
+  ✓   33 [chromium-dark-desktop] › ui-migration/p43a.browser.mjs:540:3 › P4.3a a project page › open items and the run queue: run, and resuming a paused list (5.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-acceptance.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-acceptance-method.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-tasks.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-tasks-subtasks.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-tasks-stale.png, writing actual.
+  ✓   34 [chromium-dark-desktop] › ui-migration/p43a.browser.mjs:575:3 › P4.3a a project page › acceptance criteria and the task plan with its subtasks (2.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-session-exception.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-session-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-session-handled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-session-handled-refused.png, writing actual.
+  ✓   35 [chromium-dark-desktop] › ui-migration/p43a.browser.mjs:629:3 › P4.3a open items in the coordinator conversation › an exception card: the cancel question and marking it handled, refused (3.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-shared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-shared-criteria.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-shared-tasks.png, writing actual.
+  ✓   36 [chromium-dark-desktop] › ui-migration/p43a.browser.mjs:680:3 › P4.3a a shared project › its public page (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-tasks-page.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-tasks-row-tooltip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-tasks-scope.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-tasks-failed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-tasks-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-tasks-labels.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-tasks-labels-picked.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-tasks-labelled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-tasks-created-in.png, writing actual.
+  ✓   37 [chromium-dark-desktop] › ui-migration/p43a.browser.mjs:704:3 › P4.3a the Tasks page › the scope menu, status tabs, search, labels and the created-in chip (5.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-tasks-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-tasks-selected.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-tasks-run.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-tasks-assign.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-tasks-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-tasks-delete.png, writing actual.
+  ✓   38 [chromium-dark-desktop] › ui-migration/p43a.browser.mjs:798:3 › P4.3a the Tasks page › selection, the bulk bar, the run and assign dialogs, and the stop and delete questions (10.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-task-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-task-attribution-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-task-attribution.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-task-attribution-copy.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-task-schedule.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-task-schedule-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-task-acceptance-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-task-acceptance-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-task-prerequisite.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-task-mentions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-desktop/p43a-task-mentions-tooltip.png, writing actual.
+  ✓   39 [chromium-dark-desktop] › ui-migration/p43a.browser.mjs:880:3 › P4.3a a task page › loading, the schedule, the acceptance editor, attribution, a prerequisite question and mention deliveries (5.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-projects-folded.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-projects-running.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-projects-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-projects-no-match.png, writing actual.
+  ✓   40 [chromium-dark-phone] › ui-migration/p43a.browser.mjs:121:3 › P4.3a the Projects list › lanes, a folded lane, the open views, search and its clear (3.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-projects-history.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-projects-none-cancelled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-projects-none.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-projects-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-projects-failed.png, writing actual.
+  ✓   41 [chromium-dark-phone] › ui-migration/p43a.browser.mjs:185:3 › P4.3a the Projects list › history, an empty view, no open projects, loading and a failed read (4.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-header.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-status-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-status-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-status-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-status-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-delete-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-header-live.png, writing actual.
+  ✓   42 [chromium-dark-phone] › ui-migration/p43a.browser.mjs:241:3 › P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question (11.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-coordinator.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-coordinator-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-coordinator-replace.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-coordinator-unavailable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-coordinator-rebind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-coordinator-landing.png, writing actual.
+  ✓   43 [chromium-dark-phone] › ui-migration/p43a.browser.mjs:345:3 › P4.3a a project page › the coordinator: its menu and replace question, rebinding, choosing where it opens (3.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-run-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-run-settings-escalation.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-run-settings-edited.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-run-settings-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-run-settings-paused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-run-settings-locked.png, writing actual.
+  ✓   44 [chromium-dark-phone] › ui-migration/p43a.browser.mjs:415:3 › P4.3a a project page › How it runs: the merge check warning, a refused save, pausing and a locked line (3.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-overview-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-goal-chain.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-blockers.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-blocker-review.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-blocker-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-blocker-resolve.png, writing actual.
+  ✓   45 [chromium-dark-phone] › ui-migration/p43a.browser.mjs:471:3 › P4.3a a project page › the work overview, goal, chain, blockers and resolving one (3.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-open-items.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-run-queue.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-run-queue-resume.png, writing actual.
+  ✓   46 [chromium-dark-phone] › ui-migration/p43a.browser.mjs:540:3 › P4.3a a project page › open items and the run queue: run, and resuming a paused list (4.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-acceptance.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-acceptance-method.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-acceptance-all.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-tasks.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-tasks-subtasks.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-tasks-stale.png, writing actual.
+  ✓   47 [chromium-dark-phone] › ui-migration/p43a.browser.mjs:575:3 › P4.3a a project page › acceptance criteria and the task plan with its subtasks (2.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-session-exception.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-session-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-session-handled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-session-handled-refused.png, writing actual.
+  ✓   48 [chromium-dark-phone] › ui-migration/p43a.browser.mjs:629:3 › P4.3a open items in the coordinator conversation › an exception card: the cancel question and marking it handled, refused (2.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-shared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-shared-criteria.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-shared-tasks.png, writing actual.
+  ✓   49 [chromium-dark-phone] › ui-migration/p43a.browser.mjs:680:3 › P4.3a a shared project › its public page (1.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-tasks-page.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-tasks-scope.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-tasks-failed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-tasks-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-tasks-labels.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-tasks-labels-picked.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-tasks-labelled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-tasks-created-in.png, writing actual.
+  ✓   50 [chromium-dark-phone] › ui-migration/p43a.browser.mjs:704:3 › P4.3a the Tasks page › the scope menu, status tabs, search, labels and the created-in chip (4.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-tasks-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-tasks-selected.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-tasks-run.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-tasks-assign.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-tasks-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-tasks-delete.png, writing actual.
+  ✓   51 [chromium-dark-phone] › ui-migration/p43a.browser.mjs:798:3 › P4.3a the Tasks page › selection, the bulk bar, the run and assign dialogs, and the stop and delete questions (10.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-task-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-task-attribution-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-task-attribution.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-task-schedule.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-task-schedule-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-task-acceptance-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-task-acceptance-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-task-prerequisite.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/chromium-dark-phone/p43a-task-mentions.png, writing actual.
+  ✓   52 [chromium-dark-phone] › ui-migration/p43a.browser.mjs:880:3 › P4.3a a task page › loading, the schedule, the acceptance editor, attribution, a prerequisite question and mention deliveries (4.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-projects-folded.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-projects-running.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-projects-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-projects-no-match.png, writing actual.
+  ✓   53 [webkit-light-desktop] › ui-migration/p43a.browser.mjs:121:3 › P4.3a the Projects list › lanes, a folded lane, the open views, search and its clear (3.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-projects-history.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-projects-none-cancelled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-projects-none.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-projects-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-projects-failed.png, writing actual.
+  ✓   54 [webkit-light-desktop] › ui-migration/p43a.browser.mjs:185:3 › P4.3a the Projects list › history, an empty view, no open projects, loading and a failed read (4.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-header.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-status-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-status-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-status-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-status-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-delete-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-header-live.png, writing actual.
+  ✓   55 [webkit-light-desktop] › ui-migration/p43a.browser.mjs:241:3 › P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question (19.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-coordinator.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-coordinator-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-coordinator-replace.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-coordinator-unavailable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-coordinator-rebind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-coordinator-landing.png, writing actual.
+  ✓   56 [webkit-light-desktop] › ui-migration/p43a.browser.mjs:345:3 › P4.3a a project page › the coordinator: its menu and replace question, rebinding, choosing where it opens (5.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-run-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-run-settings-escalation.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-run-settings-edited.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-run-settings-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-run-settings-paused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-run-settings-locked.png, writing actual.
+  ✓   57 [webkit-light-desktop] › ui-migration/p43a.browser.mjs:415:3 › P4.3a a project page › How it runs: the merge check warning, a refused save, pausing and a locked line (4.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-overview-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-goal-chain.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-blockers.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-blocker-review.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-blocker-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-blocker-resolve.png, writing actual.
+  ✓   58 [webkit-light-desktop] › ui-migration/p43a.browser.mjs:471:3 › P4.3a a project page › the work overview, goal, chain, blockers and resolving one (5.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-open-items.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-run-queue.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-run-queue-resume.png, writing actual.
+  ✓   59 [webkit-light-desktop] › ui-migration/p43a.browser.mjs:540:3 › P4.3a a project page › open items and the run queue: run, and resuming a paused list (5.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-acceptance.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-acceptance-method.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-tasks.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-tasks-subtasks.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-tasks-stale.png, writing actual.
+  ✓   60 [webkit-light-desktop] › ui-migration/p43a.browser.mjs:575:3 › P4.3a a project page › acceptance criteria and the task plan with its subtasks (3.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-session-exception.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-session-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-session-handled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-session-handled-refused.png, writing actual.
+  ✓   61 [webkit-light-desktop] › ui-migration/p43a.browser.mjs:629:3 › P4.3a open items in the coordinator conversation › an exception card: the cancel question and marking it handled, refused (3.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-shared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-shared-criteria.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-shared-tasks.png, writing actual.
+  ✓   62 [webkit-light-desktop] › ui-migration/p43a.browser.mjs:680:3 › P4.3a a shared project › its public page (1.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-tasks-page.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-tasks-row-tooltip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-tasks-scope.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-tasks-failed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-tasks-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-tasks-labels.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-tasks-labels-picked.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-tasks-labelled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-tasks-created-in.png, writing actual.
+  ✓   63 [webkit-light-desktop] › ui-migration/p43a.browser.mjs:704:3 › P4.3a the Tasks page › the scope menu, status tabs, search, labels and the created-in chip (6.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-tasks-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-tasks-selected.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-tasks-run.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-tasks-assign.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-tasks-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-tasks-delete.png, writing actual.
+  ✓   64 [webkit-light-desktop] › ui-migration/p43a.browser.mjs:798:3 › P4.3a the Tasks page › selection, the bulk bar, the run and assign dialogs, and the stop and delete questions (11.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-task-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-task-attribution-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-task-attribution.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-task-attribution-copy.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-task-schedule.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-task-schedule-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-task-acceptance-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-task-acceptance-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-task-prerequisite.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-task-mentions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-desktop/p43a-task-mentions-tooltip.png, writing actual.
+  ✓   65 [webkit-light-desktop] › ui-migration/p43a.browser.mjs:880:3 › P4.3a a task page › loading, the schedule, the acceptance editor, attribution, a prerequisite question and mention deliveries (7.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-projects-folded.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-projects-running.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-projects-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-projects-no-match.png, writing actual.
+  ✓   66 [webkit-light-phone] › ui-migration/p43a.browser.mjs:121:3 › P4.3a the Projects list › lanes, a folded lane, the open views, search and its clear (4.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-projects-history.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-projects-none-cancelled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-projects-none.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-projects-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-projects-failed.png, writing actual.
+  ✓   67 [webkit-light-phone] › ui-migration/p43a.browser.mjs:185:3 › P4.3a the Projects list › history, an empty view, no open projects, loading and a failed read (4.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-header.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-status-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-status-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-status-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-status-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-delete-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-header-live.png, writing actual.
+  ✓   68 [webkit-light-phone] › ui-migration/p43a.browser.mjs:241:3 › P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question (13.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-coordinator.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-coordinator-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-coordinator-replace.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-coordinator-unavailable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-coordinator-rebind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-coordinator-landing.png, writing actual.
+  ✓   69 [webkit-light-phone] › ui-migration/p43a.browser.mjs:345:3 › P4.3a a project page › the coordinator: its menu and replace question, rebinding, choosing where it opens (4.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-run-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-run-settings-escalation.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-run-settings-edited.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-run-settings-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-run-settings-paused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-run-settings-locked.png, writing actual.
+  ✓   70 [webkit-light-phone] › ui-migration/p43a.browser.mjs:415:3 › P4.3a a project page › How it runs: the merge check warning, a refused save, pausing and a locked line (4.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-overview-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-goal-chain.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-blockers.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-blocker-review.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-blocker-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-blocker-resolve.png, writing actual.
+  ✓   71 [webkit-light-phone] › ui-migration/p43a.browser.mjs:471:3 › P4.3a a project page › the work overview, goal, chain, blockers and resolving one (3.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-open-items.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-run-queue.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-run-queue-resume.png, writing actual.
+  ✓   72 [webkit-light-phone] › ui-migration/p43a.browser.mjs:540:3 › P4.3a a project page › open items and the run queue: run, and resuming a paused list (5.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-acceptance.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-acceptance-method.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-acceptance-all.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-tasks.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-tasks-subtasks.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-tasks-stale.png, writing actual.
+  ✓   73 [webkit-light-phone] › ui-migration/p43a.browser.mjs:575:3 › P4.3a a project page › acceptance criteria and the task plan with its subtasks (3.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-session-exception.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-session-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-session-handled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-session-handled-refused.png, writing actual.
+  ✓   74 [webkit-light-phone] › ui-migration/p43a.browser.mjs:629:3 › P4.3a open items in the coordinator conversation › an exception card: the cancel question and marking it handled, refused (3.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-shared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-shared-criteria.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-shared-tasks.png, writing actual.
+  ✓   75 [webkit-light-phone] › ui-migration/p43a.browser.mjs:680:3 › P4.3a a shared project › its public page (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-tasks-page.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-tasks-scope.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-tasks-failed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-tasks-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-tasks-labels.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-tasks-labels-picked.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-tasks-labelled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-tasks-created-in.png, writing actual.
+  ✓   76 [webkit-light-phone] › ui-migration/p43a.browser.mjs:704:3 › P4.3a the Tasks page › the scope menu, status tabs, search, labels and the created-in chip (4.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-tasks-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-tasks-selected.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-tasks-run.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-tasks-assign.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-tasks-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-tasks-delete.png, writing actual.
+  ✓   77 [webkit-light-phone] › ui-migration/p43a.browser.mjs:798:3 › P4.3a the Tasks page › selection, the bulk bar, the run and assign dialogs, and the stop and delete questions (10.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-task-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-task-attribution-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-task-attribution.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-task-schedule.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-task-schedule-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-task-acceptance-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-task-acceptance-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-task-prerequisite.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-light-phone/p43a-task-mentions.png, writing actual.
+  ✓   78 [webkit-light-phone] › ui-migration/p43a.browser.mjs:880:3 › P4.3a a task page › loading, the schedule, the acceptance editor, attribution, a prerequisite question and mention deliveries (4.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-projects-folded.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-projects-running.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-projects-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-projects-no-match.png, writing actual.
+  ✓   79 [webkit-dark-desktop] › ui-migration/p43a.browser.mjs:121:3 › P4.3a the Projects list › lanes, a folded lane, the open views, search and its clear (3.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-projects-history.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-projects-none-cancelled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-projects-none.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-projects-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-projects-failed.png, writing actual.
+  ✓   80 [webkit-dark-desktop] › ui-migration/p43a.browser.mjs:185:3 › P4.3a the Projects list › history, an empty view, no open projects, loading and a failed read (4.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-header.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-status-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-status-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-status-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-status-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-delete-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-header-live.png, writing actual.
+  ✓   81 [webkit-dark-desktop] › ui-migration/p43a.browser.mjs:241:3 › P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question (13.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-coordinator.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-coordinator-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-coordinator-replace.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-coordinator-unavailable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-coordinator-rebind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-coordinator-landing.png, writing actual.
+  ✓   82 [webkit-dark-desktop] › ui-migration/p43a.browser.mjs:345:3 › P4.3a a project page › the coordinator: its menu and replace question, rebinding, choosing where it opens (5.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-run-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-run-settings-escalation.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-run-settings-edited.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-run-settings-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-run-settings-paused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-run-settings-locked.png, writing actual.
+  ✓   83 [webkit-dark-desktop] › ui-migration/p43a.browser.mjs:415:3 › P4.3a a project page › How it runs: the merge check warning, a refused save, pausing and a locked line (4.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-overview-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-goal-chain.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-blockers.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-blocker-review.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-blocker-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-blocker-resolve.png, writing actual.
+  ✓   84 [webkit-dark-desktop] › ui-migration/p43a.browser.mjs:471:3 › P4.3a a project page › the work overview, goal, chain, blockers and resolving one (5.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-open-items.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-run-queue.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-run-queue-resume.png, writing actual.
+  ✓   85 [webkit-dark-desktop] › ui-migration/p43a.browser.mjs:540:3 › P4.3a a project page › open items and the run queue: run, and resuming a paused list (8.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-acceptance.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-acceptance-method.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-tasks.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-tasks-subtasks.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-tasks-stale.png, writing actual.
+  ✓   86 [webkit-dark-desktop] › ui-migration/p43a.browser.mjs:575:3 › P4.3a a project page › acceptance criteria and the task plan with its subtasks (8.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-session-exception.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-session-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-session-handled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-session-handled-refused.png, writing actual.
+  ✓   87 [webkit-dark-desktop] › ui-migration/p43a.browser.mjs:629:3 › P4.3a open items in the coordinator conversation › an exception card: the cancel question and marking it handled, refused (3.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-shared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-shared-criteria.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-shared-tasks.png, writing actual.
+  ✓   88 [webkit-dark-desktop] › ui-migration/p43a.browser.mjs:680:3 › P4.3a a shared project › its public page (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-tasks-page.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-tasks-row-tooltip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-tasks-scope.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-tasks-failed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-tasks-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-tasks-labels.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-tasks-labels-picked.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-tasks-labelled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-tasks-created-in.png, writing actual.
+  ✓   89 [webkit-dark-desktop] › ui-migration/p43a.browser.mjs:704:3 › P4.3a the Tasks page › the scope menu, status tabs, search, labels and the created-in chip (6.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-tasks-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-tasks-selected.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-tasks-run.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-tasks-assign.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-tasks-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-tasks-delete.png, writing actual.
+  ✓   90 [webkit-dark-desktop] › ui-migration/p43a.browser.mjs:798:3 › P4.3a the Tasks page › selection, the bulk bar, the run and assign dialogs, and the stop and delete questions (11.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-task-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-task-attribution-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-task-attribution.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-task-attribution-copy.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-task-schedule.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-task-schedule-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-task-acceptance-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-task-acceptance-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-task-prerequisite.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-task-mentions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-desktop/p43a-task-mentions-tooltip.png, writing actual.
+  ✓   91 [webkit-dark-desktop] › ui-migration/p43a.browser.mjs:880:3 › P4.3a a task page › loading, the schedule, the acceptance editor, attribution, a prerequisite question and mention deliveries (7.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-projects-folded.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-projects-running.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-projects-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-projects-no-match.png, writing actual.
+  ✓   92 [webkit-dark-phone] › ui-migration/p43a.browser.mjs:121:3 › P4.3a the Projects list › lanes, a folded lane, the open views, search and its clear (3.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-projects-history.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-projects-none-cancelled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-projects-none.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-projects-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-projects-failed.png, writing actual.
+  ✓   93 [webkit-dark-phone] › ui-migration/p43a.browser.mjs:185:3 › P4.3a the Projects list › history, an empty view, no open projects, loading and a failed read (4.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-header.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-header-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-status-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-status-done.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-status-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-status-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-delete-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-header-live.png, writing actual.
+  ✓   94 [webkit-dark-phone] › ui-migration/p43a.browser.mjs:241:3 › P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question (12.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-coordinator.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-coordinator-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-coordinator-replace.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-coordinator-unavailable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-coordinator-rebind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-coordinator-landing.png, writing actual.
+  ✓   95 [webkit-dark-phone] › ui-migration/p43a.browser.mjs:345:3 › P4.3a a project page › the coordinator: its menu and replace question, rebinding, choosing where it opens (4.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-run-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-run-settings-escalation.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-run-settings-edited.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-run-settings-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-run-settings-paused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-run-settings-locked.png, writing actual.
+  ✓   96 [webkit-dark-phone] › ui-migration/p43a.browser.mjs:415:3 › P4.3a a project page › How it runs: the merge check warning, a refused save, pausing and a locked line (4.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-overview-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-goal-chain.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-blockers.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-blocker-review.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-blocker-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-blocker-resolve.png, writing actual.
+  ✓   97 [webkit-dark-phone] › ui-migration/p43a.browser.mjs:471:3 › P4.3a a project page › the work overview, goal, chain, blockers and resolving one (3.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-open-items.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-run-queue.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-run-queue-resume.png, writing actual.
+  ✓   98 [webkit-dark-phone] › ui-migration/p43a.browser.mjs:540:3 › P4.3a a project page › open items and the run queue: run, and resuming a paused list (5.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-acceptance.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-acceptance-method.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-acceptance-all.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-tasks.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-tasks-subtasks.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-tasks-stale.png, writing actual.
+  ✓   99 [webkit-dark-phone] › ui-migration/p43a.browser.mjs:575:3 › P4.3a a project page › acceptance criteria and the task plan with its subtasks (3.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-session-exception.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-session-cancel.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-session-handled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-session-handled-refused.png, writing actual.
+  ✓  100 [webkit-dark-phone] › ui-migration/p43a.browser.mjs:629:3 › P4.3a open items in the coordinator conversation › an exception card: the cancel question and marking it handled, refused (3.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-shared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-shared-criteria.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-shared-tasks.png, writing actual.
+  ✓  101 [webkit-dark-phone] › ui-migration/p43a.browser.mjs:680:3 › P4.3a a shared project › its public page (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-tasks-page.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-tasks-scope.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-tasks-failed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-tasks-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-tasks-labels.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-tasks-labels-picked.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-tasks-labelled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-tasks-created-in.png, writing actual.
+  ✓  102 [webkit-dark-phone] › ui-migration/p43a.browser.mjs:704:3 › P4.3a the Tasks page › the scope menu, status tabs, search, labels and the created-in chip (4.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-tasks-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-tasks-selected.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-tasks-run.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-tasks-assign.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-tasks-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-tasks-delete.png, writing actual.
+  ✓  103 [webkit-dark-phone] › ui-migration/p43a.browser.mjs:798:3 › P4.3a the Tasks page › selection, the bulk bar, the run and assign dialogs, and the stop and delete questions (10.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-task-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-task-attribution-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-task-attribution.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-task-schedule.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-task-schedule-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-task-acceptance-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-task-acceptance-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-task-prerequisite.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p43a-del-shots/webkit-dark-phone/p43a-task-mentions.png, writing actual.
+  ✓  104 [webkit-dark-phone] › ui-migration/p43a.browser.mjs:880:3 › P4.3a a task page › loading, the schedule, the acceptance editor, attribution, a prerequisite question and mention deliveries (4.2s)
+
+  104 passed (9.4m)
+exit=0
+load: 9.83 11.38 12.04 6/4889 3472529
+ended: 2026-10-08T18:46:49Z

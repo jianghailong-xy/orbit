@@ -322,7 +322,7 @@ class ManagementLiveTest {
         signIn(owner)
         openWorkspace(workspace)
         compose.onNodeWithContentDescription("Workspace settings").performClick()
-        await("Smart model selection for tasks")
+        await("Working directory")
         field("Name").performTextReplacement("Stack workspace 2")
         compose.onAllNodes(hasSetTextAction()).filter(hasText("Name").not() and hasText("Path").not()).onFirst().performTextInput("Be brief.")
         capture("live-workspace-settings")
@@ -330,12 +330,12 @@ class ManagementLiveTest {
         eventually("server: workspace name and instructions saved") {
             read(owner, "workspaces/$workspace").jsonObject.let { it.s("name") == "Stack workspace 2" && it.s("appendSystemPrompt") == "Be brief." }
         }
-        compose.onNodeWithContentDescription("Workspace settings").performClick(); await("Smart model selection for tasks")
+        compose.onNodeWithContentDescription("Workspace settings").performClick(); await("Working directory")
         field("Name").performTextReplacement("Cancelled edit")
         click(hasText("Cancel") and hasClickAction(), scroll = false)
         compose.waitForIdle(); Thread.sleep(1_500)
         ok("server: Cancel wrote nothing", read(owner, "workspaces/$workspace").jsonObject.s("name") == "Stack workspace 2")
-        compose.onNodeWithContentDescription("Workspace settings").performClick(); await("Smart model selection for tasks")
+        compose.onNodeWithContentDescription("Workspace settings").performClick(); await("Working directory")
         ok("the form opens again on the server's record, not the cancelled edit", shows(hasSetTextAction() and hasText("Stack workspace 2")))
         click(hasText("Cancel") and hasClickAction(), scroll = false)
     }

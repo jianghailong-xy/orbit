@@ -47,6 +47,7 @@ fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: 
         "workspace" -> WorkspaceSettings(api, route.workspaceId, revision, back, workspaceDeleted, changed)
         "runners" -> RunnersList(api, revision, runner)
         "sharing" -> SharingSettings(api, revision)
+        "access-tokens" -> AccessTokensSettings(api, revision)
         "share" -> route.recordId?.split(':', limit = 2)?.takeIf { it.size == 2 }?.let { (kind, id) -> ShareResourceSettings(api, revision, kind, id) }
         "admin" -> AdminSettings(api, revision, route.recordId, open, back)
         "notifications" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -62,8 +63,9 @@ fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: 
 
 fun settingsTitle(page: String?, record: String? = null): String = when (page) {
     "share" -> ShareCopy.title(record?.substringBefore(':') ?: "SESSION")
-    "profile" -> "Edit profile"; "password" -> "Change password"; "providers" -> "Providers"
-    "workspace" -> "Workspace settings"; "runners" -> "Runners"; "sharing" -> "Shared links"
+    "profile" -> "Edit profile"; "password" -> "Change password"
+    "providers" -> record?.takeIf { it.startsWith("key:") }?.let { providerKeyTitle(it.removePrefix("key:")) } ?: "Providers"
+    "workspace" -> "Workspace settings"; "runners" -> "Runners"; "sharing" -> "Shared links"; "access-tokens" -> AccessTokens.TITLE
     "admin" -> "Admin"; "notifications" -> "Notifications"; "about" -> "About"; else -> "Settings"
 }
 
@@ -73,18 +75,32 @@ internal fun settingsRunnersValue(runners: List<JsonObject>): String =
 
 internal fun settingsSharedLinksValue(active: Int): String = if (active > 0) "$active active" else "None"
 
+/** SettingsHome.accessTokensValue: "3 active" — the tokens that still work. */
+internal fun settingsAccessTokensValue(active: Int): String = if (active > 0) "$active active" else "None"
+
+/** SettingsCopy's smart model selection switch: the one switch on the list whose name doesn't say what it does, so the web's hint
+ * goes under it. */
+internal const val SMART_MODEL_SELECTION = "Smart model selection"
+internal const val SMART_MODEL_SELECTION_HINT = "Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before."
+
+/** UserPreferences.smartModelSelection: on only for an explicit boolean true; absent, or anything else, reads as off. */
+internal fun smartModelSelection(preferences: JsonObject?): Boolean =
+    (preferences?.get("modelRouting") as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true
+
 /** The server as the sign-in screen asked for it: the host, and the port when it is not the scheme's own. */
 internal fun settingsInstanceName(server: String): String? = server.toHttpUrlOrNull()?.let {
     if (it.port == HttpUrl.defaultPort(it.scheme)) it.host else "${it.host}:${it.port}"
 }
 
-internal fun settingsSignOutTitle(instance: String?) = instance?.let { "Sign out of $it?" } ?: "Sign out?"
+/** SettingsHome.signOutTitle: no server name — the instance is the app's business, and the account is on the screen behind it. */
+internal const val SETTINGS_SIGN_OUT_TITLE = "Sign out?"
 
 /** The account, then SettingsHome's groups, then Sign out and the build — iOS's Settings list. */
 @Composable
 private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) -> Unit, logout: () -> Unit,
     deviceAlerts: () -> Boolean?) {
     val appearance = LocalAppearanceChanged.current
+    val smartSelectionChanged = LocalSmartSelectionChanged.current
     val record = remember(api) { PersonalRecord { api.get("users/me") } }
     PersonalRecordLifecycle(record, revision)
     val scope = rememberCoroutineScope()
@@ -94,6 +110,7 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
     val instance = remember(api) { settingsInstanceName(api.handle.account.server) }
     var runners by remember(api) { mutableStateOf<String?>(null) }
     var sharedLinks by remember(api) { mutableStateOf<String?>(null) }
+    var accessTokens by remember(api) { mutableStateOf<String?>(null) }
     var alerts by remember { mutableStateOf(deviceAlerts()) }
     var signingOut by remember { mutableStateOf(false) }
     var resumed by remember { mutableIntStateOf(0) }
@@ -114,12 +131,21 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             try { sharedLinks = settingsSharedLinksValue(sharingList(api.get("share-links")).list("links").count { it.text("state") == "ACTIVE" }) }
             catch (e: CancellationException) { throw e } catch (_: Exception) { }
         }
+        launch {
+            try { accessTokens = settingsAccessTokensValue(AccessTokens.tokens(accessTokenList(api.get("access-tokens")), AccessTokens.Tab.ACTIVE).size) }
+            catch (e: CancellationException) { throw e } catch (_: Exception) { }
+        }
     }
     fun page(id: String) = open(OrbitRoute(Destination.SETTINGS, id))
     fun preference(key: String, value: JsonPrimitive) {
         scope.launch {
-            if (record.mutate { api.patch("users/me/preferences", buildJsonObject { put(key, value) }) } && key == "theme")
-                appearance(((record.value as? JsonObject)?.get("preferences") as? JsonObject)?.text("theme")?.ifBlank { null } ?: "system")
+            if (!record.mutate { api.patch("users/me/preferences", buildJsonObject { put(key, value) }) }) return@launch
+            // What the server now has, read back after the write, is what the whole app follows.
+            val saved = (record.value as? JsonObject)?.get("preferences") as? JsonObject
+            when (key) {
+                "theme" -> appearance(saved?.text("theme")?.ifBlank { null } ?: "system")
+                "modelRouting" -> smartSelectionChanged(smartModelSelection(saved))
+            }
         }
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -156,6 +182,9 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             // The engine's guess at the next message after a Claude turn (docs/prompt-suggestions-design.md); absent means on.
             SettingsSwitch("Suggested replies", R.drawable.ic_suggestion, (preferences["promptSuggestions"] as? JsonPrimitive)?.booleanOrNull != false,
                 record.ready) { preference("promptSuggestions", JsonPrimitive(it)) }
+            // Off unless the account turned it on; written alone (iOS 9fb3ae6ee), its glyph beside its name (614a21410).
+            SettingsSwitch(SMART_MODEL_SELECTION, R.drawable.ic_sparkles, smartModelSelection(preferences), record.ready,
+                hint = SMART_MODEL_SELECTION_HINT) { preference("modelRouting", JsonPrimitive(it)) }
         }
         SettingsGroup("Machines & models") {
             SettingsLink("Runners", R.drawable.ic_runner, runners) { page("runners") }
@@ -170,6 +199,7 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             SettingsValue("Email", R.drawable.ic_mail, user?.text("email").orEmpty())
             SettingsValue("Instance", R.drawable.ic_globe, instance.orEmpty())
             SettingsLink("Shared links", R.drawable.ic_link, sharedLinks) { page("sharing") }
+            SettingsLink(AccessTokens.TITLE, R.drawable.ic_key, accessTokens) { page("access-tokens") }
             SettingsLink("Change password", R.drawable.ic_password) { page("password") }
             if (user?.text("role") == "ADMIN") SettingsLink("Admin", R.drawable.ic_admin) { page("admin") }
         }
@@ -186,7 +216,7 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         TextButton(onClick = { open(OrbitRoute(Destination.BUILD)) }, Modifier.align(Alignment.CenterHorizontally)) { Text("Build information") }
     }
-    if (signingOut) AlertDialog(onDismissRequest = { signingOut = false }, title = { Text(settingsSignOutTitle(instance)) },
+    if (signingOut) AlertDialog(onDismissRequest = { signingOut = false }, title = { Text(SETTINGS_SIGN_OUT_TITLE) },
         confirmButton = { TextButton(onClick = { signingOut = false; logout() }) { Text("Sign out", color = MaterialTheme.colorScheme.error) } },
         dismissButton = { TextButton(onClick = { signingOut = false }) { Text("Cancel") } })
 }
@@ -238,8 +268,9 @@ private fun SettingsPicker(title: String, icon: Int, current: String, options: L
 }
 
 @Composable
-private fun SettingsSwitch(title: String, icon: Int, checked: Boolean, enabled: Boolean, change: (Boolean) -> Unit) {
+private fun SettingsSwitch(title: String, icon: Int, checked: Boolean, enabled: Boolean, hint: String? = null, change: (Boolean) -> Unit) {
     ListItem(headlineContent = { Text(title) }, colors = settingsRowColors(), leadingContent = { SettingsIcon(icon) },
+        supportingContent = hint?.let { { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } },
         trailingContent = { Switch(checked = checked, onCheckedChange = null, enabled = enabled) },
         modifier = Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = change))
 }

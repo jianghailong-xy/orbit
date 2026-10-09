@@ -377,6 +377,13 @@ final class AppModel {
     /// Entries are released in `applySessionSnapshot` the moment a snapshot without the row lands:
     /// from then on the row isn't in `lastSnapshot` either, so no later diff can announce it.
     private var filedSessions: Set<String> = []
+    /// Sessions being moved to Trash from this device. Delete takes the row out of every loaded list
+    /// on the tap (`hideTrashedSession`), and these stay out of every list written until the move has
+    /// settled — a read that left before the server had the move would put the row back for a beat,
+    /// and so would the re-read the delete before it started, when rows are deleted one after
+    /// another. Released (`revealTrashedSession`) once the lists have been read again behind the
+    /// move, at once if the server refuses it, and by an Undo that brings the row back.
+    private var trashingSessions: Set<String> = []
     /// The last badge string written to the OS (dock tile / app icon). Both writes cross a process
     /// boundary, so an unchanged snapshot skips them — `didWriteBadge` keeps the FIRST snapshot after
     /// launch/sign-in writing even when it matches the initial value, since a badge set by a silent
@@ -1512,6 +1519,7 @@ final class AppModel {
     /// `notify: false` is for a snapshot whose transitions the caller already accounted for (a local
     /// purge), where the diff would otherwise post a bogus "finished" alert.
     private func applySessionSnapshot(_ list: [Session], notify: Bool = true) {
+        let list = SessionFilter.removing(trashingSessions, from: list)   // see `trashingSessions`
         openListAnswered = true   // a server-answered list is in hand; see `openListAnswered`
         openListReader?.invalidate()   // see `openListReader`; a fetch marks it adopted once this is done
         openListIsReaderBase = false
@@ -1993,6 +2001,33 @@ final class AppModel {
         dropIfOpen(id)
     }
 
+    /// Take a session being moved to Trash out of every list it is loaded in — the Open snapshot (and
+    /// through it the workspace list, the drawer's marks and the badge), the pane's own Completed list,
+    /// and the project page's members — and keep it out of the reads that land meanwhile
+    /// (`trashingSessions`).
+    private func hideTrashedSession(_ id: String) {
+        trashingSessions.insert(id)
+        agents?.hideTrashedSession(id)
+        if sessions.contains(where: { $0.id == id }) {
+            applySessionSnapshot(SessionFilter.removing(id, from: sessions), notify: false)
+        }
+        #if os(iOS)
+        if projectSessions.contains(where: { $0.id == id }) {
+            projectSessions = SessionFilter.removing(id, from: projectSessions)
+        }
+        // A poll draws the Completed members from here, so a Completed row has to leave it too.
+        projectCompletedSessions = projectCompletedSessions.mapValues { SessionFilter.removing(id, from: $0) }
+        #endif
+    }
+
+    /// The lists may show the session again. The Open list in hand may lack a row the server still
+    /// has (a refused move), so the next read has to answer with its list, never "unchanged".
+    private func revealTrashedSession(_ id: String) {
+        guard trashingSessions.remove(id) != nil else { return }
+        agents?.revealTrashedSession(id)
+        openListReader?.invalidate()
+    }
+
     // MARK: session row actions (shared by the menu-bar quick items + the agent session lists)
 
     /// What the app's toast host draws (see `toastHost()`): the toasts that wait for you, pinned, and
@@ -2169,6 +2204,9 @@ final class AppModel {
             return
         }
         let name = toastSessionTitle(id)
+        // An Undo can come while the move to Trash is still reading its lists again; the row is
+        // coming back, so nothing may keep it out now.
+        revealTrashedSession(id)
         Task { @MainActor in
             do { try await api.restoreSession(id) }
             catch {
@@ -2182,24 +2220,31 @@ final class AppModel {
         }
     }
 
-    /// Soft-delete a session to the trash — reversible via Undo (or the Trash view).
+    /// Soft-delete a session to the trash — reversible via Undo (or the Trash view). The row leaves
+    /// every list on the tap, and its console closes, rather than once the server has answered and
+    /// the lists have all been read again; the toast comes as soon as the server has the move, with
+    /// the re-read behind it (docs/mocks/toast-system/04-rules.html). A refusal brings the row back.
     func deleteSession(_ id: String) {
         guard let api else { return }
         let name = toastSessionTitle(id)
         filedSessions.insert(id)
+        hideTrashedSession(id)
+        dropIfOpen(id)
         Task { @MainActor in
             defer { filedSessions.remove(id) }
             do { try await api.deleteSession(id) }
             catch {
+                revealTrashedSession(id)
                 showToast("Couldn't move to Trash", sessionID: id, sessionTitle: name,
                           detail: Self.toastDetail(error), tone: .error)
+                await reloadSessionLists()
                 return
             }
             sessionDetails.remove(id)
-            dropIfOpen(id)
-            await reloadSessionLists()
             showToast("Moved to Trash", sessionID: id, sessionTitle: name,
                       tone: .neutral, icon: "trash", canUndo: true)
+            await reloadSessionLists()
+            revealTrashedSession(id)
         }
     }
 
@@ -2441,8 +2486,10 @@ final class AppModel {
             }
             let rows = try await openRead.value + completedRead.value
             guard projectSessionsAddress == address, !Task.isCancelled else { return }
-            // An older server may ignore projectId. It must never put unrelated sessions here.
-            projectSessions = SessionProjectMembers.members(of: address.projectID, in: rows)
+            // An older server may ignore projectId. It must never put unrelated sessions here, nor a
+            // row on its way to Trash (`trashingSessions`).
+            let kept = SessionFilter.removing(trashingSessions, from: rows)
+            projectSessions = SessionProjectMembers.members(of: address.projectID, in: kept)
             projectCompletedSessions[key] = projectSessions.filter { $0.effectiveLifecycleState != .open }
             projectSessionsReadAt = Date()
             projectSessionsError = nil
@@ -2472,7 +2519,8 @@ final class AppModel {
         do {
             let rows = try await api.listSessions(view: .completed, projectId: address.projectID)
             guard projectSessionsAddress == address, !Task.isCancelled else { return }
-            let completed = SessionProjectMembers.members(of: address.projectID, in: rows)
+            let kept = SessionFilter.removing(trashingSessions, from: rows)
+            let completed = SessionProjectMembers.members(of: address.projectID, in: kept)
             projectCompletedSessions[key] = completed
             projectSessionsReadAt = Date()
             let members = SessionProjectMembers.members(of: address.projectID, in: sessions + completed)
