@@ -17,9 +17,15 @@ export const dialog = (page, title) => page.locator('[role="dialog"], [role="ale
 export const notifications = (page) => page.getByRole('region', { name: 'Notifications', exact: true });
 
 /** Wait out enter and leave animations (the replaced controls run theirs whatever motion is asked for),
- *  so an observation reads where a step ended up, not a frame of its transition. */
+ *  so an observation reads where a step ended up, not a frame of its transition. A replaced popup that
+ *  has just been asked to open first sits in rc-motion's prepare step, its animation paused at opacity 0
+ *  under the classes `<motion>-appear`/`-enter` (`-leave` while it closes), and is not running yet; Base
+ *  UI marks its own transitions with data-starting-style and data-ending-style. */
 export const settled = (page) => page.waitForFunction(
-  () => document.getAnimations().every((animation) => animation.playState !== 'running' || animation.effect?.getTiming().iterations === Infinity),
+  () => document.getAnimations().every((animation) => animation.playState !== 'running' || animation.effect?.getTiming().iterations === Infinity)
+    && ![...document.querySelectorAll('[class*="-appear"], [class*="-enter"], [class*="-leave"]')]
+      .some((el) => [...el.classList].some((name) => /-(appear|enter|leave)(-(prepare|start|active))?$/.test(name)))
+    && !document.querySelector('[data-starting-style], [data-ending-style]'),
   null, { timeout: 3000 },
 ).catch(() => {});
 
