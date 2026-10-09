@@ -16,6 +16,7 @@ import io.orbitd.android.directory.StatusMessage
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitRoute
+import io.orbitd.android.toast.OrbitToasts
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 
@@ -62,6 +63,7 @@ internal fun WikiPlanScreen(store: WikiStore, route: OrbitRoute, data: Directory
     var editing by rememberSaveable(stateSaver = editTargetSaver) { mutableStateOf<WikiPlanEditTarget?>(null) }
     var refused by remember { mutableStateOf<Map<String, List<WikiPlanGateError>>>(emptyMap()) }
     var notice by rememberSaveable { mutableStateOf<String?>(null) }
+    var noticeTitle by rememberSaveable { mutableStateOf(WikiCopy.planDraftFailed) }
     var refreshing by remember { mutableStateOf(false) }
     val slug = route.id.takeIf { route.destination != Destination.WIKI_PLAN }
     val index = route.wikiPart.takeIf { route.destination == Destination.WIKI_PLAN_SECTION }
@@ -81,21 +83,21 @@ internal fun WikiPlanScreen(store: WikiStore, route: OrbitRoute, data: Directory
     // MARK: the writes
 
     /** Draft plan, or Redraft… with the owner's words. True once the server took it. */
-    suspend fun redraft(words: String?): Boolean {
+    suspend fun redraft(words: String?, failed: String = WikiCopy.planDraftFailed): Boolean {
         val (created, refusal) = store.redraftPlan(words)
-        if (refusal != null) { notice = refusal; return false }
-        WikiToast.show(if (created) WikiPlanCopy.redraftAsked else WikiPlanCopy.redraftAlready)
+        if (refusal != null) { noticeTitle = failed; notice = refusal; return false }
+        OrbitToasts.show(if (created) WikiPlanCopy.redraftAsked else WikiPlanCopy.redraftAlready)
         return true
     }
     suspend fun confirm(version: Int) {
         when (val answer = store.confirmPlan(version)) {
             is WikiStore.PlanWrite.Done -> {
-                WikiToast.show(WikiPlanCopy.confirmed(answer.version))
+                OrbitToasts.show(WikiPlanCopy.confirmed(answer.version))
                 if (route.wikiVersion != null && slug == null) nav.replace(OrbitRoute(Destination.WIKI_PLAN))
             }
-            is WikiStore.PlanWrite.Refused -> notice = answer.errors.joinToString("\n") { "${it.path} ${it.message}" }
-            is WikiStore.PlanWrite.Failed -> notice = answer.message
-            is WikiStore.PlanWrite.AcceptedNotConfirmed -> notice = WikiPlanCopy.acceptedNotConfirmed(answer.version, answer.why)
+            is WikiStore.PlanWrite.Refused -> { noticeTitle = WikiCopy.planConfirmFailed; notice = answer.errors.joinToString("\n") { "${it.path} ${it.message}" } }
+            is WikiStore.PlanWrite.Failed -> { noticeTitle = WikiCopy.planConfirmFailed; notice = answer.message }
+            is WikiStore.PlanWrite.AcceptedNotConfirmed -> { noticeTitle = WikiCopy.planConfirmFailed; notice = WikiPlanCopy.acceptedNotConfirmed(answer.version, answer.why) }
         }
     }
     /** Accept: with no other draft waiting, one press accepts and confirms — two requests, the second only once the gate
@@ -107,23 +109,23 @@ internal fun WikiPlanScreen(store: WikiStore, route: OrbitRoute, data: Directory
         val (accepted, confirmed) = store.acceptPlanProposal(proposal.id, WikiPlanLogic.acceptConfirms(plan) && !edit)
         when (accepted) {
             is WikiStore.PlanWrite.Done -> {
-                WikiToast.show(if (confirmed) WikiPlanCopy.confirmed(accepted.version) else WikiPlanCopy.changeAdded(accepted.version))
+                OrbitToasts.show(if (confirmed) WikiPlanCopy.confirmed(accepted.version) else WikiPlanCopy.changeAdded(accepted.version))
                 if (route.wikiVersion != null && slug == null) nav.replace(OrbitRoute(Destination.WIKI_PLAN))
                 if (edit) proposal.change?.doc?.slug?.let { editing = WikiPlanEditTarget(it, null) }
             }
             is WikiStore.PlanWrite.Refused -> refused = refused + (proposal.id to accepted.errors)
-            is WikiStore.PlanWrite.Failed -> notice = accepted.message
+            is WikiStore.PlanWrite.Failed -> { noticeTitle = if (edit) WikiCopy.changeEditFailed else WikiCopy.changeAcceptFailed; notice = accepted.message }
             // The change is in a draft that is now waiting on the owner; the plan page shows it with its Confirm.
-            is WikiStore.PlanWrite.AcceptedNotConfirmed -> notice = WikiPlanCopy.acceptedNotConfirmed(accepted.version, accepted.why)
+            is WikiStore.PlanWrite.AcceptedNotConfirmed -> { noticeTitle = WikiCopy.planConfirmFailed; notice = WikiPlanCopy.acceptedNotConfirmed(accepted.version, accepted.why) }
         }
     }
     suspend fun reject(proposal: WikiPlanProposal) {
         val message = store.rejectPlanProposal(proposal.id)
-        if (message != null) notice = message else WikiToast.show(WikiPlanCopy.changeRejected)
+        if (message != null) { noticeTitle = WikiCopy.changeRejectFailed; notice = message } else OrbitToasts.show(WikiPlanCopy.changeRejected)
     }
     /** An edit, in the draft's shape. Null once the server took it, else what to show in the sheet. */
     suspend fun save(body: JsonObject): List<String>? = when (val answer = store.editPlan(body)) {
-        is WikiStore.PlanWrite.Done -> { WikiToast.show(WikiPlanCopy.draftSaved(answer.version)); null }
+        is WikiStore.PlanWrite.Done -> { OrbitToasts.show(WikiPlanCopy.draftSaved(answer.version)); null }
         is WikiStore.PlanWrite.Refused -> answer.errors.map { "${it.path} ${it.message}" }
         is WikiStore.PlanWrite.Failed -> listOf(answer.message)
         is WikiStore.PlanWrite.AcceptedNotConfirmed -> listOf(WikiPlanCopy.acceptedNotConfirmed(answer.version, answer.why))
@@ -195,7 +197,7 @@ internal fun WikiPlanScreen(store: WikiStore, route: OrbitRoute, data: Directory
         val newest = state.plan?.let(WikiPlanLogic::newest)
         val protectedDocs = newest?.let { version -> WikiPlanLogic.fromVersion(version).docs.filter { it.protected }.map { it.number } }.orEmpty()
         WikiPlanRedraftSheet(WikiPlanCopy.redraftNote(provider, newest?.let { it.version to (it.status == "confirmed") }, serverExecutes), protectedDocs, state.busy,
-            close = { redrafting = false }) { words -> redraft(words) }
+            close = { redrafting = false }) { words -> redraft(words, WikiCopy.planRedraftFailed) }
     }
     // Edit a document, or one of its sections, of the newest version — the draft waiting, else the one in force.
     editing?.let { target ->
@@ -216,7 +218,7 @@ internal fun WikiPlanScreen(store: WikiStore, route: OrbitRoute, data: Directory
             }
         }
     }
-    WikiRefusalAlert(notice) { notice = null }
+    WikiRefusalAlert(noticeTitle, notice) { notice = null }
 }
 
 /** How many of the plan's documents are written, for the version in force. */

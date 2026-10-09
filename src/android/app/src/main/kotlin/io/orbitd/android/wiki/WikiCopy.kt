@@ -83,7 +83,20 @@ internal object WikiCopy {
     const val settingsSaved = "Wiki settings saved"
     const val superseded = "Superseded"
     const val retired = "Retired"
-    const val refused = "The server refused it"
+    /** A write that failed names the action (iOS d625d9809); the server's reason is on the line below. */
+    const val entrySaveFailed = "Couldn't save the entry"
+    const val entrySupersedeFailed = "Couldn't supersede the entry"
+    const val entryRetireFailed = "Couldn't retire the entry"
+    const val entryConfirmFailed = "Couldn't confirm the entry"
+    const val entryRejectFailed = "Couldn't reject the entry"
+    const val settingsSaveFailed = "Couldn't save the wiki settings"
+    const val runRevertFailed = "Couldn't revert the run"
+    const val planDraftFailed = "Couldn't draft the plan"
+    const val planRedraftFailed = "Couldn't redraft the plan"
+    const val planConfirmFailed = "Couldn't confirm the plan"
+    const val changeAcceptFailed = "Couldn't accept the change"
+    const val changeEditFailed = "Couldn't edit the change"
+    const val changeRejectFailed = "Couldn't reject the change"
     /** A decide the server recorded `conflict`: the entry had moved past the op (a newer revision), so nothing was
      * applied. iOS shows the action's own toast here — an iOS defect, not copied. */
     const val conflictRefused = "Nothing was applied: the entry changed after this was proposed."

@@ -27,6 +27,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import io.orbitd.android.toast.ToastHost
 
 /** The screenshots of the Wiki under server execution (P9, mock 35): the settings page and Set up, the Runs band and
  * a run's page, drawn from fake reads and written to PNGs under `src/android/build/evidence/wiki-android-server-execution/`.
@@ -133,7 +134,7 @@ class WikiServerExecutionShotsTest {
 
     private fun show(route: OrbitRoute, screen: @androidx.compose.runtime.Composable (WikiStore) -> Unit) {
         val store = store()
-        compose.activityRule.scenario.onActivity { activity -> activity.setContent { OrbitTheme { Box { screen(store); WikiToast.Host() } } } }
+        compose.activityRule.scenario.onActivity { activity -> activity.setContent { OrbitTheme { Box { screen(store); ToastHost({}, {}, {}) } } } }
         compose.waitForIdle()
     }
 
