@@ -150,8 +150,11 @@ class NavigationIncrementDeviceTest {
                 awaitWritable()
                 press(hasText("Delete Permanently") and hasAnyAncestor(isPopup()))
                 await { exists(hasText("Delete permanently?")) }
+                // Asked as A13d asks (iOS 6969f7840): the destructive press beside Cancel.
+                compose.onNode(hasText("Delete Permanently") and hasClickAction() and hasAnyAncestor(isDialog())).assertExists()
                 capture("15-delete-permanently-asked")
-                compose.onNodeWithText("Close").performClick()
+                compose.onNode(hasText("Cancel") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
+                assertFalse("Cancel deletes nothing", calls.any { it.startsWith("DELETE") })
                 compose.onNodeWithContentDescription("Back").performClick(); settle()
 
                 // A05-4 · a failure is a tinted card pinned with the server's words, then folds into a pill.
