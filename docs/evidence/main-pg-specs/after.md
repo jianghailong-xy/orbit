@@ -45,3 +45,24 @@ zeroes of a clean run (`scripts/project-pg-matrix.sh`).
   `the interrupted call to have streamed its first chunk within 10 s` at host load 10.5–12.3/24 cpus, and then
   passed **2 of 2** on a re-run; it is also green in run 37895053362 (main `19c760ae4`). Host-shaped, and the
   matrix's own second run is what would have said so there.
+
+## The tree that actually lands, and the one spec that would not stay green
+
+Main gained a pg spec and a service change while this task ran (`task-comment-run.pg.spec`, migration 0416), so the
+branch was merged with `origin/main` and the probe repeated on the merge — run
+[37946019165](https://github.com/jianghailong-xy/orbit/actions/runs/37946019165) at `5ff76b38a`. Shards 1/3 and 3/3
+came back green in 16:48 and 16:26. Shard 2/3 came back red on ONE spec, and reproduced it on its own second run:
+
+    claim-recovery-e2e.pg.spec.js   tests=3 pass=1 fail=2   rc=1; REPRODUCED on a second run (rc=1)
+      error: 'timed out waiting for the turn to be settled by the completion that followed it'
+
+That spec is an end-to-end of the Go runner: it compiles `go test -c -tags claimrecoveryfault` INSIDE the test and
+spawns that binary per scenario, and the wait it blew is one of five `eventually()` polls. The same wait is what
+failed first in run 37945865192, where the script's own second run was CLEAN and its footer called the first
+`NOT REPRODUCED … a timeout or a connection, not a failed assertion (host load 1.65 when it ran)`. Weighed against
+that: the whole file takes 37 s on an idle 24-core host (2 runs, both green), the shard that reproduced it took
+25:36 for the same 131 specs another shard ran in 15:52, and what the wait waits for is a spawned process's
+completion. The 90-second fuse was therefore measuring the runner machine as much as the code, so this commit
+raises it to 180 s — still a hang detector, and still inside the matrix's 600 s per-spec budget for a red first run
+plus its second. The flake itself is not this task's to fix: the supervision path it exercises is `src/runner-go`,
+which the task excludes, and it is not new — the spec is green in most runs, including run 37942654032.
