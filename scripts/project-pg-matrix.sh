@@ -95,6 +95,16 @@
 # 0 and the run went green. That is how the hole above stayed open for as long as it did — the count
 # was in front of every reader the whole time and cost nothing.
 #
+# `PCC_PG_SHARD=<index>/<count>` IS A SHARE OF THE ROSTER, NOT A SHORTER ONE
+# =========================================================================
+# It takes the roster's own indices `index, index+count, …` and runs nothing else, so CI can put the
+# same work on several runners at once (`.github/workflows/ci.yml` says why it does, and what it
+# measures). The selection is the roster's ORDER and not a list — every index belongs to exactly one
+# shard of a given count, so three shards cover the tree by construction and a spec added tomorrow
+# needs no edit here. The two ways a shard could quietly be a subset are fatal instead: an index
+# outside `1..count` is refused, and a shard whose share comes out empty stops the run rather than
+# printing the zeroes of a clean one.
+#
 # The choice, over an allowlist of specs that are permitted to skip: EVERY skip is red and nothing
 # in the tree is exempt. What makes that affordable is what the paragraphs above are. Each of them
 # is a variable this script supplies so that some spec does not skip — the restart command, the
@@ -260,6 +270,38 @@ cd "$API"
 # Taken once, and empty is fatal: a loop that never runs reports the same zeroes as a clean run.
 SPECS="$(ls build/**/*.pg.spec.js 2>/dev/null | sort)"
 [ -n "$SPECS" ] || die "no build/**/*.pg.spec.js to run — the test tree compiled nothing"
+# --- the shard, when the caller runs one ---------------------------------------------------------
+# `PCC_PG_SHARD=<index>/<count>` runs this script's share of the roster and nothing else, so CI can
+# put the same work on several runners at once — one PostgreSQL each — and finish inside the job's
+# time limit. The share is the roster's own index modulo the count, taken from the SAME
+# `ls build/**/*.pg.spec.js | sort` the whole run uses and not from a list anybody maintains: the
+# shards partition the roster by construction (every index belongs to exactly one shard, and a spec
+# added tomorrow lands in one of them with no edit here), which is the property an allowlist would
+# destroy — `.github/workflows/ci.yml`'s header has the measured numbers and the reasoning.
+#
+# One index out of range covers nothing, and that is fatal rather than a green: a shard that ran no
+# spec reports the same zeroes as a clean one, which is the one outcome this script must not be able
+# to print (see "A SKIP IS RED" above). Deeper than the count, the shards are not equal in time — a
+# spec's duration is its own — so the count is chosen against the roster's measured total rather
+# than against its length.
+SHARD="${PCC_PG_SHARD:-}"
+if [ -n "$SHARD" ]; then
+  case "$SHARD" in
+    */*) SHARD_INDEX="${SHARD%%/*}"; SHARD_COUNT="${SHARD##*/}" ;;
+    *) die "PCC_PG_SHARD must be <index>/<count>, not '$SHARD' — e.g. 2/3" ;;
+  esac
+  case "$SHARD_INDEX" in ''|*[!0-9]*) die "PCC_PG_SHARD index is not a number: '$SHARD_INDEX'" ;; esac
+  case "$SHARD_COUNT" in ''|*[!0-9]*) die "PCC_PG_SHARD count is not a number: '$SHARD_COUNT'" ;; esac
+  [ "$SHARD_COUNT" -ge 1 ] || die "PCC_PG_SHARD count must be at least 1, not '$SHARD_COUNT'"
+  [ "$SHARD_INDEX" -ge 1 ] && [ "$SHARD_INDEX" -le "$SHARD_COUNT" ] ||
+    die "PCC_PG_SHARD index $SHARD_INDEX is not one of 1..$SHARD_COUNT"
+  ROSTER_COUNT="$(printf '%s\n' "$SPECS" | wc -l | tr -d '[:space:]')"
+  SHARDED="$(printf '%s\n' "$SPECS" | awk -v i="$SHARD_INDEX" -v n="$SHARD_COUNT" 'NR % n == (i - 1)')"
+  [ -n "$SHARDED" ] ||
+    die "shard $SHARD_INDEX/$SHARD_COUNT covers none of the $ROSTER_COUNT specs in this tree — a shard that ran nothing is not a green"
+  SPECS="$SHARDED"
+  echo "==> shard $SHARD_INDEX/$SHARD_COUNT: $(printf '%s\n' "$SPECS" | wc -l | tr -d '[:space:]') of $ROSTER_COUNT specs in this tree"
+fi
 # --- one spec, one database, and whether it has to be asked twice ---------------------------------
 # Each call clones the template into the database it is given and drops it again, so the second run
 # of a spec starts from what the first one started from and neither leaves anything behind.
@@ -345,7 +387,7 @@ for f in $SPECS; do
   [ -n "${PCC_PG_LOG_DIR:-}" ] && printf '%s\n' "$out" > "$PCC_PG_LOG_DIR/$base.txt"
 done
 
-echo "==== tests=$TOTAL pass=$PASS fail=$FAIL skipped=$SKIP missing-summary=$MISSING spec-level-red=${#RED[@]} not-reproduced=${#NOT_REPRODUCED[@]} load=$(cut -d' ' -f1-3 /proc/loadavg) on $(nproc) cpus ===="
+echo "==== ${SHARD:+shard=$SHARD }tests=$TOTAL pass=$PASS fail=$FAIL skipped=$SKIP missing-summary=$MISSING spec-level-red=${#RED[@]} not-reproduced=${#NOT_REPRODUCED[@]} load=$(cut -d' ' -f1-3 /proc/loadavg) on $(nproc) cpus ===="
 for r in "${RED[@]:-}"; do [ -n "$r" ] && echo "RED: $r"; done
 for r in "${NOT_REPRODUCED[@]:-}"; do [ -n "$r" ] && echo "NOT REPRODUCED: $r"; done
 if [ "${#RED[@]}" -gt 0 ]; then exit 1; fi

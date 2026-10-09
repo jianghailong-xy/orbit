@@ -2090,6 +2090,13 @@ export class ProjectOpenItemService {
    * the coordinator's open items about the candidate marked as being handled by that check — still
    * OPEN until it reports. A check that passes makes them HANDLED in the coordinator's name; one that
    * fails again supersedes them with its own item.
+   *
+   * A TIMED-OUT CHECK (§2.2 J-T9). A newest check that is RUNNING but silent past its limit is judged
+   * by the same read the job list draws (`readInFlightJobs`), and a retry of it first ends it as
+   * `ERROR · RUNNER_LOST` — the compare-and-set on the heartbeat it was judged from — then requeues
+   * the check like any other rerun, with the candidate readmitted from CHECKING as well as BLOCKED.
+   * The account owner's door (`retryPromotionCheckAsOwner`) is this same method, held to the same
+   * rules.
    */
   async retryPromotionCheck(
     ownerId: string,
@@ -2130,6 +2137,10 @@ export class ProjectOpenItemService {
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         select: { id: true, kind: true, generation: true, state: true, checks: true },
       });
+      // Whether a RUNNING check timed out, by the rule the job list draws it with (§1.6).
+      const [silent] = newestJob?.state === 'RUNNING'
+        ? await readInFlightJobs(tx, projectId, newestJob.id)
+        : [];
       const openItems = await tx.projectOpenItem.findMany({
         where: { projectId, promotionId, kind: { in: [...INTEGRATION_ITEM_KINDS] }, state: 'OPEN' },
         select: { id: true, kind: true, assignee: true, assigneeReason: true },
@@ -2139,10 +2150,17 @@ export class ProjectOpenItemService {
         requester: ownerRequester ? 'OWNER' : 'COORDINATOR',
         coordinatorEnabled: current.coordinatorEnabled,
         promotionState: locked.state,
-        newestJob,
+        newestJob: newestJob && { ...newestJob, timedOut: silent?.timedOut === true },
         openItems,
       });
       if (!decision.ok) throw new HttpException(decision.body, decision.status);
+      if (decision.endsTimedOutJob && !(silent && await endTimedOutLanding(tx, silent))) {
+        throw new ConflictException({
+          code: INTEGRATION_RETRY_IN_FLIGHT,
+          message: 'this check\'s runner reported again while the retry was being decided, so it has not '
+            + 'timed out any more. Read the project again.',
+        });
+      }
 
       const queued = await requeuePromotionCheck(tx, {
         promotionId,

@@ -1,6 +1,6 @@
 # 协调者停着时，证据卡排队等它（设计稿）
 
-> 状态：草案，待 owner 审（2026-10-09）。
+> 状态：已定稿：所有者 2026-10-09 待定 1、2 均选 A；实现见项目 34cygPTQe5LPUT7tdUAzG。
 > 起因：10-09 20:02 的截图。Android 项目的协调者在 claude 上撞了周额度，一张「Does this evidence settle the task?」落到你面前。你的话：「这个卡片在 coordinator 不可用的时候，可以加入队列等 coordinator 去处理」。
 > 效果图：`docs/mocks/evidence-waits-for-coordinator/`（`1-today.png` … `5-landing.png`）。代码基线：main `c8a431304`，下文行号都指这一版。
 
@@ -147,3 +147,21 @@
 - 不加设置项，不加表。
 - 不改超支熔断暂停时的行为。
 - 任务页和项目页不加排队状态：对话里那张卡就是唯一显示的地方。
+
+## 7. 实现与设计的出入（T1 服务端，2026-10-09）
+
+服务端按项目 34cygPTQe5LPUT7tdUAzG 作业指导里的「规则」实现（`projects/coordinator-evidence-queue.ts` 判定，`projects/coordinator-evidence-queue.service.ts` 补投）。与上文不同或上文没写到的地方，逐条如下。
+
+1. **投给协调者的那句话**：§2.3 的示例带停机原因（`while you were paused (weekly limit)`）。实现照作业指导的英文原句，不带原因：`This revision was submitted at <提交时间 ISO> while you were unavailable. It waited for you; nobody has decided it yet.`
+2. **读接口多两组，不是一组**：§3 第 4 条只写了 `waitingOnCoordinator`。实现照线上契约另加 `sentToCoordinator`（taskId、title、projectId、evidenceRevision、deliveredAt），只读给协调这个项目的会话；`deliveredAt` 就是持有起算的那一刻（wake 行的 `updated_at`）。它只列「排过队」的投递（wake 行 `delivery.waited = true`），并且只在协调者还持有时列出：持有窗口过了，这一版回到 `pending`，同时从 `sentToCoordinator` 消失。
+3. **停着期间，投出去且读过的版本也列在排队里**：作业指导的「欠协调者」第一条是「协调者停着」，所以停着时这一版一律进 `waitingOnCoordinator`（客户端画灰卡），哪怕它此前已经投出去、协调者也读过；回来以后才回到「已投出」。§2.2 只写了「投出去以后收成一行胶囊」，没写投出去以后又停机的情形。
+4. **跨停机的持有计时**：§2.4 说 2 小时「只在协调者在线时走」。库里没有停机的历史可以扣除，所以实现是：停着时一律持有、不看时间；回到在线以后，仍按投递那一刻起算 `exceptionEscalationSeconds`（作业指导「在线时照旧按投递起」）。因此，一版在停机前已经投出并被读过、停机又超过窗口的，协调者一回来就会归所有者。只有「没读到」的那一版会重投，重投时重新起算。
+5. **「没读到」多认一种**：§3 第 6 条只认失败清队列（ANSWERED 且 `deliveredAt` 为空）。实现把投递那一轮整条不见了（打断或撤回会删除排队中的 turn）也算没读到，与异常待办被打断、撤回后照样补投一致。补投用的 turn key 由事实的 key 加上被替换的那一轮派生（`coordinatorRedeliveryTurnId`），wake 行的 `delivery` 记 `replaces`。
+6. **换协调者时连已投出的也转过去**：§2.1 写「队列投给新的那个」。实现除了排队中的版本，也把投给了被换掉的会话、还没判的版本重投给新会话（新会话独立、能判时），因为被换掉的会话已被结束，不会再判。
+7. **补投的兜底**：设计没写兜底。实现挂在任务服务已有的 60 秒对账 tick 上（`TasksService.onModuleInit`，和 @提及投递同一个定时器），只处理协调者在线又空闲的项目：会话 AWAITING_INPUT 或单纯 INTERRUPTED、没有 `retryAt`、没结束。turn 结束是延迟，tick 是保证。
+8. **停着的判定点**：投递在两处看协调者是否停着——生产者的授权里（在熔断之后、`convergence.authorizeWake` 记判断之前，所以停着时不记判断），以及写 turn 的事务里、持 Session 锁再读一次。拒收码是新的 `DELIVERY_COORDINATOR_PAUSED`（`refusal_code` 是自由文本，不需要迁移）。只有这一种拒收让这一版留在排队里；协调者回来以后若因别的原因被拒（例如消息被 `createTurn` 拒收），照今天归所有者，不再自动重试。
+9. **熔断与停机同时发生**：熔断先判，拒收码是 `PROJECT_FUSE_PAUSED`，这一版归所有者；熔断恢复后它仍留在所有者那里（证据不在熔断恢复的重判范围内），与今天一致。
+10. **投递进行中的一瞬**：认领了 key 但还没写完投递的那一刻（wake 行 CLAIMED），这一版照今天读作所有者的卡；进程恰好死在这一刻的，也照今天留给所有者。
+11. **只对证据生效**：「停着不写 turn」只用于证据投递（`CoordinatorDeliveryService.queue` 的 `holdWhilePaused`）。同一个投递门上的其他事实（例如 DEPENDENT_READY）行为不变，因为它们被拒以后不会有人再推一遍。
+12. **可选步骤 5、6 没做**：异常待办停着不计时、任务确认复核与「项目看起来做完了」两处，照项目范围留待以后。
+

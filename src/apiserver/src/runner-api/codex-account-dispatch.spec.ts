@@ -154,7 +154,9 @@ function prismaFor(s: Scenario) {
       // (providerSlugsOn); none do here.
       findMany: async () => [],
     },
-    runEvent: { aggregate: async () => ({ _max: { seq: 7 } }) },
+    // run_event max(seq) for the reclaim snapshot — raw SQL, never `aggregate`, which Prisma
+    // compiles into an OFFSET subquery the planner cannot flatten.
+    $queryRaw: async () => [{ max: 7 }],
     user: { findUnique: async () => null },
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
     $executeRaw: async () => {
