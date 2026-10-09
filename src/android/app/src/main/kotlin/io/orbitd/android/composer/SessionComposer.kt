@@ -508,10 +508,16 @@ internal fun EngineChoices(model: ComposerModel, state: ComposerState, detail: J
                     close()
                 }.padding(vertical = 10.dp).testTag("engine:${option.engine}"), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(option.label, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        color = if (connect || option.unavailable == null) Color.Unspecified else MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(secondary, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall,
-                        color = if (connect) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                    // The offer to connect a key goes under Harness's name, whole (board 4 ①); a model or a reason beside its engine.
+                    if (connect) Column(Modifier.weight(1f)) {
+                        Text(option.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(secondary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    } else {
+                        Text(option.label, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            color = if (option.unavailable == null) Color.Unspecified else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(secondary, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     if (option.engine == current) Text("✓", color = MaterialTheme.colorScheme.primary)
                 }
             }
