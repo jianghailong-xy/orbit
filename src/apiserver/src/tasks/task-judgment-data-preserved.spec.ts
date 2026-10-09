@@ -2188,7 +2188,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0080's, 0372/0377's and 0377's runtime claim guards replaced by bodies that read the column first. No
       // `project` or `project_acceptance_*` object, none of the six preserved triggers/functions and neither
       // half of the 0177 pair is named, and no row is inserted or deleted.
-      '0414_session_engine'],
+      '0414_session_engine',
+      // Which run wrote a comment (0416): two nullable UUID columns with no default and no constraint
+      // on `task_comment` (`session_id`, `attempt_id`), snapshots with no foreign key — catalog-only.
+      // Only that table is altered: no `task`, `session`, `project` or `project_acceptance_*` object
+      // nor any of the six preserved triggers/functions is named, and no function, trigger, type,
+      // index or constraint is created, replaced or dropped, so it is not another writer of the DONE
+      // fence. No INSERT, UPDATE or DELETE: every stored comment reads NULL.
+      '0416_task_comment_session_attempt'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -867,6 +867,11 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
       },
     }),
   },
+  // Two different runners, so B's own request is a reorder the route answers, not a duplicate
+  // `@ArrayUnique` refuses.
+  'POST /runners/reorder body ids[]': {
+    request: (of, mine) => ({ params: {}, body: { ids: [mine.runnerId, of.spare.runnerId] } }),
+  },
 
   // ── sessions ─────────────────────────────────────────────────────────────────────────────────
   'POST /session-folders body workspaceId': { request: (of) => ({ params: {}, body: { workspaceId: of.workspaceId, name: 'census folder' } }) },

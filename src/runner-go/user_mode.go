@@ -248,7 +248,7 @@ type taskTransport interface {
 	updateTask(sessionID, id string, body interface{}) (json.RawMessage, error)
 	deleteTask(id string) (json.RawMessage, error)
 	startTask(id, triggerID string) (json.RawMessage, error)
-	commentTask(id, agentID, bodyText string) (json.RawMessage, error)
+	commentTask(id, agentID, sessionID, bodyText string) (json.RawMessage, error)
 	getTaskProgress(id string) (json.RawMessage, error)
 	reportTaskProgress(id string, body map[string]interface{}) (json.RawMessage, error)
 	taskDependencyGraph(id string, maxDepth, maxNodes int) (json.RawMessage, error)
@@ -362,7 +362,7 @@ func (u *userTransport) startTask(id, triggerID string) (json.RawMessage, error)
 	})
 }
 
-func (u *userTransport) commentTask(id, _, bodyText string) (json.RawMessage, error) {
+func (u *userTransport) commentTask(id, _, _, bodyText string) (json.RawMessage, error) {
 	return u.at(http.MethodPost, "/tasks", id, "/comments", map[string]string{"body": bodyText})
 }
 

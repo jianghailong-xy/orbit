@@ -14,8 +14,10 @@ import io.orbitd.android.text.*
 import kotlinx.serialization.json.*
 
 @Composable
-internal fun CardBody(card: InteractionCard, open: (String) -> Unit) {
+internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: OwnerForm? = null, reopen: (() -> Unit)? = null) {
     val row = card.source
+    // The owner-confirmation card draws its question, its receipt and a reviewer's return itself (A08-1).
+    if (card.family == CardFamily.OWNER_CONFIRMATION && card.context.text("ownerCard") != null) { OwnerCardBody(card, open, owner, reopen); return }
     if (card.key.startsWith("receipt:")) {
         CardFields(row, listOf("title", "decision", "decidedAt", "decidedByType", "note", "report", "review", "answers", "reason", "problems", "resultingSeal"), open)
         return
@@ -32,7 +34,7 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit) {
         CardFamily.CREATE -> {
             val input = row.obj("input") ?: JsonObject(emptyMap())
             Text(input.text("title") ?: "", style = MaterialTheme.typography.titleSmall)
-            input.obj("preview")?.let { BatchImpact(it) }
+            input.obj("preview")?.let { ImpactRows(it) }
             val isTask = row.text("toolName") == "orbit_task_create"
             if (isTask) {
                 val list = input.obj("preview")?.objects("lists")?.firstOrNull()?.text("title")?.takeIf { it.isNotBlank() }
@@ -46,21 +48,8 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit) {
             Field("Done when", input["acceptanceCriteriaItems"], open)
             if (row.text("toolName") == "orbit_project_create") Text("The criteria are confirmed when you start the project.", style = MaterialTheme.typography.bodySmall)
         }
-        CardFamily.BATCH -> {
-            val preview = row.obj("input")?.obj("preview")
-            preview?.let {
-                BatchImpact(it)
-                Text("${it.number("taskCount") ?: it.objects("tasks").size} tasks · ${(it.number("internalEdges") ?: 0) + (it.number("externalEdges") ?: 0)} dependency edges")
-                val lists = it.objects("lists").mapNotNull { list -> list.text("title") }; if (lists.isNotEmpty()) Text("Into ${lists.joinToString(", ")}")
-                it.objects("tasks").forEachIndexed { index, task ->
-                    Text("${index + 1}. ${task.text("title") ?: task.text("key") ?: "Task"}", style = MaterialTheme.typography.titleSmall)
-                    Field("After these batch tasks", task["dependsOnRefs"], open)
-                    Field("Existing prerequisites", task["dependsOnTaskIds"], open)
-                    Field("Done when", task["acceptanceCriteria"], open)
-                }
-                it.number("titlesTruncated")?.takeIf { n -> n > 0 }?.let { n -> Text("$n more task titles") }
-            } ?: Text("The task preview could not be read.")
-        }
+        // A batch the server previewed is drawn by its review (`BatchReviewBody`); this is the one it did not.
+        CardFamily.BATCH -> Text("The task preview could not be read.")
         CardFamily.DAG -> row.obj("input")?.obj("preview")?.let { preview ->
             Text(preview.text("listTitle") ?: "Dependencies", style = MaterialTheme.typography.titleSmall)
             Text("${preview.number("edgesBefore") ?: "?"} → ${preview.number("edgesAfter") ?: "?"} edges")
@@ -87,19 +76,7 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit) {
             row.obj("decidability")?.takeIf { !it.flag("decidable") }?.let { CardFields(it, listOf("refusal", "requiredAction"), open) }
             row.obj("independence")?.takeIf { !it.flag("independent") }?.let { CardFields(it, listOf("disqualification", "requiredAction"), open) }
         }
-        CardFamily.OWNER_CONFIRMATION -> {
-            Text(row.text("title") ?: "", style = MaterialTheme.typography.titleSmall)
-            Field("Done when", row["acceptanceCriteria"], open)
-            val waiting = row.obj("waiting")
-            Field("The run's report", waiting?.obj("report")?.get("text"), open)
-            waiting?.obj("review")?.let { review ->
-                Text("Review · ${review.text("state") ?: "Unavailable"}", style = MaterialTheme.typography.titleSmall)
-                CardFields(review, listOf("reviewer", "since", "dueAt", "notReviewedReason", "outdated"), open)
-                review.obj("review")?.let { CardFields(it, listOf("judgment", "reviewedSha", "checked", "notChecked", "leftOpen"), open) }
-                CardFields(review, listOf("returned", "problems"), open)
-            }
-            Field("If confirmed", row["ifConfirmed"], open)
-        }
+        CardFamily.OWNER_CONFIRMATION -> OwnerCardBody(card, open, owner, reopen)
         CardFamily.CRITERIA_CHANGE -> {
             CardFields(row, listOf("filedAt", "baselineSeal", "currentSeal"), open)
             row.obj("diff")?.objects("entries")?.forEach { entry ->
@@ -155,11 +132,6 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit) {
         CardFamily.BACKGROUND -> CardFields(row, listOf("state", "predicate", "targets", "matches", "expiryDeliveries", "expiresAt"), open)
         CardFamily.REVIEW, CardFamily.SESSION_REQUEST -> CardFields(row, row.keys.filterNot { it.endsWith("Token") }, open)
     }
-}
-
-@Composable
-private fun BatchImpact(preview: JsonObject) {
-    batchImpactLines(preview).forEach { Text(it, style = MaterialTheme.typography.titleSmall) }
 }
 
 @Composable

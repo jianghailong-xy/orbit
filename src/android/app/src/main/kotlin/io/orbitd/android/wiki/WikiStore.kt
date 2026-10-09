@@ -562,7 +562,7 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
 
     /** Draft plan, or Redraft… with the owner's words. Nil refusal on success, with whether a job was made. */
     suspend fun redraftPlan(instructions: String?): Pair<Boolean, String?> {
-        val space = current.currentSpace ?: return false to WikiCopy.refused
+        val space = current.currentSpace ?: return false to WikiCopy.noSpaces
         return owned({ (created, refusal) -> notice(refusal, if (created) WikiPlanCopy.redraftAsked else WikiPlanCopy.redraftAlready, WikiPlanCopy.title) }) {
             try { val created = client.redraftPlan(space.id, instructions); outdate(PLAN); loadPlan(); created to null }
             catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { loadPlan(); false to wikiRefusal(error) }
@@ -577,10 +577,11 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
     /** Accept: a new draft over the newest version; with no other draft waiting it is confirmed at once. Both writes
      * run to their answers together, so a page that goes between them never leaves the draft half done unsaid. */
     suspend fun acceptPlanProposal(id: String, confirm: Boolean): Pair<PlanWrite, Boolean> {
-        val space = current.currentSpace ?: return PlanWrite.Failed(WikiCopy.refused) to false
+        val space = current.currentSpace ?: return PlanWrite.Failed(WikiCopy.noSpaces) to false
         return owned({ (write, confirmed) -> planNotice(write, if (confirmed) WikiPlanCopy::confirmed else WikiPlanCopy::changeAdded) }) {
             val draft = try {
-                client.decidePlanProposal(id, accept = true) ?: run { loadPlan(); return@owned PlanWrite.Failed(WikiCopy.refused) to false }
+                // An accept answered with no draft (iOS: `APIClient.failureReason(APIError.invalidResponse)`).
+                client.decidePlanProposal(id, accept = true) ?: run { loadPlan(); return@owned PlanWrite.Failed("the server's reply couldn't be read") to false }
             } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) {
                 loadPlan()
                 return@owned (wikiGateErrors(error)?.let { PlanWrite.Refused(it) } ?: PlanWrite.Failed(wikiRefusal(error))) to false
@@ -599,7 +600,7 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
         }
     }
     private suspend fun planWrite(done: (Int) -> String, write: suspend (WikiSpace) -> WikiPlanVersion): PlanWrite {
-        val space = current.currentSpace ?: return PlanWrite.Failed(WikiCopy.refused)
+        val space = current.currentSpace ?: return PlanWrite.Failed(WikiCopy.noSpaces)
         return owned({ answer: PlanWrite -> planNotice(answer, done) }) {
             try { val version = write(space); outdate(PLAN, DOCS); loadPlan(); loadDocsDirectory(); PlanWrite.Done(version.version) }
             catch (cancel: CancellationException) { throw cancel } catch (error: Exception) {
@@ -707,7 +708,7 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
 
     /** One owner write with an idempotency key of its own, so a resend of the same press is one write. */
     private suspend fun write(entry: WikiEntry, op: JsonObject, rationale: String, key: String, done: String): String? {
-        val spaceId = entry.spaceId ?: current.currentSpace?.id ?: return WikiCopy.refused
+        val spaceId = entry.spaceId ?: current.currentSpace?.id ?: return WikiCopy.noSpaces
         return owned({ refusal -> notice(refusal, done, entry.displayTitle) }) {
             try {
                 val result = client.submit(spaceId, op, rationale, "$key:${UUID.randomUUID().toString().lowercase()}")

@@ -80,6 +80,10 @@ object CardRequests {
                 put("triggerId", requireNotNull(input.triggerId).also { require(it.isNotBlank()) })
             })
             CardVerb.CANCEL_TASK -> request(listOf("tasks", required("taskId")), buildJsonObject { put("status", "CANCELLED") }, HttpMethod.PATCH)
+            // The task panel's own Reopen task (`TaskReopen`): back to Open, both retirement fields cleared in the one request.
+            CardVerb.REOPEN_TASK -> request(listOf("tasks", card.objectId), buildJsonObject {
+                put("status", "OPEN"); put("supersededByTaskId", JsonNull); put("terminalReason", JsonNull)
+            }, HttpMethod.PATCH)
             CardVerb.CONFIRM_MERGE -> request(projectPath("promotions", card.objectId, "confirm"), buildJsonObject { put("sourceSha", required("sourceSha")) })
             CardVerb.DECLINE_MERGE -> request(projectPath("promotions", card.objectId, "decline"))
             CardVerb.CANCEL_MERGE -> {
@@ -114,32 +118,26 @@ object CardRequests {
     private fun owner(card: InteractionCard, verb: CardVerb, input: CardInput): ApiRequest {
         require(card.family == CardFamily.OWNER_CONFIRMATION)
         val waiting = requireNotNull(card.source.obj("waiting"))
-        val review = waiting.obj("review")
+        // The review the card drew: one this build cannot read is no review at all, as on the card (`OwnerReview.readable`).
+        val review = OwnerReview.readable(waiting["review"])
         val confirm = verb == CardVerb.CONFIRM_OWNER
         val body = buildJsonObject {
             put("decision", if (confirm) "CONFIRM" else "SEND_BACK")
             put("requestId", requireNotNull(waiting.text("requestId")))
             if (confirm) {
-                val shown = review?.text("state") in setOf("REVIEWED", "OUTDATED")
-                put("reviewRecordId", if (shown) review?.obj("review")?.get("recordId") ?: JsonNull else JsonNull)
-                val questions = reviewQuestions(review)
-                val answers = questions.map { q ->
-                    val key = requireNotNull(q.text("key"))
-                    val chosen = input.ownerAnswers.firstOrNull { it.key == key } ?: OwnerAnswer(key, q.number("recommendedOption"))
+                OwnerReview.questions(review).forEach { q ->
+                    val chosen = OwnerReview.choice(q, input.ownerAnswers)
                     require(chosen.option == null || chosen.option in q.objects("options").indices)
-                    require(chosen.option != null || !chosen.text.isNullOrBlank()) { "Answer every review question." }
-                    buildJsonObject {
-                        put("key", key)
-                        if (chosen.option != null) put("option", chosen.option) else put("text", chosen.text!!.trim())
-                    }
                 }
+                require(OwnerReview.complete(review, input.ownerAnswers)) { "Answer every review question." }
+                // The record the card showed — the old one under an outdated review — and an answer to each of its questions.
+                val (record, answers) = OwnerReview.answered(review, input.ownerAnswers)
+                put("reviewRecordId", record)
                 if (answers.isNotEmpty()) put("answers", JsonArray(answers))
             } else put("note", input.text.trim().also { require(it.isNotEmpty() && it.length <= 4000) { "Enter a reason (up to 4000 characters)." } })
         }
         return ApiRequest(listOf("tasks", card.objectId, "owner-confirmation"), HttpMethod.POST, body = body.toString().encodeToByteArray())
     }
-    fun reviewQuestions(review: JsonObject?): List<JsonObject> =
-        if (review?.text("state") == "REVIEWED") review.obj("review")?.objects("needsYou").orEmpty() else emptyList()
 
     val wikiRejectReasons = setOf("not_true", "not_useful", "duplicate", "too_specific")
 }

@@ -6239,8 +6239,8 @@ html[data-theme='dark'] .session-tag-chip {
 }
 /* The engine's guess at the next message, offered in the empty box (lib/promptSuggestion). It sits
    on the first line exactly where the placeholder would — same inset, same 24px line — so nothing
-   moves when it arrives a second after the turn ends. Only Use takes the pointer: a click anywhere
-   else on the line still lands in the textarea, to type something else instead. */
+   moves when it arrives a second after the turn ends. Nothing on the line takes the pointer (Use is
+   for a screen reader): a click on it lands in the textarea, to type something else instead. */
 .composer-suggestion {
   position: absolute;
   top: 12px;
@@ -6303,10 +6303,35 @@ html[data-theme='dark'] .session-tag-chip {
     display: inline-block;
   }
 }
-/* No keyboard to press Tab on: Use instead of the key, and the box's description leaves Tab out. */
+/* A touch screen's way to say it: right after the words, as the key is on a keyboard, until the
+   first double-tap on this device takes a suggestion. */
+.composer-suggestion-tap {
+  display: none;
+  flex: none;
+  font-size: 12px;
+  color: var(--text-4);
+  white-space: nowrap;
+}
+/* No keyboard to press Tab on: a double-tap on the box takes it (WorkspaceView's
+   onComposerTouchEnd), the hint says so, and the box's description leaves Tab out. Use stays for a
+   screen reader, whose own double-tap is "activate" — there, hidden from the eye as .sr-only is.
+   `manipulation` keeps a double-tap on the box from zooming the page. */
 @media (hover: none) {
+  .composer-field {
+    touch-action: manipulation;
+  }
+  .composer-suggestion-tap {
+    display: inline;
+  }
   .composer-suggestion-use {
     display: inline-flex;
+    position: absolute;
+    overflow: hidden;
+    clip-path: inset(50%);
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    white-space: nowrap;
   }
   .composer-suggestion-tab-hint {
     display: none;
