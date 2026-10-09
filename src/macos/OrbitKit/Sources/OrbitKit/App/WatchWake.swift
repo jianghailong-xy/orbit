@@ -119,8 +119,9 @@ public enum WatchWakeText {
 }
 
 /// What the wake reads as on screen: web's `WatchWakeCard.tsx`, in the same words and the same
-/// order — what happened, in plain English; what moved; a way to the watch; and the text the agent
-/// actually received, folded away rather than dropped.
+/// order — one line in the agent's stream saying what happened, which target moved, how it came out
+/// and when, the grammar `BackgroundWakeCard` draws a background job's news in; and folded under it
+/// why, every target that moved, a way to the watch, and the text the agent actually received.
 public enum WatchWakeCard {
     /// How many changed targets the card names before "+N more".
     public static let shownChanges = 5
@@ -188,14 +189,14 @@ public enum WatchWakeCard {
         }
     }
 
-    /// One changed target's line: "Task 34Oaoim is now DONE", or the title where this client holds
-    /// one — a name is the whole reason the card is worth reading on a phone, and the browser has
-    /// no such cache to read from.
+    /// One changed target's row in the fold: "Task Land the redirect fix is now DONE" — by the title
+    /// this client holds for it, since a name is the whole reason the row is worth reading on a phone,
+    /// and by the last eight characters of its id where it holds none. Not the first eight: those of a
+    /// UUIDv7 are its creation time, so every target created in the same minute shared them.
     public static func changedLine(_ target: WatchWakeTarget, name: String? = nil) -> String {
-        let noun = target.kind == .session ? "Session" : "Task"
-        let shown = name.flatMap { $0.isEmpty ? nil : $0 } ?? String(target.id.prefix(8))
-        guard let status = target.status, !status.isEmpty else { return "\(noun) \(shown)" }
-        return "\(noun) \(shown) is now \(status)"
+        let shown = name.flatMap { $0.isEmpty ? nil : $0 } ?? String(target.id.suffix(8))
+        guard let status = target.status, !status.isEmpty else { return "\(noun(target)) \(shown)" }
+        return "\(noun(target)) \(shown) is now \(status)"
     }
 
     /// The targets this card names, and how many it leaves to `WatchProjection.moreTargets`.
@@ -204,11 +205,62 @@ public enum WatchWakeCard {
         return (shown, wake.changedTargets.count - shown.count)
     }
 
-    /// "Queued by a watch, not typed by you · generation 1 · 4m ago".
-    public static func meta(_ wake: WatchWake, ts: String? = nil, now: Date = Date()) -> String {
+    /// A target the line draws in its error tone: one the watch saw fail.
+    public static func isFailed(_ target: WatchWakeTarget) -> Bool {
+        target.status == "FAILED"
+    }
+
+    /// Whether the line takes the error tone, as a background job's does when it fails. A watch that
+    /// ran out or lost its targets is not a failure: nothing it watched went wrong.
+    public static func isFailed(_ wake: WatchWake) -> Bool {
+        wake.changedTargets.contains(where: isFailed)
+    }
+
+    /// What the line names after its title: the one target that moved — by its title alone, or by
+    /// its kind and short id where this client holds no title — or how many moved, in the noun the
+    /// Watching strip counts in (`WatchProjection.targetNoun`). Nil when none did: the three ends, and
+    /// a Match whose payload names none.
+    public static func lineName(_ wake: WatchWake, name: String? = nil) -> String? {
+        let changed = wake.changedTargets
+        if changed.count == 1, let only = changed.first {
+            return name.flatMap { $0.isEmpty ? nil : $0 } ?? "\(noun(only)) \(String(only.id.suffix(8)))"
+        }
+        guard !changed.isEmpty else { return nil }
+        let kinds = Set(changed.map(\.kind))
+        let counted = kinds.count != 1 ? "target" : (kinds.contains(.task) ? "task" : "session")
+        return "\(changed.count) \(counted)s"
+    }
+
+    /// The word the line closes on: the one target's status, or how many of several failed.
+    public static func lineStatus(_ wake: WatchWake) -> String? {
+        let changed = wake.changedTargets
+        if changed.count == 1, let status = changed.first?.status { return status.isEmpty ? nil : status }
+        let failed = changed.filter(isFailed)
+        return failed.isEmpty ? nil : "\(failed.count) of \(changed.count) failed"
+    }
+
+    /// The failures that stay out of the fold, as a failed background job's output tail does: each
+    /// failed target where several moved — a lone one is the line itself — up to `shownChanges`, with
+    /// how many more `WatchProjection.moreTargets` counts.
+    public static func failures(_ wake: WatchWake) -> (shown: [WatchWakeTarget], more: Int) {
+        guard wake.changedTargets.count > 1 else { return ([], 0) }
+        let failed = wake.changedTargets.filter(isFailed)
+        let shown = Array(failed.prefix(shownChanges))
+        return (shown, failed.count - shown.count)
+    }
+
+    /// What the line's chevron is labelled: the background line's word for a fold that holds no job.
+    public static let details = "详情"
+
+    private static func noun(_ target: WatchWakeTarget) -> String {
+        target.kind == .session ? "Session" : "Task"
+    }
+
+    /// "Queued by a watch, not typed by you · generation 1" — who queued the turn, said in the fold.
+    /// When is on the line itself.
+    public static func meta(_ wake: WatchWake) -> String {
         var line = "Queued by a watch, not typed by you"
         if let generation = wake.generation { line += " · generation \(generation)" }
-        if let ts, let relative = RelativeTime.format(ts, now: now) { line += " · \(relative)" }
         return line
     }
 
@@ -220,11 +272,13 @@ public enum WatchWakeCard {
     public static let rawSummary = "What the agent received"
 }
 
-/// A wake still waiting behind the running turn. The card is the same one; only the foot changes.
+/// A wake still waiting behind the running turn. The line is the same one, dashed, with the queue's
+/// status and its action under it.
 ///
 /// Withdrawing it is not Cancel: nobody typed these words, so nothing folds back into the composer,
 /// and the server dead-letters the watch's delivery (`WAKE_WITHDRAWN`) rather than holding it — this
-/// session is not woken this time and the watch does not send it again. That is why it asks first.
+/// session is not woken this time and the watch does not send it again. That is why it asks first,
+/// and `consequence` is what the asking says.
 public enum WatchWakeQueue {
     public static let status = "Queued for next turn"
     public static let withdraw = "Withdraw wake"

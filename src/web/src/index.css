@@ -19146,13 +19146,13 @@ div.landing-jobs-open {
 }
 
 /* ── Watches (docs/watch-contract.md): the Following page, watch cards, the session and task
-   relations, and the transcript card for a turn a watch queued. A watch is not a process, so none of
+   relations, and the transcript line for a turn a watch queued. A watch is not a process, so none of
    this borrows the Background processes tray's look (contract §9.2). */
 /* One type size and one link treatment for every watch surface, which otherwise inherit whatever the
-   page around them set. */
+   page around them set. The transcript line takes its size from the background line it is drawn as
+   (.bgwake), and only the links from here. */
 .watch-card,
-.watch-row,
-.watch-wake {
+.watch-row {
   font-size: 13px;
   line-height: 1.45;
 }
@@ -20060,107 +20060,48 @@ div.landing-jobs-open {
   color: var(--warning);
 }
 
-/* Carries its own vertical margin rather than living off its neighbour's: two wakes in a row —
-   one watch firing twice, or two watches at once — have no message bubble between them to lend
-   theirs, and used to touch. 8px is what .chat-msg uses, and adjacent margins collapse, so a wake
-   next to a message keeps the spacing it already had. */
-.watch-wake-wrap {
-  display: flex;
-  justify-content: flex-end;
-  margin: 8px 0;
-}
-.watch-wake {
-  width: min(560px, 88%);
-  padding: 10px 12px;
-  border: 1px solid var(--brand-border);
-  border-radius: 12px;
-  background: var(--brand-tint);
-  color: var(--text-1);
-}
-.watch-wake.is-expired,
-.watch-wake.is-revoked,
-.watch-wake.is-unresolvable {
-  border-color: var(--warning-border);
-  background: var(--warning-bg);
-}
-.watch-wake-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--brand);
-  font-weight: 600;
-}
-.watch-wake.is-expired .watch-wake-title,
-.watch-wake.is-revoked .watch-wake-title,
-.watch-wake.is-unresolvable .watch-wake-title {
-  color: var(--warning);
+/* The turn a watch queued (WatchWakeCard): the background line below, drawn in that line's classes
+   (.bgwake-row, .bgwake-mark…) under a root of its own (.watch-wake, beside .bgwake in the rules
+   that key on the root), so a watch firing and a job finishing read as the same kind of event in the
+   agent's stream. What is the watch's own: its eye in the line's quiet tone rather than a job's
+   green check, why it fired and each target that moved in the fold, and the failed targets kept in
+   view under the line while the fold is closed — the fold lists them with the rest once it is open. */
+.watch-wake .bgwake-mark {
+  color: var(--text-3);
 }
 .watch-wake-why {
-  margin: 3px 0 6px;
+  margin-bottom: 4px;
+  color: var(--text-2);
 }
 .watch-wake-changed {
   margin: 0 0 6px;
   padding: 0;
-  font-size: 12px;
   list-style: none;
 }
-.watch-wake-meta {
-  color: var(--text-2);
-  font-size: 12px;
-}
-.watch-wake-undelivered {
-  margin-top: 4px;
-  color: var(--warning);
-  font-size: 12px;
+.watch-wake-changed li.is-failed,
+.watch-wake-changed li.is-failed a {
+  color: var(--error);
 }
 .watch-wake-links {
-  margin-top: 6px;
+  margin-top: 2px;
+}
+.watch-wake-failures {
+  margin: 2px 0 0 22px;
   font-size: 12px;
 }
-.watch-wake-raw {
-  margin-top: 6px;
-  font-size: 12px;
+.watch-wake-failures .watch-wake-changed {
+  margin: 0;
 }
-.watch-wake-raw summary {
-  color: var(--text-2);
-  cursor: pointer;
-}
-.watch-wake-raw pre {
-  max-height: 320px;
-  margin: 6px 0 0;
-  padding: 8px;
-  overflow: auto;
-  border-radius: 6px;
-  background: var(--fill-inset);
-  font-size: 11px;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-/* A wake still waiting behind the running turn (WorkspaceView's queued tail): dashed like a queued
-   message, with the queue's status line at its foot. What withdrawing it costs takes a line of its
-   own under the state and the action, rather than the one-line ellipsis a delivery failure gets. */
-.watch-wake.is-queued {
-  border-style: dashed;
-}
-.watch-wake-queued {
-  margin-top: 6px;
-}
-.watch-wake-queued .chat-queued-meta {
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  row-gap: 2px;
-}
-.watch-wake-queued .chat-queued-why {
-  order: 1;
-  flex-basis: 100%;
-  white-space: normal;
+.bgwake-fold[open] ~ .watch-wake-failures {
+  display: none;
 }
 /* The turn the control plane opened for a background job's news, or for a wakeup coming due
    (BackgroundWakeCard): one event line in the agent's stream, in the grammar `⊘ interrupted`
    (.chat-note) already uses, rather than a card on the reader's side of the conversation — which is
    where their own messages sit, in their tint, so a run of wakes read as somebody cutting in. A
    job that failed or was killed takes the error tone and keeps its tail out of the fold. */
-.bgwake {
+.bgwake,
+.watch-wake {
   margin: 6px 0;
   font-size: 13px;
   color: var(--text-3);
@@ -20187,7 +20128,8 @@ div.landing-jobs-open {
   display: inline-flex;
   color: var(--success-solid);
 }
-.bgwake.is-failed .bgwake-mark {
+.bgwake.is-failed .bgwake-mark,
+.watch-wake.is-failed .bgwake-mark {
   color: var(--error-solid);
 }
 .bgwake-mark.is-pending {
@@ -20196,7 +20138,8 @@ div.landing-jobs-open {
 .bgwake-title {
   flex: none;
 }
-.bgwake.is-failed .bgwake-title {
+.bgwake.is-failed .bgwake-title,
+.watch-wake.is-failed .bgwake-title {
   color: var(--error);
 }
 /* The one line gives way here: the title, how it came out and when stay whole, and all of the name
@@ -20423,7 +20366,8 @@ div.landing-jobs-open {
 }
 /* Still waiting behind the running turn (WorkspaceView's queued tail): dashed like a queued
    message, with the queue's own status line under it. */
-.bgwake.is-queued .bgwake-row {
+.bgwake.is-queued .bgwake-row,
+.watch-wake.is-queued .bgwake-row {
   border: 1px dashed var(--border);
 }
 .bgwake-queued {
