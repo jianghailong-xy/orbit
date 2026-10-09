@@ -136,7 +136,8 @@ fun DirectoryActionDialog(dialog: DirectoryDialog, api: DirectoryApi, data: Dire
                             if (!allowed) Text("This action isn't available in the current session state.", style = MaterialTheme.typography.bodySmall)
                             if (dialog.view != SessionView.TRASH) {
                                 ActionButton("Share…", canWrite) { setDialog(DirectoryDialog.Share(s)) }
-                                ActionButton("Move…", canWrite) { setDialog(DirectoryDialog.Move(s)) }
+                                // A project's members are listed where its coordinator is, so of its sessions only the coordinator offers Move… (A05-6).
+                                if (s.projectMembership?.isCoordinator != false) ActionButton("Move…", canWrite) { setDialog(DirectoryDialog.Move(s)) }
                             }
                             ActionButton(if (dialog.view == SessionView.TRASH) "Delete Permanently…" else "Move to Trash", canWrite) {
                                 if (dialog.view == SessionView.TRASH) setDialog(DirectoryDialog.Purge(s))
@@ -214,7 +215,7 @@ private fun MoveChoices(session: DirectorySession, api: DirectoryApi, enabled: B
 }
 
 @Composable
-private fun ActionButton(text: String, enabled: Boolean, action: () -> Unit) {
+internal fun ActionButton(text: String, enabled: Boolean, action: () -> Unit) {
     TextButton(onClick = action, enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(text) }
 }
 

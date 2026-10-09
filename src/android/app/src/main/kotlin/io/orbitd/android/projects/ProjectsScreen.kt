@@ -839,7 +839,7 @@ private fun LazyListScope.overviewSection(state: ProjectPageState, doc: JsonObje
 /** The landing in flight (ProjectLandingRow.swift): what the platform is doing while the counts stand still — and, on a server that
  * lists its jobs, a press that opens them. */
 @Composable
-private fun LandingRow(line: LandingLine, openJobs: (() -> Unit)?) {
+internal fun LandingRow(line: LandingLine, openJobs: (() -> Unit)?) {
     Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
         .then(if (openJobs != null) Modifier.clickable(role = Role.Button, onClick = openJobs) else Modifier).padding(10.dp).testTag("landing-row"),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -877,7 +877,7 @@ private fun LandingLineView(line: LandingLine, modifier: Modifier = Modifier) {
  * Retry, and a Retry that did not go through says why under its row. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun LandingJobsSheet(lines: List<LandingJobLine>, retry: suspend (String) -> String?, openTask: (String) -> Unit, close: () -> Unit) {
+internal fun LandingJobsSheet(lines: List<LandingJobLine>, retry: suspend (String) -> String?, openTask: (String) -> Unit, close: () -> Unit) {
     // The jobs a Retry is on its way for take no second press; why one did not go through stays under its row.
     var retrying by remember { mutableStateOf<Set<String>>(emptySet()) }
     var failures by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
