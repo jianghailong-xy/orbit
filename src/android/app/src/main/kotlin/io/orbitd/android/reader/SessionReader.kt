@@ -309,7 +309,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // Keep the composer and its activity-result launchers alive while card forms use the IME.
                 // The chip's Open task › pushes the task over this run, so Back returns to it.
                 Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
-                    focusRequest = composeFocus, inputFocusChanged = { composerFocused = it }, openTask = { open(OrbitRoute(Destination.TASK, it)) }) }
+                    focusRequest = composeFocus, inputFocusChanged = { composerFocused = it }, openTask = { open(OrbitRoute(Destination.TASK, it)) },
+                    openRunner = { runner, engine -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) }) }
             }
         }
         }

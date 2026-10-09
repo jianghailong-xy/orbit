@@ -96,9 +96,9 @@ abstract class ComposerShellTest {
     protected fun dialogButtons(): List<String> = compose.onAllNodes(hasAnyAncestor(isDialog()) and hasClickAction()).fetchSemanticsNodes()
         .mapNotNull { node -> node.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } }
 
-    /** Every line of the open dialog, top to bottom — a button's words merged into one line. */
+    /** Every row of the open dialog, top to bottom — a button's texts on lines of their own. */
     protected fun dialogLines(): List<String> = compose.onAllNodes(hasAnyAncestor(isDialog()) and hasText("", substring = true))
-        .fetchSemanticsNodes().mapNotNull { node -> node.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } }
+        .fetchSemanticsNodes().mapNotNull { node -> node.config.getOrNull(SemanticsProperties.Text)?.joinToString("\n") { it.text } }
 
     /** The dialog's lines after the [heading] line, up to the first of [until]. */
     protected fun section(heading: String, until: Set<String>): List<String> =
