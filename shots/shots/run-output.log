@@ -1,0 +1,146 @@
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+==> stub ready on 127.0.0.1:8765 (pid 5552, after 2s)
+==> ios
+Test Case '-[MrProbeUITests.ManagedShotTests test01CapabilityMissing]' started.
+Test Case '-[MrProbeUITests.ManagedShotTests test01CapabilityMissing]' passed (103.694 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test02CapabilityOff]' started.
+Test Case '-[MrProbeUITests.ManagedShotTests test02CapabilityOff]' passed (18.931 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test03Preparing]' started.
+Test Case '-[MrProbeUITests.ManagedShotTests test03Preparing]' passed (15.307 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test04WaitingCapacity]' started.
+Test Case '-[MrProbeUITests.ManagedShotTests test04WaitingCapacity]' passed (15.037 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test05Available]' started.
+Test Case '-[MrProbeUITests.ManagedShotTests test05Available]' passed (12.526 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test06Sleeping]' started.
+Test Case '-[MrProbeUITests.ManagedShotTests test06Sleeping]' passed (12.325 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test07Waking]' started.
+Test Case '-[MrProbeUITests.ManagedShotTests test07Waking]' passed (18.382 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test08FailedRetry]' started.
+Test Case '-[MrProbeUITests.ManagedShotTests test08FailedRetry]' passed (23.508 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test09ModelUnavailable]' started.
+Test Case '-[MrProbeUITests.ManagedShotTests test09ModelUnavailable]' passed (15.919 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test10NotEligible]' started.
+Test Case '-[MrProbeUITests.ManagedShotTests test10NotEligible]' passed (12.147 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test11SetUp]' started.
+Test Case '-[MrProbeUITests.ManagedShotTests test11SetUp]' passed (19.143 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test12Removed]' started.
+Test Case '-[MrProbeUITests.ManagedShotTests test12Removed]' passed (15.853 seconds).
+	 Executed 12 tests, with 0 failures (0 unexpected) in 282.771 (282.789) seconds
+	 Executed 12 tests, with 0 failures (0 unexpected) in 282.771 (282.795) seconds
+	 Executed 12 tests, with 0 failures (0 unexpected) in 282.771 (282.796) seconds
+** TEST SUCCEEDED **
+==> stub ready on 127.0.0.1:8765 (pid 33072, after 2s)
+==> mac
+Test Case '-[MrMacProbeUITests.ManagedShotTests test01CapabilityMissing]' started.
+Test Case '-[MrMacProbeUITests.ManagedShotTests test01CapabilityMissing]' passed (19.573 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test02CapabilityOff]' started.
+Test Case '-[MrMacProbeUITests.ManagedShotTests test02CapabilityOff]' passed (9.239 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test03Preparing]' started.
+Test Case '-[MrMacProbeUITests.ManagedShotTests test03Preparing]' passed (9.464 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test04WaitingCapacity]' started.
+Test Case '-[MrMacProbeUITests.ManagedShotTests test04WaitingCapacity]' passed (9.573 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test05Available]' started.
+Test Case '-[MrMacProbeUITests.ManagedShotTests test05Available]' passed (8.798 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test06Sleeping]' started.
+Test Case '-[MrMacProbeUITests.ManagedShotTests test06Sleeping]' passed (10.042 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test07Waking]' started.
+Test Case '-[MrMacProbeUITests.ManagedShotTests test07Waking]' passed (11.346 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test08FailedRetry]' started.
+Test Case '-[MrMacProbeUITests.ManagedShotTests test08FailedRetry]' passed (16.383 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test09ModelUnavailable]' started.
+Test Case '-[MrMacProbeUITests.ManagedShotTests test09ModelUnavailable]' passed (9.160 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test10NotEligible]' started.
+Test Case '-[MrMacProbeUITests.ManagedShotTests test10NotEligible]' passed (10.291 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test11SetUp]' started.
+Test Case '-[MrMacProbeUITests.ManagedShotTests test11SetUp]' passed (11.201 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test12Removed]' started.
+Test Case '-[MrMacProbeUITests.ManagedShotTests test12Removed]' passed (9.012 seconds).
+	 Executed 12 tests, with 0 failures (0 unexpected) in 134.082 (134.089) seconds
+	 Executed 12 tests, with 0 failures (0 unexpected) in 134.082 (134.092) seconds
+	 Executed 12 tests, with 0 failures (0 unexpected) in 134.082 (134.094) seconds
+** TEST SUCCEEDED **
+.mr-probe/run.sh: line 78: 33072 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+/Users/runner/work/orbit/orbit/.mr-probe/shots/ios:
+total 9104
+drwxr-xr-x  46 runner  staff    1472 Oct  9 12:30 .
+drwxr-xr-x   4 runner  staff     128 Oct  9 12:08 ..
+-rw-r--r--   1 runner  staff  354824 Oct  9 12:18 01-capability-missing.png
+-rw-r--r--   1 runner  staff  356814 Oct  9 12:18 02-capability-off.png
+-rw-r--r--   1 runner  staff  218734 Oct  9 12:18 03-preparing.png
+-rw-r--r--   1 runner  staff  232304 Oct  9 12:18 04-waiting-capacity.png
+-rw-r--r--   1 runner  staff  356896 Oct  9 12:19 05-available.png
+-rw-r--r--   1 runner  staff  304924 Oct  9 12:19 06-sleeping.png
+-rw-r--r--   1 runner  staff  304150 Oct  9 12:19 07-waking.png
+-rw-r--r--   1 runner  staff  221048 Oct  9 12:19 08-failed-retry.png
+-rw-r--r--   1 runner  staff  218725 Oct  9 12:19 08b-after-retry.png
+-rw-r--r--   1 runner  staff  243073 Oct  9 12:20 09-model-unavailable.png
+-rw-r--r--   1 runner  staff  290426 Oct  9 12:20 10-not-eligible.png
+-rw-r--r--   1 runner  staff  289392 Oct  9 12:20 11-set-up.png
+-rw-r--r--   1 runner  staff  290825 Oct  9 12:20 11b-after-set-up.png
+-rw-r--r--   1 runner  staff  211691 Oct  9 12:21 12-removed.png
+drwxr-xr-x  41 runner  staff    1312 Oct  9 12:22 attachments
+-rw-r--r--   1 runner  staff     262 Oct  9 12:22 Complete Issue Description.txt
+-rw-r--r--   1 runner  staff      34 Oct  9 12:22 ManagedShotTeststest01CapabilityMissing-notes
+-rw-r--r--@  1 runner  staff      34 Oct  9 12:18 ManagedShotTeststest01CapabilityMissing-notes.txt
+-rw-r--r--   1 runner  staff      30 Oct  9 12:22 ManagedShotTeststest02CapabilityOff-notes
+-rw-r--r--@  1 runner  staff      30 Oct  9 12:18 ManagedShotTeststest02CapabilityOff-notes.txt
+-rw-r--r--   1 runner  staff       0 Oct  9 12:22 ManagedShotTeststest03Preparing-notes
+-rw-r--r--@  1 runner  staff       0 Oct  9 12:18 ManagedShotTeststest03Preparing-notes.txt
+-rw-r--r--   1 runner  staff       0 Oct  9 12:22 ManagedShotTeststest04WaitingCapacity-notes
+-rw-r--r--@  1 runner  staff       0 Oct  9 12:18 ManagedShotTeststest04WaitingCapacity-notes.txt
+-rw-r--r--   1 runner  staff       0 Oct  9 12:22 ManagedShotTeststest05Available-notes
+-rw-r--r--@  1 runner  staff       0 Oct  9 12:19 ManagedShotTeststest05Available-notes.txt
+-rw-r--r--   1 runner  staff       0 Oct  9 12:22 ManagedShotTeststest06Sleeping-notes
+-rw-r--r--@  1 runner  staff       0 Oct  9 12:19 ManagedShotTeststest06Sleeping-notes.txt
+-rw-r--r--   1 runner  staff       0 Oct  9 12:22 ManagedShotTeststest07Waking-notes
+-rw-r--r--@  1 runner  staff       0 Oct  9 12:19 ManagedShotTeststest07Waking-notes.txt
+-rw-r--r--   1 runner  staff     236 Oct  9 12:22 ManagedShotTeststest08FailedRetry-notes
+-rw-r--r--@  1 runner  staff     236 Oct  9 12:19 ManagedShotTeststest08FailedRetry-notes.txt
+-rw-r--r--   1 runner  staff       0 Oct  9 12:22 ManagedShotTeststest09ModelUnavailable-notes
+-rw-r--r--@  1 runner  staff       0 Oct  9 12:20 ManagedShotTeststest09ModelUnavailable-notes.txt
+-rw-r--r--   1 runner  staff       0 Oct  9 12:22 ManagedShotTeststest10NotEligible-notes
+-rw-r--r--@  1 runner  staff       0 Oct  9 12:20 ManagedShotTeststest10NotEligible-notes.txt
+-rw-r--r--   1 runner  staff     106 Oct  9 12:22 ManagedShotTeststest11SetUp-notes
+-rw-r--r--@  1 runner  staff     106 Oct  9 12:20 ManagedShotTeststest11SetUp-notes.txt
+-rw-r--r--   1 runner  staff       0 Oct  9 12:22 ManagedShotTeststest12Removed-notes
+-rw-r--r--@  1 runner  staff       0 Oct  9 12:21 ManagedShotTeststest12Removed-notes.txt
+-rw-r--r--   1 runner  staff    5240 Oct  9 12:30 not-served.txt
+-rw-r--r--   1 runner  staff   31906 Oct  9 12:21 requests.log
+-rw-r--r--   1 runner  staff      49 Oct  9 12:10 requests.log.out
+-rw-r--r--   1 runner  staff  655222 Oct  9 12:22 xcodebuild-ios.log
+
+/Users/runner/work/orbit/orbit/.mr-probe/shots/mac:
+total 4168
+drwxr-xr-x  33 runner  staff    1056 Oct  9 12:30 .
+drwxr-xr-x   4 runner  staff     128 Oct  9 12:08 ..
+-rw-r--r--   1 runner  staff  102710 Oct  9 12:30 01-capability-missing.png
+-rw-r--r--   1 runner  staff  102710 Oct  9 12:30 02-capability-off.png
+-rw-r--r--   1 runner  staff   82222 Oct  9 12:30 03-preparing.png
+-rw-r--r--   1 runner  staff   87858 Oct  9 12:30 04-waiting-capacity.png
+-rw-r--r--   1 runner  staff  102710 Oct  9 12:30 05-available.png
+-rw-r--r--   1 runner  staff  132920 Oct  9 12:30 06-sleeping.png
+-rw-r--r--   1 runner  staff  132610 Oct  9 12:30 07-waking.png
+-rw-r--r--   1 runner  staff   83969 Oct  9 12:30 08-failed-retry.png
+-rw-r--r--   1 runner  staff   82267 Oct  9 12:30 08b-after-retry.png
+-rw-r--r--   1 runner  staff   92048 Oct  9 12:30 09-model-unavailable.png
+-rw-r--r--   1 runner  staff  106695 Oct  9 12:30 10-not-eligible.png
+-rw-r--r--   1 runner  staff   98640 Oct  9 12:30 11-set-up.png
+-rw-r--r--   1 runner  staff  106298 Oct  9 12:30 11b-after-set-up.png
+-rw-r--r--   1 runner  staff   78930 Oct  9 12:30 12-removed.png
+drwxr-xr-x  29 runner  staff     928 Oct  9 12:30 attachments
+-rw-r--r--   1 runner  staff      34 Oct  9 12:30 ManagedShotTeststest01CapabilityMissing-notes
+-rw-r--r--   1 runner  staff      30 Oct  9 12:30 ManagedShotTeststest02CapabilityOff-notes
+-rw-r--r--   1 runner  staff       0 Oct  9 12:30 ManagedShotTeststest03Preparing-notes
+-rw-r--r--   1 runner  staff       0 Oct  9 12:30 ManagedShotTeststest04WaitingCapacity-notes
+-rw-r--r--   1 runner  staff       0 Oct  9 12:30 ManagedShotTeststest05Available-notes
+-rw-r--r--   1 runner  staff       0 Oct  9 12:30 ManagedShotTeststest06Sleeping-notes
+-rw-r--r--   1 runner  staff       0 Oct  9 12:30 ManagedShotTeststest07Waking-notes
+-rw-r--r--   1 runner  staff     210 Oct  9 12:30 ManagedShotTeststest08FailedRetry-notes
+-rw-r--r--   1 runner  staff       0 Oct  9 12:30 ManagedShotTeststest09ModelUnavailable-notes
+-rw-r--r--   1 runner  staff       0 Oct  9 12:30 ManagedShotTeststest10NotEligible-notes
+-rw-r--r--   1 runner  staff      80 Oct  9 12:30 ManagedShotTeststest11SetUp-notes
+-rw-r--r--   1 runner  staff       0 Oct  9 12:30 ManagedShotTeststest12Removed-notes
+-rw-r--r--   1 runner  staff    2594 Oct  9 12:30 not-served.txt
+-rw-r--r--   1 runner  staff   26081 Oct  9 12:30 requests.log
+-rw-r--r--   1 runner  staff      49 Oct  9 12:22 requests.log.out
+-rw-r--r--   1 runner  staff  646328 Oct  9 12:30 xcodebuild-mac.log

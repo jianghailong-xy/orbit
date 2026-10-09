@@ -1,0 +1,29 @@
+Test Case '-[MrMacProbeUITests.ManagedShotTests test01CapabilityMissing]' started.
+Test Case '-[MrMacProbeUITests.ManagedShotTests test01CapabilityMissing]' passed (19.573 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test02CapabilityOff]' started.
+Test Case '-[MrMacProbeUITests.ManagedShotTests test02CapabilityOff]' passed (9.239 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test03Preparing]' started.
+Test Case '-[MrMacProbeUITests.ManagedShotTests test03Preparing]' passed (9.464 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test04WaitingCapacity]' started.
+Test Case '-[MrMacProbeUITests.ManagedShotTests test04WaitingCapacity]' passed (9.573 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test05Available]' started.
+Test Case '-[MrMacProbeUITests.ManagedShotTests test05Available]' passed (8.798 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test06Sleeping]' started.
+Test Case '-[MrMacProbeUITests.ManagedShotTests test06Sleeping]' passed (10.042 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test07Waking]' started.
+Test Case '-[MrMacProbeUITests.ManagedShotTests test07Waking]' passed (11.346 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test08FailedRetry]' started.
+    t =    10.74s Added attachment named '08-failed-retry'
+Test Case '-[MrMacProbeUITests.ManagedShotTests test08FailedRetry]' passed (16.383 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test09ModelUnavailable]' started.
+Test Case '-[MrMacProbeUITests.ManagedShotTests test09ModelUnavailable]' passed (9.160 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test10NotEligible]' started.
+Test Case '-[MrMacProbeUITests.ManagedShotTests test10NotEligible]' passed (10.291 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test11SetUp]' started.
+Test Case '-[MrMacProbeUITests.ManagedShotTests test11SetUp]' passed (11.201 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test12Removed]' started.
+Test Case '-[MrMacProbeUITests.ManagedShotTests test12Removed]' passed (9.012 seconds).
+	 Executed 12 tests, with 0 failures (0 unexpected) in 134.082 (134.089) seconds
+	 Executed 12 tests, with 0 failures (0 unexpected) in 134.082 (134.092) seconds
+	 Executed 12 tests, with 0 failures (0 unexpected) in 134.082 (134.094) seconds
+** TEST SUCCEEDED **

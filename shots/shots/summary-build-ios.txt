@@ -1,0 +1,29 @@
+Test Case '-[MrProbeUITests.ManagedShotTests test01CapabilityMissing]' started.
+Test Case '-[MrProbeUITests.ManagedShotTests test01CapabilityMissing]' passed (103.694 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test02CapabilityOff]' started.
+Test Case '-[MrProbeUITests.ManagedShotTests test02CapabilityOff]' passed (18.931 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test03Preparing]' started.
+Test Case '-[MrProbeUITests.ManagedShotTests test03Preparing]' passed (15.307 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test04WaitingCapacity]' started.
+Test Case '-[MrProbeUITests.ManagedShotTests test04WaitingCapacity]' passed (15.037 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test05Available]' started.
+Test Case '-[MrProbeUITests.ManagedShotTests test05Available]' passed (12.526 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test06Sleeping]' started.
+Test Case '-[MrProbeUITests.ManagedShotTests test06Sleeping]' passed (12.325 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test07Waking]' started.
+Test Case '-[MrProbeUITests.ManagedShotTests test07Waking]' passed (18.382 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test08FailedRetry]' started.
+    t =    17.56s Added attachment named '08-failed-retry'
+Test Case '-[MrProbeUITests.ManagedShotTests test08FailedRetry]' passed (23.508 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test09ModelUnavailable]' started.
+Test Case '-[MrProbeUITests.ManagedShotTests test09ModelUnavailable]' passed (15.919 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test10NotEligible]' started.
+Test Case '-[MrProbeUITests.ManagedShotTests test10NotEligible]' passed (12.147 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test11SetUp]' started.
+Test Case '-[MrProbeUITests.ManagedShotTests test11SetUp]' passed (19.143 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test12Removed]' started.
+Test Case '-[MrProbeUITests.ManagedShotTests test12Removed]' passed (15.853 seconds).
+	 Executed 12 tests, with 0 failures (0 unexpected) in 282.771 (282.789) seconds
+	 Executed 12 tests, with 0 failures (0 unexpected) in 282.771 (282.795) seconds
+	 Executed 12 tests, with 0 failures (0 unexpected) in 282.771 (282.796) seconds
+** TEST SUCCEEDED **

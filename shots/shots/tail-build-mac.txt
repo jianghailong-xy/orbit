@@ -1,0 +1,300 @@
+    t =     0.13s Open io.orbitd.mrmacprobe
+    t =     0.13s     Launch io.orbitd.mrmacprobe
+2026-10-09 12:28:31.975 xcodebuild[33208:94970] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 12:28:31.975 xcodebuild[33208:94970] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     0.86s         Wait for accessibility to load
+    t =     1.67s         Setting up automation session
+    t =     1.71s         Wait for io.orbitd.mrmacprobe to idle
+    t =     2.05s Waiting 20.0s for Window (First Match) to exist
+    t =     3.10s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     3.11s         Checking existence of `Window (First Match)`
+    t =     3.13s Checking existence of `Any (First Match)`
+    t =     3.46s Checking existence of `StaticText (First Match)`
+    t =     8.22s Checking existence of `Window (First Match)`
+    t =     8.23s Checking existence of `Window (First Match)`
+    t =     8.24s Find the Window (First Match)
+    t =     8.35s Added attachment named '03-preparing'
+    t =     8.35s Terminate io.orbitd.mrmacprobe:50981
+    t =     9.37s Tear Down
+    t =     9.37s     Added attachment named 'ManagedShotTeststest03Preparing-notes.txt'
+Test Case '-[MrMacProbeUITests.ManagedShotTests test03Preparing]' passed (9.464 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test04WaitingCapacity]' started.
+    t =     0.00s Start Test at 2026-10-09 12:28:41.309
+    t =     0.15s Set Up
+    t =     0.17s Open io.orbitd.mrmacprobe
+    t =     0.17s     Launch io.orbitd.mrmacprobe
+2026-10-09 12:28:41.481 xcodebuild[33208:94970] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 12:28:41.481 xcodebuild[33208:94970] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     0.80s         Wait for accessibility to load
+    t =     1.62s         Setting up automation session
+    t =     1.73s         Wait for io.orbitd.mrmacprobe to idle
+    t =     1.73s Waiting 20.0s for Window (First Match) to exist
+    t =     2.75s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     2.75s         Checking existence of `Window (First Match)`
+    t =     2.78s Checking existence of `Any (First Match)`
+    t =     3.28s Checking existence of `StaticText (First Match)`
+    t =     8.33s Checking existence of `Window (First Match)`
+    t =     8.34s Checking existence of `Window (First Match)`
+    t =     8.34s Find the Window (First Match)
+    t =     8.41s Added attachment named '04-waiting-capacity'
+    t =     8.41s Terminate io.orbitd.mrmacprobe:51140
+    t =     9.51s Tear Down
+    t =     9.51s     Added attachment named 'ManagedShotTeststest04WaitingCapacity-notes.txt'
+Test Case '-[MrMacProbeUITests.ManagedShotTests test04WaitingCapacity]' passed (9.573 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test05Available]' started.
+    t =     0.00s Start Test at 2026-10-09 12:28:50.882
+    t =     0.10s Set Up
+    t =     0.14s Open io.orbitd.mrmacprobe
+    t =     0.14s     Launch io.orbitd.mrmacprobe
+2026-10-09 12:28:51.041 xcodebuild[33208:94970] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 12:28:51.041 xcodebuild[33208:94970] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     0.68s         Wait for accessibility to load
+    t =     1.32s         Setting up automation session
+    t =     1.35s         Wait for io.orbitd.mrmacprobe to idle
+    t =     1.41s Waiting 20.0s for Window (First Match) to exist
+    t =     2.49s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     2.49s         Checking existence of `Window (First Match)`
+    t =     2.54s Checking existence of `Any (First Match)`
+    t =     2.73s Checking existence of `StaticText (First Match)`
+    t =     7.47s Checking existence of `Window (First Match)`
+    t =     7.49s Checking existence of `Window (First Match)`
+    t =     7.50s Find the Window (First Match)
+    t =     7.55s Added attachment named '05-available'
+    t =     7.55s Checking existence of `Any (First Match)`
+    t =     7.68s Terminate io.orbitd.mrmacprobe:51606
+    t =     8.77s Tear Down
+    t =     8.77s     Added attachment named 'ManagedShotTeststest05Available-notes.txt'
+Test Case '-[MrMacProbeUITests.ManagedShotTests test05Available]' passed (8.798 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test06Sleeping]' started.
+    t =     0.00s Start Test at 2026-10-09 12:28:59.682
+    t =     0.12s Set Up
+    t =     0.12s Open io.orbitd.mrmacprobe
+    t =     0.12s     Launch io.orbitd.mrmacprobe
+2026-10-09 12:28:59.807 xcodebuild[33208:94970] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 12:28:59.807 xcodebuild[33208:94970] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     0.63s         Wait for accessibility to load
+    t =     1.21s         Setting up automation session
+    t =     1.27s         Wait for io.orbitd.mrmacprobe to idle
+    t =     1.54s Waiting 20.0s for Window (First Match) to exist
+    t =     2.59s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     2.60s         Checking existence of `Window (First Match)`
+    t =     2.61s Checking existence of `Any (First Match)`
+    t =     2.84s Checking existence of `StaticText (First Match)`
+    t =     2.94s Checking existence of `TextView (First Match)`
+    t =     4.03s Checking existence of `Any (First Match)`
+    t =     4.11s Checking existence of `StaticText (First Match)`
+    t =     8.81s Checking existence of `Window (First Match)`
+    t =     8.83s Checking existence of `Window (First Match)`
+    t =     8.83s Find the Window (First Match)
+    t =     8.92s Added attachment named '06-sleeping'
+    t =     8.92s Terminate io.orbitd.mrmacprobe:52085
+    t =     9.99s Tear Down
+    t =     9.99s     Added attachment named 'ManagedShotTeststest06Sleeping-notes.txt'
+Test Case '-[MrMacProbeUITests.ManagedShotTests test06Sleeping]' passed (10.042 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test07Waking]' started.
+    t =     0.00s Start Test at 2026-10-09 12:29:09.723
+    t =     0.18s Set Up
+    t =     0.22s Open io.orbitd.mrmacprobe
+    t =     0.22s     Launch io.orbitd.mrmacprobe
+2026-10-09 12:29:09.949 xcodebuild[33208:94970] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 12:29:09.949 xcodebuild[33208:94970] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.29s         Wait for accessibility to load
+    t =     2.27s         Setting up automation session
+    t =     2.33s         Wait for io.orbitd.mrmacprobe to idle
+    t =     2.34s Waiting 20.0s for Window (First Match) to exist
+    t =     3.41s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     3.41s         Checking existence of `Window (First Match)`
+    t =     3.49s Checking existence of `Any (First Match)`
+    t =     3.84s Checking existence of `StaticText (First Match)`
+    t =     4.03s Checking existence of `TextView (First Match)`
+    t =     5.18s Checking existence of `Any (First Match)`
+    t =     5.33s Checking existence of `StaticText (First Match)`
+    t =    10.08s Checking existence of `Window (First Match)`
+    t =    10.09s Checking existence of `Window (First Match)`
+    t =    10.10s Find the Window (First Match)
+    t =    10.21s Added attachment named '07-waking'
+    t =    10.21s Terminate io.orbitd.mrmacprobe:52154
+    t =    11.28s Tear Down
+    t =    11.28s     Added attachment named 'ManagedShotTeststest07Waking-notes.txt'
+Test Case '-[MrMacProbeUITests.ManagedShotTests test07Waking]' passed (11.346 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test08FailedRetry]' started.
+    t =     0.00s Start Test at 2026-10-09 12:29:21.069
+    t =     0.10s Set Up
+    t =     0.11s Open io.orbitd.mrmacprobe
+    t =     0.11s     Launch io.orbitd.mrmacprobe
+2026-10-09 12:29:21.189 xcodebuild[33208:94970] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 12:29:21.189 xcodebuild[33208:94970] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     0.82s         Wait for accessibility to load
+    t =     1.89s         Setting up automation session
+    t =     1.92s         Wait for io.orbitd.mrmacprobe to idle
+    t =     1.93s Waiting 20.0s for Window (First Match) to exist
+    t =     3.01s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     3.01s         Checking existence of `Window (First Match)`
+    t =     3.12s Checking existence of `Any (First Match)`
+    t =     3.70s Checking existence of `StaticText (First Match)`
+    t =     4.35s Checking existence of `TextView (First Match)`
+    t =     5.57s Checking existence of `Any (First Match)`
+    t =     5.80s Checking existence of `StaticText (First Match)`
+    t =    10.55s Checking existence of `Window (First Match)`
+    t =    10.57s Checking existence of `Window (First Match)`
+    t =    10.59s Find the Window (First Match)
+    t =    10.74s Added attachment named '08-failed-retry'
+    t =    10.74s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Retry"'
+    t =    10.96s Checking existence of `Button (Element at index 0)`
+    t =    11.15s Find the Button (Element at index 0)
+    t =    11.79s Checking existence of `"Retry" Button`
+    t =    11.96s Find the "Retry" Button
+    t =    12.21s Find the "Retry" Button
+    t =    12.34s Find the "Retry" Button
+    t =    12.52s Find the "Retry" Button
+    t =    12.71s Find the "Retry" Button
+    t =    12.90s Checking existence of `"Retry" Button`
+    t =    13.10s Click "Retry" Button
+    t =    13.10s     Wait for io.orbitd.mrmacprobe to idle
+    t =    13.10s     Find the "Retry" Button
+    t =    13.30s     Check for interrupting elements affecting "Retry" Button
+    t =    13.42s     Synthesize event
+    t =    14.21s     Wait for io.orbitd.mrmacprobe to idle
+    t =    14.22s Checking existence of `Any (First Match)`
+    t =    14.42s Checking existence of `StaticText (First Match)`
+    t =    15.11s Checking existence of `Window (First Match)`
+    t =    15.13s Checking existence of `Window (First Match)`
+    t =    15.13s Find the Window (First Match)
+    t =    15.24s Added attachment named '08b-after-retry'
+    t =    15.27s Terminate io.orbitd.mrmacprobe:52700
+    t =    16.35s Tear Down
+    t =    16.35s     Added attachment named 'ManagedShotTeststest08FailedRetry-notes.txt'
+Test Case '-[MrMacProbeUITests.ManagedShotTests test08FailedRetry]' passed (16.383 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test09ModelUnavailable]' started.
+    t =     0.00s Start Test at 2026-10-09 12:29:37.453
+    t =     0.10s Set Up
+    t =     0.11s Open io.orbitd.mrmacprobe
+    t =     0.11s     Launch io.orbitd.mrmacprobe
+2026-10-09 12:29:37.569 xcodebuild[33208:94970] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 12:29:37.569 xcodebuild[33208:94970] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     0.83s         Wait for accessibility to load
+    t =     1.67s         Setting up automation session
+    t =     1.71s         Wait for io.orbitd.mrmacprobe to idle
+    t =     1.72s Waiting 20.0s for Window (First Match) to exist
+    t =     2.75s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     2.75s         Checking existence of `Window (First Match)`
+    t =     2.77s Checking existence of `Any (First Match)`
+    t =     3.03s Checking existence of `StaticText (First Match)`
+    t =     7.85s Checking existence of `Window (First Match)`
+    t =     7.87s Checking existence of `Window (First Match)`
+    t =     7.89s Find the Window (First Match)
+    t =     8.02s Added attachment named '09-model-unavailable'
+    t =     8.02s Terminate io.orbitd.mrmacprobe:52954
+    t =     9.09s Tear Down
+    t =     9.09s     Added attachment named 'ManagedShotTeststest09ModelUnavailable-notes.txt'
+Test Case '-[MrMacProbeUITests.ManagedShotTests test09ModelUnavailable]' passed (9.160 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test10NotEligible]' started.
+    t =     0.00s Start Test at 2026-10-09 12:29:46.613
+    t =     0.10s Set Up
+    t =     0.11s Open io.orbitd.mrmacprobe
+    t =     0.11s     Launch io.orbitd.mrmacprobe
+2026-10-09 12:29:46.728 xcodebuild[33208:94970] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 12:29:46.728 xcodebuild[33208:94970] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     0.87s         Wait for accessibility to load
+    t =     1.64s         Setting up automation session
+    t =     1.66s         Wait for io.orbitd.mrmacprobe to idle
+    t =     1.68s Waiting 20.0s for Window (First Match) to exist
+    t =     2.70s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     2.70s         Checking existence of `Window (First Match)`
+    t =     2.72s Checking existence of `Any (First Match)`
+    t =     2.90s Checking existence of `StaticText (First Match)`
+    t =     3.04s Checking existence of `TextView (First Match)`
+    t =     4.18s Checking existence of `Any (First Match)`
+    t =     4.34s Checking existence of `StaticText (First Match)`
+    t =     9.04s Checking existence of `Window (First Match)`
+    t =     9.05s Checking existence of `Window (First Match)`
+    t =     9.06s Find the Window (First Match)
+    t =     9.15s Added attachment named '10-not-eligible'
+    t =     9.15s Terminate io.orbitd.mrmacprobe:53133
+    t =    10.24s Tear Down
+    t =    10.24s     Added attachment named 'ManagedShotTeststest10NotEligible-notes.txt'
+Test Case '-[MrMacProbeUITests.ManagedShotTests test10NotEligible]' passed (10.291 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test11SetUp]' started.
+    t =     0.00s Start Test at 2026-10-09 12:29:56.905
+    t =     0.13s Set Up
+    t =     0.15s Open io.orbitd.mrmacprobe
+    t =     0.15s     Launch io.orbitd.mrmacprobe
+2026-10-09 12:29:57.062 xcodebuild[33208:94970] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 12:29:57.062 xcodebuild[33208:94970] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.01s         Wait for accessibility to load
+    t =     1.75s         Setting up automation session
+    t =     1.79s         Wait for io.orbitd.mrmacprobe to idle
+    t =     1.79s Waiting 20.0s for Window (First Match) to exist
+    t =     2.82s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     2.82s         Checking existence of `Window (First Match)`
+    t =     2.84s Checking existence of `Any (First Match)`
+    t =     3.15s Checking existence of `StaticText (First Match)`
+    t =     7.92s Checking existence of `Window (First Match)`
+    t =     7.93s Checking existence of `Window (First Match)`
+    t =     7.94s Find the Window (First Match)
+    t =     8.05s Added attachment named '11-set-up'
+    t =     8.05s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Set up"'
+    t =     8.21s Checking existence of `Button (Element at index 0)`
+    t =     8.28s Find the Button (Element at index 0)
+    t =     8.36s Checking existence of `"Set up" Button`
+    t =     8.44s Find the "Set up" Button
+    t =     8.52s Find the "Set up" Button
+    t =     8.62s Find the "Set up" Button
+    t =     8.69s Find the "Set up" Button
+    t =     8.77s Find the "Set up" Button
+    t =     8.84s Checking existence of `"Set up" Button`
+    t =     8.90s Click "Set up" Button
+    t =     8.90s     Wait for io.orbitd.mrmacprobe to idle
+    t =     8.90s     Find the "Set up" Button
+    t =     8.96s     Check for interrupting elements affecting "Set up" Button
+    t =     8.97s     Synthesize event
+    t =     9.33s     Wait for io.orbitd.mrmacprobe to idle
+    t =     9.34s Checking existence of `Any (First Match)`
+    t =     9.41s Checking existence of `StaticText (First Match)`
+    t =    10.07s Checking existence of `Window (First Match)`
+    t =    10.08s Checking existence of `Window (First Match)`
+    t =    10.08s Find the Window (First Match)
+    t =    10.11s Added attachment named '11b-after-set-up'
+    t =    10.12s Terminate io.orbitd.mrmacprobe:53936
+    t =    11.16s Tear Down
+    t =    11.16s     Added attachment named 'ManagedShotTeststest11SetUp-notes.txt'
+Test Case '-[MrMacProbeUITests.ManagedShotTests test11SetUp]' passed (11.201 seconds).
+Test Case '-[MrMacProbeUITests.ManagedShotTests test12Removed]' started.
+    t =     0.00s Start Test at 2026-10-09 12:30:08.106
+    t =     0.12s Set Up
+    t =     0.13s Open io.orbitd.mrmacprobe
+    t =     0.13s     Launch io.orbitd.mrmacprobe
+2026-10-09 12:30:08.241 xcodebuild[33208:94970] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 12:30:08.242 xcodebuild[33208:94970] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     0.76s         Wait for accessibility to load
+    t =     1.41s         Setting up automation session
+    t =     1.44s         Wait for io.orbitd.mrmacprobe to idle
+    t =     1.45s Waiting 20.0s for Window (First Match) to exist
+    t =     2.50s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     2.50s         Checking existence of `Window (First Match)`
+    t =     2.51s Checking existence of `Any (First Match)`
+    t =     2.78s Checking existence of `StaticText (First Match)`
+    t =     7.60s Checking existence of `Window (First Match)`
+    t =     7.62s Checking existence of `Window (First Match)`
+    t =     7.63s Find the Window (First Match)
+    t =     7.87s Added attachment named '12-removed'
+    t =     7.87s Terminate io.orbitd.mrmacprobe:54523
+    t =     8.96s Tear Down
+    t =     8.96s     Added attachment named 'ManagedShotTeststest12Removed-notes.txt'
+Test Case '-[MrMacProbeUITests.ManagedShotTests test12Removed]' passed (9.012 seconds).
+Test Suite 'ManagedShotTests' passed at 2026-10-09 12:30:17.119.
+	 Executed 12 tests, with 0 failures (0 unexpected) in 134.082 (134.089) seconds
+Test Suite 'MrMacProbeUITests.xctest' passed at 2026-10-09 12:30:17.122.
+	 Executed 12 tests, with 0 failures (0 unexpected) in 134.082 (134.092) seconds
+Test Suite 'All tests' passed at 2026-10-09 12:30:17.122.
+	 Executed 12 tests, with 0 failures (0 unexpected) in 134.082 (134.094) seconds
+2026-10-09 12:30:18.016 xcodebuild[33208:94970] [MT] IDETestOperationsObserverDebug: 142.233 elapsed -- Testing started completed.
+2026-10-09 12:30:18.016 xcodebuild[33208:94970] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-09 12:30:18.016 xcodebuild[33208:94970] [MT] IDETestOperationsObserverDebug: 142.233 sec, +142.233 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.mr-probe/results/mac.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

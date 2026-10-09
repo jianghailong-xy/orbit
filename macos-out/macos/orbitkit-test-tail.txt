@@ -1,0 +1,60 @@
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testPrimaryCleanLiveShowsMerge]' started.
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testPrimaryCleanLiveShowsMerge]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testPrimaryDirtyButEndedFallsThroughToMerge]' started.
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testPrimaryDirtyButEndedFallsThroughToMerge]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testPrimaryDirtyLiveShowsCommit]' started.
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testPrimaryDirtyLiveShowsCommit]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testPrimaryMergeHeldDuringTurn]' started.
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testPrimaryMergeHeldDuringTurn]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testPrimaryOlderRunnerFallsBackToLifecycle]' started.
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testPrimaryOlderRunnerFallsBackToLifecycle]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testResolvableForAnyConflictNotForError]' started.
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testResolvableForAnyConflictNotForError]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testResolveCommitPromptIsWebsWordForWord]' started.
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testResolveCommitPromptIsWebsWordForWord]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testSessionDetailDecodesWorktreeFields]' started.
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testSessionDetailDecodesWorktreeFields]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testSessionDetailToleratesMissingWorktreeFields]' started.
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testSessionDetailToleratesMissingWorktreeFields]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testSlimOldDetailUsesMixedSessionStateOnlyWhenRawStatusIsMissing]' started.
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testSlimOldDetailUsesMixedSessionStateOnlyWhenRawStatusIsMissing]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testTurnActiveFromTheSendBeforeTheRecordCatchesUp]' started.
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testTurnActiveFromTheSendBeforeTheRecordCatchesUp]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testTurnActiveWhileParkedSubagentsRun]' started.
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testTurnActiveWhileParkedSubagentsRun]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testTurnActiveWhileQueuedOrRunning]' started.
+Test Case '-[OrbitKitTests.WorktreeBarLogicTests testTurnActiveWhileQueuedOrRunning]' passed (0.000 seconds).
+Test Suite 'WorktreeBarLogicTests' passed at 2026-10-09 12:11:02.062.
+	 Executed 41 tests, with 0 failures (0 unexpected) in 0.007 (0.011) seconds
+Test Suite 'WorktreeCommitToastWiringTests' started at 2026-10-09 12:11:02.062.
+Test Case '-[OrbitKitTests.WorktreeCommitToastWiringTests testAFailedCommitLeadsWithTheRunnersPlainSentence]' started.
+Test Case '-[OrbitKitTests.WorktreeCommitToastWiringTests testAFailedCommitLeadsWithTheRunnersPlainSentence]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.WorktreeCommitToastWiringTests testASuccessfulCommitShowsTheRunnerLineUnderItsHeadline]' started.
+Test Case '-[OrbitKitTests.WorktreeCommitToastWiringTests testASuccessfulCommitShowsTheRunnerLineUnderItsHeadline]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.WorktreeCommitToastWiringTests testNoChangeShowsItTooAndStaysNeutral]' started.
+Test Case '-[OrbitKitTests.WorktreeCommitToastWiringTests testNoChangeShowsItTooAndStaysNeutral]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.WorktreeCommitToastWiringTests testTheBarsCommitFailurePanelIsWired]' started.
+Test Case '-[OrbitKitTests.WorktreeCommitToastWiringTests testTheBarsCommitFailurePanelIsWired]' passed (0.009 seconds).
+Test Suite 'WorktreeCommitToastWiringTests' passed at 2026-10-09 12:11:02.075.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.012 (0.013) seconds
+Test Suite 'WorktreeFileTests' started at 2026-10-09 12:11:02.075.
+Test Case '-[OrbitKitTests.WorktreeFileTests testFailuresDistinguishMissingOfflineTimeoutAndDeleted]' started.
+Test Case '-[OrbitKitTests.WorktreeFileTests testFailuresDistinguishMissingOfflineTimeoutAndDeleted]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.WorktreeFileTests testOtherReadErrorsOfferRetryAndReadableServerReason]' started.
+Test Case '-[OrbitKitTests.WorktreeFileTests testOtherReadErrorsOfferRetryAndReadableServerReason]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.WorktreeFileTests testOversizeErrorIsPreservedForThePreview]' started.
+Test Case '-[OrbitKitTests.WorktreeFileTests testOversizeErrorIsPreservedForThePreview]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.WorktreeFileTests testReadsExactRelativePathAndUnmodifiedBinaryBytesWithoutCache]' started.
+Test Case '-[OrbitKitTests.WorktreeFileTests testReadsExactRelativePathAndUnmodifiedBinaryBytesWithoutCache]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.WorktreeFileTests testSamePathIsReadAgainAndDoesNotReusePreviousBytes]' started.
+Test Case '-[OrbitKitTests.WorktreeFileTests testSamePathIsReadAgainAndDoesNotReusePreviousBytes]' passed (0.001 seconds).
+Test Suite 'WorktreeFileTests' passed at 2026-10-09 12:11:02.079.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
+Test Suite 'OrbitKitPackageTests.xctest' passed at 2026-10-09 12:11:02.080.
+	 Executed 3585 tests, with 5 tests skipped and 0 failures (0 unexpected) in 24.845 (25.472) seconds
+Test Suite 'All tests' passed at 2026-10-09 12:11:02.081.
+	 Executed 3585 tests, with 5 tests skipped and 0 failures (0 unexpected) in 24.845 (25.474) seconds
+◇ Test run started.
+↳ Testing Library Version: 1501
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.

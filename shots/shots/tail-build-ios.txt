@@ -1,0 +1,300 @@
+
+Copy /Users/runner/work/orbit/orbit/.mr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/MrProbeUITests-Runner.app/Frameworks/XCUIAutomation.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCUIAutomation.framework (in target 'MrProbeUITests' from project 'MrProbe')
+    cd /Users/runner/work/orbit/orbit/.mr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCUIAutomation.framework /Users/runner/work/orbit/orbit/.mr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/MrProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.mr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/MrProbeUITests-Runner.app/Frameworks/XCTestSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework (in target 'MrProbeUITests' from project 'MrProbe')
+    cd /Users/runner/work/orbit/orbit/.mr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework /Users/runner/work/orbit/orbit/.mr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/MrProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.mr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/MrProbeUITests-Runner.app/Frameworks/XCTestCore.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework (in target 'MrProbeUITests' from project 'MrProbe')
+    cd /Users/runner/work/orbit/orbit/.mr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework /Users/runner/work/orbit/orbit/.mr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/MrProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.mr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/MrProbeUITests-Runner.app/Frameworks/XCTest.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework (in target 'MrProbeUITests' from project 'MrProbe')
+    cd /Users/runner/work/orbit/orbit/.mr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework /Users/runner/work/orbit/orbit/.mr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/MrProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.mr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/MrProbeUITests-Runner.app/Frameworks/XCTAutomationSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework (in target 'MrProbeUITests' from project 'MrProbe')
+    cd /Users/runner/work/orbit/orbit/.mr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework /Users/runner/work/orbit/orbit/.mr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/MrProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.mr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/MrProbeUITests-Runner.app/Frameworks/Testing.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework (in target 'MrProbeUITests' from project 'MrProbe')
+    cd /Users/runner/work/orbit/orbit/.mr-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework /Users/runner/work/orbit/orbit/.mr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/MrProbeUITests-Runner.app/Frameworks
+
+CodeSign /Users/runner/work/orbit/orbit/.mr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/MrProbeUITests-Runner.app/PlugIns/MrProbeUITests.xctest (in target 'MrProbeUITests' from project 'MrProbe')
+    cd /Users/runner/work/orbit/orbit/.mr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.mr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/MrProbeUITests-Runner.app/PlugIns/MrProbeUITests.xctest
+
+CodeSign /Users/runner/work/orbit/orbit/.mr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/MrProbeUITests-Runner.app (in target 'MrProbeUITests' from project 'MrProbe')
+    cd /Users/runner/work/orbit/orbit/.mr-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.mr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/MrProbeUITests-Runner.app
+/Users/runner/work/orbit/orbit/.mr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/MrProbeUITests-Runner.app: replacing existing signature
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.mr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/MrProbeUITests-Runner.app/PlugIns/MrProbeUITests.xctest (in target 'MrProbeUITests' from project 'MrProbe')
+    cd /Users/runner/work/orbit/orbit/.mr-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.mr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/MrProbeUITests-Runner.app/PlugIns/MrProbeUITests.xctest
+
+Touch /Users/runner/work/orbit/orbit/.mr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/MrProbeUITests-Runner.app/PlugIns/MrProbeUITests.xctest (in target 'MrProbeUITests' from project 'MrProbe')
+    cd /Users/runner/work/orbit/orbit/.mr-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.mr-probe/.dd-ios/Build/Products/Debug-iphonesimulator/MrProbeUITests-Runner.app/PlugIns/MrProbeUITests.xctest
+
+2026-10-09 12:16:06.922545+0000 MrProbeUITests-Runner[17183:52782] [Default] Running tests...
+2026-10-09 12:16:07.124451+0000 MrProbeUITests-Runner[17183:54384] [General] Failed to send CA Event for app launch measurements for ca_event_type: 0 event_name: com.apple.app_launch_measurement.FirstFramePresentationMetric
+2026-10-09 12:16:07.173631+0000 MrProbeUITests-Runner[17183:54386] [General] Failed to send CA Event for app launch measurements for ca_event_type: 1 event_name: com.apple.app_launch_measurement.ExtendedLaunchMetrics
+objc[17183]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x109ce4310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x109c48398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'All tests' started at 2026-10-09 12:16:19.693.
+Test Suite 'MrProbeUITests.xctest' started at 2026-10-09 12:16:19.694.
+Test Suite 'ManagedShotTests' started at 2026-10-09 12:16:19.694.
+Test Case '-[MrProbeUITests.ManagedShotTests test01CapabilityMissing]' started.
+    t =     0.00s Start Test at 2026-10-09 12:16:19.695
+    t =     2.83s Set Up
+    t =    14.74s Open io.orbitd.mrprobe
+    t =    14.75s     Launch io.orbitd.mrprobe
+2026-10-09 12:16:35.721 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 12:16:35.722 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    55.23s         Setting up automation session
+    t =    72.74s         Wait for io.orbitd.mrprobe to idle
+    t =    80.66s Checking existence of `Any (First Match)`
+    t =    84.63s Checking existence of `Any (First Match)`
+    t =    87.29s Checking existence of `Any (First Match)`
+    t =   101.70s Added attachment named '01-capability-missing'
+    t =   101.70s Terminate io.orbitd.mrprobe:20805
+    t =   102.84s Tear Down
+    t =   102.84s     Added attachment named 'ManagedShotTeststest01CapabilityMissing-notes.txt'
+Test Case '-[MrProbeUITests.ManagedShotTests test01CapabilityMissing]' passed (103.694 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test02CapabilityOff]' started.
+    t =     0.00s Start Test at 2026-10-09 12:18:03.391
+    t =     0.07s Set Up
+    t =     0.68s Open io.orbitd.mrprobe
+    t =     0.68s     Launch io.orbitd.mrprobe
+2026-10-09 12:18:04.181 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 12:18:04.182 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     3.09s         Setting up automation session
+    t =     6.12s         Wait for io.orbitd.mrprobe to idle
+    t =     9.10s Checking existence of `Any (First Match)`
+    t =    17.79s Added attachment named '02-capability-off'
+    t =    17.79s Terminate io.orbitd.mrprobe:22128
+    t =    18.86s Tear Down
+    t =    18.86s     Added attachment named 'ManagedShotTeststest02CapabilityOff-notes.txt'
+Test Case '-[MrProbeUITests.ManagedShotTests test02CapabilityOff]' passed (18.931 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test03Preparing]' started.
+    t =     0.00s Start Test at 2026-10-09 12:18:22.325
+    t =     0.04s Set Up
+2026-10-09 12:18:22.533 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 12:18:22.533 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     0.06s Open io.orbitd.mrprobe
+    t =     0.06s     Launch io.orbitd.mrprobe
+    t =     1.85s         Setting up automation session
+    t =     3.39s         Wait for io.orbitd.mrprobe to idle
+    t =     5.57s Checking existence of `Any (First Match)`
+    t =     7.63s Checking existence of `Any (First Match)`
+    t =    14.25s Added attachment named '03-preparing'
+    t =    14.25s Terminate io.orbitd.mrprobe:22949
+    t =    15.26s Tear Down
+    t =    15.26s     Added attachment named 'ManagedShotTeststest03Preparing-notes.txt'
+Test Case '-[MrProbeUITests.ManagedShotTests test03Preparing]' passed (15.307 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test04WaitingCapacity]' started.
+    t =     0.00s Start Test at 2026-10-09 12:18:37.632
+    t =     0.04s Set Up
+2026-10-09 12:18:37.717 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 12:18:37.717 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     0.07s Open io.orbitd.mrprobe
+    t =     0.07s     Launch io.orbitd.mrprobe
+    t =     0.77s         Setting up automation session
+    t =     2.97s         Wait for io.orbitd.mrprobe to idle
+    t =     6.18s Checking existence of `Any (First Match)`
+    t =     8.70s Checking existence of `Any (First Match)`
+    t =    13.96s Added attachment named '04-waiting-capacity'
+    t =    13.96s Terminate io.orbitd.mrprobe:23808
+    t =    15.00s Tear Down
+    t =    15.00s     Added attachment named 'ManagedShotTeststest04WaitingCapacity-notes.txt'
+Test Case '-[MrProbeUITests.ManagedShotTests test04WaitingCapacity]' passed (15.037 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test05Available]' started.
+    t =     0.00s Start Test at 2026-10-09 12:18:52.671
+    t =     0.04s Set Up
+2026-10-09 12:18:52.744 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 12:18:52.744 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     0.06s Open io.orbitd.mrprobe
+    t =     0.06s     Launch io.orbitd.mrprobe
+    t =     1.30s         Setting up automation session
+    t =     2.94s         Wait for io.orbitd.mrprobe to idle
+    t =     5.00s Checking existence of `Any (First Match)`
+    t =    11.27s Added attachment named '05-available'
+    t =    11.27s Checking existence of `Any (First Match)`
+    t =    11.45s Terminate io.orbitd.mrprobe:24239
+    t =    12.51s Tear Down
+    t =    12.51s     Added attachment named 'ManagedShotTeststest05Available-notes.txt'
+Test Case '-[MrProbeUITests.ManagedShotTests test05Available]' passed (12.526 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test06Sleeping]' started.
+    t =     0.00s Start Test at 2026-10-09 12:19:05.198
+    t =     0.03s Set Up
+    t =     0.05s Open io.orbitd.mrprobe
+    t =     0.05s     Launch io.orbitd.mrprobe
+2026-10-09 12:19:05.262 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 12:19:05.262 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     0.71s         Setting up automation session
+    t =     2.33s         Wait for io.orbitd.mrprobe to idle
+    t =     4.53s Checking existence of `Any (First Match)`
+    t =     6.16s Checking existence of `Any (First Match)`
+    t =    11.24s Added attachment named '06-sleeping'
+    t =    11.24s Terminate io.orbitd.mrprobe:24761
+    t =    12.30s Tear Down
+    t =    12.30s     Added attachment named 'ManagedShotTeststest06Sleeping-notes.txt'
+Test Case '-[MrProbeUITests.ManagedShotTests test06Sleeping]' passed (12.325 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test07Waking]' started.
+    t =     0.00s Start Test at 2026-10-09 12:19:17.523
+    t =     0.04s Set Up
+2026-10-09 12:19:17.640 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 12:19:17.640 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     0.08s Open io.orbitd.mrprobe
+    t =     0.08s     Launch io.orbitd.mrprobe
+    t =     1.78s         Setting up automation session
+    t =     3.46s         Wait for io.orbitd.mrprobe to idle
+    t =     5.87s Checking existence of `Any (First Match)`
+    t =     8.65s Checking existence of `Any (First Match)`
+    t =    10.94s Checking existence of `Any (First Match)`
+    t =    17.23s Added attachment named '07-waking'
+    t =    17.24s Terminate io.orbitd.mrprobe:25525
+    t =    18.32s Tear Down
+    t =    18.32s     Added attachment named 'ManagedShotTeststest07Waking-notes.txt'
+Test Case '-[MrProbeUITests.ManagedShotTests test07Waking]' passed (18.382 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test08FailedRetry]' started.
+    t =     0.00s Start Test at 2026-10-09 12:19:35.905
+    t =     0.04s Set Up
+    t =     0.20s Open io.orbitd.mrprobe
+    t =     0.20s     Launch io.orbitd.mrprobe
+2026-10-09 12:19:36.234 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 12:19:36.234 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     2.55s         Setting up automation session
+    t =     5.24s         Wait for io.orbitd.mrprobe to idle
+    t =     7.84s Checking existence of `Any (First Match)`
+    t =    11.18s Checking existence of `Any (First Match)`
+    t =    17.56s Added attachment named '08-failed-retry'
+    t =    17.56s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Retry"'
+    t =    17.75s Checking existence of `Button (Element at index 0)`
+    t =    17.84s Find the Button (Element at index 0)
+    t =    17.98s Checking existence of `"Retry" Button`
+    t =    18.05s Find the "Retry" Button
+    t =    18.16s Find the "Retry" Button
+    t =    18.27s Find the "Retry" Button
+    t =    18.38s Find the "Retry" Button
+    t =    18.68s Find the "Retry" Button
+    t =    18.89s Checking existence of `"Retry" Button`
+    t =    19.05s Tap "Retry" Button
+    t =    19.05s     Wait for io.orbitd.mrprobe to idle
+    t =    19.05s     Find the "Retry" Button
+    t =    19.22s     Check for interrupting elements affecting "Retry" Button
+    t =    19.66s     Synthesize event
+    t =    20.12s     Wait for io.orbitd.mrprobe to idle
+    t =    20.12s Checking existence of `Any (First Match)`
+    t =    22.43s Added attachment named '08b-after-retry'
+    t =    22.47s Terminate io.orbitd.mrprobe:26176
+    t =    23.47s Tear Down
+    t =    23.47s     Added attachment named 'ManagedShotTeststest08FailedRetry-notes.txt'
+Test Case '-[MrProbeUITests.ManagedShotTests test08FailedRetry]' passed (23.508 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test09ModelUnavailable]' started.
+    t =     0.00s Start Test at 2026-10-09 12:19:59.414
+    t =     0.03s Set Up
+    t =     0.07s Open io.orbitd.mrprobe
+    t =     0.07s     Launch io.orbitd.mrprobe
+2026-10-09 12:19:59.509 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 12:19:59.509 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.73s         Setting up automation session
+    t =     3.92s         Wait for io.orbitd.mrprobe to idle
+    t =     6.73s Checking existence of `Any (First Match)`
+    t =     9.34s Checking existence of `Any (First Match)`
+    t =    14.86s Added attachment named '09-model-unavailable'
+    t =    14.86s Terminate io.orbitd.mrprobe:27267
+    t =    15.88s Tear Down
+    t =    15.88s     Added attachment named 'ManagedShotTeststest09ModelUnavailable-notes.txt'
+Test Case '-[MrProbeUITests.ManagedShotTests test09ModelUnavailable]' passed (15.919 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test10NotEligible]' started.
+    t =     0.00s Start Test at 2026-10-09 12:20:15.333
+    t =     0.05s Set Up
+2026-10-09 12:20:15.415 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 12:20:15.415 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     0.07s Open io.orbitd.mrprobe
+    t =     0.07s     Launch io.orbitd.mrprobe
+    t =     1.35s         Setting up automation session
+    t =     2.81s         Wait for io.orbitd.mrprobe to idle
+    t =     5.32s Checking existence of `Any (First Match)`
+    t =    11.03s Added attachment named '10-not-eligible'
+    t =    11.04s Terminate io.orbitd.mrprobe:27742
+    t =    12.09s Tear Down
+    t =    12.09s     Added attachment named 'ManagedShotTeststest10NotEligible-notes.txt'
+Test Case '-[MrProbeUITests.ManagedShotTests test10NotEligible]' passed (12.147 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test11SetUp]' started.
+    t =     0.00s Start Test at 2026-10-09 12:20:27.484
+    t =     0.04s Set Up
+    t =     0.07s Open io.orbitd.mrprobe
+    t =     0.07s     Launch io.orbitd.mrprobe
+2026-10-09 12:20:27.623 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 12:20:27.624 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.92s         Setting up automation session
+    t =     4.72s         Wait for io.orbitd.mrprobe to idle
+    t =     8.26s Checking existence of `Any (First Match)`
+    t =    10.08s Checking existence of `Any (First Match)`
+    t =    15.23s Added attachment named '11-set-up'
+    t =    15.24s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Set up"'
+    t =    15.42s Checking existence of `Button (Element at index 0)`
+    t =    15.50s Find the Button (Element at index 0)
+    t =    15.62s Checking existence of `"Set up" Button`
+    t =    15.71s Find the "Set up" Button
+    t =    15.80s Find the "Set up" Button
+    t =    15.86s Find the "Set up" Button
+    t =    15.92s Find the "Set up" Button
+    t =    16.03s Find the "Set up" Button
+    t =    16.14s Checking existence of `"Set up" Button`
+    t =    16.25s Tap "Set up" Button
+    t =    16.25s     Wait for io.orbitd.mrprobe to idle
+    t =    16.25s     Find the "Set up" Button
+    t =    16.35s     Check for interrupting elements affecting "Set up" Button
+    t =    16.44s     Synthesize event
+    t =    16.75s     Wait for io.orbitd.mrprobe to idle
+    t =    16.76s Checking existence of `Any (First Match)`
+    t =    18.01s Added attachment named '11b-after-set-up'
+    t =    18.06s Terminate io.orbitd.mrprobe:28387
+    t =    19.08s Tear Down
+    t =    19.08s     Added attachment named 'ManagedShotTeststest11SetUp-notes.txt'
+Test Case '-[MrProbeUITests.ManagedShotTests test11SetUp]' passed (19.143 seconds).
+Test Case '-[MrProbeUITests.ManagedShotTests test12Removed]' started.
+    t =     0.00s Start Test at 2026-10-09 12:20:46.629
+    t =     0.05s Set Up
+    t =     0.07s Open io.orbitd.mrprobe
+    t =     0.08s     Launch io.orbitd.mrprobe
+2026-10-09 12:20:46.837 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 12:20:46.837 xcodebuild[5560:22406] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.32s         Setting up automation session
+    t =     3.62s         Wait for io.orbitd.mrprobe to idle
+    t =     5.89s Checking existence of `Any (First Match)`
+    t =     8.42s Checking existence of `Any (First Match)`
+    t =    14.70s Added attachment named '12-removed'
+    t =    14.71s Terminate io.orbitd.mrprobe:29219
+    t =    15.77s Tear Down
+    t =    15.77s     Added attachment named 'ManagedShotTeststest12Removed-notes.txt'
+Test Case '-[MrProbeUITests.ManagedShotTests test12Removed]' passed (15.853 seconds).
+Test Suite 'ManagedShotTests' passed at 2026-10-09 12:21:02.482.
+	 Executed 12 tests, with 0 failures (0 unexpected) in 282.771 (282.789) seconds
+Test Suite 'MrProbeUITests.xctest' passed at 2026-10-09 12:21:02.488.
+	 Executed 12 tests, with 0 failures (0 unexpected) in 282.771 (282.795) seconds
+Test Suite 'All tests' passed at 2026-10-09 12:21:02.488.
+	 Executed 12 tests, with 0 failures (0 unexpected) in 282.771 (282.796) seconds
+2026-10-09 12:22:03.651 xcodebuild[5560:22406] [MT] IDETestOperationsObserverDebug: 402.681 elapsed -- Testing started completed.
+2026-10-09 12:22:03.652 xcodebuild[5560:22406] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-09 12:22:03.652 xcodebuild[5560:22406] [MT] IDETestOperationsObserverDebug: 402.681 sec, +402.681 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.mr-probe/results/ios.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

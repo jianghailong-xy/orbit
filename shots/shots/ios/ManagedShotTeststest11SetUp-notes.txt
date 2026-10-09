@@ -1,0 +1,1 @@
+set up: 9 label="Set up" value="" frame=(42.0, 279.0, 73.33333333333333, 34.333333333333314) hittable=true
