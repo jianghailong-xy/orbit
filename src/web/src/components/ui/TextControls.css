@@ -53,6 +53,21 @@
   box-shadow: var(--orbit-input-invalid-shadow);
 }
 
+/* Warning, as the replaced field's warning status: the warning colour, a lighter one under the
+   pointer, and its own outline when focused. */
+.orbit-text-control[data-warning] {
+  border-color: var(--orbit-badge-warning);
+}
+
+.orbit-text-control[data-warning]:hover:not([data-disabled]) {
+  border-color: var(--orbit-input-warning-hover);
+}
+
+.orbit-text-control[data-warning]:is(:focus, :focus-within):not([data-disabled]) {
+  border-color: var(--orbit-badge-warning);
+  box-shadow: 0 0 0 2px var(--orbit-input-warning-outline);
+}
+
 .orbit-text-control[data-disabled] {
   color: var(--orbit-control-disabled-text);
   background: var(--orbit-control-disabled-bg);
@@ -108,9 +123,41 @@
   align-items: center;
 }
 
+/* The replaced clear control as measured: a bare 12px icon in the quaternary text colour, darker on
+   hover and press, laid out but unseen while the field is empty; 8px before any suffix of its own. */
+.orbit-input-clear {
+  margin: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  background-color: transparent;
+  color: var(--orbit-control-disabled-text);
+  font-size: 12px;
+  line-height: 0;
+  vertical-align: -1px;
+  cursor: pointer;
+  transition: color 0.3s;
+}
+.orbit-input-clear:hover { color: var(--text-3); }
+.orbit-input-clear:active { color: var(--text-1); }
+.orbit-input-clear:focus-visible {
+  color: var(--text-3);
+  border-radius: var(--orbit-radius-sm);
+  outline: var(--orbit-focus-width) solid var(--orbit-focus-color);
+  outline-offset: var(--orbit-focus-offset);
+  transition: outline-offset 0s, outline 0s;
+}
+.orbit-input-clear[data-hidden] { visibility: hidden; }
+.orbit-input-clear:not(:last-child) { margin-inline-end: 8px; }
+
 .orbit-input[data-invalid]:not([data-disabled]) .orbit-input-prefix,
 .orbit-input[data-invalid]:not([data-disabled]) .orbit-input-suffix {
   color: var(--orbit-control-error);
+}
+
+.orbit-input[data-warning]:not([data-disabled]) .orbit-input-prefix,
+.orbit-input[data-warning]:not([data-disabled]) .orbit-input-suffix {
+  color: var(--orbit-badge-warning);
 }
 
 .orbit-textarea {

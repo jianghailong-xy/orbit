@@ -2,6 +2,7 @@ import {
   ArrowRightOutlined,
   CaretDownOutlined,
   CaretUpOutlined,
+  CloseOutlined,
   DeleteOutlined,
   LockOutlined,
   PlayCircleOutlined,
@@ -18,22 +19,6 @@ import {
   useQueryClient,
   type QueryClient,
 } from '@tanstack/react-query';
-import {
-  Avatar,
-  Button,
-  Checkbox,
-  Dropdown,
-  Input,
-  InputNumber,
-  type MenuProps,
-  Modal,
-  Popconfirm,
-  Segmented,
-  Select,
-  Spin,
-  Tag,
-  Tooltip,
-} from 'antd';
 import { SESSION_CREATED_TASKS_COPY } from '@orbit/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom';
@@ -80,6 +65,20 @@ import {
   writeTaskSort,
 } from '../lib/taskSorting';
 import { useToast } from '../lib/toast';
+import { Avatar } from '../components/ui/Avatar';
+import { Button } from '../components/ui/Button';
+import { Checkbox } from '../components/ui/Checkbox';
+import { Combobox } from '../components/ui/Combobox';
+import { Dialog } from '../components/ui/Dialog';
+import { Input } from '../components/ui/Input';
+import { Menu, type MenuItem } from '../components/ui/Menu';
+import { MultiSelect } from '../components/ui/MultiSelect';
+import { NumberInput } from '../components/ui/NumberInput';
+import { Popconfirm } from '../components/ui/Popconfirm';
+import { Segmented } from '../components/ui/Segmented';
+import { Spinner } from '../components/ui/Spinner';
+import { Tooltip } from '../components/ui/Tooltip';
+import '../components/ui/Badge.css';
 
 // A checkbox is focusable but is not text entry, and clicking a row's checkbox leaves the
 // focus sitting on it — so treating every <input> as "typing" would silence the whole list
@@ -280,7 +279,7 @@ function BatchesTable({
   if (loading) {
     return (
       <div style={{ padding: 48, textAlign: 'center' }}>
-        <Spin />
+        <Spinner aria-busy="true" />
       </div>
     );
   }
@@ -376,7 +375,8 @@ export function isProjectOnlyList(list: { _count?: { tasks: number }; tasksOutsi
 /**
  * What the Tasks page's title offers: all tasks, the tasks in no list, then the lists — the groups
  * the sidebar held before its foot became the open projects, with the same dots and counts, the way
- * the iPhone's Tasks page offers them under `List:`. Each key is the address it opens.
+ * the iPhone's Tasks page offers them under `List:`. Each key is the address it opens, the one on
+ * screen is marked selected, and picking one hands its address to `onPick`.
  *
  * `unlisted` is undefined until counted; No list is offered meanwhile, and left out only once the
  * count says there is nothing in it (unless it is the page on screen).
@@ -385,7 +385,8 @@ export function taskScopeMenuItems(
   lists: readonly TaskListRow[],
   unlisted: number | undefined,
   current: string,
-): NonNullable<MenuProps['items']> {
+  onPick?: (path: string) => void,
+): MenuItem[] {
   const row = (title: string, count?: number, dot?: string) => (
     <span className="tasks-scope-row">
       {dot !== undefined && <span className={`tp-list-dot ${dot}`} />}
@@ -393,12 +394,16 @@ export function taskScopeMenuItems(
       {count !== undefined && <span className="tasks-scope-count">{count}</span>}
     </span>
   );
+  const scope = (key: string, title: string, count?: number, dot?: string): MenuItem => ({
+    key,
+    label: row(title, count, dot),
+    textValue: title,
+    selected: key === current,
+    onSelect: onPick && (() => onPick(key)),
+  });
   const listItem = (list: TaskListRow) => {
     const running = (list.runningTasks ?? 0) > 0;
-    return {
-      key: `/lists/${encodeId(list.id)}`,
-      label: row(list.title, list._count?.tasks, running ? 'running' : list.completed ? 'done' : ''),
-    };
+    return scope(`/lists/${encodeId(list.id)}`, list.title, list._count?.tasks, running ? 'running' : list.completed ? 'done' : '');
   };
   // The tasks outside projects, like the page itself: a project's list is on the project's page.
   const own = lists.filter((list) => !isProjectOnlyList(list));
@@ -408,9 +413,9 @@ export function taskScopeMenuItems(
   const done = own.filter(finished);
   const showUnlisted = unlisted === undefined || unlisted > 0 || current === '/lists/none';
   return [
-    { key: '/tasks', label: row('All tasks') },
-    ...(showUnlisted ? [{ key: '/lists/none', label: row('No list', unlisted) }] : []),
-    ...(active.length || done.length ? [{ type: 'divider' as const }] : []),
+    scope('/tasks', 'All tasks'),
+    ...(showUnlisted ? [scope('/lists/none', 'No list', unlisted)] : []),
+    ...(active.length || done.length ? [{ type: 'separator' as const, key: 'rule' }] : []),
     ...(active.length
       ? [{ type: 'group' as const, key: 'lists', label: `Task List · ${active.length}`, children: active.map(listItem) }]
       : []),
@@ -925,6 +930,8 @@ export function TaskListView() {
     setAssignOpen(true);
   };
 
+  // Whether the list took the Space being pressed (see the keyup below).
+  const spaceTaken = useRef(false);
   // Keyboard driving of the list. Up/Down step the cursor, opening each task like tabs —
   // the same selection and the same address a click drives; Shift+Up/Down extend the
   // multi-selection as the cursor moves; Space checks the cursor row; Cmd/Ctrl+A checks
@@ -932,6 +939,7 @@ export function TaskListView() {
   // its own keys.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
+      if (e.key === ' ') spaceTaken.current = false;
       if (e.altKey || isTypingTarget(e.target)) return;
       if (rows.length === 0) return;
       const mod = e.metaKey || e.ctrlKey;
@@ -945,6 +953,7 @@ export function TaskListView() {
         // Space scrolls the detail panel when the focus is inside it; don't steal that.
         if (document.activeElement?.closest('.task-detail-panel')) return;
         e.preventDefault();
+        spaceTaken.current = true;
         pickRow(selectedTaskId, false);
         return;
       }
@@ -971,6 +980,19 @@ export function TaskListView() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [rows, rowIds, selectedTaskId, openTask]);
+
+  // A Space the list took (it checked the cursor row) must not also press the control that has focus. A native
+  // checkbox or button never acts on a Space whose keydown was prevented, but a row's checkbox is drawn as a span
+  // that acts on the keyup, so that keyup is prevented too — in the capture phase, before the checkbox reads it.
+  useEffect(() => {
+    const onKeyUp = (e: KeyboardEvent): void => {
+      if (e.key !== ' ' || !spaceTaken.current) return;
+      spaceTaken.current = false;
+      e.preventDefault();
+    };
+    window.addEventListener('keyup', onKeyUp, true);
+    return () => window.removeEventListener('keyup', onKeyUp, true);
+  }, []);
 
   // Esc clears a multi-selection first, and only falls through to the detail panel's own
   // Esc (a window listener too, but in the bubble phase) once there is none left.
@@ -1122,7 +1144,7 @@ export function TaskListView() {
         >
           <Checkbox
             checked={selectedIds.has(r.id)}
-            onChange={(e) => pickRow(r.id, e.nativeEvent.shiftKey)}
+            onCheckedChange={(_, event) => pickRow(r.id, (event as MouseEvent).shiftKey === true)}
           />
         </div>
         <div className="task-status-cell">
@@ -1134,7 +1156,7 @@ export function TaskListView() {
           </span>
           {r.blocked ? (
             <Tooltip
-              title={r.dependencyState === 'BLOCKED_FAILED' ? 'Prerequisite cancelled — resolve it' : 'Waiting for prerequisites'}
+              content={r.dependencyState === 'BLOCKED_FAILED' ? 'Prerequisite cancelled — resolve it' : 'Waiting for prerequisites'}
             >
               <LockOutlined
                 style={{
@@ -1194,10 +1216,10 @@ export function TaskListView() {
         )}
         <div className="row-actions">
           {entry.kind === 'OPEN_RUN' ? (
-            <Tooltip title={entry.hint}>
+            <Tooltip content={entry.hint}>
               <Button
                 size="small"
-                type="text"
+                variant="text"
                 aria-label={entry.label}
                 icon={<ArrowRightOutlined />}
                 onClick={(e) => {
@@ -1208,10 +1230,10 @@ export function TaskListView() {
             </Tooltip>
           ) : (
             canRunRow && (
-              <Tooltip title={entry.hint}>
+              <Tooltip content={entry.hint}>
                 <Button
                   size="small"
-                  type="text"
+                  variant="text"
                   aria-label={entry.label}
                   icon={isRetry ? <ReloadOutlined /> : <PlayCircleOutlined />}
                   onClick={(e) => {
@@ -1229,25 +1251,24 @@ export function TaskListView() {
             // A run in flight is stopped, not detached: with the task gone it has no way left to
             // finish, so leaving it would park it forever. Worth saying before the click.
             description="A run still in flight is stopped. This action cannot be undone."
-            okText="Delete"
+            confirmText="Delete"
             cancelText="Cancel"
-            okButtonProps={{
-              danger: true,
-              loading: remove.isPending && remove.variables === r.id,
-            }}
+            danger
+            confirmLoading={remove.isPending && remove.variables === r.id}
             onConfirm={() => remove.mutate(r.id)}
-          >
-            <Button
-              size="small"
-              type="text"
-              danger
-              icon={<DeleteOutlined />}
-              aria-label={`Delete ${r.title}`}
-              loading={remove.isPending && remove.variables === r.id}
-              disabled={remove.isPending && remove.variables !== r.id}
-              onClick={(e) => e.stopPropagation()}
-            />
-          </Popconfirm>
+            trigger={
+              <Button
+                size="small"
+                variant="text"
+                danger
+                icon={<DeleteOutlined />}
+                aria-label={`Delete ${r.title}`}
+                loading={remove.isPending && remove.variables === r.id}
+                disabled={remove.isPending && remove.variables !== r.id}
+                onClick={(e) => e.stopPropagation()}
+              />
+            }
+          />
         </div>
       </div>
     );
@@ -1263,30 +1284,25 @@ export function TaskListView() {
                 button needs the row or it drops beneath the heading. */}
             <div className="tasks-title-row">
               <h1 className="page-title">
-                <Dropdown
-                  trigger={['click']}
+                <Menu
                   open={scopeMenuOpen}
                   onOpenChange={setScopeMenuOpen}
-                  menu={{
-                    className: 'tasks-scope-menu',
-                    selectable: true,
-                    selectedKeys: [scopePath],
-                    items: taskScopeMenuItems(
-                      taskLists.data ?? [],
-                      unlistedCount.data?.counts?.total,
-                      scopePath,
-                    ),
-                    onClick: ({ key }) => {
-                      setScopeMenuOpen(false);
-                      navigate(key);
-                    },
-                  }}
-                >
-                  <button type="button" className="tasks-scope-trigger" title="Choose which tasks to show">
-                    {pageTitle}
-                    <CaretDownOutlined className="tasks-scope-caret" />
-                  </button>
-                </Dropdown>
+                  // The title keeps focus after a pick, and ↑/↓ step through the tasks (see the keys above).
+                  openOnArrowKeys={false}
+                  popupClassName="tasks-scope-menu"
+                  items={taskScopeMenuItems(
+                    taskLists.data ?? [],
+                    unlistedCount.data?.counts?.total,
+                    scopePath,
+                    (path) => navigate(path),
+                  )}
+                  trigger={
+                    <button type="button" className="tasks-scope-trigger" title="Choose which tasks to show">
+                      {pageTitle}
+                      <CaretDownOutlined className="tasks-scope-caret" />
+                    </button>
+                  }
+                />
               </h1>
               {isListView && (
                 <Button
@@ -1305,7 +1321,7 @@ export function TaskListView() {
                 className="tasks-viewswitch"
                 size="small"
                 value={view}
-                onChange={(v) => setView(v as string)}
+                onValueChange={setView}
                 options={[
                   { label: 'Tasks', value: 'tasks' },
                   { label: 'Batches', value: 'batches' },
@@ -1369,7 +1385,7 @@ export function TaskListView() {
                 <div className="tasks-bulkbar">
                   <span className="tasks-bulkbar-count">{selectedRows.length} selected</span>
                   <Button
-                    type="primary"
+                    variant="primary"
                     size="small"
                     icon={<PlayCircleOutlined />}
                     onClick={openBatch}
@@ -1379,35 +1395,38 @@ export function TaskListView() {
                   <Popconfirm
                     title="Stop selected tasks?"
                     description="Cancels each selected task's running or queued run."
-                    okText="Stop"
-                    okButtonProps={{ danger: true }}
+                    confirmText="Stop"
+                    danger
                     onConfirm={() => batchStop.mutate({ taskIds: selectedRows.map((r: any) => r.id) })}
-                  >
-                    <Button size="small" danger icon={<StopOutlined />} loading={batchStop.isPending}>
-                      Stop
-                    </Button>
-                  </Popconfirm>
+                    trigger={
+                      <Button size="small" danger icon={<StopOutlined />} loading={batchStop.isPending}>
+                        Stop
+                      </Button>
+                    }
+                  />
                   <Button size="small" icon={<UserOutlined />} onClick={openAssign}>
                     Set assignee
                   </Button>
                   <Popconfirm
                     title={`Delete ${selectedRows.length} selected task${selectedRows.length === 1 ? '' : 's'}?`}
                     description="Runs still in flight are stopped. This action cannot be undone."
-                    okText="Delete"
+                    confirmText="Delete"
                     cancelText="Cancel"
-                    okButtonProps={{ danger: true, loading: batchDelete.isPending }}
+                    danger
+                    confirmLoading={batchDelete.isPending}
                     onConfirm={() => batchDelete.mutate(selectedRows.map((r: any) => r.id))}
-                  >
-                    <Button
-                      size="small"
-                      danger
-                      icon={<DeleteOutlined />}
-                      loading={batchDelete.isPending}
-                    >
-                      Delete
-                    </Button>
-                  </Popconfirm>
-                  <Button type="text" size="small" onClick={clearSelection}>
+                    trigger={
+                      <Button
+                        size="small"
+                        danger
+                        icon={<DeleteOutlined />}
+                        loading={batchDelete.isPending}
+                      >
+                        Delete
+                      </Button>
+                    }
+                  />
+                  <Button variant="text" size="small" onClick={clearSelection}>
                     Clear
                   </Button>
                 </div>
@@ -1416,31 +1435,29 @@ export function TaskListView() {
                   <Segmented
                     options={filterOptions}
                     value={filter}
-                    onChange={(v) => setFilter(v as string)}
+                    onValueChange={setFilter}
                   />
                   <Input
                     className="tasks-search"
                     size="small"
                     allowClear
+                    onClear={() => setQuery('')}
                     prefix={<SearchOutlined style={{ color: 'var(--text-3)' }} />}
                     placeholder="Search tasks"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                   />
                   {hasLabels && (
-                    <Select
+                    <MultiSelect
                       className="tasks-labelfilter"
                       size="small"
-                      mode="multiple"
-                      allowClear
+                      clearable
                       // A picker, not a wall of chips: this deployment has 110 labels, and every
                       // one of them as a toggle would be wallpaper rather than a control.
-                      showSearch
-                      optionFilterProp="label"
                       maxTagCount={2}
                       placeholder="Labels"
                       value={labels}
-                      onChange={(v) => setLabels(v as string[])}
+                      onValueChange={setLabels}
                       options={labelRows.map((row) => ({
                         value: row.label,
                         label: row.label,
@@ -1448,7 +1465,7 @@ export function TaskListView() {
                         // here saves a round trip through the table to find that out.
                         title: `${row.done}/${row.total} done`,
                       }))}
-                      optionRender={(option) => {
+                      renderOption={(option) => {
                         const row = labelRows.find((r) => r.label === option.value);
                         return (
                           <span className="tasks-labelopt">
@@ -1460,17 +1477,29 @@ export function TaskListView() {
                     />
                   )}
                   {createdIn && (
-                    <Tag
-                      className="tasks-createdin"
-                      closable={{ 'aria-label': 'Remove this filter' }}
-                      onClose={() => setParam('createdIn', '', '')}
+                    // The replaced closable tag: the chip, its text cut to fit, and its close mark,
+                    // itself the button.
+                    <span
+                      className="orbit-badge orbit-badge-default tasks-createdin"
                       title={`${SESSION_CREATED_TASKS_COPY.createdInChip}${createdInTitle}`}
                     >
                       <span className="tasks-createdin-text">
                         {SESSION_CREATED_TASKS_COPY.createdInChip}
                         {createdInTitle}
                       </span>
-                    </Tag>
+                      <CloseOutlined
+                        role="button"
+                        tabIndex={0}
+                        aria-label="Remove this filter"
+                        className="tasks-createdin-close"
+                        onClick={() => setParam('createdIn', '', '')}
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter' && e.key !== ' ') return;
+                          e.preventDefault();
+                          if (!e.repeat) e.currentTarget.click();
+                        }}
+                      />
+                    </span>
                   )}
                   {uniformAssignee?.name && (
                     <span className="task-assignee-chip" style={{ marginLeft: 'auto' }}>
@@ -1491,7 +1520,7 @@ export function TaskListView() {
           <div className="tasks-body" ref={bodyRef}>
             {tasks.isLoading ? (
               <div style={{ padding: 48, textAlign: 'center' }}>
-                <Spin />
+                <Spinner aria-busy="true" />
               </div>
             ) : listMissing ? (
               <div style={{ padding: '24px 16px', color: 'var(--text-3)', fontSize: 13 }}>
@@ -1519,7 +1548,7 @@ export function TaskListView() {
                     <Checkbox
                       checked={allSelected}
                       indeterminate={someSelected && !allSelected}
-                      onChange={toggleAll}
+                      onCheckedChange={toggleAll}
                       disabled={rows.length === 0}
                     />
                   </div>
@@ -1598,23 +1627,33 @@ export function TaskListView() {
         />
       )}
 
-      <Modal
+      <Dialog
+        className="tasks-batch-dialog"
         title="Run tasks"
         open={batchOpen}
-        onCancel={() => setBatchOpen(false)}
-        onOk={() =>
-          batchRun.mutate({
-            // The rows, so the refresh afterwards knows which projects they came from; only the
-            // ids reach the request body.
-            tasks: selectedRows.map((r: any) => ({ id: r.id as string, projectId: r.projectId })),
-            maxConcurrent: concurrency,
-            // One press of Run, named where it is pressed.
-            triggerId: newRunRequestToken(),
-          })
+        onClose={() => setBatchOpen(false)}
+        footer={
+          <>
+            <Button onClick={() => setBatchOpen(false)}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={batchRun.isPending}
+              disabled={runnableRows.length === 0}
+              onClick={() =>
+                batchRun.mutate({
+                  // The rows, so the refresh afterwards knows which projects they came from; only
+                  // the ids reach the request body.
+                  tasks: selectedRows.map((r: any) => ({ id: r.id as string, projectId: r.projectId })),
+                  maxConcurrent: concurrency,
+                  // One press of Run, named where it is pressed.
+                  triggerId: newRunRequestToken(),
+                })
+              }
+            >
+              Run
+            </Button>
+          </>
         }
-        confirmLoading={batchRun.isPending}
-        okText="Run"
-        okButtonProps={{ disabled: runnableRows.length === 0 }}
       >
         <p style={{ marginTop: 0 }}>
           Will run <b>{runnableRows.length}</b> selected task(s)
@@ -1625,11 +1664,11 @@ export function TaskListView() {
         </p>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span>Concurrency</span>
-          <InputNumber
+          <NumberInput
             min={1}
             max={64}
             value={concurrency}
-            onChange={(v) => setConcurrency(v ?? 1)}
+            onValueChange={(v) => setConcurrency(v ?? 1)}
             style={{ width: 96 }}
           />
           <span style={{ color: 'var(--text-3)' }}>tasks running at once</span>
@@ -1637,35 +1676,43 @@ export function TaskListView() {
         <p style={{ marginTop: 10, marginBottom: 0, color: 'var(--text-3)', fontSize: 12 }}>
           All tasks are submitted at once; at most this many run concurrently in this batch, the rest queue and start as slots free up. This limit applies only to this batch and never changes any runner's own concurrency cap.
         </p>
-      </Modal>
+      </Dialog>
 
-      <Modal
+      <Dialog
+        className="tasks-batch-dialog"
         title="Set assignee"
         open={assignOpen}
-        onCancel={() => setAssignOpen(false)}
-        onOk={() =>
-          batchAssign.mutate({
-            taskIds: selectedRows.map((r: any) => r.id),
-            assigneeId: assignWorkspaceId,
-          })
+        onClose={() => setAssignOpen(false)}
+        footer={
+          <>
+            <Button onClick={() => setAssignOpen(false)}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={batchAssign.isPending}
+              onClick={() =>
+                batchAssign.mutate({
+                  taskIds: selectedRows.map((r: any) => r.id),
+                  assigneeId: assignWorkspaceId,
+                })
+              }
+            >
+              OK
+            </Button>
+          </>
         }
-        confirmLoading={batchAssign.isPending}
-        okText="OK"
       >
         <p style={{ marginTop: 0 }}>
           Set the assignee (responsible workspace) for <b>{selectedRows.length}</b> selected task(s).
         </p>
-        <Select
-          allowClear
-          showSearch
-          optionFilterProp="label"
+        <Combobox
+          clearable
           style={{ width: '100%' }}
           placeholder="Pick a workspace, leave empty to clear the assignee"
-          value={assignWorkspaceId ?? undefined}
-          onChange={(v) => setAssignWorkspaceId(v ?? null)}
+          value={assignWorkspaceId}
+          onValueChange={setAssignWorkspaceId}
           options={(workspaces.data ?? []).map((a) => ({ value: a.id, label: a.name }))}
         />
-      </Modal>
+      </Dialog>
     </>
   );
 }

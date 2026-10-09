@@ -8,19 +8,6 @@ import {
   type TaskStatus,
 } from '@orbit/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  Alert,
-  App as AntApp,
-  Button,
-  Empty,
-  List,
-  Modal,
-  Popconfirm,
-  Select,
-  Spin,
-  Tag,
-  Typography,
-} from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
@@ -95,6 +82,17 @@ import { type TaskDependencyGraphResponse } from '../lib/taskDependencyGraph';
 import { scheduledStart } from '../lib/taskSchedule';
 import { ProjectTasksGraph } from '../components/ProjectTasksGraph';
 import { ProjectTaskLink } from '../components/ProjectTaskLink';
+import { Alert } from '../components/ui/Alert';
+import { Badge, type BadgeProps } from '../components/ui/Badge';
+import { Button } from '../components/ui/Button';
+import { useConfirm } from '../components/ui/ConfirmDialog';
+import { Dialog } from '../components/ui/Dialog';
+import { Empty } from '../components/ui/Empty';
+import { Popconfirm } from '../components/ui/Popconfirm';
+import { Select } from '../components/ui/Select';
+import { Spinner } from '../components/ui/Spinner';
+import '../components/ui/List.css';
+import '../components/ui/Typography.css';
 import { useOpenProjectTask } from '../lib/projectTaskRoute';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 import { useToast } from '../lib/toast';
@@ -215,6 +213,24 @@ export const STATUS_LABEL: Record<Project['status'], string> = {
   DONE: 'Completed',
   CANCELLED: 'Cancelled',
 };
+
+/** The tag colours above (and the work and landing tags below), as a status label's tone. The names
+ *  stay the replaced tag's, which a public project page still draws them with; `processing` is the
+ *  blue the tone calls `info`. */
+const TAG_TONE: Readonly<Record<string, NonNullable<BadgeProps['tone']>>> = {
+  default: 'default',
+  processing: 'info',
+  success: 'success',
+  warning: 'warning',
+  error: 'error',
+  blue: 'blue',
+  green: 'green',
+  orange: 'orange',
+  red: 'red',
+  gold: 'gold',
+  purple: 'purple',
+};
+const tagTone = (color: string) => TAG_TONE[color] ?? 'default';
 
 // Row text, not the full field — a task's acceptance criteria runs far past what a list row should
 // show. Read only by the detail page's task rows now: the projects list truncates its goal with
@@ -512,13 +528,12 @@ export function ProjectsPage() {
 
       {projects.isLoading ? (
         <div style={{ padding: 48, textAlign: 'center' }}>
-          <Spin />
+          <Spinner aria-busy="true" />
         </div>
       ) : projects.isError ? (
         <Alert
           type="error"
-          showIcon
-          message="Projects could not be loaded"
+          title="Projects could not be loaded"
           description={projects.error instanceof Error ? projects.error.message : undefined}
           action={
             <Button size="small" danger onClick={() => projects.refetch()}>
@@ -530,7 +545,7 @@ export function ProjectsPage() {
         // An OPEN-scoped read cannot distinguish a new account from one whose whole history is
         // closed. Say only what this response proves, and keep the useful next action beside it.
         <Empty description="No open projects" style={{ marginTop: 48 }}>
-          <Button type="primary" icon={<PlusOutlined />} onClick={onNewProject}>
+          <Button variant="primary" icon={<PlusOutlined />} onClick={onNewProject}>
             New project
           </Button>
         </Empty>
@@ -574,8 +589,8 @@ export function ProjectsPage() {
             // A fact rather than a signal, so it sits after the reason and before the status.
             const line = integrationChipOf(p);
             return (
-              <List.Item
-                className="project-row"
+              <li
+                className="orbit-list-item project-row"
                 style={{ padding: '11px 10px' }}
               >
                 {/* One link spanning the whole row — meta and count alike — so the entire row is a
@@ -605,7 +620,7 @@ export function ProjectsPage() {
                           Open phone gets the same answer from its lane. Keep the OPEN tag only on
                           desktop, where it is useful context and does not squeeze the title. */}
                       {filter === 'OPEN' && !phone ? (
-                        <Tag color={STATUS_COLOR[p.status]}>{p.status}</Tag>
+                        <Badge tone={tagTone(STATUS_COLOR[p.status])}>{p.status}</Badge>
                       ) : null}
                       {p.status === 'DONE' ? (
                         <span className="project-row-done-provenance">{doneProvenance(p)}</span>
@@ -627,7 +642,7 @@ export function ProjectsPage() {
                     </span>
                   </div>
                 </Link>
-              </List.Item>
+              </li>
             );
           }}
         />
@@ -677,7 +692,7 @@ function Field({ label, text, empty }: { label: string; text?: string | null; em
   const body = text?.trim();
   return (
     <div style={{ marginBottom: 24 }}>
-      <Typography.Title level={5}>{label}</Typography.Title>
+      <h5 className="orbit-typography">{label}</h5>
       {/* Instructions are written the way task descriptions are — headings, lists, fenced
           commands — and are handed to a coordinator as a prompt, so read them as Markdown rather
           than source. `remarkHardBreaks` preserves the hand-laid-out lines. react-markdown is used
@@ -695,9 +710,9 @@ function Field({ label, text, empty }: { label: string; text?: string | null; em
           </Markdown>
         </div>
       ) : (
-        <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+        <div className="orbit-typography orbit-typography-secondary" style={{ marginBottom: 0 }}>
           {empty}
-        </Typography.Paragraph>
+        </div>
       )}
     </div>
   );
@@ -892,13 +907,13 @@ function ProjectStatusActions({
       {project.status === 'OPEN' ? (
         <>
           {hasDoneGate && onRecordDone ? (
-            <Button size="small" type="text" aria-label={`${PROJECT_DONE_COPY.recordAsDone} ${project.title}`} onClick={onRecordDone}>
+            <Button size="small" variant="text" aria-label={`${PROJECT_DONE_COPY.recordAsDone} ${project.title}`} onClick={onRecordDone}>
               {STATUS_PRESS.DONE.entry}
             </Button>
           ) : (
             <Button
               size="small"
-              type="text"
+              variant="text"
               aria-label={`Record ${project.title} as done`}
               onClick={() => setPress('DONE')}
             >
@@ -907,7 +922,7 @@ function ProjectStatusActions({
           )}
           <Button
             size="small"
-            type="text"
+            variant="text"
             aria-label={`Record ${project.title} as cancelled`}
             onClick={() => setPress('CANCELLED')}
           >
@@ -920,7 +935,7 @@ function ProjectStatusActions({
         // back to OPEN and pressing again says both halves out loud.
         <Button
           size="small"
-          type="text"
+          variant="text"
           aria-label={`Reopen ${project.title}`}
           onClick={() => setPress('OPEN')}
         >
@@ -928,57 +943,76 @@ function ProjectStatusActions({
         </Button>
       )}
 
-      <Modal
+      <Dialog
+        className="project-status-dialog"
         open={press !== null}
         title={press ? STATUS_PRESS[press].title(project.title) : ''}
-        okText={press ? STATUS_PRESS[press].ok : ''}
-        cancelText="Back"
-        // Never disabled by the evidence above it, however incomplete that evidence is. A missing
-        // receipt is something the reader has to know, not something that takes the decision off
-        // them — they are the only one entitled to make it.
-        okButtonProps={{ danger: press === 'CANCELLED', loading: write.isPending }}
-        onOk={() => press && write.mutate(press)}
-        onCancel={() => {
+        onClose={() => {
           write.reset();
           setPress(null);
         }}
+        footer={
+          <>
+            <Button
+              onClick={() => {
+                write.reset();
+                setPress(null);
+              }}
+            >
+              Back
+            </Button>
+            {/* Never disabled by the evidence above it, however incomplete that evidence is. A
+                missing receipt is something the reader has to know, not something that takes the
+                decision off them — they are the only one entitled to make it. */}
+            <Button
+              variant="primary"
+              danger={press === 'CANCELLED'}
+              loading={write.isPending}
+              onClick={() => press && write.mutate(press)}
+            >
+              {press ? STATUS_PRESS[press].ok : ''}
+            </Button>
+          </>
+        }
       >
         {press === 'DONE' ? (
           <>
-            <Typography.Paragraph type="secondary">
+            <div className="orbit-typography orbit-typography-secondary">
               Nothing decides this for you. Recording it is a claim you are making about the goal,
               not a conclusion Orbit reached — so here is everything Orbit can put beside it.
-            </Typography.Paragraph>
+            </div>
             {criteria.length > 0 ? (
               <CriteriaEvidence criteria={criteria} />
             ) : (
-              <Typography.Paragraph type="secondary">
+              <div className="orbit-typography orbit-typography-secondary">
                 This project states no acceptance criteria, so there is nothing to put beside the
                 claim.
-              </Typography.Paragraph>
+              </div>
             )}
           </>
         ) : press === 'CANCELLED' ? (
           <>
-            <Typography.Paragraph type="secondary">
+            <div className="orbit-typography orbit-typography-secondary">
               This records that the goal is no longer being pursued. It says nothing about whether
               the project reached what it was stated for. From then on its tasks do not start —
               nothing runs them by itself, and Run is refused — but a run already going is not
               stopped, and nothing is deleted.
-            </Typography.Paragraph>
+            </div>
             {unfinished === null ? null : (
-              <Typography.Paragraph strong>
-                {`${unfinished} unfinished ${unfinished === 1 ? 'task stays' : 'tasks stay'} filed under it and won’t start.`}
-              </Typography.Paragraph>
+              <div className="orbit-typography">
+                <strong>
+                  {`${unfinished} unfinished ${unfinished === 1 ? 'task stays' : 'tasks stay'} filed under it and won’t start.`}
+                </strong>
+              </div>
             )}
           </>
         ) : press === 'OPEN' ? (
           <>
-            <Typography.Paragraph type="secondary">
+            <div className="orbit-typography orbit-typography-secondary">
               Reopening puts this project back to Open, so its tasks can start again, and changes
               nothing else: its tasks, its stated criteria and its history stay as they are. It is
               how a status written by mistake is taken back, so it asks once and asks for nothing.
-            </Typography.Paragraph>
+            </div>
           </>
         ) : null}
 
@@ -988,12 +1022,11 @@ function ProjectStatusActions({
         {write.error ? (
           <Alert
             type="error"
-            showIcon
-            message="Project status was not changed"
+            title="Project status was not changed"
             description={write.error.message}
           />
         ) : null}
-      </Modal>
+      </Dialog>
     </>
   );
 }
@@ -1066,20 +1099,18 @@ export function ProjectDetailPage() {
         <Alert
           style={{ marginTop: 24 }}
           type="error"
-          showIcon
-          message="Project could not be loaded"
+          title="Project could not be loaded"
           description="This link is missing a project id."
         />
       ) : project.isLoading ? (
         <div style={{ padding: 48, textAlign: 'center' }}>
-          <Spin />
+          <Spinner aria-busy="true" />
         </div>
       ) : project.isError ? (
         <Alert
           style={{ marginTop: 24 }}
           type="error"
-          showIcon
-          message="Project could not be loaded"
+          title="Project could not be loaded"
           description={project.error instanceof Error ? project.error.message : undefined}
           action={
             <Button size="small" danger onClick={() => project.refetch()}>
@@ -1094,18 +1125,18 @@ export function ProjectDetailPage() {
               title. A balanced command centre now leads with changing work state and the way to
               act on it, followed by the stable goal they are working toward. */}
           <header className="project-detail-identity" data-project-block="header">
-            <Typography.Title level={2} className="page-title">
+            <h2 className="page-title orbit-typography">
               {p.title}
-            </Typography.Title>
+            </h2>
             <div className="project-detail-meta">
               {/* An open project nobody has started says so rather than reading like one that runs. */}
               {p.status === 'OPEN' && started === false ? (
-                <Tag color="default">{NOT_STARTED}</Tag>
+                <Badge>{NOT_STARTED}</Badge>
               ) : (
-                <Tag color={STATUS_COLOR[p.status]}>{STATUS_LABEL[p.status]}</Tag>
+                <Badge tone={tagTone(STATUS_COLOR[p.status])}>{STATUS_LABEL[p.status]}</Badge>
               )}
               {p.status === 'OPEN' && doneRequest ? (
-                <Tag color="gold">{PROJECT_DONE_COPY.readyToClose}</Tag>
+                <Badge tone="gold">{PROJECT_DONE_COPY.readyToClose}</Badge>
               ) : null}
               {p.status === 'DONE' ? (
                 <span className="project-done-provenance">{doneProvenance(p)}</span>
@@ -1127,23 +1158,25 @@ export function ProjectDetailPage() {
               <Popconfirm
                 title={`Delete “${p.title}”?`}
                 description="This deletes the project and everything filed under it. This action cannot be undone."
-                okText="Delete"
+                confirmText="Delete"
                 cancelText="Cancel"
-                okButtonProps={{ danger: true, loading: remove.isPending }}
+                danger
+                confirmLoading={remove.isPending}
                 onConfirm={() => remove.mutate()}
-              >
-                <Button
-                  size="small"
-                  type="text"
-                  danger
-                  style={{ marginInlineStart: 'auto' }}
-                  icon={<DeleteOutlined />}
-                  aria-label={`Delete ${p.title}`}
-                  loading={remove.isPending}
-                >
-                  Delete project
-                </Button>
-              </Popconfirm>
+                trigger={
+                  <Button
+                    size="small"
+                    variant="text"
+                    danger
+                    style={{ marginInlineStart: 'auto' }}
+                    icon={<DeleteOutlined />}
+                    aria-label={`Delete ${p.title}`}
+                    loading={remove.isPending}
+                  >
+                    Delete project
+                  </Button>
+                }
+              />
             </div>
           </header>
 
@@ -1164,8 +1197,7 @@ export function ProjectDetailPage() {
             <Alert
               style={{ marginBottom: 14 }}
               type="error"
-              showIcon
-              message="Project could not be deleted"
+              title="Project could not be deleted"
               description={remove.error.message}
             />
           ) : null}
@@ -1478,7 +1510,7 @@ export function ProjectCoordinatorSection({
 }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { modal } = AntApp.useApp();
+  const [confirm, confirmation] = useConfirm();
   const [rebinding, setRebinding] = useState(false);
   const [choosingLanding, setChoosingLanding] = useState(false);
   // The workspace the reader named for a coordinator that has never opened. Kept rather than sent
@@ -1537,19 +1569,19 @@ export function ProjectCoordinatorSection({
           replace.mutate();
           return;
         }
-        modal.confirm({
+        void confirm({
           // Wider than the 416 default so the two answers stay on one line: stacked, the safe one
-          // sits above the destructive one, which is the reading order nobody expects.
+          // sits above the destructive one, which is the reading order nobody expects. Focus
+          // starts on the safe one.
           width: 480,
           title: 'Complete this conversation and start a new coordinator?',
-          content:
+          description:
             'The current conversation is completed — a turn in flight finishes first — and this ' +
             'project starts coordinating from a new, empty one. Nothing is deleted: the completed ' +
             'conversation stays readable.',
-          okText: 'Complete and start a new one',
+          confirmText: 'Complete and start a new one',
           cancelText: 'Keep this coordinator',
-          autoFocusButton: 'cancel',
-          onOk: () => replace.mutate(),
+          onConfirm: () => replace.mutate(),
         });
         return;
       // Two different things, and only the second is a write of its own. Naming the landing of a
@@ -1596,14 +1628,13 @@ export function ProjectCoordinatorSection({
             borderRadius: 10,
           }}
         >
-          <Spin />
+          <Spinner aria-busy="true" />
         </div>
       ) : status.isError ? (
         // A READ that failed, which is the one thing here Retry is the right answer to.
         <Alert
           type="error"
-          showIcon
-          message="Coordinator could not be read"
+          title="Coordinator could not be read"
           description={status.error instanceof Error ? status.error.message : undefined}
           action={
             <Button size="small" danger onClick={() => status.refetch()}>
@@ -1625,8 +1656,7 @@ export function ProjectCoordinatorSection({
           {failure ? (
             <Alert
               type="error"
-              showIcon
-              message={
+              title={
                 unavailable
                   ? 'The coordinator cannot be opened'
                   : replace.error
@@ -1656,7 +1686,7 @@ export function ProjectCoordinatorSection({
             />
           ) : null}
           {restore.error ? (
-            <Alert type="error" showIcon message="Could not restore" description={restore.error.message} />
+            <Alert type="error" title="Could not restore" description={restore.error.message} />
           ) : null}
         </>
       )}
@@ -1680,6 +1710,7 @@ export function ProjectCoordinatorSection({
           onClose={() => setChoosingLanding(false)}
         />
       ) : null}
+      {confirmation}
     </div>
   );
 }
@@ -1730,7 +1761,7 @@ function CoordinatorRebindDialog({
 }) {
   const qc = useQueryClient();
   const workspaces = useQuery(workspacesQuery());
-  const [picked, setPicked] = useState<string | undefined>(undefined);
+  const [picked, setPicked] = useState<string | null>(null);
   const rebind = useMutation({
     mutationFn: (workspaceId: string) => rebindProjectCoordinator(projectId, workspaceId),
     onSuccess: () => {
@@ -1742,24 +1773,35 @@ function CoordinatorRebindDialog({
   });
 
   return (
-    <Modal
+    <Dialog
+      className="project-coordinator-dialog"
       open
       title="Rebind coordination workspace"
-      okText="Rebind"
-      okButtonProps={{ disabled: !picked, loading: rebind.isPending }}
-      onOk={() => picked && rebind.mutate(picked)}
-      onCancel={onClose}
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            disabled={!picked}
+            loading={rebind.isPending}
+            onClick={() => picked && rebind.mutate(picked)}
+          >
+            Rebind
+          </Button>
+        </>
+      }
     >
-      <Typography.Paragraph type="secondary">
+      <div className="orbit-typography orbit-typography-secondary">
         The coordinator opens in this workspace from now on. The conversation already recorded is
         left where it is — this decides where the NEXT one opens.
-      </Typography.Paragraph>
+      </div>
       <Select
         style={{ width: '100%' }}
         placeholder="Workspace"
         loading={workspaces.isPending}
         value={picked}
-        onChange={setPicked}
+        onValueChange={setPicked}
         options={(workspaces.data ?? []).map((w: { id: string; name: string }) => ({
           value: w.id,
           label: w.id === currentWorkspaceId ? `${w.name} (current)` : w.name,
@@ -1769,12 +1811,11 @@ function CoordinatorRebindDialog({
         <Alert
           style={{ marginTop: 12 }}
           type="error"
-          showIcon
-          message="Could not rebind"
+          title="Could not rebind"
           description={rebind.error.message}
         />
       ) : null}
-    </Modal>
+    </Dialog>
   );
 }
 
@@ -1805,33 +1846,39 @@ function CoordinatorLandingDialog({
   onClose: () => void;
 }) {
   const workspaces = useQuery(workspacesQuery());
-  const [picked, setPicked] = useState<string | undefined>(proposed ?? undefined);
+  const [picked, setPicked] = useState<string | null>(proposed);
 
   return (
-    <Modal
+    <Dialog
+      className="project-coordinator-dialog"
       open
       title="Choose the coordination workspace"
-      okText="Start coordinator here"
-      okButtonProps={{ disabled: !picked }}
-      onOk={() => picked && onPick(picked)}
-      onCancel={onClose}
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={!picked} onClick={() => picked && onPick(picked)}>
+            Start coordinator here
+          </Button>
+        </>
+      }
     >
-      <Typography.Paragraph type="secondary">
+      <div className="orbit-typography orbit-typography-secondary">
         The conversation opens here now and stays here — a coordinator cannot be moved to another
         workspace later.
-      </Typography.Paragraph>
+      </div>
       <Select
         style={{ width: '100%' }}
         placeholder="Workspace"
         loading={workspaces.isPending}
         value={picked}
-        onChange={setPicked}
+        onValueChange={setPicked}
         options={(workspaces.data ?? []).map((w: { id: string; name: string }) => ({
           value: w.id,
           label: w.name,
         }))}
       />
-    </Modal>
+    </Dialog>
   );
 }
 
@@ -2294,11 +2341,11 @@ export function ProjectTasks({ projectId }: { projectId: string }) {
   return (
     <div style={{ marginBottom: 24 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography.Title level={4}>Tasks</Typography.Title>
+        <h4 className="orbit-typography">Tasks</h4>
         {/* Beside the heading rather than inside the list: it is still offered on a project whose
             page of tasks is empty, still loading, or failed to load — none of which says anything
             about whether more work can be added. */}
-        <Button type="primary" onClick={() => open.mutate(undefined)}>
+        <Button variant="primary" onClick={() => open.mutate(undefined)}>
           New task
         </Button>
       </div>
@@ -2310,21 +2357,19 @@ export function ProjectTasks({ projectId }: { projectId: string }) {
       {open.error ? (
         <Alert
           type="error"
-          showIcon
-          message="New task could not be started"
+          title="New task could not be started"
           description={open.error.message}
         />
       ) : null}
 
       {tasks.isLoading ? (
         <div style={{ padding: 24, textAlign: 'center' }}>
-          <Spin />
+          <Spinner aria-busy="true" />
         </div>
       ) : tasks.isError ? (
         <Alert
           type="error"
-          showIcon
-          message="Tasks could not be loaded"
+          title="Tasks could not be loaded"
           description={tasks.error instanceof Error ? tasks.error.message : undefined}
           action={
             <Button size="small" danger onClick={() => tasks.refetch()}>
@@ -2336,7 +2381,13 @@ export function ProjectTasks({ projectId }: { projectId: string }) {
         <ProjectTaskGroupsList
           items={tasks.data.items}
           hasMore={Boolean(tasks.data.nextCursor)}
-          renderRow={(t) => <ProjectTaskRow projectId={projectId} task={t} branches={branches} />}
+          renderRows={(rows) => (
+            <div className="orbit-list orbit-list-split">
+              <ul className="orbit-list-items">
+                {rows.map((t) => <ProjectTaskRow key={t.id} projectId={projectId} task={t} branches={branches} />)}
+              </ul>
+            </div>
+          )}
         />
       ) : (
         <Empty description="No top-level tasks yet" />
@@ -2347,17 +2398,17 @@ export function ProjectTasks({ projectId }: { projectId: string }) {
 
 /**
  * One page of tasks in its bands (projectTaskGroups), each band's heading and count over its rows,
- * each row drawn by `renderRow` — the project page's own rows here, a public project page's rows
- * there, under the same bands.
+ * each band's rows drawn by `renderRows` — the project page's own list here, a public project
+ * page's there, under the same bands.
  */
 export function ProjectTaskGroupsList({
   items,
   hasMore,
-  renderRow,
+  renderRows,
 }: {
   items: ProjectTask[];
   hasMore: boolean;
-  renderRow: (task: ProjectTask) => ReactNode;
+  renderRows: (tasks: ProjectTask[]) => ReactNode;
 }) {
   return (
     <>
@@ -2375,22 +2426,22 @@ export function ProjectTaskGroupsList({
               marginTop: 16,
             }}
           >
-            <Typography.Text strong={group.level !== null} type="secondary">
-              {group.heading}
-            </Typography.Text>
-            <Typography.Text type="secondary">
+            <span className="orbit-typography orbit-typography-secondary">
+              {group.level !== null ? <strong>{group.heading}</strong> : group.heading}
+            </span>
+            <span className="orbit-typography orbit-typography-secondary">
               {group.tasks.length} task{group.tasks.length === 1 ? '' : 's'}
-            </Typography.Text>
+            </span>
           </div>
-          <List dataSource={group.tasks} rowKey="id" renderItem={renderRow} />
+          {renderRows(group.tasks)}
         </div>
       ))}
       {/* Said outright rather than shown as a button: this unit reads one page and sends no
           cursor, so a silent stop here would read as "that is all of them". */}
       {hasMore ? (
-        <Typography.Text type="secondary">
+        <span className="orbit-typography orbit-typography-secondary">
           More top-level tasks exist beyond this first page.
-        </Typography.Text>
+        </span>
       ) : null}
     </>
   );
@@ -2430,8 +2481,8 @@ function ProjectTaskRow({
   const isOpen = routeId(openTaskParam) === routeId(task.id);
 
   return (
-    <List.Item
-      className={`project-task-row is-openable${isOpen ? ' is-open' : ''}`}
+    <li
+      className={`orbit-list-item project-task-row is-openable${isOpen ? ' is-open' : ''}`}
       data-work-state={projectTaskWorkStateOf(task)}
       data-integration-state={task.integration?.state}
       // Work already on main recedes — it is the answer to "did that ship?" and to nothing a
@@ -2446,74 +2497,76 @@ function ProjectTaskRow({
       }}
     >
       <div className="project-task-row-layout">
-        {/* Own this flex item rather than asking AntD's Meta to negotiate directly with the two
-            fixed controls beside it. The wrapper supplies the missing min-width:0 boundary; on a
-            phone it also gives the task copy a full line before the count and disclosure. */}
+        {/* Own this flex item rather than asking the title-and-description block to negotiate
+            directly with the two fixed controls beside it. The wrapper supplies the missing
+            min-width:0 boundary; on a phone it also gives the task copy a full line before the count
+            and disclosure. */}
         <div className="project-task-row-copy">
-          <List.Item.Meta
-            className="project-task-row-meta"
-            // Title in full: a task's title is its identity, and a half-read one names a
-            // different task. The long-form field underneath is what gets cut instead.
-            title={
-              <span className="project-task-row-title">
-                <TaskStatusMark status={task.status} />{' '}
-                {/* Its own navigation, by the same rule as the row's; the row must not open it a
-                    second time, and a ⌘/middle-click is the browser's, for a tab of its own. */}
-                <ProjectTaskLink
-                  className="project-task-row-link"
-                  projectId={projectId}
-                  taskId={task.id}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {task.title}
-                </ProjectTaskLink>{' '}
-                <Tag color={TASK_STATUS_COLOR[task.status] ?? 'default'}>{task.status}</Tag>
-                {workLabel ? (
-                  <Tag data-testid="project-task-work-state" color={workLabel.color}>
-                    {workLabel.text}
-                  </Tag>
-                ) : null}
-                {/* Where this one is between done and on main, or what it is waiting to land
-                    behind (§7.3 V10). Beside the work lane rather than replacing it: "DONE" is
-                    still true of a task whose checks are running, and the two tags together are
-                    the sentence — finished, not there yet. */}
-                {integrationTag ? (
-                  <Tag data-testid="project-task-integration" color={integrationTag.color}>
-                    {integrationTag.text}
-                  </Tag>
-                ) : null}
-                {/* Both badges are omitted at zero rather than shown as `waits 0`. Most rows in a
-                    real project have nothing on either side, and a list where every row carries two
-                    zeroes is a list where the rows that do carry a number stop standing out. */}
-                {task.unmetCount > 0 ? <Tag color="gold">waits {task.unmetCount}</Tag> : null}
-                {task.blocksCount > 0 ? <Tag color="blue">blocks {task.blocksCount}</Tag> : null}
-                {/* The one thing a tree could never say. `waits 3` names a count; WHICH three is
-                    what a reader has to know to go unblock them, and on a hand-drawn graph it is
-                    exactly where the escape lines get drawn. Only for two or more: at one, the
-                    prerequisite is a click away and a second request per row is not worth it. */}
-                {task.unmetCount >= 2 ? <ProjectTaskPrerequisites task={task} /> : null}
-                {/* Only on a task that actually has one — an unscheduled task is the normal case,
-                    and a "not scheduled" chip on every row would drown the few that are. Said as
-                    "Starts", never "Due": this is the trigger the server acts on, and the row
-                    deliberately shows no `dueDate` at all, so the word has only one meaning here.
-                    The <time> is what carries the precise instant for anything not reading the
-                    screen — `dateTime` in canonical UTC for machines, the same in `title` for a
-                    reader who needs the exact moment behind a to-the-minute local rendering. */}
-                {starts ? (
-                  <Tag>
-                    <time dateTime={starts.iso} title={starts.iso}>
-                      Starts {starts.local}
-                    </time>
-                  </Tag>
-                ) : null}
-              </span>
-            }
-            description={
-              <span className="project-task-row-description">
-                {excerpt(task.acceptanceCriteria, 'No acceptance criteria set')}
-              </span>
-            }
-          />
+          <div className="orbit-list-item-meta project-task-row-meta">
+            <div className="orbit-list-item-meta-content">
+              {/* Title in full: a task's title is its identity, and a half-read one names a
+                  different task. The long-form field underneath is what gets cut instead. */}
+              <h4 className="orbit-list-item-meta-title">
+                <span className="project-task-row-title">
+                  <TaskStatusMark status={task.status} />{' '}
+                  {/* Its own navigation, by the same rule as the row's; the row must not open it a
+                      second time, and a ⌘/middle-click is the browser's, for a tab of its own. */}
+                  <ProjectTaskLink
+                    className="project-task-row-link"
+                    projectId={projectId}
+                    taskId={task.id}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {task.title}
+                  </ProjectTaskLink>{' '}
+                  <Badge tone={tagTone(TASK_STATUS_COLOR[task.status] ?? 'default')}>{task.status}</Badge>
+                  {workLabel ? (
+                    <Badge data-testid="project-task-work-state" tone={tagTone(workLabel.color)}>
+                      {workLabel.text}
+                    </Badge>
+                  ) : null}
+                  {/* Where this one is between done and on main, or what it is waiting to land
+                      behind (§7.3 V10). Beside the work lane rather than replacing it: "DONE" is
+                      still true of a task whose checks are running, and the two tags together are
+                      the sentence — finished, not there yet. */}
+                  {integrationTag ? (
+                    <Badge data-testid="project-task-integration" tone={tagTone(integrationTag.color)}>
+                      {integrationTag.text}
+                    </Badge>
+                  ) : null}
+                  {/* Both badges are omitted at zero rather than shown as `waits 0`. Most rows in a
+                      real project have nothing on either side, and a list where every row carries two
+                      zeroes is a list where the rows that do carry a number stop standing out. */}
+                  {task.unmetCount > 0 ? <Badge tone="gold">waits {task.unmetCount}</Badge> : null}
+                  {task.blocksCount > 0 ? <Badge tone="blue">blocks {task.blocksCount}</Badge> : null}
+                  {/* The one thing a tree could never say. `waits 3` names a count; WHICH three is
+                      what a reader has to know to go unblock them, and on a hand-drawn graph it is
+                      exactly where the escape lines get drawn. Only for two or more: at one, the
+                      prerequisite is a click away and a second request per row is not worth it. */}
+                  {task.unmetCount >= 2 ? <ProjectTaskPrerequisites task={task} /> : null}
+                  {/* Only on a task that actually has one — an unscheduled task is the normal case,
+                      and a "not scheduled" chip on every row would drown the few that are. Said as
+                      "Starts", never "Due": this is the trigger the server acts on, and the row
+                      deliberately shows no `dueDate` at all, so the word has only one meaning here.
+                      The <time> is what carries the precise instant for anything not reading the
+                      screen — `dateTime` in canonical UTC for machines, the same in `title` for a
+                      reader who needs the exact moment behind a to-the-minute local rendering. */}
+                  {starts ? (
+                    <Badge>
+                      <time dateTime={starts.iso} title={starts.iso}>
+                        Starts {starts.local}
+                      </time>
+                    </Badge>
+                  ) : null}
+                </span>
+              </h4>
+              <div className="orbit-list-item-meta-description">
+                <span className="project-task-row-description">
+                  {excerpt(task.acceptanceCriteria, 'No acceptance criteria set')}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
         <div className="project-task-row-count">
           {task.childCount} subtask{task.childCount === 1 ? '' : 's'}
@@ -2549,7 +2602,7 @@ function ProjectTaskRow({
           <ProjectTaskLevel projectId={projectId} parentTaskId={task.id} branches={branches} />
         </div>
       ) : null}
-    </List.Item>
+    </li>
   );
 }
 
@@ -2597,11 +2650,11 @@ function ProjectTaskPrerequisites({ task }: { task: ProjectTask }) {
   // many are unaccounted for is the honest version; silently listing four of six is not.
   const missing = task.unmetCount - waitingOn.length;
   return (
-    <Typography.Text type="secondary">
+    <span className="orbit-typography orbit-typography-secondary">
       {' → '}
       {waitingOn.join(', ')}
       {missing > 0 ? `, +${missing} more` : ''}
-    </Typography.Text>
+    </span>
   );
 }
 
@@ -2643,13 +2696,12 @@ export function ProjectTaskLevel({
 
   return children.isLoading ? (
     <div style={{ padding: 12, textAlign: 'center' }}>
-      <Spin size="small" />
+      <Spinner size="small" aria-busy="true" />
     </div>
   ) : children.isError ? (
     <Alert
       type="error"
-      showIcon
-      message="Subtasks could not be loaded"
+      title="Subtasks could not be loaded"
       description={children.error instanceof Error ? children.error.message : undefined}
       action={
         <Button size="small" danger onClick={() => children.refetch()}>
@@ -2659,27 +2711,26 @@ export function ProjectTaskLevel({
     />
   ) : children.data && children.data.items.length > 0 ? (
     <>
-      <List
-        size="small"
-        dataSource={children.data.items}
-        rowKey="id"
-        renderItem={(child) => (
-          <ProjectTaskRow projectId={projectId} task={child} branches={branches} />
-        )}
-      />
+      <div className="orbit-list orbit-list-split orbit-list-sm">
+        <ul className="orbit-list-items">
+          {children.data.items.map((child) => (
+            <ProjectTaskRow key={child.id} projectId={projectId} task={child} branches={branches} />
+          ))}
+        </ul>
+      </div>
       {/* Same reason as the root list: one page, no cursor sent, so stopping silently would read
           as "that is all of them". */}
       {children.data.nextCursor ? (
-        <Typography.Text type="secondary">
+        <span className="orbit-typography orbit-typography-secondary">
           More subtasks exist beyond this first page.
-        </Typography.Text>
+        </span>
       ) : null}
     </>
   ) : (
     // The only way to reach this level is a row that claimed at least one child, so an empty page
     // is not "a leaf" — it is a count that has since moved on.
     <Empty
-      image={Empty.PRESENTED_IMAGE_SIMPLE}
+      image="simple"
       description="No subtasks — the count on this row is out of date"
     />
   );

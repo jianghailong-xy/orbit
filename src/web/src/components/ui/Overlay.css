@@ -15,7 +15,9 @@
 .orbit-overlay-header { margin-bottom: 8px; }
 .orbit-overlay-title { margin: 0; color: var(--text-1); font-size: 16px; font-weight: 600; line-height: 24px; }
 .orbit-overlay-description { margin: 0; }
-.orbit-overlay-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+/* Buttons that do not fit wrap onto the next line, each line to the end and no gap between lines,
+   as the replaced footers' inline buttons did (a long confirmation on a phone). */
+.orbit-overlay-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0 8px; margin-top: 12px; }
 .orbit-overlay-close {
   display: inline-flex; align-items: center; justify-content: center; position: absolute;
   top: 12px; right: 12px; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 4px;

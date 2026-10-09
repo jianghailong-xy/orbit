@@ -1,8 +1,10 @@
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { Button, Input, Typography } from 'antd';
 import { useId, useState } from 'react';
 import { api } from '../api';
 import { useToast } from '../lib/toast';
+import { Button } from './ui/Button';
+import { Input } from './ui/Input';
+import './ui/Typography.css';
 import {
   RUN_AT_IMPOSSIBLE,
   canSaveTaskSchedule,
@@ -135,8 +137,7 @@ export function TaskScheduleFields({
           step={1}
           value={draft}
           disabled={pending}
-          status={issue ? 'error' : undefined}
-          aria-invalid={issue ? true : undefined}
+          invalid={Boolean(issue)}
           // `aria-invalid` says only THAT something is wrong. The hint is always announced with
           // the field; the reason joins it when there is one, rather than replacing it.
           aria-describedby={issue ? `${hintId} ${errorId}` : hintId}
@@ -145,7 +146,7 @@ export function TaskScheduleFields({
         <div className="tdp-schedule-actions">
           <Button
             size="small"
-            type="primary"
+            variant="primary"
             loading={savePending}
             // An empty, impossible or untouched draft has nothing to send — see
             // canSaveTaskSchedule for why each of those is a refusal rather than a request.
@@ -175,7 +176,7 @@ export function TaskScheduleFields({
             that has one — that Run now is a way of losing it. That last sentence is the whole
             reason this is in the panel rather than only in the header button's tooltip: a reader
             deciding between the two is looking here. */}
-        <Typography.Text id={hintId} type="secondary" className="tdp-schedule-hint">
+        <span id={hintId} className="tdp-schedule-hint orbit-typography orbit-typography-secondary">
           {scheduledLocal
             ? `Starts once, on ${scheduledLocal}, in your own time zone. Run now starts immediately and clears this scheduled start.`
             : scheduled
@@ -184,7 +185,7 @@ export function TaskScheduleFields({
                 // and it names both ways out — the only two this control has.
                 'A start is scheduled that this control cannot read. Cancel schedule clears it, or pick a time to replace it.'
               : 'Optional, in your own time zone. The task starts once, at that time.'}
-        </Typography.Text>
+        </span>
       </div>
     </div>
   );

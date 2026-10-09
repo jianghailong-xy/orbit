@@ -10,6 +10,8 @@ export interface SelectOption<Value extends string = string> {
   value: Value;
   label: string;
   disabled?: boolean;
+  /** Said when the pointer rests on the option (the native title), in a searchable list. */
+  title?: string;
 }
 export interface SelectGroup<Value extends string = string> {
   label: string;

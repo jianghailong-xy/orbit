@@ -1,6 +1,8 @@
 /* The replaced card as measured: a 1px split border, 8px radius and the raised surface; a 56px head
    whose 16px semibold title (a 25.14px line, one line cut with an ellipsis) is centred over a 1px split
-   line, which the body overlaps by 1px; 24px body padding. No outer margin: the page spaces its cards. */
+   line, which the body overlaps by 1px; 24px body padding. The extra sits at the head's far end in
+   14px regular body text. Small: a 38px head with 12px sides and a 14px title, 12px body padding.
+   No outer margin: the page spaces its cards. */
 .orbit-card {
   position: relative;
   box-sizing: border-box;
@@ -36,4 +38,24 @@
 }
 .orbit-card-body {
   padding: 24px;
+}
+/* Beside an extra the title takes all the room the extra leaves, as in the replaced head (no gap). */
+.orbit-card-head:has(> .orbit-card-extra) {
+  gap: 0;
+}
+.orbit-card-extra {
+  margin-inline-start: auto;
+  color: var(--text-1);
+  font-size: var(--orbit-font-size);
+  font-weight: 400;
+}
+.orbit-card-small > .orbit-card-head {
+  min-height: 38px;
+  padding: 0 12px;
+}
+.orbit-card-small > .orbit-card-head > .orbit-card-title {
+  font-size: var(--orbit-font-size);
+}
+.orbit-card-small > .orbit-card-body {
+  padding: 12px;
 }

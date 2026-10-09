@@ -81,7 +81,7 @@ final class ProjectPageCopyParityTests: XCTestCase {
     func testAProjectNobodyStartedIsTaggedNotStarted() throws {
         let web = try source(Self.page)
         assertSays(web, "{p.status === 'OPEN' && started === false ? (", in: Self.page)
-        assertSays(web, "<Tag color=\"default\">{NOT_STARTED}</Tag>", in: Self.page)
+        assertSays(web, "<Badge>{NOT_STARTED}</Badge>", in: Self.page)
         let words = try source("src/web/src/lib/projectStart.ts")
         assertSays(words, "export const NOT_STARTED = '\(StartProject.notStarted)';", in: "src/web/src/lib/projectStart.ts")
     }
@@ -188,7 +188,7 @@ final class ProjectPageCopyParityTests: XCTestCase {
     /// project is done, who recorded it — in `doneProvenance`'s words.
     func testTheHeaderSaysReadyToCloseAndWhoRecordedItDone() throws {
         let web = try source(Self.page)
-        assertSays(web, "<Tag color=\"gold\">{PROJECT_DONE_COPY.readyToClose}</Tag>", in: Self.page)
+        assertSays(web, "<Badge tone=\"gold\">{PROJECT_DONE_COPY.readyToClose}</Badge>", in: Self.page)
         // …only while the coordinator's request stands, not for every OPEN project (the browser since
         // 1f85c0afe; this client's `ProjectDone.readyToClose`).
         assertSays(web, "{p.status === 'OPEN' && doneRequest ? (", in: Self.page)

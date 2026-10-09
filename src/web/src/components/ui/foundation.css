@@ -30,6 +30,8 @@
   --orbit-control-error-outline: rgba(255, 55, 5, 0.06);
   --orbit-input-error-hover: #ffa399;
   --orbit-input-focus-shadow: 0 0 0 2px rgba(5, 122, 255, 0.06);
+  --orbit-input-warning-hover: #ffba52;
+  --orbit-input-warning-outline: rgba(255, 175, 5, 0.1);
   --orbit-input-invalid-shadow: 0 0 0 2px var(--orbit-control-error-outline);
   --orbit-badge-default-bg: #f5f5f5;
   --orbit-badge-info-bg: #f0f7ff;
@@ -48,6 +50,8 @@
   --orbit-badge-red-bg: #fff1f0;
   --orbit-badge-gold: #d48806;
   --orbit-badge-gold-bg: #fffbe6;
+  --orbit-badge-purple: #531dab;
+  --orbit-badge-purple-bg: #f9f0ff;
   --orbit-control-on-primary: #ffffff;
   --orbit-control-hover-bg: rgba(0, 0, 0, 0.04);
   --orbit-fill-alter: rgba(0, 0, 0, 0.02);
@@ -64,6 +68,10 @@
   --orbit-menu-selected-bg: #f0f7ff;
   --orbit-empty-border: #d9d9d9;
   --orbit-empty-fill: #fafafa;
+  --orbit-empty-shadow: #f0f0f0;
+  --orbit-empty-outline: #bfbfbf;
+  --orbit-skeleton-from: rgba(0, 0, 0, 0.06);
+  --orbit-skeleton-to: rgba(0, 0, 0, 0.15);
   --orbit-tooltip-bg: rgba(0, 0, 0, 0.85);
   --orbit-avatar-bg: rgba(0, 0, 0, 0.25);
   --orbit-segmented-track: #f2f3f5;
@@ -94,6 +102,8 @@
   --orbit-control-error-outline: rgba(38, 4, 0, 0.41);
   --orbit-input-error-hover: #774642;
   --orbit-input-focus-shadow: 0 0 0 2px rgba(1, 58, 182, 0.33);
+  --orbit-input-warning-hover: #705426;
+  --orbit-input-warning-outline: rgba(36, 21, 0, 0.54);
   --orbit-badge-default-bg: #3c3c3f;
   --orbit-badge-info-bg: #14192c;
   --orbit-badge-success: #399c50;
@@ -111,6 +121,8 @@
   --orbit-badge-red-bg: #2a1215;
   --orbit-badge-gold: #e8b339;
   --orbit-badge-gold-bg: #2b2111;
+  --orbit-badge-purple: #854eca;
+  --orbit-badge-purple-bg: #1a1325;
   --orbit-control-hover-bg: rgba(255, 255, 255, 0.08);
   --orbit-fill-alter: rgba(255, 255, 255, 0.04);
   --orbit-control-disabled-text: rgba(255, 255, 255, 0.25);
@@ -124,6 +136,10 @@
   --orbit-menu-selected-bg: #1d305b;
   --orbit-empty-border: #515154;
   --orbit-empty-fill: #333336;
+  --orbit-empty-shadow: #444447;
+  --orbit-empty-outline: #606062;
+  --orbit-skeleton-from: rgba(255, 255, 255, 0.12);
+  --orbit-skeleton-to: rgba(255, 255, 255, 0.18);
   --orbit-tooltip-bg: #5b5b6c;
   --orbit-avatar-bg: rgba(255, 255, 255, 0.25);
   --orbit-segmented-track: #343437;

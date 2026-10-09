@@ -106,14 +106,14 @@ async function click(element: Element | null | undefined, what: string): Promise
 const buttonNamed = (text: string) =>
   [...container!.querySelectorAll('button')].find((b) => b.textContent?.trim() === text) ?? null;
 
-/** Open the ⋯ and answer its items. */
+/** Open the ⋯ and answer its items: the menu the button opened, by its role, and its entries by theirs. */
 async function openMenu(): Promise<HTMLElement[]> {
   await click(container!.querySelector('button[aria-label="More project actions"]'), 'the ⋯ button');
-  await vi.waitFor(() => expect(document.body.querySelector('.project-more-menu')).not.toBeNull());
-  return [...document.body.querySelectorAll<HTMLElement>('.project-more-menu .ant-dropdown-menu-item')];
+  await vi.waitFor(() => expect(document.body.querySelector('[role="menu"].project-more-menu')).not.toBeNull());
+  return [...document.body.querySelectorAll<HTMLElement>('[role="menu"].project-more-menu [role="menuitem"]')];
 }
 const item = (items: HTMLElement[], label: string) =>
-  items.find((el) => el.querySelector('.ant-dropdown-menu-title-content')?.textContent?.startsWith(label));
+  items.find((el) => el.textContent?.startsWith(label));
 
 const dialog = (): HTMLElement => {
   const found = document.body.querySelector<HTMLElement>('[role="dialog"].share-dialog');
