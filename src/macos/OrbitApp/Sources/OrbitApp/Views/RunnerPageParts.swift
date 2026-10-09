@@ -346,14 +346,16 @@ struct RunnerEngineRow: View {
         .padding(.vertical, 2)
     }
 
-    /// `2.1.284 · Signed in`, the state in its colour.
+    /// `2.1.284 · Signed in`, the state in its colour — and Kimi's site after its version,
+    /// `2.1.1 · kimi.ai · Signed in`, as the web's row says it.
     private var statusLine: AttributedString {
         typealias Colour = AttributeScopes.SwiftUIAttributes.ForegroundColorAttribute
         let status = RunnerPageFormat.engineStatus(health, runner: runner)
         let version = health.installed == true ? RunnerPageFormat.engineVersion(health.version) : nil
-        var line = AttributedString(version ?? "")
+        let head = [version, health.installed == true ? RunnerPageFormat.engineSite(health) : nil].compactMap { $0 }
+        var line = AttributedString(head.joined(separator: RunnerPageCopy.RUNNER_LINE_SEPARATOR))
         if let status {
-            if version != nil { line += AttributedString(RunnerPageCopy.RUNNER_LINE_SEPARATOR) }
+            if !head.isEmpty { line += AttributedString(RunnerPageCopy.RUNNER_LINE_SEPARATOR) }
             var words = AttributedString(status.text)
             if status.tone != .muted { words[Colour.self] = RunnerInk.status(status.tone) }
             line += words

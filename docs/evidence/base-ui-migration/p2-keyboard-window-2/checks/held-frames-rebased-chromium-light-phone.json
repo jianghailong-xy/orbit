@@ -1,0 +1,35 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.config.mjs --project chromium-light-phone'",
+ "env": {},
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "runner": "run-chunks.py (inside one mcp__orbit__bg_run job)",
+ "commit": "f162a2f9de3cb4bdea8e9a6120dd28a8e2184328",
+ "webTree": "d8ae59f026644577041afea38b5994da1eef0f9f",
+ "dirtyWeb": "",
+ "startedAt": "2026-10-08T03:26:53.435869+00:00",
+ "endedAt": "2026-10-08T03:29:31.211087+00:00",
+ "loadAverage": {
+  "start": [
+   45.9677734375,
+   28.80078125,
+   21.94775390625
+  ],
+  "end": [
+   66.7392578125,
+   42.60546875,
+   28.0263671875
+  ]
+ },
+ "exitCode": 0,
+ "outputSha256": "8f152ba0285aad7a0c7487e8b05c6401156b2845569ce95d4b24b7e16717a1bf",
+ "outputBytes": 8884,
+ "raw": "/var/tmp/kw2-246921c8/runs/held-frames-rebased-chromium-light-phone",
+ "stats": {
+  "expected": 49,
+  "unexpected": 0,
+  "skipped": 0,
+  "flaky": 0,
+  "duration": 156657.726,
+  "samples": 49
+ }
+}

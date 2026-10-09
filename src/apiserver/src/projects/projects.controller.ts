@@ -13,6 +13,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ProjectStatus } from '@prisma/client';
+import type { StartProjectResponse } from '@orbit/shared';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden, PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
@@ -437,13 +438,26 @@ export class ProjectsController {
    */
   @PatForbidden('OWNER_INTERACTIVE')
   @Post(':id/start')
-  start(
+  async start(
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: StartProjectDto,
     @Headers('x-orbit-session-id') actingSessionId: string | undefined,
-  ) {
-    return this.acceptance.startProject(user.userId, id, dto, actingSessionId);
+  ): Promise<StartProjectResponse> {
+    // Automatic is the coordinator running the project, so a start that turns it on leaves the
+    // project one (the owner, 2026-10-07): whether one can open is checked before the start writes
+    // anything, and it is opened once the start has. A request carrying a session is the start's
+    // own refusal, so it is not read for anything first.
+    if (dto.automatic && !actingSessionId) {
+      await this.projects.assertStartCanOpenCoordinator(user.userId, id);
+    }
+    const started = await this.acceptance.startProject(user.userId, id, dto, actingSessionId);
+    const coordinator = await this.projects.coordinatorAfterStart(
+      user.userId,
+      id,
+      started.settings.automatic,
+    );
+    return { ...started, coordinator };
   }
 
   /**

@@ -210,41 +210,70 @@ final class WatchWakeCopyParityTests: XCTestCase {
         XCTAssertTrue(web.contains(" is now ${t.status}"), "what a changed target is now drifted")
     }
 
-    // MARK: the bar pinned to the top of the transcript
+    // MARK: the line the card became
 
-    /// What the bar over the conversation calls this turn, on both ends.
-    ///
-    /// The bar names the turn the answer in view belongs to, and it looked for the person's own
-    /// bubbles: iOS found the wake among them and drew "↑ Your question" with the payload's raw
-    /// UUID beside it — directly above this card reading "not typed by you" — while the browser
-    /// walked past it and named an unrelated earlier question. Both now name it off
-    /// `StickySummary`, which takes the two words from this card, so the bar cannot say one thing
-    /// while the card under it says another. The browser's half of that is the pair of attributes
-    /// the card stamps on its root for `WorkspaceView`'s scanner to read.
-    func testTheStickyBarNamesAWakeInThisCardsOwnWords() throws {
+    /// What the line says after its title and closes on, in the same words on both ends: the one
+    /// target that moved, or how many did; its status, or how many of several failed.
+    func testTheLineNamesAndClosesInTheSameWords() throws {
+        let web = try flat(Self.webWakeCard)
+        let name = try capture(web, "function lineName\\((.*?)\\n\\}", "lineName", Self.webWakeCard)
+        let closing = try capture(web, "function lineStatus\\((.*?)\\n\\}", "lineStatus", Self.webWakeCard)
+
+        // Several: counted in the noun the Watching strip counts in.
+        XCTAssertTrue(name.contains("kinds.size !== 1 ? 'target' : kinds.has('TASK') ? 'task' : 'session'"),
+                      "the noun several targets are counted in drifted from \(Self.webWakeCard)")
+        XCTAssertTrue(name.contains("`${changed.length} ${noun}s`"), "how several targets are counted drifted")
+        let three = wake([target("T1"), target("T2"), target("T3")])
+        XCTAssertEqual(WatchWakeCard.lineName(three), "3 tasks")
+        XCTAssertEqual(WatchWakeCard.lineName(wake([target("T1"), target("S1", kind: .session)])), "2 targets")
+        // One: by its title, else its kind and the END of its id — the start of a UUIDv7 is the minute
+        // it was made in, which every target made that minute shares.
+        XCTAssertTrue(name.contains("linkId(changed[0].id).slice(-8)"),
+                      "the browser no longer names a lone untitled target by the end of its id")
+        XCTAssertEqual(WatchWakeCard.lineName(wake([target("01a11e30-5f2c-7d41-9b2e-8c3f4a5b6c7d")])),
+                       "Task 4a5b6c7d")
+        XCTAssertEqual(WatchWakeCard.lineName(wake([target("T1")]), name: "Land the redirect fix"),
+                       "Land the redirect fix")
+        XCTAssertNil(WatchWakeCard.lineName(wake([])), "a wake naming no target names none on the line")
+
+        XCTAssertTrue(closing.contains("return changed[0].status || null;"),
+                      "a lone target's line no longer closes on its status in \(Self.webWakeCard)")
+        XCTAssertEqual(WatchWakeCard.lineStatus(wake([target("T1", status: "DONE")])), "DONE")
+        XCTAssertTrue(closing.contains("`${failed.length} of ${changed.length} failed`"),
+                      "how many of several failed drifted")
+        XCTAssertEqual(WatchWakeCard.lineStatus(wake([target("T1", status: "FAILED"), target("T2", status: "DONE")])),
+                       "1 of 2 failed")
+        XCTAssertNil(WatchWakeCard.lineStatus(wake([target("T1", status: "DONE"), target("T2", status: "DONE")])))
+
+        // What a failure is, which is what takes the line's error tone.
+        XCTAssertTrue(web.contains("const isFailed = (target: ChangedTarget) => target.status === 'FAILED';"),
+                      "what counts as a failed target drifted")
+        XCTAssertTrue(WatchWakeCard.isFailed(target("T1", status: "FAILED")))
+        XCTAssertFalse(WatchWakeCard.isFailed(target("T1", status: "CANCELLED")))
+        // And what the chevron is labelled: the background line's word for a fold that holds no job.
+        assertRendered(web, WatchWakeCard.details, "the line's details label", Self.webWakeCard)
+    }
+
+    /// The bar pinned to the top of the transcript does not point at this turn: it is a line inside
+    /// the answer, so the bar keeps naming the question (`StickySummary.isAnchor`, which
+    /// `StickySummaryTests` holds). The browser's half of that rule is the attribute pair its scanner
+    /// reads, which the line must never stamp. Named in the card's own words it took the bar over the
+    /// reply the agent simply carried on with, and the question left the screen.
+    func testTheLineIsNoTurnTheStickyBarPointsAt() throws {
         let card = try flat(Self.webWakeCard)
-        for (attribute, what) in [("data-sticky-label={watchWakeTitle(wake.kind)}", "label"),
-                                  ("data-sticky-text={watchWakeWhy(wake)}", "line")] {
-            XCTAssertTrue(card.contains(attribute),
-                          "the \(what) the bar takes from this card drifted: \(Self.webWakeCard) no "
-                              + "longer stamps \(attribute.debugDescription) on the card's root, so "
-                              + "the browser's bar is back to skipping the wake and naming an "
-                              + "earlier question in its place.")
-        }
-        // Taken from the same two functions the card itself draws, which is what makes them the
-        // card's own words rather than a second wording of them.
-        XCTAssertTrue(card.contains("<EyeOutlined /> {watchWakeTitle(wake.kind)}")
-                          && card.contains("className=\"watch-wake-why\">{watchWakeWhy(wake)}"),
-                      "the card stopped drawing its own title and line through the functions the "
-                          + "bar reads, so the two can now drift apart inside the browser itself.")
+        XCTAssertFalse(card.contains("data-sticky-label=") || card.contains("data-sticky-text="),
+                       "\(Self.webWakeCard) stamps an attribute the bar's scanner reads, so the bar points "
+                           + "at the line and the question leaves it")
 
+        // The scanner itself still reaches the cards that do name themselves (an exception item's, a
+        // task run's opening), and reads their line off the card rather than scraping markdown.
         let web = try flat(Self.webWorkspace)
         XCTAssertTrue(web.contains("[data-sticky-label]:not(.is-queued)"),
-                      "the browser's scanner no longer reaches the wake's card — it is back to "
-                          + "`.chat-user` bubbles alone, which a wake is not.")
+                      "the browser's scanner no longer reaches a card that names itself — it is back "
+                          + "to `.chat-user` bubbles alone.")
         XCTAssertTrue(web.contains("cur.getAttribute('data-sticky-text')"),
-                      "the browser's bar stopped reading the wake's line off the card and is back "
-                          + "to scraping rendered markdown a wake's card does not have.")
+                      "the browser's bar stopped reading a card's line off the card and is back to "
+                          + "scraping rendered markdown a card does not have.")
         // The one label that is not a card's title, and the arrow every label opens with.
         assertWritten(web, prefix: "const STICKY_LABEL = ",
                       String(StickySummary.yourQuestion.dropFirst(StickySummary.arrow.count)),
@@ -432,5 +461,15 @@ final class WatchWakeCopyParityTests: XCTestCase {
         assertWritten(web, WatchWakeQueue.withdraw, "the withdraw action", Self.webWorkspace)
         assertWritten(web, WatchWakeQueue.confirmTitle, "what the confirmation asks", Self.webWorkspace)
         assertWritten(web, WatchWakeQueue.keep, "the way out of the confirmation", Self.webWorkspace)
+    }
+
+    // MARK: fixtures
+
+    private func wake(_ changed: [WatchWakeTarget]) -> WatchWake {
+        WatchWake(watchId: "w", kind: .matched, generation: 1, reason: nil, changedTargets: changed)
+    }
+
+    private func target(_ id: String, kind: WatchTargetKind = .task, status: String? = nil) -> WatchWakeTarget {
+        WatchWakeTarget(kind: kind, id: id, status: status)
     }
 }

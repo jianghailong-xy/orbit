@@ -88,8 +88,14 @@ func init() {
 		claudeAccountMoveCapabilityV1,
 		antigravityAccountLoginCapabilityV1,
 		antigravityAccountRemoveCapabilityV1,
+		kimiLoginRegionCapabilityV1,
+		kimiAccountLoginCapabilityV1,
+		kimiAccountRemoveCapabilityV1,
+		kimiAccountMoveCapabilityV1,
 		sessionMoveCapabilityV1,
 		wikiMaintenanceRunV1,
+		wikiRepoOpCapabilityV1,
+		wikiRepoOpReadCapabilityV1,
 	}, declaredSteerCapabilities()...), ",")
 }
 
@@ -657,6 +663,32 @@ func (t *Transport) integrationJobResult(jobID string, b IntegrationJobResultReq
 	return &out, nil
 }
 
+// wikiRepoOpProgress renews a claimed repository operation's lease. A 409 means this process's claim
+// had already moved on and it must stop working on the operation.
+func (t *Transport) wikiRepoOpProgress(opID string, b WikiRepoOpProgressRequest) error {
+	return t.do(nil, "POST", "/runner/wiki/repo-ops/"+opID+"/progress", b, nil, 15*time.Second)
+}
+
+// wikiRepoOpFragment uploads one piece of a snapshot too large for one request body. Idempotent by its
+// ordinal, so a piece that has to be sent again is the same piece.
+func (t *Transport) wikiRepoOpFragment(opID string, b WikiRepoOpFragmentRequest) (*WikiRepoOpFragmentResponse, error) {
+	var out WikiRepoOpFragmentResponse
+	if err := t.do(nil, "POST", "/runner/wiki/repo-ops/"+opID+"/fragments", b, &out, 60*time.Second); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// wikiRepoOpResult reports what a claimed repository operation came to. The answer says whether the
+// control plane took it; a 409 means this process's claim had already moved on.
+func (t *Transport) wikiRepoOpResult(opID string, b WikiRepoOpResultRequest) (*WikiRepoOpResultResponse, error) {
+	var out WikiRepoOpResultResponse
+	if err := t.do(nil, "POST", "/runner/wiki/repo-ops/"+opID+"/result", b, &out, wikiRepoOpResultTimeout); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // importResult settles a session's pending transcript import; the receipt says whether the
 // ok applied (a retried ok after a lost reply applies nothing) or the session went to Trash.
 func (t *Transport) importResult(sessionID string, b ImportResultRequest) (*ImportResultResponse, error) {
@@ -666,6 +698,12 @@ func (t *Transport) importResult(sessionID string, b ImportResultRequest) (*Impo
 		return nil, err
 	}
 	return &out, nil
+}
+
+// sessionNaming reports the title an engine gave its session. Cosmetic and one-shot: a failure is
+// the caller's to log, and the session keeps the title it has.
+func (t *Transport) sessionNaming(sessionID string, b SessionNamingRequest) error {
+	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/naming", b, nil, 15*time.Second)
 }
 
 // claudeHistoryResult answers a heartbeat-delivered ClaudeHistoryCommand: what Claude Code
@@ -2300,6 +2338,22 @@ func (t *Transport) listWikiVerifications(route, sessionID, spaceID, after strin
 	var out json.RawMessage
 	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/" + route + "?" + values.Encode()
 	_, err := t.doWiki(http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID), true)
+	return out, err
+}
+
+// requestWikiVerification asks the server to verify the ops the calling session proposed in a space
+// (contract `reviewModes.verification.routes.request`, `servedBy`): what `orbit wiki verify` calls where
+// the list answered that this deployment verifies on the server, so the command waits for the verdict
+// instead of asking a model of the session's provider about it. One queued job per session and space, so
+// asking twice while one is queued is one job; the answer names it, and answers `servedBy: runner` with
+// no job where the server does not run for the account.
+func (t *Transport) requestWikiVerification(sessionID, spaceID string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(spaceID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/verifications/request"
+	_, err := t.doWiki(http.MethodPost, path, nil, &out, taskOpTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 

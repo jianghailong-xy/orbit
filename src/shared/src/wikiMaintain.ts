@@ -24,6 +24,42 @@ export const WIKI_MAINTENANCE_JOB = {
 } as const;
 
 /**
+ * A maintenance run the server's wiki worker executes (contract `maintenance.job.server`, P8): the job kind
+ * `maintain`, the numbers the pipeline holds itself to, and the steps its model calls are filed under. The
+ * numbers are the runner's, moved verbatim (`maintenance.job.rules` and `maintenance.job.run.steps`); what
+ * changes is who asks — the queue, with the deployment's System model, instead of a clean Claude Code in a
+ * session.
+ */
+export const WIKI_MAINTAIN_JOB = {
+  kind: 'maintain',
+  /** Background work: a fact made the run, and the owner's own asks sort above it (contract `jobs.priority`). */
+  priority: 0,
+  /** The queue's steps: extraction, and the one plan change a run may propose; `plan_*` is the plan's wait limit. */
+  steps: { extract: 'extract', planProposal: 'plan_proposal' },
+  /** One extraction's max_tokens: an 8k-token dossier's at most six entries, the import's own budget. */
+  extractMaxTokens: 8192,
+  /** One plan proposal's max_tokens: a document's new sections in the plan's line format (the runner's 32,000). */
+  planMaxTokens: 32_000,
+  /** Dossiers one page of the run's read carries (`maintenance.job.rules.pageSessions`). */
+  pageSessions: 5,
+  /** The most ops one changeset may hold, and — in a Manual space — the most one run may leave waiting. */
+  opsPerChangeset: 30,
+  opsPerTurn: 5,
+  /** A source's quote, at most (`limits.quoteMaxChars`), and how much of the README tells the model what the repository is. */
+  quoteMaxChars: 300,
+  aboutMaxChars: 300,
+  /** One plan proposal's rounds at most, and the items one may be made of (`maintenance.job.docs.rules`). */
+  proposalRoundsMax: 3,
+  proposalItemsMax: 12,
+  /** How long the job waits for one repository operation of the run: the snapshot, a read, a diff, the anchors. */
+  repoWaitSeconds: 300,
+  /** Reads and diffs in flight at once: each is a fetch in the same checkout on the space's runner. */
+  repoOpsInFlight: 2,
+  /** The directories under docs/ that hold no design document (`maintenance.job.docs.excluded`). */
+  docsExcluded: ['docs/mocks/', 'docs/evidence/'],
+} as const;
+
+/**
  * Whose failure a failed maintenance run was (contract `maintenance.job.recovery.failureKinds`), as its run
  * row and the space's health say it: `infra` — the platform under the run: its runner went offline, its
  * engine never came up, the server answered 5xx or could not be reached, the disk filled — or `content` —
@@ -255,7 +291,8 @@ export interface WikiMaintenanceCheck {
   position: string | null;
   reached: boolean;
   run: {
-    taskId: string;
+    /** The task that ran it; null for a run a wiki job ran (the server path, migration 0401). */
+    taskId: string | null;
     sessionId: string | null;
     outcome: WikiCursorOutcome | null;
     opsRefused: number | null;

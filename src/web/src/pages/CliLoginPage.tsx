@@ -1,6 +1,12 @@
-import { Alert, Button, Card, Descriptions, Result, Space, Spin, Tag } from 'antd';
 import { useEffect, useState } from 'react';
 import { approveCliLogin, denyCliLogin, getCliLoginRequest, type CliLoginRequest } from '../api';
+import { Alert } from '../components/ui/Alert';
+import { Badge } from '../components/ui/Badge';
+import { Button } from '../components/ui/Button';
+import { Card } from '../components/ui/Card';
+import { Descriptions } from '../components/ui/Descriptions';
+import { Result } from '../components/ui/Result';
+import { Spinner } from '../components/ui/Spinner';
 import { NEVER_EXPIRES, NEVER_EXPIRES_WARNING, fullDate, scopeSummary } from '../lib/accessTokens';
 import { useToast } from '../lib/toast';
 
@@ -16,33 +22,36 @@ export function lifetimeLine(expiresInDays: number | null, now: number): string 
 export function CliLoginDetails({ request, now }: { request: CliLoginRequest; now: number }) {
   return (
     <Descriptions
-      column={1}
-      size="small"
-      bordered
+      labelWidth={136}
       style={{ marginBottom: 16 }}
-      styles={{ label: { width: 136, whiteSpace: 'nowrap' } }}
-    >
-      <Descriptions.Item label="Token name">{request.name}</Descriptions.Item>
-      <Descriptions.Item label="Scopes">
-        <div>{scopeSummary(request.scopes)}</div>
-        <div style={{ marginTop: 6 }}>
-          {request.scopes.map((scope) => (
-            <Tag key={scope} style={{ marginBottom: 4 }}>
-              {scope}
-            </Tag>
-          ))}
-        </div>
-      </Descriptions.Item>
-      <Descriptions.Item label="Expires">
-        {request.expiresInDays === null ? (
-          <Tag color="warning">{NEVER_EXPIRES}</Tag>
-        ) : (
-          lifetimeLine(request.expiresInDays, now)
-        )}
-      </Descriptions.Item>
-      <Descriptions.Item label="Requested from">{request.hostname ?? 'Unknown host'}</Descriptions.Item>
-      <Descriptions.Item label="Code">{request.userCode}</Descriptions.Item>
-    </Descriptions>
+      items={[
+        { key: 'name', label: 'Token name', children: request.name },
+        {
+          key: 'scopes',
+          label: 'Scopes',
+          children: (
+            <>
+              <div>{scopeSummary(request.scopes)}</div>
+              <div style={{ marginTop: 6 }}>
+                {request.scopes.map((scope) => (
+                  <Badge key={scope} style={{ marginBottom: 4 }}>
+                    {scope}
+                  </Badge>
+                ))}
+              </div>
+            </>
+          ),
+        },
+        {
+          key: 'expires',
+          label: 'Expires',
+          children:
+            request.expiresInDays === null ? <Badge tone="warning">{NEVER_EXPIRES}</Badge> : lifetimeLine(request.expiresInDays, now),
+        },
+        { key: 'host', label: 'Requested from', children: request.hostname ?? 'Unknown host' },
+        { key: 'code', label: 'Code', children: request.userCode },
+      ]}
+    />
   );
 }
 
@@ -100,7 +109,7 @@ export function CliLoginPage() {
       <Card title="🔑 Approve orbit login" style={{ width: 500 }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: 24 }}>
-            <Spin />
+            <Spinner />
           </div>
         ) : error ? (
           <Result status="warning" title="Cannot approve this login" subTitle={error} />
@@ -125,14 +134,13 @@ export function CliLoginPage() {
               </p>
               <CliLoginDetails request={request} now={now} />
               {request.expiresInDays === null && (
-                <Alert type="warning" showIcon style={{ marginBottom: 16 }} message={NEVER_EXPIRES_WARNING} />
+                <Alert type="warning" style={{ marginBottom: 16 }} title={NEVER_EXPIRES_WARNING} />
               )}
               {request.nameInUse && (
                 <Alert
                   type="error"
-                  showIcon
                   style={{ marginBottom: 16 }}
-                  message={`You already have an access token named "${request.name}".`}
+                  title={`You already have an access token named "${request.name}".`}
                   description={
                     <>
                       Revoke it under Settings → Access tokens, or run <code>orbit login --name</code> with
@@ -141,19 +149,19 @@ export function CliLoginPage() {
                   }
                 />
               )}
-              <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
                 <Button disabled={submitting !== null} loading={submitting === 'DENIED'} onClick={() => decide('DENIED')}>
                   Deny
                 </Button>
                 <Button
-                  type="primary"
+                  variant="primary"
                   disabled={request.nameInUse || submitting !== null}
                   loading={submitting === 'APPROVED'}
                   onClick={() => decide('APPROVED')}
                 >
                   Approve
                 </Button>
-              </Space>
+              </div>
             </>
           )
         )}

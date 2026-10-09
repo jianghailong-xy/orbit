@@ -52,6 +52,11 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
     /// Whether an OpenCode session may spend this key too (`OpenCodeKeys`), as GET /providers decides
     /// it. Nil from an older server, which reads as no.
     public var runsOnOpenCode: Bool? = nil
+    /// The endpoint, and whether a key is stored — only on the account's own list (GET
+    /// /providers/mine); the pickers' catalogue carries neither. What tells a DeepSeek key
+    /// (`DeepSeekBalance.applies`) and names its endpoint on the key's page.
+    public var baseUrl: String? = nil
+    public var hasApiKey: Bool? = nil
     /// Whether the key is switched on. Only GET /providers/mine says — the account's own keys, disabled
     /// ones included (the Infrastructure page's API keys); the catalogue lists enabled keys alone, and
     /// nil reads as on.
@@ -61,13 +66,15 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
     private enum CodingKeys: String, CodingKey {
         case providerID = "id"
         case slug, label, runtime, models, defaultModel, presetSlug, modelsFromRuntime, planUsage, runsOnOpenCode
+        case baseUrl, hasApiKey
         case enabled
     }
 
     public init(slug: String, label: String, runtime: String? = nil,
                 models: [ConfiguredProviderModel] = [], defaultModel: String? = nil,
                 presetSlug: String? = nil, modelsFromRuntime: Bool? = nil,
-                planUsage: PlanUsageSnapshot? = nil, runsOnOpenCode: Bool? = nil, enabled: Bool? = nil) {
+                planUsage: PlanUsageSnapshot? = nil, runsOnOpenCode: Bool? = nil,
+                baseUrl: String? = nil, hasApiKey: Bool? = nil, enabled: Bool? = nil) {
         self.slug = slug
         self.label = label
         self.runtime = runtime
@@ -77,6 +84,8 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
         self.modelsFromRuntime = modelsFromRuntime
         self.planUsage = planUsage
         self.runsOnOpenCode = runsOnOpenCode
+        self.baseUrl = baseUrl
+        self.hasApiKey = hasApiKey
         self.enabled = enabled
     }
 }

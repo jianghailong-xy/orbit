@@ -55,10 +55,24 @@ describe('sessionProjectLandingLine', () => {
     }), NOW)).toEqual({ text: 'Landing 2 jobs · rebasing · 4m', tone: 'running' });
   });
 
-  it('goes quiet when the runner stopped reporting, and falls back to the count on older servers', () => {
-    expect(sessionProjectLandingLine(integration({
+  it('goes quiet when the runner stopped reporting, and says why rather than calling it a timeout', () => {
+    const silent = sessionProjectLandingLine(integration({
       inFlight: { taskTitle: null, kind: 'CHECK_PROMOTION', phase: 'CHECK', state: 'RUNNING', startedAt: ago(30), heartbeatAt: ago(11) },
-    }), NOW)?.tone).toBe('queued');
+    }), NOW);
+    expect(silent).toEqual({ text: 'Merge check · no report for 11m · 30m', tone: 'queued' });
+    // How long it has been silent, never a verdict — a timeout is the job's own, and the server
+    // words it in the landing's `blockingReason` (`LandTaskStatus`), not here.
+    expect(silent!.text).not.toMatch(/timed? ?out/i);
+    // A claim whose runner has not reported once says so; one with a live report keeps its phase.
+    expect(sessionProjectLandingLine(integration({
+      inFlight: { taskTitle: 'P5', kind: 'LAND_TASK', phase: 'FETCH', state: 'RUNNING', startedAt: ago(4), heartbeatAt: null },
+    }), NOW)?.text).toBe('Landing · no report yet · 4m · P5');
+    expect(sessionProjectLandingLine(integration({
+      inFlight: { taskTitle: 'P5', kind: 'LAND_TASK', phase: 'FETCH', state: 'RUNNING', startedAt: ago(4), heartbeatAt: ago(0) },
+    }), NOW)?.text).toBe('Landing · fetching · 4m · P5');
+  });
+
+  it('falls back to the count on older servers', () => {
     expect(sessionProjectLandingLine({ line: 'MAIN', ref: 'main', activeJobCount: 1 }, NOW))
       .toEqual({ text: 'Landing · 1 job', tone: 'queued' });
     expect(sessionProjectLandingLine({ line: 'MAIN', ref: 'main', activeJobCount: 0 }, NOW)).toBeNull();

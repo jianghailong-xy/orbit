@@ -30,6 +30,13 @@
  *      with a null title rather than a missing one.
  *  (e) A finished job is not in flight, and another project's job is not this project's: the two
  *      ways a row could be described that nothing is waiting on.
+ *  (f) `inFlightJobs` lists every job the counts count, in `inFlight`'s order, with its task, its
+ *      runner and its limit — and its first entry is the job `inFlight` describes.
+ *  (g) A running job silent past the claim lease is timed out; one inside it is not.
+ *  (h) While checking, the limit is the job's check budgets plus the lease, so a long healthy check
+ *      is not called timed out.
+ *  (i) A claim that has not reported while another job on the same runner, repository and ref was
+ *      claimed first is waiting its turn, not timed out; one that reported and went silent is.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/project-integration-inflight.pg.spec.ts
  */
@@ -111,7 +118,8 @@ async function job(
   spec: { at: Date; claimedAt?: Date; finishedAt?: Date; heartbeatAt?: Date; state: string;
           taskId?: string | null; idempotency: string;
           kind?: IntegrationJobKind; phase?: IntegrationJobPhase | null;
-          checks?: Prisma.InputJsonValue; aheadOfUpstream?: number },
+          checks?: Prisma.InputJsonValue; aheadOfUpstream?: number;
+          runnerId?: string; targetRef?: string; generation?: number },
 ): Promise<string> {
   const id = randomUUID();
   await db.projectIntegrationJob.create({
@@ -128,8 +136,10 @@ async function job(
         ? { landedSha: 'b'.repeat(40), testedTreeSha: 'a'.repeat(40), landedTreeSha: 'a'.repeat(40) }
         : {}),
       taskId: spec.taskId ?? null,
-      serialKey: `${f.projectId}:refs/heads/project/${f.projectId}`,
-      targetRef: `refs/heads/project/${f.projectId}`,
+      generation: spec.generation ?? 1,
+      runnerId: spec.runnerId ?? null,
+      serialKey: `${f.projectId}:${spec.targetRef ?? `refs/heads/project/${f.projectId}`}`,
+      targetRef: spec.targetRef ?? `refs/heads/project/${f.projectId}`,
       upstreamRef: 'refs/heads/main',
       sourceRef: `refs/heads/orbit/${spec.idempotency}`,
       state: spec.state,
@@ -168,6 +178,24 @@ async function listInFlight(db: PrismaClient, f: Fixture) {
 
 /** An instant the spec names in words, so a case reads as the sequence it is describing. */
 const at = (seconds: number) => new Date(Date.UTC(2026, 8, 25, 13, 58, 0) + seconds * 1000);
+
+/** An instant this many minutes before now — the timeout is measured against the database's clock,
+ *  so these cases stay whole minutes away from every limit they test. */
+const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000);
+
+/** A runner of the fixture's owner, named the way the job list prints it. */
+async function runner(db: PrismaClient, f: Fixture, name: string): Promise<string> {
+  const id = randomUUID();
+  await db.runner.create({ data: { id, name, ownerId: f.ownerId, tokenHash: `hash-${id}` } });
+  return id;
+}
+
+/** The one job of a project's list, for the cases about a single job's limit. */
+async function onlyJob(db: PrismaClient, f: Fixture) {
+  const jobs = (await read(db, f)).inFlightJobs ?? [];
+  assert.equal(jobs.length, 1);
+  return jobs[0];
+}
 
 test('the landing line describes running work before the queue, on real PostgreSQL',
   { skip: !URL, timeout: 300_000 }, async (t) => {
@@ -210,6 +238,8 @@ test('the landing line describes running work before the queue, on real PostgreS
           state: 'RUNNING',
           startedAt: at(60),
           heartbeatAt: at(65),
+          // The wait it paid: enqueued at :30, claimed at :60.
+          waitMs: 30_000,
         });
         assert.equal(view.integratingCount, 1);
         assert.equal(view.queuedCount, 1);
@@ -236,6 +266,7 @@ test('the landing line describes running work before the queue, on real PostgreS
           state: 'RUNNING',
           startedAt: at(10),
           heartbeatAt: null,
+          waitMs: 10_000,
         });        assert.deepEqual(await listInFlight(db, f), view.inFlight);
       });
 
@@ -250,7 +281,7 @@ test('the landing line describes running work before the queue, on real PostgreS
 
         assert.deepEqual(view.inFlight, {
           taskTitle: null, kind: 'LAND_PROMOTION', phase: null,
-          state: 'RUNNING', startedAt: at(10), heartbeatAt: null,
+          state: 'RUNNING', startedAt: at(10), heartbeatAt: null, waitMs: 10_000,
         });        assert.deepEqual(await listInFlight(db, f), view.inFlight);
       });
 
@@ -261,8 +292,9 @@ test('the landing line describes running work before the queue, on real PostgreS
         await job(db, f, { at: at(0), state: 'QUEUED', taskId, idempotency: 'older' });
 
         assert.deepEqual((await read(db, f)).inFlight, {
+          // A queued job's whole clock is the wait, so it carries no separate measurement of one.
           taskTitle: 'Oldest queued task', kind: 'LAND_TASK', phase: null,
-          state: 'QUEUED', startedAt: at(0), heartbeatAt: null,
+          state: 'QUEUED', startedAt: at(0), heartbeatAt: null, waitMs: null,
         });
         assert.deepEqual(await listInFlight(db, f), (await read(db, f)).inFlight);
       });
@@ -277,7 +309,7 @@ test('the landing line describes running work before the queue, on real PostgreS
           await db.projectIntegrationJob.update({ where: { id }, data: { phase } });
           assert.deepEqual((await read(db, f)).inFlight, {
             taskTitle: null, kind: 'CHECK_PROMOTION', phase,
-            state: 'RUNNING', startedAt: at(10), heartbeatAt: null,
+            state: 'RUNNING', startedAt: at(10), heartbeatAt: null, waitMs: 10_000,
           });
         }
       });
@@ -335,6 +367,104 @@ test('the landing line describes running work before the queue, on real PostgreS
         assert.equal(view.mergeCheckOnTip, 'PASSING');
         assert.equal(view.commitsAheadOfUpstream, null);
       });
+
+      await t.test('(f) the job list carries every job the counts count, in the line’s order',
+        async () => {
+          const f = await fixture(db, 'job-list');
+          const machine = await runner(db, f, 'workstation-gpu');
+          const landing = await task(db, f, 'C5 · 登录后开通默认托管 runner');
+          const waiting = await task(db, f, 'C6 · 容量准入');
+          const running = await job(db, f, { at: minutesAgo(3), claimedAt: minutesAgo(2), state: 'RUNNING',
+            taskId: landing, phase: 'REBASE', heartbeatAt: minutesAgo(1), runnerId: machine,
+            generation: 2, idempotency: 'running' });
+          const promotion = await job(db, f, { at: minutesAgo(5), state: 'QUEUED', idempotency: 'merge' });
+          const queued = await job(db, f, { at: minutesAgo(1), state: 'QUEUED', taskId: waiting,
+            idempotency: 'queued' });
+
+          const view = await read(db, f);
+          const jobs = view.inFlightJobs ?? [];
+
+          assert.deepEqual(jobs.map((j) => j.jobId), [running, promotion, queued]);
+          assert.deepEqual(jobs[0], {
+            jobId: running, kind: 'LAND_TASK', state: 'RUNNING', phase: 'REBASE',
+            taskId: landing, taskTitle: 'C5 · 登录后开通默认托管 runner', generation: 2,
+            startedAt: jobs[0].startedAt, queuedAt: jobs[0].queuedAt, heartbeatAt: jobs[0].heartbeatAt,
+            runnerName: 'workstation-gpu', retriedBy: null, timedOut: false, limitSeconds: 600,
+            retryable: false,
+          });
+          assert.deepEqual(
+            { taskTitle: jobs[0].taskTitle, kind: jobs[0].kind, phase: jobs[0].phase, state: jobs[0].state,
+              startedAt: jobs[0].startedAt, heartbeatAt: jobs[0].heartbeatAt },
+            view.inFlight,
+            'the first job is the one inFlight describes');
+          assert.deepEqual(
+            { taskId: jobs[1].taskId, taskTitle: jobs[1].taskTitle, kind: jobs[1].kind, phase: jobs[1].phase,
+              runnerName: jobs[1].runnerName, timedOut: jobs[1].timedOut, limitSeconds: jobs[1].limitSeconds },
+            { taskId: null, taskTitle: null, kind: 'LAND_PROMOTION', phase: null,
+              runnerName: null, timedOut: false, limitSeconds: null },
+            'a queued promotion names no task and has no limit yet');
+          assert.equal(jobs[2].taskTitle, 'C6 · 容量准入');
+          assert.equal(view.integratingCount + view.queuedCount, jobs.length);
+        });
+
+      await t.test('(g) a running job silent past the lease is timed out; one inside it is not',
+        async () => {
+          for (const [label, silent, timedOut] of [['quiet', 9, false], ['lost', 11, true]] as const) {
+            const f = await fixture(db, `lease-${label}`);
+            const taskId = await task(db, f, 'C5');
+            // The claim the runner never answered: its heartbeat is the claim's own instant.
+            await job(db, f, { at: minutesAgo(silent + 1), claimedAt: minutesAgo(silent), state: 'RUNNING',
+              taskId, phase: 'FETCH', heartbeatAt: minutesAgo(silent), idempotency: label });
+            const only = await onlyJob(db, f);
+            assert.equal(only.limitSeconds, 600, label);
+            assert.equal(only.timedOut, timedOut, label);
+            assert.equal(only.retryable, timedOut, `${label}: a timed-out task landing takes a retry`);
+          }
+        });
+
+      await t.test('(h) while checking, the limit is the check budgets plus the lease', async () => {
+        for (const [label, silent, timedOut] of [['checking', 24, false], ['overdue', 26, true]] as const) {
+          const f = await fixture(db, `check-${label}`);
+          await db.projectCodebase.update({
+            where: { id: f.codebaseId },
+            data: { mergeCheckCommand: 'npm test', mergeCheckTimeoutSeconds: 900 },
+          });
+          const taskId = await task(db, f, 'C2b');
+          await job(db, f, { at: minutesAgo(silent + 2), claimedAt: minutesAgo(silent + 1), state: 'RUNNING',
+            taskId, phase: 'CHECK', heartbeatAt: minutesAgo(silent), idempotency: label });
+          const only = await onlyJob(db, f);
+          assert.equal(only.limitSeconds, 900 + 600, label);
+          assert.equal(only.timedOut, timedOut, label);
+        }
+      });
+
+      await t.test('(i) a claim queued behind another job on its runner is waiting, not timed out',
+        async () => {
+          const f = await fixture(db, 'runner-turn');
+          const other = await fixture(db, 'runner-turn-other');
+          const machine = await runner(db, f, 'workstation-gpu');
+          // Another project's merge check holds the runner's lock on main, on the same repository.
+          const repo = (await db.projectCodebase.findUniqueOrThrow({ where: { id: f.codebaseId } }))
+            .canonicalRepoUrl;
+          await db.projectCodebase.update({ where: { id: other.codebaseId }, data: { canonicalRepoUrl: repo } });
+          const holder = await job(db, other, { at: minutesAgo(40), claimedAt: minutesAgo(30), state: 'RUNNING',
+            kind: 'CHECK_PROMOTION', phase: 'CHECK', heartbeatAt: minutesAgo(29), runnerId: machine,
+            targetRef: 'refs/heads/main', idempotency: 'holder' });
+          const waiting = await job(db, f, { at: minutesAgo(25), claimedAt: minutesAgo(20), state: 'RUNNING',
+            kind: 'LAND_PROMOTION', phase: 'FETCH', heartbeatAt: minutesAgo(20), runnerId: machine,
+            targetRef: 'refs/heads/main', idempotency: 'waiting' });
+
+          assert.equal((await onlyJob(db, f)).timedOut, false, 'waiting its turn on the runner');
+
+          // Once it has reported it is past the lock, and its silence is its own again.
+          await db.projectIntegrationJob.update({ where: { id: waiting }, data: { heartbeatAt: minutesAgo(15) } });
+          assert.equal((await onlyJob(db, f)).timedOut, true, 'reported, then silent past the lease');
+
+          // And with nothing ahead of it, an unanswered claim is a lost one.
+          await db.projectIntegrationJob.update({ where: { id: waiting }, data: { heartbeatAt: minutesAgo(20) } });
+          await db.projectIntegrationJob.update({ where: { id: holder }, data: { state: 'CHECK_FAILED', finishedAt: minutesAgo(1) } });
+          assert.equal((await onlyJob(db, f)).timedOut, true, 'nothing ahead of it on the runner');
+        });
     } finally {
       await db.$disconnect();
       // Both halves of the harness: the `pg` Client holds an open socket, and a spec that leaves it

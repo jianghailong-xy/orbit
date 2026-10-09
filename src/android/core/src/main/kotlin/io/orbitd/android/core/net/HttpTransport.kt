@@ -23,6 +23,8 @@ class ApiRequest(
     query: List<Pair<String, String>> = emptyList(),
     body: ByteArray? = null,
     val contentType: String = "application/json; charset=utf-8",
+    val maxResponseBytes: Long? = null,
+    val onUploadProgress: ((Long, Long) -> Unit)? = null,
 ) {
     val path = path.toList()
     val query = query.toList()
@@ -67,7 +69,16 @@ class OkHttpTransport : HttpTransport {
             object : RequestBody() {
                 override fun contentType() = api.contentType.toMediaType()
                 override fun contentLength() = it.size.toLong()
-                override fun writeTo(sink: BufferedSink) { sink.write(it) }
+                override fun writeTo(sink: BufferedSink) {
+                    var written = 0
+                    api.onUploadProgress?.invoke(0, it.size.toLong())
+                    while (written < it.size) {
+                        val count = minOf(64 * 1024, it.size - written)
+                        sink.write(it, written, count)
+                        written += count
+                        api.onUploadProgress?.invoke(written.toLong(), it.size.toLong())
+                    }
+                }
                 // Also disables OkHttp's HTTP 503/408 follow-ups for rotating refresh requests.
                 override fun isOneShot() = true
             }
@@ -89,7 +100,16 @@ class OkHttpTransport : HttpTransport {
                 override fun onResponse(call: Call, response: Response) {
                     response.use {
                         try {
-                            continuation.resume(ApiResponse(it.code, it.body?.bytes() ?: ByteArray(0)))
+                            val responseBody = it.body
+                            val limit = api.maxResponseBytes
+                            val data = if (responseBody == null) ByteArray(0) else if (limit == null) responseBody.bytes() else {
+                                if (responseBody.contentLength() > limit) throw IOException("Response exceeds read limit")
+                                val source = responseBody.source()
+                                source.request(limit + 1)
+                                if (source.buffer.size > limit) throw IOException("Response exceeds read limit")
+                                source.readByteArray()
+                            }
+                            continuation.resume(ApiResponse(it.code, data))
                         } catch (_: IOException) {
                             continuation.resumeWithException(NetworkException())
                         }

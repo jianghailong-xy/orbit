@@ -388,7 +388,14 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(landing.contains("updatedAt: app.projectSessionsIntegrationReadAt"))
         XCTAssertTrue(landing.contains("refreshFailed: app.projectSessionsIntegrationReadFailed"))
         XCTAssertTrue(landing.contains("ProjectLandingRow(line: line)"), "the same row the project page draws")
-        XCTAssertTrue(landing.contains("app.openProject(address.projectID)"))
+        // A press opens the jobs the row counts, on a server that lists them; on an older one, the
+        // project page, as it always did.
+        let press = try slice(landing, from: "Button {", to: "} label: {")
+        let steps = try ["if integration.inFlightJobs != nil {", "showsLandingJobs = true", "} else {",
+                         "app.openProject(address.projectID)"].map {
+            try XCTUnwrap(press.range(of: $0)?.lowerBound, "the press keeps `\($0)`")
+        }
+        XCTAssertEqual(steps, steps.sorted())
 
         let app = code(try appSource("AppModel.swift"))
         let load = try slice(app, from: "func loadProjectSessions(_ address: SessionProjectAddress) async {", to: "\n    }")
@@ -404,6 +411,61 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let task = try slice(page, from: ".task(id: address) {", to: "\n        }")
         XCTAssertEqual(task.components(separatedBy: "await app.loadProjectIntegration(address)").count - 1, 2,
                        "the landing is read on arrival and on every poll")
+    }
+
+    /// The jobs a landing row counts open over this page (docs/mocks/landing-jobs-sheet), from the
+    /// progress card's row and from the merge card's alike, on a server that lists them. The sheet
+    /// is the page's, not either row's — their TimelineViews redraw every second — and it reads the
+    /// page's own landing read; a Retry that went through reads it again at once, outside the polls.
+    func testTheLandingRowsOpenTheJobsInFlightOverThePage() throws {
+        let source = code(try appSource("Views/SessionProjectPage.swift"))
+        let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
+        XCTAssertTrue(page.contains("@State private var showsLandingJobs = false"))
+        let landing = try slice(page, from: "@ViewBuilder private var landingLine: some View {", to: "\n    }")
+        XCTAssertFalse(landing.contains(".sheet("), "the row redraws every second; the sheet is the page's")
+        let card = try slice(page, from: "@ViewBuilder private var mergeCard: some View {", to: "\n    }\n")
+        XCTAssertTrue(card.contains("onLanding: app.projectSessionsIntegration?.inFlightJobs == nil"))
+        XCTAssertTrue(card.contains("? nil : { showsLandingJobs = true },"), "the merge job's row opens the same jobs")
+        XCTAssertFalse(card.contains(".sheet("))
+
+        let sheet = try slice(page, from: ".sheet(isPresented: $showsLandingJobs) {", to: "\n        }\n")
+        for part in ["ProjectLandingJobsSheet(",
+                     "ProjectPage.landingJobLines($0, now: now, updatedAt: app.projectSessionsIntegrationReadAt,",
+                     "refreshFailed: app.projectSessionsIntegrationReadFailed)",
+                     "try await app.retryIntegrationJob(address.projectID, jobID: jobID)",
+                     "await app.loadProjectIntegration(address)",
+                     "app.openFromConversation(.task(taskID), overConsole: rowNavigation == .push)"] {
+            XCTAssertTrue(sheet.contains(part), "the jobs sheet keeps `\(part)`")
+        }
+        let retry = try XCTUnwrap(sheet.range(of: "try await app.retryIntegrationJob("))
+        let reload = try XCTUnwrap(sheet.range(of: "await app.loadProjectIntegration(address)"))
+        XCTAssertLessThan(retry.lowerBound, reload.lowerBound, "the line is read again once the Retry went through")
+        let close = try XCTUnwrap(sheet.range(of: "showsLandingJobs = false"))
+        let open = try XCTUnwrap(sheet.range(of: "app.openFromConversation(.task(taskID)"))
+        XCTAssertLessThan(close.lowerBound, open.lowerBound, "the sheet goes down before the task opens")
+        let hosted = try XCTUnwrap(page.range(of: ".sheet(isPresented: $showsLandingJobs) {"))
+        let polls = try XCTUnwrap(page.range(of: ".task(id: address) {"))
+        XCTAssertLessThan(hosted.lowerBound, polls.lowerBound, "hosted on the list, beside the page's other sheets")
+
+        let app = code(try appSource("AppModel.swift"))
+        let write = try slice(app, from: "func retryIntegrationJob(_ projectID: String, jobID: String) async throws {",
+                              to: "\n    }")
+        XCTAssertTrue(write.contains("guard let api else { throw APIError.notConfigured }"))
+        XCTAssertTrue(write.contains("_ = try await api.retryIntegrationJob(projectID, jobID: jobID)"))
+        XCTAssertEqual(try branches(of: "func retryIntegrationJob(_ projectID: String, jobID: String)", in: app),
+                       ["os(iOS)"])
+
+        let merge = try slice(source, from: "private struct ProjectMergeCardView: View {", to: "\n}\n")
+        XCTAssertTrue(merge.contains("let onLanding: (() -> Void)?"))
+        let row = try slice(merge, from: "@ViewBuilder private func landingRow(_ line: ProjectPage.LandingLine) -> some View {",
+                            to: "\n    }\n")
+        for part in ["if let onLanding {", "Button(action: onLanding) {", "ProjectLandingRow(line: line)",
+                     "Image(systemName: \"chevron.right\")", ".buttonStyle(.plain)"] {
+            XCTAssertTrue(row.contains(part), "the merge card's landing row keeps `\(part)`")
+        }
+        XCTAssertEqual(merge.components(separatedBy: "if let landing { landingRow(landing) }").count - 1, 2,
+                       "the checking and the merging card both draw the row a press opens the jobs from")
+        XCTAssertFalse(merge.contains("if let landing { ProjectLandingRow(line: landing) }"))
     }
 
     /// The merge into main lives on this page (owner decision 2026-10-06): its card under the
@@ -460,6 +522,20 @@ final class SessionProjectPageWiringTests: XCTestCase {
                                 to: "\n    }\n")
         XCTAssertTrue(merging.contains("header(PromotionCards.pageTitle(view), symbol: \"arrow.triangle.merge\")"))
         XCTAssertFalse(merging.contains("ProgressView"), "the landing row below is this card's moving mark")
+    }
+
+    /// A blocked candidate's card names what is in front of it — the landing holding the branch,
+    /// off the project's own read — instead of leaving "Coordinator is resolving it" as the whole
+    /// answer (the owner's report of 2026-10-08).
+    func testTheBlockedCardNamesTheLandingInFrontOfIt() throws {
+        let page = code(try appSource("Views/SessionProjectPage.swift"))
+        let card = try slice(page, from: "private var mergeCard: some View {", to: "\n    }")
+        XCTAssertTrue(card.contains("PromotionCards.blockedByLine(view, landings: $0.landTasks)"),
+                      "the blocked card names who is in front of it, from the project's landings")
+        let blocked = try slice(page, from: "@ViewBuilder private func blocked(_ view: ProjectPromotionView) -> some View {",
+                                to: "\n    }\n")
+        XCTAssertTrue(blocked.contains("PromotionCards.blockedByLabel"),
+                      "and it draws only when there is something to name")
     }
 
     /// A read that failed with no rows in hand says why in one sentence, with Retry, and stays up

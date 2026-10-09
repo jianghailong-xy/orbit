@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,11 +23,11 @@ import (
 // itself refreshes it immediately (see runloop).
 const engineHealthRefreshInterval = 5 * time.Minute
 
-// engineSignedOutSeen is told when a session finds its engine signed out as it starts it — an
-// Antigravity whose Google sign-in agy refused (antigravity_google_session.go). The run loop then
-// re-probes the engines and beats at once, so the heartbeat carries the sign-out, the yes -> no edge the
-// control plane notifies on, now rather than at the next refresh. Unset — in tests, outside the run
-// loop — it does nothing.
+// engineSignedOutSeen is told when a session finds its engine signed out as it starts it — the sign-in
+// preflight refusing to spawn it (runSessionProcess), or an Antigravity whose Google sign-in agy
+// refused (antigravity_google_session.go). The run loop then re-probes the engines and beats at once,
+// so the heartbeat carries the sign-out, the yes -> no edge the control plane notifies on, now rather
+// than at the next refresh. Unset — in tests, outside the run loop — it does nothing.
 var engineSignedOutSeen atomic.Pointer[func()]
 
 func noteEngineSignedOut() {
@@ -76,6 +77,7 @@ func probeEngines(specs []engineSpec, servicePath string) []EngineHealthReport {
 			AuthSource:        h.authSource,
 			PlanUsage:         h.planUsage,
 			InstallationError: h.installError,
+			KimiRegion:        h.kimiRegion,
 		}
 		if spec.bin == providerDsh {
 			report.Auth = "unknown"
@@ -96,7 +98,7 @@ func probeEngines(specs []engineSpec, servicePath string) []EngineHealthReport {
 				defaultAuth = authNo
 			}
 			var usage map[string]*PlanUsage
-			report.Accounts, usage = accountHealthWithUsage(kind, h.path, defaultAuth)
+			report.Accounts, usage = accountHealthWithUsage(kind, h.path, defaultAuth, h.kimiRegion)
 			if len(usage) > 0 {
 				report.PlanUsage = withAccountUsage(report.PlanUsage, spec.bin, usage)
 			}
@@ -112,13 +114,15 @@ func probeEngines(specs []engineSpec, servicePath string) []EngineHealthReport {
 // is what selects Default — so its answer is reused instead of asked twice. Nil when the slots can't
 // be listed: the report then reads as the one account it was before.
 func accountHealth(kind accountSlotKind, binPath string, defaultAuth authState) []EngineAccountReport {
-	out, _ := accountHealthWithUsage(kind, binPath, defaultAuth)
+	out, _ := accountHealthWithUsage(kind, binPath, defaultAuth, "")
 	return out
 }
 
 // accountHealthWithUsage is accountHealth plus, for a kind whose status question reads quota too
-// (usageStatus), each added account's own quota by slot id. Default's is the engine probe's own.
-func accountHealthWithUsage(kind accountSlotKind, binPath string, defaultAuth authState) ([]EngineAccountReport, map[string]*PlanUsage) {
+// (usageStatus), each added account's own quota by slot id. Default's is the engine probe's own, and
+// so is the site of Default's Kimi login (defaultRegion): an added Kimi account's is read from its own
+// directory, signed in or not — a Re-sign in starts on the site the account was on.
+func accountHealthWithUsage(kind accountSlotKind, binPath string, defaultAuth authState, defaultRegion string) ([]EngineAccountReport, map[string]*PlanUsage) {
 	slots, err := kind.list()
 	if err != nil {
 		return nil, nil
@@ -141,15 +145,41 @@ func accountHealthWithUsage(kind accountSlotKind, binPath string, defaultAuth au
 				auth = accountLoginStatus(kind, binPath, slot.Dir)
 			}
 		}
-		out = append(out, EngineAccountReport{
+		report := EngineAccountReport{
 			ID:        slot.ID,
 			Name:      slot.Name,
 			Dir:       slot.Dir,
 			CodexHome: codexHomeOf(kind, slot.Dir),
 			Auth:      authWord(auth),
-		})
+		}
+		if kind.engine == providerClaude && auth == authYes {
+			report.LoginExpiresAt = claudeLoginExpiry(slot)
+		}
+		if kind.engine == providerKimi {
+			report.KimiRegion = defaultRegion
+			if slot.ID != accountSlotDefaultID {
+				report.KimiRegion = probeKimiLoginRegion(binPath, envWithValue(os.Environ(), kind.varName, slot.Dir))
+			}
+		}
+		out = append(out, report)
 	}
 	return out, usage
+}
+
+// claudeLoginExpiry is when a Claude account's login lapses, RFC 3339, or "" when its stored
+// credentials record no such time or hold no refresh token to lapse. Default's login is read where
+// the quota read reads it — the runner's own, the Keychain on a Mac — and an added account's from
+// its own directory, never from Default's.
+func claudeLoginExpiry(slot accountSlot) string {
+	dir := slot.Dir
+	if slot.ID == accountSlotDefaultID {
+		dir = ""
+	}
+	login, err := claudeStoredLoginIn(dir)
+	if err != nil || !login.refreshable || login.loginExpiresAt.IsZero() {
+		return ""
+	}
+	return login.loginExpiresAt.UTC().Format(time.RFC3339)
 }
 
 // withAccountUsage files each added account's own quota under the engine snapshot's accounts, the
@@ -282,6 +312,12 @@ type engineHealthProbe struct {
 	// An "unknown" isn't conclusive — a CLI that wouldn't say this time says nothing about its
 	// login — so it neither ends a sign-out nor starts one.
 	wasSignedOut map[string]bool
+	// The site each Kimi account's login was on at the last probe that read one, by account id, kept
+	// the same way. A sign-in on the other site rewrites the models that account's config lists — the
+	// list the catalog reads, when it is the account the catalog reads (kimiCatalogHome) — so it is a
+	// sign-in the catalog has to hear about even though the engine was never signed out
+	// (kimi_region.go).
+	kimiRegions map[string]string
 }
 
 func (p *engineHealthProbe) refresh() {
@@ -346,7 +382,7 @@ func (p *engineHealthProbe) refreshEngine(engine string) {
 }
 
 // signedInSinceLastProbe records each engine's answer and says whether one the probe last found
-// signed out is signed in now.
+// signed out is signed in now — or, for Kimi, has an account signed in on the other site.
 func (p *engineHealthProbe) signedInSinceLastProbe(reports []EngineHealthReport) bool {
 	if p.wasSignedOut == nil {
 		p.wasSignedOut = map[string]bool{}
@@ -360,8 +396,37 @@ func (p *engineHealthProbe) signedInSinceLastProbe(reports []EngineHealthReport)
 			signedIn = signedIn || p.wasSignedOut[r.Engine]
 			delete(p.wasSignedOut, r.Engine)
 		}
+		if r.Engine == providerKimi && p.kimiSiteMoved(r) {
+			signedIn = true
+		}
 	}
 	return signedIn
+}
+
+// kimiSiteMoved records the site each of Kimi's accounts is on and says whether a signed-in one is
+// on another site than the probe last read for it. A report that lists no accounts
+// is read as Default alone, the account its own auth and kimiRegion describe. An account read on no
+// site this time keeps the last one: a probe that could not say is not a move, and neither is a first
+// reading.
+func (p *engineHealthProbe) kimiSiteMoved(r EngineHealthReport) bool {
+	if p.kimiRegions == nil {
+		p.kimiRegions = map[string]string{}
+	}
+	accounts := r.Accounts
+	if len(accounts) == 0 {
+		accounts = []EngineAccountReport{{ID: accountSlotDefaultID, Auth: r.Auth, KimiRegion: r.KimiRegion}}
+	}
+	moved := false
+	for _, account := range accounts {
+		if account.KimiRegion == "" {
+			continue
+		}
+		if last := p.kimiRegions[account.ID]; account.Auth == "yes" && last != "" && last != account.KimiRegion {
+			moved = true
+		}
+		p.kimiRegions[account.ID] = account.KimiRegion
+	}
+	return moved
 }
 
 // signedOut is whether the last completed probe found engine signed out (see
@@ -371,6 +436,17 @@ func (p *engineHealthProbe) signedOut(engine string) bool {
 	for _, r := range p.snapshotNow() {
 		if r.Engine == engine {
 			return r.signedOut()
+		}
+	}
+	return false
+}
+
+// signedIn is whether the last completed probe found anything on engine signed in (see
+// EngineHealthReport.signedIn). False before the first one finishes, as signedOut is.
+func (p *engineHealthProbe) signedIn(engine string) bool {
+	for _, r := range p.snapshotNow() {
+		if r.Engine == engine {
+			return r.signedIn()
 		}
 	}
 	return false

@@ -16,6 +16,7 @@ import { BadRequestException } from '@nestjs/common';
 import { accountDir, isAccountEngine } from '@orbit/shared';
 import { ACCOUNT_CHOICE, accountEnvVar, accountOnRunner } from './account';
 import { catalogModels } from './model-catalog';
+import { ANTHROPIC_HOST } from './plan-usage';
 import { decryptSecret } from './provider-crypto';
 import { followsRuntimeCatalog, presetDefaultModel } from './preset-overlay';
 import {
@@ -282,6 +283,16 @@ export async function accountPoolRuntime(
   return shared ? AgentProvider.CODEX : null;
 }
 
+/** Whether a row points at Anthropic's own endpoint — compared by hostname, so a path such as
+ *  `/anthropic` on a vendor's domain is not mistaken for it. */
+function isAnthropicEndpoint(baseUrl: string): boolean {
+  try {
+    return new URL(baseUrl).hostname.toLowerCase() === ANTHROPIC_HOST;
+  } catch {
+    return false;
+  }
+}
+
 // Env injected so the borrowed runtime CLI talks to the provider's endpoint. Claude runtime →
 // Anthropic-compatible vars (Phase 1); codex runtime → OpenAI-compatible (Phase 2); kimi runtime →
 // the Kimi CLI's own KIMI_MODEL_* provider; antigravity runtime → agy's GEMINI_API_KEY /
@@ -340,6 +351,20 @@ function injectedEnv(row: ModelProviderRow, model: string): Record<string, strin
     // inherit the session model; `CLAUDE_CODE_SUBAGENT_MODEL` does not (measured on 2.1.278).
     CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP: '1',
   };
+  // A late tool discovery inside a conversation that has run on Anthropic's own endpoint travels
+  // inline — `tool_addition` carrying the whole `tool_definition` — the shape that endpoint's
+  // inline-tools beta asks for. Switching that same conversation to a vendor shim replays the
+  // recorded blocks, and a shim that implements only the by-name form answers 422; DeepSeek words
+  // it "unknown variant `tool_definition`", which the CLI's rejection classifier does not know (it
+  // matches Anthropic's own "Input tag 'tool_definition'"), so the CLI's built-in fallback —
+  // re-declare the late tools in `tools[]` and reference them by name — never fires, and every
+  // turn of that session keeps failing until the model is switched back. With this off the engine
+  // takes the by-name path from the start (measured on 2.1.292 against DeepSeek: the conversation
+  // that 422s without it completes a turn with it). Injected only where the host is not
+  // Anthropic's: there the inline form is served, and the session keeps it.
+  if (!isAnthropicEndpoint(row.baseUrl)) {
+    claudeEnv.CLAUDE_CODE_INLINE_TOOLS = 'false';
+  }
   // A model id the CLI's own catalog doesn't describe gets 200k assumed for it, and auto-compact
   // keeps the session inside that. The endpoint can't correct the CLI — an Anthropic-compatible
   // shim like DeepSeek's serves no /v1/models for it to ask — so the declared window travels as
@@ -475,6 +500,10 @@ export function resolveProviderExec(args: {
    *  Workspace.antigravityAccount), read the same way: resolved into the ORBIT_ANTIGRAVITY_GOOGLE_DIR
    *  injected below, which the runner reads to pick the sign-in the session's agy runs on. */
   antigravityAccount?: string | null;
+  /** The Kimi Code account slot this session runs on (Session.kimiAccount ?? Workspace.kimiAccount),
+   *  read the same way: resolved into the KIMI_CODE_HOME injected below, the directory Kimi Code keeps
+   *  its whole login in. */
+  kimiAccount?: string | null;
   /** Runner.engines of the assigned runner: where each account's directory is reported. */
   runnerEngines?: unknown;
   /** The owner's configured keys (openCodeKeyRows), for an OpenCode session whose model names one
@@ -529,7 +558,8 @@ export function resolveProviderExec(args: {
   // the sign-in card (RunnerSignIn) rather than the control plane holding a credential for it.
   const provider = execRuntime(args);
   // A session on an account other than Default runs in that account's own directory — a Codex
-  // CODEX_HOME, a Claude Code CLAUDE_CONFIG_DIR, an Antigravity Google sign-in's Gemini directory.
+  // CODEX_HOME, a Claude Code CLAUDE_CONFIG_DIR, an Antigravity Google sign-in's Gemini directory, a
+  // Kimi Code KIMI_CODE_HOME.
   // Built-in only: a configured provider brings its own key, so no sign-in on the machine is spent.
   // The chosen account replaces any such variable typed into the workspace's env.
   const accountId = isAccountEngine(provider) ? args[ACCOUNT_CHOICE[provider]] : undefined;

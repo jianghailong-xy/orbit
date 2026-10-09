@@ -3,7 +3,7 @@ import type { Request, Response } from 'express';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { visitorAddress } from '../shared/public-surface.guard';
 import { GoogleExchangeDto, GoogleLinkDto } from './dto';
-import { type GoogleCallbackOutcome, type GoogleIntent, GoogleLoginService } from './google-login.service';
+import { type GoogleCallbackOutcome, type GoogleIntent, GoogleLoginService, isGoogleClientState } from './google-login.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { PatForbidden } from './pat-scope.decorator';
 import { googleRedirectUri } from './sign-in-providers.service';
@@ -77,7 +77,13 @@ function returnTo(outcome: GoogleCallbackOutcome): string {
 export class GoogleAuthController {
   constructor(private readonly flows: GoogleLoginService) {}
 
-  /** §4.1: `client=web|native`, `code_challenge`, and for native an optional `client_state` it gets back. */
+  /**
+   * §4.1: `client=web|native`, `code_challenge`, and for native an optional `client_state` it gets back.
+   * The browser comes here by a navigation — the Web page's, or the apps' authentication session — so
+   * a start refused for a client that named itself sends it back by §4.2's failure redirect, with no
+   * cookie: GOOGLE_NOT_CONFIGURED, GOOGLE_BAD_REQUEST, GOOGLE_RATE_LIMITED or GOOGLE_SIGN_IN_BUSY, and
+   * the `client_state` only if it is one /start takes. Without a client there is nowhere to send it: 400.
+   */
   @Get('start')
   async start(
     @Req() req: Request,
@@ -88,7 +94,9 @@ export class GoogleAuthController {
   ) {
     if (client !== 'web' && client !== 'native') throw new BadRequestException('client must be web or native');
     const started = await this.flows.start({ client, codeChallenge, clientState, visitor: visitorAddress(req) });
-    if (!started) return res.redirect(302, googleFailureRedirect(client, 'GOOGLE_NOT_CONFIGURED', clientState));
+    if ('refused' in started) {
+      return res.redirect(302, googleFailureRedirect(client, started.refused, isGoogleClientState(clientState) ? clientState : undefined));
+    }
     res.setHeader('Set-Cookie', bindingCookie(started.binding));
     return res.redirect(302, started.authorizationUrl);
   }

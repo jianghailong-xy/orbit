@@ -1,0 +1,26 @@
+{
+ "command": "npm run build -w @orbit/web && npm run test -w @orbit/web",
+ "job": "bgj_d89b1450d3fd",
+ "header": [
+  "# HEAD 821e2d501d59983cbcc5e7407571b2a4f13e0b53; tracked changes: []; untracked: [?? docs/evidence/base-ui-migration/webkit-scroll-lock-accepted/ ]",
+  "# argv: npm run build -w @orbit/web && npm run test -w @orbit/web",
+  "# started 2026-10-09T03:00:32Z",
+  "# df: /dev/nvme0n1p3   936787M 903999M    23244M  98% /"
+ ],
+ "finished": "# finished 2026-10-09T03:07:40Z exit 0",
+ "testFiles": {
+  "passed": 370,
+  "total": 370
+ },
+ "tests": {
+  "passed": 4801,
+  "total": 4801
+ },
+ "fullOutput": {
+  "path": "/mnt/data/tmp/34cfhmpygHQdZxRznyVH9/logs/merge-check.log",
+  "lines": 11288,
+  "bytes": 995363,
+  "sha256": "8c098fdda8c936615f9dd8299b1fa7a4e16b1159c37611385d3e4727d0266712"
+ },
+ "filtered": "merge-check.txt (filter-merge-check.py from p3.2-accepted/tools, plus the closing lines)"
+}

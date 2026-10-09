@@ -1,5 +1,6 @@
 import { Prisma, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { INTEGRATION_CLAIM_STALE_MS } from '@orbit/shared';
 import { notifyRunnerWakeOnCommit } from '../realtime/runner-wake';
 import { LANDING_SESSION_CANDIDATES, LANDING_WORK_SESSION_SELECT, landingWorkSession } from './landing-source-branch';
 import { startOnFirstIntegration } from './project-integration-line';
@@ -81,6 +82,9 @@ export const INTEGRATION_ERROR_CODES = [
   'PROMOTION_TREE_NONDETERMINISTIC',
   'RUNNER_DRAINING',
   'INTEGRATION_REPOSITORY_UNKNOWN',
+  // Written by the platform, never reported: the runner stopped reporting past the job's limit and
+  // a retry ended the job to queue the next generation (§2.2 J-T9).
+  'RUNNER_LOST',
 ] as const;
 export type IntegrationErrorCode = (typeof INTEGRATION_ERROR_CODES)[number];
 
@@ -187,6 +191,88 @@ export const DEFAULT_CHECK_TIMEOUT_SECONDS = 3_600;
  * died does not hold a repository's serial slot for an afternoon.
  */
 export { INTEGRATION_CLAIM_STALE_MS } from '@orbit/shared';
+
+/** What `checksFor` reads off a job: the fields its two checks are built from. The claim returns
+ *  them with the row it takes, and the integration view reads the same columns for a job's limit. */
+export interface IntegrationCheckSource {
+  kind: string;
+  promotionSourceKind: string | null;
+  /** The acceptance of the task whose session the job names (see `checksFor`). */
+  acceptanceCommand: string | null;
+  acceptanceExpectedExitCode: number | null;
+  acceptanceTimeoutSeconds: number | null;
+  mergeCheckCommand: string | null;
+  mergeCheckTimeoutSeconds: number | null;
+  skipMergeCheck: boolean;
+}
+
+/**
+ * The commands to run on the combined tree (§2.4 J-S5), in the order a person would run them: the
+ * task's own acceptance first, because a task that cannot pass its own criterion on the merged tree
+ * is the narrower failure and the one whose owner is obvious.
+ *
+ * A task with no acceptance command contributes none. That is not a gap: an EVIDENCE_JUDGMENT or
+ * OWNER_CONFIRMED task was settled by somebody looking at it, and there is no command to re-run.
+ *
+ * ONE GENERATION MAY SKIP ITS CHECK. `integration_skip_merge_check` queues a landing with the merge
+ * check NOT RUN, because the account owner agreed the check is what is red rather than the delivery
+ * (§2.4 J-S5, 0393) — so no MERGE_CHECK spec is built and the runner's CHECK phase does not happen
+ * at all. The task's own acceptance is deliberately NOT skipped with it: the check the owner was
+ * asked about is the project's, and a task whose own criterion cannot pass on the combined tree is a
+ * statement about that task that no approval here chose to waive. This is the only place a check
+ * disappears, and it disappears for the job whose row says so — the next generation is queued with
+ * the flag false and is handed its check like any other.
+ */
+export function checksFor(row: IntegrationCheckSource): IntegrationCheckSpec[] {
+  const checks: IntegrationCheckSpec[] = [];
+  // Which checks a job runs is decided by WHAT IT IS PUTTING WHERE (§3.4 M-S3). A landing on the
+  // project branch runs the task's own acceptance on the combined tree, and so does a `TASK_BRANCH`
+  // promotion — it is one task's work arriving on the upstream, and the task's acceptance command is
+  // the criterion the whole thing was judged by. A `PROJECT_BRANCH` promotion runs the project's
+  // merge check and nothing else: every task it carries already passed its own acceptance on the
+  // line, and the session the job names belongs to one of those tasks only so the queue can find a
+  // checkout to work in — the job itself names no task, which is why `row.acceptanceCommand` here is
+  // that session's task's and not the promotion's.
+  const taskAcceptanceApplies = row.kind === 'LAND_TASK' || row.promotionSourceKind === 'TASK_BRANCH';
+  if (taskAcceptanceApplies && row.acceptanceCommand && row.acceptanceExpectedExitCode != null) {
+    checks.push({
+      name: 'TASK_ACCEPTANCE',
+      command: row.acceptanceCommand,
+      expectedExitCode: row.acceptanceExpectedExitCode,
+      timeoutSeconds: row.acceptanceTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS,
+    });
+  }
+  // The kind is checked as well as the flag even though 0393's CHECK makes the combination
+  // impossible: what skips a check is one task's landing onto the project's own branch, and a row
+  // that arrived saying otherwise — a hand-written fixture, a build ahead of the migration — keeps
+  // the check it was queued for rather than landing unchecked.
+  if (row.mergeCheckCommand && !(row.kind === 'LAND_TASK' && row.skipMergeCheck)) {
+    checks.push({
+      name: 'MERGE_CHECK',
+      command: row.mergeCheckCommand,
+      expectedExitCode: 0,
+      timeoutSeconds: row.mergeCheckTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS,
+    });
+  }
+  return checks;
+}
+
+/**
+ * How long a running job's current step may go without a report before the integration view says
+ * it timed out (§1.6 `inFlightJobs`, §2.2 J-T9); null for a job that is not running.
+ *
+ * The runner reports when a step STARTS and says nothing during it, so a healthy check is silent for
+ * as long as it runs: while checking, the limit is every check's budget plus the lease. Every other
+ * step is git work, and the lease is what J-T3 already treats as a lost claim.
+ */
+export function integrationJobLimitSeconds(
+  job: IntegrationCheckSource & { state: string; phase: string | null },
+): number | null {
+  if (job.state !== 'RUNNING') return null;
+  const lease = INTEGRATION_CLAIM_STALE_MS / 1_000;
+  if (job.phase !== 'CHECK') return lease;
+  return checksFor(job).reduce((total, check) => total + check.timeoutSeconds, lease);
+}
 
 /** How many jobs one runner is handed per heartbeat (J-T2's dispatch). */
 export const INTEGRATION_JOBS_PER_HEARTBEAT = 2;
@@ -668,6 +754,41 @@ export interface LandingRetryRequest {
   /** Exactly one requester is recorded by migration 0380. */
   requestedBySessionId?: string;
   requestedByUserId?: string;
+}
+
+/**
+ * End a RUNNING landing whose runner stopped reporting past its limit, for the retry that replaces it
+ * in the same transaction (§2.2 J-T9). Nobody reported this end, so it is the platform's: ERROR with
+ * `RUNNER_LOST`, the step it was last at, and whether that step was past the push.
+ *
+ * A compare-and-set on what the timeout was judged from: still RUNNING, and the heartbeat the read
+ * saw. A report, a takeover claim or a result that arrived since moved one of them, and the caller is
+ * told so rather than ending a job that is talking again. The claim generation moves with it, so a
+ * runner that was alive after all is refused when it reports.
+ */
+export async function endTimedOutLanding(
+  tx: Prisma.TransactionClient,
+  job: { jobId: string; phase: string | null; heartbeatAt: Date | null; startedAt: Date;
+         limitSeconds: number | null; runnerName: string | null },
+): Promise<boolean> {
+  const detail = {
+    detail: `no report from ${job.runnerName ? `runner ${job.runnerName}` : 'its runner'} within `
+      + `${Math.round((job.limitSeconds ?? 0) / 60)} minutes`,
+    phase: job.phase,
+    lastReportAt: (job.heartbeatAt ?? job.startedAt).toISOString(),
+    limitSeconds: job.limitSeconds,
+    runnerName: job.runnerName,
+    pushRecorded: job.phase === 'PUSH' || job.phase === 'VERIFY',
+  };
+  const ended = await tx.$executeRaw(Prisma.sql`
+    UPDATE "project_integration_job"
+       SET "state" = 'ERROR', "error_code" = 'RUNNER_LOST',
+           "error_detail" = ${JSON.stringify(detail)}::jsonb,
+           "claim_generation" = "claim_generation" + 1,
+           "finished_at" = now(), "updated_at" = now()
+     WHERE "id" = ${job.jobId}::uuid AND "state" = 'RUNNING'
+       AND "heartbeat_at" IS NOT DISTINCT FROM ${job.heartbeatAt}::timestamptz`);
+  return ended === 1;
 }
 
 /**

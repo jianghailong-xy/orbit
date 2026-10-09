@@ -72,6 +72,24 @@ export function isTerminalPromotionState(state: string): boolean {
 }
 
 /**
+ * Why a candidate is BLOCKED (migration 0409's CHECK spells the same four): what the job that blocked
+ * it answered. Stored because `checks` and `conflicts` cannot say it — both are empty when the source
+ * was already on the upstream, and when the job errored before a check ran.
+ */
+export const PROMOTION_BLOCKED_REASONS = ['ALREADY_LANDED', 'CHECK_FAILED', 'CONFLICT', 'ERROR'] as const;
+export type PromotionBlockedReason = (typeof PROMOTION_BLOCKED_REASONS)[number];
+
+/**
+ * The reason a job's answer blocks its candidate for, or null for an answer that is none of the four:
+ * a block is then recorded without one, and read the way a block from before 0409 is.
+ */
+export function promotionBlockedReasonFor(jobState: string): PromotionBlockedReason | null {
+  return (PROMOTION_BLOCKED_REASONS as readonly string[]).includes(jobState)
+    ? jobState as PromotionBlockedReason
+    : null;
+}
+
+/**
  * Whether the owner may confirm this promotion right now, and why not when they may not.
  *
  * READY and nothing else. A BLOCKED promotion is the "有冲突时不可确认" half of §3.3 — its checks did
@@ -244,6 +262,7 @@ export const PROMOTION_COLUMNS = {
   filesChanged: true,
   checks: true,
   conflicts: true,
+  blockedReason: true,
   state: true,
   checkJobId: true,
   landJobId: true,
@@ -331,6 +350,7 @@ export function promotionView(row: PromotionRow, facts: PromotionFacts): Project
     taskIds: row.includedTaskIds,
     checks: Array.isArray(row.checks) ? (row.checks as unknown as IntegrationCheckResult[]) : [],
     conflicts: row.conflicts,
+    blockedReason: row.blockedReason as PromotionBlockedReason | null,
     // One source for both readings of "did anything conflict": the paths below are the files, this
     // is the answer the card's `main` row gives, and they are derived from the same array.
     upstream: { syncedAt: facts.upstreamSyncedAt, conflicts: row.conflicts.length > 0 },

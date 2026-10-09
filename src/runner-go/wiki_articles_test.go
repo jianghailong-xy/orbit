@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -33,11 +34,14 @@ type fakeArticlesDoor struct {
 	plan     map[string]interface{}
 	planCode int
 	planBody string
-	inputs   map[string]map[string]interface{}
-	answer   func(slug string, body wikiArticleWrite) (int, string)
-	calls    []string
-	sessions []string
-	writes   map[string]wikiArticleWrite
+	// inputCode and inputBody, when set, answer every topic's input instead of inputs.
+	inputCode int
+	inputBody string
+	inputs    map[string]map[string]interface{}
+	answer    func(slug string, body wikiArticleWrite) (int, string)
+	calls     []string
+	sessions  []string
+	writes    map[string]wikiArticleWrite
 }
 
 func newFakeArticlesDoor(t *testing.T, topics []map[string]interface{}, inputs map[string]map[string]interface{}) *fakeArticlesDoor {
@@ -65,6 +69,11 @@ func newFakeArticlesDoor(t *testing.T, topics []map[string]interface{}, inputs m
 			out, _ := json.Marshal(door.plan)
 			_, _ = w.Write(out)
 		case r.Method == http.MethodGet && strings.HasPrefix(path, "articles/") && strings.HasSuffix(path, "/input"):
+			if door.inputCode != 0 {
+				w.WriteHeader(door.inputCode)
+				_, _ = w.Write([]byte(door.inputBody))
+				return
+			}
 			slug := strings.TrimSuffix(strings.TrimPrefix(path, "articles/"), "/input")
 			input, ok := door.inputs[slug]
 			if !ok {
@@ -582,6 +591,65 @@ func TestWikiArticleIsRefusedToAnyButAMaintenanceRun(t *testing.T) {
 	}
 }
 
+// For an account the Orbit server runs the wiki for, the door answers WIKI_SERVER_EXECUTES: the server's wiki
+// worker writes the articles, so the command asks no model, says so and exits 0 (contract
+// `articles.serverExecution`).
+func TestWikiArticleLeavesAnAccountTheServerRunsToTheServer(t *testing.T) {
+	const refused = `{"code":"WIKI_SERVER_EXECUTES","message":"the Orbit server writes this account's wiki articles (ORBIT_WIKI_EXECUTOR=canary)"}`
+	door := newFakeArticlesDoor(t, nil, nil)
+	door.planCode = http.StatusConflict
+	door.planBody = refused
+	vllm := newFakeVLLM(t, articleAnswers)
+	spawns := fakeVerifyClaude(t)
+	wikiArticlesSession(t, door.URL, vllm)
+
+	var out strings.Builder
+	if err := cmdWikiCLI([]string{"articles", "--space", "space-1"}, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("an account the server runs: %v — the command exits 0\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "The Orbit server writes the articles of space space-1 (WIKI_SERVER_EXECUTES)") ||
+		!strings.Contains(out.String(), "Nothing was asked of this session's model") {
+		t.Errorf("output = %q", out.String())
+	}
+	out.Reset()
+	if err := cmdWikiCLI([]string{"articles", "--space", "space-1", "--json"}, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("--json: %v", err)
+	}
+	var summary wikiArticlesSummary
+	if err := json.Unmarshal([]byte(out.String()), &summary); err != nil || !summary.ServerExecutes || summary.Written != 0 {
+		t.Errorf("--json printed %q (%v)", out.String(), err)
+	}
+	if len(spawns()) != 0 || len(vllm.Requests()) != 0 {
+		t.Error("a model was asked for an account the server runs")
+	}
+	for _, call := range door.Calls() {
+		if call != "POST /api/runner/wiki/spaces/space-1/article-plan" {
+			t.Errorf("after the plan was refused the run went on: %s", call)
+		}
+	}
+
+	// The switch gave the account to the server while a run ran: the topic's input is refused, the run stops
+	// there — no model asked, nothing written — and exits 0.
+	door = newFakeArticlesDoor(t, []map[string]interface{}{planTopic("database", 3, true), planTopic("testing", 3, true)}, nil)
+	door.inputCode = http.StatusConflict
+	door.inputBody = refused
+	vllm = newFakeVLLM(t, articleAnswers)
+	wikiArticlesSession(t, door.URL, vllm)
+	out.Reset()
+	if err := cmdWikiCLI([]string{"articles", "--space", "space-1"}, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("a run the server took over: %v", err)
+	}
+	if !strings.Contains(out.String(), "The Orbit server writes the articles of space space-1") {
+		t.Errorf("output = %q", out.String())
+	}
+	if want := []string{"POST /api/runner/wiki/spaces/space-1/article-plan", "GET /api/runner/wiki/spaces/space-1/articles/database/input"}; !reflect.DeepEqual(door.Calls(), want) {
+		t.Errorf("door calls = %v, want %v", door.Calls(), want)
+	}
+	if len(vllm.Requests()) != 0 {
+		t.Error("a model was asked after the server took the account over")
+	}
+}
+
 func TestWikiArticleCountsAStaleWriteAsAFailure(t *testing.T) {
 	door := newFakeArticlesDoor(t, []map[string]interface{}{planTopic("database", 3, true)},
 		map[string]map[string]interface{}{"database": topicInput("database", smallTopic("database", 3))})
@@ -827,4 +895,202 @@ func TestWikiArticleDrivesTheRealClaudeCodeWithThinkingOff(t *testing.T) {
 	}
 	sort.Strings(keys)
 	t.Logf("the request's keys: %v", keys)
+}
+
+// ── One answer with the server's articles job ───────────────────────────────────────────────────
+
+// wikiArticleWriterFixture is the topic the runner and the server's `articles` job must write the same way
+// (src/shared/src/wiki-article-writer.fixture.json): the server's specs read it too, so a prompt changed on
+// one side, or a grouping that drifted, is a red on the other.
+const wikiArticleWriterFixture = "../shared/src/wiki-article-writer.fixture.json"
+
+var updateWikiArticleWriterFixture = flag.Bool("update-wiki-article-writer-fixture", false,
+	"write the calls, the system prompt and the groups of "+wikiArticleWriterFixture+" from this runner's run")
+
+type wikiArticleWriterFixtureModel struct {
+	Names    []string `json:"names"`
+	Article  string   `json:"article"`
+	Short    string   `json:"short"`
+	ShortFor string   `json:"shortFor"`
+}
+
+type wikiArticleWriterFixtureTopic struct {
+	Slug           string                   `json:"slug"`
+	Title          string                   `json:"title"`
+	EntrySetSha256 string                   `json:"entrySetSha256"`
+	Entries        []map[string]interface{} `json:"entries"`
+}
+
+// wikiArticleWriterUnit is the unit the server files a call under — name-<n>, part-<n>, part-<n>/again — read
+// off the prompt the runner sent: the server names its calls, and the runner does not. names holds the names
+// each topic's groups were given so far, in order.
+func wikiArticleWriterUnit(topics []wikiArticleWriterFixtureTopic, names map[string][]string, prompt string) (string, string) {
+	const again = "\n\nA previous draft kept only "
+	suffix := ""
+	if i := strings.Index(prompt, again); i >= 0 {
+		prompt, suffix = prompt[:i], "/again"
+	}
+	for _, topic := range topics {
+		switch {
+		case strings.HasPrefix(prompt, "下面是 wiki 里「"+topic.Title+"」主题下"):
+			return topic.Slug, fmt.Sprintf("name-%d", len(names[topic.Slug])+1)
+		case strings.HasPrefix(prompt, `Write the overview of the wiki topic "`+topic.Title+`".`),
+			strings.HasPrefix(prompt, `Write a wiki article titled "`+topic.Title+`",`):
+			return topic.Slug, "part-0" + suffix
+		}
+		for i, name := range names[topic.Slug] {
+			if strings.HasPrefix(prompt, `Write a wiki article titled "`+name+`" (a part of the topic "`+topic.Title+`")`) {
+				return topic.Slug, fmt.Sprintf("part-%d%s", i+1, suffix)
+			}
+		}
+	}
+	return "", ""
+}
+
+func TestWikiArticleAsksWhatTheServerAsks(t *testing.T) {
+	raw, err := os.ReadFile(wikiArticleWriterFixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Model  wikiArticleWriterFixtureModel   `json:"model"`
+		Topics []wikiArticleWriterFixtureTopic `json:"topics"`
+		System string                          `json:"system"`
+		Calls  map[string]map[string]string    `json:"calls"`
+		Groups map[string][][]string           `json:"groups"`
+	}
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	plan := []map[string]interface{}{}
+	inputs := map[string]map[string]interface{}{}
+	for _, topic := range fixture.Topics {
+		plan = append(plan, map[string]interface{}{"slug": topic.Slug, "title": topic.Title, "category": "platform",
+			"entryCount": len(topic.Entries), "entrySetSha256": topic.EntrySetSha256, "articleSha256": nil, "generatedAt": nil, "changed": true})
+		inputs[topic.Slug] = map[string]interface{}{
+			"spaceId": "space-1", "topic": map[string]interface{}{"slug": topic.Slug, "title": topic.Title, "category": "platform", "description": nil},
+			"entrySetSha256": topic.EntrySetSha256, "articleSha256": nil, "entries": topic.Entries,
+		}
+	}
+	door := newFakeArticlesDoor(t, plan, inputs)
+	// The model of the fixture: the nth naming prompt gets the nth name; a second ask gets the article; any
+	// other article of the topic titled shortFor gets the short draft, and everything else the article.
+	var mu sync.Mutex
+	named := 0
+	vllm := newFakeVLLM(t, func(prompt string) (int, string) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case strings.Contains(prompt, "起一个简短的中文小标题"):
+			name := fixture.Model.Names[named]
+			named++
+			return http.StatusOK, "好的，这组的小标题是：\n「" + name + "」"
+		case strings.Contains(prompt, "A previous draft kept only"):
+			return http.StatusOK, fixture.Model.Article
+		case strings.HasPrefix(prompt, `Write a wiki article titled "`+fixture.Model.ShortFor+`",`):
+			return http.StatusOK, fixture.Model.Short
+		}
+		return http.StatusOK, fixture.Model.Article
+	})
+	spawns := fakeVerifyClaude(t)
+	wikiArticlesSession(t, door.URL, vllm)
+	var out strings.Builder
+	if err := cmdWikiCLI([]string{"articles", "--space", "space-1", "--json"}, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("orbit wiki articles: %v\n%s", err, out.String())
+	}
+
+	// Every call, by the unit the server files it under. Names are asked one after another, so the order
+	// they were asked in is the order the runner numbered its groups.
+	calls := map[string]map[string]string{}
+	names := map[string][]string{}
+	asked := 0
+	system := ""
+	for _, run := range spawns() {
+		for i, arg := range run.Args {
+			if arg == "--system-prompt" && i+1 < len(run.Args) {
+				system = run.Args[i+1]
+			}
+		}
+		slug, unit := wikiArticleWriterUnit(fixture.Topics, names, run.Prompt)
+		if slug == "" {
+			t.Fatalf("a prompt the fixture's topics do not explain: %.200q", run.Prompt)
+		}
+		if strings.HasPrefix(unit, "name-") {
+			// The name the model gave it, which later prompts call the group by.
+			names[slug] = append(names[slug], fixture.Model.Names[asked])
+			asked++
+		}
+		if calls[slug] == nil {
+			calls[slug] = map[string]string{}
+		}
+		if _, twice := calls[slug][unit]; twice {
+			t.Fatalf("topic %s asked %s twice", slug, unit)
+		}
+		calls[slug][unit] = run.Prompt
+	}
+	groups := map[string][][]string{}
+	for _, topic := range fixture.Topics {
+		written, ok := door.Write(topic.Slug)
+		if !ok {
+			t.Fatalf("topic %s was not written", topic.Slug)
+		}
+		for _, part := range written.Articles {
+			if part.Kind == "subtopic" {
+				groups[topic.Slug] = append(groups[topic.Slug], part.Entries)
+			}
+		}
+	}
+	if *updateWikiArticleWriterFixture {
+		var whole map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &whole); err != nil {
+			t.Fatal(err)
+		}
+		for key, value := range map[string]interface{}{"system": system, "calls": calls, "groups": groups} {
+			encoded, err := wikiArticleWriterJSON(value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			whole[key] = encoded
+		}
+		encoded, err := wikiArticleWriterJSON(whole)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(wikiArticleWriterFixture, encoded, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("wrote %s: %d calls, %d groups", wikiArticleWriterFixture, len(calls["wiki"])+len(calls["database"]), len(groups["wiki"]))
+		return
+	}
+	if system != fixture.System {
+		t.Errorf("the system prompt = %q, the fixture's %q", system, fixture.System)
+	}
+	if !reflect.DeepEqual(groups, fixture.Groups) {
+		t.Errorf("the runner grouped the topic as %v, the fixture says %v", groups, fixture.Groups)
+	}
+	for slug, want := range fixture.Calls {
+		for unit, prompt := range want {
+			if calls[slug][unit] != prompt {
+				t.Errorf("topic %s, %s: the runner asked\n%q\nthe fixture says\n%q", slug, unit, calls[slug][unit], prompt)
+			}
+		}
+		if len(calls[slug]) != len(want) {
+			t.Errorf("topic %s: the runner made %d calls, the fixture %d", slug, len(calls[slug]), len(want))
+		}
+	}
+	if len(calls) != len(fixture.Calls) {
+		t.Errorf("the runner asked about %d topics, the fixture %d", len(calls), len(fixture.Calls))
+	}
+}
+
+// wikiArticleWriterJSON is the fixture's own layout: two-space indents, and < > & as they are.
+func wikiArticleWriterJSON(value interface{}) ([]byte, error) {
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(value); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }

@@ -126,6 +126,8 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let claudeAccount: String?
     /// The same for its Antigravity sessions: one of the runner's Google accounts, or nil for Automatic.
     public let antigravityAccount: String?
+    /// The same for its Kimi Code sessions: one of the runner's Kimi accounts, or nil for Automatic.
+    public let kimiAccount: String?
 
     public let enableWorktree: Bool?
     /// Smart model selection (docs/model-routing-design.md §7.2): on, a fresh task run here gets the
@@ -146,7 +148,8 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         case description, appendSystemPrompt, systemPrompt, allowedTools, disallowedTools
         case maxTurns, maxBudgetUsd, targetRunnerId, targetLabels, runnerId, env, enabled
         case antigravityKeyAvailableByRunner
-        case autoInitGit, codexAccount, claudeAccount, antigravityAccount, enableWorktree, modelRouting, workDirExists, workDirIsGit
+        case autoInitGit, codexAccount, claudeAccount, antigravityAccount, kimiAccount, enableWorktree, modelRouting
+        case workDirExists, workDirIsGit
         case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup
     }
 
@@ -178,6 +181,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         codexAccount = try c.decodeIfPresent(String.self, forKey: .codexAccount)
         claudeAccount = try c.decodeIfPresent(String.self, forKey: .claudeAccount)
         antigravityAccount = try c.decodeIfPresent(String.self, forKey: .antigravityAccount)
+        kimiAccount = try c.decodeIfPresent(String.self, forKey: .kimiAccount)
         enableWorktree = try c.decodeIfPresent(Bool.self, forKey: .enableWorktree)
         modelRouting = try c.decodeIfPresent(Bool.self, forKey: .modelRouting)
         workDirExists = try c.decodeIfPresent(Bool.self, forKey: .workDirExists)
@@ -364,6 +368,9 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// accounts.
     public let antigravityAccount: String?
     public let antigravityAccountPinned: Bool?
+    /// The same pair for a session on the built-in Kimi Code engine: one of the runner's Kimi accounts.
+    public let kimiAccount: String?
+    public let kimiAccountPinned: Bool?
     public let pendingApprovals: Int?
     /// What `pendingApprovals` is counting, when one word says it better than "approval":
     /// `OWNER_CONFIRMATION` when everything counted is an OWNER_CONFIRMED task's run waiting for its
@@ -456,6 +463,17 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// (idle / task-done / user-ended — shown as dormant) apart from a hard cancel/orphan.
     public let error: String?
     public let endReason: String?
+    /// The SOURCE chain's state for this session — `UNBOUND`, `SELECTED`, `PINNED` or `REFUSED`
+    /// (§6.1). Only `REFUSED` is terminal, and it is the one value this client acts on: such a
+    /// session never re-resolves, and its recovery is a new run (SR34). Absent from older servers,
+    /// which reads as "nothing to say", never as a refusal.
+    public let sourceState: String?
+    /// §10.1's code. Present exactly when `sourceState` is `REFUSED`, which is the DB's own rule
+    /// (`session_source_refusal_chk`).
+    public let sourceRefusalCode: String?
+    /// §10.1's fifth column with `fixAction` folded in — what the refusal was about, in the ref's
+    /// and the runner's own words.
+    public let sourceRefusalDetail: SourceRefusalDetail?
     /// When the server will re-send the message a self-healing failure killed — a spent quota, a
     /// 529, a runner that vanished mid-turn — or nil when nothing is armed. What makes a FAILED
     /// row not yet an outcome: the run continues on its own when this fires, so `isSettled` (and
@@ -548,6 +566,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         claudeAccountPinned = try values.decodeIfPresent(Bool.self, forKey: .claudeAccountPinned)
         antigravityAccount = try values.decodeIfPresent(String.self, forKey: .antigravityAccount)
         antigravityAccountPinned = try values.decodeIfPresent(Bool.self, forKey: .antigravityAccountPinned)
+        kimiAccount = try values.decodeIfPresent(String.self, forKey: .kimiAccount)
+        kimiAccountPinned = try values.decodeIfPresent(Bool.self, forKey: .kimiAccountPinned)
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
         ownerItems = try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems)
@@ -579,6 +599,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         engineTurnActive = try values.decodeIfPresent(Bool.self, forKey: .engineTurnActive)
         error = try values.decodeIfPresent(String.self, forKey: .error)
         endReason = try values.decodeIfPresent(String.self, forKey: .endReason)
+        sourceState = try values.decodeIfPresent(String.self, forKey: .sourceState)
+        sourceRefusalCode = try values.decodeIfPresent(String.self, forKey: .sourceRefusalCode)
+        sourceRefusalDetail = try? values.decodeIfPresent(SourceRefusalDetail.self,
+                                                          forKey: .sourceRefusalDetail)
         retryAt = try values.decodeIfPresent(String.self, forKey: .retryAt)
         agent = try values.decodeIfPresent(SessionAgentRef.self, forKey: .agent)
         tags = try values.decodeIfPresent([SessionTag].self, forKey: .tags)
@@ -604,6 +628,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 runningSubagentCount: Int? = nil,
                 engineTurnActive: Bool? = nil,
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
+                sourceState: String? = nil, sourceRefusalCode: String? = nil,
+                sourceRefusalDetail: SourceRefusalDetail? = nil,
                 pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil,
                 currentTurnStartedAt: String? = nil,
                 tags: [SessionTag]? = nil, retryAt: String? = nil,
@@ -612,6 +638,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 codexAccount: String? = nil, codexAccountPinned: Bool? = nil,
                 claudeAccount: String? = nil, claudeAccountPinned: Bool? = nil,
                 antigravityAccount: String? = nil, antigravityAccountPinned: Bool? = nil,
+                kimiAccount: String? = nil, kimiAccountPinned: Bool? = nil,
                 awaitingReplyFrom: [SessionRequestPeer]? = nil, owesReplyTo: [SessionRequestPeer]? = nil,
                 folderId: String? = nil,
                 confirmationUnderReview: ConfirmationUnderReview? = nil,
@@ -639,6 +666,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.claudeAccountPinned = claudeAccountPinned
         self.antigravityAccount = antigravityAccount
         self.antigravityAccountPinned = antigravityAccountPinned
+        self.kimiAccount = kimiAccount
+        self.kimiAccountPinned = kimiAccountPinned
         self.pendingApprovals = pendingApprovals
         self.waitingKind = waitingKind
         self.ownerItems = ownerItems
@@ -666,6 +695,9 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.engineTurnActive = engineTurnActive
         self.error = error
         self.endReason = endReason
+        self.sourceState = sourceState
+        self.sourceRefusalCode = sourceRefusalCode
+        self.sourceRefusalDetail = sourceRefusalDetail
         self.retryAt = retryAt
         self.agent = agent
         self.pinnedAt = pinnedAt
@@ -721,6 +753,8 @@ public struct SessionAgentRef: Codable, Equatable, Sendable, Identifiable {
     public var claudeAccount: String? = nil
     /// Its Antigravity account, the same way (`Agent.antigravityAccount`).
     public var antigravityAccount: String? = nil
+    /// Its Kimi Code account, the same way (`Agent.kimiAccount`).
+    public var kimiAccount: String? = nil
     /// Its environment, which can decide the account too — a config directory or a key of its own
     /// (`CodexAccounts.automaticOffered`). Carried by the detail payload's workspace row.
     public var env: [String: String]? = nil
@@ -1000,6 +1034,8 @@ public struct CreateSessionRequest: Codable, Sendable {
     public let claudeAccount: String?
     /// The same for a session on the built-in Antigravity engine: one of the runner's Google accounts.
     public let antigravityAccount: String?
+    /// The same for a session on the built-in Kimi Code engine: one of the runner's Kimi accounts.
+    public let kimiAccount: String?
     /// The folder the new session is filed in — one started from a folder's page lands in that
     /// folder (docs/session-folders-move-design.md §3.2). It has to be one of this workspace's
     /// folders, else the server answers 400. Nil omits it: the session is in no folder.
@@ -1009,7 +1045,8 @@ public struct CreateSessionRequest: Codable, Sendable {
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                 fastMode: Bool? = nil,
                 shell: Bool? = nil, attachmentIds: [String]? = nil, codexAccount: String? = nil,
-                claudeAccount: String? = nil, antigravityAccount: String? = nil, folderId: String? = nil) {
+                claudeAccount: String? = nil, antigravityAccount: String? = nil, kimiAccount: String? = nil,
+                folderId: String? = nil) {
         self.prompt = prompt
         self.title = title
         self.agentId = agentId
@@ -1024,6 +1061,7 @@ public struct CreateSessionRequest: Codable, Sendable {
         self.codexAccount = codexAccount
         self.claudeAccount = claudeAccount
         self.antigravityAccount = antigravityAccount
+        self.kimiAccount = kimiAccount
         self.folderId = folderId
     }
 }

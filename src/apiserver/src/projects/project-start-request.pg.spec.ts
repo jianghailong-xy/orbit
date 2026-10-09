@@ -17,7 +17,11 @@
  *       START_REQUEST_NOT_READY and files nothing, and one request can be refused by several at
  *       once, every finding in the one answer;
  *   (2) the two warnings — tasks set to start by hand, listed by id and title, and Automatic on a
- *       project branch with no merge check — do not refuse: the request is filed and carries them.
+ *       project branch with no merge check — do not refuse: the request is filed, and they come back
+ *       to the coordinator in the answer. They are not filed WITH it (the owner, 2026-10-07): they
+ *       are about how the plan is written, which only the coordinator can change, so the stored
+ *       request — what the owner's card is drawn from — carries none. Automatic left out is
+ *       suggested on, the way the owner's card opens.
  *       The third, a criterion served only by work that looks codeless and does not declare it
  *       (0346), is held to its cases in `criterion-landing-codeless.pg.spec.ts`; every plan here is
  *       EXECUTABLE work, so the exact warning lists below are also its control — code work is not
@@ -461,7 +465,7 @@ test('a coordinator asks its owner to start the project, and the plan is checked
     assert.deepEqual(await requests(project.id), []);
   });
 
-  // ═══ (2) the two warnings: filed, and carried ═════════════════════════════════════════════════
+  // ═══ (2) the two warnings: returned to the coordinator, not filed for the owner ═══════════════
 
   await t.test('(2) tasks started by hand and a missing merge check warn, and the request is filed', async () => {
     const project = await planned('warnings', { byHand: true });
@@ -486,7 +490,8 @@ test('a coordinator asks its owner to start the project, and the plan is checked
     assert.equal(stored.dedupe_key, 'START_REQUEST');
     assert.equal(stored.title, 'Start this project?');
     assert.equal(stored.escalate_at, null, 'already the owner’s: nowhere to escalate to');
-    assert.deepEqual(stored.payload.warnings, filed.warnings, 'the warnings are filed with it');
+    assert.deepEqual(stored.payload.warnings, [],
+      'the warnings are the coordinator’s: answered, and not filed for the owner’s card');
     assert.equal(stored.payload.why, SUGGESTED.why);
     assert.equal(stored.payload.criteriaDigest, await seal(project.id),
       'it names the seal the start door will confirm');
@@ -497,6 +502,14 @@ test('a coordinator asks its owner to start the project, and the plan is checked
     // leave a request with none.
     const clean = await planned('no-warnings');
     assert.deepEqual((await ask(clean.id, clean.sessionId)).warnings, []);
+
+    // Automatic left out is suggested on, which is how the owner's card opens whatever is sent.
+    const unsaid = await planned('automatic-unsaid');
+    const { automatic: _left, ...withoutAutomatic } = SUGGESTED;
+    const suggestedOn = await ask(unsaid.id, unsaid.sessionId, withoutAutomatic as ProjectStartRequestBody);
+    assert.equal(suggestedOn.settings.automatic, true);
+    const [unsaidStored] = await requests(unsaid.id);
+    assert.equal(unsaidStored.payload.settings.automatic, true);
 
     // The owner reads it beside the exceptions rather than among them: a client that predates the
     // kind would draw every `needsYou` row it cannot name as an exception escalated to them.

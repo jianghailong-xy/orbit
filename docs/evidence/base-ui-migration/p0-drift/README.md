@@ -195,13 +195,14 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 | --- | --- | ---: | --- | --- |
 | 会话列表行 | session-idle、session-streaming、session-composer-focus、session-attachment-menu、session-attachment-staged、notification-error、breakpoint-961-session（4 个桌面项目） | 28 | `918034e7…`、`f5bdd7fd…` | `f5bdd7fd3`（运行 full2-f5bdd7fd3） |
 | 项目页 | project-overview、project-graph（8 项目），project-graph-fullscreen、breakpoint-639/641-graph（桌面） | 28 | `93d3ec58…` | `93d3ec580`（full2-93d3ec580） |
-| 任务面板与设置 | task-detail、task-action-hover/focus/menu、task-share-dialog、settings、settings-saved（8 项目），breakpoint-599/601-dialog（桌面） | 64 | `4088d37e…` | `4088d37e6`（full2-4088d37e6） |
-| Wiki 961px 暗色 | breakpoint-961-wiki（chromium-dark-desktop）。第 2 批按第 6 条追加 main 提交并替换参考图，旧图在 git 历史里 | 1 | `e64d0c72…`、`6c4e0ac0…`、`2f9cc095…`、`a884fda3…` | `a884fda36`（full-maint-a884fda36）；第 1 批为 `e64d0c72a`（m5-e64d0c72a） |
+| 任务面板与设置：任务面板 | task-detail、task-action-hover/focus/menu、task-share-dialog（8 项目），breakpoint-599/601-dialog（桌面） | 48 | `4088d37e…` | `4088d37e6`（full2-4088d37e6） |
+| 任务面板与设置：设置页（第 5 批按第 6 条追加 A11） | settings、settings-saved（8 项目）。WebKit 的 settings 4 张和桌面 settings-saved 2 张另带 A6 `d233a6cd0`：第 2 批记录过它让这 6 张的滚动条变化，低于阈值，当时没有登记；新参考图在含它的树上生成，所以写进这 6 条 | 16 | `4088d37e…`、`def13409…`；WebKit 那 6 张为 `4088d37e…`、`d233a6cd…`、`def13409…` | `def134095`（full-fix-def134095）；第 1 批为 `4088d37e6`（full2-4088d37e6） |
+| Wiki 961px 暗色 | breakpoint-961-wiki（chromium-dark-desktop）。第 2 批、第 5 批按第 6 条追加 main 提交并替换参考图，旧图在 git 历史里 | 1 | `e64d0c72…`、`6c4e0ac0…`、`2f9cc095…`、`a884fda3…`、`2ba6765d…` | `2ba6765d9`（full-fix-2ba6765d9）；第 2 批为 `a884fda36`（full-maint-a884fda36），第 1 批为 `e64d0c72a`（m5-e64d0c72a） |
 | 资料页（第 2 批，A6） | profile（8 项目），profile-validation（WebKit 桌面 2 个项目） | 10 | `d233a6cd…` | `d233a6cd0`（full-maint-d233a6cd0） |
 | 资料页，第 7 条例外（第 2 批，A6） | profile-validation（Chromium 4 个项目，WebKit 手机 2 个项目） | 6 | `d233a6cd…` | `d233a6cd0` 加 B1 修复 `3ec9cf83d`，即 `dcb5fd1bd`（full-maint-xfix-d233a6cd0），见 `migrationFix` |
-| Wiki 首页窄屏与 959px（第 2 批，A7、A8） | wiki-home、wiki-new-entry（手机 4 个项目），breakpoint-959-wiki（桌面 4 个项目） | 12 | `6c4e0ac0…`、`2f9cc095…` | `2f9cc095f`（full-maint-2f9cc095f） |
-| Wiki 目录抽屉（第 2 批，A8） | wiki-contents（手机 4 个项目） | 4 | `2f9cc095…` | `2f9cc095f`（full-maint-2f9cc095f） |
-| Wiki 首页桌面与 961px（第 2 批，A7、A8、A9） | wiki-home、wiki-new-entry（桌面 4 个项目），breakpoint-961-wiki（桌面 3 个项目，chromium-dark-desktop 见上面「Wiki 961px 暗色」） | 11 | `6c4e0ac0…`、`2f9cc095…`、`a884fda3…` | `a884fda36`（full-maint-a884fda36） |
+| Wiki 首页窄屏与 959px（第 2 批 A7、A8，第 5 批 A10） | wiki-home、wiki-new-entry（手机 4 个项目），breakpoint-959-wiki（桌面 4 个项目） | 12 | `6c4e0ac0…`、`2f9cc095…`、`2ba6765d…` | `2ba6765d9`（full-fix-2ba6765d9）；第 2 批为 `2f9cc095f`（full-maint-2f9cc095f） |
+| Wiki 目录抽屉（第 2 批 A8，第 5 批 A10） | wiki-contents（手机 4 个项目） | 4 | `2f9cc095…`、`2ba6765d…` | `2ba6765d9`（full-fix-2ba6765d9）；第 2 批为 `2f9cc095f`（full-maint-2f9cc095f） |
+| Wiki 首页桌面与 961px（第 2 批 A7、A8、A9，第 5 批 A10） | wiki-home、wiki-new-entry（桌面 4 个项目），breakpoint-961-wiki（桌面 3 个项目，chromium-dark-desktop 见上面「Wiki 961px 暗色」） | 11 | `6c4e0ac0…`、`2f9cc095…`、`a884fda3…`、`2ba6765d…` | `2ba6765d9`（full-fix-2ba6765d9）；第 2 批为 `a884fda36`（full-maint-a884fda36） |
 
 **每条登记的字段**：
 
@@ -223,17 +224,21 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 - 这些 main 树都在 P2.3 晋升（`90e749e72`）之前，不含 B1。
 - 会话组的生成树 `f5bdd7fd3` 含 P1.1/P1.2 的晋升，项目页的 `93d3ec580` 含 P2.1 的晋升。这些晋升提交本身经过同样的运行，确认没有改变对应截图。
 - 第 2 批的生成树都在 P2.3 晋升之后，含 B1。B1 只改变设置页、资料页的成功提示胶囊。所以 profile-validation 中受 B1 影响的 6 张按第 7 条，在 X 加 B1 修复的树上生成，其余截图在 X 的树上生成，不受 B1 影响（见 [p0-drift-2](../p0-drift-2/README.md)）。
+- 第 5 批的生成树 `2ba6765d9` 含 B1 修复和本项目到当时为止晋升进 main 的迁移代码。它的 first-parent 前驱 `7cc52e0cf` 对照当前期望，Wiki 28 张逐字节相同，所以这些迁移代码没有改变这些截图。`2ba6765d9` 让 Wiki 页头读 `GET /api/wiki/spaces/<id>/share`，参考图用补了这条固定响应（`48ebd321c`；生成时的运行器取自 rebase 前的 `82247962c`，`fixtures.mjs` 逐字节相同）的 P0 测试生成，按「场景与固定数据维护」第 5 条，它与 P0 原测试只差这一条响应；同一棵树上两者的截图除 Chromium 噪声外相同（见 [p0-drift-5](../p0-drift-5/README.md)）。
+- 第 5 批设置页的生成树 `def134095` 含 B1 修复和已晋升的 P4.1 设置页迁移。P4.1 的同提交对照里，设置页 16 张有 14 张逐字节相同、2 张是噪声（[p4.1-accepted](../p4.1-accepted/README.md)）。`def134095` 的 first-parent 前驱 `ebf5e6441` 对照当前期望全部通过比较器，只差 A6 的滚动条（WebKit 6 张，低于阈值）和 Chromium 噪声。所以迁移代码没有改变这些截图。新参考图与前一版相比，只多了 `def134095` 新加的 Suggested replies 一行（其下各行随之下移）和 A6 的滚动条，其余只有 Chromium 噪声。
 
 **未登记**：其余 88 张仍然对照 P0.2。
 
 **第 2 批**：归因、同环境证明和登记经过见 [p0-drift-2](../p0-drift-2/README.md)。
+
+**第 5 批**：归因、同环境证明和登记经过见 [p0-drift-5](../p0-drift-5/README.md)。
 
 ## 「已接受的迁移差异」层
 
 迁移批次可能按设计改变 P0 截图，且这项改变已被协调者在该批证据里判定接受。例如 P3.2 让 task 场景有 8 个用例按设计不同：More 菜单和分享对话框的焦点约定，以及 WebKit 下 Share… 图标约 30 像素的行高精度差。这类差异不是 main 漂移，不能进参考层；也不是缺陷，不该靠人逐条解释。这一层专门收它们。
 
 - **位置**：与 main 漂移层分开，三处：
-  - [accepted/registry.json](accepted/registry.json)，本次为空；
+  - [accepted/registry.json](accepted/registry.json)，第 1 批为空，之后的登记见本节「已登记的条目」；
   - `accepted/screenshots/{project}/{name}.png`：接受后的期望图，即同提交对照的 after 原件；
   - `accepted/before/{project}/{name}.png`：同提交对照的 before 原件。
 - **组装顺序**：P0 回归先取 P0.2 原图，再用 main 漂移层替换登记的截图，最后用这一层替换登记的截图。同一张截图可以先有 main 漂移参考，再叠一条已接受的迁移差异。
@@ -258,6 +263,20 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
   - after 原件与 before 不一致。
 
   检查通过后复制两张原件、写入条目，同一截图的旧条目移入 `previous`。
+
+- **已登记的条目**：
+
+| 批次与判定 | 截图 | 条数 | 替换的期望 | 同提交原件 | 登记证据 |
+| --- | --- | ---: | --- | --- | --- |
+| P3.2（[34Za39ACSBoCkYKc80Md8](orbit-task:34Za39ACSBoCkYKc80Md8)）第 2 版证据，`evidenceDigest` `302ca1f5…09bc`，CONFIRM，文档 [p3.2/README.md](../p3.2/README.md) | task-share-dialog（8 个项目）；task-action-menu（4 个浅色项目） | 12 | 第 1 批 A4 的 main 漂移参考（`4088d37e6`） | before `fffcdb532`（P3.2 落地前的项目 tip），after `2925958ae` | [p3.2-accepted](../p3.2-accepted/README.md) |
+| P4.1（[34Za39Do3N6tkmIMP0GBP](orbit-task:34Za39Do3N6tkmIMP0GBP)）第 1 版证据，`evidenceDigest` `9477611a…7d57`，CONFIRM，文档 [p4.1/README.md](../p4.1/README.md) | profile-validation（webkit-light-phone、webkit-dark-phone） | 2 | 第 2 批 A6 的 main 漂移参考（`d233a6cd0`，第 7 条例外，生成于 `dcb5fd1bd`） | before `a84bc61e7`（P4.1 的起点），after `3aa26fb97`（P4.1 落地后的项目 tip） | [p4.1-accepted](../p4.1-accepted/README.md) |
+| WebKit 滚动锁（[34cBi0yt6bFcSmbJFgDPj](orbit-task:34cBi0yt6bFcSmbJFgDPj)）第 1 版证据，`evidenceDigest` `fdb19816…8e7c`，CONFIRM，文档 [webkit-scroll-lock/README.md](../webkit-scroll-lock/README.md) | settings-saved、profile-validation、notification-error（webkit-light-desktop、webkit-dark-desktop、webkit-dark-phone） | 9 | 7 张是 main 漂移参考：settings-saved 的设置页组（生成于 `def134095`），桌面 profile-validation 的第 2 批 A6（`d233a6cd0`），桌面 notification-error 的会话组（生成于 `f5bdd7fd3`）。webkit-dark-phone 的 notification-error 是 P0.2 原图。webkit-dark-phone 的 profile-validation 原是 P4.1 的接受条目，旧条目移入 `previous`，`replaces` 仍是第 2 批 A6 的 main 漂移参考 | before `15b7b5609`（该批的起点），after `b2568f28d`（该批落地项目线的合并） | [webkit-scroll-lock-accepted](../webkit-scroll-lock-accepted/README.md) |
+
+P3.2 另有 11 张截图的变化低于 P0 比较器阈值（深色 task-action-menu 4 张，webkit-dark-phone 的 task-detail、task-action-hover、task-action-focus，WebKit 桌面的 breakpoint-599/601-dialog 4 张）。登记工具不收这类截图，它们仍对照 main 漂移参考并通过，逐张见 p3.2-accepted。
+
+P4.1 的同提交对照里，其余 250 张截图 before → after 232 张逐字节相同、18 张是 Chromium 噪声，都通过 P0 比较器，逐张见 p4.1-accepted。
+
+WebKit 滚动锁另有 3 张截图（webkit-light-phone 的 settings-saved、profile-validation、notification-error）只差文档滚动条那 8px 一列与 (0,0) 一点，变化低于 P0 比较器阈值，登记工具不收，仍对照当前期望通过；其中 profile-validation 仍是 P4.1 的接受条目。同提交对照里，其余 240 张截图 before → after 224 张逐字节相同、16 张是 Chromium 噪声，都通过 P0 比较器，逐张见 webkit-scroll-lock-accepted。
 
 ## 维护规则
 
@@ -315,7 +334,13 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 
    `generatedFrom.commit` 仍是 X。`expected-screenshots.mjs` 每次运行都校验这些字段，缺一项，整次运行失败。不满足这三条时仍按第 4、5 条：X 的树含未接受的迁移改动，该截图就不能登记。
 
-### 场景维护
+### 场景与固定数据维护
+
+main 的产品改动可能让 P0 用例在截图比对以外的地方失败。这时可以对场景或固定数据做最小的维护，只为让 P0 原测试继续截到同一页面；截图比对、断言和容差都不变，维护后的截图照常归因、登记。维护分两种：
+- **场景维护**：main 删掉了场景依赖的元素，场景停在截图前的等待或定位处（第 2 批加入）；
+- **固定数据维护**：main 让 P0 页面多发了一个请求，固定数据里没有它，用例停在固定数据校验「Every API call must have an explicit browser fixture」（第 3 批加入）。
+
+#### 场景维护
 
 main 删掉了 P0 场景依赖的元素，使场景在截图前的等待或定位处失败时，可以最小限度地改这个场景的等待或定位条件：
 1. **只改那一处等待或定位**：改成同一页面上取代被删元素的内容。截图名、截取的页面和区域（P0 是整页截图）、截图比对、断言内容和容差都不变。
@@ -332,6 +357,43 @@ main 删掉了 P0 场景依赖的元素，使场景在截图前的等待或定�
 | 提交 | 场景 | 原条件 | 新条件 | 删掉原元素的 main 提交 | 截取 |
 | --- | --- | --- | --- | --- | --- |
 | `d2479173b` | wiki：`wiki-home` 截图前的等待 | `.wk-card`：首页第一张卡片，P0.2 时是 Principles 卡 | `.wk-pl-doc.topic`：取代卡片的话题文章行，首页的读取都完成后才画出 | `2f9cc095f` refactor(wiki): list topic articles on the Wiki home, drop status cards | 仍是 `/wiki/orbit` 首页的整页截图 `wiki-home.png`。之后的 `wiki-contents`、`wiki-new-entry` 截图和全部断言都没有改 |
+
+#### 固定数据维护
+
+main 给 P0 页面新增了请求，固定数据没有对应的响应，用例因此停在固定数据校验时，可以为这个请求补一个确定的固定响应：
+1. **只补那一个请求**：在 `fixtures.mjs` 里加一条路由，方法和路径与新请求完全相同，响应是固定的值。已有的固定数据、断言、截图比对和容差都不变；其余没有建模的请求（包括写请求）照旧返回 501，并使校验失败。
+2. **引用 main 提交**：注释和提交说明都写明新增该请求的 main 提交。同环境运行要证明：该提交的 first-parent 前驱上，页面不发这个请求，固定数据校验通过；该提交上校验失败，`unhandled` 正是这个请求。请求经合并进入项目线时，按 main 漂移参考第 4 条 (a)(b) 的办法逐层下钻到该提交。
+3. **取值有依据**：响应取 P0 固定账号在真实产品里最合理的默认状态，并与已有固定数据一致，不能为了让截图通过而挑选取值。下面的清单写明取值依据：服务端在默认配置下实际回答什么，与已有固定数据的关系，页面因此显示什么。
+4. **单独提交**：只改 `fixtures.mjs`，不与登记或其他改动混在一起，可单独回退。
+5. **之后的截图照常归因、登记**：
+   - 补了固定响应后，截图若有变化，按 main 漂移参考第 4 条归因、登记；
+   - 参考图用补了固定响应的 P0 测试生成，它与 P0 原测试只差这一条响应；
+   - 在该 main 提交之前的树上，页面不发这个请求，归因运行用原测试。
+6. **不属于固定数据维护的情况**：迁移改动带来的新请求、修改已有的固定响应、截图差异和断言失败。
+
+已做的固定数据维护：
+
+| 提交 | 请求 | 固定响应 | 新增该请求的 main 提交 | 截图 |
+| --- | --- | --- | --- | --- |
+| `5d7801e47` | `GET /api/auth/methods`：资料页的 `SignInMethodsCard` 经 `lib/googleLink.ts` 的 `authMethodsQuery` 读取 | `{ password: true, google: false, googleSignup: false }` | `558a8ba1f` feat(auth): link and unlink Google from the profile page, admin unlink, signInMethods, Sign-in settings (S4)。经 Google 登录项目的合并 `98cdd37d0`、main 的合并 `eee179f5d` 和项目线吸收 main 的 `09cc5760d` 进入项目线 | 没有变化，不需要登记。补固定响应前后，tip 的 252 张截图 248 张逐字节相同，4 张是 Chromium 噪声；资料页 profile 8 张逐字节相同，profile-validation 6 张相同、2 张是 Chromium 噪声（9 和 90 像素，差 1）。吸收 main 的 `09cc5760d` 前后同样没有截图变化。见 [p0-drift-3](../p0-drift-3/README.md) |
+| `48ebd321c` | `GET /api/wiki/spaces/<id>/share`：每个 Wiki 页面页头的 `WikiShareButton`（`components/WikiShareButton.tsx`）经 `api.ts` 的 `getShareLink('WIKI', …)` 读取 | `{ link: null, counts: { documents: 0, footnotes: 0 } }` | `2ba6765d9` docs(mocks): add wiki share mock for share-links。提交标题只提设计稿，提交里同时有 Wiki 分享的服务端和客户端实现，Web 在 `WikiPage.tsx` 的页头挂上 `WikiShareButton`。它是 main 的 first-parent 提交，是项目线吸收 main 的 `1d3cd4c70` 的第二父 | 补固定响应本身不改变截图。同一棵树上，原测试与补了固定响应的测试相比，0 张变化，WebKit 126 张全部逐字节相同：`2ba6765d9` 上 240 张逐字节相同、12 张 Chromium 噪声；项目 tip `1d3cd4c70` 上 235 张、17 张；新基础 `4d77d69b7` 上 246 张、6 张（≤15 像素，单通道差 ≤2）。Wiki 截图的变化来自 `2ba6765d9` 在页头加的 Share 按钮，按 main 漂移参考登记为 A10（28 张），见 [p0-drift-5](../p0-drift-5/README.md) |
+
+`5d7801e47` 的取值依据：
+- **服务端的默认回答**：`GET /auth/methods` 由 `SignInProvidersService.methods()`（`src/apiserver/src/auth/sign-in-providers.service.ts`）回答。没有 `sign_in_provider` 记录，或记录没开启、缺 client ID 或密钥时，回答就是 `{ password: true, google: false, googleSignup: false }`。Google 登录要管理员在 Admin → Sign-in 里打开才有（`7bb096cad` feat(auth): store Google sign-in settings, off until an administrator turns it on）。
+- **与已有固定数据一致**：P0 账号（`/users/me` 的固定数据）是普通成员，没有 `signInMethods` 字段。按 `lib/queries.ts` 的说明，这表示早于 Google 登录的服务端，账号只有密码。只能用密码登录、没有绑定 Google，与服务端没开 Google 登录相符。
+- **页面因此显示什么**：`SignInMethodsCard` 只在 Google 登录开着、账号已绑定 Google 或账号没有密码时才画出。真实产品里，一个只有密码的账号在没开 Google 的服务端上看不到这张卡片，资料页与 `558a8ba1f` 之前相同，Change password 卡片照常显示。P0 账号没有 `signInMethods`，卡片同样不画。反过来，如果取 `google: true`，真实产品会给这个账号显示带 Connect Google 的卡片，而 P0 页面不会，截图就不再是真实产品在这一状态下的样子。所以只有 `google: false` 同时符合服务端默认和已有固定数据。
+
+`48ebd321c` 的取值依据：
+- **服务端的默认回答**：`GET /wiki/spaces/:id/share` 由 `ShareLinksService.current(ownerId, 'WIKI', spaceId)`（`src/apiserver/src/share-links/share-links.service.ts`）回答 `{ link, counts }`。
+  - `link` 是这个空间还没结束的链接。链接只在所有者打开分享时建立（Share 对话框发 `PUT /wiki/spaces/:id/share`；`put()` 调用的 `insert()` 是服务端唯一新建链接的地方），服务端不会自动建，所以没人分享过的空间回答 `link: null`。
+  - `counts` 由 `wikiShareCounts`（`src/apiserver/src/share-links/public-wiki.ts`）算：`documents` 是 `WikiDocs.directory` 里已写好的文档数，`footnotes` 是这些文档已写好的段落里可以公开的脚注数。没有已写好的段落时，直接回答 `footnotes: 0`。
+- **与已有固定数据一致**：
+  - `counts` 读的目录，就是 `GET /api/wiki/spaces/<id>/docs` 回答的那份（`WikiDocs.directory`）。已有固定数据是 `{ plan: null, docs: { total: 0, written: 0 }, categories: [] }`，没有确认的计划，也就没有写好的文档。按同一份数据，服务端回答 `documents: 0, footnotes: 0`。
+  - 已有固定数据里，项目的 `GET /api/projects/<id>/share` 也是没分享的状态 `{ link: null, counts: … }`，形状相同。P0 账号唯一的分享链接是任务那条（`SHARE_TOKEN`），没有 Wiki 链接。
+- **页面因此显示什么**：
+  - `WikiShareButton` 在没有链接、或链接已结束时画 Share 按钮（手机只有图标），有打开的链接时画「Shared · Live」胶囊。`counts` 只在 Share 对话框里显示，P0 场景不打开它。
+  - 真实产品里，没分享过的空间页头显示 Share，P0 页面也是。如果取一个打开的链接，页头就成了 Shared · Live，这不是 P0 账号的空间该有的状态。
+  - 补固定响应之前，请求得到 501，查询没有数据，按钮同样是 Share。所以补固定响应不改变截图；页头多出的 Share 按钮是 `2ba6765d9` 本身的改动，按 main 漂移参考第 4 条归因、登记（第 5 批的 A10）。
 
 ### 已接受的迁移差异（`accepted/`）
 
@@ -474,7 +536,7 @@ main 删掉了 P0 场景依赖的元素，使场景在截图前的等待或定�
 
 ```sh
 bash scripts/worktree-overlay.sh
-NO_COLOR=1 npm run test:ui-migration -w @orbit/web     # 第 2 批之后：只剩 P3.2 待登记的 8 个 task 用例（见 p0-drift-2）
+NO_COLOR=1 npm run test:ui-migration -w @orbit/web     # P3.2 的差异登记之后应全部通过（见 p3.2-accepted）
 npm run build -w @orbit/web && npm run test -w @orbit/web
 node docs/evidence/base-ui-migration/p0-drift/tools/validator-checks.mjs "$PWD" /tmp/p0-validator-checks
 ```

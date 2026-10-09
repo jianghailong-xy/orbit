@@ -307,7 +307,14 @@ public enum Infrastructure {
     /// the machine's probe answered for itself, outranks the probe; then whether it is there and signed in.
     public static func rowKind(_ health: RunnerEngineHealth?, install: RunnerInstallState?,
                                engine: LoginEngine) -> RowKind {
-        if let install, install.engine == engine.rawValue {
+        rowKind(health, install: install, slug: engine.rawValue)
+    }
+
+    /// The same for an engine named by its slug — OpenCode among them, which a runner installs and
+    /// nothing here signs in.
+    public static func rowKind(_ health: RunnerEngineHealth?, install: RunnerInstallState?,
+                               slug engine: String) -> RowKind {
+        if let install, install.engine == engine {
             if install.status == "pending" || install.status == "installing" { return .installing }
             if install.status == "failed" && health?.installed != true { return .installFailed }
             if install.status == "done" && health?.installed != true { return .installed }
@@ -326,6 +333,18 @@ public enum Infrastructure {
     public static func installable(_ runner: Runner, _ engine: LoginEngine) -> Bool {
         if engine == .antigravity && runner.antigravity?.supported == false { return false }
         switch rowKind(engineHealth(runner, engine), install: runner.install, engine: engine) {
+        case .missing, .installFailed: return true
+        default: return false
+        }
+    }
+
+    /// Whether OpenCode's page offers to install it (web's OpenCode row): it signs in per provider, on the
+    /// machine, so its install is the one press its page has — on a machine that reports it missing, or
+    /// whose last install of it failed. A runner that never mentions OpenCode gets none, as the web draws
+    /// it no row.
+    public static func installsOpenCode(_ runner: Runner) -> Bool {
+        guard let health = runner.engines?.first(where: { $0.engine == "opencode" }) else { return false }
+        switch rowKind(health, install: runner.install, slug: "opencode") {
         case .missing, .installFailed: return true
         default: return false
         }

@@ -121,10 +121,12 @@ final class ConsoleModel {
     /// id). Nil leaves it to the workspace: its own pick, else Automatic — the account with the most
     /// room, which the server chooses when it creates the session.
     private(set) var draftCodexAccount: String?
-    /// Draft only: the same for a Claude account picked under Claude, and an Antigravity account picked
-    /// under Antigravity. At most one of the three is set — a pick is made under one engine.
+    /// Draft only: the same for a Claude account picked under Claude, an Antigravity account picked
+    /// under Antigravity and a Kimi account picked under Kimi. At most one of the four is set — a pick
+    /// is made under one engine.
     private(set) var draftClaudeAccount: String?
     private(set) var draftAntigravityAccount: String?
+    private(set) var draftKimiAccount: String?
     /// Which Codex account this session runs on, from its detail: its own (`Session.codexAccount`),
     /// and its workspace's for a session that stored none. Only a detail read sets them.
     private(set) var sessionCodexAccount: String?
@@ -136,15 +138,24 @@ final class ConsoleModel {
     private(set) var workspaceClaudeAccount: String?
     private(set) var sessionCodexAccountPinned = false
     private(set) var sessionClaudeAccountPinned = false
-    /// The same three for Antigravity.
+    /// The same three for Antigravity, and for Kimi.
     private(set) var sessionAntigravityAccount: String?
     private(set) var workspaceAntigravityAccount: String?
     private(set) var sessionAntigravityAccountPinned = false
+    private(set) var sessionKimiAccount: String?
+    private(set) var workspaceKimiAccount: String?
+    private(set) var sessionKimiAccountPinned = false
     private(set) var workspaceEnv: [String: String]?
     private var workspaceAntigravityKeys: [String: Bool]?
     private(set) var runnerAntigravity: RunnerAntigravityState?
     private(set) var runnerVersion: String?
     private(set) var sessionError: String?
+    /// The SOURCE refusal this session's row carries, adopted by name like `sessionError` — the
+    /// three columns the "never started" card reads to say WHY a run that produced no transcript
+    /// never began. Nil on a session that was not refused.
+    private(set) var sessionSourceState: String?
+    private(set) var sessionSourceRefusalCode: String?
+    private(set) var sessionSourceRefusalDetail: SourceRefusalDetail?
     private(set) var antigravityInstalling = false
     private(set) var runnerInstall: RunnerInstallState?
 
@@ -180,6 +191,37 @@ final class ConsoleModel {
     var queuedDshRepair: DshRuntime.Repair? {
         guard executesDsh, sessionStatus == .pending else { return nil }
         return DshRuntime.repair(sessionError)
+    }
+
+    /// The card this session's page draws when no engine ever ran on it — a refused SOURCE, or a
+    /// machine-side reason with nothing behind it. Nil when this console has nothing to say (see
+    /// `SessionRunStart`), which is also how the two engine cards above stay the only card for the
+    /// engines they own.
+    var runStart: SessionRunStart.Card? {
+        SessionRunStart.card(error: sessionError, sourceState: sessionSourceState,
+                             sourceRefusalCode: sessionSourceRefusalCode,
+                             sourceRefusalDetail: sessionSourceRefusalDetail,
+                             status: sessionStatus, runnerName: runnerName, runnerVersion: runnerVersion)
+    }
+
+    /// "Start it again" for a refused run: SR34's recovery, which is a NEW run on the task — a
+    /// refused session never re-resolves. The same door the task page's Run press uses, with this
+    /// press's own trigger id (the server's idempotency name for one ask).
+    func startRefusedRunAgain() async {
+        guard let taskID, !startingRun else { return }
+        startingRun = true
+        defer { startingRun = false }
+        do {
+            try await api.executeTask(taskID, triggerId: PublicID.newToken())
+            showTransientStatus("Starting a new run…")
+        } catch {
+            statusMessage = "Couldn't start it again — \(APIClient.failureReason(error))."
+        }
+    }
+
+    /// Hand the composer a reply about this run, the way every other card's "Chat about this" does.
+    func chatAboutRunStart() {
+        composerText = "About this run: "
     }
 
     var canInstallDsh: Bool {
@@ -264,6 +306,10 @@ final class ConsoleModel {
     /// Nil unless the user picked one here: the session's own provider must never be re-asserted
     /// from a console whose context has not loaded yet.
     private(set) var pendingResumeProvider: String?
+    /// The provider the session itself is stored on, kept only while a held pick has replaced
+    /// `provider` (`pendingResumeProvider`). What is running and what is coming are two different
+    /// facts then, and the model menu's title says both.
+    private(set) var pendingResumeFrom: String?
     /// The account of the engine `pendingResumeProvider` moves the session onto, picked under it in the
     /// Provider submenu — sent with that switch on the revive (`ResumeRequest.account`).
     private(set) var pendingResumeAccount: String?
@@ -388,6 +434,8 @@ final class ConsoleModel {
     /// Keeps the composer's contents put and the send button spinning until the ids land.
     private(set) var waitingForUploads = false
     private(set) var sending = false
+    /// A "Start it again" on a refused run is in flight: one press, one new run.
+    private(set) var startingRun = false
     /// True from the moment the user sends a message until the agent's first output for that turn
     /// lands (or the send fails). Bridges the window where the POST has returned but the live
     /// `RUNNING` status hasn't arrived yet, so the tail "working" indicator doesn't blink off in
@@ -418,8 +466,8 @@ final class ConsoleModel {
     /// and none at all while no account can be named.
     var planUsage: PlanUsageSnapshot? {
         if currentPool != nil { return poolAccount?.member.planUsage }
-        // A built-in Codex, Claude or Antigravity session spends one of the runner's accounts — the one
-        // it runs on. Antigravity's Default too: its quota is never in the runner's own report, only
+        // A built-in Codex, Claude, Antigravity or Kimi session spends one of the runner's accounts — the
+        // one it runs on. Antigravity's Default too: its quota is never in the runner's own report, only
         // with its engine's health (`engineUsage`), and a Default on the machine's Gemini key has none.
         if let engine = accountEngine, engine == "antigravity" || account(for: engine) != CodexAccounts.defaultID {
             return CodexAccounts.snapshot(engineUsage(engine), account: account(for: engine))
@@ -602,8 +650,8 @@ final class ConsoleModel {
         default: return nil
         }
     }
-    /// The engine whose account this draft or session names: the built-in Codex, Claude or Antigravity
-    /// engine, not an account pool. Nil for everything else.
+    /// The engine whose account this draft or session names: the built-in Codex, Claude, Antigravity or
+    /// Kimi engine, not an account pool. Nil for everything else.
     var accountEngine: String? {
         currentPool == nil && RunnerPageFormat.keepsAccounts(provider) ? provider : nil
     }
@@ -633,6 +681,7 @@ final class ConsoleModel {
         switch engine {
         case "claude": return draftClaudeAccount
         case "antigravity": return draftAntigravityAccount
+        case "kimi": return draftKimiAccount
         default: return draftCodexAccount
         }
     }
@@ -641,6 +690,7 @@ final class ConsoleModel {
         switch engine {
         case "claude": return sessionClaudeAccount
         case "antigravity": return sessionAntigravityAccount
+        case "kimi": return sessionKimiAccount
         default: return sessionCodexAccount
         }
     }
@@ -649,6 +699,7 @@ final class ConsoleModel {
         switch engine {
         case "claude": return sessionClaudeAccountPinned
         case "antigravity": return sessionAntigravityAccountPinned
+        case "kimi": return sessionKimiAccountPinned
         default: return sessionCodexAccountPinned
         }
     }
@@ -657,6 +708,7 @@ final class ConsoleModel {
         switch engine {
         case "claude": return workspaceClaudeAccount
         case "antigravity": return workspaceAntigravityAccount
+        case "kimi": return workspaceKimiAccount
         default: return workspaceCodexAccount
         }
     }
@@ -1070,6 +1122,10 @@ final class ConsoleModel {
     private var worktreePollTask: Task<Void, Never>?
     /// The "Tasks created here" card's poll, started and stopped with the stream for the same reason.
     private var createdTasksPollTask: Task<Void, Never>?
+    /// The runner row's re-read once a minute (`refreshRunner`), started and stopped with the stream:
+    /// web's 60s `refetchInterval` on the console's runners query, so the plan-usage gauge keeps up
+    /// with the turns running here instead of waiting for a reconnect.
+    private var runnerPollTask: Task<Void, Never>?
 
     /// Begin the live SSE loop if it isn't already running. Idempotent (re-focusing the same session
     /// is a no-op) and inert for a draft/session-less console.
@@ -1078,6 +1134,13 @@ final class ConsoleModel {
         streamTask = Task { [weak self] in await self?.run() }
         worktreePollTask = Task { [weak self] in await self?.worktree.startPolling() }
         createdTasksPollTask = Task { [weak self] in await self?.createdTasks.startPolling() }
+        runnerPollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
+                guard let self, !Task.isCancelled else { return }
+                await self.refreshRunner()
+            }
+        }
     }
 
     /// Cancel the live SSE loop and drop its connection. The reducer state stays cached, so a later
@@ -1092,6 +1155,8 @@ final class ConsoleModel {
         worktreePollTask = nil
         createdTasksPollTask?.cancel()
         createdTasksPollTask = nil
+        runnerPollTask?.cancel()
+        runnerPollTask = nil
         codexResetPollTask?.cancel()
         codexResetPollTask = nil
         codexResetPollingOperationID = nil
@@ -1173,6 +1238,11 @@ final class ConsoleModel {
                 // reported while this socket was suspended puts a card here, and the read is the
                 // only way this window hears about it.
                 Task { [weak self] in await self?.refreshOwnerConfirmation(force: true) }
+                // And the runner's row. The model menu's names, the plan-usage gauge and the `/`
+                // catalogue all come from the one read `loadContext` made when the console opened:
+                // without this, a failed read would stay failed until the console was opened again,
+                // and a quota read before the phone slept would stay that old.
+                Task { [weak self] in await self?.refreshRunner() }
             }
             isReconnect = true
             let outcome = await withTaskGroup(of: StreamOutcome.self) { group in
@@ -1700,6 +1770,31 @@ final class ConsoleModel {
         runnerHeartbeatDraining = nil
     }
 
+    /// GET /runners for the read a console makes when it opens, tried three times before giving up,
+    /// as `seedTailPage` is. One transient failure (common on mobile) used to leave the model menu
+    /// on raw ids and the plan-usage gauge missing for as long as the console stayed open.
+    private func fetchRunners() async -> [Runner]? {
+        for attempt in 0..<3 {
+            if let rows = try? await api.runners() { return rows }
+            if attempt < 2 { try? await Task.sleep(nanoseconds: UInt64(300 * (attempt + 1)) * 1_000_000) }
+        }
+        return nil
+    }
+
+    /// Re-read this session's runner row: on a reconnect (`run()`), and once a minute while the
+    /// console streams (`runnerPollTask`). A failed read keeps what is on screen and fails the reset
+    /// admission closed, as `loadContext`'s does.
+    private func refreshRunner() async {
+        guard let runnerID else { return }
+        guard let rows = try? await api.runners() else {
+            clearCodexResetAdmission()
+            return
+        }
+        let runner = rows.first(where: { $0.id == runnerID })
+        if let runner { adoptRunnerSnapshot(runner) } else { clearRunnerSnapshot() }
+        applySlashItems(from: runner)
+    }
+
     /// Load the footer context once: the owning agent's name + the runner's plan usage, and
     /// adopt the session's stored model/permission/effort so the pills show its real settings
     /// (matching web — see AgentView's seed effects). This runs for terminal sessions too: a
@@ -1739,6 +1834,9 @@ final class ConsoleModel {
         sessionAntigravityAccount = s.antigravityAccount
         workspaceAntigravityAccount = s.agent?.antigravityAccount
         sessionAntigravityAccountPinned = s.antigravityAccountPinned ?? false
+        sessionKimiAccount = s.kimiAccount
+        workspaceKimiAccount = s.agent?.kimiAccount
+        sessionKimiAccountPinned = s.kimiAccountPinned ?? false
         workspaceEnv = s.agent?.env
         workspaceAntigravityKeys = s.agent?.antigravityKeyAvailableByRunner
 
@@ -1746,12 +1844,13 @@ final class ConsoleModel {
         let live = ComposerLogic.isLive(status: s.effectiveRunStatus)
 
         // Plan usage + Runtime model/default data ride the GET /runners list. A request failure is
-        // merely unavailable data and must retain the model already on screen.
+        // merely unavailable data and must retain the model already on screen; the next reconnect
+        // reads it again (`refreshRunner`).
         var sessionRunner: Runner?
         var runnerSnapshotLoaded = false
         runnerID = s.assignedRunnerId
         if let rid = s.assignedRunnerId {
-            if let rows = try? await api.runners() {
+            if let rows = await fetchRunners() {
                 if let r = rows.first(where: { $0.id == rid }) {
                     sessionRunner = r
                     runnerSnapshotLoaded = true
@@ -1835,6 +1934,9 @@ final class ConsoleModel {
         guard let session, session.id == sessionID else { return }
         serverStatus = session.effectiveRunStatus
         sessionError = session.error
+        sessionSourceState = session.sourceState
+        sessionSourceRefusalCode = session.sourceRefusalCode
+        sessionSourceRefusalDetail = session.sourceRefusalDetail
         if let keys = session.agent?.antigravityKeyAvailableByRunner { workspaceAntigravityKeys = keys }
         serverCapabilities = session.capabilities
         // What this row says it is waiting on the owner for moves before any card here does: a
@@ -1902,6 +2004,9 @@ final class ConsoleModel {
         sessionAntigravityAccount = s.antigravityAccount
         workspaceAntigravityAccount = s.agent?.antigravityAccount
         sessionAntigravityAccountPinned = s.antigravityAccountPinned ?? false
+        sessionKimiAccount = s.kimiAccount
+        workspaceKimiAccount = s.agent?.kimiAccount
+        sessionKimiAccountPinned = s.kimiAccountPinned ?? false
         workspaceEnv = s.agent?.env
         workspaceAntigravityKeys = s.agent?.antigravityKeyAvailableByRunner
         return true
@@ -2000,6 +2105,10 @@ final class ConsoleModel {
                                                         catalog: modelCatalog,
                                                         configured: configuredProviders)
         providerSwitchNote = TaskRunHandoff.providerSwitchNote(from: from, to: slug, liveRun: isLive)
+        // A held pick replaces `provider` before the resume carries it, so remember what the session
+        // is actually on for as long as the pick stands: the model menu's title reads the pair
+        // (`SessionProviderChoices.engineTitle`), and only the stored half can name what is running.
+        if !isLive, pendingResumeProvider == nil { pendingResumeFrom = from }
         provider = slug
         if nextModel != modelID {
             modelID = nextModel
@@ -2016,6 +2125,7 @@ final class ConsoleModel {
         // here would silently re-assert itself on some later resume of this same console.
         pendingResumeProvider = nil
         pendingResumeAccount = nil
+        pendingResumeFrom = nil
         await applyConfig(model: nextModel, permissionMode: nextMode.rawValue,
                           effort: nextEffort.rawValue, provider: slug, account: account)
     }
@@ -2055,6 +2165,7 @@ final class ConsoleModel {
         draftCodexAccount = slug == "codex" ? account : nil
         draftClaudeAccount = slug == "claude" ? account : nil
         draftAntigravityAccount = slug == "antigravity" ? account : nil
+        draftKimiAccount = slug == "kimi" ? account : nil
     }
 
     /// Move this session to another of its runner's accounts — which pins it there — or back onto
@@ -2563,16 +2674,37 @@ final class ConsoleModel {
     /// read from this window.
     private(set) var serverNothingToResend = false
 
-    /// What a retry sends: what is on screen when that answers it, and the server's answer when
-    /// nothing on screen does.
-    var retryMessageText: String {
-        let loaded = lastUserMessageText
-        return loaded.isEmpty ? serverRetryText : loaded
+    /// Whether the window holds words of the READER's to send — the only ones a press may promise
+    /// from this client. False when it holds another session's message (whose press is the server's
+    /// own re-send, so only the server's chooser can say what it carries — and may say there is
+    /// nothing at all) or none at all.
+    ///
+    /// Read off the window alone, deliberately: it decides whether to ask, so it must not depend on
+    /// the answer the asking produces.
+    var retryWordsAreTheReaders: Bool {
+        !lastUserMessageText.isEmpty && lastUserMessage.sessionMessage == nil
     }
 
-    /// Go and get it — only when the window came up empty, and only once per session.
+    /// What a retry sends: what is on screen when the reader sent it, and the server's answer when
+    /// the window has nothing — or when what it holds is another session's, which is not the
+    /// reader's to send again (Web parity: `retryIsTheReaders` in WorkspaceView.tsx).
+    var retryMessageText: String {
+        retryWordsAreTheReaders ? lastUserMessageText : serverRetryText
+    }
+
+    /// Whether the auto-retry card is in its continue state: the server answered that a re-send has
+    /// nothing of anybody's to carry, and the window is not holding words of the reader's that their
+    /// own send would carry instead — those are theirs to send, whatever an earlier look answered.
+    var retryContinues: Bool { serverNothingToResend && !retryWordsAreTheReaders }
+
+    /// Go and get it — when the window cannot answer for the press, and only once per session.
+    ///
+    /// The window answers for words of the reader's own; everything else is the server's chooser to
+    /// answer, and asking is what keeps the card from promising what that chooser would refuse —
+    /// on 2026-10-07 a card quoting the window's bubble (another session's, with the failure on a
+    /// turn nobody sent) had its press answered with 'no message for a retry to re-send'.
     func refreshRetryText() async {
-        guard lastUserMessageText.isEmpty, serverRetryText.isEmpty else { return }
+        guard !retryWordsAreTheReaders, serverRetryText.isEmpty, serverRetrySender == nil else { return }
         let answer = try? await api.retryMessage(sessionID: sessionID)
         serverRetryText = answer?.text ?? ""
         serverRetrySender = answer?.sessionMessage
@@ -2589,12 +2721,15 @@ final class ConsoleModel {
         // the same bubble. When it holds none — a run's message is thousands of events behind the
         // window — the server's words stand in, and there are no files to carry with them.
         let last = lastUserMessage
+        // Whose words this press may carry: the reader's own off their bubble, and otherwise the
+        // server's answer — the only thing that knows what its chooser would re-send.
+        let readers = retryWordsAreTheReaders
         guard !sending, !retryInFlight else { return }
         // Nothing of anybody's to re-send — the failure landed on a turn nobody sent, and the server
         // said so. The press sends the platform's own sentence in the reader's name
         // (`AutoRetryLogic.continueMessage`, quoted under the button they pressed), through the same
         // send as anything typed, so the composer's provider pick travels with it.
-        if last.text.isEmpty, serverRetryText.isEmpty, serverNothingToResend {
+        if !readers, serverRetryText.isEmpty, serverNothingToResend {
             retryInFlight = true
             defer { retryInFlight = false }
             sendingAutoRetry = true
@@ -2602,7 +2737,8 @@ final class ConsoleModel {
             await send(overrideText: AutoRetryLogic.continueMessage, overrideAttachments: [])
             return
         }
-        switch RetryRoute.of(loadedText: last.text, loadedSender: last.sessionMessage,
+        switch RetryRoute.of(loadedText: readers ? last.text : "",
+                             loadedSender: readers ? last.sessionMessage : nil,
                              serverText: serverRetryText, serverSender: serverRetrySender) {
         case .nothing:
             return
@@ -2615,7 +2751,9 @@ final class ConsoleModel {
             defer { retryInFlight = false }
             sendingAutoRetry = true
             defer { sendingAutoRetry = false }
-            await send(overrideText: text, overrideAttachments: last.attachments)
+            // The files of the bubble THOSE words came from — and none at all when they came from
+            // the server's answer, which this client holds no bubble for.
+            await send(overrideText: text, overrideAttachments: readers ? last.attachments : [])
         }
     }
 
@@ -2836,6 +2974,7 @@ final class ConsoleModel {
                 codexAccount: provider == "codex" ? draftCodexAccount : nil,
                 claudeAccount: provider == "claude" ? draftClaudeAccount : nil,
                 antigravityAccount: provider == "antigravity" ? draftAntigravityAccount : nil,
+                kimiAccount: provider == "kimi" ? draftKimiAccount : nil,
                 // The folder page this draft was opened from, if any: the session is filed in it as
                 // it is created (§3.3). Omitted for a draft from a list.
                 folderId: draftFolderID))
@@ -2848,6 +2987,7 @@ final class ConsoleModel {
             draftCodexAccount = nil
             draftClaudeAccount = nil
             draftAntigravityAccount = nil
+            draftKimiAccount = nil
             // The Mode pick is different: without a write-back it lived on this one session, while
             // the runs nobody starts from a composer — task-launched, MCP-created — keep resolving
             // the ACCOUNT default server-side. Web parity, and best-effort: a failed write costs a
@@ -2868,7 +3008,7 @@ final class ConsoleModel {
         var runnerSnapshotLoaded = false
         var agentRunner: Runner?
         if let rid = draftAgent?.runnerId {
-            if let rows = try? await api.runners() {
+            if let rows = await fetchRunners() {
                 if let r = rows.first(where: { $0.id == rid }) {
                     agentRunner = r
                     runnerID = r.id
@@ -3385,6 +3525,10 @@ final class ConsoleModel {
     /// different things: the property is nil while unread, and the read answers nil when this
     /// project is asking nothing — which is the ordinary case and draws no card.
     private(set) var promotion: ProjectPromotionView?
+    /// What the project's line is landing, for the row that names what is in front of a blocked
+    /// candidate (`PromotionCards.blockedByLine`). Kept as last read, and read only while one is
+    /// blocked: the three states that are not blocked have nothing to look past.
+    private(set) var promotionLandings: [ProjectLandTask] = []
     /// The criteria themselves, carried on the confirmation card: confirming a set the reader
     /// cannot read is the "signed unread" the whole path exists to prevent.
     private(set) var projectCriteria: [ProjectCriteriaDocument.Item] = []
@@ -3407,6 +3551,9 @@ final class ConsoleModel {
     /// read is not OPEN either — and `ProjectCriteriaDocument.taskCount` is where a document that
     /// did not say the count is read as none.
     private(set) var projectTaskCount = 0
+    /// How long a problem waits on this project's coordinator before it reaches the owner, off the
+    /// same read — what the start card's list of what still comes to the owner says.
+    private(set) var projectEscalationSeconds = StartProject.defaultEscalationSeconds
     /// The coordinator's request the start card in this conversation is drawn for — kept while the
     /// card is on screen, so a request that stops standing leaves its card stale in place rather
     /// than blank (web's `delivered`), and let go of once the project is started.
@@ -3526,7 +3673,7 @@ final class ConsoleModel {
             // receipt is one of these — the merge already happened, and pointing a reader at it
             // would be pointing them at something with nothing to press.
             case .criteriaDecisionReceipt, .evidenceDecisionReceipt,
-                 .acceptanceConfirmationReceipt, .promotionReceipt:
+                 .acceptanceConfirmationReceipt, .promotionReceipt, .coordinatorQuestionRecord:
                 return nil
             case .acceptanceConfirmation:
                 return waiting(AcceptanceConfirmations.isOpen(acceptanceConfirmation), question: true)
@@ -3702,6 +3849,7 @@ final class ConsoleModel {
             projectStatus = document.status
             projectStarted = document.started
             projectTaskCount = document.taskCount
+            projectEscalationSeconds = document.exceptionEscalationSeconds ?? projectEscalationSeconds
             projectDone = document.doneSubject
             // A read asked for after a press here, and still not DONE: the project was reopened, so
             // the press's own record no longer makes the card a receipt (`ProjectDone.recorded`).
@@ -3714,7 +3862,12 @@ final class ConsoleModel {
         // that fails leaves the last answer standing, and neither may close a card.
         if let items = try? await api.projectOpenItems(projectID: projectID) {
             openItems = items
-            for row in CoordinatorQuestions.open(items) {
+            // The questions that have ended first, each as the record it became where it ended,
+            // with its question card let go of (`adoptQuestionRecords`). Then the open ones — but
+            // not one this console already holds a record of: a read that left before an answer
+            // here and came back after it still lists the question as open.
+            adoptQuestionRecords(items)
+            for row in CoordinatorQuestions.open(items) where questionRecord(row.itemId) == nil {
                 deliver(.coordinatorQuestion(itemID: row.itemId))
             }
             // And the exceptions that became the owner's, which had no card here at all: the
@@ -3741,6 +3894,15 @@ final class ConsoleModel {
         do {
             let current = try await api.currentPromotion(projectID: projectID)
             promotion = current
+            // And, for a candidate a check BLOCKED, what the line is doing about the branch: one of
+            // the project's current landings is holding the merge, and its own `blockingReason` names
+            // what holds THAT — which is the answer "Coordinator is resolving it" never gave (owner
+            // report, 2026-10-08). Independent of the read above, and failing leaves the last answer
+            // standing, like every other read here.
+            if PromotionCards.stage(current) == .blocked,
+               let integration = try? await api.projectIntegration(projectID) {
+                promotionLandings = integration.landTasks
+            }
             if let current, let stage = PromotionCards.stage(current) {
                 // A merge that has HAPPENED is neither asking nor telling anything now: it is a
                 // record, and the conversation draws it where it happened (`adoptPromotionReceipts`
@@ -3831,7 +3993,7 @@ final class ConsoleModel {
     }
 
     /// The start card's settings as the owner has left them: their edits on this request, or the
-    /// coordinator's suggestion untouched.
+    /// coordinator's suggestion with Automatic on (`StartSettingsDraft(_:)`).
     func startDraft(for row: ProjectOpenItemRow) -> StartSettingsDraft {
         if let draft = startDrafts[row.itemId] { return draft }
         guard let request = row.startRequest else {
@@ -3847,18 +4009,19 @@ final class ConsoleModel {
     /// Which closing card this conversation draws (`ProjectDone.slot`), adopted from the reads — one
     /// at a time, the way the browser's `SessionProjectSettlementCard` switches between them: "Is
     /// this project done?" while the coordinator's request stands (or the row says Record as done…),
-    /// its receipt once the project is recorded done, and otherwise "Why is this project not done?".
+    /// its receipt once the project is recorded done, and otherwise nothing. Nothing asks "Why is
+    /// this project not done?" in a conversation any more (the owner's ruling of 2026-10-07
+    /// 04:20Z); Orbit's own DONE is the terminal state of that old card, drawn as it always was.
     ///
     /// Each card is re-derived from the reads on every render, so a request the coordinator filed
     /// again is the same card with the new request in it. A read that has not answered changes
     /// nothing on screen; one that answered and asks nothing takes the closing card down, as the
-    /// browser draws none — "Why is this project not done?" is up only while the project looks
-    /// finished, and the owner's card only while it is asked or recorded.
+    /// browser draws none — the owner's card is up only while it is asked or recorded.
     private func adoptDoneSlot() {
         let live = ProjectDone.live(openItems: openItems, status: projectDone?.status)
         doneRequestRow = live
         switch ProjectDone.slot(subject: projectDone, request: live, waitingKind: sessionWaitingKind,
-                                record: doneRecord, started: projectStarted) {
+                                record: doneRecord) {
         case .none:
             if projectDone != nil {
                 decisionCards.removeAll { $0.kind == .projectDone || $0.kind == .projectNotDone }
@@ -4161,6 +4324,46 @@ final class ConsoleModel {
                 kind: .promotionReceipt(promotion: receipt.promotion),
                 placement: .at(receipt.moment)))
         }
+    }
+
+    /// The same, for the questions this project's coordinator asked that have ended — answered,
+    /// here or at another end, or withdrawn (§5.2 R10, R12): each drawn as the record it became, at
+    /// the moment it ended (`CoordinatorQuestions.receipts`), and its question card let go of. The
+    /// record is what the in-memory "Answered" line could not be: there after a relaunch, and on a
+    /// device that never saw the question open.
+    private func adoptQuestionRecords(_ items: ProjectOpenItemsView) {
+        for receipt in CoordinatorQuestions.receipts(items) {
+            adoptQuestionRecord(receipt.record)
+        }
+    }
+
+    /// One record in, the question it ended out. A record already drawn is replaced only when the
+    /// read says something new about it — the copy this console drew from its own press until the
+    /// read came back, or an answer that has since reached a coordinator — and it keeps its place:
+    /// the moment it ended does not move. One the read stops carrying (it serves the newest fifty)
+    /// keeps its row, for `adoptReceipts`' reason.
+    private func adoptQuestionRecord(_ record: ProjectClosedQuestion) {
+        decisionCards.removeAll { $0.kind == .coordinatorQuestion(itemID: record.itemId) }
+        let receipt = CoordinatorQuestions.Receipt(record: record)
+        let card = DeliveredDecisionCard(kind: .coordinatorQuestionRecord(record: record),
+                                         placement: .at(receipt.moment))
+        if let drawn = decisionCards.firstIndex(where: { $0.id == receipt.id }) {
+            if decisionCards[drawn] != card { decisionCards[drawn] = card }
+        } else {
+            decisionCards.append(card)
+        }
+    }
+
+    /// The record one question became, once it has ended — the row this conversation draws for it,
+    /// else the read's — or nil while it is still a question. What its card and its review sheet
+    /// draw instead of the question.
+    func questionRecord(_ itemID: String) -> ProjectClosedQuestion? {
+        for card in decisionCards {
+            if case .coordinatorQuestionRecord(let record) = card.kind, record.itemId == itemID {
+                return record
+            }
+        }
+        return openItems?.closedQuestions.first { $0.itemId == itemID }
     }
 
     /// Where one delivered proposal stands right now — the whole of what decides whether its
@@ -4521,9 +4724,10 @@ final class ConsoleModel {
     /// Answer the coordinator's question, with this device's own credential — no agent between the
     /// press and the door, and no session header on the request (§5.2 R10).
     ///
-    /// The receipt is handed back rather than kept here: the card that made the press is the one
-    /// that shows what was sent and where it went, which is also what the browser's card does. A
-    /// refusal leaves the card standing and says which refusal it met.
+    /// The card becomes the record of the answer at once, drawn from what was sent and where the
+    /// door says it went (`CoordinatorQuestions.answeredHere`); the read that follows replaces it
+    /// with the server's copy of the same record, so nothing stands empty between the press and
+    /// the read. A refusal leaves the card standing and says which refusal it met.
     func answerQuestion(_ row: ProjectOpenItemRow, chosen: CoordinatorQuestionChoice?,
                         text: String) async -> OwnerAnswerReceipt? {
         guard let projectID, let question = row.question,
@@ -4532,6 +4736,8 @@ final class ConsoleModel {
         do {
             let receipt = try await api.answerOpenItem(projectID: projectID, itemID: row.itemId,
                                                        request)
+            adoptQuestionRecord(CoordinatorQuestions.answeredHere(row: row, question: question,
+                                                                  request: request, receipt: receipt))
             await refreshRulerQuestions(force: true)
             return receipt
         } catch {

@@ -1,6 +1,5 @@
 import { Fragment, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Button } from 'antd';
 import type { LoginEngine } from '@orbit/shared';
 import { runsOnEnvKey } from '../lib/engineAccounts';
 import { encodeId } from '../lib/idCodec';
@@ -12,6 +11,7 @@ import { ProviderTile } from './ProviderGallery';
 import { engineHealthOf, rowKindOf } from './RunnerEngines';
 import { ENGINE_NAME, RunnerSignIn } from './RunnerSignIn';
 import type { Runner } from './TasksSidePanel';
+import { Button } from './ui/Button';
 
 /**
  * The top of the Infrastructure page (docs/mocks/infrastructure-page/02-after-infrastructure.png):
@@ -88,7 +88,7 @@ export function NeedsAttention({ runners, pools }: { runners: Runner[]; pools: P
               <b>{ENGINE_NAME[engine]}</b> is signed out on <b>{machineName(runner)}</b>
               <span className="infra-attn-sub"> · Sessions there can’t use it</span>
             </span>
-            <Button size="small" type="primary" onClick={() => setSignIn(signIn === panel ? null : panel)}>
+            <Button size="small" variant="primary" onClick={() => setSignIn(signIn === panel ? null : panel)}>
               Sign in
             </Button>
             {signIn === panel && (

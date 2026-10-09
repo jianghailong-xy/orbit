@@ -304,6 +304,19 @@ final class ProjectDetailModel {
         }
     }
 
+    /// Retry, on a landing job the server judged timed out (`POST /projects/:id/integration/jobs/
+    /// :jobId/retry`): its silent generation ends and the next one is queued. The answer is the line
+    /// read again, which the job list redraws from at once; then the page reads everything again,
+    /// since the lanes move with it. Throws what the server answered, for the job's row to say.
+    func retryIntegrationJob(_ jobID: String) async throws {
+        integration = try await api.retryIntegrationJob(projectID, jobID: jobID)
+        integrationUnread = false
+        integrationReadAt = Date()
+        integrationReadFailed = false
+        onChanged()
+        await load()
+    }
+
     /// Pause project, or Resume project — the owner's, and a press rather than a setting: it stops
     /// the project moving at once, and resuming undoes it.
     func setPaused(_ paused: Bool) async -> String? {

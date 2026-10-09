@@ -11,6 +11,7 @@ import { Prisma, ProjectStatus, RunStatus } from '@prisma/client';
 import {
   CONTINUE_MESSAGE,
   RunEventType,
+  isAccountEngine,
   isAuthErrorText,
   isRetryableApiErrorText,
   isUsageLimitErrorText,
@@ -48,7 +49,10 @@ import {
   confirmationReviewRetryTurnId,
   isConfirmationReviewContentTurn,
 } from '../tasks/owner-confirmation-review-turn';
-import { runAccount } from '../providers/plan-usage-accounts';
+import { accountAfterUsageLimitAt, runAccount } from '../providers/plan-usage-accounts';
+import { ACCOUNT_CHOICE, ACCOUNT_PINNED } from '../providers/account';
+import { ACCOUNT_MOVE_CAPABILITY } from '../providers/account-move-capability';
+import { isBuiltinProvider } from '../providers/custom-provider';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
 import {
   classifyTransactionError,
@@ -348,14 +352,21 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         startedAt: true,
         runtimeSessionId: true,
         assignedRunner: {
-          select: { planUsage: true, engines: true, status: true, lastHeartbeatAt: true },
+          select: { planUsage: true, engines: true, status: true, lastHeartbeatAt: true, capabilities: true, accountPauses: true },
         },
-        // Which of the runner's Codex, Claude or Antigravity accounts the run spends, whose quota alone
-        // can hold it back: the one picked for the session, else its workspace's.
+        // Which of the runner's Codex, Claude, Antigravity or Kimi accounts the run spends: the one
+        // picked for the session, else its workspace's. Its quota alone holds back a session somebody
+        // pinned there; one on Automatic waits only while every other account is spent too.
         codexAccount: true,
         claudeAccount: true,
         antigravityAccount: true,
-        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true } },
+        kimiAccount: true,
+        codexAccountPinned: true,
+        claudeAccountPinned: true,
+        antigravityAccountPinned: true,
+        kimiAccountPinned: true,
+        providerBuiltin: true,
+        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
       },
     });
     if (due.length === 0) return;
@@ -486,7 +497,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           session.provider,
           now,
         );
-        const blockedUntil = poolResumesAt
+        const ownBlockedUntil = poolResumesAt
           ? (poolResumesAt > now ? poolResumesAt : null)
           : planUsageBlockedUntil(
               withEnginePlanUsage(
@@ -502,10 +513,36 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
                   codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
                   claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
                   antigravityAccount: session.antigravityAccount ?? session.workspace?.antigravityAccount,
+                  kimiAccount: session.kimiAccount ?? session.workspace?.kimiAccount,
                 },
                 session.assignedRunner?.engines,
               ),
             );
+        // A session on Automatic is not held by its own account alone, on a runner that carries its
+        // conversation to another: room on another of the runner's accounts re-sends it now — its
+        // dispatch moves it there (accountBeforeDispatch) — and with every one spent it waits for the
+        // first to free up (accountAfterUsageLimitAt), not for this one's reset, which for a weekly
+        // limit can be days after another account's 5 hours come back.
+        const engine = ownBlockedUntil
+          && isAccountEngine(session.provider)
+          && isBuiltinProvider(session.provider, session.providerBuiltin)
+          && (session.assignedRunner?.capabilities ?? []).includes(ACCOUNT_MOVE_CAPABILITY[session.provider])
+          ? session.provider
+          : null;
+        const elsewhere = engine
+          ? accountAfterUsageLimitAt(
+              engine,
+              { account: session[ACCOUNT_CHOICE[engine]], pinned: session[ACCOUNT_PINNED[engine]] },
+              session.workspace,
+              session.assignedRunner?.engines,
+              session.assignedRunner?.planUsage,
+              now,
+              session.assignedRunner?.accountPauses,
+            )
+          : null;
+        const blockedUntil = ownBlockedUntil && elsewhere && elsewhere < ownBlockedUntil
+          ? (elsewhere > now ? elsewhere : null)
+          : ownBlockedUntil;
         if (blockedUntil) {
           await this.rearm(session.id, session.status, blockedUntil, attempts, observed);
           continue;

@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntdApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SignInMethods } from '../lib/queries';
@@ -21,7 +20,7 @@ vi.mock('../api', async (importOriginal) => ({
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() };
 vi.mock('../lib/toast', () => ({ useToast: () => toast }));
 const { api } = await import('../api');
-const { AdminUsersPage, GOOGLE_SIGN_IN_ONLY, UNLINK_GOOGLE } = await import('./AdminUsersPage');
+const { AdminUsersPage, GOOGLE_SIGN_IN_ONLY, GOOGLE_SIGN_IN_ONLY_HINT, UNLINK_GOOGLE } = await import('./AdminUsersPage');
 
 interface Row {
   id: string;
@@ -72,27 +71,30 @@ async function open(): Promise<void> {
     root!.render(
       <MemoryRouter initialEntries={['/admin']}>
         <QueryClientProvider client={client}>
-          <AntdApp>
-            <AdminUsersPage />
-          </AntdApp>
+          <AdminUsersPage />
         </QueryClientProvider>
       </MemoryRouter>,
     );
   });
-  await vi.waitFor(() => expect(container!.querySelectorAll('.ant-table-row').length).toBe(users.length));
+  await vi.waitFor(() => expect(userRows().length).toBe(users.length));
   await settle();
 }
 
 const button = (within: ParentNode | null | undefined, label: string) =>
   [...(within?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((b) => b.textContent?.trim() === label);
-const rowOf = (email: string) =>
-  [...container!.querySelectorAll<HTMLElement>('.ant-table-row')].find((row) => row.querySelector('td')?.textContent === email);
-const headers = () => [...container!.querySelectorAll('.ant-table-thead th')].map((th) => th.textContent?.trim() ?? '');
+/** The users table's rows (its body's rows, less the one that says it is empty). */
+const userRows = () =>
+  [...container!.querySelectorAll<HTMLTableRowElement>('tbody tr')].filter((row) => row.cells.length > 1);
+const rowOf = (email: string) => userRows().find((row) => row.querySelector('td')?.textContent === email);
+const headers = () => [...container!.querySelectorAll('thead th')].map((th) => th.textContent?.trim() ?? '');
 /** The text of `email`'s cell under the column headed `title`. */
 const cell = (email: string, title: string) => rowOf(email)?.querySelectorAll('td')[headers().indexOf(title)]?.textContent?.trim();
 const confirmDialog = () => document.body.querySelector<HTMLElement>('.orbit-confirm[data-open]');
+/** The open dialog named Add user, by the title it is labelled by. */
 const addUserDialog = () =>
-  [...document.body.querySelectorAll<HTMLElement>('.ant-modal')].find((modal) => modal.querySelector('.ant-modal-title')?.textContent === 'Add user');
+  [...document.body.querySelectorAll<HTMLElement>('[role="dialog"]')].find(
+    (d) => document.getElementById(d.getAttribute('aria-labelledby') ?? '')?.textContent === 'Add user',
+  );
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -151,7 +153,7 @@ afterEach(async () => {
 describe('Admin → Users · Google sign-in', { timeout: 60_000 }, () => {
   it('the list says how each account signs in and when it was opened', async () => {
     await open();
-    expect(headers()).toEqual(['Email', 'Name', 'Role', 'Sign-in', 'Created', '']);
+    expect(headers()).toEqual(['Email', 'Name', 'Role', 'Status', 'Sign-in', 'Created', '']);
     expect(cell('admin@example.test', 'Sign-in')).toBe('Password');
     expect(cell('dev@example.test', 'Sign-in')).toBe('PasswordGoogle');
     expect(cell('gina@gmail.com', 'Sign-in')).toBe('Google');
@@ -186,7 +188,7 @@ describe('Admin → Users · Google sign-in', { timeout: 60_000 }, () => {
     expect(button(rowOf('dev@example.test'), UNLINK_GOOGLE)).toBeTruthy();
   });
 
-  it('Add user offers Google sign-in only while Google sign-in is on, and creates the account without a password', async () => {
+  it('Add user offers Google sign-in only while Google sign-in is on, says which addresses it can work for, and creates the account without a password', async () => {
     await open();
     await click(button(container, 'Add user'), 'Add user');
     const dialog = addUserDialog();
@@ -195,7 +197,12 @@ describe('Admin → Users · Google sign-in', { timeout: 60_000 }, () => {
     const googleOnly = [...dialog!.querySelectorAll<HTMLElement>('label.orbit-choice')].find((label) => label.textContent === GOOGLE_SIGN_IN_ONLY);
     await click(googleOnly?.querySelector('[role="checkbox"]'), GOOGLE_SIGN_IN_ONLY);
     expect(googleOnly?.querySelector('[role="checkbox"]')?.getAttribute('aria-checked')).toBe('true');
-    expect(dialog?.textContent).toContain('No password is set: they sign in with the Google account of this email address.');
+    // The limit is stated where the administrator chooses it (§5.2): only Gmail or Workspace, and a
+    // password for anyone else, because a passwordless account no Google account vouches for has no way in.
+    expect(dialog?.textContent).toContain(GOOGLE_SIGN_IN_ONLY_HINT);
+    expect(dialog?.textContent).toContain('must be a Gmail or Google Workspace address');
+    expect(dialog?.textContent).toContain('give them a password instead');
+    expect(dialog?.textContent).not.toContain('A one-time password is generated and shown once after creating.');
 
     await click(button(dialog, 'Create'), 'Create');
     expect(requests.filter((r) => r.path === '/admin/users' && r.method === 'POST').map((r) => r.body)).toEqual([

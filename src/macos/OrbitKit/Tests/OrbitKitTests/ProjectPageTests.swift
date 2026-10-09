@@ -261,14 +261,16 @@ final class ProjectPageTests: XCTestCase {
 
     // MARK: The landing in flight
 
-    /// The row the owner approved: `◌ Landing <task> · checking · 1m 20s`.
+    /// The row the owner approved: `◌ Landing <task> · checking · 1m 20s`, with the runner's own
+    /// last report under it — a claimed job reports, and the row says how long ago it did.
     func testTheLandingLineNamesTheTaskAndCountsSecondsWhileTheChecksRun() {
         let view = ProjectIntegrationView(
             integratingCount: 1, queuedCount: 0,
             inFlight: .init(taskTitle: "T2 wiki 契约、迁移与共享类型", state: "RUNNING",
-                            startedAt: iso(80), kind: "LAND_TASK", phase: "CHECK"))
-        XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now), ProjectPage.LandingLine(
-            what: "T2 wiki 契约、迁移与共享类型", running: true, state: "checking", clock: "1m 20s", word: "Landing"))
+                            startedAt: iso(80), kind: "LAND_TASK", phase: "CHECK", heartbeatAt: iso(0)))
+        XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now, updatedAt: Self.now), ProjectPage.LandingLine(
+            what: "T2 wiki 契约、迁移与共享类型", running: true, state: "checking", clock: "1m 20s",
+            word: "Landing", updated: "Updated just now"))
     }
 
     func testTheLandingLineIsQueuedAndStillWhileTheJobWaitsItsTurn() {
@@ -284,13 +286,13 @@ final class ProjectPageTests: XCTestCase {
     func testTheLandingLineNamesTheCountWhenSeveralAreInFlight() {
         let view = ProjectIntegrationView(
             integratingCount: 2, queuedCount: 1,
-            inFlight: .init(taskTitle: "T1", state: "RUNNING", startedAt: iso(80)))
+            inFlight: .init(taskTitle: "T1", state: "RUNNING", startedAt: iso(80), heartbeatAt: iso(0)))
         XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now)?.what, "3 jobs")
     }
 
     func testLandingRefreshFailureFreezesTheClockAndStopsClaimingActivity() {
         let view = ProjectIntegrationView(integratingCount: 1, inFlight: .init(
-            state: "RUNNING", startedAt: iso(80), kind: "LAND_TASK", phase: "CHECK"))
+            state: "RUNNING", startedAt: iso(80), kind: "LAND_TASK", phase: "CHECK", heartbeatAt: iso(0)))
         let later = Self.now.addingTimeInterval(60)
         let line = ProjectPage.landingLine(view, now: later, updatedAt: Self.now, refreshFailed: true)
         XCTAssertEqual(line?.state, "Update unavailable")
@@ -302,14 +304,45 @@ final class ProjectPageTests: XCTestCase {
         XCTAssertEqual(ProjectPage.landingLine(view, now: later, updatedAt: later)?.running, true)
     }
 
+    /// A runner that has gone quiet is a fact about the REPORTS, and the row says exactly that.
+    /// It used to say "Update unavailable", which read as "the app cannot see the server" and, to a
+    /// reader watching a landing sit still, as "this timed out" — neither of which is what happened.
     func testLandingHeartbeatCanBeStaleEvenWhenTheAPIReadSucceeds() {
         let view = ProjectIntegrationView(integratingCount: 1, inFlight: .init(
             state: "RUNNING", startedAt: iso(720), kind: "LAND_TASK", phase: "CHECK", heartbeatAt: iso(660)))
         let line = ProjectPage.landingLine(view, now: Self.now, updatedAt: Self.now)
         XCTAssertEqual(line?.running, false)
-        XCTAssertEqual(line?.state, "Update unavailable")
+        XCTAssertEqual(line?.state, ProjectPage.landingNoReport)
         XCTAssertEqual(line?.clock, "1m 0s")
-        XCTAssertEqual(line?.updated, "Updated 11m ago")
+        XCTAssertEqual(line?.updated, "No report for 11m")
+        // Never a timeout: a timeout is the job's own verdict, and the server words it in the
+        // landing's `blockingReason` (`LandTaskStatus`), which is the only place it appears.
+        XCTAssertFalse("\(line?.state ?? "") \(line?.updated ?? "")".lowercased().contains("timed out"))
+        // A claim whose runner has not reported once says that instead of counting a silence it
+        // cannot measure.
+        let silentFromTheStart = ProjectIntegrationView(integratingCount: 1, inFlight: .init(
+            state: "RUNNING", startedAt: iso(240), kind: "LAND_TASK", phase: "FETCH"))
+        XCTAssertEqual(ProjectPage.landingLine(silentFromTheStart, now: Self.now, updatedAt: Self.now)?.updated,
+                       ProjectPage.landingNoReportYet)
+    }
+
+    /// The other half of "how long is this taking": a job claimed 2m 24s after it was queued, and
+    /// 4m 41s into its work, is a different story from one that has been working for 7m 5s.
+    func testTheLandingLineSaysWhatTheJobWaitedBeforeItWasClaimed() {
+        let view = ProjectIntegrationView(integratingCount: 1, inFlight: .init(
+            taskTitle: "C5", state: "RUNNING", startedAt: iso(281), kind: "LAND_TASK", phase: "FETCH",
+            heartbeatAt: iso(5), waitMs: 143_637))
+        let line = ProjectPage.landingLine(view, now: Self.now, updatedAt: Self.now)
+        XCTAssertEqual(line?.clock, "4m 41s")
+        XCTAssertEqual(line?.wait, "2m 23s")
+        // A queued job's whole clock IS its wait, which `Queued for` already says.
+        let queued = ProjectIntegrationView(integratingCount: 0, queuedCount: 1, inFlight: .init(
+            taskTitle: "C5", state: "QUEUED", startedAt: iso(126), kind: "LAND_TASK", waitMs: 126_000))
+        XCTAssertEqual(ProjectPage.landingLine(queued, now: Self.now)?.clockLabel, "Queued for")
+        XCTAssertNil(ProjectPage.landingLine(queued, now: Self.now)?.wait)
+        // And a job that never waited says nothing about waiting.
+        XCTAssertNil(ProjectPage.landingLine(ProjectIntegrationView(integratingCount: 1, inFlight: .init(
+            state: "RUNNING", startedAt: iso(80), heartbeatAt: iso(0))), now: Self.now)?.wait)
     }
 
     func testManualAndPausedReadyWorkUseTheirActualStartConditions() {
@@ -334,16 +367,16 @@ final class ProjectPageTests: XCTestCase {
     func testTheLandingLineKeepsItsWordsForAJobWithNoTaskAndNoReadableClock() {
         let view = ProjectIntegrationView(
             integratingCount: 1, queuedCount: 0,
-            inFlight: .init(taskTitle: nil, state: "RUNNING", startedAt: "not a date"))
-        XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now), ProjectPage.LandingLine(
-            what: nil, running: true, state: "running", clock: "0m 0s"))
+            inFlight: .init(taskTitle: nil, state: "RUNNING", startedAt: "not a date", heartbeatAt: iso(0)))
+        XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now, updatedAt: Self.now), ProjectPage.LandingLine(
+            what: nil, running: true, state: "running", clock: "0m 0s", updated: "Updated just now"))
     }
 
     func testMergeJobsDescribeTheirKindAndActualPhase() {
         for (kind, word) in ProjectPage.integrationJobWords {
             for (phase, state) in ProjectPage.integrationPhaseWords {
                 let view = ProjectIntegrationView(inFlight: .init(
-                    state: "RUNNING", startedAt: iso(80), kind: kind, phase: phase))
+                    state: "RUNNING", startedAt: iso(80), kind: kind, phase: phase, heartbeatAt: iso(0)))
                 XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now)?.word, word)
                 XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now)?.state, state)
             }
@@ -366,6 +399,232 @@ final class ProjectPageTests: XCTestCase {
         // A clock a little behind the server (skew) counts from zero, never backwards.
         XCTAssertEqual(ProjectPage.landingClock(-5), "0m 0s")
         XCTAssertEqual(RelativeTime.span(80), "1m")   // what this deliberately is not
+    }
+
+    // MARK: The jobs in flight (docs/mocks/landing-jobs-sheet)
+
+    /// One `inFlightJobs` element, its instants counted in seconds before `now`.
+    private func job(_ id: String, kind: String = "LAND_TASK", state: String = "RUNNING",
+                     phase: String? = "FETCH", taskId: String? = "t-c5", title: String? = "C5 · 托管 runner",
+                     generation: Int = 1, started: TimeInterval = 80, queued: TimeInterval = 95,
+                     heartbeat: TimeInterval? = 20, runner: String? = "workstation-gpu",
+                     retriedBy: String? = nil, timedOut: Bool = false, limit: Int? = 600,
+                     retryable: Bool = false) -> ProjectIntegrationJob {
+        ProjectIntegrationJob(jobId: id, kind: kind, state: state, phase: phase, taskId: taskId, taskTitle: title,
+                              generation: generation, startedAt: iso(started), queuedAt: iso(queued),
+                              heartbeatAt: heartbeat.map { iso($0) }, runnerName: runner, retriedBy: retriedBy,
+                              timedOut: timedOut, limitSeconds: limit, retryable: retryable)
+    }
+
+    /// The 21:57 screen: a landing whose runner took it 110 minutes ago and has said nothing since,
+    /// and a merge into main queued behind it.
+    private func stuckLanding() -> ProjectIntegrationView {
+        let stuck = job("j-c5", started: 6_630, queued: 6_640, heartbeat: 6_620, timedOut: true, retryable: true)
+        let merge = job("j-merge", kind: "LAND_PROMOTION", state: "QUEUED", phase: nil, taskId: nil, title: nil,
+                        started: 2_468, queued: 2_468, heartbeat: nil, runner: nil, limit: nil)
+        return ProjectIntegrationView(
+            integratingCount: 1, queuedCount: 1,
+            inFlight: .init(taskTitle: stuck.taskTitle, state: "RUNNING", startedAt: stuck.startedAt,
+                            kind: "LAND_TASK", phase: "FETCH", heartbeatAt: stuck.heartbeatAt),
+            inFlightJobs: [stuck, merge])
+    }
+
+    func testTheHelpersSayTheCountTheLimitTheTitleAndTheClockTime() throws {
+        XCTAssertEqual(ProjectPage.landingJobsCount(2, timedOut: 0), "2 jobs")
+        XCTAssertEqual(ProjectPage.landingJobsCount(2, timedOut: 1), "2 jobs · 1 timed out")
+        XCTAssertEqual(ProjectPage.landingLimit(600), "limit 10m")
+        XCTAssertEqual(ProjectPage.landingLimit(4_500), "limit 75m")
+        // Rounded as `Math.round` rounds: half a minute goes up.
+        XCTAssertEqual(ProjectPage.landingLimit(630), "limit 11m")
+        XCTAssertEqual(ProjectPage.landingLimit(629), "limit 10m")
+        XCTAssertEqual(ProjectPage.landingJobsTitle(1), "1 job in flight")
+        XCTAssertEqual(ProjectPage.landingJobsTitle(2), "2 jobs in flight")
+        XCTAssertEqual(ProjectPage.landingJobsTitle(0), "0 jobs in flight")
+        // A local 24-hour clock, in the zone it is asked for: the reader's own by default.
+        let claimed = try XCTUnwrap(RelativeTime.parse("2026-10-07T12:07:30.000Z"))
+        let utc = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let east = try XCTUnwrap(TimeZone(secondsFromGMT: 8 * 3_600))
+        let west = try XCTUnwrap(TimeZone(secondsFromGMT: -4 * 3_600))
+        XCTAssertEqual(ProjectPage.landingClockTime(claimed, timeZone: utc), "12:07")
+        XCTAssertEqual(ProjectPage.landingClockTime(claimed, timeZone: east), "20:07")
+        XCTAssertEqual(ProjectPage.landingClockTime(claimed, timeZone: west), "08:07")
+        XCTAssertEqual(ProjectPage.landingClockTime(claimed.addingTimeInterval(36_480), timeZone: utc), "22:15")
+        XCTAssertEqual(ProjectPage.landingClockTime(claimed.addingTimeInterval(43_500), timeZone: utc), "00:12")
+        // The one cached formatter goes back to the zone asked for, call after call.
+        XCTAssertEqual(ProjectPage.landingClockTime(claimed, timeZone: utc), "12:07")
+    }
+
+    /// The row on a server that lists its jobs: the count says how many timed out, and a lead the
+    /// server judged timed out says so — how long nothing was heard, against its limit.
+    func testTheLandingLineSaysTheLeadTimedOutAndCountsTheTimedOutJobs() {
+        XCTAssertEqual(ProjectPage.landingLine(stuckLanding(), now: Self.now, updatedAt: Self.now),
+                       ProjectPage.LandingLine(what: "2 jobs · 1 timed out", running: false, state: "Timed out",
+                                               clock: "110m", word: "Landing", clockLabel: "No report for",
+                                               updated: "limit 10m", timedOut: true))
+        // One job: the name slot is its task, as ever.
+        let one = ProjectIntegrationView(
+            integratingCount: 1, queuedCount: 0,
+            inFlight: .init(taskTitle: "C5", state: "RUNNING", startedAt: iso(6_630), kind: "LAND_TASK",
+                            phase: "CHECK", heartbeatAt: nil),
+            inFlightJobs: [job("j", phase: "CHECK", started: 6_630, heartbeat: nil, timedOut: true, limit: 4_200)])
+        let line = ProjectPage.landingLine(one, now: Self.now, updatedAt: Self.now)
+        XCTAssertEqual(line?.what, "C5")
+        XCTAssertEqual(line?.clock, "110m", "no report since the claim, when the runner never made one")
+        XCTAssertEqual(line?.updated, "limit 70m")
+        // Jobs in flight that did not time out: the count alone.
+        let running = ProjectIntegrationView(
+            integratingCount: 1, queuedCount: 1,
+            inFlight: .init(taskTitle: "C5", state: "RUNNING", startedAt: iso(80), kind: "LAND_TASK", phase: "FETCH",
+                            heartbeatAt: iso(20)),
+            inFlightJobs: [job("j1"), job("j2", state: "QUEUED", phase: nil, heartbeat: nil, runner: nil)])
+        XCTAssertEqual(ProjectPage.landingLine(running, now: Self.now, updatedAt: Self.now),
+                       ProjectPage.LandingLine(what: "2 jobs", running: true, state: "fetching", clock: "1m 20s",
+                                               word: "Landing", updated: "Updated just now"))
+    }
+
+    /// "Update unavailable" is this app unable to read the server, and it outranks what the last
+    /// read said — a timed-out lead included: nobody knows what it is doing now.
+    func testTheLandingLineCannotReadTheServerEvenWhenTheLeadTimedOut() {
+        for (updatedAt, failed) in [(Self.now, true), (Self.now.addingTimeInterval(-91), false)] {
+            let line = ProjectPage.landingLine(stuckLanding(), now: Self.now, updatedAt: updatedAt,
+                                               refreshFailed: failed)
+            XCTAssertEqual(line?.state, "Update unavailable")
+            XCTAssertEqual(line?.running, false)
+            XCTAssertEqual(line?.timedOut, false)
+            XCTAssertEqual(line?.what, "2 jobs · 1 timed out")
+            XCTAssertEqual(line?.clockLabel, "Elapsed")
+            // Frozen at the runner's last report, ten seconds after its claim.
+            XCTAssertEqual(line?.clock, "0m 10s")
+            XCTAssertEqual(line?.updated, "Updated 110m ago")
+        }
+    }
+
+    /// A server that lists its jobs decides what timed out; an old heartbeat alone is no longer
+    /// "Update unavailable" — a long check is silent for as long as it runs.
+    func testAServerThatListsItsJobsIsNotSecondGuessedFromTheHeartbeat() {
+        let inFlight = ProjectIntegrationInFlight(taskTitle: "T", state: "RUNNING", startedAt: iso(720),
+                                                  kind: "LAND_TASK", phase: "CHECK", heartbeatAt: iso(660))
+        let listed = ProjectIntegrationView(integratingCount: 1, inFlight: inFlight, inFlightJobs: [
+            job("j", phase: "CHECK", started: 720, heartbeat: 660, limit: 4_200),
+        ])
+        XCTAssertEqual(ProjectPage.landingLine(listed, now: Self.now, updatedAt: Self.now),
+                       ProjectPage.LandingLine(what: "T", running: true, state: "checking", clock: "12m 0s",
+                                               word: "Landing", updated: "Updated 11m ago"))
+        // An empty list is still a server that lists them; no list at all is an older server, whose
+        // row reads the reports for itself — and reads them for what they are: a runner that has
+        // said nothing for a while is "No report", never a timeout (only the job's own verdict, the
+        // server's `blockingReason`, may word one) and never "Update unavailable", which is this app
+        // failing to READ the server.
+        let empty = ProjectIntegrationView(integratingCount: 1, inFlight: inFlight, inFlightJobs: [])
+        XCTAssertEqual(ProjectPage.landingLine(empty, now: Self.now, updatedAt: Self.now)?.state, "checking")
+        let older = ProjectIntegrationView(integratingCount: 1, inFlight: inFlight)
+        XCTAssertEqual(ProjectPage.landingLine(older, now: Self.now, updatedAt: Self.now)?.state, "No report")
+        XCTAssertEqual(ProjectPage.landingLine(older, now: Self.now, updatedAt: Self.now)?.updated,
+                       "No report for 11m")
+        XCTAssertEqual(ProjectPage.landingLine(older, now: Self.now, updatedAt: Self.now)?.timedOut, false)
+    }
+
+    /// One line per job, in the server's order, each drawn as the row: its task in the name slot,
+    /// a running job's phase and clock, a queued job's wait.
+    func testTheJobLinesDrawEachJobAsTheRow() {
+        let view = ProjectIntegrationView(
+            integratingCount: 1, queuedCount: 2, inFlight: .init(state: "RUNNING", startedAt: iso(80)),
+            inFlightJobs: [
+                job("j1"),
+                job("j2", phase: "REBASE", started: 130, heartbeat: nil),
+                // Re-queued after an earlier claim: the raw row still carries that claim's step and
+                // report, and neither is this wait's.
+                job("j3", state: "QUEUED", phase: "PUSH", started: 2_468, heartbeat: 3_000, runner: nil, limit: nil),
+            ])
+        let lines = ProjectPage.landingJobLines(view, now: Self.now, updatedAt: Self.now.addingTimeInterval(-75))
+        XCTAssertEqual(lines.map(\.id), ["j1", "j2", "j3"])
+        XCTAssertEqual(lines[0], ProjectPage.LandingJobLine(
+            jobId: "j1", taskId: "t-c5",
+            line: ProjectPage.LandingLine(what: "C5 · 托管 runner", running: true, state: "fetching", clock: "1m 20s",
+                                          word: "Landing", updated: "Updated just now"),
+            detail: nil, retryable: false))
+        // No report yet: how fresh the line is comes from the read, as the row's does.
+        XCTAssertEqual(lines[1].line, ProjectPage.LandingLine(what: "C5 · 托管 runner", running: true,
+                                                               state: "rebasing", clock: "2m 10s", word: "Landing",
+                                                               updated: "Updated 1m ago"))
+        XCTAssertEqual(lines[2].line, ProjectPage.LandingLine(what: "C5 · 托管 runner", running: false,
+                                                               state: "queued", clock: "41m 8s", word: "Landing",
+                                                               clockLabel: "Queued for", updated: "Updated 1m ago"))
+        XCTAssertNil(lines[2].detail)
+        XCTAssertEqual(ProjectPage.landingJobLines(ProjectIntegrationView(
+            integratingCount: 1, inFlight: .init(state: "RUNNING", startedAt: iso(80))), now: Self.now), [],
+            "an older server lists nothing")
+    }
+
+    /// A timed-out job says who took it and when, where it stopped, and whether a push may already
+    /// have happened — and offers Retry when the server says it can be retried.
+    func testATimedOutJobSaysWhereItsRunnerStoppedAndOffersRetry() throws {
+        let claimed = try XCTUnwrap(RelativeTime.parse(iso(6_630)))
+        let at = ProjectPage.landingClockTime(claimed)
+        let lines = ProjectPage.landingJobLines(stuckLanding(), now: Self.now, updatedAt: Self.now)
+        XCTAssertEqual(lines.map(\.id), ["j-c5", "j-merge"])
+        XCTAssertEqual(lines[0], ProjectPage.LandingJobLine(
+            jobId: "j-c5", taskId: "t-c5",
+            line: ProjectPage.LandingLine(what: "C5 · 托管 runner", running: false, state: "Timed out", clock: "110m",
+                                          word: "Landing", clockLabel: "No report for", updated: "limit 10m",
+                                          timedOut: true),
+            detail: "Runner workstation-gpu took it at \(at) · stopped at fetching · no push recorded",
+            retryable: true))
+        // A promotion lands no single task: no title, nothing to open.
+        XCTAssertEqual(lines[1], ProjectPage.LandingJobLine(
+            jobId: "j-merge", taskId: nil,
+            line: ProjectPage.LandingLine(what: nil, running: false, state: "queued", clock: "41m 8s",
+                                          word: "Merge to main", clockLabel: "Queued for", updated: "Updated just now"),
+            detail: nil, retryable: false))
+
+        func detail(phase: String?, runner: String? = "workstation-gpu") -> String? {
+            let view = ProjectIntegrationView(inFlight: .init(state: "RUNNING", startedAt: iso(6_630)), inFlightJobs: [
+                job("j", phase: phase, started: 6_630, heartbeat: 6_620, runner: runner, timedOut: true),
+            ])
+            return ProjectPage.landingJobLines(view, now: Self.now, updatedAt: Self.now).first?.detail
+        }
+        XCTAssertEqual(detail(phase: "PUSH"), "Runner workstation-gpu took it at \(at) · stopped at pushing · may have been pushed")
+        XCTAssertEqual(detail(phase: "VERIFY"), "Runner workstation-gpu took it at \(at) · stopped at verifying · may have been pushed")
+        XCTAssertEqual(detail(phase: "MERGE"), "Runner workstation-gpu took it at \(at) · stopped at merging · no push recorded")
+        XCTAssertEqual(detail(phase: nil, runner: nil), "The runner took it at \(at) · stopped at running · no push recorded")
+        // Retry is the server's to offer: a timed-out job it will not take has none.
+        let refused = ProjectIntegrationView(inFlight: .init(state: "RUNNING", startedAt: iso(6_630)), inFlightJobs: [
+            job("j", started: 6_630, heartbeat: 6_620, timedOut: true, retryable: false),
+        ])
+        XCTAssertEqual(ProjectPage.landingJobLines(refused, now: Self.now, updatedAt: Self.now).first?.retryable, false)
+    }
+
+    /// The run a retry started says which generation it is, who asked, and when.
+    func testARetriedJobSaysItsGenerationAndWhoAsked() throws {
+        let asked = try XCTUnwrap(RelativeTime.parse(iso(12)))
+        let at = ProjectPage.landingClockTime(asked)
+        let view = ProjectIntegrationView(inFlight: .init(state: "RUNNING", startedAt: iso(12)), inFlightJobs: [
+            job("j2", generation: 2, started: 12, queued: 12, heartbeat: 2, retriedBy: "OWNER"),
+            job("j3", state: "QUEUED", phase: nil, generation: 3, started: 12, queued: 12, heartbeat: nil, runner: nil,
+                retriedBy: "COORDINATOR", limit: nil),
+        ])
+        let lines = ProjectPage.landingJobLines(view, now: Self.now, updatedAt: Self.now)
+        XCTAssertEqual(lines.map(\.detail), ["Generation 2 · retried by you at \(at)",
+                                             "Generation 3 · retried by the coordinator at \(at)"])
+        XCTAssertEqual(lines[0].line.state, "fetching")
+        XCTAssertEqual(lines[0].line.clock, "0m 12s")
+    }
+
+    /// While this app cannot read the server, every job says so — the timed-out one too — and its
+    /// clock stops where the row's does. What the last read said under it stays.
+    func testTheJobLinesCannotReadTheServerEither() {
+        let lines = ProjectPage.landingJobLines(stuckLanding(), now: Self.now, updatedAt: Self.now,
+                                                refreshFailed: true)
+        XCTAssertEqual(lines.map(\.line.state), ["Update unavailable", "Update unavailable"])
+        XCTAssertEqual(lines.map(\.line.timedOut), [false, false])
+        XCTAssertEqual(lines.map(\.line.running), [false, false])
+        XCTAssertEqual(lines[0].line.clock, "0m 10s")
+        XCTAssertEqual(lines[0].line.updated, "Updated 110m ago")
+        XCTAssertEqual(lines[0].detail?.hasSuffix("stopped at fetching · no push recorded"), true)
+        XCTAssertEqual(lines[0].retryable, true)
+        XCTAssertEqual(ProjectPage.landingJobLines(stuckLanding(), now: Self.now,
+                                                   updatedAt: Self.now.addingTimeInterval(-91)).first?.line.state,
+                       "Update unavailable")
     }
 
     // MARK: Tasks
@@ -504,6 +763,51 @@ final class ProjectPageTests: XCTestCase {
         XCTAssertTrue(ProjectPage.reportsIntegrationLanes(panorama.buckets))
         XCTAssertEqual(panorama.shape.edgeCount, 5)
     }
+
+    /// `inFlightJobs` as the server sends it — a timed-out landing and a merge queued behind it —
+    /// and its absence from an older server, which is not an empty list.
+    func testDecodesTheJobsInFlightAndAnOlderServersAbsence() throws {
+        let view = try JSONDecoder().decode(ProjectIntegrationView.self, from: Data("""
+        {"line":"PROJECT_BRANCH","ref":"project/runner","upstreamRef":"main","integratingCount":1,"queuedCount":1,
+         "mergeCheckOnTip":"PASSING",
+         "inFlight":{"taskTitle":"C5","kind":"LAND_TASK","phase":"FETCH","state":"RUNNING",
+           "startedAt":"2026-10-07T12:07:04.000Z","heartbeatAt":"2026-10-07T12:07:13.000Z"},
+         "inFlightJobs":[
+           {"jobId":"j-c5","kind":"LAND_TASK","state":"RUNNING","phase":"FETCH","taskId":"t-c5","taskTitle":"C5",
+            "generation":1,"startedAt":"2026-10-07T12:07:04.000Z","queuedAt":"2026-10-07T12:06:58.000Z",
+            "heartbeatAt":"2026-10-07T12:07:13.000Z","runnerName":"workstation-gpu","retriedBy":null,
+            "timedOut":true,"limitSeconds":600,"retryable":true},
+           {"jobId":"j-merge","kind":"LAND_PROMOTION","state":"QUEUED","phase":null,"taskId":null,"taskTitle":null,
+            "generation":2,"startedAt":"2026-10-07T13:16:00.000Z","queuedAt":"2026-10-07T13:16:00.000Z",
+            "heartbeatAt":null,"runnerName":null,"retriedBy":"COORDINATOR","timedOut":false,"limitSeconds":null,
+            "retryable":false,"somethingNewer":1}]}
+        """.utf8))
+        XCTAssertEqual(view.inFlight?.taskTitle, "C5")
+        XCTAssertEqual(view.inFlightJobs, [
+            ProjectIntegrationJob(jobId: "j-c5", kind: "LAND_TASK", state: "RUNNING", phase: "FETCH", taskId: "t-c5",
+                                  taskTitle: "C5", generation: 1, startedAt: "2026-10-07T12:07:04.000Z",
+                                  queuedAt: "2026-10-07T12:06:58.000Z", heartbeatAt: "2026-10-07T12:07:13.000Z",
+                                  runnerName: "workstation-gpu", retriedBy: nil, timedOut: true, limitSeconds: 600,
+                                  retryable: true),
+            ProjectIntegrationJob(jobId: "j-merge", kind: "LAND_PROMOTION", state: "QUEUED", generation: 2,
+                                  startedAt: "2026-10-07T13:16:00.000Z", queuedAt: "2026-10-07T13:16:00.000Z",
+                                  retriedBy: "COORDINATOR"),
+        ])
+
+        let older = try JSONDecoder().decode(ProjectIntegrationView.self, from: Data(#"""
+        {"integratingCount":1,"queuedCount":0,"inFlight":{"state":"RUNNING","startedAt":"2026-10-07T12:07:04.000Z"}}
+        """#.utf8))
+        XCTAssertNotNil(older.inFlight)
+        XCTAssertNil(older.inFlightJobs, "an older server's absence, which no client reads as none in flight")
+        let none = try JSONDecoder().decode(ProjectIntegrationView.self, from: Data(#"{"inFlightJobs":[]}"#.utf8))
+        XCTAssertEqual(none.inFlightJobs, [])
+        // An element that leaves its optional facts out decodes to their empty forms.
+        let sparse = try JSONDecoder().decode(ProjectIntegrationView.self, from: Data(#"""
+        {"inFlightJobs":[{"jobId":"j","kind":"LAND_TASK","state":"QUEUED","startedAt":"s","queuedAt":"q"}]}
+        """#.utf8))
+        XCTAssertEqual(sparse.inFlightJobs, [ProjectIntegrationJob(jobId: "j", kind: "LAND_TASK", state: "QUEUED",
+                                                                   startedAt: "s", queuedAt: "q")])
+    }
 }
 
 // MARK: - the routes
@@ -586,6 +890,8 @@ final class ProjectAPIClientTests: XCTestCase {
             case ("GET", "/api/projects/p1"), ("PATCH", "/api/projects/p1"): return (200, document)
             case ("GET", "/api/projects/p1/panorama"): return (200, #"{"buckets":{},"shape":{}}"#)
             case ("GET", "/api/projects/p1/integration"): return (200, #"{"line":null}"#)
+            case ("POST", "/api/projects/p1/integration/jobs/j1/retry"):
+                return (201, #"{"line":"PROJECT_BRANCH","integratingCount":0,"queuedCount":1,"inFlightJobs":[]}"#)
             case ("GET", "/api/projects/p1/tasks/page"): return (200, #"{"items":[],"nextCursor":null}"#)
             case ("GET", "/api/projects/p1/coordinator/status"):
                 return (200, #"{"projectId":"p1","state":"NEVER_OPENED","coordination":{},"openability":{"canOpen":true}}"#)
@@ -611,6 +917,7 @@ final class ProjectAPIClientTests: XCTestCase {
         _ = try await api.project("p1")
         _ = try await api.projectPanorama("p1")
         _ = try await api.projectIntegration("p1")
+        let retried = try await api.retryIntegrationJob("p1", jobID: "j1")
         _ = try await api.projectTaskPage("p1", cursor: "c2", limit: 50)
         let status = try await api.projectCoordinatorStatus("p1")
         let opened = try await api.openProjectCoordinator("p1")
@@ -627,6 +934,8 @@ final class ProjectAPIClientTests: XCTestCase {
         try await api.deleteProject("p1")
 
         XCTAssertEqual(listed.map(\.id), ["p1"])
+        XCTAssertEqual(retried.queuedCount, 1, "the Retry answers the line read again")
+        XCTAssertEqual(retried.inFlightJobs, [])
         XCTAssertEqual(status.state, .neverOpened)
         XCTAssertEqual(opened, ProjectCoordinatorOpened(sessionId: "s1", created: true, workspaceId: "w1"))
         XCTAssertEqual(line.line, .main)
@@ -639,6 +948,8 @@ final class ProjectAPIClientTests: XCTestCase {
             "GET /api/projects/p1",
             "GET /api/projects/p1/panorama",
             "GET /api/projects/p1/integration",
+            // The owner's Retry carries no body: the job is the whole of what it names.
+            "POST /api/projects/p1/integration/jobs/j1/retry",
             "GET /api/projects/p1/tasks/page?limit=50&cursor=c2",
             "GET /api/projects/p1/coordinator/status",
             "POST /api/projects/p1/coordinator",

@@ -137,7 +137,14 @@ struct ConsoleView: View {
                         // Errors only, and sticky until the ✕ — this row is in flow, so anything that
                         // comes and goes on a timer here shoves the composer around while the user is
                         // typing in it. Confirmations belong in the toast host (see `showToast`).
-                        if let repair = console.queuedDshRepair {
+                        // Why this run produced nothing at all. Drawn first because it is about the
+                        // run itself rather than the message being sent, and drawn INSTEAD of the
+                        // two engine-repair cards below when it has something to say — one fact,
+                        // one card (an engine reason it does not claim is theirs, and the reverse).
+                        if let runStart = console.runStart {
+                            SessionRunStartCardView(console: console, card: runStart)
+                                .padding(.bottom, .composerBandGap)
+                        } else if let repair = console.queuedDshRepair {
                             DshRepairCardView(console: console, repair: repair)
                                 .padding(.bottom, .composerBandGap)
                         } else if let repair = console.queuedAntigravityRepair {
@@ -205,6 +212,8 @@ struct ConsoleView: View {
                 }
                 // Image cache for user-turn attachments, read by `UserBubbleView` down the tree.
                 .environment(registry.attachments)
+                // The tasks this conversation filed, which a watch's wake line names its targets by.
+                .environment(console.createdTasks)
                 // One full-screen viewer for the whole transcript: a thumbnail anywhere in it opens here
                 // and pages across every image in the session, in transcript order (web parity).
                 .environment(\.sessionImagePreview, sessionImagePreview(console))
@@ -919,8 +928,8 @@ struct TranscriptView: View {
     // top yet (freshly opened, before the first geometry callback) but we're scrolled below the top, fall
     // back to naming the last question so the header shows at once; at the very top / short transcripts it
     // stays nil. Queued turns are skipped (web's `:not(.chat-queued)`) — they haven't been asked yet — and
-    // so is a background job's news or a wakeup coming due, a line inside an answer rather than the head
-    // of one (`StickySummary.isAnchor`; web's line carries no `data-sticky-label`).
+    // so is a watch's wake, a background job's news or a wakeup coming due, a line inside an answer
+    // rather than the head of one (`StickySummary.isAnchor`; web's line carries no `data-sticky-label`).
     //
     // Which turns are questions is read once per published state (`StickyQuestions`, kept on the
     // ruler), so a scroll is a lookup rather than a walk re-reading every turn's text.
@@ -1064,10 +1073,10 @@ struct TranscriptView: View {
     // `anchor: .top` lands the bubble just under this header (it's a safe-area inset, so the scroll
     // region starts below it).
     private func stickyQuestion(_ bubble: UserBubble, proxy: ScrollViewProxy) -> some View {
-        // What this turn was and what it said. A watch's wake — or an exception item's delivery — is
-        // still the turn the bar points back at, but it is not the person's question: it gets its
-        // card's own title and line (`StickySummary`), so the bar can't say "your question" above a
-        // card reading "not typed by you".
+        // What this turn was and what it said. An exception item's delivery — or another card the
+        // control plane draws — is still the turn the bar points back at, but it is not the person's
+        // question: it gets its card's own title and line (`StickySummary`), so the bar can't say
+        // "your question" above a card reading otherwise. A wake is no such turn (`isAnchor`).
         let summary = StickySummary.of(text: bubble.text, note: bubble.note, itemCard: bubble.itemCard,
                                        taskStart: bubble.taskStart,
                                        startedCard: bubble.startedCard,
@@ -1090,8 +1099,8 @@ struct TranscriptView: View {
         } label: { _ in
             HStack(spacing: 8) {
                 // Priority, not `fixedSize()`: the label is served first, so the line beside it is
-                // what gives way — but a label as long as "Watch stopped: every target is gone"
-                // truncates itself rather than pushing the line off the row entirely.
+                // what gives way — but a card's label too long for the row truncates itself rather
+                // than pushing the line off the row entirely.
                 Text(summary.label)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.tail).layoutPriority(1)

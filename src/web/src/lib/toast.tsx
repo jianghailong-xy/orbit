@@ -43,6 +43,12 @@ function announce(headline: React.ReactNode, assertive: boolean, ...lines: React
   if (!liveRegion) {
     liveRegion = document.createElement('div');
     liveRegion.className = 'sr-only';
+    // Fixed, where the class says absolute: hung after the app at the end of <body>, an absolute box
+    // sits just under the fold and makes the document 1px taller than the window. That pixel gives the
+    // document WebKit's 8px page scrollbar (index.css), which narrows fixed layers laid out after it on
+    // a phone and makes a modal's scroll lock lose the place of the page beneath it. A fixed box adds
+    // nothing to the document's height.
+    liveRegion.style.position = 'fixed';
     liveRegion.setAttribute('aria-atomic', 'true');
     document.body.appendChild(liveRegion);
   }

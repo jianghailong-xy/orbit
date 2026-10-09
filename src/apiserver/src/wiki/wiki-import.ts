@@ -29,6 +29,10 @@ export class WikiNoteDto {
 
   @Allow()
   text?: unknown;
+
+  /** `server` from a command whose notes the server reads (contract `import.server`); absent otherwise. */
+  @Allow()
+  readBy?: unknown;
 }
 
 /** What registering a note answers (contract `import.note.answer`). */

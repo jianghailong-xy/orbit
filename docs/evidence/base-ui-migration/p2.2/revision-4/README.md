@@ -1,5 +1,13 @@
 # P2.2 第4版：验证异步解锁的时限和实际滚动
 
+> **证据瘦身（2026-10-07）**：完整原件见提交 `7732f14f82d4e6b4406d7d164c4b672f63aa0f56`（瘦身前最后一个含完整文件的提交）。取回单个文件用 `git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2.2/revision-4/<路径> > <文件>`，整个目录用 `git archive 7732f14f82d4e6b4406d7d164c4b672f63aa0f56 docs/evidence/base-ui-migration/p2.2/revision-4 | tar -x -C <空目录>`。
+>
+> 本目录在瘦身中：6 份 Playwright 报告换成同目录的 `report.summary.json`，都只删附件正文；删除 12 个 trace 压缩包；删除被取代修订的 423 个原始运行文件（截图、逐用例 JSON、运行压缩包）。下文链接若指向这些文件，按上面的命令从该提交取回；读取它们的脚本要在取回的目录里运行。
+>
+> 第 4 版（判定 SEND_BACK）已被后续修订取代，被采用的是[第 8 版](../revision-8/README.md)。本版运行的截图、逐用例 JSON 和协调者复核压缩包 p22-r3-coordinator-review.zip 已删除。
+>
+> 目录里的 SHA256SUMS 类清单（`*.sha256`、`artifact-index*.json`、`manifest.json`、各运行 `summary.json` 里的附件哈希等）保留原文件，核验的是提交 `7732f14f8` 里的文件。做法、保留理由和逐文件删除清单见 [evidence-slimming](../../evidence-slimming/README.md)。
+
 对应 [P2.2](orbit-task:34Za394q2ZEgr7TKprjkF)、返工评论 `34a3GPknMykOXpXBtg6Ua` 和 r3 SEND_BACK 决定 `6UJ5y55Qlsm5WDeOGbLp2h`。项目验收 key `1BvO6hYrlFnU60JqxQPUHt`，原文：**P2：Orbit 自有弹层、选择及反馈组件保持现有键盘、焦点、通知和确认行为。** 本版仅补该任务的最终关闭、及时解除滚动锁及实际可滚动证据。
 
 结论：未改运行时的诊断捕获到了原断言位置仍锁定、随后及时解锁和真实滚动的完整过程，支持即时读值抢在异步清理前的判断；没有证据要求修改组件。固定测试提交 `2bd040fe3bc642cdb53460539146e25eb4e8aad2` 的八环境32项原入口、40项减少动效重复均通过，retries=0、无跳过。本说明和原件作为后续独立归档提交，不改变被测 Web 树。

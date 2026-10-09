@@ -49,8 +49,10 @@ export function Popconfirm({ trigger, anchor, title, description, confirmText = 
   return <BasePopover.Root open={layer.open} onOpenChange={(next) => { if (!pending || next) layer.setOpen(next); }} modal={false}>
     {trigger && <BasePopover.Trigger ref={triggerNode} render={trigger} disabled={disabled} />}
     <BasePopover.Portal container={layer.container()}>
-      {/* No collision padding: the replaced confirmation was shifted right up to the viewport edge. */}
-      <BasePopover.Positioner ref={positionerRef} anchor={anchor} side={side} align={align} {...offsets} collisionPadding={0} className="orbit-floating-positioner" style={{ zIndex: layer.zIndex }}>
+      {/* No collision padding: the replaced confirmation was shifted right up to the viewport edge. Placed in
+          the page's own coordinates as the replaced one was (see useFloating): inside a dialog it is neither
+          held to the dialog's width nor, on its first frame, placed by the dialog's offset. */}
+      <BasePopover.Positioner ref={positionerRef} anchor={anchor} side={side} align={align} {...offsets} collisionPadding={0} positionMethod={layer.positionMethod} className="orbit-floating-positioner" style={{ zIndex: layer.zIndex }}>
         <BasePopover.Popup ref={popup} initialFocus={popup} finalFocus={returnFocus}
           className={`orbit-popover orbit-popconfirm${popupClassName ? ` ${popupClassName}` : ''}`} style={popupStyle}>
           <BasePopover.Arrow className="orbit-floating-arrow" style={calloutArrowStyle} />

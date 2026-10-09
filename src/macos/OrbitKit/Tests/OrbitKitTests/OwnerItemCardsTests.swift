@@ -83,6 +83,16 @@ final class OwnerItemCardsTests: XCTestCase {
             ("NOTE_PROMPT", CoordinatorQuestions.notePrompt),
             ("OWN_ANSWER_PROMPT", CoordinatorQuestions.ownAnswerPrompt),
             ("OTHER_OPTION", CoordinatorQuestions.otherOption),
+            ("YOUR_ANSWER", CoordinatorQuestions.freeAnswerPrompt),
+            // The record a question becomes once it has ended (§5.2 R10, R12).
+            ("WITHDRAWN_HEADING", CoordinatorQuestions.withdrawnHeading),
+            ("ANSWERED_BY_YOU", CoordinatorQuestions.answeredByYou),
+            ("WITHDRAWN_BY_COORDINATOR", CoordinatorQuestions.withdrawnByCoordinator),
+            ("WITHDRAWN_BY_YOU", CoordinatorQuestions.withdrawnByYou),
+            ("COORDINATOR_WITHDREW", CoordinatorQuestions.coordinatorWithdrew),
+            ("YOU_WITHDREW", CoordinatorQuestions.youWithdrew),
+            ("YOUR_NOTE", CoordinatorQuestions.yourNote),
+            ("VIEW_DETAILS", CoordinatorQuestions.viewDetails),
         ]
         for (name, mine) in pairs {
             XCTAssertEqual(mine, try declaration(web, name),
@@ -143,6 +153,15 @@ final class OwnerItemCardsTests: XCTestCase {
     /// away because a request was in flight.
     func testAQuestionGoesStaleInPlaceRatherThanVanishing() {
         let items = ProjectOpenItemsView(needsYou: [questionRow(question())])
+        // A question that has ended is read as the record it became — and not counted.
+        let ended = ProjectClosedQuestion(itemId: "answered", question: question(),
+                                          askedAt: "2026-09-13T10:00:00Z",
+                                          resolvedAt: "2026-09-13T10:05:00Z",
+                                          answer: .init(option: nil, text: "t4 first"))
+        let read = ProjectOpenItemsView(needsYou: [questionRow(question())], closedQuestions: [ended])
+        XCTAssertEqual(CoordinatorQuestions.standing(items: read, itemId: "answered"), .closed(ended))
+        XCTAssertFalse(CoordinatorQuestions.isOpen(.closed(ended)),
+                       "a question that has ended is not one the bar points at")
         XCTAssertEqual(CoordinatorQuestions.standing(items: nil, itemId: "item-1"), .unread)
         XCTAssertFalse(CoordinatorQuestions.isOpen(.unread), "an unreadable standing is not a question to point at")
 
@@ -212,22 +231,6 @@ final class OwnerItemCardsTests: XCTestCase {
         XCTAssertEqual(CoordinatorQuestions.optionIndex(.option(2)), 2)
         XCTAssertNil(CoordinatorQuestions.optionIndex(.other))
         XCTAssertNil(CoordinatorQuestions.optionIndex(nil))
-    }
-
-    /// The receipt says what was answered in the words the card showed, and whether anybody has
-    /// been told yet — an answer with no coordinator bound waits for the next one (R11).
-    func testTheReceiptSaysWhatWasAnsweredAndWhoWasTold() {
-        let choice = question(options: [.init(label: "t4 first"), .init(label: "both")])
-        XCTAssertEqual(CoordinatorQuestions.answerInWords(question: choice, option: 0, text: ""),
-                       "t4 first")
-        XCTAssertEqual(CoordinatorQuestions.answerInWords(question: choice, option: 1, text: "share a runner"),
-                       "both — share a runner")
-        XCTAssertEqual(CoordinatorQuestions.answerInWords(question: choice, option: nil, text: " "),
-                       "(no answer given)")
-        XCTAssertEqual(CoordinatorQuestions.receiptLine(delivered: true),
-                       "by you · delivered to the current coordinator")
-        XCTAssertEqual(CoordinatorQuestions.receiptLine(delivered: false),
-                       "by you · waiting for this project’s next coordinator")
     }
 
     /// The footnote rounds the way the browser's `ago` does, because both cards write it.

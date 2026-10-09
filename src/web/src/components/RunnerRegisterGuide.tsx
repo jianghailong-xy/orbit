@@ -1,13 +1,14 @@
 import { CheckCircleFilled, CheckOutlined, CopyOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Segmented } from 'antd';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { copyText } from '../lib/clipboard';
 import { encodeId } from '../lib/idCodec';
+import { Segmented } from './ui/Segmented';
 
 type OS = 'macOS' | 'Linux' | 'Windows';
+const OS_OPTIONS = (['macOS', 'Linux', 'Windows'] as const).map((value) => ({ value, label: value }));
 
 // install.sh, the runner binaries (/dl) and the API are all served from the deployment's own
 // origin, and both the binary's defaultServer and install.sh's BASE_URL are baked to that
@@ -100,11 +101,12 @@ export function RunnerRegisterGuide() {
           the machine belongs to you. It appears under Machines on Infrastructure once it comes online.
         </p>
 
-        <Segmented
+        <Segmented<OS>
           className="runner-os"
+          aria-label="Operating system"
           value={os}
-          onChange={(v) => setOs(v as OS)}
-          options={['macOS', 'Linux', 'Windows']}
+          onValueChange={setOs}
+          options={OS_OPTIONS}
         />
 
         <CommandBox cmd={installCmd[os]} copied={copied} onCopy={() => copy(installCmd[os])} />

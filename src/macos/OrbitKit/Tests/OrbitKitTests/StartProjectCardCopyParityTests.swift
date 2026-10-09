@@ -102,23 +102,40 @@ final class StartProjectCardCopyParityTests: XCTestCase {
     func testTheCardsFixedWordsMatchTheWeb() throws {
         let web = try flat(Self.words)
         assertDeclares(web, "START_PROJECT_TITLE", StartProject.title)
-        assertDeclares(web, "START_ASKED_BY_COORDINATOR", StartProject.askedByCoordinator)
         assertDeclares(web, "READY_TO_START", StartProject.readyToStart)
         assertDeclares(web, "START_DONE_WHEN", StartProject.doneWhen)
         assertDeclares(web, "START_PLAN", StartProject.plan)
         assertDeclares(web, "START_HOW_IT_RUNS", StartProject.howItRuns)
-        assertDeclares(web, "START_SUGGESTED_BY_COORDINATOR", StartProject.suggestedByCoordinator)
         assertDeclares(web, "START_VIEW_TASKS", StartProject.viewTasks)
+        assertDeclares(web, "START_TASK_GRAPH", StartProject.taskGraph)
         assertDeclares(web, "START_PROJECT_ACTION", StartProject.action)
         assertDeclares(web, "START_CHAT_PLACEHOLDER", StartProject.chatPlaceholder)
-        assertDeclares(web, "START_CHECKED_PLAN", StartProject.checkedPlan)
-        assertDeclares(web, "START_CHECKED_CRITERIA", StartProject.checkedCriteria)
-        assertDeclares(web, "START_CHECKED_RUNNERS", StartProject.checkedRunners)
+        assertDeclares(web, "START_NOBODY_ASKED", StartProject.nobodyAsked)
+        assertDeclares(web, "START_NO_COORDINATOR_YET", StartProject.noCoordinatorYet)
+        assertDeclares(web, "START_COORDINATOR", StartProject.coordinator)
+        assertDeclares(web, "START_MORE", StartProject.more)
+        assertDeclares(web, "START_LESS", StartProject.less)
         assertDeclares(web, "START_NOT_RECORDED", StartProject.notRecorded)
         assertDeclares(web, "START_REQUEST_GONE", StartProject.requestGone)
+        assertDeclares(web, "START_OPENS_COORDINATOR", StartProject.opensCoordinator)
+        assertDeclares(web, "START_NOW", StartProject.now)
+        assertDeclares(web, "START_YOU", StartProject.you)
+        // What still comes to the owner, and whose settings these are.
+        assertDeclares(web, "START_COMES_TO_YOU", StartProject.comesToYou)
+        assertDeclares(web, "START_DECIDE_DONE", StartProject.decideDone)
+        assertDeclares(web, "START_YOU_CONFIRM", StartProject.youConfirm)
+        assertDeclares(web, "START_PROBLEMS", StartProject.problems)
+        assertDeclares(web, "START_PROBLEMS_DETAIL", StartProject.problemsDetail)
+        assertDeclares(web, "START_MERGING_INTO_MAIN", StartProject.mergingIntoMain)
+        assertDeclares(web, "START_EACH_MERGE_INTO_MAIN", StartProject.eachMergeIntoMain)
+        assertDeclares(web, "START_CRITERIA_CHANGES", StartProject.criteriaChanges)
+        assertDeclares(web, "START_AUTOMATIC_BY_DEFAULT", StartProject.automaticByDefault)
+        assertDeclares(web, "START_COORDINATOR_SUGGESTED_OFF", StartProject.coordinatorSuggestedOff)
+        assertDeclares(web, "START_REST_SUGGESTED", StartProject.restSuggested)
+        assertDeclares(web, "START_CHANGE_LATER", StartProject.changeLater)
     }
 
-    func testTheSectionHeadsAndTheMetaLineMatchTheWebWhole() throws {
+    func testTheSectionHeadsAndTheHeaderLineMatchTheWebWhole() throws {
         let web = try flat(Self.words)
         let criteria = "${count === 1 ? 'criterion' : 'criteria'}"
         assertSentence(web, StartProject.doneWhenHead(Self.count),
@@ -129,56 +146,76 @@ final class StartProjectCardCopyParityTests: XCTestCase {
                        [(StartProject.plan, "${START_PLAN}"), (n, "${count}"),
                         ("tasks", "${count === 1 ? 'task' : 'tasks'}")], "the Plan head")
         XCTAssertEqual(StartProject.planHead(1), "\(StartProject.plan) · 1 task")
-
-        // Who asked and when, then the seal — order is the copy here, not just the words.
-        let asked = StartProject.meta(projectTitle: Self.title, askedAgo: "AGO", seal: Self.seal)
-        let bare = StartProject.meta(projectTitle: Self.title, askedAgo: nil, seal: Self.seal)
-        XCTAssertTrue(asked.hasPrefix(Self.title) && asked.hasSuffix(" · seal \(Self.seal)"), asked)
-        let middle = String(asked.dropFirst(Self.title.count).dropLast(" · seal \(Self.seal)".count))
-        assertSentence(web, middle, [(StartProject.askedByCoordinator, "${START_ASKED_BY_COORDINATOR}"),
-                                     ("AGO", "${askedAgo}")], "who asked, and when")
-        assertSentence(web, bare, [(Self.title, "${projectTitle}${asked}"), (Self.seal, "${seal}")],
-                       "the meta line")
+        XCTAssertTrue(web.contains("`${head} in ${levels} levels`"),
+                      "the web no longer says how many levels the way this end does")
+        XCTAssertEqual(StartProject.planHead(Self.count, levels: 4),
+                       "\(StartProject.planHead(Self.count)) in 4 levels")
+        // Who asked, under the project's name; and the line of a card nobody asked for.
+        assertDeclares(web, "START_COORDINATOR_ASKED", StartProject.coordinatorAsked)
+        assertSentence(web, StartProject.askedLine("AGO"),
+                       [(StartProject.coordinatorAsked, "${START_COORDINATOR_ASKED}"), ("AGO", "${ago}")],
+                       "who asked, and when")
+        XCTAssertEqual(StartProject.askedLine(nil), StartProject.coordinatorAsked)
+        assertSentence(web, StartProject.nobodyAskedLine(hasCoordinator: false),
+                       [(StartProject.nobodyAsked, "${START_NOBODY_ASKED}"),
+                        (StartProject.noCoordinatorYet, "${START_NO_COORDINATOR_YET}")],
+                       "a card nobody asked for, on a project with no coordinator")
+        XCTAssertEqual(StartProject.nobodyAskedLine(hasCoordinator: true), StartProject.nobodyAsked)
     }
 
-    func testTheParagraphsMatchTheWebWhole() throws {
+    func testTheParagraphsAndTheLineUnderStartMatchTheWebWhole() throws {
         let web = try flat(Self.words)
         assertSentence(web, StartProject.explanation(Self.count), [(n, "${count}")],
                        "what starting binds the project to")
-        assertSentence(web, StartProject.coordinatorSays("WHY"), [("WHY", "${why}")],
-                       "the coordinator's reason, quoted")
-        // What the check found true: the two fixed findings, then the repository when there is one.
-        XCTAssertEqual(StartProject.checkedLine(repository: nil),
-                       "\(StartProject.checkedPlan) \(StartProject.checkedCriteria) · "
-                           + "\(StartProject.checkedRunners)")
-        XCTAssertTrue(web.contains("`repository ${repositoryLabel(repository)}`"),
-                      "the web no longer names the repository the way this end does")
-        XCTAssertTrue(StartProject.checkedLine(repository: "https://x/o/r")
-                        .hasSuffix(" · repository o/r"))
-        XCTAssertTrue(web.contains("`${START_CHECKED_PLAN} ${found.join(' · ')}`"),
-                      "the web no longer joins the findings the way this end does")
+        // Whose settings these are: the owner's default Automatic, and the coordinator's suggestion.
+        XCTAssertTrue(web.contains("`${START_AUTOMATIC_BY_DEFAULT} (${START_COORDINATOR_SUGGESTED_OFF}).`"))
+        XCTAssertTrue(web.contains("`${START_AUTOMATIC_BY_DEFAULT}.`"))
+        XCTAssertEqual(StartProject.howItRunsNote(asked: true, suggestedOff: true),
+                       "\(StartProject.automaticByDefault) (\(StartProject.coordinatorSuggestedOff)). "
+                           + "\(StartProject.restSuggested) \(StartProject.changeLater)")
+        XCTAssertEqual(StartProject.howItRunsNote(asked: false, suggestedOff: false),
+                       "\(StartProject.automaticByDefault). \(StartProject.changeLater)")
+        // What pressing Start does, part by part.
+        XCTAssertTrue(web.contains("['opens a coordinator']"))
+        XCTAssertTrue(web.contains("`starts ${joinAnd(input.startsNow)} now`"))
+        XCTAssertTrue(web.contains("'confirms this criterion'"))
+        XCTAssertTrue(web.contains("`confirms these ${input.criteria} criteria`"))
+        XCTAssertTrue(web.contains("`seal ${input.seal}`"))
+        XCTAssertEqual(StartProject.barCaption(opensCoordinator: false, startsNow: ["X", "Y"],
+                                               criteria: Self.count, seal: Self.seal),
+                       "Starts X and Y now · confirms these \(n) criteria · seal \(Self.seal)")
+        XCTAssertEqual(StartProject.barCaption(opensCoordinator: true, startsNow: [], criteria: 1,
+                                               seal: Self.seal),
+                       "Opens a coordinator · confirms this criterion")
     }
 
-    /// The ready check's warning about tasks set to start by hand, in the words both ends build it
-    /// from — and the order line's two sentences, for the step that starts now and every later one.
-    func testThePlansSentencesMatchTheWebWhole() throws {
+    /// What still comes to the owner, in the words both ends build each line from.
+    func testWhatComesToTheOwnerIsSaidInTheWebsWords() throws {
         let web = try flat(Self.words)
-        let warning = StartProject.byHandWarning(["X", "Y"])
-        assertSentence(web, warning,
-                       [("X and Y", "${joinAnd(labels)}"), (" are ", " ${one ? 'is' : 'are'} "),
-                        ("they wait", "${one ? 'it waits' : 'they wait'}")],
-                       "the warning about tasks set to start by hand")
-        XCTAssertTrue(web.contains("`${who} ${group.members.length === 1 ? 'starts' : 'start'} now`"),
-                      "the web no longer says the first step the way this end does")
-        XCTAssertTrue(web.contains("`${who} after ${joinAnd(group.after.map((id) => label.get(id)!))}`"),
-                      "the web no longer says a later step the way this end does")
-        XCTAssertTrue(web.contains(".join(' · ');"), "the steps are no longer joined by ' · '")
+        assertSentence(web, StartProject.reviews(Self.count),
+                       [(n, "${count}"), ("reviews", "${count === 1 ? 'review' : 'reviews'}")], "the reviews")
+        assertSentence(web, StartProject.tasksYouConfirm(Self.count), [(n, "${count}")],
+                       "the tasks the owner confirms, counted")
+        assertSentence(web, StartProject.problemsUnresolved(within: "WITHIN"), [("WITHIN", "${within}")],
+                       "what reaches the owner after the escalation window")
+        XCTAssertTrue(web.contains("`${task.label} · ${task.title}`"),
+                      "the web no longer names a task the owner confirms the way this end does")
+        XCTAssertTrue(web.contains("`${Math.max(1, Math.round(seconds / 60))} min`"))
+        XCTAssertTrue(web.contains("`${Math.round(seconds / 3600)} h`"))
+        XCTAssertEqual(StartProject.within(seconds: 7_200), "2 h")
+    }
+
+    /// The plan's own words: a level of several tasks, the names a list is joined with, and the rule
+    /// that reads a task's label off its title.
+    func testThePlansWordsMatchTheWebWhole() throws {
+        let web = try flat(Self.words)
+        assertSentence(web, StartProject.inParallel(Self.count), [(n, "${count}")], "a level of several tasks")
         XCTAssertTrue(web.contains("`${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`"),
                       "the web no longer lists names as `A, B and C`")
         XCTAssertEqual(StartProject.joinAnd(["A", "B", "C"]), "A, B and C")
-        // The two codes the warnings turn on, in the server's spelling at both ends.
-        XCTAssertTrue(web.contains("finding.code === 'START_NO_MERGE_CHECK'"))
-        XCTAssertTrue(web.contains("finding.code === 'START_TASKS_START_BY_HAND'"))
+        XCTAssertTrue(web.contains("/^([A-Z]\\d{1,2}[a-z]?)(?:[.):：]|\\s)/u"),
+                      "the web no longer reads P1a as a label the way this end does")
+        XCTAssertEqual(StartProject.planTaskLabel("P1a · wiki-worker"), "P1a")
     }
 
     // MARK: How it runs
@@ -200,6 +237,15 @@ final class StartProjectCardCopyParityTests: XCTestCase {
         assertDeclares(web, "RUN_MERGE_CHECK_HINT", RunSettings.mergeCheckHint)
         assertDeclares(web, "RUN_MERGE_CHECK_PLACEHOLDER", RunSettings.mergeCheckPlaceholder)
         assertDeclares(web, "RUN_NO_MERGE_CHECK_WARNING", RunSettings.noMergeCheckWarning)
+        // The start card's own Automatic sentences, and its merge check's values.
+        assertDeclares(web, "RUN_AUTOMATIC_ON_CHECKED", RunSettings.automaticOnChecked)
+        assertDeclares(web, "RUN_AUTOMATIC_ON_UNCHECKED", RunSettings.automaticOnUnchecked)
+        assertDeclares(web, "RUN_AUTOMATIC_ON_MAIN", RunSettings.automaticOnMain)
+        assertDeclares(web, "RUN_AUTOMATIC_OFF", RunSettings.automaticOff)
+        assertDeclares(web, "RUN_AUTOMATIC_OFF_MAIN", RunSettings.automaticOffMain)
+        assertDeclares(web, "RUN_MERGE_CHECK_SET", RunSettings.mergeCheckSet)
+        assertDeclares(web, "RUN_MERGE_CHECK_NONE", RunSettings.mergeCheckNone)
+        assertDeclares(web, "RUN_MERGE_CHECK_NONE_SAYS", RunSettings.mergeCheckNoneSays)
         assertSentence(web, RunSettings.tasksAtATime(Self.count),
                        [("tasks", "${count === 1 ? 'task' : 'tasks'}")], "the words after the number")
         XCTAssertEqual(RunSettings.tasksAtATime(1), "task at a time")

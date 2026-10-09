@@ -25,7 +25,7 @@ function render(preferences: UserPreferences) {
 /** The switch in the row that names it — the page has other switches (the two alert ones). */
 function switchAfter(html: string, label: string): string {
   const row = html.slice(html.indexOf(`<div>${label}</div>`));
-  return row.match(/<button[^>]*role="switch"[^>]*>/)?.[0] ?? '';
+  return row.match(/<[a-z]+[^>]*role="switch"[^>]*>/)?.[0] ?? '';
 }
 
 describe('session orchestration, one switch for the whole account', () => {
@@ -52,7 +52,7 @@ describe('the way into Settings → Shared links', () => {
   it('is a Sharing section that names the page and offers to manage it', () => {
     const html = render({});
     // Card title, then the row: what the page is, what it holds, and the button that opens it.
-    expect(html).toMatch(/ant-card-head-title">Sharing</);
+    expect(html).toMatch(/<h2[^>]*>Sharing<\/h2>/);
     expect(html).toContain('<div>Shared links</div>');
     expect(html).toContain('Everything you’ve made viewable by link');
     expect(html).toMatch(/<button[^>]*><span>Manage<\/span><\/button>/);
@@ -65,7 +65,7 @@ describe('the order of the cards', () => {
     // would put the two clients' pages in different orders. Access tokens comes last: the web's alone
     // until the apps list tokens too.
     const html = render({});
-    const titles = [...html.matchAll(/ant-card-head-title">([^<]+)</g)].map((m) => m[1]);
+    const titles = [...html.matchAll(/<h2[^>]*>([^<]+)<\/h2>/g)].map((m) => m[1]);
     expect(titles).toEqual(['Session defaults', 'Session orchestration', 'Notifications', 'Appearance', 'Sharing', 'Access tokens']);
   });
 });

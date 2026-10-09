@@ -3,7 +3,8 @@
  * be stored with, and which account a run spends — the one every quota gate judges.
  *
  * A runner reports Default's quota as that engine's snapshot's own windows and every other account's
- * under that snapshot's `accounts`, by the account's id (src/runner-go/{codex,claude}_account_usage.go).
+ * under that snapshot's `accounts`, by the account's id (src/runner-go/{codex,claude}_account_usage.go),
+ * and Kimi Code's the same way under `kimi`.
  */
 import type { PlanUsage, PlanUsageSnapshot } from '@orbit/shared';
 import { ENGINE_ACCOUNTS_MAX, namedRunnerEngines, sanitizeRunnerEngines } from '../common/runner-engines';
@@ -11,6 +12,7 @@ import {
   accountDir,
   accountOfEnv,
   accountToMoveTo,
+  accountToMoveToAt,
   accountToStartOn,
   isAccountEngine,
   planUsageBlockedUntil,
@@ -41,8 +43,9 @@ export function sanitizePlanUsageAccounts(usage: PlanUsage): PlanUsage {
   if (usage.provider === 'codex' && !usage.codex) return sanitizeAccountsOf(usage) ?? usage;
   const codex = sanitizeAccountsOf(usage.codex);
   const claude = sanitizeAccountsOf(usage.claude);
-  if (codex === usage.codex && claude === usage.claude) return usage;
-  return { ...usage, ...(codex ? { codex } : {}), ...(claude ? { claude } : {}) };
+  const kimi = sanitizeAccountsOf(usage.kimi);
+  if (codex === usage.codex && claude === usage.claude && kimi === usage.kimi) return usage;
+  return { ...usage, ...(codex ? { codex } : {}), ...(claude ? { claude } : {}), ...(kimi ? { kimi } : {}) };
 }
 
 /** One engine snapshot with its `accounts` as they are stored, or the same object when it carries
@@ -93,8 +96,8 @@ export function runAccount(
 /**
  * Whether a workspace leaves its sessions' `engine` account to Orbit — Automatic: it picked none for
  * that engine, and its env selects no other config directory (CODEX_HOME, CLAUDE_CONFIG_DIR,
- * ORBIT_ANTIGRAVITY_GOOGLE_DIR) and no key of its own. Otherwise its choice or its env decides, and
- * Orbit neither picks nor moves.
+ * ORBIT_ANTIGRAVITY_GOOGLE_DIR, KIMI_CODE_HOME) and no key of its own. Otherwise its choice or its env
+ * decides, and Orbit neither picks nor moves.
  */
 export function workspaceLeavesAccountToOrbit(
   engine: AccountEngine,
@@ -149,8 +152,9 @@ export function automaticCodexAccount(
  * runner's accounts that can run now (accountToMoveTo) — when the session is on Automatic (nobody
  * picked its account by hand: `pinned`) and its workspace leaves the account to Orbit. `from` is the
  * account the session ran on, as dispatch resolved it. Null when the session stays and waits for that
- * account's reset: a hand-picked account, a workspace pinned to one, a runner with no second account,
- * or no other account with room.
+ * account's reset: a hand-picked account, a workspace pinned to one, a runner with no second account —
+ * or no other account with room, when it waits for the first account to free up, that one or another
+ * (accountAfterUsageLimitAt).
  */
 /**
  * Where a session on Automatic goes BEFORE a turn is dispatched to it, when its runner's own snapshot
@@ -193,6 +197,29 @@ export function accountAfterUsageLimit(
   const usage = weighedPlanUsage(planUsage, runnerEngines);
   const to = accountToMoveTo(engine, accountsOf(engine, runnerEngines, accountPauses, now), usage, now, from);
   return to ? { from, to } : null;
+}
+
+/**
+ * When a session on Automatic that its account's usage limit stopped can go again on another of the
+ * runner's accounts — what its retry waits for, where accountAfterUsageLimit is where it goes: `now`
+ * while one has room (the retry's dispatch moves it there, accountBeforeDispatch), else when the first
+ * of them frees up (accountToMoveToAt). Null when the session is pinned, its workspace decides, or no
+ * other account names such a moment: then only its own account's reset says when.
+ */
+export function accountAfterUsageLimitAt(
+  engine: AccountEngine,
+  session: { account?: string | null; pinned?: boolean },
+  workspace: AccountWorkspace | null | undefined,
+  runnerEngines: unknown,
+  planUsage: unknown,
+  now: Date,
+  accountPauses?: unknown,
+): Date | null {
+  if (session.pinned || !workspaceLeavesAccountToOrbit(engine, workspace, runnerEngines)) return null;
+  const from = runAccount(engine, workspace?.env, { [ACCOUNT_CHOICE[engine]]: session.account }, runnerEngines);
+  if (!from) return null;
+  const usage = weighedPlanUsage(planUsage, runnerEngines);
+  return accountToMoveToAt(engine, accountsOf(engine, runnerEngines, accountPauses, now), usage, now, from);
 }
 
 /** What an account's name is read from: the runner's report, and the names its accounts were given in
@@ -243,6 +270,7 @@ export function sessionAccountPausedUntil(
     codexAccount: session.codexAccount ?? workspace?.codexAccount,
     claudeAccount: session.claudeAccount ?? workspace?.claudeAccount,
     antigravityAccount: session.antigravityAccount ?? workspace?.antigravityAccount,
+    kimiAccount: session.kimiAccount ?? workspace?.kimiAccount,
   }, runner.engines);
   return runnerAccountPausedUntil(runner.accountPauses, engine, account, now);
 }
@@ -252,4 +280,5 @@ export interface WorkspaceAccountChoices {
   codexAccount?: string | null;
   claudeAccount?: string | null;
   antigravityAccount?: string | null;
+  kimiAccount?: string | null;
 }

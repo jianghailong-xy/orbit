@@ -105,6 +105,80 @@ export function retirementBlockers(files) {
     || file.hits.some((hit) => blocked.has(hit.kind))).map((file) => file.path);
 }
 
+// --check-owners: every use point needs an owner in the P0.1 inventory or in a dated record under
+// inventory-delta/ (later records win). A file is a use point when it imports antd or the v5 patch or
+// has one of OWNER_KINDS; index.css is matched line by line on its hit text, never on line numbers.
+const OWNER_KINDS = ['antd-reference', 'ant-class', 'ant-selector', 'internal-ref', 'use-app', 'use-token', 'react19-patch'];
+const CSS_PATH = 'src/web/src/index.css';
+const CSS_KINDS = ['antd-reference', 'ant-class'];
+
+export function loadInventory(directory = resolve(root, 'docs/evidence/base-ui-migration')) {
+  const json = (name) => JSON.parse(readFileSync(resolve(directory, name), 'utf8'));
+  const testPhases = new Map();
+  let phase;
+  for (const line of readFileSync(resolve(directory, 'routes-and-tests.md'), 'utf8').split('\n')) {
+    phase = line.match(/^### (P[\d.]+) /)?.[1] ?? phase;
+    const test = line.match(/^\| `([^`]+\.(?:test|spec)\.[^`]+)` \|/)?.[1];
+    if (test && phase) testPhases.set(`src/web/src/${test}`, phase);
+  }
+  const deltas = resolve(directory, 'inventory-delta');
+  const records = existsSync(deltas) ? readdirSync(deltas).filter((name) => /^\d{4}-\d{2}-\d{2}[\w.-]*\.json$/.test(name)).sort()
+    .map((name) => ({ ...JSON.parse(readFileSync(resolve(deltas, name), 'utf8')), name })) : [];
+  return { baseline: json('audit-baseline.json'), ownership: json('ownership.json'), css: json('css-ownership.json'), testPhases, records };
+}
+
+export function ownerGaps(report, { baseline, ownership, css, testPhases, records }) {
+  const owners = new Map([...Object.entries(ownership.files).map(([path, entry]) => [path, { owner: entry.phase, from: 'P0.1' }]),
+    ...[...testPhases].map(([path, owner]) => [path, { owner, from: 'P0.1' }])]);
+  const baseFiles = new Map(baseline.files.map((file) => [file.path, file]));
+  const key = (hit) => `${hit.kind}\0${hit.text}`;
+  const slots = new Map();
+  const add = (hit, slot, count = 1) => slots.set(key(hit), [...(slots.get(key(hit)) ?? []), ...Array.from({ length: count }, () => ({ ...slot }))]);
+  for (const hit of baseFiles.get(CSS_PATH)?.hits.filter((item) => CSS_KINDS.includes(item.kind)) ?? []) {
+    add(hit, { owner: css.groups.find((group) => group.from <= hit.line && hit.line <= group.to)?.phase, from: 'P0.1' });
+  }
+  const inactive = {};
+  for (const record of records) {
+    Object.assign(inactive, record.inactiveOwners);
+    for (const [path, entry] of Object.entries(record.files ?? {})) owners.set(path, { owner: entry.owner, pending: entry.pending, from: record.name });
+    for (const entry of record.css ?? []) {
+      const slot = { owner: entry.owner, pending: entry.pending, from: record.name };
+      if (entry.status === 'reassigned') for (const existing of slots.get(key(entry)) ?? []) Object.assign(existing, slot);
+      else add(entry, slot, entry.count);
+    }
+  }
+  const signature = (file) => new Set([
+    ...file.imports.filter((item) => ['antd', 'react19-patch'].includes(item.family))
+      .flatMap((item) => (item.bindings.length ? item.bindings.map((binding) => binding.imported) : [`${item.kind}:${item.module}`])),
+    ...file.hits.filter((hit) => OWNER_KINDS.includes(hit.kind)).map((hit) => hit.kind),
+  ]);
+  const result = { unowned: [], pending: [], owners: {} };
+  const judge = (point, entry) => {
+    const owner = entry?.owner?.split('→').at(-1).trim();
+    if (entry?.pending) result.pending.push({ ...point, candidates: entry.pending.candidates, record: entry.from });
+    else if (!owner) result.unowned.push({ ...point, reason: 'no owner' });
+    else if (inactive[owner]) result.unowned.push({ ...point, reason: `owner ${owner}: ${inactive[owner]}` });
+    else result.owners[owner] = (result.owners[owner] ?? 0) + 1;
+  };
+  for (const file of report.files) {
+    if (file.path === CSS_PATH) {
+      const seen = new Map();
+      for (const hit of file.hits.filter((item) => CSS_KINDS.includes(item.kind))) {
+        seen.set(key(hit), (seen.get(key(hit)) ?? -1) + 1);
+        judge({ path: file.path, line: hit.line, kind: hit.kind, text: hit.text }, slots.get(key(hit))?.[seen.get(key(hit))]);
+      }
+    } else if (['production', 'test'].includes(file.category) && signature(file).size) {
+      const entry = owners.get(file.path);
+      const before = baseFiles.get(file.path);
+      const grown = entry?.from === 'P0.1' ? [...signature(file)].filter((item) => !before || !signature(before).has(item)) : [];
+      if (grown.length) result.unowned.push({ path: file.path, reason: `new since P0.1, not in a delta record: ${grown.join(', ')}` });
+      else judge({ path: file.path }, entry);
+    }
+  }
+  result.owners = Object.fromEntries(Object.entries(result.owners).sort());
+  return result;
+}
+
 function audit() {
   const paths = [...sourcePaths(resolve(root, 'src/web/src')), 'src/web/package.json', 'package-lock.json'].sort();
   const files = paths.map((path) => scanText(path, readFileSync(resolve(root, path), 'utf8')));
@@ -153,11 +227,25 @@ function audit() {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
-  if (args.some((arg) => !['--json', '--check-retired', '--help'].includes(arg))) {
+  if (args.some((arg) => !['--json', '--check-retired', '--check-owners', '--help'].includes(arg))) {
     console.error('Unknown option. Use --help.');
     process.exitCode = 2;
   } else if (args.includes('--help')) {
-    console.log('Usage: node src/web/scripts/audit-antd.mjs [--json] [--check-retired]\nScans src/web/src and web manifest/root lockfile. --check-retired exits 1 for remaining antd/class/internal-ref/patch references; independent icons are permitted.');
+    console.log('Usage: node src/web/scripts/audit-antd.mjs [--json] [--check-retired]\nScans src/web/src and web manifest/root lockfile. --check-retired exits 1 for remaining antd/class/internal-ref/patch references; independent icons are permitted.\n       node src/web/scripts/audit-antd.mjs --check-owners\nRead-only: exits 1 when a use point has no owner in the P0.1 inventory or docs/evidence/base-ui-migration/inventory-delta/*.json; lists the ones awaiting the coordinator.');
+  } else if (args.includes('--check-owners')) {
+    if (args.length > 1) {
+      console.error('--check-owners runs alone.');
+      process.exitCode = 2;
+    } else {
+      const report = audit();
+      const inventory = loadInventory();
+      const result = ownerGaps(report, inventory);
+      console.log(JSON.stringify({ baseline: report.baseline, records: inventory.records.map((record) => record.name), ...result }, null, 2));
+      if (result.unowned.length) {
+        console.error(`Ownership gaps: ${result.unowned.length} use points have no owner. Migrate them in this batch if in scope, otherwise report them to the coordinator.`);
+        process.exitCode = 1;
+      }
+    }
   } else {
     const report = audit();
     if (args.includes('--json')) console.log(JSON.stringify(report, null, 2));

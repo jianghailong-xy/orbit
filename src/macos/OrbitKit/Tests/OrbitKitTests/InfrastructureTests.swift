@@ -288,4 +288,35 @@ final class InfrastructureTests: XCTestCase {
         """#)
         XCTAssertFalse(Infrastructure.installable(unsupported, .antigravity))
     }
+
+    /// OpenCode signs in nowhere here, so its page's one press is its install (web's OpenCode row): on a
+    /// machine that reports it missing, and Retry after a failed install — none while one is under way, for
+    /// one installed, or on a runner that never mentions OpenCode, where the web draws it no row either.
+    func testOpenCodesPageInstallsItWhereTheMachineReportsItMissing() throws {
+        let missing = try runner(#"""
+        {"id":"r","name":"r","online":true,"engines":[{"engine":"opencode","installed":false,"auth":"unknown"}]}
+        """#)
+        XCTAssertTrue(Infrastructure.installsOpenCode(missing))
+        let installed = try runner(#"""
+        {"id":"r","name":"r","online":true,"engines":[{"engine":"opencode","installed":true,"auth":"unknown"}]}
+        """#)
+        XCTAssertFalse(Infrastructure.installsOpenCode(installed))
+        let silent = try runner(#"{"id":"r","name":"r","online":true,"engines":[{"engine":"claude","installed":true,"auth":"yes"}]}"#)
+        XCTAssertFalse(Infrastructure.installsOpenCode(silent))
+
+        let installing = try runner(#"""
+        {"id":"r","name":"r","online":true,"engines":[{"engine":"opencode","installed":false,"auth":"unknown"}],
+         "install":{"status":"installing","engine":"opencode"}}
+        """#)
+        XCTAssertEqual(Infrastructure.rowKind(installing.engines?.first, install: installing.install, slug: "opencode"),
+                       .installing)
+        XCTAssertFalse(Infrastructure.installsOpenCode(installing))
+        let failed = try runner(#"""
+        {"id":"r","name":"r","online":true,"engines":[{"engine":"opencode","installed":false,"auth":"unknown"}],
+         "install":{"status":"failed","engine":"opencode"}}
+        """#)
+        XCTAssertEqual(Infrastructure.rowKind(failed.engines?.first, install: failed.install, slug: "opencode"),
+                       .installFailed)
+        XCTAssertTrue(Infrastructure.installsOpenCode(failed))
+    }
 }

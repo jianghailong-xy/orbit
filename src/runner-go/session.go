@@ -235,7 +235,13 @@ type sessionMeta struct {
 	// on (antigravitySessionGoogleDirToRecord): what a removal of that account refuses to take while
 	// the session is running. Empty on Default.
 	AntigravityGoogleDir string `json:"antigravityGoogleDir,omitempty"`
-	WorkDir              string `json:"workDir"`
+	// KimiCodeHome is the KIMI_CODE_HOME of the added Kimi account this session runs on
+	// (kimiSessionHomeToRecord): where its conversation is kept, so where `orbit resume` looks for it,
+	// and what a removal of that account refuses to take while the session is running. Empty on
+	// Default. A session moved to another account keeps the one it ran on here until its engine starts
+	// on the new one, its conversation carried there first (writeKimiSessionMeta).
+	KimiCodeHome string `json:"kimiCodeHome,omitempty"`
+	WorkDir      string `json:"workDir"`
 	// PreviousWorkDir is the WorkDir before the last write that changed it: where a session moved
 	// to another of this machine's workspaces last ran, and so where its Claude conversation is
 	// (carryMovedClaudeConversation). Each run records its own WorkDir before its engine starts.
@@ -301,13 +307,32 @@ func writeSessionMeta(scratch string, job *ClaimedSession, execDir string) {
 	writeSessionMetaWithCodexState(scratch, job, execDir, "", "", "")
 }
 
+// writeKimiSessionMeta is writeSessionMeta from a Kimi engine that has started in the KIMI_CODE_HOME
+// its claim names, the session's conversation carried there first (carryKimiConversation): the one
+// write that moves KimiCodeHome to another account.
+func writeKimiSessionMeta(scratch string, job *ClaimedSession, execDir string) {
+	writeSessionMetaRecord(scratch, job, execDir, "", "", "", true)
+}
+
 func writeSessionMetaWithCodexState(scratch string, job *ClaimedSession, execDir, layout, partition, codexHome string) {
+	writeSessionMetaRecord(scratch, job, execDir, layout, partition, codexHome, false)
+}
+
+func writeSessionMetaRecord(scratch string, job *ClaimedSession, execDir, layout, partition, codexHome string, kimiStarted bool) {
 	// Generic writes happen before the provider starts and on cold claims. Preserve
 	// the Codex state scope learned by an earlier successful start so a resume never
 	// falls back from runner-shared state to a stale legacy session directory.
 	claudeDir := claudeSessionConfigDirToRecord(job, execDir)
 	antigravityDir := antigravitySessionGoogleDirToRecord(job)
+	kimiHome := kimiSessionHomeToRecord(job, execDir)
 	existing := readSessionMeta(filepath.Join(scratch, "meta.json"))
+	// A Kimi conversation stays in the account it ran on until the engine that starts on another
+	// carries it there, so a write before then — a cold claim already naming the account it moves to —
+	// keeps the account it is in: the one `orbit resume` has to open, and a removal has to leave alone.
+	if !kimiStarted && existing != nil && existing.Provider == providerKimi && existing.RuntimeSessionID != "" &&
+		runtimeProvider(job) == providerKimi {
+		kimiHome = existing.KimiCodeHome
+	}
 	if layout == "" || claudeDir == "" {
 		if existing != nil {
 			if layout == "" {
@@ -340,6 +365,7 @@ func writeSessionMetaWithCodexState(scratch string, job *ClaimedSession, execDir
 		CodexStateHome:       codexHome,
 		ClaudeConfigDir:      claudeDir,
 		AntigravityGoogleDir: antigravityDir,
+		KimiCodeHome:         kimiHome,
 		WorkDir:              execDir,
 		PreviousWorkDir:      previousWorkDir,
 		Title:                job.Title,
@@ -589,6 +615,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 
 	var bufMu sync.Mutex
 	var buf []RunEvent
+	// How long each stretch of reasoning took, written onto the block that closes it (guarded by
+	// bufMu, so it sees events in the order they are buffered). See thinking_clock.go.
+	thinkClock := &thinkingClock{}
 	// A coordinator context can be acknowledged only after its compaction boundary is durable on
 	// the control plane. The provider emits and completes on different goroutines, so count under
 	// the same lock that appends the event and drain every generation before /turn-complete.
@@ -692,6 +721,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			seq++
 			seqMu.Unlock()
 			bufMu.Lock()
+			payload = thinkClock.observe(eventType, payload, time.Now())
 			buf = append(buf, RunEvent{Seq: s, Type: eventType, TS: nowISO(), TurnID: turnID, Payload: payload})
 			if coordinatorContextBoundaryEvent(eventType, payload) {
 				coordinatorContextBarrier.mark()
@@ -1538,6 +1568,10 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 	}
 	if msg := engineAuthPreflight(provider, preflightEnv); msg != "" {
 		emit(evError, map[string]interface{}{"message": msg})
+		// The engine probe the Providers page reads can be minutes old and still say Signed in. Re-probe
+		// and beat now (noteEngineSignedOut), as for an Antigravity sign-in agy refuses, rather than leave
+		// the page contradicting this refusal until the next refresh.
+		noteEngineSignedOut()
 		return stFailed, true, false
 	}
 	return providerRuntimeFor(provider).run(sessionProcessArgs{
@@ -1756,6 +1790,8 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		// real message prepends + clears it so claude sees it as context (CLI `!` semantics).
 		// Poller-goroutine-local (no lock), and intentionally lost on respawn.
 		var pendingShellCtx []string
+		// Whether this spawn has asked the engine to name the session (session_naming.go).
+		namingAsked := false
 		for pollCtx.Err() == nil {
 			resp, err := t.inbox(pollCtx, job.SessionID, leaseGeneration)
 			if err != nil {
@@ -2023,6 +2059,13 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 						}
 					}
 				}(delivery, resp.TurnID, steer)
+				// The opening request is on its way: the same engine names the session, once, when
+				// the control plane asked it to. Queued behind the user frame on the one writer, and
+				// answered beside the turn rather than after it.
+				if firstSpawn && !steer && !namingAsked && job.Naming != nil {
+					namingAsked = true
+					go askClaudeSessionTitle(procCtx, t, rt, job)
+				}
 			case "shell":
 				if !waitTurnPermit(procCtx) {
 					return
@@ -2314,6 +2357,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// A long turn is many minutes from its turn_end, so ctxPing also reports it mid-turn.
 	var contextTokens int
 	var ctxPing contextPinger
+	// The turn the latest `result` answered, which a prompt_suggestion arriving after it is filed
+	// against. Empty when that result failed or closed a turn the engine started on its own.
+	var lastAnsweredTurnID string
 	targetFenceTripped := false
 scanLoop:
 	for sc.Scan() {
@@ -2336,6 +2382,18 @@ scanLoop:
 				logln("dropping an unmatched control_response", resp.RequestID,
 					fmt.Sprintf("(generation %d)", controlIDGeneration(resp.RequestID)),
 					"for", job.SessionID, "on", rt.String())
+			}
+			continue
+		}
+		// The engine's guess at the person's next message (claude_prompt_suggestion.go). It belongs
+		// to the turn that just ended, and only while nothing newer has been handed to the engine: a
+		// message already on its way has answered what the suggestion was guessing at.
+		if msg["type"] == claudePromptSuggestionFrame {
+			activeOrbitMu.Lock()
+			busy := activeOrbitTurnID != "" || len(pending) > 0
+			activeOrbitMu.Unlock()
+			if p := promptSuggestionPayload(msg); p != nil && lastAnsweredTurnID != "" && !busy {
+				emitFor(lastAnsweredTurnID, evPromptSuggestion, p)
 			}
 			continue
 		}
@@ -2459,6 +2517,11 @@ scanLoop:
 				turnStatus = stFailed
 			}
 			lastAssistantText = ""
+			// A failed turn's own card is what comes next, so nothing is suggested after it.
+			lastAnsweredTurnID = ""
+			if turnID != "" && turnStatus != stFailed {
+				lastAnsweredTurnID = turnID
+			}
 			emit(evTurnEnd, withContextWindow(map[string]interface{}{
 				"subtype":       r.Subtype,
 				"numTurns":      r.NumTurns,

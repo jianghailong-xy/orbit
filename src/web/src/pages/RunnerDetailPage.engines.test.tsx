@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App as AntdApp } from 'antd';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { RunnerEngineHealth, RunnerInstallState } from '@orbit/shared';
+import type { PlanUsage, RunnerEngineHealth, RunnerInstallState } from '@orbit/shared';
 import type { Runner } from '../components/TasksSidePanel';
 import { openRunnerMenu } from '../components/RunnerEngines.test-helpers';
 import { RunnerDetailPage } from './RunnerDetailPage';
@@ -102,6 +102,8 @@ afterEach(() => {
   apiMock.mockReset();
   scrolledTo = [];
   document.body.innerHTML = '';
+  // A group of accounts opened in one case stays open for the next otherwise (useOpenAccounts).
+  localStorage.clear();
 });
 
 /** Where the page is: its own address, unless something sent the reader elsewhere. */
@@ -204,6 +206,9 @@ describe('an engine on its machine’s page', () => {
     const { sent } = await mount(machine());
     const codex = row('codex');
     expect(text($('.re-meta', codex))).toBe('0.160.1 · 2 of 2 accounts available');
+    // Folded at first, as on the machine's card: the head speaks for its accounts until it is opened.
+    expect($$('.rd-engines .re-acct')).toEqual([]);
+    await click($('.re-grp-toggle', codex));
     expect($$('.rd-engines .re-acct .re-name-text').map(text)).toEqual(['Default', 'Work']);
 
     const work = $$('.rd-engines .re-acct')[1];
@@ -216,6 +221,24 @@ describe('an engine on its machine’s page', () => {
     expect(sent).toEqual([
       { method: 'POST', path: `/runners/${RUNNER_ID}/login`, body: { engine: 'codex', accountName: 'Account 3' } },
     ]);
+  });
+});
+
+describe('an engine’s quota on its machine’s page', () => {
+  it('says a Kimi login whose plan has no quota limit apart from one whose read found nothing', async () => {
+    // The runner read the account and the answer held no window: no quota limit, not a failed
+    // read — Codex's windowless snapshot here is what a failed one still reads as.
+    await mount(
+      machine({
+        planUsage: {
+          kimi: { provider: 'kimi', fetchedAt: new Date().toISOString() },
+          codex: { provider: 'codex', fetchedAt: new Date().toISOString() },
+        } as PlanUsage,
+        engines: [health({ engine: 'kimi' }), health({ engine: 'codex' })],
+      }),
+    );
+    expect(text($('.re-quota-none', row('kimi')))).toBe('No quota limit');
+    expect(text($('.re-quota-none', row('codex')))).toBe('No quota reported');
   });
 });
 
@@ -269,7 +292,12 @@ describe('the machine’s own controls over its engines', () => {
       'opencode',
       'dsh',
     ]);
-    expect([text($('.re-name', row('opencode'))), text($('.re-meta', row('opencode')))]).toEqual(['OpenCode', '1.18.33']);
+    // OpenCode has its card's row here too, with nothing to press: it signs in per provider, on the machine.
+    expect([text($('.re-name', row('opencode'))), text($('.re-meta', row('opencode')))]).toEqual([
+      'OpenCode',
+      '1.18.33 · the CLI wouldn\'t say',
+    ]);
+    expect(text($('.re-login-note', row('opencode')))).toMatch(/^Run opencode auth login on that machine/);
     expect([text($('.re-name', row('dsh'))), text($('.re-status', row('dsh')))]).toEqual(['DeepSeek Harness', 'Uses API keys']);
     expect(actions(row('opencode'))).toEqual([]);
   });

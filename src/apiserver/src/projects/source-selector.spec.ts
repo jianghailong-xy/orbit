@@ -106,7 +106,7 @@ test('P5: once this project has landed on its line, an ordinary task starts from
   assert.deepEqual(resolved.selector.requiredContains, []);
 });
 
-test('P4: prerequisites move the baseline to the integration ref and record what it must contain', () => {
+test('P4: prerequisites pin the baseline to the line and record what it must contain', () => {
   const resolved = resolveSource(
     input({
       task: { dependsOnTaskIds: ['t-a'] },
@@ -120,8 +120,36 @@ test('P4: prerequisites move the baseline to the integration ref and record what
   );
   assert.equal(resolved.state, 'SELECTED');
   assert.equal(resolved.selector.kind, 'DEPENDENCY_CLOSURE');
-  assert.equal(resolved.selector.ref, 'refs/heads/release/next');
+  // Nothing has landed on this project's own line yet, so that line still bears upstream's name
+  // (v1.2) — the same two spellings P5 has, read off the same one line.
+  assert.equal(resolved.selector.ref, 'refs/heads/main');
   assert.deepEqual(resolved.selector.requiredContains, [SHA('b')]);
+});
+
+test('P4/v1.2: the baseline follows the line, and the containment requirement is the same either way', () => {
+  // A task with prerequisites is dispatched exactly when its prerequisite has just landed — and
+  // this project's own line usually has no landing yet at that moment. Naming `integrationRef`
+  // unconditionally pinned a ref nobody had created (the runner's fetch answered
+  // BASE_REF_NOT_FOUND, project 34bZ3i4AvgJaaoaw5E9tH, 2026-10-07). The two spellings are the same
+  // tree; only the name differs, and what the baseline must CONTAIN does not differ at all.
+  const prerequisite = {
+    task: { dependsOnTaskIds: ['t-a'] },
+    prerequisiteCheckpoints: [{ taskId: 't-a', commitSha: SHA('b'), kind: 'ACCEPTED' }],
+  };
+
+  const before = resolveSource(input({ ...prerequisite, integrationLineHasLanding: false }));
+  assert.equal(before.state, 'SELECTED');
+  assert.equal(before.reason.rank, 'P4');
+  assert.equal(before.selector.kind, 'DEPENDENCY_CLOSURE');
+  assert.equal(before.selector.ref, 'refs/heads/main');
+  assert.deepEqual(before.selector.requiredContains, [SHA('b')]);
+
+  const after = resolveSource(input({ ...prerequisite, integrationLineHasLanding: true }));
+  assert.equal(after.state, 'SELECTED');
+  assert.equal(after.reason.rank, 'P4');
+  assert.equal(after.selector.kind, 'DEPENDENCY_CLOSURE');
+  assert.equal(after.selector.ref, 'refs/heads/release/next');
+  assert.deepEqual(after.selector.requiredContains, [SHA('b')]);
 });
 
 test('P2 beats P3, and P1 beats both (D1–D3, on inputs where both predicates are true)', () => {

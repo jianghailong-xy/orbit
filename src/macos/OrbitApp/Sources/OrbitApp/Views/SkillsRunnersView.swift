@@ -110,7 +110,8 @@ struct RunnersListView: View {
                 RunnerAddSection { addingRunner = true }
                 InfrastructurePoolsSection(memberPools: lists.memberPools, ownPools: lists.ownPools,
                                            open: opensPools ? push : nil)
-                InfrastructureKeysSection(keys: lists.keys)
+                InfrastructureKeysSection(keys: lists.keys, balances: model.agents?.deepSeekBalances ?? [:],
+                                          open: opensPools ? push : nil)
             }
             .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
             .modifier(RunnersLoadOverlay(runners: runners, isEmpty: runners.runners.isEmpty,
@@ -132,6 +133,7 @@ struct RunnersListView: View {
             }
             .task { await self.model.agents?.reloadPools() }
             .task { await self.model.agents?.loadOwnKeys() }
+            .task { await self.model.agents?.loadDeepSeekBalances() }
             .task { await self.model.sharedPools?.load() }
             .task(id: InfrastructureLists.codexPoolIDs(model)) {
                 for id in InfrastructureLists.codexPoolIDs(self.model) { await self.model.sharedPools?.loadAccess(id) }
@@ -161,7 +163,8 @@ struct RunnersListView: View {
         }
     }
 
-    /// A pool's page is pushed where the page is a stack's (iOS) — the three-column pane shows records only.
+    /// A pool's page — and a DeepSeek key's — is pushed where the page is a stack's (iOS); the three-column
+    /// pane shows records only.
     private var opensPools: Bool { rowNavigation == .push }
 
     private func push(_ page: NavNode) { model.push(page) }

@@ -49,6 +49,13 @@ final class AgentsModel {
     /// Every pool a new-session draft may offer, in web's order: the shared ones drawn as account
     /// pools whose members are their keys (`SharedPools.asProviderPool`), then this account's own.
     var allPools: [ProviderPool] { SharedPools.asProviderPools(sharedPools) + providerPools }
+    /// The account's own providers as its key list reads them (GET /providers/mine), with the ids and
+    /// endpoints the catalogue above leaves out: what tells a DeepSeek key, and what its balance is
+    /// asked by. Read for Infrastructure's API keys (`loadDeepSeekBalances`).
+    private(set) var personalProviders: [ConfiguredProvider] = []
+    /// Each DeepSeek key's account balance by provider id, as the server last answered — or why it
+    /// didn't. Absent until asked, which a page reads as loading.
+    private(set) var deepSeekBalances: [String: ProviderBalanceReading] = [:]
     /// How the workspace-list fetches have gone: tells a failed fetch from an empty list, and holds
     /// the launch landing open until one succeeds (`LoadFailureLogic`).
     private(set) var loadState = ListLoadState()
@@ -123,6 +130,36 @@ final class AgentsModel {
     }
 
     func agent(_ id: String) -> Agent? { items.first { $0.id == id } }
+
+    // MARK: a DeepSeek key's account balance
+
+    /// The account's own keys read again, and the balance of each DeepSeek key among them: the server's
+    /// last read of it, which the providers holding one key share. Read side by side, so a key whose
+    /// read is slow holds up no other key's.
+    func loadDeepSeekBalances() async {
+        guard let mine = try? await api.personalProviders() else { return }
+        personalProviders = mine
+        let ids = mine.filter(DeepSeekBalance.applies(to:)).compactMap(\.providerID)
+        await withTaskGroup(of: Void.self) { group in
+            for id in ids { group.addTask { await self.readBalance(id, refresh: false) } }
+        }
+    }
+
+    /// One key's balance asked of DeepSeek again (the server lets that through once per 10 s for a key),
+    /// and read again for the other providers holding the same key, which share it.
+    func refreshDeepSeekBalance(_ id: String) async {
+        await readBalance(id, refresh: true)
+        guard case .answered(let answer)? = deepSeekBalances[id] else { return }
+        for sibling in answer.sharedWith ?? [] { await readBalance(sibling.id, refresh: false) }
+    }
+
+    private func readBalance(_ id: String, refresh: Bool) async {
+        do {
+            deepSeekBalances[id] = .answered(try await api.providerBalance(id, refresh: refresh))
+        } catch {
+            deepSeekBalances[id] = .unreachable(APIClient.failureReason(error))
+        }
+    }
 
     // MARK: a Codex pool of one's own — its ChatGPT account (migration 0323)
 

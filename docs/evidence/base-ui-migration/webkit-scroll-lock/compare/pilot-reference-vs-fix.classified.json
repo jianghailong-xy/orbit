@@ -1,0 +1,248 @@
+[
+ {
+  "file": "chromium-dark-desktop/pilot-account-open.png",
+  "differentPixels": 45,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-desktop/pilot-delete-confirm.png",
+  "differentPixels": 2,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-desktop/pilot-inputs.png",
+  "differentPixels": 3,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-desktop/pilot-p0-share-focused.png",
+  "differentPixels": 3,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-desktop/pilot-prerequisite-open.png",
+  "differentPixels": 3,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-desktop/pilot-remove-confirm.png",
+  "differentPixels": 7,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-desktop/pilot-share-expiry-open.png",
+  "differentPixels": 22,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-desktop/pilot-share-turn-off.png",
+  "differentPixels": 4,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-phone/pilot-run-hint.png",
+  "differentPixels": 2,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-phone/pilot-share-turn-off.png",
+  "differentPixels": 23,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/pilot-assignee-open.png",
+  "differentPixels": 9,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/pilot-delete-confirm.png",
+  "differentPixels": 24,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/pilot-detail.png",
+  "differentPixels": 9,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/pilot-field-hover.png",
+  "differentPixels": 9,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/pilot-inputs.png",
+  "differentPixels": 5,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/pilot-list-open.png",
+  "differentPixels": 9,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/pilot-list-search.png",
+  "differentPixels": 9,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/pilot-model-open.png",
+  "differentPixels": 9,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/pilot-p0-share-focused.png",
+  "differentPixels": 3,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/pilot-provider-open.png",
+  "differentPixels": 9,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/pilot-reopen-refused.png",
+  "differentPixels": 15,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/pilot-run-hint.png",
+  "differentPixels": 24,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/pilot-share-error.png",
+  "differentPixels": 37545,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": {
+   "scrollbar": 0,
+   "shift4": 1788,
+   "shift8": 1051,
+   "other": 34706
+  },
+  "otherBox": [
+   352,
+   81,
+   1062,
+   736
+  ]
+ },
+ {
+  "file": "chromium-light-desktop/pilot-share-expiry-open.png",
+  "differentPixels": 15,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/pilot-share-loading.png",
+  "differentPixels": 37641,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": {
+   "scrollbar": 0,
+   "shift4": 1805,
+   "shift8": 1063,
+   "other": 34773
+  },
+  "otherBox": [
+   312,
+   81,
+   1062,
+   736
+  ]
+ },
+ {
+  "file": "chromium-light-desktop/pilot-share-private.png",
+  "differentPixels": 3,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/pilot-share-turn-off.png",
+  "differentPixels": 10,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/pilot-suggested-open.png",
+  "differentPixels": 9,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-phone/pilot-remove-confirm.png",
+  "differentPixels": 6,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-phone/pilot-reopen-refused.png",
+  "differentPixels": 48,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-phone/pilot-run-hint.png",
+  "differentPixels": 20,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-phone/pilot-share-turn-off.png",
+  "differentPixels": 20,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ }
+]

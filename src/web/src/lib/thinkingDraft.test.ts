@@ -6,7 +6,7 @@ describe('what a finished thinking block keeps', () => {
     // Claude's own shape: {"thinking":"","signature":"CAIS…"}. Before this, the draft was
     // cleared and the empty durable event rendered nothing — the reasoning disappeared at the
     // instant it finished.
-    const patch = settleThinking('', 'weighing whether to go straight to L3', 1000, 13000);
+    const patch = settleThinking({ text: '' }, 'weighing whether to go straight to L3', 1000, 13000);
 
     expect(patch.text).toBe('weighing whether to go straight to L3');
   });
@@ -14,7 +14,7 @@ describe('what a finished thinking block keeps', () => {
   it('leaves a provider that did report its reasoning alone', () => {
     // The draft may already hold the first chunks of the NEXT block, so overwriting a
     // provider's own text with it would both duplicate and mis-attribute.
-    const patch = settleThinking('the reasoning, in full', 'first chunk of what comes next', 1000, 13000);
+    const patch = settleThinking({ text: 'the reasoning, in full' }, 'first chunk of what comes next', 1000, 13000);
 
     expect(patch.text).toBeUndefined();
   });
@@ -22,13 +22,23 @@ describe('what a finished thinking block keeps', () => {
   it('records nothing when the block closed empty and nothing was streamed either', () => {
     // A reload mid-session replays durable events with no deltas behind them. Inventing an
     // empty node here is what would paper the transcript with blank rows.
-    expect(settleThinking('', '', null, 13000)).toEqual({});
+    expect(settleThinking({ text: '' }, '', null, 13000)).toEqual({});
   });
 
   it('measures the stretch it actually watched, and declines to guess at one it did not', () => {
-    expect(settleThinking('', 'x', 1000, 13000).thinkingMs).toBe(12000);
+    expect(settleThinking({ text: '' }, 'x', 1000, 13000).thinkingMs).toBe(12000);
     // Page opened mid-block: no start, so no duration rather than a wrong one.
-    expect(settleThinking('', 'x', null, 13000).thinkingMs).toBeUndefined();
+    expect(settleThinking({ text: '' }, 'x', null, 13000).thinkingMs).toBeUndefined();
+  });
+
+  it("keeps the runner's own figure over the one this page took", () => {
+    // The runner stores the duration on the block, and that is what a reload reads. This page's
+    // clock starts when the first chunk reaches it, so letting it win would make the row change
+    // its number on the next reload.
+    const patch = settleThinking({ text: '', thinkingMs: 4200 }, 'weighing it up', 1000, 6000);
+
+    expect(patch.thinkingMs).toBeUndefined();
+    expect(patch.text).toBe('weighing it up');
   });
 });
 

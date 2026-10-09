@@ -229,7 +229,8 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     /// The CLI's own answer to "am I signed in": `yes` / `no` / `unknown`.
     public let auth: String?
     /// The accounts this engine is signed into on the runner, Default first — reported for an engine
-    /// whose CLI keeps a login per directory (Codex, Claude, Antigravity). Absent from an older runner.
+    /// whose CLI keeps a login per directory (Codex, Claude, Antigravity, Kimi). Absent from an older
+    /// runner.
     /// `auth` above stays the engine's answer: for Antigravity that may be a GEMINI_API_KEY, while its
     /// Default account is the runner's Google sign-in alone (`RunnerPageFormat.runsOnEnvKey`).
     public let accounts: [RunnerEngineAccount]?
@@ -244,6 +245,9 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     public let installationError: String?
     /// DeepSeek Harness only: what the runner's probe established, kept apart from a key's validity.
     public let dsh: DshRuntimeHealth?
+    /// Kimi only: the site its login is on, `mainland-cn` (kimi.com) or `global` (kimi.ai) — see
+    /// `KimiSite`. Absent before the first Kimi sign-in on that machine, and from an older runner.
+    public let kimiRegion: String?
     public var id: String { engine }
     /// Only the CLI's own "yes" counts — the third state exists precisely so an engine that
     /// wouldn't answer is never shown as signed in (web's `rowKindOf`).
@@ -252,10 +256,11 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     public init(engine: String, installed: Bool? = nil, version: String? = nil, auth: String? = nil,
                 accounts: [RunnerEngineAccount]? = nil, update: RunnerEngineUpdate? = nil,
                 authSource: String? = nil, planUsage: PlanUsageSnapshot? = nil,
-                installationError: String? = nil, dsh: DshRuntimeHealth? = nil) {
+                installationError: String? = nil, dsh: DshRuntimeHealth? = nil, kimiRegion: String? = nil) {
         self.engine = engine
         self.installationError = installationError
         self.dsh = dsh
+        self.kimiRegion = kimiRegion
         self.installed = installed
         self.version = version
         self.auth = auth
@@ -298,8 +303,8 @@ public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
     public let name: String?
     /// The CLI's own answer for this account: `yes` / `no` / `unknown`.
     public let auth: String?
-    /// The account's directory on that machine: a CODEX_HOME, a CLAUDE_CONFIG_DIR, or the Gemini
-    /// directory an Antigravity Google sign-in lives in.
+    /// The account's directory on that machine: a CODEX_HOME, a CLAUDE_CONFIG_DIR, the Gemini
+    /// directory an Antigravity Google sign-in lives in, or a KIMI_CODE_HOME.
     public let home: String?
     /// The same directory under Codex's historical field name, Codex accounts only: read
     /// `home ?? codexHome`.
@@ -309,10 +314,17 @@ public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
     public let fingerprintPrefix: String?
     /// Temporarily skipped until this time, without changing authentication or quota.
     public let pausedUntil: String?
+    /// When this signed-in account's login lapses (ISO 8601): the CLI's own expiry for it, Claude Code
+    /// only. Absent where the CLI recorded none.
+    public let loginExpiresAt: String?
+    /// Kimi only: the site this account's login is on, `mainland-cn` (kimi.com) or `global` (kimi.ai)
+    /// — each account's own (`KimiSite.site(of:)`). Absent before its first sign-in.
+    public let kimiRegion: String?
 
     public init(id: String, name: String? = nil, auth: String? = nil,
                 home: String? = nil, codexHome: String? = nil,
-                fingerprintPrefix: String? = nil, pausedUntil: String? = nil) {
+                fingerprintPrefix: String? = nil, pausedUntil: String? = nil,
+                loginExpiresAt: String? = nil, kimiRegion: String? = nil) {
         self.id = id
         self.name = name
         self.auth = auth
@@ -320,6 +332,8 @@ public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
         self.codexHome = codexHome
         self.fingerprintPrefix = fingerprintPrefix
         self.pausedUntil = pausedUntil
+        self.loginExpiresAt = loginExpiresAt
+        self.kimiRegion = kimiRegion
     }
 }
 
@@ -441,11 +455,14 @@ public struct StartLoginRequest: Encodable, Sendable {
     public let engine: String
     public let account: String?
     public let accountName: String?
+    /// Kimi only: the site to sign in on (`KimiSite`). Absent: a bare `kimi login`.
+    public let region: String?
 
-    public init(engine: LoginEngine, account: String? = nil, accountName: String? = nil) {
+    public init(engine: LoginEngine, account: String? = nil, accountName: String? = nil, region: String? = nil) {
         self.engine = engine.rawValue
         self.account = account
         self.accountName = accountName
+        self.region = region
     }
 }
 
@@ -645,13 +662,18 @@ public struct PlanUsageBucket: Codable, Equatable, Sendable {
     }
 }
 
-/// One provider's usage snapshot. Claude fills fiveHour/sevenDay; Codex fills primary/secondary.
+/// One provider's usage snapshot. Claude fills fiveHour/sevenDay; Codex fills primary/secondary;
+/// Kimi Code fills fiveHour/sevenDay/month/monthCode (shared `PlanUsageSnapshot`).
 public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
     public let provider: String?
     public let fiveHour: PlanUsageWindow?
     public let sevenDay: PlanUsageWindow?
     public let sevenDayOpus: PlanUsageWindow?
     public let sevenDaySonnet: PlanUsageWindow?
+    /// Kimi Code only: the monthly limit on everything the account spends (`usages.limit_month_total`).
+    public let month: PlanUsageWindow?
+    /// Kimi Code only: the monthly limit on coding use (`usages.limit_month_code`), beside `month`.
+    public let monthCode: PlanUsageWindow?
     public let primary: PlanUsageWindow?
     public let secondary: PlanUsageWindow?
     public let limitId: String?
@@ -663,15 +685,16 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
     /// Earned Codex reset state (absent on older runners and non-Codex snapshots).
     public let rateLimitReset: PlanUsageRateLimitReset?
     public let fetchedAt: String?
-    /// The runner's other accounts of this engine — Codex, Claude Code or Antigravity — by account id,
-    /// each as its own windows: this snapshot's windows (or buckets) are Default's (web
+    /// The runner's other accounts of this engine — Codex, Claude Code, Antigravity or Kimi Code — by
+    /// account id, each as its own windows: this snapshot's windows (or buckets) are Default's (web
     /// `codexAccountSnapshot`).
     public var accounts: [String: PlanUsageSnapshot]? = nil
     public let buckets: [PlanUsageBucket]?
 
     public init(provider: String? = nil, fiveHour: PlanUsageWindow? = nil,
                 sevenDay: PlanUsageWindow? = nil, sevenDayOpus: PlanUsageWindow? = nil,
-                sevenDaySonnet: PlanUsageWindow? = nil, primary: PlanUsageWindow? = nil,
+                sevenDaySonnet: PlanUsageWindow? = nil, month: PlanUsageWindow? = nil,
+                monthCode: PlanUsageWindow? = nil, primary: PlanUsageWindow? = nil,
                 secondary: PlanUsageWindow? = nil, limitId: String? = nil,
                 limitName: String? = nil, planType: String? = nil,
                 rateLimitReachedType: String? = nil, credits: PlanUsageCredits? = nil,
@@ -684,6 +707,8 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
         self.sevenDay = sevenDay
         self.sevenDayOpus = sevenDayOpus
         self.sevenDaySonnet = sevenDaySonnet
+        self.month = month
+        self.monthCode = monthCode
         self.primary = primary
         self.secondary = secondary
         self.limitId = limitId
@@ -707,6 +732,9 @@ public struct PlanUsage: Codable, Equatable, Sendable {
     public let sevenDay: PlanUsageWindow?
     public let sevenDayOpus: PlanUsageWindow?
     public let sevenDaySonnet: PlanUsageWindow?
+    /// Kimi Code's monthly pair on a flat payload (`PlanUsageSnapshot.month`, `.monthCode`).
+    public let month: PlanUsageWindow?
+    public let monthCode: PlanUsageWindow?
     public let primary: PlanUsageWindow?
     public let secondary: PlanUsageWindow?
     public let limitId: String?
@@ -730,7 +758,8 @@ public struct PlanUsage: Codable, Equatable, Sendable {
 
     public init(provider: String? = nil, fiveHour: PlanUsageWindow? = nil,
                 sevenDay: PlanUsageWindow? = nil, sevenDayOpus: PlanUsageWindow? = nil,
-                sevenDaySonnet: PlanUsageWindow? = nil, primary: PlanUsageWindow? = nil,
+                sevenDaySonnet: PlanUsageWindow? = nil, month: PlanUsageWindow? = nil,
+                monthCode: PlanUsageWindow? = nil, primary: PlanUsageWindow? = nil,
                 secondary: PlanUsageWindow? = nil, limitId: String? = nil,
                 limitName: String? = nil, planType: String? = nil,
                 rateLimitReachedType: String? = nil, credits: PlanUsageCredits? = nil,
@@ -745,6 +774,8 @@ public struct PlanUsage: Codable, Equatable, Sendable {
         self.sevenDay = sevenDay
         self.sevenDayOpus = sevenDayOpus
         self.sevenDaySonnet = sevenDaySonnet
+        self.month = month
+        self.monthCode = monthCode
         self.primary = primary
         self.secondary = secondary
         self.limitId = limitId
@@ -830,7 +861,12 @@ public extension PlanUsageSnapshot {
                 }
             }
         }
-        let raw: [(String, String, PlanUsageWindow?)] = [
+        // Kimi Code's in the words of its own /usage panel, the month as the one limit that stops the
+        // account — its total; the coding share of it (`monthCode`) is not a row of its own.
+        let raw: [(String, String, PlanUsageWindow?)] = provider == "kimi" ? [
+            ("fiveHour", "5h limit", fiveHour),
+            ("sevenDay", "Weekly limit", sevenDay),
+            ("month", "Monthly limit", month)] : [
             ("fiveHour", "5-hour limit", fiveHour),
             ("sevenDay", "Weekly · all models", sevenDay),
             ("sevenDayOpus", "Weekly · Opus", sevenDayOpus),
@@ -888,6 +924,7 @@ public extension PlanUsage {
     var flatSnapshot: PlanUsageSnapshot {
         PlanUsageSnapshot(provider: provider, fiveHour: fiveHour, sevenDay: sevenDay,
                           sevenDayOpus: sevenDayOpus, sevenDaySonnet: sevenDaySonnet,
+                          month: month, monthCode: monthCode,
                           primary: primary, secondary: secondary, limitId: limitId,
                           limitName: limitName, planType: planType,
                           rateLimitReachedType: rateLimitReachedType, credits: credits,

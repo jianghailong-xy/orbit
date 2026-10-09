@@ -77,6 +77,11 @@ final class LoginFailureTests: XCTestCase {
                        "Google sign-in is turned off on this server. Sign in with your email and password, or ask an administrator to turn it on.")
         XCTAssertEqual(says["GOOGLE_FLOW_MISMATCH"], "This Google sign-in expired or was already used. Continue with Google to try again.")
         XCTAssertEqual(says["GOOGLE_CANCELLED"], LoginFailure.googleCancelled)
+        XCTAssertEqual(says["GOOGLE_RATE_LIMITED"], LoginFailure.googleTooMany)
+        XCTAssertEqual(says["GOOGLE_SIGN_IN_BUSY"],
+                       "Too many Google sign-ins are in progress on this Orbit server. Wait a few minutes, then continue with Google again, or sign in with your password.")
+        XCTAssertEqual(says["GOOGLE_BAD_REQUEST"],
+                       "Orbit couldn't start Google sign-in from this app. Continue with Google to try again; if it keeps failing, sign in with your password.")
     }
 
     /// A password sign-in turned down without a code is still a wrong password; one turned down with
@@ -113,10 +118,10 @@ final class LoginFailureTests: XCTestCase {
     }
 
     /// Every code the server's Google sign-in can answer the app with has a sentence here, so a new
-    /// one can't reach the page as a catch-all: a callback's `error` (`GoogleCallbackError`), the
-    /// exchange's own refusals and those of the helpers it throws, and the account resolution's
-    /// (`RESOLUTION_REFUSALS`). Read from the server's own source. Linking's codes (§5.3) are left
-    /// out: the apps don't link (§8.2).
+    /// one can't reach the page as a catch-all: a callback's `error` (`GoogleCallbackError`) and
+    /// /start's (`GoogleStartRefusal`), sent back the same way, the exchange's own refusals and those
+    /// of the helpers it throws, and the account resolution's (`RESOLUTION_REFUSALS`). Read from the
+    /// server's own source. Linking's codes (§5.3) are left out: the apps don't link (§8.2).
     func testEveryCodeTheServerSignsInWithHasASentence() throws {
         let service = try source("src/apiserver/src/auth/google-login.service.ts")
         var codes = Set<String>()
@@ -133,6 +138,8 @@ final class LoginFailureTests: XCTestCase {
 
         let callback = try slice(from: "export type GoogleCallbackError =", to: ";")
         codes.formUnion(try matches("'([A-Z_]+)'", in: callback).map { $0[0] })
+        let start = try slice(from: "export type GoogleStartRefusal =", to: ";")
+        codes.formUnion(try matches("'([A-Z_]+)'", in: start).map { $0[0] })
         let exchange = try slice(from: "  async exchange(", to: "\n  }\n")
         codes.formUnion(try matches("'((?:GOOGLE|ACCOUNT)_[A-Z_]+)'", in: exchange).map { $0[0] })
         for helper in try matches(#"const (\w+) = \(\) =>\s*new \w+\(\{\s*code: '([A-Z_]+)'"#, in: service)
@@ -145,7 +152,8 @@ final class LoginFailureTests: XCTestCase {
         }
 
         XCTAssertTrue(codes.isSuperset(of: ["GOOGLE_CANCELLED", "GOOGLE_FLOW_EXPIRED", "GOOGLE_FLOW_MISMATCH",
-                                            "GOOGLE_NOT_CONFIGURED", "SETUP_REQUIRED", "GOOGLE_ACCOUNT_NOT_FOUND"]),
+                                            "GOOGLE_NOT_CONFIGURED", "SETUP_REQUIRED", "GOOGLE_ACCOUNT_NOT_FOUND",
+                                            "GOOGLE_RATE_LIMITED", "GOOGLE_SIGN_IN_BUSY", "GOOGLE_BAD_REQUEST"]),
                       "\(codes.sorted())")
         XCTAssertFalse(codes.contains("GOOGLE_UNLINK_WOULD_LOCK_OUT"), "a link code read as a sign-in one")
         for code in codes.sorted() {

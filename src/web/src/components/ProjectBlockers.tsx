@@ -1,8 +1,9 @@
 import { useId, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Input, Modal, Tag, Typography } from 'antd';
 import { api } from '../api';
 import { routeId } from '../lib/idCodec';
+import { sourceRefusalWhy } from '../lib/sourceRefusal';
 
 /**
  * The Blockers card on the project page (mock 6, docs/mocks/project-progress/): every open
@@ -31,7 +32,16 @@ export interface ProjectBlocker {
   criterionRevision: number | null;
   /** The current wording of the criterion, when the task still points at one. */
   criterionText?: string | null;
-  detail: { reason?: string; paths?: string[] } & Record<string, unknown>;
+  /** The SOURCE_UNRESOLVED fields, written by the door that freezes a refused start: the §10.1
+   *  code, its pairing, the ref that could not be resolved, and the tasks whose starts it refused. */
+  detail: {
+    reason?: string;
+    paths?: string[];
+    code?: string;
+    fixAction?: string;
+    ref?: string;
+    taskIds?: string[];
+  } & Record<string, unknown>;
   firstSeenAt: string;
   resolvedAt: string | null;
   resolvedBy: 'AUTO' | 'USER' | 'COORDINATOR' | null;
@@ -82,11 +92,43 @@ export function blockerHeadline(blocker: ProjectBlocker): Headline {
   const reason = blocker.detail?.reason;
   const known = typeof reason === 'string' ? REASON_HEADLINE[reason] : undefined;
   if (known) return known;
+  // A refused start (§10.3 / SR50) is named by what it costs the reader — a project whose runs
+  // cannot start — rather than by its kind's words, and by the line itself when that is what is
+  // missing. The kind stays spelled out underneath (`blockerSourceRefusalLine`), because it is the
+  // word the server, the contract and a task comment all use for this.
+  if (blocker.kind === 'SOURCE_UNRESOLVED') {
+    return {
+      ...(OWNER_TAG[blocker.owner] ?? OWNER_TAG.SYSTEM),
+      title:
+        blocker.detail?.fixAction === 'FIX_REF'
+          ? 'Integration line not created'
+          : 'Runs can’t start from this project’s line',
+    };
+  }
   const words = blocker.kind.toLowerCase().split('_').filter(Boolean).join(' ');
   return {
     ...(OWNER_TAG[blocker.owner] ?? OWNER_TAG.SYSTEM),
     title: words ? `${words[0]!.toUpperCase()}${words.slice(1)}` : blocker.kind,
   };
+}
+
+/**
+ * The subject line of a refused-start blocker: the kind, and the ref that could not be resolved.
+ *
+ * The two together on purpose. The kind is what a coordinator's report and the task's own timeline
+ * call this (`SOURCE_UNRESOLVED`), so a reader arriving from either can match what they read there
+ * to what they see here; the ref is the address that is missing, which is the whole of the fix.
+ */
+export function blockerSourceRefusalLine(blocker: ProjectBlocker): string | null {
+  if (blocker.kind !== 'SOURCE_UNRESOLVED') return null;
+  const ref = typeof blocker.detail?.ref === 'string' ? blocker.detail.ref : null;
+  return ref ? `${blocker.kind} · ${ref}` : blocker.kind;
+}
+
+/** The tasks a refused start names: the runs this line refused, newest first as the door wrote them. */
+export function blockerRefusedTaskIds(blocker: ProjectBlocker): string[] {
+  const ids = blocker.kind === 'SOURCE_UNRESOLVED' ? blocker.detail?.taskIds : undefined;
+  return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string' && id !== '') : [];
 }
 
 /** The work a blocker is about, and for a moved standard, where that standard stands now. */
@@ -212,12 +254,67 @@ export function resolveProjectBlocker(
   );
 }
 
+/** One refused run's task, as the project's own task page names it. The id is the address; the
+ *  title and status are what the page adds when it has resolved that far. */
+interface RefusedTaskRow {
+  id: string;
+  title?: string;
+  status?: string;
+}
+
+/**
+ * The tasks a refused start names, read off the project's own task page.
+ *
+ * Deliberately the page's query key and URL, so the read this card makes is the read the task list
+ * below already makes — one request, one cache entry, and the two cannot disagree about a row. The
+ * read is only made when a blocker actually names tasks (most projects have none), and a row whose
+ * task the page has not resolved still draws: the id is the address, and a card that hid it would
+ * be hiding the one thing the reader can act on.
+ */
+function RefusedTaskList({ projectId, taskIds }: { projectId: string; taskIds: string[] }) {
+  const tasks = useQuery({
+    queryKey: ['project', projectId, 'tasks', 'root'],
+    queryFn: () =>
+      api<{ items: RefusedTaskRow[] }>(
+        `/projects/${encodeURIComponent(projectId)}/tasks/page?limit=100`,
+      ),
+    enabled: taskIds.length > 0,
+  });
+  const byId = new Map((tasks.data?.items ?? []).map((task) => [task.id, task]));
+  return (
+    <ul className="project-blockers-tasks">
+      {taskIds.map((id) => {
+        const task = byId.get(id);
+        return (
+          <li key={id}>
+            <span className="project-blockers-task-dot" aria-hidden="true" />
+            <a className="project-blockers-task-title" href={`/tasks/${encodeURIComponent(id)}`}>
+              {task?.title ?? id}
+            </a>
+            {/* What this blocker says about that row: its start is the one this line refused. Not
+                the task's own status, which a refusal deliberately does not change. */}
+            <span className="project-blockers-task-state" title={blockerTaskStateTitle}>
+              Refused
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Why a row above reads "Refused" although the task's own status is untouched. */
+const blockerTaskStateTitle =
+  'This task’s start was refused before it ran; the task itself was not changed.';
+
 function BlockerRow({
   blocker,
+  projectId,
   now,
   onResolve,
 }: {
   blocker: ProjectBlocker;
+  projectId: string;
   now: number;
   onResolve: () => void;
 }) {
@@ -228,6 +325,8 @@ function BlockerRow({
   const prompt = blockerDecisionPrompt(blocker);
   const criterionVisible = showsCriterion(blocker);
   const taskPublicId = blocker.subjectType === 'TASK' ? routeId(blocker.subjectId) : null;
+  const sourceRefusal = blockerSourceRefusalLine(blocker);
+  const refusedTaskIds = blockerRefusedTaskIds(blocker);
   return (
     <li className="project-blockers-row">
       <div className="project-blockers-main">
@@ -235,6 +334,15 @@ function BlockerRow({
           <Tag color={headline.color}>{headline.tag}</Tag>
           <span>{headline.title}</span>
         </div>
+        {/* What the refusal was, in the sentence the session card over the refused conversation
+            shows — one table (`lib/sourceRefusal`), so the two screens describe one refusal
+            identically. The step below them is the server's own `requiredAction`. */}
+        {sourceRefusal ? (
+          <>
+            <div className="project-blockers-why">{sourceRefusalWhy(blocker.detail?.fixAction)}</div>
+            <div className="project-blockers-refusal">{sourceRefusal}</div>
+          </>
+        ) : null}
         {subject ? (
           <div className="project-blockers-subject">
             {taskPublicId ? (
@@ -263,6 +371,11 @@ function BlockerRow({
           <span>Next step</span>
           {blocker.requiredAction}
         </div>
+        {/* Which runs this is about, so the reader can go and change their baseline rather than
+            guess which tasks the line stopped. */}
+        {refusedTaskIds.length > 0 ? (
+          <RefusedTaskList projectId={projectId} taskIds={refusedTaskIds} />
+        ) : null}
         {pathsLine ? (
           <details className="project-blockers-files">
             <summary className="project-blockers-paths">{pathsLine}</summary>
@@ -440,6 +553,7 @@ export function ProjectBlockersCard({
           <BlockerRow
             key={blocker.id}
             blocker={blocker}
+            projectId={projectId}
             now={now}
             onResolve={() => setResolving(blocker)}
           />

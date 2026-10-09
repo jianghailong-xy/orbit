@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntdApp } from 'antd';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { Runner } from '../components/TasksSidePanel';
@@ -122,15 +121,13 @@ function mount(ws: ReturnType<typeof workspace>, preferences: UserPreferences = 
   root = createRoot(host);
   act(() =>
     root!.render(
-      <AntdApp>
-        <QueryClientProvider client={qc}>
-          <MemoryRouter initialEntries={[`/runners/${RUNNER_ID}`]}>
-            <Routes>
-              <Route path="/runners/:id" element={<RunnerDetailPage />} />
-            </Routes>
-          </MemoryRouter>
-        </QueryClientProvider>
-      </AntdApp>,
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={[`/runners/${RUNNER_ID}`]}>
+          <Routes>
+            <Route path="/runners/:id" element={<RunnerDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
     ),
   );
   return { writes };
@@ -235,16 +232,18 @@ describe('smart model selection on the Agent', () => {
 const ENGINES_NOTE =
   "Only this agent's own engine is ticked by default, so a task never moves to another engine unless you tick it here.";
 
-/** The engines smart selection may use, inside its row, as each one's tick reads. */
+/** The engines smart selection may use, inside its row, as each one's tick reads: its label, whether
+ *  it is checked, and whether it is disabled. */
 const engines = () =>
-  [...smartRow().querySelectorAll<HTMLElement>('.rd-engines-list .ant-checkbox-wrapper')].map((chip) => {
-    const input = chip.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
-    return { engine: chip.textContent, ticked: input.checked, fixed: input.disabled };
-  });
+  [...smartRow().querySelectorAll<HTMLElement>('.rd-engines-list [role="checkbox"]')].map((tick) => ({
+    engine: tick.closest('label')?.textContent,
+    ticked: tick.getAttribute('aria-checked') === 'true',
+    fixed: tick.getAttribute('aria-disabled') === 'true',
+  }));
 const engineInput = (engine: string) =>
-  [...smartRow().querySelectorAll<HTMLElement>('.rd-engines-list .ant-checkbox-wrapper')]
-    .find((chip) => chip.textContent === engine)!
-    .querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+  [...smartRow().querySelectorAll<HTMLElement>('.rd-engines-list [role="checkbox"]')].find(
+    (tick) => tick.closest('label')?.textContent === engine,
+  )!;
 
 describe('the engines smart selection may use', () => {
   it('sit under the switch, with only the agent\'s own engine ticked, and that one fixed', async () => {

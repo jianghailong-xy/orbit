@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Start 卡片：Plan 里的黄字</title>
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+</head>
+<body>
+<h1>Start 卡片：Plan 里的黄字</h1>
+<p class="lede"><b>这些黄字是“启动前检查”留下的提醒。</b>协调者请求启动时，服务端会先检查计划：如果某条验收标准只靠“看起来不写代码”的任务完成（OWNER_CONFIRMED，或 EVIDENCE_JUDGMENT 但没有验收命令），而这些任务都没声明 codeless，就记一条提醒。它防的是：这种任务结束时如果没有提交，那条标准可能一直算不上“已落地”，项目也就到不了 done（10-01 有个上线任务就这样卡住过项目）。</p>
+<p class="lede"><b>问题出在显示上：</b>每条标准一段，句子是写给协调者看的，满是内部词，而且整段橙色。这个项目 7 条标准里有 6 条命中，6 段加起来约 <b data-fill="warns"></b> pt。这次还是误判：11 个任务都会写代码，只是验收要看证据，写不成一条命令。</p>
+<p class="lede"><b>方案：</b>同一种提醒合成一行，换成 owner 的说法，默认收起，点开再看原因和涉及的任务（②③，只改 iOS 和 Web）。可选：让协调者能对提醒附一句说明，卡片直接引用，不再用琥珀色（④，要改服务端）。数据取自截图里的项目「Wiki 服务端执行与 System model」。</p>
+
+<div class="row">
+  <figure>
+    <span class="tag now">现在 · 截图这一屏</span>
+    <div data-phone="today"></div>
+    <figcaption>
+      <b>黄字是检查留下的提醒，照搬了服务端写给协调者的原句</b>
+      <ol>
+        <li><span class="num">1</span>服务端的句子写给协调者，满是 <b>OWNER_CONFIRMED、EVIDENCE_JUDGMENT、LANDED、codeless</b> 这些内部词。iOS 和 Web 都原样画成橙色。</li>
+        <li><span class="num">2</span>每条标准一段：这里 6 段只差一个数字，每段 8 行，共约 <b data-fill="warns"></b> pt，比一屏还高。How it runs 和 Start 被挤到很下面。</li>
+        <li>这次是误判：11 个任务都会写代码。协调者在对话里说了“可以忽略”，但卡片上看不到这句话。</li>
+        <li><span class="num">3</span>顺带发现：编号规则认得出 P1，认不出 P1a，整段标题被截断后拼进了顺序里。标题里的 “·” 又和分隔符混在一起，读不出先后。</li>
+      </ol>
+    </figcaption>
+  </figure>
+
+  <figure>
+    <span class="tag after">方案 · 默认收起</span>
+    <div data-phone="collapsed"></div>
+    <figcaption>
+      <b>同一种提醒合成一行，用 owner 的话说，默认收起</b>
+      <ol>
+        <li><span class="num">1</span>6 段合成一行。第一行说发生了什么：<b>Orbit can't tell if 11 tasks write code</b>。第二行说要不要管：<b>Fine if they do — if not, done can stall</b>。</li>
+        <li>只有三角图标是琥珀色，文字用主色和次要色：这是请你看一眼，不是报错。点整行展开，Start 照常能按。</li>
+        <li>整张卡从约 <b data-fill="len-today"></b> pt 缩到约 <b data-fill="len-new"></b> pt。这一屏里就能看到 How it runs。</li>
+        <li><span class="num">2</span>Plan 一行认出 P1a、P1b：<b>P1a starts now · P1b after P1a · …</b></li>
+      </ol>
+    </figcaption>
+  </figure>
+
+  <figure>
+    <span class="tag after">方案 · 点开这一行</span>
+    <div data-phone="expanded"></div>
+    <figcaption>
+      <b>点开再看原因、涉及的标准和任务、要不要做什么</b>
+      <ol>
+        <li><span class="num">1</span><b>原因</b>：这些任务靠证据验收，没有命令，Orbit 看不出会不会提交。没提交的可能卡住它那条标准，项目也就到不了 done，除非标成 <b>No code to land</b>（Done 卡上已有的说法）。</li>
+        <li><b>涉及</b>：标准号压成区间（1–5 and 7），任务用 Plan 一行里的编号。</li>
+        <li><b>要不要做</b>：都写代码就不用管；有不写代码的，请协调者标一下。整段不出现内部词。</li>
+        <li>再点一次收起。</li>
+      </ol>
+    </figcaption>
+  </figure>
+
+  <figure>
+    <span class="tag opt">可选 · 协调者已说明（要改服务端）</span>
+    <div data-phone="note"></div>
+    <figcaption>
+      <b>协调者能回一句，这一行就不用琥珀色</b>
+      <ol>
+        <li>这次协调者在对话里说了“6 条提示可以忽略……真正不写代码的只有 P10，已经声明过了”，但卡片上看不到。</li>
+        <li><span class="num">1</span>给 <code>project_request_start</code> 加一个可选参数，让协调者对某种提醒附一句说明。有说明时，图标换成灰色 ⓘ，第二行换成协调者的原话；标题不变，点开仍是 ③ 的内容。</li>
+        <li>没有说明的提醒照 ② 显示。</li>
+        <li>要改服务端、MCP 工具、CLI 和两端客户端。建议先做 ②③，这一步你来定。</li>
+      </ol>
+    </figcaption>
+  </figure>
+</div>
+
+<script>
+const MARKS = {
+  today: [['[data-mk-warns]', 1, { pad: 3 }], ['[data-mk-warns] .wt:nth-child(2)', 2, { pad: 1 }], ['[data-mk-order]', 3, { pad: 3 }]],
+  collapsed: [['[data-mk-warn]', 1, { pad: 0 }], ['[data-mk-order]', 2, { pad: 3 }]],
+  expanded: [['[data-mk-warn]', 1, { pad: 0 }]],
+  note: [['[data-mk-note]', 1, { pad: 0 }]],
+};
+document.querySelectorAll('[data-phone]').forEach((slot) => { slot.outerHTML = phone(slot.dataset.phone); });
+window.__layout = () => {
+  document.querySelectorAll('.phone').forEach((ph) => layoutPhone(ph, MARKS[ph.dataset.v]));
+  const warns = document.querySelector('.phone[data-v="today"] [data-mk-warns]').offsetHeight;
+  const today = document.querySelector('.phone[data-v="today"] .cd').offsetHeight;
+  const now = document.querySelector('.phone[data-v="collapsed"] .cd').offsetHeight;
+  const round = (n) => (Math.round(n / 10) * 10).toLocaleString('en-US');
+  const fill = { warns: round(warns), 'len-today': round(today), 'len-new': round(now) };
+  document.querySelectorAll('[data-fill]').forEach((el) => { el.textContent = fill[el.dataset.fill]; });
+};
+document.fonts.ready.then(() => window.__layout());
+</script>
+</body>
+</html>

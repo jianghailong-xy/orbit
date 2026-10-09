@@ -190,12 +190,12 @@ func loginFlowFor(engine string) loginFlow {
 // loginRelay drives engine logins on this machine while the user completes
 // their browser authorization through the control plane.
 //
-// One at a time per account: a CLI writes the credentials of the account it signs in — Kimi's,
-// and the machine's one login for any engine without account slots; one directory's worth of files
-// for Codex's CODEX_HOME and Claude's CLAUDE_CONFIG_DIR — so two concurrent sign-ins into the same
-// account would race over them, while sign-ins into different slots write different files and run
-// side by side. The heartbeat redelivers a `start` until the server sees a status change, so
-// start() must be idempotent while that account's sign-in is already running.
+// One at a time per account: a CLI writes the credentials of the account it signs in — the
+// machine's one login for any engine without account slots; one directory's worth of files for
+// Codex's CODEX_HOME, Claude's CLAUDE_CONFIG_DIR and Kimi's KIMI_CODE_HOME — so two concurrent
+// sign-ins into the same account would race over them, while sign-ins into different slots write
+// different files and run side by side. The heartbeat redelivers a `start` until the server sees a
+// status change, so start() must be idempotent while that account's sign-in is already running.
 type loginRelay struct {
 	mu sync.Mutex
 	wg sync.WaitGroup
@@ -246,6 +246,8 @@ type loginRun struct {
 	slot   string
 	kind   accountSlotKind
 	google *antigravityGoogleLoginOutput
+	// googleCopied is closed once agy's terminal output has stopped coming into google.
+	googleCopied <-chan struct{}
 	// googleDir is the Gemini directory an Antigravity sign-in writes: Default's, or its account's.
 	googleDir string
 	ctx       context.Context
@@ -387,9 +389,19 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 	if flow.engine == providerCodex {
 		spec, _ := specFor(providerCodex)
 		if path, ok := lookLoginEngine(providerCodex); !ok || !supportsLoginFlag(path, spec, env) {
-			giveUp("this runner's codex is too old to sign in from the browser — run `codex update` on that machine, or sign in there with `" + loginCommandIn(env, "codex login") + "`")
+			giveUp("this runner's codex is too old to sign in from the browser — run `codex update` on that machine, or sign in there with `" + loginCommandIn(providerCodex, env, "codex login") + "`")
 			return
 		}
+	}
+	// Kimi signs in on one of two sites, each with accounts of its own (kimi_region.go). A start
+	// naming one passes it on; one naming none is the bare `kimi login` it always was.
+	if flow.engine == providerKimi && lr.Region != "" {
+		argv, refusal := kimiLoginArgv(flow.argv, lr.Region, env)
+		if refusal != "" {
+			giveUp(refusal)
+			return
+		}
+		flow.argv = argv
 	}
 	r.mu.Lock()
 	if prev := r.runs[key]; prev != nil {
@@ -473,8 +485,9 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 	}
 	out := &syncBuffer{}
 	var startErr error
+	var googleCopied <-chan struct{}
 	if google != nil {
-		stdin, startErr = startAntigravityGooglePTY(cmd, google)
+		stdin, googleCopied, startErr = startAntigravityGooglePTY(cmd, google)
 	} else {
 		cmd.Stdout = out
 		cmd.Stderr = out
@@ -493,7 +506,7 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 		giveUp(signInStartError(startErr, flow))
 		return
 	}
-	run = &loginRun{key: key, attempt: attempt, stdin: stdin, cancel: cancel, out: out, slot: createdSlot, kind: kind, google: google, googleDir: antigravityGoogleDirIn(env), ctx: ctx, binPath: binPath, finished: make(chan struct{})}
+	run = &loginRun{key: key, attempt: attempt, stdin: stdin, cancel: cancel, out: out, slot: createdSlot, kind: kind, google: google, googleCopied: googleCopied, googleDir: antigravityGoogleDirIn(env), ctx: ctx, binPath: binPath, finished: make(chan struct{})}
 	if r.runs == nil {
 		r.runs = map[string]*loginRun{}
 	}
@@ -631,7 +644,7 @@ poll:
 		}
 		report(LoginResultRequest{
 			Status:  loginFailed,
-			Message: "couldn't read a sign-in URL from the CLI — run `" + loginCommandIn(env, flow.cmdLine()) + "` on this machine instead",
+			Message: "couldn't read a sign-in URL from the CLI — run `" + loginCommandIn(flow.engine, env, flow.cmdLine()) + "` on this machine instead",
 		})
 		return
 	}
@@ -802,9 +815,11 @@ func probeAuthNow(engine string, env []string) authState {
 }
 
 // loginCommandIn spells a sign-in command the way to run it by hand for the account env signs in:
-// run bare, a command meant for one account's directory would sign in Default instead.
-func loginCommandIn(env []string, cmdLine string) string {
-	for _, kind := range accountSlotKinds {
+// run bare, a command meant for one account's directory would sign in Default instead. Only engine's
+// own variable is read: env is the runner's environment plus that one, and the runner's may well set
+// another engine's.
+func loginCommandIn(engine string, env []string, cmdLine string) string {
+	if kind, ok := accountSlotKindFor(engine); ok {
 		if dir := envValue(env, kind.varName); dir != "" {
 			return kind.varName + "=" + shellQuote(dir) + " " + cmdLine
 		}

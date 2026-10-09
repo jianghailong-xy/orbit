@@ -1,0 +1,27 @@
+{
+ "label": "ref-nb-p41",
+ "step": "p41",
+ "tree": "/mnt/data/tmp/overlay-first-frame-34brok/ref",
+ "command": "cd src/web && P41_SNAPSHOTS=/mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots P41_OUTPUT=/mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/results npx playwright test -c ui-migration/p41.config.mjs --update-snapshots=all",
+ "commit": "c4c94c924e6163abd1bcff74d376899f69c4a8a0",
+ "webChanges": [
+  "M src/web/src/components/ui/Combobox.tsx",
+  " M src/web/src/components/ui/Floating.ts",
+  " M src/web/src/components/ui/Menu.tsx",
+  " M src/web/src/components/ui/MultiSelect.tsx",
+  " M src/web/src/components/ui/Overlay.tsx",
+  " M src/web/src/components/ui/Popconfirm.tsx",
+  " M src/web/src/components/ui/Popover.tsx",
+  " M src/web/src/components/ui/README.md",
+  " M src/web/src/components/ui/Select.tsx",
+  " M src/web/src/components/ui/Tooltip.tsx"
+ ],
+ "webDiffSha256": "85eab0fbf2d29bfd677007b1963ad64ee8bd9048bb93ea0c83f1074e0f1023e5",
+ "startedAt": "2026-10-08T16:00:27Z",
+ "endedAt": "2026-10-08T16:05:46+00:00",
+ "loadAverage": {
+  "start": "9.49 12.71 12.81",
+  "end": "22.67 17.77 15.02"
+ },
+ "exitCode": 1
+}
