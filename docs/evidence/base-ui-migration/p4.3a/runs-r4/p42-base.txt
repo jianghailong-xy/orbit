@@ -1,0 +1,857 @@
+argv: env P42_SNAPSHOTS=/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots P42_OUTPUT=/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-out npx playwright test --config ui-migration/p42.config.mjs --update-snapshots=all
+tree: /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/base
+head: 3369ee1e00682eb5934a7deb79e675a3c5f51f43
+uncommitted:
+load: 12.73 14.23 15.79 10/4890 684930
+disk: / 38226M available, TMPDIR /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/tmp
+started: 2026-10-08T23:21:48Z
+
+
+Running 184 tests using 1 worker
+
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-providers.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-engine-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-engine-remove.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-account-pause.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-account-pause-custom.png, writing actual.
+  ✓    1 [chromium-light-desktop] › ui-migration/p42.browser.mjs:109:3 › P4.2 providers › engines: an account menu, its remove question and the pause dialog (3.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-pools.png, writing actual.
+  ✓    2 [chromium-light-desktop] › ui-migration/p42.browser.mjs:175:3 › P4.2 providers › pools: each kind (1.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-keys-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-keys.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-keys-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-keys-empty.png, writing actual.
+  ✓    3 [chromium-light-desktop] › ui-migration/p42.browser.mjs:192:3 › P4.2 providers › keys: the table, its delete question, loading and empty (2.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-new-pool.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-new-pool-people.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-new-pool-claude.png, writing actual.
+  ✓    4 [chromium-light-desktop] › ui-migration/p42.browser.mjs:238:3 › P4.2 providers › New pool: each engine and who can use it (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-connect.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-connect-probe-error.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-connect-advanced.png, writing actual.
+  ✓    5 [chromium-light-desktop] › ui-migration/p42.browser.mjs:272:3 › P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway (1.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-connect-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-connect-dialect-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-connect-models.png, writing actual.
+  ✓    6 [chromium-light-desktop] › ui-migration/p42.browser.mjs:299:3 › P4.2 connecting a provider › a custom endpoint: its dialect, models and context windows (2.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-connect-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-connect-edit-shown.png, writing actual.
+  ✓    7 [chromium-light-desktop] › ui-migration/p42.browser.mjs:334:3 › P4.2 connecting a provider › editing: the stored key shown, the switch, and Save (1.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-deepseek-lines.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-deepseek-read.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-deepseek-refreshing.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-deepseek-low.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-deepseek-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-deepseek-loading.png, writing actual.
+  ✓    8 [chromium-light-desktop] › ui-migration/p42.browser.mjs:362:3 › P4.2 a DeepSeek key’s balance › its line in the keys table, and on its page: read, refreshing, too low, refused and loading (3.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-pool-claude.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-pool-tooltip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-pool-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-pool-add-account.png, writing actual.
+  ✓    9 [chromium-light-desktop] › ui-migration/p42.browser.mjs:430:3 › P4.2 a pool on its own page › a Claude pool: its tooltip, delete question and Add account (5.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-pool-codex.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-pool-who.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-pool-person-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-pool-just-mine.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-pool-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-pool-replace-key.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-pool-signout.png, writing actual.
+  ✓   10 [chromium-light-desktop] › ui-migration/p42.browser.mjs:477:3 › P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions (6.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-pool-add-kind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-pool-add-key.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-pool-add-key-form.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-codex-signin.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-codex-signin-code.png, writing actual.
+  ✓   11 [chromium-light-desktop] › ui-migration/p42.browser.mjs:547:3 › P4.2 a pool on its own page › adding to a Codex pool: the kind, a key, and signing ChatGPT in (2.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-pool-member.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-pool-leave.png, writing actual.
+  ✓   12 [chromium-light-desktop] › ui-migration/p42.browser.mjs:595:3 › P4.2 a pool on its own page › a pool somebody added the reader to: leaving it (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-runners-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-runners.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-runner-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-runner-rename.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-runner-rotate.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-runner-token.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-runner-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-runners-empty.png, writing actual.
+  ✓   13 [chromium-light-desktop] › ui-migration/p42.browser.mjs:622:3 › P4.2 runners › the list: loading, its menu, rename, token rotation and delete (12.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-register.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-register-windows.png, writing actual.
+  ✓   14 [chromium-light-desktop] › ui-migration/p42.browser.mjs:697:3 › P4.2 runners › the register guide: each system (1.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-runner-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-runner-actions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-workspace-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-workspace-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-workspace-advanced.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-workspace-discard.png, writing actual.
+  ✓   15 [chromium-light-desktop] › ui-migration/p42.browser.mjs:718:3 › P4.2 a runner’s page › its menus, a workspace’s settings and the discard question (3.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-workspace-history.png, writing actual.
+  ✓   16 [chromium-light-desktop] › ui-migration/p42.browser.mjs:776:3 › P4.2 a runner’s page › a new workspace with the directory’s Claude history (4.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-capacity.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-keep-free-open.png, writing actual.
+  ✓   17 [chromium-light-desktop] › ui-migration/p42.browser.mjs:799:3 › P4.2 a runner’s page › capacity: max concurrent, keep free and rename (2.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-runner-offline.png, writing actual.
+  ✓   18 [chromium-light-desktop] › ui-migration/p42.browser.mjs:842:3 › P4.2 a runner’s page › an offline runner: what needs attention (677ms)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-enroll-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-enroll.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-enroll-approved.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-enroll-conflict.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-enroll-error.png, writing actual.
+  ✓   19 [chromium-light-desktop] › ui-migration/p42.browser.mjs:854:3 › P4.2 approving orbit register › loading, the machine, a name already registered, approved and a dead code (2.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-users-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-users.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-users-reset.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-users-password.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-users-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-users-empty.png, writing actual.
+  ✓   20 [chromium-light-desktop] › ui-migration/p42.browser.mjs:899:3 › P4.2 users › the table: loading, reset password, a one-time password and delete (6.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-users-add.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-users-add-google.png, writing actual.
+  ✓   21 [chromium-light-desktop] › ui-migration/p42.browser.mjs:962:3 › P4.2 users › adding a user: with a password, and Google only (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-users-disable-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-users-disable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-desktop/p42-users-disabled.png, writing actual.
+  ✓   22 [chromium-light-desktop] › ui-migration/p42.browser.mjs:1000:3 › P4.2 users › disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled (1.8s)
+  ✓   23 [chromium-light-desktop] › ui-migration/p42.browser.mjs:1052:3 › P4.2 the pages’ own button styles › at rest, under the pointer and pressed (12.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-providers.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-engine-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-engine-remove.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-account-pause.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-account-pause-custom.png, writing actual.
+  ✓   24 [chromium-light-phone] › ui-migration/p42.browser.mjs:109:3 › P4.2 providers › engines: an account menu, its remove question and the pause dialog (3.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-pools.png, writing actual.
+  ✓   25 [chromium-light-phone] › ui-migration/p42.browser.mjs:175:3 › P4.2 providers › pools: each kind (890ms)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-keys-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-keys.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-keys-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-keys-empty.png, writing actual.
+  ✓   26 [chromium-light-phone] › ui-migration/p42.browser.mjs:192:3 › P4.2 providers › keys: the table, its delete question, loading and empty (2.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-new-pool.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-new-pool-people.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-new-pool-claude.png, writing actual.
+  ✓   27 [chromium-light-phone] › ui-migration/p42.browser.mjs:238:3 › P4.2 providers › New pool: each engine and who can use it (1.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-connect.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-connect-probe-error.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-connect-advanced.png, writing actual.
+  ✓   28 [chromium-light-phone] › ui-migration/p42.browser.mjs:272:3 › P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-connect-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-connect-dialect-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-connect-models.png, writing actual.
+  ✓   29 [chromium-light-phone] › ui-migration/p42.browser.mjs:299:3 › P4.2 connecting a provider › a custom endpoint: its dialect, models and context windows (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-connect-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-connect-edit-shown.png, writing actual.
+  ✓   30 [chromium-light-phone] › ui-migration/p42.browser.mjs:334:3 › P4.2 connecting a provider › editing: the stored key shown, the switch, and Save (1.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-deepseek-lines.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-deepseek-read.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-deepseek-refreshing.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-deepseek-low.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-deepseek-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-deepseek-loading.png, writing actual.
+  ✓   31 [chromium-light-phone] › ui-migration/p42.browser.mjs:362:3 › P4.2 a DeepSeek key’s balance › its line in the keys table, and on its page: read, refreshing, too low, refused and loading (4.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-pool-claude.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-pool-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-pool-add-account.png, writing actual.
+  ✓   32 [chromium-light-phone] › ui-migration/p42.browser.mjs:430:3 › P4.2 a pool on its own page › a Claude pool: its tooltip, delete question and Add account (4.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-pool-codex.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-pool-who.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-pool-person-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-pool-just-mine.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-pool-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-pool-replace-key.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-pool-signout.png, writing actual.
+  ✓   33 [chromium-light-phone] › ui-migration/p42.browser.mjs:477:3 › P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions (6.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-pool-add-kind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-pool-add-key.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-pool-add-key-form.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-codex-signin.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-codex-signin-code.png, writing actual.
+  ✓   34 [chromium-light-phone] › ui-migration/p42.browser.mjs:547:3 › P4.2 a pool on its own page › adding to a Codex pool: the kind, a key, and signing ChatGPT in (2.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-pool-member.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-pool-leave.png, writing actual.
+  ✓   35 [chromium-light-phone] › ui-migration/p42.browser.mjs:595:3 › P4.2 a pool on its own page › a pool somebody added the reader to: leaving it (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-runners-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-runners.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-runner-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-runner-rename.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-runner-rotate.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-runner-token.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-runner-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-runners-empty.png, writing actual.
+  ✓   36 [chromium-light-phone] › ui-migration/p42.browser.mjs:622:3 › P4.2 runners › the list: loading, its menu, rename, token rotation and delete (12.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-register.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-register-windows.png, writing actual.
+  ✓   37 [chromium-light-phone] › ui-migration/p42.browser.mjs:697:3 › P4.2 runners › the register guide: each system (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-runner-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-runner-actions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-workspace-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-workspace-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-workspace-advanced.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-workspace-discard.png, writing actual.
+  ✓   38 [chromium-light-phone] › ui-migration/p42.browser.mjs:718:3 › P4.2 a runner’s page › its menus, a workspace’s settings and the discard question (3.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-workspace-history.png, writing actual.
+  ✓   39 [chromium-light-phone] › ui-migration/p42.browser.mjs:776:3 › P4.2 a runner’s page › a new workspace with the directory’s Claude history (4.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-capacity.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-keep-free-open.png, writing actual.
+  ✓   40 [chromium-light-phone] › ui-migration/p42.browser.mjs:799:3 › P4.2 a runner’s page › capacity: max concurrent, keep free and rename (1.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-runner-offline.png, writing actual.
+  ✓   41 [chromium-light-phone] › ui-migration/p42.browser.mjs:842:3 › P4.2 a runner’s page › an offline runner: what needs attention (614ms)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-enroll-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-enroll.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-enroll-approved.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-enroll-conflict.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-enroll-error.png, writing actual.
+  ✓   42 [chromium-light-phone] › ui-migration/p42.browser.mjs:854:3 › P4.2 approving orbit register › loading, the machine, a name already registered, approved and a dead code (2.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-users-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-users.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-users-reset.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-users-password.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-users-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-users-empty.png, writing actual.
+  ✓   43 [chromium-light-phone] › ui-migration/p42.browser.mjs:899:3 › P4.2 users › the table: loading, reset password, a one-time password and delete (6.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-users-add.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-users-add-google.png, writing actual.
+  ✓   44 [chromium-light-phone] › ui-migration/p42.browser.mjs:962:3 › P4.2 users › adding a user: with a password, and Google only (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-users-disable-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-users-disable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-light-phone/p42-users-disabled.png, writing actual.
+  ✓   45 [chromium-light-phone] › ui-migration/p42.browser.mjs:1000:3 › P4.2 users › disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled (2.3s)
+  -   46 [chromium-light-phone] › ui-migration/p42.browser.mjs:1052:3 › P4.2 the pages’ own button styles › at rest, under the pointer and pressed
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-providers.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-engine-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-engine-remove.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-account-pause.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-account-pause-custom.png, writing actual.
+  ✓   47 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:109:3 › P4.2 providers › engines: an account menu, its remove question and the pause dialog (3.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-pools.png, writing actual.
+  ✓   48 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:175:3 › P4.2 providers › pools: each kind (934ms)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-keys-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-keys.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-keys-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-keys-empty.png, writing actual.
+  ✓   49 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:192:3 › P4.2 providers › keys: the table, its delete question, loading and empty (2.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-new-pool.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-new-pool-people.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-new-pool-claude.png, writing actual.
+  ✓   50 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:238:3 › P4.2 providers › New pool: each engine and who can use it (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-connect.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-connect-probe-error.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-connect-advanced.png, writing actual.
+  ✓   51 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:272:3 › P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway (1.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-connect-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-connect-dialect-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-connect-models.png, writing actual.
+  ✓   52 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:299:3 › P4.2 connecting a provider › a custom endpoint: its dialect, models and context windows (2.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-connect-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-connect-edit-shown.png, writing actual.
+  ✓   53 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:334:3 › P4.2 connecting a provider › editing: the stored key shown, the switch, and Save (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-deepseek-lines.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-deepseek-read.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-deepseek-refreshing.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-deepseek-low.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-deepseek-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-deepseek-loading.png, writing actual.
+  ✓   54 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:362:3 › P4.2 a DeepSeek key’s balance › its line in the keys table, and on its page: read, refreshing, too low, refused and loading (3.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-pool-claude.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-pool-tooltip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-pool-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-pool-add-account.png, writing actual.
+  ✓   55 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:430:3 › P4.2 a pool on its own page › a Claude pool: its tooltip, delete question and Add account (5.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-pool-codex.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-pool-who.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-pool-person-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-pool-just-mine.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-pool-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-pool-replace-key.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-pool-signout.png, writing actual.
+  ✓   56 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:477:3 › P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions (6.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-pool-add-kind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-pool-add-key.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-pool-add-key-form.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-codex-signin.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-codex-signin-code.png, writing actual.
+  ✓   57 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:547:3 › P4.2 a pool on its own page › adding to a Codex pool: the kind, a key, and signing ChatGPT in (2.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-pool-member.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-pool-leave.png, writing actual.
+  ✓   58 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:595:3 › P4.2 a pool on its own page › a pool somebody added the reader to: leaving it (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-runners-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-runners.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-runner-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-runner-rename.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-runner-rotate.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-runner-token.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-runner-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-runners-empty.png, writing actual.
+  ✓   59 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:622:3 › P4.2 runners › the list: loading, its menu, rename, token rotation and delete (12.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-register.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-register-windows.png, writing actual.
+  ✓   60 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:697:3 › P4.2 runners › the register guide: each system (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-runner-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-runner-actions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-workspace-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-workspace-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-workspace-advanced.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-workspace-discard.png, writing actual.
+  ✓   61 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:718:3 › P4.2 a runner’s page › its menus, a workspace’s settings and the discard question (3.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-workspace-history.png, writing actual.
+  ✓   62 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:776:3 › P4.2 a runner’s page › a new workspace with the directory’s Claude history (4.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-capacity.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-keep-free-open.png, writing actual.
+  ✓   63 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:799:3 › P4.2 a runner’s page › capacity: max concurrent, keep free and rename (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-runner-offline.png, writing actual.
+  ✓   64 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:842:3 › P4.2 a runner’s page › an offline runner: what needs attention (643ms)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-enroll-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-enroll.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-enroll-approved.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-enroll-conflict.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-enroll-error.png, writing actual.
+  ✓   65 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:854:3 › P4.2 approving orbit register › loading, the machine, a name already registered, approved and a dead code (2.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-users-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-users.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-users-reset.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-users-password.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-users-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-users-empty.png, writing actual.
+  ✓   66 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:899:3 › P4.2 users › the table: loading, reset password, a one-time password and delete (6.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-users-add.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-users-add-google.png, writing actual.
+  ✓   67 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:962:3 › P4.2 users › adding a user: with a password, and Google only (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-users-disable-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-users-disable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-desktop/p42-users-disabled.png, writing actual.
+  ✓   68 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:1000:3 › P4.2 users › disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled (2.0s)
+  ✓   69 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:1052:3 › P4.2 the pages’ own button styles › at rest, under the pointer and pressed (12.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-providers.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-engine-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-engine-remove.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-account-pause.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-account-pause-custom.png, writing actual.
+  ✓   70 [chromium-dark-phone] › ui-migration/p42.browser.mjs:109:3 › P4.2 providers › engines: an account menu, its remove question and the pause dialog (2.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-pools.png, writing actual.
+  ✓   71 [chromium-dark-phone] › ui-migration/p42.browser.mjs:175:3 › P4.2 providers › pools: each kind (914ms)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-keys-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-keys.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-keys-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-keys-empty.png, writing actual.
+  ✓   72 [chromium-dark-phone] › ui-migration/p42.browser.mjs:192:3 › P4.2 providers › keys: the table, its delete question, loading and empty (2.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-new-pool.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-new-pool-people.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-new-pool-claude.png, writing actual.
+  ✓   73 [chromium-dark-phone] › ui-migration/p42.browser.mjs:238:3 › P4.2 providers › New pool: each engine and who can use it (1.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-connect.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-connect-probe-error.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-connect-advanced.png, writing actual.
+  ✓   74 [chromium-dark-phone] › ui-migration/p42.browser.mjs:272:3 › P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway (1.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-connect-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-connect-dialect-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-connect-models.png, writing actual.
+  ✓   75 [chromium-dark-phone] › ui-migration/p42.browser.mjs:299:3 › P4.2 connecting a provider › a custom endpoint: its dialect, models and context windows (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-connect-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-connect-edit-shown.png, writing actual.
+  ✓   76 [chromium-dark-phone] › ui-migration/p42.browser.mjs:334:3 › P4.2 connecting a provider › editing: the stored key shown, the switch, and Save (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-deepseek-lines.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-deepseek-read.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-deepseek-refreshing.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-deepseek-low.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-deepseek-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-deepseek-loading.png, writing actual.
+  ✓   77 [chromium-dark-phone] › ui-migration/p42.browser.mjs:362:3 › P4.2 a DeepSeek key’s balance › its line in the keys table, and on its page: read, refreshing, too low, refused and loading (4.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-pool-claude.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-pool-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-pool-add-account.png, writing actual.
+  ✓   78 [chromium-dark-phone] › ui-migration/p42.browser.mjs:430:3 › P4.2 a pool on its own page › a Claude pool: its tooltip, delete question and Add account (5.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-pool-codex.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-pool-who.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-pool-person-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-pool-just-mine.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-pool-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-pool-replace-key.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-pool-signout.png, writing actual.
+  ✓   79 [chromium-dark-phone] › ui-migration/p42.browser.mjs:477:3 › P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions (6.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-pool-add-kind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-pool-add-key.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-pool-add-key-form.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-codex-signin.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-codex-signin-code.png, writing actual.
+  ✓   80 [chromium-dark-phone] › ui-migration/p42.browser.mjs:547:3 › P4.2 a pool on its own page › adding to a Codex pool: the kind, a key, and signing ChatGPT in (4.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-pool-member.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-pool-leave.png, writing actual.
+  ✓   81 [chromium-dark-phone] › ui-migration/p42.browser.mjs:595:3 › P4.2 a pool on its own page › a pool somebody added the reader to: leaving it (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-runners-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-runners.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-runner-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-runner-rename.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-runner-rotate.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-runner-token.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-runner-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-runners-empty.png, writing actual.
+  ✓   82 [chromium-dark-phone] › ui-migration/p42.browser.mjs:622:3 › P4.2 runners › the list: loading, its menu, rename, token rotation and delete (12.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-register.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-register-windows.png, writing actual.
+  ✓   83 [chromium-dark-phone] › ui-migration/p42.browser.mjs:697:3 › P4.2 runners › the register guide: each system (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-runner-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-runner-actions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-workspace-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-workspace-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-workspace-advanced.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-workspace-discard.png, writing actual.
+  ✓   84 [chromium-dark-phone] › ui-migration/p42.browser.mjs:718:3 › P4.2 a runner’s page › its menus, a workspace’s settings and the discard question (3.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-workspace-history.png, writing actual.
+  ✓   85 [chromium-dark-phone] › ui-migration/p42.browser.mjs:776:3 › P4.2 a runner’s page › a new workspace with the directory’s Claude history (4.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-capacity.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-keep-free-open.png, writing actual.
+  ✓   86 [chromium-dark-phone] › ui-migration/p42.browser.mjs:799:3 › P4.2 a runner’s page › capacity: max concurrent, keep free and rename (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-runner-offline.png, writing actual.
+  ✓   87 [chromium-dark-phone] › ui-migration/p42.browser.mjs:842:3 › P4.2 a runner’s page › an offline runner: what needs attention (572ms)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-enroll-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-enroll.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-enroll-approved.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-enroll-conflict.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-enroll-error.png, writing actual.
+  ✓   88 [chromium-dark-phone] › ui-migration/p42.browser.mjs:854:3 › P4.2 approving orbit register › loading, the machine, a name already registered, approved and a dead code (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-users-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-users.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-users-reset.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-users-password.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-users-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-users-empty.png, writing actual.
+  ✓   89 [chromium-dark-phone] › ui-migration/p42.browser.mjs:899:3 › P4.2 users › the table: loading, reset password, a one-time password and delete (6.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-users-add.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-users-add-google.png, writing actual.
+  ✓   90 [chromium-dark-phone] › ui-migration/p42.browser.mjs:962:3 › P4.2 users › adding a user: with a password, and Google only (1.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-users-disable-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-users-disable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/chromium-dark-phone/p42-users-disabled.png, writing actual.
+  ✓   91 [chromium-dark-phone] › ui-migration/p42.browser.mjs:1000:3 › P4.2 users › disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled (1.9s)
+  -   92 [chromium-dark-phone] › ui-migration/p42.browser.mjs:1052:3 › P4.2 the pages’ own button styles › at rest, under the pointer and pressed
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-providers.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-engine-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-engine-remove.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-account-pause.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-account-pause-custom.png, writing actual.
+  ✓   93 [webkit-light-desktop] › ui-migration/p42.browser.mjs:109:3 › P4.2 providers › engines: an account menu, its remove question and the pause dialog (4.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-pools.png, writing actual.
+  ✓   94 [webkit-light-desktop] › ui-migration/p42.browser.mjs:175:3 › P4.2 providers › pools: each kind (1.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-keys-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-keys.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-keys-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-keys-empty.png, writing actual.
+  ✓   95 [webkit-light-desktop] › ui-migration/p42.browser.mjs:192:3 › P4.2 providers › keys: the table, its delete question, loading and empty (3.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-new-pool.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-new-pool-people.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-new-pool-claude.png, writing actual.
+  ✓   96 [webkit-light-desktop] › ui-migration/p42.browser.mjs:238:3 › P4.2 providers › New pool: each engine and who can use it (2.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-connect.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-connect-probe-error.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-connect-advanced.png, writing actual.
+  ✓   97 [webkit-light-desktop] › ui-migration/p42.browser.mjs:272:3 › P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway (2.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-connect-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-connect-dialect-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-connect-models.png, writing actual.
+  ✓   98 [webkit-light-desktop] › ui-migration/p42.browser.mjs:299:3 › P4.2 connecting a provider › a custom endpoint: its dialect, models and context windows (2.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-connect-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-connect-edit-shown.png, writing actual.
+  ✓   99 [webkit-light-desktop] › ui-migration/p42.browser.mjs:334:3 › P4.2 connecting a provider › editing: the stored key shown, the switch, and Save (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-deepseek-lines.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-deepseek-read.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-deepseek-refreshing.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-deepseek-low.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-deepseek-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-deepseek-loading.png, writing actual.
+  ✓  100 [webkit-light-desktop] › ui-migration/p42.browser.mjs:362:3 › P4.2 a DeepSeek key’s balance › its line in the keys table, and on its page: read, refreshing, too low, refused and loading (4.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-pool-claude.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-pool-tooltip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-pool-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-pool-add-account.png, writing actual.
+  ✓  101 [webkit-light-desktop] › ui-migration/p42.browser.mjs:430:3 › P4.2 a pool on its own page › a Claude pool: its tooltip, delete question and Add account (6.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-pool-codex.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-pool-who.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-pool-person-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-pool-just-mine.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-pool-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-pool-replace-key.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-pool-signout.png, writing actual.
+  ✓  102 [webkit-light-desktop] › ui-migration/p42.browser.mjs:477:3 › P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions (8.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-pool-add-kind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-pool-add-key.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-pool-add-key-form.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-codex-signin.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-codex-signin-code.png, writing actual.
+  ✓  103 [webkit-light-desktop] › ui-migration/p42.browser.mjs:547:3 › P4.2 a pool on its own page › adding to a Codex pool: the kind, a key, and signing ChatGPT in (4.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-pool-member.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-pool-leave.png, writing actual.
+  ✓  104 [webkit-light-desktop] › ui-migration/p42.browser.mjs:595:3 › P4.2 a pool on its own page › a pool somebody added the reader to: leaving it (2.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-runners-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-runners.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-runner-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-runner-rename.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-runner-rotate.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-runner-token.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-runner-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-runners-empty.png, writing actual.
+  ✓  105 [webkit-light-desktop] › ui-migration/p42.browser.mjs:622:3 › P4.2 runners › the list: loading, its menu, rename, token rotation and delete (14.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-register.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-register-windows.png, writing actual.
+  ✓  106 [webkit-light-desktop] › ui-migration/p42.browser.mjs:697:3 › P4.2 runners › the register guide: each system (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-runner-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-runner-actions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-workspace-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-workspace-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-workspace-advanced.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-workspace-discard.png, writing actual.
+  ✓  107 [webkit-light-desktop] › ui-migration/p42.browser.mjs:718:3 › P4.2 a runner’s page › its menus, a workspace’s settings and the discard question (5.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-workspace-history.png, writing actual.
+  ✓  108 [webkit-light-desktop] › ui-migration/p42.browser.mjs:776:3 › P4.2 a runner’s page › a new workspace with the directory’s Claude history (5.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-capacity.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-keep-free-open.png, writing actual.
+  ✓  109 [webkit-light-desktop] › ui-migration/p42.browser.mjs:799:3 › P4.2 a runner’s page › capacity: max concurrent, keep free and rename (2.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-runner-offline.png, writing actual.
+  ✓  110 [webkit-light-desktop] › ui-migration/p42.browser.mjs:842:3 › P4.2 a runner’s page › an offline runner: what needs attention (1.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-enroll-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-enroll.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-enroll-approved.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-enroll-conflict.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-enroll-error.png, writing actual.
+  ✓  111 [webkit-light-desktop] › ui-migration/p42.browser.mjs:854:3 › P4.2 approving orbit register › loading, the machine, a name already registered, approved and a dead code (3.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-users-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-users.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-users-reset.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-users-password.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-users-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-users-empty.png, writing actual.
+  ✓  112 [webkit-light-desktop] › ui-migration/p42.browser.mjs:899:3 › P4.2 users › the table: loading, reset password, a one-time password and delete (8.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-users-add.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-users-add-google.png, writing actual.
+  ✓  113 [webkit-light-desktop] › ui-migration/p42.browser.mjs:962:3 › P4.2 users › adding a user: with a password, and Google only (2.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-users-disable-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-users-disable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-desktop/p42-users-disabled.png, writing actual.
+  ✓  114 [webkit-light-desktop] › ui-migration/p42.browser.mjs:1000:3 › P4.2 users › disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled (2.3s)
+  ✓  115 [webkit-light-desktop] › ui-migration/p42.browser.mjs:1052:3 › P4.2 the pages’ own button styles › at rest, under the pointer and pressed (13.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-providers.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-engine-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-engine-remove.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-account-pause.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-account-pause-custom.png, writing actual.
+  ✓  116 [webkit-light-phone] › ui-migration/p42.browser.mjs:109:3 › P4.2 providers › engines: an account menu, its remove question and the pause dialog (3.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-pools.png, writing actual.
+  ✓  117 [webkit-light-phone] › ui-migration/p42.browser.mjs:175:3 › P4.2 providers › pools: each kind (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-keys-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-keys.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-keys-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-keys-empty.png, writing actual.
+  ✓  118 [webkit-light-phone] › ui-migration/p42.browser.mjs:192:3 › P4.2 providers › keys: the table, its delete question, loading and empty (2.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-new-pool.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-new-pool-people.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-new-pool-claude.png, writing actual.
+  ✓  119 [webkit-light-phone] › ui-migration/p42.browser.mjs:238:3 › P4.2 providers › New pool: each engine and who can use it (2.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-connect.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-connect-probe-error.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-connect-advanced.png, writing actual.
+  ✓  120 [webkit-light-phone] › ui-migration/p42.browser.mjs:272:3 › P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway (2.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-connect-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-connect-dialect-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-connect-models.png, writing actual.
+  ✓  121 [webkit-light-phone] › ui-migration/p42.browser.mjs:299:3 › P4.2 connecting a provider › a custom endpoint: its dialect, models and context windows (2.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-connect-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-connect-edit-shown.png, writing actual.
+  ✓  122 [webkit-light-phone] › ui-migration/p42.browser.mjs:334:3 › P4.2 connecting a provider › editing: the stored key shown, the switch, and Save (1.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-deepseek-lines.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-deepseek-read.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-deepseek-refreshing.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-deepseek-low.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-deepseek-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-deepseek-loading.png, writing actual.
+  ✓  123 [webkit-light-phone] › ui-migration/p42.browser.mjs:362:3 › P4.2 a DeepSeek key’s balance › its line in the keys table, and on its page: read, refreshing, too low, refused and loading (4.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-pool-claude.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-pool-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-pool-add-account.png, writing actual.
+  ✓  124 [webkit-light-phone] › ui-migration/p42.browser.mjs:430:3 › P4.2 a pool on its own page › a Claude pool: its tooltip, delete question and Add account (5.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-pool-codex.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-pool-who.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-pool-person-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-pool-just-mine.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-pool-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-pool-replace-key.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-pool-signout.png, writing actual.
+  ✓  125 [webkit-light-phone] › ui-migration/p42.browser.mjs:477:3 › P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions (8.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-pool-add-kind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-pool-add-key.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-pool-add-key-form.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-codex-signin.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-codex-signin-code.png, writing actual.
+  ✓  126 [webkit-light-phone] › ui-migration/p42.browser.mjs:547:3 › P4.2 a pool on its own page › adding to a Codex pool: the kind, a key, and signing ChatGPT in (3.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-pool-member.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-pool-leave.png, writing actual.
+  ✓  127 [webkit-light-phone] › ui-migration/p42.browser.mjs:595:3 › P4.2 a pool on its own page › a pool somebody added the reader to: leaving it (1.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-runners-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-runners.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-runner-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-runner-rename.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-runner-rotate.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-runner-token.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-runner-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-runners-empty.png, writing actual.
+  ✓  128 [webkit-light-phone] › ui-migration/p42.browser.mjs:622:3 › P4.2 runners › the list: loading, its menu, rename, token rotation and delete (13.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-register.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-register-windows.png, writing actual.
+  ✓  129 [webkit-light-phone] › ui-migration/p42.browser.mjs:697:3 › P4.2 runners › the register guide: each system (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-runner-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-runner-actions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-workspace-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-workspace-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-workspace-advanced.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-workspace-discard.png, writing actual.
+  ✓  130 [webkit-light-phone] › ui-migration/p42.browser.mjs:718:3 › P4.2 a runner’s page › its menus, a workspace’s settings and the discard question (3.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-workspace-history.png, writing actual.
+  ✓  131 [webkit-light-phone] › ui-migration/p42.browser.mjs:776:3 › P4.2 a runner’s page › a new workspace with the directory’s Claude history (5.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-capacity.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-keep-free-open.png, writing actual.
+  ✓  132 [webkit-light-phone] › ui-migration/p42.browser.mjs:799:3 › P4.2 a runner’s page › capacity: max concurrent, keep free and rename (2.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-runner-offline.png, writing actual.
+  ✓  133 [webkit-light-phone] › ui-migration/p42.browser.mjs:842:3 › P4.2 a runner’s page › an offline runner: what needs attention (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-enroll-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-enroll.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-enroll-approved.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-enroll-conflict.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-enroll-error.png, writing actual.
+  ✓  134 [webkit-light-phone] › ui-migration/p42.browser.mjs:854:3 › P4.2 approving orbit register › loading, the machine, a name already registered, approved and a dead code (3.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-users-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-users.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-users-reset.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-users-password.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-users-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-users-empty.png, writing actual.
+  ✓  135 [webkit-light-phone] › ui-migration/p42.browser.mjs:899:3 › P4.2 users › the table: loading, reset password, a one-time password and delete (7.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-users-add.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-users-add-google.png, writing actual.
+  ✓  136 [webkit-light-phone] › ui-migration/p42.browser.mjs:962:3 › P4.2 users › adding a user: with a password, and Google only (2.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-users-disable-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-users-disable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-light-phone/p42-users-disabled.png, writing actual.
+  ✓  137 [webkit-light-phone] › ui-migration/p42.browser.mjs:1000:3 › P4.2 users › disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled (2.4s)
+  -  138 [webkit-light-phone] › ui-migration/p42.browser.mjs:1052:3 › P4.2 the pages’ own button styles › at rest, under the pointer and pressed
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-providers.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-engine-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-engine-remove.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-account-pause.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-account-pause-custom.png, writing actual.
+  ✓  139 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:109:3 › P4.2 providers › engines: an account menu, its remove question and the pause dialog (5.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-pools.png, writing actual.
+  ✓  140 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:175:3 › P4.2 providers › pools: each kind (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-keys-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-keys.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-keys-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-keys-empty.png, writing actual.
+  ✓  141 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:192:3 › P4.2 providers › keys: the table, its delete question, loading and empty (3.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-new-pool.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-new-pool-people.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-new-pool-claude.png, writing actual.
+  ✓  142 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:238:3 › P4.2 providers › New pool: each engine and who can use it (3.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-connect.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-connect-probe-error.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-connect-advanced.png, writing actual.
+  ✓  143 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:272:3 › P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-connect-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-connect-dialect-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-connect-models.png, writing actual.
+  ✓  144 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:299:3 › P4.2 connecting a provider › a custom endpoint: its dialect, models and context windows (2.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-connect-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-connect-edit-shown.png, writing actual.
+  ✓  145 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:334:3 › P4.2 connecting a provider › editing: the stored key shown, the switch, and Save (2.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-deepseek-lines.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-deepseek-read.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-deepseek-refreshing.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-deepseek-low.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-deepseek-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-deepseek-loading.png, writing actual.
+  ✓  146 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:362:3 › P4.2 a DeepSeek key’s balance › its line in the keys table, and on its page: read, refreshing, too low, refused and loading (4.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-pool-claude.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-pool-tooltip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-pool-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-pool-add-account.png, writing actual.
+  ✓  147 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:430:3 › P4.2 a pool on its own page › a Claude pool: its tooltip, delete question and Add account (6.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-pool-codex.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-pool-who.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-pool-person-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-pool-just-mine.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-pool-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-pool-replace-key.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-pool-signout.png, writing actual.
+  ✓  148 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:477:3 › P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions (8.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-pool-add-kind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-pool-add-key.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-pool-add-key-form.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-codex-signin.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-codex-signin-code.png, writing actual.
+  ✓  149 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:547:3 › P4.2 a pool on its own page › adding to a Codex pool: the kind, a key, and signing ChatGPT in (3.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-pool-member.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-pool-leave.png, writing actual.
+  ✓  150 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:595:3 › P4.2 a pool on its own page › a pool somebody added the reader to: leaving it (1.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-runners-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-runners.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-runner-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-runner-rename.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-runner-rotate.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-runner-token.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-runner-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-runners-empty.png, writing actual.
+  ✓  151 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:622:3 › P4.2 runners › the list: loading, its menu, rename, token rotation and delete (15.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-register.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-register-windows.png, writing actual.
+  ✓  152 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:697:3 › P4.2 runners › the register guide: each system (2.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-runner-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-runner-actions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-workspace-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-workspace-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-workspace-advanced.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-workspace-discard.png, writing actual.
+  ✓  153 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:718:3 › P4.2 a runner’s page › its menus, a workspace’s settings and the discard question (4.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-workspace-history.png, writing actual.
+  ✓  154 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:776:3 › P4.2 a runner’s page › a new workspace with the directory’s Claude history (5.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-capacity.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-keep-free-open.png, writing actual.
+  ✓  155 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:799:3 › P4.2 a runner’s page › capacity: max concurrent, keep free and rename (2.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-runner-offline.png, writing actual.
+  ✓  156 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:842:3 › P4.2 a runner’s page › an offline runner: what needs attention (955ms)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-enroll-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-enroll.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-enroll-approved.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-enroll-conflict.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-enroll-error.png, writing actual.
+  ✓  157 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:854:3 › P4.2 approving orbit register › loading, the machine, a name already registered, approved and a dead code (3.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-users-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-users.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-users-reset.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-users-password.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-users-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-users-empty.png, writing actual.
+  ✓  158 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:899:3 › P4.2 users › the table: loading, reset password, a one-time password and delete (7.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-users-add.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-users-add-google.png, writing actual.
+  ✓  159 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:962:3 › P4.2 users › adding a user: with a password, and Google only (2.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-users-disable-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-users-disable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-desktop/p42-users-disabled.png, writing actual.
+  ✓  160 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:1000:3 › P4.2 users › disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled (2.3s)
+  ✓  161 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:1052:3 › P4.2 the pages’ own button styles › at rest, under the pointer and pressed (12.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-providers.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-engine-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-engine-remove.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-account-pause.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-account-pause-custom.png, writing actual.
+  ✓  162 [webkit-dark-phone] › ui-migration/p42.browser.mjs:109:3 › P4.2 providers › engines: an account menu, its remove question and the pause dialog (4.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-pools.png, writing actual.
+  ✓  163 [webkit-dark-phone] › ui-migration/p42.browser.mjs:175:3 › P4.2 providers › pools: each kind (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-keys-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-keys.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-keys-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-keys-empty.png, writing actual.
+  ✓  164 [webkit-dark-phone] › ui-migration/p42.browser.mjs:192:3 › P4.2 providers › keys: the table, its delete question, loading and empty (3.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-new-pool.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-new-pool-people.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-new-pool-claude.png, writing actual.
+  ✓  165 [webkit-dark-phone] › ui-migration/p42.browser.mjs:238:3 › P4.2 providers › New pool: each engine and who can use it (2.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-connect.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-connect-probe-error.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-connect-advanced.png, writing actual.
+  ✓  166 [webkit-dark-phone] › ui-migration/p42.browser.mjs:272:3 › P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway (2.3s)
+[WebServer] 7:32:19 AM [vite] http proxy error: /api/providers/shared-pools
+[WebServer] AggregateError [ECONNREFUSED]: 
+[WebServer]     at internalConnectMultiple (node:net:1492:18)
+[WebServer]     at afterConnectMultiple (node:net:2161:7)
+[WebServer] 7:32:19 AM [vite] http proxy error: /api/runners
+[WebServer] AggregateError [ECONNREFUSED]: 
+[WebServer]     at internalConnectMultiple (node:net:1492:18)
+[WebServer]     at afterConnectMultiple (node:net:2161:7)
+[WebServer] 7:32:19 AM [vite] http proxy error: /api/providers/pools
+[WebServer] AggregateError [ECONNREFUSED]: 
+[WebServer]     at internalConnectMultiple (node:net:1492:18)
+[WebServer]     at afterConnectMultiple (node:net:2161:7)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-connect-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-connect-dialect-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-connect-models.png, writing actual.
+  ✓  167 [webkit-dark-phone] › ui-migration/p42.browser.mjs:299:3 › P4.2 connecting a provider › a custom endpoint: its dialect, models and context windows (2.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-connect-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-connect-edit-shown.png, writing actual.
+  ✓  168 [webkit-dark-phone] › ui-migration/p42.browser.mjs:334:3 › P4.2 connecting a provider › editing: the stored key shown, the switch, and Save (2.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-deepseek-lines.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-deepseek-read.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-deepseek-refreshing.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-deepseek-low.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-deepseek-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-deepseek-loading.png, writing actual.
+  ✓  169 [webkit-dark-phone] › ui-migration/p42.browser.mjs:362:3 › P4.2 a DeepSeek key’s balance › its line in the keys table, and on its page: read, refreshing, too low, refused and loading (4.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-pool-claude.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-pool-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-pool-add-account.png, writing actual.
+  ✓  170 [webkit-dark-phone] › ui-migration/p42.browser.mjs:430:3 › P4.2 a pool on its own page › a Claude pool: its tooltip, delete question and Add account (5.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-pool-codex.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-pool-who.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-pool-person-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-pool-just-mine.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-pool-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-pool-replace-key.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-pool-signout.png, writing actual.
+  ✓  171 [webkit-dark-phone] › ui-migration/p42.browser.mjs:477:3 › P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions (8.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-pool-add-kind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-pool-add-key.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-pool-add-key-form.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-codex-signin.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-codex-signin-code.png, writing actual.
+  ✓  172 [webkit-dark-phone] › ui-migration/p42.browser.mjs:547:3 › P4.2 a pool on its own page › adding to a Codex pool: the kind, a key, and signing ChatGPT in (4.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-pool-member.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-pool-leave.png, writing actual.
+  ✓  173 [webkit-dark-phone] › ui-migration/p42.browser.mjs:595:3 › P4.2 a pool on its own page › a pool somebody added the reader to: leaving it (2.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-runners-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-runners.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-runner-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-runner-rename.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-runner-rotate.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-runner-token.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-runner-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-runners-empty.png, writing actual.
+  ✓  174 [webkit-dark-phone] › ui-migration/p42.browser.mjs:622:3 › P4.2 runners › the list: loading, its menu, rename, token rotation and delete (13.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-register.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-register-windows.png, writing actual.
+  ✓  175 [webkit-dark-phone] › ui-migration/p42.browser.mjs:697:3 › P4.2 runners › the register guide: each system (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-runner-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-runner-actions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-workspace-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-workspace-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-workspace-advanced.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-workspace-discard.png, writing actual.
+  ✓  176 [webkit-dark-phone] › ui-migration/p42.browser.mjs:718:3 › P4.2 a runner’s page › its menus, a workspace’s settings and the discard question (4.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-workspace-history.png, writing actual.
+  ✓  177 [webkit-dark-phone] › ui-migration/p42.browser.mjs:776:3 › P4.2 a runner’s page › a new workspace with the directory’s Claude history (5.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-capacity.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-keep-free-open.png, writing actual.
+  ✓  178 [webkit-dark-phone] › ui-migration/p42.browser.mjs:799:3 › P4.2 a runner’s page › capacity: max concurrent, keep free and rename (2.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-runner-offline.png, writing actual.
+  ✓  179 [webkit-dark-phone] › ui-migration/p42.browser.mjs:842:3 › P4.2 a runner’s page › an offline runner: what needs attention (1.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-enroll-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-enroll.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-enroll-approved.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-enroll-conflict.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-enroll-error.png, writing actual.
+  ✓  180 [webkit-dark-phone] › ui-migration/p42.browser.mjs:854:3 › P4.2 approving orbit register › loading, the machine, a name already registered, approved and a dead code (3.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-users-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-users.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-users-reset.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-users-password.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-users-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-users-empty.png, writing actual.
+  ✓  181 [webkit-dark-phone] › ui-migration/p42.browser.mjs:899:3 › P4.2 users › the table: loading, reset password, a one-time password and delete (7.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-users-add.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-users-add-google.png, writing actual.
+  ✓  182 [webkit-dark-phone] › ui-migration/p42.browser.mjs:962:3 › P4.2 users › adding a user: with a password, and Google only (2.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-users-disable-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-users-disable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/runs/p42-base-shots/webkit-dark-phone/p42-users-disabled.png, writing actual.
+  ✓  183 [webkit-dark-phone] › ui-migration/p42.browser.mjs:1000:3 › P4.2 users › disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled (2.3s)
+  -  184 [webkit-dark-phone] › ui-migration/p42.browser.mjs:1052:3 › P4.2 the pages’ own button styles › at rest, under the pointer and pressed
+
+  4 skipped
+  180 passed (11.7m)
+exit=0
+load: 25.63 20.44 17.62 14/5805 760552
+ended: 2026-10-08T23:33:33Z

@@ -1,0 +1,38 @@
+{
+  "baseline": {
+    "commit": "19c760ae435ad0db310e5376c51c89f3ff464d5b",
+    "scopeHash": "c6d3343e20ed7eb8fd26a7b555b9f834acfa8ce871685246a83caa49eab4978e"
+  },
+  "records": [
+    "2026-10-07.json",
+    "2026-10-07b.json",
+    "2026-10-07c.json",
+    "2026-10-07d.json",
+    "2026-10-08.json"
+  ],
+  "unowned": [
+    {
+      "path": "src/web/src/App.infrastructure.test.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/pages/InfrastructurePage.overview.test.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/pages/RunnerDetailPage.engines.test.tsx",
+      "reason": "no owner"
+    }
+  ],
+  "pending": [],
+  "owners": {
+    "KEEP": 1,
+    "P4.3a": 83,
+    "P4.3b": 31,
+    "P4.4": 54,
+    "P5.1": 28,
+    "P5.2": 11,
+    "P5.3": 94,
+    "P6": 37
+  }
+}

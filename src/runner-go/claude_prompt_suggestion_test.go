@@ -14,8 +14,8 @@ func withClaudeSpawnVersion(t *testing.T, version string) {
 }
 
 // The flag is on only when all three say so: the control plane turned it on, the CLI is one it
-// was measured on, and the engine talks to Anthropic. A CLI that does not know the flag refuses to
-// start, so every doubt about the version leaves it off.
+// was measured on, and the engine talks to an endpoint it was measured on. A CLI that does not
+// know the flag refuses to start, so every doubt about the version leaves it off.
 func TestClaudeCommandArgsAskForPromptSuggestionsOnlyWhenOn(t *testing.T) {
 	t.Setenv("ANTHROPIC_BASE_URL", "")
 	for _, c := range []struct {
@@ -30,8 +30,10 @@ func TestClaudeCommandArgsAskForPromptSuggestionsOnlyWhenOn(t *testing.T) {
 		{name: "not turned on", on: false, version: "2.2.0", want: false},
 		{name: "older CLI", on: true, version: "2.1.292", want: false},
 		{name: "CLI version unreadable", on: true, version: "0.0.0", want: false},
-		{name: "configured provider endpoint", on: true, version: "2.2.0",
-			env: map[string]string{"ANTHROPIC_BASE_URL": "https://api.deepseek.com/anthropic"}, want: false},
+		{name: "DeepSeek's endpoint", on: true, version: "2.2.0",
+			env: map[string]string{"ANTHROPIC_BASE_URL": "https://api.deepseek.com/anthropic"}, want: true},
+		{name: "configured provider endpoint nobody measured", on: true, version: "2.2.0",
+			env: map[string]string{"ANTHROPIC_BASE_URL": "http://127.0.0.1:8000"}, want: false},
 		{name: "Anthropic's own endpoint spelled out", on: true, version: "2.2.0",
 			env: map[string]string{"ANTHROPIC_BASE_URL": "https://api.anthropic.com/"}, want: true},
 	} {
@@ -50,16 +52,16 @@ func TestClaudeCommandArgsAskForPromptSuggestionsOnlyWhenOn(t *testing.T) {
 
 // The runner's own environment can point the CLI elsewhere too; a session's env overrides it,
 // in both directions, exactly as envWithAgent layers the two.
-func TestClaudeTalksToAnthropicReadsTheEnvironmentTheSpawnGets(t *testing.T) {
+func TestClaudeTalksToMeasuredEndpointReadsTheEnvironmentTheSpawnGets(t *testing.T) {
 	t.Setenv("ANTHROPIC_BASE_URL", "https://proxy.example.com")
-	if claudeTalksToAnthropic(nil) {
+	if claudeTalksToMeasuredEndpoint(nil) {
 		t.Error("a runner whose own environment points claude at a proxy was read as talking to Anthropic")
 	}
-	if !claudeTalksToAnthropic(map[string]string{"ANTHROPIC_BASE_URL": ""}) {
+	if !claudeTalksToMeasuredEndpoint(map[string]string{"ANTHROPIC_BASE_URL": ""}) {
 		t.Error("a session env that clears the runner's endpoint was read as still using it")
 	}
 	t.Setenv("ANTHROPIC_BASE_URL", "")
-	if !claudeTalksToAnthropic(map[string]string{"OTHER": "x"}) {
+	if !claudeTalksToMeasuredEndpoint(map[string]string{"OTHER": "x"}) {
 		t.Error("no endpoint anywhere was read as a configured one")
 	}
 }

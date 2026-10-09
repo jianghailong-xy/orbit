@@ -171,8 +171,8 @@ const currentLocation = (): string | null =>
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   apiMock.mockReset();
-  // antd's responsive controls subscribe to breakpoints on mount and jsdom ships no matchMedia. The
-  // stub answers "no breakpoint matches", which is the desktop reading; layout is not the subject.
+  // The page's breakpoint reads subscribe on mount and jsdom ships no matchMedia. The stub answers
+  // "no breakpoint matches", which is the desktop reading; layout is not the subject.
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: false,
     media: query,
@@ -183,8 +183,8 @@ beforeEach(() => {
     removeEventListener: () => {},
     dispatchEvent: () => false,
   }));
-  // Some antd controls observe their boxes and jsdom ships no ResizeObserver. Their layout is not
-  // the subject of these interaction tests.
+  // Some controls observe their boxes and jsdom ships no ResizeObserver. Their layout is not the
+  // subject of these interaction tests.
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -242,7 +242,7 @@ async function mount(initialEntry = '/projects'): Promise<void> {
     );
   });
   await waitForUi(() => {
-    expect(nextContainer.querySelector('.project-row, .ant-empty')).not.toBeNull();
+    expect(nextContainer.querySelector('.project-row, .orbit-empty')).not.toBeNull();
     expect(nextContainer.querySelector('[data-testid="location"]')?.textContent).toBe(initialEntry);
   });
 }
@@ -250,13 +250,18 @@ async function mount(initialEntry = '/projects'): Promise<void> {
 /** The whole mounted page as text. */
 const text = () => document.body.textContent ?? '';
 
-function segment(label: string): HTMLInputElement {
-  const item = [...mountedContainer().querySelectorAll('.ant-segmented-item')].find((el) =>
-    el.textContent?.trim().startsWith(label),
-  );
+/** The scope control's options, by their role in its radio group. */
+const segments = (): HTMLElement[] =>
+  [...mountedContainer().querySelectorAll<HTMLElement>('[role="radiogroup"] [role="radio"]')];
+
+function segment(label: string): HTMLElement {
+  const item = segments().find((el) => el.textContent?.trim().startsWith(label));
   expect(item, `segment ${label}`).toBeTruthy();
-  return item!.querySelector('input')! as HTMLInputElement;
+  return item!;
 }
+
+/** Whether a segment is the one selected, as its radio state says. */
+const checked = (label: string): boolean => segment(label).getAttribute('aria-checked') === 'true';
 
 function button(label: string, scope: ParentNode = document.body): HTMLButtonElement {
   const found = [...scope.querySelectorAll('button')].find(
@@ -273,8 +278,8 @@ async function click(element: HTMLElement, assertion?: () => void): Promise<void
   if (assertion) await waitForUi(assertion);
 }
 
-/** Type into a controlled antd field. React tracks the DOM value itself, so the native setter has
- *  to be called before the event or the change is swallowed as a no-op. */
+/** Type into a controlled field. React tracks the DOM value itself, so the native setter has to be
+ *  called before the event or the change is swallowed as a no-op. */
 async function type(
   element: HTMLInputElement | HTMLTextAreaElement,
   value: string,
@@ -299,11 +304,11 @@ describe('ProjectsPage — status filter', () => {
     await mount('/projects?status=CANCELLED');
 
     expect(currentLocation()).toBe('/projects?status=CANCELLED');
-    expect(segment('Cancelled').checked).toBe(true);
+    expect(checked('Cancelled')).toBe(true);
     expect(text()).toContain('Project history');
     expect(text()).toContain('Open projects');
     expect(
-      [...mountedContainer().querySelectorAll('.ant-segmented-item')].map((el) =>
+      segments().map((el) =>
         el.textContent?.trim(),
       ),
     ).toEqual(['Completed', 'Cancelled']);
@@ -318,11 +323,11 @@ describe('ProjectsPage — status filter', () => {
 
     expect(reads()).toEqual(['/projects?status=OPEN']);
     expect(currentLocation()).toBe('/projects');
-    expect(segment('All').checked).toBe(true);
+    expect(checked('All')).toBe(true);
     expect(text()).toContain('Open projects');
     expect(button('History')).toBeTruthy();
     expect(
-      [...mountedContainer().querySelectorAll('.ant-segmented-item')].map((el) =>
+      segments().map((el) =>
         el.textContent?.trim(),
       ),
     ).toEqual(['All', 'Running 2', 'Ready 1']);
@@ -370,7 +375,7 @@ describe('ProjectsPage — status filter', () => {
     await mount();
 
     expect(
-      [...mountedContainer().querySelectorAll('.ant-segmented-item')]
+      segments()
         .some((el) => el.textContent?.trim() === 'Completed'),
     ).toBe(false);
     await click(button('History'), () => {
@@ -382,9 +387,9 @@ describe('ProjectsPage — status filter', () => {
     // The answer on screen is the one the server just gave, not a slice of the first read.
     expect(text()).toContain('Legacy Cleanup');
     expect(text()).not.toContain('Website Revamp');
-    expect(segment('Completed').checked).toBe(true);
+    expect(checked('Completed')).toBe(true);
     expect(
-      [...mountedContainer().querySelectorAll('.ant-segmented-item')].map((el) =>
+      segments().map((el) =>
         el.textContent?.trim(),
       ),
     ).toEqual(['Completed', 'Cancelled']);
@@ -397,7 +402,7 @@ describe('ProjectsPage — status filter', () => {
     expect(completed.querySelector('h3')).toBeNull();
     expect(completed.querySelector('button')).toBeNull();
     expect(completed.querySelector('.project-row-title')?.textContent).toBe('Legacy Cleanup');
-    expect(completed.querySelectorAll('.project-row-head .ant-tag')).toHaveLength(0);
+    expect(completed.querySelectorAll('.project-row-head .orbit-badge')).toHaveLength(0);
 
     await click(segment('Cancelled'), () => {
       expect(currentLocation()).toBe('/projects?status=CANCELLED');
@@ -411,14 +416,14 @@ describe('ProjectsPage — status filter', () => {
     expect(text()).toContain('Abandoned Prototype');
     expect(text()).not.toContain('Legacy Cleanup');
     expect(currentLocation()).toBe('/projects?status=CANCELLED');
-    expect(segment('Cancelled').checked).toBe(true);
+    expect(checked('Cancelled')).toBe(true);
 
     const cancelled = mountedContainer().querySelector('section[data-section="cancelled"]')!;
     expect(cancelled).toBeTruthy();
     expect(cancelled.getAttribute('aria-label')).toBe('Cancelled projects');
     expect(cancelled.querySelector('h3')).toBeNull();
     expect(cancelled.querySelector('button')).toBeNull();
-    expect(cancelled.querySelectorAll('.project-row-head .ant-tag')).toHaveLength(0);
+    expect(cancelled.querySelectorAll('.project-row-head .orbit-badge')).toHaveLength(0);
   });
 
   // This three-navigation case also peaked at 5.035s in a warm loaded suite. Every transition
@@ -457,12 +462,12 @@ describe('ProjectsPage — status filter', () => {
     expect(back).toBeTruthy();
     await click(back! as HTMLAnchorElement, () => {
       expect(currentLocation()).toBe('/projects?status=DONE');
-      expect(segment('Completed').checked).toBe(true);
+      expect(checked('Completed')).toBe(true);
       expect(text()).toContain('Legacy Cleanup');
     });
 
     expect(currentLocation()).toBe('/projects?status=DONE');
-    expect(segment('Completed').checked).toBe(true);
+    expect(checked('Completed')).toBe(true);
     expect(text()).toContain('Legacy Cleanup');
     expect(text()).not.toContain('Website Revamp');
   });
@@ -480,7 +485,7 @@ describe('ProjectsPage — status filter', () => {
     });
     await mount('/projects?view=RUNNING');
 
-    expect(segment('Running').checked).toBe(true);
+    expect(checked('Running')).toBe(true);
     expect(text()).toContain('Website Revamp');
     expect(text()).not.toContain('Ready Rollout');
     await click(
@@ -502,7 +507,7 @@ describe('ProjectsPage — status filter', () => {
     });
 
     expect(currentLocation()).toBe('/projects?view=RUNNING');
-    expect(segment('Running').checked).toBe(true);
+    expect(checked('Running')).toBe(true);
     expect(text()).toContain('Website Revamp');
     expect(text()).not.toContain('Ready Rollout');
   });
@@ -590,7 +595,7 @@ describe('ProjectsPage — search', () => {
       expect(text()).toContain('Legacy Cleanup');
     });
     expect(searchBox().value).toBe('');
-    expect(segment('Completed').checked).toBe(true);
+    expect(checked('Completed')).toBe(true);
     expect(text()).toContain('Legacy Cleanup');
     expect(text()).not.toContain('Website Revamp');
     expect(reads().length).toBe(before);
@@ -601,7 +606,7 @@ describe('ProjectsPage — search', () => {
     await mount();
     await click(segment('Ready'), () => {
       expect(currentLocation()).toBe('/projects?view=READY');
-      expect(segment('Ready').checked).toBe(true);
+      expect(checked('Ready')).toBe(true);
     });
     const before = reads().length;
 
@@ -611,7 +616,7 @@ describe('ProjectsPage — search', () => {
     expect(text()).toContain('No ready projects match “revamp”');
     // Counts describe the whole Open scope, so typing does not make the tabs jump around.
     expect(
-      [...mountedContainer().querySelectorAll('.ant-segmented-item')].map((el) =>
+      segments().map((el) =>
         el.textContent?.trim(),
       ),
     ).toEqual(['All', 'Running 1', 'Ready 1']);
@@ -621,7 +626,7 @@ describe('ProjectsPage — search', () => {
       expect(text()).toContain('Ready Rollout');
     });
     expect(searchBox().value).toBe('');
-    expect(segment('Ready').checked).toBe(true);
+    expect(checked('Ready')).toBe(true);
     expect(currentLocation()).toBe('/projects?view=READY');
     expect(text()).toContain('Ready Rollout');
     expect(text()).not.toContain('Website Revamp');
@@ -668,10 +673,10 @@ describe('ProjectsPage — empty states', () => {
 
     // A terminal dead end returns to the actionable Open list.
     await click(button('Show open projects'), () => {
-      expect(segment('All').checked).toBe(true);
+      expect(checked('All')).toBe(true);
       expect(text()).toContain('Website Revamp');
     });
-    expect(segment('All').checked).toBe(true);
+    expect(checked('All')).toBe(true);
     expect(text()).toContain('Website Revamp');
   });
 
@@ -685,7 +690,7 @@ describe('ProjectsPage — empty states', () => {
 
     expect(text()).toContain('No ready projects');
     expect(text()).not.toContain('No open projects');
-    const empty = mountedContainer().querySelector('.ant-empty')!;
+    const empty = mountedContainer().querySelector('.orbit-empty')!;
     expect(button('Show all open projects', empty)).toBeTruthy();
     expect(
       [...empty.querySelectorAll('button')].some((candidate) =>
@@ -698,7 +703,7 @@ describe('ProjectsPage — empty states', () => {
       expect(text()).toContain('Ledger Migration');
     });
     expect(currentLocation()).toBe('/projects');
-    expect(segment('All').checked).toBe(true);
+    expect(checked('All')).toBe(true);
     expect(text()).toContain('Website Revamp');
     expect(text()).toContain('Ledger Migration');
   });
@@ -709,7 +714,7 @@ describe('ProjectsPage — empty states', () => {
 
     // An Open-scoped read cannot claim the account has no project history at all.
     expect(text()).toContain('No open projects');
-    const empty = mountedContainer().querySelector('.ant-empty')!;
+    const empty = mountedContainer().querySelector('.orbit-empty')!;
     // In the empty state itself, not only up in the toolbar: a reader who has never seen this page
     // is looking at the middle of it, and that is where the dead end used to be.
     const cta = button('New project', empty);

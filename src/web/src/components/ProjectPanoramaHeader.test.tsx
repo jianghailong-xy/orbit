@@ -250,7 +250,7 @@ describe('ProjectPanoramaHeader', () => {
     // Loading: nothing seeded, so the query is pending with its fetch not yet dispatched.
     const loading = render(newClient());
     expect(loading).toContain('Work overview');
-    expect(loading).toContain('ant-spin');
+    expect(loading).toContain('<span role="status" aria-label="Loading"');
     expect(loading).not.toContain('could not be loaded');
   });
 

@@ -1,7 +1,6 @@
 import { FileMarkdownOutlined, GlobalOutlined, LinkOutlined, MoreOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Dropdown } from 'antd';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { getShareLink } from '../api';
 import { copyText } from '../lib/clipboard';
 import { encodeId } from '../lib/idCodec';
@@ -9,6 +8,8 @@ import { useToast } from '../lib/toast';
 import { type ProjectPanoramaBuckets, projectPanoramaQuery } from './ProjectPanoramaHeader';
 import { ShareModal, shareLinkQueryKey } from './ShareModal';
 import { taskStatusLabel } from './TaskStatusPill';
+import { Button } from './ui/Button';
+import { Menu } from './ui/Menu';
 
 /** The signed-in address of a project — what Copy link hands its owner, never the public one. */
 export const projectAppUrl = (projectId: string): string =>
@@ -121,7 +122,14 @@ export function ProjectShareControls({
   const toast = useToast();
   const qc = useQueryClient();
   const [shareOpen, setShareOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  // Opened from the ⋯ menu, the dialog gives focus back to the ⋯ button: the item it came from is
+  // gone. Kept apart from `shareOpen` so closing does not change where focus goes as it closes.
+  const [sharedFromMenu, setSharedFromMenu] = useState(false);
+  const moreButton = useRef<HTMLButtonElement>(null);
+  const openShare = (fromMenu: boolean) => {
+    setSharedFromMenu(fromMenu);
+    setShareOpen(true);
+  };
   const shareQ = useQuery({
     queryKey: shareLinkQueryKey('PROJECT', projectId),
     queryFn: () => getShareLink('PROJECT', projectId),
@@ -145,12 +153,12 @@ export function ProjectShareControls({
           type="button"
           className="session-shared-pill"
           title="Anyone with the link can view this project — open its sharing settings"
-          onClick={() => setShareOpen(true)}
+          onClick={() => openShare(false)}
         >
           <GlobalOutlined /> Shared · Live
         </button>
       ) : (
-        <Button size="small" icon={<GlobalOutlined />} onClick={() => setShareOpen(true)}>
+        <Button size="small" icon={<GlobalOutlined />} onClick={() => openShare(false)}>
           Share
         </Button>
       )}
@@ -163,52 +171,44 @@ export function ProjectShareControls({
       </Button>
       {/* Two words for two links (§8): Copy link is the signed-in address, for yourself; Share… is
           the public one. Copy as Markdown needs neither. */}
-      <Dropdown
-        trigger={['click']}
-        open={menuOpen}
-        onOpenChange={setMenuOpen}
-        menu={{
-          className: 'project-more-menu',
-          items: [
-            {
-              key: 'copy-link',
-              icon: <LinkOutlined />,
-              label: 'Copy link',
-              onClick: () => {
-                setMenuOpen(false);
-                copy(projectAppUrl(projectId), 'Link copied', "Couldn't copy the link");
-              },
-            },
-            {
-              key: 'share',
-              icon: <GlobalOutlined className={live ? 'session-share-icon-live' : undefined} />,
-              label: live ? (
-                <span className="scope-menu-row">
-                  Share…<span className="scope-menu-value">Live link</span>
-                </span>
-              ) : (
-                'Share…'
-              ),
-              onClick: () => {
-                setMenuOpen(false);
-                setShareOpen(true);
-              },
-            },
-            {
-              key: 'copy-markdown',
-              icon: <FileMarkdownOutlined />,
-              label: 'Copy as Markdown',
-              onClick: () => {
-                setMenuOpen(false);
-                copyMarkdown();
-              },
-            },
-          ],
-        }}
-      >
-        <Button size="small" type="text" icon={<MoreOutlined />} aria-label="More project actions" />
-      </Dropdown>
-      <ShareModal open={shareOpen} onClose={() => setShareOpen(false)} kind="PROJECT" rootId={projectId} />
+      <Menu
+        popupClassName="project-more-menu"
+        items={[
+          {
+            key: 'copy-link',
+            icon: <LinkOutlined />,
+            label: 'Copy link',
+            onSelect: () => copy(projectAppUrl(projectId), 'Link copied', "Couldn't copy the link"),
+          },
+          {
+            key: 'share',
+            icon: <GlobalOutlined className={live ? 'session-share-icon-live' : undefined} />,
+            label: live ? (
+              <span className="scope-menu-row">
+                Share…<span className="scope-menu-value">Live link</span>
+              </span>
+            ) : (
+              'Share…'
+            ),
+            textValue: 'Share…',
+            onSelect: () => openShare(true),
+          },
+          {
+            key: 'copy-markdown',
+            icon: <FileMarkdownOutlined />,
+            label: 'Copy as Markdown',
+            onSelect: copyMarkdown,
+          },
+        ]}
+        trigger={<Button ref={moreButton} size="small" variant="text" icon={<MoreOutlined />} aria-label="More project actions" />}
+      />
+      <ShareModal
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        kind="PROJECT"
+        rootId={projectId}
+        returnFocus={sharedFromMenu ? moreButton : undefined}
+      />
     </>
   );
 }

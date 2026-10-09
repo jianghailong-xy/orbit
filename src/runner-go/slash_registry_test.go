@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -156,5 +159,67 @@ func TestSlashRegistryEmptyForGatesTheProbe(t *testing.T) {
 	}
 	if newSlashRegistry(path).emptyFor(providerClaude) {
 		t.Fatal("a restart should reload the learned set, not re-probe")
+	}
+}
+
+// TestSlashRegistryProbeRunsInPrivateProbeDirectory: the start-up probe that fills an empty registry
+// starts claude in the runner's private probe directory. It used to start it in the runner's own
+// workDir — the directory `orbit register` ran in, ~/Desktop as often as not on a Mac — where Claude
+// Code's start-up read of the tree below it had macOS ask the user, in the runner's name, for access.
+func TestSlashRegistryProbeRunsInPrivateProbeDirectory(t *testing.T) {
+	machine := privateOrbitHome(t)
+	prev := slashReg
+	slashReg = newSlashRegistry(filepath.Join(t.TempDir(), "reg.json"))
+	defer func() { slashReg = prev }()
+	pwds := filepath.Join(t.TempDir(), "pwds")
+	t.Setenv("CAPTURE_PWDS", pwds)
+	dir := t.TempDir()
+	writeFakeBin(t, dir, "claude", `pwd -P >> "$CAPTURE_PWDS"
+echo '{"type":"system","subtype":"init","slash_commands":["loop","clear"],"skills":["loop"]}'`)
+	t.Setenv("PATH", dir)
+
+	if !ensureClaudeSlashRegistry(context.Background()) {
+		t.Fatal("the probe learned nothing from the init handshake")
+	}
+	commands, skills := slashReg.extras(nil)
+	eq(t, names(commands), []string{"clear"}, "learned commands")
+	eq(t, names(skills), []string{"loop"}, "learned skills")
+
+	data, err := os.ReadFile(pwds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := filepath.EvalSymlinks(filepath.Join(machine, claudeProbeDirName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(string(data)); got != want {
+		t.Fatalf("the probe ran in %q, want the private probe directory %q", got, want)
+	}
+}
+
+// Without a private probe directory the probe does not run at all, rather than in whatever
+// directory the runner happens to be in: `/` under launchd, the register directory in a terminal.
+func TestSlashRegistryProbeNeedsPrivateProbeDirectory(t *testing.T) {
+	home := t.TempDir()
+	if err := os.Chmod(home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ORBIT_HOME", home)
+	prev := slashReg
+	slashReg = newSlashRegistry(filepath.Join(t.TempDir(), "reg.json"))
+	defer func() { slashReg = prev }()
+	pwds := filepath.Join(t.TempDir(), "pwds")
+	t.Setenv("CAPTURE_PWDS", pwds)
+	dir := t.TempDir()
+	writeFakeBin(t, dir, "claude", `pwd -P >> "$CAPTURE_PWDS"
+echo '{"type":"system","subtype":"init","slash_commands":["loop"],"skills":[]}'`)
+	t.Setenv("PATH", dir)
+
+	if ensureClaudeSlashRegistry(context.Background()) {
+		t.Fatal("the probe learned names without a private probe directory")
+	}
+	if data, err := os.ReadFile(pwds); err == nil {
+		t.Fatalf("claude started anyway, in %q", strings.TrimSpace(string(data)))
 	}
 }

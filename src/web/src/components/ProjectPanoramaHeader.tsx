@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { queryOptions, useQuery } from '@tanstack/react-query';
 import { RightOutlined } from '@ant-design/icons';
-import { Alert, Button, Spin, Typography } from 'antd';
 import {
   INTEGRATION_CLAIM_STALE_MS,
   type IntegrationJobPhase,
@@ -14,6 +13,10 @@ import { api } from '../api';
 import { projectIntegrationQuery, projectReadyToRunQuery } from '../lib/queries';
 import { LandingJobsSheet } from './LandingJobsSheet';
 import { ProjectTaskLink } from './ProjectTaskLink';
+import { Alert } from './ui/Alert';
+import { Button } from './ui/Button';
+import { Spinner } from './ui/Spinner';
+import './ui/Typography.css';
 
 /**
  * Where a project's work stands, and — when none of it is moving — why (the header card of the
@@ -830,9 +833,9 @@ function Card({ hint, children }: { hint?: string; children: ReactNode }) {
       }}
     >
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-        <Typography.Title level={5} style={{ margin: 0 }}>
+        <h5 className="orbit-typography" style={{ margin: 0 }}>
           Work overview
-        </Typography.Title>
+        </h5>
         {hint ? <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{hint}</span> : null}
       </header>
       {children}
@@ -892,7 +895,7 @@ export function ProjectPanoramaHeader({
     return (
       <Card>
         <div style={{ padding: 24, textAlign: 'center' }}>
-          <Spin />
+          <Spinner aria-busy="true" />
         </div>
       </Card>
     );
@@ -903,8 +906,7 @@ export function ProjectPanoramaHeader({
       <Card>
         <Alert
           type="error"
-          showIcon
-          message="Project panorama could not be loaded"
+          title="Project panorama could not be loaded"
           description={panorama.error instanceof Error ? panorama.error.message : undefined}
           action={
             <Button size="small" danger onClick={() => panorama.refetch()}>

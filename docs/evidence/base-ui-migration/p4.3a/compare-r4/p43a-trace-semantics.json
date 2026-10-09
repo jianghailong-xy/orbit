@@ -1,0 +1,273 @@
+{
+ "tests": 112,
+ "steps": 944,
+ "semantic": [
+  {
+   "test": "chromium-dark-phone :: P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question",
+   "step": "share from the menu",
+   "delta": {
+    "menus": [
+     [
+      [
+       {
+        "text": "Copy link",
+        "disabled": false
+       },
+       {
+        "text": "Share…",
+        "disabled": false
+       },
+       {
+        "text": "Copy as Markdown",
+        "disabled": false
+       }
+      ]
+     ],
+     []
+    ]
+   }
+  }
+ ],
+ "presentation": {
+  "focus": 253,
+  "dialogs": 48
+ },
+ "examples": {
+  "focus": [
+   {
+    "test": "chromium-dark-desktop :: P4.3a a project page › How it runs: the merge check warning, a refused save, pausing and a locked line",
+    "step": "escalation choices",
+    "ref": {
+     "role": "combobox",
+     "name": "Escalate after"
+    },
+    "del": {
+     "role": "option",
+     "name": "1 hour"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3a a project page › open items and the run queue: run, and resuming a paused list",
+    "step": "resume list asked",
+    "ref": {
+     "role": "button",
+     "name": "Resume list Accessibility for Record keyboard focus"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Resume “Accessibility”?"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3a a project page › the coordinator: its menu and replace question, rebinding, choosing where it opens",
+    "step": "split menu",
+    "ref": {
+     "role": "button",
+     "name": "More coordinator actions"
+    },
+    "del": {
+     "role": "menu",
+     "name": "Start a new coordinatorCompletes this conversation first, then opens an empty on"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3a a project page › the coordinator: its menu and replace question, rebinding, choosing where it opens",
+    "step": "rebind: workspaces",
+    "ref": {
+     "role": "combobox",
+     "name": "input"
+    },
+    "del": {
+     "role": "presentation",
+     "name": "Orbit baseline (current)Docs siteRelease bot"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3a a project page › the coordinator: its menu and replace question, rebinding, choosing where it opens",
+    "step": "choose a workspace",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Choose the coordination workspace"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3a a project page › the coordinator: its menu and replace question, rebinding, choosing where it opens",
+    "step": "not chosen",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "Choose a workspace…"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question",
+    "step": "⋯ menu",
+    "ref": {
+     "role": "button",
+     "name": "More project actions"
+    },
+    "del": {
+     "role": "menu",
+     "name": "Copy linkShare…Copy as Markdown"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question",
+    "step": "share closed",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "More project actions"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question",
+    "step": "record as cancelled asked",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Stop pursuing “Orbit UI migration”?"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question",
+    "step": "recorded as done",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "More project actions"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question",
+    "step": "reopened",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "More project actions"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question",
+    "step": "delete asked",
+    "ref": {
+     "role": "button",
+     "name": "Delete Orbit UI migration"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Delete “Orbit UI migration”?"
+    }
+   }
+  ],
+  "dialogs": [
+   {
+    "test": "chromium-dark-desktop :: P4.3a a project page › open items and the run queue: run, and resuming a paused list",
+    "step": "resume list asked",
+    "ref": [],
+    "del": [
+     "Resume “Accessibility”?This removes the pause from the entire list. 1 otherwise-ready task will become eligible. Other a"
+    ]
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3a a project page › the coordinator: its menu and replace question, rebinding, choosing where it opens",
+    "step": "replace asked",
+    "ref": [
+     "Complete this conversation and start a new coordinator?Complete this conversation and start a new coordinator?The curren"
+    ],
+    "del": [
+     "Complete this conversation and start a new coordinator?The current conversation is completed — a turn in flight finishes"
+    ]
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question",
+    "step": "delete asked",
+    "ref": [],
+    "del": [
+     "Delete “Orbit UI migration”?This deletes the project and everything filed under it. This action cannot be undone.CancelD"
+    ]
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3a a task page › loading, the schedule, the acceptance editor, attribution, a prerequisite question and mention deliveries",
+    "step": "remove prerequisite asked",
+    "ref": [],
+    "del": [
+     "Remove prerequisite?This task will no longer wait for this prerequisite.CancelRemove"
+    ]
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3a the Tasks page › selection, the bulk bar, the run and assign dialogs, and the stop and delete questions",
+    "step": "stop asked",
+    "ref": [],
+    "del": [
+     "Stop selected tasks?Cancels each selected task's running or queued run.CancelStop"
+    ]
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3a the Tasks page › selection, the bulk bar, the run and assign dialogs, and the stop and delete questions",
+    "step": "delete asked",
+    "ref": [],
+    "del": [
+     "Delete 3 selected tasks?Runs still in flight are stopped. This action cannot be undone.CancelDelete"
+    ]
+   },
+   {
+    "test": "chromium-dark-phone :: P4.3a a project page › open items and the run queue: run, and resuming a paused list",
+    "step": "resume list asked",
+    "ref": [],
+    "del": [
+     "Resume “Accessibility”?This removes the pause from the entire list. 1 otherwise-ready task will become eligible. Other a"
+    ]
+   },
+   {
+    "test": "chromium-dark-phone :: P4.3a a project page › the coordinator: its menu and replace question, rebinding, choosing where it opens",
+    "step": "replace asked",
+    "ref": [
+     "Complete this conversation and start a new coordinator?Complete this conversation and start a new coordinator?The curren"
+    ],
+    "del": [
+     "Complete this conversation and start a new coordinator?The current conversation is completed — a turn in flight finishes"
+    ]
+   },
+   {
+    "test": "chromium-dark-phone :: P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question",
+    "step": "delete asked",
+    "ref": [],
+    "del": [
+     "Delete “Orbit UI migration”?This deletes the project and everything filed under it. This action cannot be undone.CancelD"
+    ]
+   },
+   {
+    "test": "chromium-dark-phone :: P4.3a a task page › loading, the schedule, the acceptance editor, attribution, a prerequisite question and mention deliveries",
+    "step": "remove prerequisite asked",
+    "ref": [],
+    "del": [
+     "Remove prerequisite?This task will no longer wait for this prerequisite.CancelRemove"
+    ]
+   },
+   {
+    "test": "chromium-dark-phone :: P4.3a the Tasks page › selection, the bulk bar, the run and assign dialogs, and the stop and delete questions",
+    "step": "stop asked",
+    "ref": [],
+    "del": [
+     "Stop selected tasks?Cancels each selected task's running or queued run.CancelStop"
+    ]
+   },
+   {
+    "test": "chromium-dark-phone :: P4.3a the Tasks page › selection, the bulk bar, the run and assign dialogs, and the stop and delete questions",
+    "step": "delete asked",
+    "ref": [],
+    "del": [
+     "Delete 3 selected tasks?Runs still in flight are stopped. This action cannot be undone.CancelDelete"
+    ]
+   }
+  ]
+ }
+}

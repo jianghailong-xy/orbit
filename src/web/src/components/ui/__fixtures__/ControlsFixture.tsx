@@ -1,7 +1,9 @@
 import { useState, type ReactNode } from 'react';
 import { App as AntApp, Tag as AntTag, Button as AntButton, Checkbox as AntCheckbox,
-  ConfigProvider, Input as AntInput, Radio as AntRadio, Spin as AntSpin, Switch as AntSwitch } from 'antd';
-import { PlusOutlined, SearchOutlined, InfoCircleOutlined } from '@ant-design/icons';
+  ConfigProvider, Input as AntInput, Radio as AntRadio, Spin as AntSpin, Switch as AntSwitch,
+  Alert as AntAlert, Card as AntCard, Empty as AntEmpty, List as AntList, Skeleton as AntSkeleton,
+  Typography as AntTypography } from 'antd';
+import { CopyOutlined, DownOutlined, PlusOutlined, SearchOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider, useThemeMode } from '../../../lib/theme';
 import { darkTheme, lightTheme } from '../../../theme';
@@ -13,6 +15,12 @@ import { Radio, RadioGroup } from '../Radio';
 import { Switch } from '../Switch';
 import { Badge } from '../Badge';
 import { Spinner } from '../Spinner';
+import { Alert } from '../Alert';
+import { Card } from '../Card';
+import { Empty } from '../Empty';
+import { Skeleton } from '../Skeleton';
+import '../Typography.css';
+import '../List.css';
 import './ControlsFixture.css';
 
 function Pair({ name, orbit, ant }: { name: string; orbit: ReactNode; ant: ReactNode }) {
@@ -91,6 +99,8 @@ function Content() {
         orbit={<Button variant={variant} danger>Delete</Button>} ant={<AntButton type={variant} danger>Delete</AntButton>} />)}
       <Pair name="button-icon" orbit={<Button icon={<PlusOutlined />}>Create</Button>} ant={<AntButton icon={<PlusOutlined />}>Create</AntButton>} />
       <Pair name="button-icon-only" orbit={<Button icon={<PlusOutlined />} aria-label="Create" />} ant={<AntButton icon={<PlusOutlined />} aria-label="Create" />} />
+      <Pair name="button-icon-end" orbit={<Button size="small" variant="text" icon={<DownOutlined />} iconPlacement="end">Expand</Button>}
+        ant={<AntButton size="small" type="text">Expand <DownOutlined /></AntButton>} />
       <Pair name="button-disabled" orbit={<Button variant="primary" disabled>Save changes</Button>} ant={<AntButton type="primary" disabled>Save changes</AntButton>} />
       {(['default', 'text', 'link'] as const).map((variant) => <Pair key={variant} name={`button-disabled-${variant}`}
         orbit={<Button variant={variant} disabled>Save changes</Button>} ant={<AntButton type={variant} disabled>Save changes</AntButton>} />)}
@@ -102,6 +112,7 @@ function Content() {
         orbit={<Input aria-label="Project" size={size} defaultValue="Orbit baseline" />} ant={<AntInput aria-label="Project" size={size} defaultValue="Orbit baseline" />} />)}
       <Pair name="input-affix" orbit={<Input aria-label="Search" prefix={<SearchOutlined />} suffix={<InfoCircleOutlined />} placeholder="Search projects" />} ant={<AntInput aria-label="Search" prefix={<SearchOutlined />} suffix={<InfoCircleOutlined />} placeholder="Search projects" />} />
       <Pair name="input-invalid" orbit={<Input aria-label="Invalid project" invalid defaultValue="Missing owner" />} ant={<AntInput aria-label="Invalid project" status="error" defaultValue="Missing owner" />} />
+      <Pair name="input-warning" orbit={<Input aria-label="Merge check" warning placeholder="npm test" />} ant={<AntInput aria-label="Merge check" status="warning" placeholder="npm test" />} />
       <Pair name="input-disabled" orbit={<Input aria-label="Disabled project" disabled defaultValue="Orbit baseline" />} ant={<AntInput aria-label="Disabled project" disabled defaultValue="Orbit baseline" />} />
       <Pair name="textarea" orbit={<Textarea aria-label="Description" rows={3} defaultValue={'First line\nSecond line'} />} ant={<AntInput.TextArea aria-label="Description" rows={3} defaultValue={'First line\nSecond line'} />} />
       <Pair name="textarea-invalid" orbit={<Textarea aria-label="Invalid description" invalid rows={2} defaultValue="Missing detail" />} ant={<AntInput.TextArea aria-label="Invalid description" status="error" rows={2} defaultValue="Missing detail" />} />
@@ -127,6 +138,61 @@ function Content() {
       <Pair name="badge-icon" orbit={<Badge tone="success" icon={<InfoCircleOutlined />}>Task status</Badge>} ant={<AntTag color="success" icon={<InfoCircleOutlined />}>Task status</AntTag>} />
       {(['small', 'middle'] as const).map((size) => <Pair key={size} name={`spinner-${size}`}
         orbit={<Spinner size={size} />} ant={<AntSpin size={size === 'middle' ? 'medium' : size} />} />)}
+      <Pair name="badge-purple" orbit={<Badge tone="purple">Awaiting verification</Badge>} ant={<AntTag color="purple">Awaiting verification</AntTag>} />
+      <h2>Feedback, cards and text (P4.3a)</h2>
+      <Pair name="alert-action" orbit={<Alert type="error" title="Tasks could not be loaded" action={<Button size="small" danger>Retry</Button>} />}
+        ant={<AntAlert type="error" showIcon message="Tasks could not be loaded" action={<AntButton size="small" danger>Retry</AntButton>} />} />
+      <Pair name="alert-action-description" orbit={<Alert type="error" title="Projects could not be loaded" description="The server answered 503." action={<Button size="small" danger>Retry</Button>} />}
+        ant={<AntAlert type="error" showIcon message="Projects could not be loaded" description="The server answered 503." action={<AntButton size="small" danger>Retry</AntButton>} />} />
+      <Pair name="alert-warning-description" orbit={<Alert type="warning" title="Impact ranking not computed" description="More than 500 unfinished tasks." />}
+        ant={<AntAlert type="warning" showIcon message="Impact ranking not computed" description="More than 500 unfinished tasks." />} />
+      <Pair name="card-small" orbit={<Card title="Attribution" size="small" style={{ width: 280 }}>Counts towards Orbit UI migration</Card>}
+        ant={<AntCard title="Attribution" size="small" style={{ width: 280 }}>Counts towards Orbit UI migration</AntCard>} />
+      <Pair name="card-extra" orbit={<Card title="Acceptance criteria" extra={<Button size="small">Edit</Button>} style={{ width: 320 }}>Three criteria stated.</Card>}
+        ant={<AntCard title="Acceptance criteria" extra={<AntButton size="small">Edit</AntButton>} style={{ width: 320 }}>Three criteria stated.</AntCard>} />
+      <Pair name="empty-default" orbit={<Empty description="No open projects" style={{ width: 300 }}><Button variant="primary" icon={<PlusOutlined />}>New project</Button></Empty>}
+        ant={<AntEmpty description="No open projects" style={{ width: 300 }}><AntButton type="primary" icon={<PlusOutlined />}>New project</AntButton></AntEmpty>} />
+      <Pair name="empty-simple" orbit={<Empty image="simple" description="No subtasks" style={{ width: 300 }} />}
+        ant={<AntEmpty image={AntEmpty.PRESENTED_IMAGE_SIMPLE} description="No subtasks" style={{ width: 300 }} />} />
+      {([3, 2] as const).map((rows) => <Pair key={rows} name={`skeleton-${rows}`} orbit={<div style={{ width: 300 }}><Skeleton rows={rows} /></div>}
+        ant={<div style={{ width: 300 }}><AntSkeleton active title={false} paragraph={{ rows }} /></div>} />)}
+      <Pair name="typography-title-2" orbit={<h2 className="orbit-typography">Orbit UI migration</h2>} ant={<AntTypography.Title level={2}>Orbit UI migration</AntTypography.Title>} />
+      <Pair name="typography-title-4" orbit={<h4 className="orbit-typography">Run queue</h4>} ant={<AntTypography.Title level={4}>Run queue</AntTypography.Title>} />
+      <Pair name="typography-title-5" orbit={<h5 className="orbit-typography">Goal</h5>} ant={<AntTypography.Title level={5}>Goal</AntTypography.Title>} />
+      <Pair name="typography-paragraph" orbit={<div className="orbit-typography orbit-typography-secondary">No instructions set</div>}
+        ant={<AntTypography.Paragraph type="secondary">No instructions set</AntTypography.Paragraph>} />
+      <Pair name="typography-paragraph-strong" orbit={<div className="orbit-typography"><strong>2 unfinished tasks stay filed under it.</strong></div>}
+        ant={<AntTypography.Paragraph strong>2 unfinished tasks stay filed under it.</AntTypography.Paragraph>} />
+      <Pair name="typography-secondary" orbit={<span className="orbit-typography orbit-typography-secondary">Next → Capture browser baselines</span>}
+        ant={<AntTypography.Text type="secondary">Next → Capture browser baselines</AntTypography.Text>} />
+      <Pair name="typography-warning" orbit={<span className="orbit-typography orbit-typography-warning">Not on main yet</span>}
+        ant={<AntTypography.Text type="warning">Not on main yet</AntTypography.Text>} />
+      <Pair name="typography-strong" orbit={<span className="orbit-typography"><strong>Orbit UI migration</strong></span>}
+        ant={<AntTypography.Text strong>Orbit UI migration</AntTypography.Text>} />
+      <Pair name="typography-code" orbit={<span className="orbit-typography"><code>RUN_ACCEPTANCE_COMMAND</code></span>}
+        ant={<AntTypography.Text code>RUN_ACCEPTANCE_COMMAND</AntTypography.Text>} />
+      {/* In a 12px parent: the text keeps its own 14px, as the replaced root does. */}
+      <Pair name="typography-secondary-12px" orbit={<div style={{ fontSize: 12 }}><span className="orbit-typography orbit-typography-secondary">Why this task waits</span></div>}
+        ant={<div style={{ fontSize: 12 }}><AntTypography.Text type="secondary">Why this task waits</AntTypography.Text></div>} />
+      <Pair name="typography-paragraph-code-12px" orbit={<div style={{ fontSize: 12 }}><div className="orbit-typography">Runs <code>npm test</code> before landing</div></div>}
+        ant={<div style={{ fontSize: 12 }}><AntTypography.Paragraph>Runs <code>npm test</code> before landing</AntTypography.Paragraph></div>} />
+      <Pair name="typography-code-copy" orbit={<span className="orbit-typography"><code>34ZZeq0e3IR65GVm2kAs7<span className="orbit-typography-actions"><button type="button" className="orbit-typography-copy" aria-label="Copy"><CopyOutlined aria-hidden /></button></span></code></span>}
+        ant={<AntTypography.Text code copyable={{ text: '34ZZeq0e3IR65GVm2kAs7' }}>34ZZeq0e3IR65GVm2kAs7</AntTypography.Text>} />
+      {(['default', 'small'] as const).map((size) => <Pair key={size} name={`list-${size}`}
+        orbit={<div className={`orbit-list orbit-list-split${size === 'small' ? ' orbit-list-sm' : ''}`} style={{ width: 320 }}><ul className="orbit-list-items">
+          {['Inventory existing components', 'Capture browser baselines'].map((title) => <li key={title} className="orbit-list-item">
+            <div className="orbit-list-item-meta"><div className="orbit-list-item-meta-content">
+              <h4 className="orbit-list-item-meta-title">{title}</h4>
+              <div className="orbit-list-item-meta-description">No acceptance criteria set</div>
+            </div></div>
+          </li>)}
+        </ul></div>}
+        ant={<AntList size={size} style={{ width: 320 }} dataSource={['Inventory existing components', 'Capture browser baselines']} rowKey={(title) => title}
+          renderItem={(title) => <AntList.Item><AntList.Item.Meta title={title} description="No acceptance criteria set" /></AntList.Item>} />} />)}
+      <Pair name="input-clear" orbit={<Input aria-label="Search projects" prefix={<SearchOutlined />} allowClear value="" onChange={() => undefined} placeholder="Search projects and goals" />}
+        ant={<AntInput aria-label="Search projects" prefix={<SearchOutlined />} allowClear value="" onChange={() => undefined} placeholder="Search projects and goals" />} />
+      <Pair name="input-clear-value" orbit={<Input aria-label="Search tasks" size="small" prefix={<SearchOutlined />} allowClear value="baseline" onChange={() => undefined} />}
+        ant={<AntInput aria-label="Search tasks" size="small" prefix={<SearchOutlined />} allowClear value="baseline" onChange={() => undefined} />} />
       <Behavior />
     </main>
   </AntApp></ConfigProvider>;
