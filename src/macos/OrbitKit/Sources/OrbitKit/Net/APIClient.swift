@@ -1327,6 +1327,32 @@ public final class APIClient: @unchecked Sendable {
 
     public func runners() async throws -> [Runner] { try await get("runners") }
     public func runner(_ id: String) async throws -> Runner { try await get("runners/\(id)") }
+
+    // MARK: managed runner (docs/managed-runner-design.md, "Server and three client interfaces")
+
+    /// `GET /api/auth/capabilities`. A server from before the feature answers 404: nil, which is no
+    /// capability rather than an error. Reading it allocates nothing.
+    public func serverCapabilities() async throws -> ServerCapabilities? {
+        do {
+            let capabilities: ServerCapabilities = try await get("auth/capabilities")
+            return capabilities
+        } catch APIError.http(404, _) {
+            return nil
+        }
+    }
+    /// `GET /api/managed-runner`: the owner's mapping as stored and derived, allocating nothing.
+    public func managedRunnerStatus() async throws -> ManagedRunnerStatus { try await get("managed-runner") }
+    /// Retry a FAILED managed runner the server allows it for: the revision it was read at, and one
+    /// key per press, so a resent request is the same request. Answers 202 with the status.
+    public func retryManagedRunner(revision: Int,
+                                   idempotencyKey: String = UUID().uuidString) async throws -> ManagedRunnerStatus {
+        try await post("managed-runner/retry",
+                       body: ManagedRunnerWriteRequest(idempotencyKey: idempotencyKey, revision: revision))
+    }
+    /// Ask for the owner's managed runner where the server offers one (`actions.canEnsure`).
+    public func ensureManagedRunner(idempotencyKey: String = UUID().uuidString) async throws -> ManagedRunnerStatus {
+        try await post("managed-runner/ensure", body: ManagedRunnerWriteRequest(idempotencyKey: idempotencyKey))
+    }
     /// The active and latest Codex reset-credit operations for a runner.
     public func codexRateLimitResetOperations(runnerID: String) async throws -> CodexRateLimitResetOperations {
         try await get("runners/\(runnerID)/codex-rate-limit-reset")

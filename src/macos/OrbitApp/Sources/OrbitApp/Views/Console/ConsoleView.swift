@@ -134,6 +134,13 @@ struct ConsoleView: View {
                     // the text they go out with. The band owns the gutter and the gaps; members only
                     // say whether they are on screen.
                     ComposerBand {
+                        // The managed runner's state while it is anything but ready, when this
+                        // console's runner is it (docs/managed-runner-design.md): about the runner the
+                        // message goes to, so it stays in sight while you type.
+                        if let managed = console.managed, managed.showsBanner {
+                            ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
+                                .padding(.bottom, .composerBandGap)
+                        }
                         // Errors only, and sticky until the ✕ — this row is in flow, so anything that
                         // comes and goes on a timer here shoves the composer around while the user is
                         // typing in it. Confirmations belong in the toast host (see `showToast`).

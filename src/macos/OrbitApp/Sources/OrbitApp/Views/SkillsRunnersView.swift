@@ -84,9 +84,22 @@ struct RunnersListView: View {
         @Bindable var model = model
         if let runners = model.runners {
             let lists = InfrastructureLists(model)
+            // An account with no runner at all, while the server offers managed runners: its managed
+            // runner — Set up, or why there is none — above the machines, as the web's default landing
+            // shows it (`ManagedRunnerLogic.onboarding`). Add Runner stays where it is.
+            let managed = runners.loadState.hasLoaded
+                ? ManagedRunnerLogic.onboarding(model.managedRunner?.display, runnerCount: runners.runners.count)
+                : nil
             // Runners' stack projection — the record on top — and only where there is a detail
             // column to select into.
             List(selection: rowNavigation == .selection ? $model.selectedRunnerID : nil) {
+                #if os(iOS)
+                if let managed {
+                    Section {
+                        ManagedRunnerBanner(display: managed, runnerID: model.managedRunner?.status?.runnerId)
+                    }
+                }
+                #endif
                 if lists.settled {
                     let attention = lists.attention
                     if !attention.isEmpty {
@@ -114,6 +127,7 @@ struct RunnersListView: View {
                                           open: opensPools ? push : nil)
             }
             .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
+            .modifier(ManagedRunnerAboveList(display: managed, runnerID: model.managedRunner?.status?.runnerId))
             .modifier(RunnersLoadOverlay(runners: runners, isEmpty: runners.runners.isEmpty,
                                          failedTitle: "Machines couldn't be loaded",
                                          emptyTitle: nil, systemImage: "desktopcomputer"))
@@ -257,6 +271,30 @@ private struct RunnersLoadOverlay: ViewModifier {
 }
 
 /// The list's last card: Add Runner, and what it will ask of the new machine.
+/// The managed runner above Infrastructure's list on the Mac, for an account with no runner
+/// (`ManagedRunnerLogic.onboarding`). A Mac list is a table that keeps its rows where they were when
+/// a row or a top inset that arrives after it has drawn changes its height, so there the banner takes
+/// room of its own above the list; on iOS it is the list's first section.
+private struct ManagedRunnerAboveList: ViewModifier {
+    let display: ManagedRunnerDisplay?
+    let runnerID: String?
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        VStack(spacing: 0) {
+            if let display {
+                ManagedRunnerBanner(display: display, runnerID: runnerID)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+            }
+            content
+        }
+        #else
+        content
+        #endif
+    }
+}
+
 private struct RunnerAddSection: View {
     let add: () -> Void
 
