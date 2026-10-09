@@ -278,7 +278,7 @@
 <section id="part-1">
 <h1>建议输入：Use 换成「拍两下」—— iPhone 为准</h1>
 <p class="lede">今天灰字行尾有个 <b>Use</b> 胶囊，点它把建议填进输入框。改成：<b>拿掉 Use，在输入框那一行拍两下</b>，效果和点 Use 一样：填进去、光标到句尾、键盘起来，<b>不发送</b>。
-第一下就是今天的「点输入框」，键盘马上起来，不用等第二下；只点一下，照旧是自己打字。
+有建议时第一下先等约 0.3 秒，看有没有第二下：键盘若立刻起来，会把输入卡片顶上去，第二下就落到键盘上。只点一下，键盘晚这么一点起来，照旧是自己打字。
 手势看不见，所以灰字后面跟一行小字 <b>Double-tap to use</b>；在这台设备上拍中过一次，它就不再出现。
 例句是编的；红点、虚线框、紫字是标注，不是界面。</p>
 
@@ -330,10 +330,10 @@
 
 <!-- ═════════════ 2 · the gesture ═════════════ -->
 <section id="part-2">
-<h2>iPhone · 拍两下 <small>第一下就是今天的「点输入框」，不等第二下</small></h2>
+<h2>iPhone · 拍两下 <small>有建议时，第一下先等约 0.3 秒，好让第二下落在原处</small></h2>
 <div class="row">
   <div class="tile">
-    <div class="cap">④ 第一下 <span>键盘起来，灰字还在</span></div>
+    <div class="cap">④ 只点一下 <span>约 0.3 秒后键盘起来，灰字还在</span></div>
     <div class="phone kbup">
       <div data-tpl="tail"></div>
       <div class="band"><div class="card focus">
@@ -343,7 +343,7 @@
       </div></div>
       <div data-tpl="keyboard"></div>
     </div>
-    <div class="legend">就是今天的「点输入框」：键盘马上起来，停车栏照旧收起，不等第二下。<b>只点一下就停在这</b>：灰字还在，开始打字它就让开。</div>
+    <div class="legend">有建议时，单点要等双击判定落空（约 0.3 秒）才起键盘：键盘若在第一下就起来，会把输入卡片顶上去，第二下就落到键盘上（拼音键盘上是一个候选字）。之后和今天一样：停车栏收起，<b>灰字还在</b>，开始打字它就让开。</div>
   </div>
 
   <div class="tile">
@@ -374,7 +374,7 @@
       </div></div>
       <div data-tpl="keyboard"></div>
     </div>
-    <div class="legend">粘贴照旧：点一下，停一下再点（或长按），出 Paste。<b>两下点得太快</b>会被当成拍两下、填进建议，删掉再粘即可。
+    <div class="legend">粘贴照旧：点一下，等键盘起来再点（或长按），出 Paste，只是比平时晚约 0.3 秒。<b>两下点得太快</b>会被当成拍两下、填进建议，删掉再粘即可。
       只在有建议、输入框为空时认两下；有字时两下仍是系统的选词。</div>
   </div>
 </div>
@@ -453,7 +453,7 @@
     <div class="sarrow">→</div>
     <div class="smini"><div class="tag">改后</div>
       <div class="afield new"><span class="aph">合并并部署</span><span class="atip">Double-tap to use</span></div></div>
-    <div class="snote">输入框尾部的 Use 文字按钮拿掉，placeholder 里灰字加提示；拍两下填入，第一下照常聚焦。TalkBack 同样走 <b>Use suggestion</b> 动作。</div>
+    <div class="snote">输入框尾部的 Use 文字按钮拿掉，placeholder 里灰字加提示；拍两下填入；没聚焦时第一下同样先等一等。TalkBack 同样走 <b>Use suggestion</b> 动作。</div>
   </div>
   <div class="srow plain">
     <div class="sname"><b>iPad</b><span>同一份 ComposerView</span></div>
@@ -487,12 +487,13 @@
     <h3>变与不变</h3>
     <ul>
       <li>拍两下 = 以前点 Use：填进去、光标到句尾、键盘起来，<b>不发送</b></li>
-      <li>单点不变；有字时不认两下</li>
+      <li>单点照旧是聚焦打字，只是有建议时晚约 0.3 秒；有字时不认两下</li>
       <li>建议什么时候出现、什么时候消失（设计文档 §4.4）不变；不加关闭按钮，设置里的总开关照旧</li>
     </ul>
     <h3 class="more">代价</h3>
     <ul>
       <li>手势看不见：靠提示小字教一次，每台设备各一次（记在本机）</li>
+      <li>有建议时单点晚约 0.3 秒（起键盘、Paste），否则第二下会落到刚起来的键盘上（④）</li>
       <li>想粘贴时两下点太快，会填进建议（⑥）</li>
       <li>读屏走动作、不走手势（⑨）</li>
     </ul>
@@ -501,11 +502,11 @@
     <h3>落地（按代价排）</h3>
     <ol>
       <li><b>iPhone · iPad</b><span class="cost">小</span>：<code>PromptSuggestionLine</code> 在 iOS 去掉 Use 和行尾 64pt，换成提示小字（macOS 分支的 <code>Use ⇥</code> 不动）；
-        <code>GrowingTextEditor</code> 的 UITextView 在有建议时挂一个双击识别，和系统点按同时识别（第一下不等），认到就走现成的 <code>acceptSuggestion()</code> + <code>PlatformHaptics.tap()</code>，第二下不让系统弹编辑菜单；
+        <code>GrowingTextEditor</code> 的 UITextView 在有建议时挂一个双击识别，输入框自己的点按都等它落空，认到就走现成的 <code>acceptSuggestion()</code> + <code>PlatformHaptics.tap()</code>，第二下不让系统弹编辑菜单；
         加 <code>Use suggestion</code> 读屏动作；「用过」记在 UserDefaults</li>
-      <li><b>手机网页</b><span class="cost">小</span>：<code>hover: none</code> 时不画 <code>.composer-suggestion-use</code>，改画提示；textarea 上认两下（两次点按 ≤ 300 ms、相距 ≤ 24 px）；
+      <li><b>手机网页</b><span class="cost">小</span>：<code>hover: none</code> 时不画 <code>.composer-suggestion-use</code>，改画提示；textarea 上认两下（两次点按 ≤ 300 ms、相距 ≤ 24 px），没聚焦时先扣住第一下、超时再交还；
         <code>touch-action: manipulation</code>；读屏用的 Use 按钮视觉隐藏；「用过」记在 localStorage</li>
-      <li><b>Android</b><span class="cost">中</span>：<code>SessionComposer.kt</code> 去掉 trailingIcon 的 Use；<code>pointerInput</code> 在 Initial 阶段认两下、不吃第一下；
+      <li><b>Android</b><span class="cost">中</span>：<code>SessionComposer.kt</code> 去掉 trailingIcon 的 Use；<code>pointerInput</code> 在 Initial 阶段认两下，没聚焦时先扣住第一下、超时再交还；
         <code>semantics</code> 加 customActions；「用过」记在 SharedPreferences</li>
       <li><b>测试与文档</b>：三端把「点 Use」的用例换成拍两下，加上单点不填、有字不认、提示只出一次、读屏动作；
         <code>docs/prompt-suggestions-design.md</code> 改 §4.1、§4.3，§9 补一条</li>
