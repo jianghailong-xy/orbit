@@ -46,11 +46,14 @@ export const apiCases = {
   ],
 };
 
-// The PostgreSQL specs that start the whole API server — AppModule in the spec's process, or build/main.js
-// as a child — and so run the migration on their way up now: they run green after it, every case passing
-// and none skipped.
+// Specs that start the whole API server — build/main.js as a child, or AppModule in the spec's process — and
+// so run the migration on their way up now: they run green after it, every case passing and none skipped.
+// managed-runner-sign-in also holds the rows a start finds to be byte-for-byte what they were.
 export const regressionPgSources = [
   'src/apiserver/src/auth/access-tokens.pg.spec.ts',
+  'src/apiserver/src/auth/tenant-isolation.pg.spec.ts',
+  'src/apiserver/src/runners/runner-reorder.pg.spec.ts',
+  'src/apiserver/src/managed-runners/managed-runner-sign-in.pg.spec.ts',
 ];
 
 /** A named scenario, by its name: a name the lists above do not hold is refused here, not later. */
