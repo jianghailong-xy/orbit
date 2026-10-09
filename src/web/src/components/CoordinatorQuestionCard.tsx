@@ -1,6 +1,8 @@
 import { useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Input } from 'antd';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type {
   CoordinatorQuestion,
   ProjectOpenItemRow,
@@ -9,6 +11,7 @@ import type {
 import { CardActionButton, CardActions } from './CardAction';
 import { ReviewCard } from './ReviewCard';
 import { api } from '../api';
+import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { projectOpenItemsQuery } from '../lib/queries';
 import { ago } from '../lib/watches';
 
@@ -201,7 +204,17 @@ export function CoordinatorQuestionCard({
         </span>
       </div>
       <div className="approval-body is-questions coordinator-question-body">
-        <p className="coordinator-question-text">{question.question}</p>
+        {/* The question as the coordinator wrote it — the same Markdown the approval cards render
+            (`ApprovalPanel`), so bullets and emphasis do not arrive as their raw spelling. */}
+        <div className="coordinator-question-text md">
+          <Markdown
+            remarkPlugins={[remarkGfm]}
+            urlTransform={referenceUrlTransform}
+            components={{ a: ReferenceLink }}
+          >
+            {question.question}
+          </Markdown>
+        </div>
         {/* The options are the answer: one tap, with the recommendation marked where it was made
             rather than as a sentence above them. A question asked without any is prose only. */}
         {question.options.map((option, index) => (

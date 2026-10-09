@@ -69,6 +69,11 @@ class ManagementDeviceTest {
     @Volatile private var accountsPass = false
     /** Default's Claude login lapses in two days until it is signed in again, then in a month. */
     @Volatile private var claudeRenewed = false
+    /** The remote reports Kimi Code's accounts: Default alone on kimi.ai, or with Work on kimi.com ([kimiTwo]); [kimiOld] is a
+     * runner too old for Kimi's accounts and sites, its one login signed out. */
+    @Volatile private var kimiPass = false
+    @Volatile private var kimiTwo = false
+    @Volatile private var kimiOld = false
     /** The sign-in relay as GET runners/:id/login reads it; POST login and POST login/code move it on. */
     @Volatile private var loginRelay = """{"status":null,"engine":null,"userCode":null,"url":null,"message":null,"account":null}"""
     @Volatile private var workspaceName = "Fixture workspace"
@@ -339,6 +344,96 @@ class ManagementDeviceTest {
                 accountsPass = false
                 runBlocking { app.session.logout() }
                 File(app.filesDir, "a13-management").apply { mkdirs() }.resolve("accounts-requests.txt").writeText(calls.joinToString("\n"))
+            }
+        }
+    }
+
+    /**
+     * Kimi Code's accounts (docs/mocks/kimi-accounts/02-ios and its Android notes) through the real shell over controlled HTTP:
+     * one login with its site and Add Account; Sign In Again and Add Account asking the site first — the name first on an add —
+     * and the device step naming the site of the account being added, the other site one press away; two accounts each on
+     * its own site with its own three windows; NEXT on every engine page; and a runner too old for any of it.
+     */
+    @Test fun kimiAccountsSiteFirstTwoAccountsAndNext() {
+        start()
+        MockWebServer().use { server ->
+            server.dispatcher = dispatcher()
+            try {
+                role = "ADMIN"; runnerOnline = true; kimiPass = true; kimiTwo = false; kimiOld = false
+                signIn(server); settings()
+                click(hasText("Runners") and hasClickAction()); await("Controlled remote")
+                click(hasText("Controlled remote") and hasClickAction()); await("Max Concurrent")
+                // One login: its site after its version, and its window nearest the limit.
+                await("2.1.1 · kimi.ai · Signed in")
+                compose.onAllNodesWithText("2.1.1 · kimi.ai", substring = true).onFirst().performScrollTo()
+                capture("kimi-runner-one")
+                click(hasText("Kimi Code") and hasClickAction()); await("Accounts"); await("Monthly limit")
+                capture("kimi-engine-one")
+                // Signing the one login in again asks the site first, its own marked Current.
+                compose.onNodeWithContentDescription("More for Default").performScrollTo().performClick()
+                click(hasText("Sign In Again"), scroll = false)
+                await("Which Kimi account are you signing in with?"); await("Current")
+                compose.onNode(hasText("Close") and hasClickAction()).performScrollTo()
+                capture("kimi-sign-in-again-default")
+                click(hasText("Close") and hasClickAction())
+                // Add Account: a name first — the one picked, Account 2 — then the site; nothing is marked Current on an
+                // account not signed in yet. The name is not typed: a focused field raises the emulator keyboard's stylus
+                // onboarding over the page (RunnerEnginePageTest types one).
+                click(hasText("Add Account") and hasClickAction())
+                await("Which Kimi account are you signing in with?")
+                compose.onNode(hasSetTextAction()).assertTextContains("Account 2")
+                compose.onAllNodesWithText("The two sites keep separate accounts", substring = true).onFirst().performScrollTo()
+                capture("kimi-add-account")
+                click(hasText("kimi.com") and hasClickAction())
+                await("Sign in with the kimi.com account you are adding"); await("7K06-QP86")
+                compose.onAllNodesWithText("Use kimi.ai instead", substring = true).onFirst().performScrollTo()
+                capture("kimi-add-device-code")
+                click(hasText("Use kimi.ai instead") and hasClickAction())
+                await("Sign in with the kimi.ai account you are adding"); await("Use kimi.com instead")
+                capture("kimi-add-use-instead")
+                click(hasText("Cancel") and hasClickAction())
+                compose.waitUntil(10_000) { calls.contains("DELETE /api/runners/$runnerId/login") }
+                // Work added on kimi.com: each account on its own site with its own three windows, NEXT on Default.
+                kimiTwo = true
+                compose.activityRule.scenario.recreate()
+                await("Work"); await("NEXT"); await("kimi.com · ~/.orbit/kimi-accounts/5c2e91a0")
+                capture("kimi-engine-two")
+                compose.onNodeWithContentDescription("More for Work").performScrollTo().performClick()
+                click(hasText("Sign In Again"), scroll = false)
+                await("Which Kimi account are you signing in with?"); await("Current")
+                compose.onNode(hasText("Close") and hasClickAction()).performScrollTo()
+                capture("kimi-sign-in-again-work")
+                click(hasText("Close") and hasClickAction())
+                back()
+                await("2.1.1 · 2 accounts signed in"); await("Next: Default")
+                compose.onAllNodesWithText("Next: Default", substring = true).onFirst().performScrollTo()
+                capture("kimi-runner-two")
+                // NEXT on every engine page, by the same rule.
+                for ((engine, shot) in listOf("Claude Code" to "next-claude", "Codex" to "next-codex", "Antigravity" to "next-antigravity")) {
+                    click(hasText(engine) and hasClickAction()); await("NEXT")
+                    capture(shot)
+                    back()
+                }
+                // A runner too old for Kimi's accounts and sites: its one login under Sign-In, no Add Account, kimi.ai refused.
+                kimiOld = true
+                click(hasText("Kimi Code") and hasClickAction()); await("Sign-In")
+                assertTrue("no Add Account", compose.onAllNodesWithText("Add Account").fetchSemanticsNodes().isEmpty())
+                click(hasText("Sign In") and hasClickAction())
+                await("Which Kimi account are you signing in with?")
+                click(hasText("kimi.ai") and hasClickAction())
+                val refusal = "This runner is too old to choose a Kimi site — update it, then try again."
+                // The relay is read again every 2 s on the page's clock, which a plain sleep never moves.
+                val refusedBy = System.currentTimeMillis() + 30_000
+                while (compose.onAllNodesWithText(refusal, substring = true).fetchSemanticsNodes().isEmpty()) {
+                    assertTrue("the older runner's refusal is shown", System.currentTimeMillis() < refusedBy)
+                    compose.mainClock.advanceTimeBy(500); compose.waitForIdle(); SystemClock.sleep(200)
+                }
+                capture("kimi-old-runner")
+                back()
+            } finally {
+                kimiPass = false; kimiTwo = false; kimiOld = false
+                runBlocking { app.session.logout() }
+                File(app.filesDir, "a13-management").apply { mkdirs() }.resolve("kimi-requests.txt").writeText(calls.joinToString("\n"))
             }
         }
     }
@@ -806,7 +901,44 @@ class ManagementDeviceTest {
               "accounts":{"5c2e91a0":{"provider":"antigravity","buckets":${buckets(0.61, 0.04, 1.0, 1.0)}}}}}],
         "planUsage":{"claude":{"fiveHour":{"utilization":42,"resetsAt":"${at(7200)}"},"sevenDay":{"utilization":61,"resetsAt":"${at(3 * 86400)}"},
           "accounts":{"1fda3f43":{"fiveHour":{"utilization":12,"resetsAt":"${at(3600)}"},"sevenDay":{"utilization":30,"resetsAt":"${at(5 * 86400)}"}}}}},"install":null}"""
-    private fun runner() = if (accountsPass) accountsRunner() else """{"id":"$runnerId","name":"controlled-remote","displayName":"Controlled remote","hostname":"ci-runner-01","version":"0.1.199",
+    /** Kimi Code's three windows and the coding share of its month, which no page draws. */
+    private fun kimiWindows(five: Int, week: Int, month: Int, fiveIn: Long, weekIn: Long, monthIn: Long) =
+        """"provider":"kimi","fiveHour":{"utilization":$five,"resetsAt":"${at(fiveIn)}"},"sevenDay":{"utilization":$week,"resetsAt":"${at(weekIn)}"},""" +
+            """"month":{"utilization":$month,"resetsAt":"${at(monthIn)}"},"monthCode":{"utilization":${month / 2},"resetsAt":"${at(monthIn)}"}"""
+    /** The remote in the Kimi pass, as the board draws HPC: Default on kimi.ai, and once added Work on kimi.com, its five hours
+     * 91% used. Claude Code, Codex and Antigravity keep two accounts each, so every engine page has one marked NEXT. A runner
+     * too old for Kimi's accounts reads no Kimi quota either. */
+    private fun kimiRunner(): String {
+        val kimi = if (kimiOld) """{"engine":"kimi","installed":true,"version":"2.1.1","auth":"no","kimiRegion":"mainland-cn"}"""
+            else """{"engine":"kimi","installed":true,"version":"2.1.1","auth":"yes","kimiRegion":"global",
+              "accounts":[{"id":"default","home":"/home/ci/.kimi-code","auth":"yes","kimiRegion":"global"}${if (!kimiTwo) "" else """,
+                {"id":"5c2e91a0","name":"Work","home":"/home/ci/.orbit/kimi-accounts/5c2e91a0","auth":"yes","kimiRegion":"mainland-cn"}"""}]}"""
+        val kimiCapabilities = if (kimiOld) "" else """"kimi-account-login/v1","kimi-account-remove/v1","kimi-account-move/v1","kimi-login-region/v1","""
+        return """{"id":"$runnerId","name":"controlled-remote","displayName":"Controlled remote","hostname":"ci-runner-01","version":"0.1.200",
+        "online":true,"status":"ONLINE","lastHeartbeatAt":"${heartbeat()}","maxConcurrent":4,"activeSessions":1,"runsAsRoot":false,"selfUpdate":null,
+        "minFreeDiskMb":null,"reposRoot":"/home/ci/orbit-repos","enrolledAt":"2026-09-01T10:00:00Z",
+        "capabilities":[$kimiCapabilities"claude-account-remove/v1","antigravity-google-login/v1","antigravity-account-login/v1","antigravity-account-remove/v1","os:linux"],
+        "antigravity":{"supported":true,"installed":true,"version":"1.3.0","envKeyAvailable":true,"authSource":"google","googleLogin":"available"},
+        "engines":[{"engine":"claude","installed":true,"version":"2.1.284 (Claude Code)","auth":"yes",
+            "accounts":[{"id":"default","home":"/home/ci/.claude","auth":"yes"},{"id":"1fda3f43","name":"Work","home":"/home/ci/.orbit/claude-accounts/1fda3f43","auth":"yes"}]},
+          {"engine":"codex","installed":true,"version":"codex-cli 0.158.0","auth":"yes",
+            "accounts":[{"id":"default","home":"/home/ci/.codex","auth":"yes"},{"id":"1a2b3c4d","name":"Second","home":"/home/ci/.orbit/codex-accounts/1a2b3c4d","auth":"yes"}]},
+          $kimi,
+          {"engine":"antigravity","installed":true,"version":"1.3.0","auth":"yes","authSource":"google",
+            "accounts":[{"id":"default","home":"/home/ci/.orbit/antigravity/google","auth":"yes"},
+              {"id":"5c2e91a0","name":"Work","home":"/home/ci/.orbit/antigravity-accounts/5c2e91a0","auth":"yes"}],
+            "planUsage":{"provider":"antigravity","buckets":${buckets(1.0, 1.0, 0.98, 1.0)},
+              "accounts":{"5c2e91a0":{"provider":"antigravity","buckets":${buckets(0.61, 0.04, 1.0, 1.0)}}}}}],
+        "planUsage":{"claude":{"fiveHour":{"utilization":42,"resetsAt":"${at(7200)}"},"sevenDay":{"utilization":61,"resetsAt":"${at(5 * 86400)}"},
+            "accounts":{"1fda3f43":{"fiveHour":{"utilization":12,"resetsAt":"${at(3600)}"},"sevenDay":{"utilization":30,"resetsAt":"${at(3 * 86400)}"}}}},
+          "codex":{"provider":"codex","primary":{"utilization":85,"windowDurationMins":300,"resetsAt":"${at(5400)}"},
+            "secondary":{"utilization":40,"windowDurationMins":10080,"resetsAt":"${at(4 * 86400)}"},
+            "accounts":{"1a2b3c4d":{"provider":"codex","primary":{"utilization":30,"windowDurationMins":300,"resetsAt":"${at(9000)}"},
+              "secondary":{"utilization":20,"windowDurationMins":10080,"resetsAt":"${at(6 * 86400)}"}}}},
+          "kimi":${if (kimiOld) "null" else """{${kimiWindows(12, 34, 8, 2 * 3600, 4 * 86400, 23 * 86400)},
+            "accounts":{"5c2e91a0":{${kimiWindows(91, 61, 22, 3600, 86400, 20 * 86400)}}}}"""}},"install":null}"""
+    }
+    private fun runner() = if (kimiPass) kimiRunner() else if (accountsPass) accountsRunner() else """{"id":"$runnerId","name":"controlled-remote","displayName":"Controlled remote","hostname":"ci-runner-01","version":"0.1.199",
         "online":$runnerOnline,"status":"${if (runnerOnline) "ONLINE" else "OFFLINE"}","lastHeartbeatAt":"${heartbeat()}","maxConcurrent":4,"activeSessions":1,
         "runsAsRoot":false,"selfUpdate":${runnerSelfUpdate ?: "null"},"minFreeDiskMb":null,"reposRoot":"/home/ci/orbit-repos","enrolledAt":"2026-09-01T10:00:00Z","capabilities":["claude-account-remove/v1"],
         "engines":[{"engine":"claude","installed":true,"version":"2.1.284 (Claude Code)","auth":"yes","update":{"status":"checked","at":"${now.minusSeconds(360)}","okAt":"${now.minusSeconds(360)}","latest":"2.1.284"},
@@ -884,10 +1016,26 @@ class ManagementDeviceTest {
                 "/api/runners/$runnerId/login" -> when (request.method) {
                     "POST" -> {
                         val start = bodyOf()
-                        loginRelay = if (start["engine"]?.jsonPrimitive?.content == "codex")
-                            """{"status":"awaiting_approval","engine":"codex","userCode":"WXYZ-1234","url":"https://auth.openai.com/codex/device","message":null,"account":null}"""
-                        else """{"status":"awaiting_code","engine":"claude","userCode":null,"url":"https://claude.ai/oauth/authorize?code=true","message":null,"account":"default"}"""
-                        loginRelay
+                        val region = start["region"]?.jsonPrimitive?.content
+                        val account = start["account"]?.jsonPrimitive?.content?.let { "\"$it\"" } ?: "null"
+                        when {
+                            // An older runner's next check-in refuses a site it can't be told (RunnerApiController).
+                            start["engine"]?.jsonPrimitive?.content == "kimi" && kimiOld && region != null -> {
+                                loginRelay = """{"status":"failed","engine":"kimi","userCode":null,"url":null,"message":"This runner is too old to choose a Kimi site — update it, then try again.","account":null}"""
+                                """{"status":"pending","engine":"kimi","userCode":null,"url":null,"message":null,"account":null}"""
+                            }
+                            start["engine"]?.jsonPrimitive?.content == "kimi" -> {
+                                val (site, code) = if (region == "global") "kimi.ai" to "Q2PF-8XWA" else "kimi.com" to "7K06-QP86"
+                                loginRelay = """{"status":"awaiting_approval","engine":"kimi","userCode":"$code","url":"https://www.$site/code/authorize_device?user_code=$code","message":null,"account":$account}"""
+                                loginRelay
+                            }
+                            else -> {
+                                loginRelay = if (start["engine"]?.jsonPrimitive?.content == "codex")
+                                    """{"status":"awaiting_approval","engine":"codex","userCode":"WXYZ-1234","url":"https://auth.openai.com/codex/device","message":null,"account":null}"""
+                                else """{"status":"awaiting_code","engine":"claude","userCode":null,"url":"https://claude.ai/oauth/authorize?code=true","message":null,"account":"default"}"""
+                                loginRelay
+                            }
+                        }
                     }
                     "DELETE" -> { loginRelay = """{"status":"cancelled","engine":null,"userCode":null,"url":null,"message":null,"account":null}"""; loginRelay }
                     else -> loginRelay

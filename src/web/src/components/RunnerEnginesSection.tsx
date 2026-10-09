@@ -5,7 +5,7 @@ import { accountToStartOn, withEnginePlanUsage, type ReportedEngine, type Runner
 import { api } from '../api';
 import { accountNameOf, accountPlanUsage, engineKeepsAccounts, runsOnEnvKey } from '../lib/engineAccounts';
 import { encodeId } from '../lib/idCodec';
-import { bindingPlanUsageRow, currentPlanUsageRows, planUsageSnapshotForProvider } from '../lib/planUsage';
+import { bindingPlanUsageRow, currentPlanUsageRows, kimiNoQuotaLimit, planUsageSnapshotForProvider } from '../lib/planUsage';
 import { formatResetTime } from '../lib/providerPools';
 import { runnersQuery } from '../lib/queries';
 import {
@@ -14,6 +14,7 @@ import {
   RUNNER_ENGINES_OFFLINE_FOOTER,
   RUNNER_ENGINE_NOT_INSTALLED,
   RUNNER_ENGINE_NO_QUOTA,
+  RUNNER_ENGINE_NO_QUOTA_LIMIT,
   RUNNER_ENGINE_SIGNED_IN,
   RUNNER_ENGINE_SIGNED_OUT,
   runnerEngineAccountsSignedIn,
@@ -278,7 +279,9 @@ function EngineLine({ runner, health }: { runner: Runner; health: RunnerEngineHe
             </div>
           ))
         ) : (
-          <span className="rd-engine-muted">{signedIn ? RUNNER_ENGINE_NO_QUOTA : '—'}</span>
+          <span className="rd-engine-muted">
+            {signedIn ? (kimiNoQuotaLimit(snapshot) ? RUNNER_ENGINE_NO_QUOTA_LIMIT : RUNNER_ENGINE_NO_QUOTA) : '—'}
+          </span>
         )}
       </div>
       <RightOutlined className="rd-engine-chevron" />

@@ -2369,7 +2369,8 @@ private struct StartProjectCardView: View {
                 // Start stays live.
                 onChatAbout: {
                     console.startPlanChangeReply(criteriaDigest: request.criteriaDigest, question: .start)
-                })
+                },
+                graph: console.projectGraph)
         } else {
             VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
                 ApprovalHeader(symbol: "play.fill", title: StartProject.title, tone: .blue)
@@ -2478,11 +2479,23 @@ struct StartProjectCard: View {
     var onChatAbout: (() -> Void)? = nil
     /// A press the door did not take, in its own words.
     var error: String? = nil
+    /// The dependency graph `plan` was read off, which the Plan draws while the whole of it fits.
+    var graph: ProjectDependencyGraph? = nil
+    /// Opens one task of the plan; where there is no such press, a task opens the way View tasks
+    /// does.
+    var onOpenTask: ((String) -> Void)? = nil
     @Environment(\.dismissApprovalReview) private var dismissReview
     @State private var starting = false
     @State private var criteriaOpen = false
     @State private var whyOpen = false
     @State private var mergeCheckOpen = false
+    /// Whether the clamps hide anything: More and Read all are drawn only while they do (or once
+    /// opened), since a toggle for words already in full would open nothing.
+    @State private var whyCut = false
+    @State private var cutCriteria: Set<String> = []
+    @State private var planWidth: CGFloat = 0
+    @State private var graphOpen = false
+    @State private var graphExpanded: Set<String> = []
 
     /// Whether a coordinator asked for this card.
     private var asked: Bool { askedAt != nil }
@@ -2550,24 +2563,26 @@ struct StartProjectCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Label(StartProject.coordinator, systemImage: "bubble.left.fill")
                         .font(.orbitLabel).foregroundStyle(.secondary)
-                    Text(request.why).font(.orbitSubtext).lineLimit(whyOpen ? nil : 3)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Button {
-                        PlatformHaptics.tap()
-                        whyOpen.toggle()
-                    } label: {
-                        Text(whyOpen ? StartProject.less : StartProject.more)
-                            .font(.orbitLabel).foregroundStyle(Color.blue)
+                    ClampedText(text: request.why, font: .orbitSubtext, lineLimit: whyOpen ? nil : 3) { whyCut = $0 }
+                    if whyOpen || whyCut {
+                        Button {
+                            PlatformHaptics.tap()
+                            whyOpen.toggle()
+                        } label: {
+                            Text(whyOpen ? StartProject.less : StartProject.more)
+                                .font(.orbitLabel).foregroundStyle(Color.blue)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
                 .startRow()
             }
         }
     }
 
-    /// The criteria, open, each clamped to two lines, the toggle taking the clamp off — the
-    /// confirmation card's rule, for its reason: a folded list is an invitation to sign unread.
+    /// The criteria, open, each clamped to two lines, the toggle taking the clamp off while the clamp
+    /// hides anything — the confirmation card's rule, for its reason: a folded list is an invitation
+    /// to sign unread.
     @ViewBuilder private var criteriaList: some View {
         if !criteria.isEmpty {
             ForEach(criteria) { item in
@@ -2575,22 +2590,25 @@ struct StartProjectCard: View {
                     Text("\(item.ordinal)")
                         .font(.orbitMonoFine).foregroundStyle(.secondary)
                         .frame(minWidth: 14, alignment: .trailing)
-                    Text(item.text).font(.orbitProse).lineLimit(criteriaOpen ? nil : 2)
-                    Spacer(minLength: 0)
+                    ClampedText(text: item.text, font: .orbitProse, lineLimit: criteriaOpen ? nil : 2) { cut in
+                        cutCriteria = cut ? cutCriteria.union([item.id]) : cutCriteria.subtracting([item.id])
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Button {
-                PlatformHaptics.tap()
-                criteriaOpen.toggle()
-            } label: {
-                Text(criteriaOpen ? AcceptanceConfirmations.showLessLabel
-                                  : AcceptanceConfirmations.readLabel(count: criteria.count))
-                    .font(.orbitLabel)
-                    .foregroundStyle(Color.blue)
+            if criteriaOpen || !cutCriteria.isEmpty {
+                Button {
+                    PlatformHaptics.tap()
+                    criteriaOpen.toggle()
+                } label: {
+                    Text(criteriaOpen ? AcceptanceConfirmations.showLessLabel
+                                      : AcceptanceConfirmations.readLabel(count: criteria.count))
+                        .font(.orbitLabel)
+                        .foregroundStyle(Color.blue)
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(.plain)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -2789,31 +2807,81 @@ struct StartProjectCard: View {
         .startRow()
     }
 
-    // MARK: the plan, by level
+    // MARK: the plan, as the task graph or by level
 
-    /// The plan by level — what starts now, what runs side by side, and the task that needs the
-    /// owner — the batch-create review's rule; the tasks themselves are one press away.
+    /// The plan: the project page's task graph while the whole of it fits the card at
+    /// `StartProject.planGraphMinFit` or better — what waits on what, task by task — and otherwise
+    /// by level (what starts now, what runs side by side, the task that needs the owner, the
+    /// batch-create review's rule) with the graph a press away. A drawn graph's rows are its
+    /// layout's, so its head counts tasks only (docs/mocks/start-card-web-width, board 02).
     @ViewBuilder
     private var planSection: some View {
-        StartSectionHead(title: StartProject.planHead(plan.count, levels: plan.levels?.count ?? 1))
+        let drawn = StartProject.planGraph(graph, availableWidth: Double(planWidth))
+        StartSectionHead(title: StartProject.planHead(plan.count, levels: drawn == nil ? (plan.levels?.count ?? 1) : 1))
         StartPanel {
             VStack(alignment: .leading, spacing: 8) {
-                if let levels = plan.levels {
+                if let drawn {
+                    let scale = CGFloat(drawn.scale)
+                    ProjectGraphCanvas(layout: drawn.layout, edges: drawn.edges) { mark in
+                        if mark.kind == .task { openTask(mark.taskId ?? mark.id) }
+                    }
+                    .scaleEffect(scale, anchor: .topLeading)
+                    .frame(width: CGFloat(drawn.layout.width) * scale, height: CGFloat(drawn.layout.height) * scale,
+                           alignment: .topLeading)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                } else if let levels = plan.levels {
                     ForEach(Array(levels.enumerated()), id: \.offset) { at, level in
                         planLevel(at + 1, level)
                     }
                 }
-                Button {
-                    PlatformHaptics.tap()
-                    dismissReview()
-                    onViewTasks()
-                } label: {
-                    Text(StartProject.viewTasks).font(.orbitSubtext).foregroundStyle(Color.blue)
+                HStack(spacing: 14) {
+                    Button {
+                        PlatformHaptics.tap()
+                        dismissReview()
+                        onViewTasks()
+                    } label: {
+                        Text(StartProject.viewTasks).font(.orbitSubtext).foregroundStyle(Color.blue)
+                    }
+                    .buttonStyle(.plain)
+                    if graph != nil, drawn == nil {
+                        Button {
+                            PlatformHaptics.tap()
+                            graphOpen = true
+                        } label: {
+                            Label(StartProject.taskGraph, systemImage: "arrow.up.left.and.arrow.down.right")
+                                .font(.orbitSubtext).foregroundStyle(Color.blue)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-                .buttonStyle(.plain)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                GeometryReader { geo in
+                    Color.clear.onChange(of: geo.size.width, initial: true) { _, width in planWidth = width }
+                }
             }
             .startRow()
         }
+        #if os(iOS)
+        .fullScreenCover(isPresented: $graphOpen) { graphFullScreen }
+        #else
+        .sheet(isPresented: $graphOpen) { graphFullScreen.frame(minWidth: 720, minHeight: 520) }
+        #endif
+    }
+
+    /// The project page's task graph full screen, for a plan the card lists by level.
+    @ViewBuilder private var graphFullScreen: some View {
+        if let graph {
+            ProjectGraphFullScreen(graph: graph, expanded: $graphExpanded, onOpenTask: openTask)
+        }
+    }
+
+    /// One task of the plan, opened: by the page's own press where there is one, otherwise the way
+    /// View tasks opens the plan's tasks.
+    private func openTask(_ taskID: String) {
+        dismissReview()
+        if let onOpenTask { onOpenTask(taskID) } else { onViewTasks() }
     }
 
     private func planLevel(_ number: Int, _ level: [StartPlanLevelTask]) -> some View {
@@ -2870,6 +2938,48 @@ struct StartProjectCard: View {
         }
         .buttonStyle(.bordered)
         .disabled(criteria.isEmpty)
+    }
+}
+
+/// Text clamped to `lineLimit` lines that says whether the clamp hides any of it: the same words,
+/// laid out unclamped at the same width and never shown, measured against what is drawn. The start
+/// card draws its More and Read all only while this says so — a toggle for words already shown in
+/// full would open nothing (docs/mocks/start-card-web-width, the browser's `useClampHides`).
+private struct ClampedText: View {
+    let text: String
+    let font: Font
+    let lineLimit: Int?
+    let onCut: (Bool) -> Void
+
+    @State private var drawn: CGFloat = 0
+    @State private var whole: CGFloat = 0
+
+    var body: some View {
+        Text(text).font(font).lineLimit(lineLimit)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                GeometryReader { geo in
+                    Color.clear.onChange(of: geo.size.height, initial: true) { _, height in
+                        drawn = height
+                        onCut(whole > height + 1)
+                    }
+                }
+            }
+            .background(alignment: .topLeading) {
+                Text(text).font(font)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .hidden()
+                    .background {
+                        GeometryReader { geo in
+                            Color.clear.onChange(of: geo.size.height, initial: true) { _, height in
+                                whole = height
+                                onCut(height > drawn + 1)
+                            }
+                        }
+                    }
+                    .accessibilityHidden(true)
+            }
     }
 }
 
@@ -3204,8 +3314,9 @@ private struct CoordinatorQuestionCardView: View {
     /// The question, its options, the row that means "none of these", and a box to answer it in.
     private func asked(_ row: ProjectOpenItemRow, _ question: CoordinatorQuestion) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(question.question)
-                .font(.orbitProse)
+            // The question as the coordinator wrote it — Markdown, as the browser's card renders
+            // it (`CoordinatorQuestionCard`), so bullets and emphasis do not arrive raw.
+            MarkdownView(source: question.question).font(.orbitProse)
                 .frame(maxWidth: .infinity, alignment: .leading)
             ForEach(Array(question.options.enumerated()), id: \.offset) { index, option in
                 optionRow(index: index, option: option,

@@ -89,6 +89,9 @@ test('(c) the whole repository is free of references to the dropped table and co
   for (const file of files) {
     // Migrations are append-only history: 0210 must still be able to CREATE what 0225 drops.
     if (file.startsWith('src/apiserver/prisma/migrations/')) continue;
+    // Frozen evidence reports record what was run at the time, for the same reason the migration
+    // ledger is excluded above: they are history, not a live caller.
+    if (file.startsWith('docs/evidence/')) continue;
     // This spec and its sibling are where the absence is asserted, so they must name it.
     if (file.includes('startup-removal')) continue;
     if (!/\.(ts|tsx|js|mjs|cjs|go|sql|json|ya?ml|sh|md|swift)$/.test(file)) continue;
@@ -121,6 +124,9 @@ test('(c) the rollout gate has no residual reference either', () => {
   for (const file of files) {
     // 0225's own comment says which flag it is removing; that is the record, not a reader of it.
     if (file.startsWith('src/apiserver/prisma/migrations/')) continue;
+    // Frozen evidence reports record what was run at the time, for the same reason the migration
+    // ledger is excluded above: they are history, not a live caller.
+    if (file.startsWith('docs/evidence/')) continue;
     if (file.includes('startup-removal')) continue;
     if (!/\.(ts|tsx|js|mjs|cjs|go|sql|json|ya?ml|sh|md|swift)$/.test(file)) continue;
     let source: string;

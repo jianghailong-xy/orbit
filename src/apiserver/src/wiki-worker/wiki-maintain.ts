@@ -8,6 +8,7 @@ import {
   type WikiReviewMode,
 } from '@orbit/shared';
 import {
+  answerField,
   cutRunes,
   goTrimSpace,
   wikiImportFieldValue,
@@ -162,8 +163,9 @@ export function wikiMaintainOffTopic(answer: string): boolean {
   if (fenced) text = goTrimSpace(fenced[1]);
   if (!text.startsWith('{')) return false;
   try {
-    const said = JSON.parse(text) as { offTopic?: unknown };
-    return said !== null && typeof said === 'object' && said.offTopic === true;
+    // Go decodes into a struct, so the key reads in any case: {"OffTopic": true} says it too.
+    const said = JSON.parse(text) as Record<string, unknown>;
+    return said !== null && typeof said === 'object' && answerField(said, 'offTopic') === true;
   } catch {
     return false;
   }

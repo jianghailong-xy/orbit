@@ -156,8 +156,9 @@ internal fun poolTone(tone: String) = when (tone) {
     "success" -> Ink.green; "brand" -> MaterialTheme.colorScheme.primary; "warning" -> Ink.amber; "danger" -> Ink.red; else -> Ink.muted
 }
 
+/** A small mark beside a name — NEXT, SHARED, OWNER — as the account pools and the engine page draw it. */
 @Composable
-private fun Chip(text: String, modifier: Modifier = Modifier, brand: Boolean = false) {
+internal fun Chip(text: String, modifier: Modifier = Modifier, brand: Boolean = false) {
     Text(text, modifier.clip(RoundedCornerShape(5.dp)).background(if (brand) MaterialTheme.colorScheme.primary.copy(alpha = .12f) else Ink.muted.copy(alpha = .1f))
         .padding(horizontal = 5.dp, vertical = 1.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
         color = if (brand) MaterialTheme.colorScheme.primary else Ink.muted, maxLines = 1, softWrap = false)

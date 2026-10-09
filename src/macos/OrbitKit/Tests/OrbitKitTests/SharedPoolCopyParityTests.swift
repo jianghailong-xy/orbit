@@ -90,7 +90,7 @@ final class SharedPoolCopyParityTests: XCTestCase {
         assertSays(row, "key.enabled ? '\(SharedPoolPage.disableKey)' : '\(SharedPoolPage.enableKey)'", in: Self.accountPools)
         assertSays(row, "title={`\(SharedPoolPage.removeKeyTitle(key(label: "${key.label}")))`}", in: Self.accountPools)
         assertSays(row, "description=\"\(SharedPoolPage.removeKeyNote)\"", in: Self.accountPools)
-        assertSays(row, "okText=\"\(SharedPoolPage.remove)\"", in: Self.accountPools)
+        assertSays(row, "confirmText=\"\(SharedPoolPage.remove)\"", in: Self.accountPools)
         // "No keys yet — …", in the web's one sentence for both kinds of pool.
         assertSays(row, "No {shared ? 'keys' : 'accounts'}\(SharedPoolPage.noKeys.dropFirst("No keys".count))",
                    in: Self.accountPools)
@@ -153,7 +153,7 @@ final class SharedPoolCopyParityTests: XCTestCase {
         assertSays(card, "label: '\(SharedPoolPage.removeFromPool)', danger: true", in: Self.sharedPool)
         let someone = SharedPoolPerson(userId: "u", name: "${person.name}")
         assertSays(card, "title: `\(SharedPoolPage.removePersonTitle(someone, in: pool("${pool.label}")))`", in: Self.sharedPool)
-        assertSays(card, "content: '\(SharedPoolPage.removePersonNote)'", in: Self.sharedPool)
+        assertSays(card, "description: '\(SharedPoolPage.removePersonNote)',", in: Self.sharedPool)
     }
 
     /// "Add a key", step by step, and "Replace key".
@@ -192,7 +192,7 @@ final class SharedPoolCopyParityTests: XCTestCase {
 
         let refused = key(label: "${poolKey.label}")
         assertSays(dialog, "title={`\(AddPoolKey.replaceTitle(refused))`}", in: Self.sharedPool)
-        assertSays(dialog, "okText=\"\(SharedPoolPage.replaceKey)\"", in: Self.sharedPool)
+        assertSays(dialog, "> \(SharedPoolPage.replaceKey) </Button>", in: Self.sharedPool)
         let lead = AddPoolKey.replaceLead(key(label: "{poolKey.label}", fingerprint: "{poolKey.fingerprint}"))
         assertSays(dialog, "> \(lead) </div>", in: Self.sharedPool)
         assertSays(dialog, "message.success(`\(AddPoolKey.replaced(refused, in: pool("${pool.label}")))`)", in: Self.sharedPool)

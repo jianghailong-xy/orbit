@@ -1,0 +1,72 @@
+== Scenario 6a: a runner without the kimi-account-* capabilities ==
+runner-nocap.diff (the only change to the source):
+--- /root/.orbit/worktrees/d7dec327-328c-5e56-b824-35fa98f0e2ed/src/runner-go/transport.go	2026-10-09 00:01:38.044177155 +0800
++++ /var/tmp/kimi-accounts-stack/runner-nocap-src/transport.go	2026-10-09 01:12:50.520984774 +0800
+@@ -89,9 +89,6 @@
+ 		antigravityAccountLoginCapabilityV1,
+ 		antigravityAccountRemoveCapabilityV1,
+ 		kimiLoginRegionCapabilityV1,
+-		kimiAccountLoginCapabilityV1,
+-		kimiAccountRemoveCapabilityV1,
+-		kimiAccountMoveCapabilityV1,
+ 		sessionMoveCapabilityV1,
+ 		wikiMaintenanceRunV1,
+ 		wikiRepoOpCapabilityV1,
+old-kimi capabilities with kimi in them: ["kimi-login-region/v1"]
+old-kimi engines[kimi]: {"engine":"kimi","installed":true,"version":"2.1.1","auth":"yes","accounts":[{"id":"default","home":"/var/tmp/kimi-accounts-stack/runners/old-kimi/userhome/.kimi-code","auth":"yes","kimiRegion":"mainland-cn"}],"kimiRegion":"mainland-cn"}
+old-kimi Default home: digest ec3a7c26f24b2841 (5 entries) /var/tmp/kimi-accounts-stack/runners/old-kimi/userhome/.kimi-code
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+signed in on http://127.0.0.1:4741 as owner@kimi-int.test
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Kimi row on old-kimi: Kimi Code 2.1.1 · kimi.com Signed in No quota reported | Add account buttons: 0
+Kimi row on hpc-kimi: Add account buttons: 1
+shot /var/tmp/kimi-accounts-stack/shots/6-compat/6a1-old-runner-no-add-account.png
+→ POST /api/runners/34cStXE0R8wbtmXA7xgAP/login {"engine":"kimi","accountName":"Not on this runner","region":"mainland-cn"} ← 201
+POST a named Kimi sign-in to old-kimi: {"status":"pending","engine":"kimi","userCode":null,"url":null,"message":null,"account":null}
+GET /runners/old-kimi/login: {"status":"failed","engine":"kimi","userCode":null,"url":null,"message":"This runner is too old to sign in another Kimi account — update it, then try again.","account":null}
+fake kimi login calls on old-kimi since: 0
+→ DELETE /api/runners/34cStXE0R8wbtmXA7xgAP/login ← 200
+→ DELETE /api/runners/34cStXE0R8wbtmXA7xgAP/accounts/kimi/0badc0de ← 400 {"message":"This runner is too old to remove a Kimi account — update it, then try again.","error":"Bad Request","statusCode":400}
+DELETE a Kimi account on old-kimi: {"status":400,"body":{"message":"This runner is too old to remove a Kimi account — update it, then try again.","error":"Bad Request","statusCode":400}}
+stopped runner old-kimi (2876889)
+left-over account (0ddba11a) device code: TAC7-AJEL {"ok":true,"user":"leftover@kimi.ai","region":"global"}
+runner old-kimi pid 2915719 (orbit-nocap, ORBIT_HOME=/var/tmp/kimi-accounts-stack/runners/old-kimi/home)
+old-kimi engines[kimi] now: {"engine":"kimi","installed":true,"version":"2.1.1","auth":"yes","accounts":[{"id":"default","home":"/var/tmp/kimi-accounts-stack/runners/old-kimi/userhome/.kimi-code","auth":"yes","kimiRegion":"mainland-cn"},{"id":"0ddba11a","name":"Left over","home":"/var/tmp/kimi-accounts-stack/runners/old-kimi/home/kimi-accounts/0ddba11a","auth":"yes","kimiRegion":"global"}],"kimiRegion":"mainland-cn"}
+→ POST /api/sessions {"workspaceId":"34cSuKW0Pb0IDlfFqgpqO","provider":"kimi","prompt":"Scenario 6a: a Kimi session on the old runner."} ← 201
+→ PATCH /api/sessions/34cT3gXsePqQ4gredDAi3/account {"account":"0ddba11a"} ← 409 {"message":"this session's runner cannot move a conversation to another account yet — it updates itself when no turn is running","error":"Conflict","statusCode":409}
+PATCH /sessions/:id/account {account:"0ddba11a"} on old-kimi: {"status":409,"body":{"message":"this session's runner cannot move a conversation to another account yet — it updates itself when no turn is running","error":"Conflict","statusCode":409}}
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+console.error Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+console.error Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+old-kimi session, Provider submenu rows: []
+shot /var/tmp/kimi-accounts-stack/shots/6-compat/6a2-old-runner-session-menu.png
+page errors (new web): []
+== Scenario 6b: the old client (main before this project, 721e48275) ==
+main web source: 721e48275dcfac150c6944e0d5fae399cf6d83e8
+→ POST /api/runners/34cSsjpxU1AVt4w2wGiis/login {"engine":"kimi","accountName":"Personal","region":"global"} ← 201
+POST a named kimi.ai sign-in on hpc-kimi: {"status":"pending","engine":"kimi","userCode":null,"url":null,"message":null,"account":null}
+device step: {"status":"awaiting_approval","engine":"kimi","userCode":"QWQV-FLCN","url":"https://www.kimi.ai/code/authorize_device?user_code=QWQV-FLCN","message":null,"account":"aac0717e"}
+fake kimi ← {"ok":true,"user":"personal@kimi.ai","region":"global"}
+stopped runner hpc-kimi (2893182)
+runner hpc-kimi pid 2919024 (orbit, ORBIT_HOME=/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home)
+hpc-kimi engines[kimi]: {"engine":"kimi","installed":true,"version":"2.1.1","auth":"yes","accounts":[{"id":"default","home":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code","auth":"yes","kimiRegion":"global"},{"id":"aac0717e","name":"Personal","home":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/aac0717e","auth":"yes","kimiRegion":"global"}],"kimiRegion":"global"}
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+signed in on http://127.0.0.1:4742 as owner@kimi-int.test
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+old client, hpc-kimi card: hpc-kimi workstation · v0.1.225 Manage → Claude Code Not installed — Orbit can install it here Not installed — Install Codex 0.161.0 Signed out Sign in to see quota Add account Sign in Sessions on this runner can’t use Codex until you sign in again. Antigravity Not installed — Orbit can install it here Not installed — Install Google terms restrict personal account sign-in through third-party tools; your account may be suspended. Kimi Code 2.1.1 · 2 of 2 accounts available Add account Default /var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code Available 5-hour limit 85% resets 03:50 Weekly · all models 30% resets Mon 04:20 PersonalNEXT /var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/aac0717e Available 5-hour limit 10% resets 03:50 Weekly · all models 5% resets Mon 04:20 O OpenCode Not installed — Orbit can install it here Not installed — Install
+shot /var/tmp/kimi-accounts-stack/shots/6-compat/6b1-old-client-providers.png
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+console.error Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+console.error Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+shot /var/tmp/kimi-accounts-stack/shots/6-compat/6b2-old-client-session.png
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+shot /var/tmp/kimi-accounts-stack/shots/6-compat/6b3-old-client-runner-workspace.png
+page errors (old client): []
+PASS 6a: the old runner's Kimi row offers no Add account (the new runner's does)
+PASS 6a: a named Kimi sign-in to the old runner is refused with the upgrade message
+PASS 6a: nothing signed in on the old runner (no kimi login ran, no slot, Default unchanged)
+PASS 6a: removing a Kimi account on the old runner is refused with the upgrade message
+PASS 6a: switching a Kimi session on the old runner to another account is refused with the upgrade message
+PASS 6a: the composer offers no account to move to on the old runner
+PASS 6b: the old client renders the Providers page, a Kimi session and the runner page with no page error
+SCENARIO 6 PASS

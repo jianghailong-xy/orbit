@@ -57,6 +57,9 @@ export function sourceFiles(root: string = ROOT): string[] {
   // `--cached` prints one row per index stage, so an unmerged path would arrive three times.
   return [...new Set(listed)]
     .filter((file) => !file.startsWith('src/apiserver/prisma/migrations/'))
+    // Frozen evidence reports record what was run at the time, for the same reason the migration
+    // ledger is excluded above: they are history, not a live caller.
+    .filter((file) => !file.startsWith('docs/evidence/'))
     .filter((file) => existsSync(path.join(root, file)) && statSync(path.join(root, file)).isFile());
 }
 

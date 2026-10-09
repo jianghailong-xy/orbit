@@ -205,6 +205,8 @@ export class TaskCompletionEvidenceDto {
   revision!: string;
   idempotencyKeys!: string[];
   legacyImport!: TaskLegacyEvidenceImportDto | null;
+  /** The revision's one decision once it has been answered, note included; null before that. */
+  decision!: TaskEvidenceRevisionDecisionDto | null;
   /**
    * What this submission's citations resolved to, one per `evidence.checks` entry and in that
    * order. Present on a submit receipt — including a replayed one — and null on a list read,
@@ -297,6 +299,18 @@ export class DecideOwnerConfirmationDto {
   @IsOptional()
   @IsArray()
   answers?: Array<{ key: string; option?: number | null; text?: string | null }>;
+}
+
+/**
+ * The one decision a revision carries, as the ledger read returns it: at most one per revision
+ * (`task_evidence_decision_evidence_key`), with the note a SEND_BACK was required to record — the
+ * reason read back by any session, where until 2026-10-09 only the deciding session could see it.
+ */
+export class TaskEvidenceRevisionDecisionDto {
+  decision!: EvidenceDecisionValue;
+  note!: string | null;
+  decidedAt!: Date;
+  decidedByType!: CreatorType;
 }
 
 /** The shared read shape of one recorded decision. */

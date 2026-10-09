@@ -63,7 +63,7 @@ export function Combobox<Value extends string = string>({ options, value, onValu
       {clearable && value !== null && !disabled && <BaseCombobox.Clear className="orbit-choice-clear" tabIndex={0} aria-label={clearLabel}><CloseCircleFilled aria-hidden /></BaseCombobox.Clear>}
     </span>
     <BaseCombobox.Portal container={layer.container()}>
-      <BaseCombobox.Positioner ref={positioner} anchor={anchor} side={side} align={align} {...placement}
+      <BaseCombobox.Positioner ref={positioner} anchor={anchor} side={side} align={align} {...placement} positionMethod={layer.positionMethod}
         className="orbit-floating-positioner orbit-choice-positioner" data-match-width={matchTriggerWidth}
         style={{ zIndex: layer.zIndex, '--orbit-choice-anchor-width': anchorWidth === undefined ? undefined : `${anchorWidth}px` } as CSSProperties}>
         <BaseCombobox.Popup className={`orbit-select-popup${popupClassName ? ` ${popupClassName}` : ''}`} style={popupStyle} finalFocus={returnFocus}>

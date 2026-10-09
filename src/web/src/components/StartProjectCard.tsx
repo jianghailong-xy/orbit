@@ -1,4 +1,16 @@
-import { useEffect, useId, useRef, useState, type JSX, type Ref } from 'react';
+import {
+  Suspense,
+  lazy,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type JSX,
+  type Ref,
+  type RefObject,
+} from 'react';
+import { useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Input, InputNumber, Modal, Select, Spin, Switch } from 'antd';
 import type {
@@ -41,6 +53,7 @@ import {
   START_PROJECT_ACTION,
   START_PROJECT_TITLE,
   START_REQUEST_GONE,
+  START_TASK_GRAPH,
   START_VIEW_TASKS,
   START_YOU,
   planLevels,
@@ -192,13 +205,45 @@ export interface StartProjectFacts {
   escalationSeconds: number;
 }
 
+// The project page's task graph, behind the same kind of boundary the project page draws it
+// through: React Flow and dagre load when a start card has a plan to draw, never with the page.
+const LazyStartPlanGraph = lazy(() => import('./StartPlanGraph'));
+const LazyStartTaskGraph = lazy(async () => ({ default: (await import('./StartPlanGraph')).StartTaskGraph }));
+
+/**
+ * Whether a line clamp under `box` is hiding text right now — `box` itself, or each element under it
+ * that `selector` names — measured after layout and again whenever the box changes size, which
+ * opening or closing the clamp does too. A toggle for text that already shows in full would open
+ * nothing, so the card draws More and "Read all" only while this says something is cut (or once
+ * they are open). `content` re-measures when the words change without the box changing size.
+ */
+function useClampHides(box: RefObject<HTMLElement | null>, selector: string | null, content: string): boolean {
+  const [hides, setHides] = useState(false);
+  useLayoutEffect(() => {
+    const element = box.current;
+    if (!element) return undefined;
+    const measure = () => {
+      const texts = selector ? [...element.querySelectorAll<HTMLElement>(selector)] : [element];
+      setHides(texts.some((text) => text.scrollHeight > text.clientHeight + 1));
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [box, selector, content]);
+  return hides;
+}
+
 export function StartProjectCard({
   ref,
+  projectId,
   projectTitle,
   askedAt,
   request,
   criteria,
   plan,
+  graph = null,
   facts,
   branch,
   draft,
@@ -214,6 +259,7 @@ export function StartProjectCard({
 }: {
   /** The card's own element, which is where its keyboard claim says it is drawn (`CardHotkey.ts`). */
   ref?: Ref<HTMLDivElement>;
+  projectId: string;
   projectTitle: string;
   /** When the coordinator asked; null for a card nobody asked for. */
   askedAt: string | null;
@@ -222,6 +268,8 @@ export function StartProjectCard({
   /** The stated criteria, or null when the project document could not be read. */
   criteria: ConfirmationCriterion[] | null;
   plan: StartPlanView;
+  /** The dependency graph `plan` was read off, which the Plan draws when it fits. */
+  graph?: ProjectDependencyGraphResponse | null;
   facts: StartProjectFacts;
   /** The project branch as the line menu names it. */
   branch: string;
@@ -248,7 +296,17 @@ export function StartProjectCard({
   const [criteriaOpen, setCriteriaOpen] = useState(false);
   const [whyOpen, setWhyOpen] = useState(false);
   const [mergeCheckOpen, setMergeCheckOpen] = useState(false);
+  const [graphDrawn, setGraphDrawn] = useState(false);
+  const [graphOpen, setGraphOpen] = useState(false);
   const items = [...(criteria ?? [])].sort((a, b) => a.ordinal - b.ordinal);
+  const whyText = useRef<HTMLParagraphElement>(null);
+  const criteriaList = useRef<HTMLOListElement>(null);
+  const whyHides = useClampHides(whyText, null, request.why);
+  const criteriaHide = useClampHides(
+    criteriaList,
+    '.settlement-card-criterion',
+    items.map((item) => item.text).join('\n'),
+  );
   // A card nobody asked for — the owner's own "Start…" on the project page — carries the default
   // rule's settings rather than a suggestion, and quotes nobody.
   const asked = askedAt !== null;
@@ -264,6 +322,29 @@ export function StartProjectCard({
     escalationSeconds: facts.escalationSeconds,
   });
   const set = (patch: Partial<StartSettingsDraft>) => onDraft({ ...draft, ...patch });
+  // The plan by level: what starts now, what runs together, and the task that needs the owner.
+  const levels = plan.levels ? (
+    <ol className="start-card-levels">
+      {plan.levels.map((level, at) => (
+        <li key={level[0]!.id} className="start-card-level">
+          <span className="start-card-level-number">{at + 1}</span>
+          {level.length === 1 ? (
+            <span className="start-card-task">
+              <b>{level[0]!.label}</b>
+              <span className="start-card-task-title">{planTaskRest(level[0]!.title, level[0]!.label)}</span>
+              {level[0]!.now ? <span className="start-card-pill is-now">{START_NOW}</span> : null}
+              {level[0]!.you ? <span className="start-card-pill is-you">{START_YOU}</span> : null}
+            </span>
+          ) : (
+            <span className="start-card-task">
+              <b>{level.map((task) => task.label).join(' · ')}</b>
+              <span className="start-card-parallel">{startInParallel(level.length)}</span>
+            </span>
+          )}
+        </li>
+      ))}
+    </ol>
+  ) : null;
   return (
     <div ref={ref} className="approval-card settlement-card start-card">
       <div className="approval-head settlement-card-head">
@@ -281,20 +362,25 @@ export function StartProjectCard({
         {asked && request.why ? (
           <div className="start-card-quote">
             <div className="start-card-quote-head">{START_COORDINATOR}</div>
-            <p className={whyOpen ? 'start-card-quote-text is-open' : 'start-card-quote-text'}>{request.why}</p>
-            <button type="button" className="start-card-link" onClick={() => setWhyOpen((open) => !open)}>
-              {whyOpen ? START_LESS : START_MORE}
-            </button>
+            <p ref={whyText} className={whyOpen ? 'start-card-quote-text is-open' : 'start-card-quote-text'}>
+              {request.why}
+            </p>
+            {whyOpen || whyHides ? (
+              <button type="button" className="start-card-link" onClick={() => setWhyOpen((open) => !open)}>
+                {whyOpen ? START_LESS : START_MORE}
+              </button>
+            ) : null}
           </div>
         ) : null}
         {stale ? <p className="settlement-card-stale">{stale}</p> : null}
 
         {/* Done when: what a press confirms, open — each clamped to two lines, the toggle taking the
-            clamp off. A folded list is an invitation to sign unread. */}
+            clamp off while the clamp hides anything. A folded list is an invitation to sign unread. */}
         <div className="start-card-section">{startDoneWhenHead(items.length)}</div>
         {items.length > 0 ? (
           <>
             <ol
+              ref={criteriaList}
               id={listId}
               className={criteriaOpen ? 'settlement-card-criteria is-open' : 'settlement-card-criteria'}
             >
@@ -304,15 +390,17 @@ export function StartProjectCard({
                 </li>
               ))}
             </ol>
-            <button
-              type="button"
-              className="settlement-card-read"
-              aria-expanded={criteriaOpen}
-              aria-controls={listId}
-              onClick={() => setCriteriaOpen((open) => !open)}
-            >
-              {criteriaOpen ? ACCEPTANCE_SHOW_LESS_LABEL : acceptanceReadLabel(items.length)}
-            </button>
+            {criteriaOpen || criteriaHide ? (
+              <button
+                type="button"
+                className="settlement-card-read"
+                aria-expanded={criteriaOpen}
+                aria-controls={listId}
+                onClick={() => setCriteriaOpen((open) => !open)}
+              >
+                {criteriaOpen ? ACCEPTANCE_SHOW_LESS_LABEL : acceptanceReadLabel(items.length)}
+              </button>
+            ) : null}
           </>
         ) : null}
         <p className="start-card-note">{startExplanation(items.length)}</p>
@@ -420,32 +508,21 @@ export function StartProjectCard({
           {startHowItRunsNote(asked, asked && request.settings.automatic === false)}
         </p>
 
-        {/* The plan, by level: what starts now, what waits on what, and the task that needs the
-            owner — the gist; the tasks themselves are one press away. */}
-        <div className="start-card-section">{startPlanHead(plan.count, plan.levels?.length ?? 1)}</div>
+        {/* The plan: the project page's task graph while the whole of it fits the card legibly —
+            what waits on what, task by task — and otherwise by level (what starts now, what runs
+            together, the task that needs the owner) with the graph full screen a press away. A
+            drawn graph's rows are its layout's, not levels, so its head counts tasks only. */}
+        <div className="start-card-section">
+          {startPlanHead(plan.count, graphDrawn ? 1 : (plan.levels?.length ?? 1))}
+        </div>
         <div className="start-card-plan">
-          {plan.levels ? (
-            <ol className="start-card-levels">
-              {plan.levels.map((level, at) => (
-                <li key={level[0]!.id} className="start-card-level">
-                  <span className="start-card-level-number">{at + 1}</span>
-                  {level.length === 1 ? (
-                    <span className="start-card-task">
-                      <b>{level[0]!.label}</b>
-                      <span className="start-card-task-title">{planTaskRest(level[0]!.title, level[0]!.label)}</span>
-                      {level[0]!.now ? <span className="start-card-pill is-now">{START_NOW}</span> : null}
-                      {level[0]!.you ? <span className="start-card-pill is-you">{START_YOU}</span> : null}
-                    </span>
-                  ) : (
-                    <span className="start-card-task">
-                      <b>{level.map((task) => task.label).join(' · ')}</b>
-                      <span className="start-card-parallel">{startInParallel(level.length)}</span>
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ol>
-          ) : null}
+          {graph ? (
+            <Suspense fallback={levels}>
+              <LazyStartPlanGraph projectId={projectId} data={graph} fallback={levels} onDrawn={setGraphDrawn} />
+            </Suspense>
+          ) : (
+            levels
+          )}
           {onViewTasks ? (
             <button type="button" className="start-card-link" onClick={onViewTasks}>
               {START_VIEW_TASKS}
@@ -453,6 +530,16 @@ export function StartProjectCard({
           ) : (
             <AppLink className="start-card-link" to={projectHref}>{START_VIEW_TASKS}</AppLink>
           )}
+          {graph && !graphDrawn ? (
+            <button type="button" className="start-card-link start-card-graph-link" onClick={() => setGraphOpen(true)}>
+              {START_TASK_GRAPH} <span aria-hidden="true">⤢</span>
+            </button>
+          ) : null}
+          {graph && graphOpen ? (
+            <Suspense fallback={null}>
+              <LazyStartTaskGraph projectId={projectId} data={graph} onClose={() => setGraphOpen(false)} />
+            </Suspense>
+          ) : null}
         </div>
         {error ? (
           <Alert
@@ -711,11 +798,13 @@ export function SessionStartProjectCard({
     <StartProjectCard
       ref={anchor}
       key={shown.itemId}
+      projectId={project}
       projectTitle={title}
       askedAt={shown.waitingSince}
       request={request}
       criteria={criteria}
       plan={startPlanView(graphRead.data ?? null, document?._count?.tasks ?? 0)}
+      graph={graphRead.data ?? null}
       facts={startProjectFacts(document, true)}
       branch={branchRef.replace(/^refs\/heads\//u, '')}
       draft={draft}
@@ -856,11 +945,13 @@ function OwnerStartProjectCard({
   const branchRef = request.settings.projectBranchName ?? `refs/heads/project/${projectId}`;
   return (
     <StartProjectCard
+      projectId={projectId}
       projectTitle={document?.title || projectId}
       askedAt={null}
       request={request}
       criteria={criteria}
       plan={startPlanView(graph, document?._count?.tasks ?? 0)}
+      graph={graph}
       facts={startProjectFacts(document, false)}
       branch={branchRef.replace(/^refs\/heads\//u, '')}
       draft={draft}
@@ -897,6 +988,17 @@ export function ProjectStartDialog({
   asked?: boolean;
 }): JSX.Element {
   const narrow = useIsMobile();
+  // A task opened from the card's graph opens over the project's page: the dialog gets out of its
+  // way rather than standing over it.
+  const { pathname } = useLocation();
+  const openedAt = useRef(pathname);
+  useEffect(() => {
+    if (!open) {
+      openedAt.current = pathname;
+      return;
+    }
+    if (pathname !== openedAt.current) onClose();
+  }, [onClose, open, pathname]);
   const card = !open ? null : asked ? (
     <SessionStartProjectCard projectId={projectId} bare onStarted={onClose} onViewTasks={onViewTasks} />
   ) : (

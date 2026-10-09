@@ -5,6 +5,7 @@ import {
   type WikiVerificationVerdict,
 } from '@orbit/shared';
 import { quoted, unwrapped } from '../wiki/wiki-plan';
+import { answerField, fixAnswerStrings, goTrimSpace } from './wiki-import-extract';
 
 /**
  * What the server asks a model about one waiting op, and how it reads the answer (contracts/wiki.contract.json
@@ -189,18 +190,25 @@ export function parseWikiVerdict(text: string, candidates: readonly WikiVerifyCa
   if (body === null) return { refusal: 'no JSON object in it' };
   let value: { verdict?: unknown; reason?: unknown; duplicateOf?: unknown };
   try {
-    value = JSON.parse(body) as typeof value;
+    // Go decodes into a struct: the keys read in any case (answerField), a lone surrogate in a string
+    // comes out U+FFFD (fixAnswerStrings), and a number past float64 in an unknown field is skipped
+    // without failing the decode, as Go skips what no struct field takes.
+    value = fixAnswerStrings(JSON.parse(body)) as typeof value;
   } catch (error) {
     return { refusal: `its JSON does not read as a verdict: ${message(error)}` };
   }
-  const named = value.verdict === null || value.verdict === undefined ? null : unwrapped(String(value.verdict));
-  if (named === null || !(WIKI_VERIFY_VERDICTS as readonly string[]).includes(named)) {
+  const named = answerField(value, 'verdict');
+  const unwrappedVerdict = named === null || named === undefined ? null : unwrapped(String(named));
+  if (unwrappedVerdict === null || !(WIKI_VERIFY_VERDICTS as readonly string[]).includes(unwrappedVerdict)) {
     return { refusal: `verdict is not one of ${WIKI_VERIFY_VERDICTS.join(', ')}` };
   }
-  const verdict = named as WikiVerificationVerdict;
-  if (typeof value.reason !== 'string' || value.reason.trim() === '') return { refusal: 'it gives no reason' };
-  const reason = cutRunes(value.reason.trim(), WIKI_REVIEW_RULES.verificationReasonMaxChars);
-  const duplicateOf = value.duplicateOf === null || value.duplicateOf === undefined ? '' : unwrapped(String(value.duplicateOf));
+  const verdict = unwrappedVerdict as WikiVerificationVerdict;
+  const reasonGiven = answerField(value, 'reason');
+  // Go trims the reason with strings.TrimSpace: NEL (U+0085) goes, a BOM stays — goTrimSpace, not .trim().
+  if (typeof reasonGiven !== 'string' || goTrimSpace(reasonGiven) === '') return { refusal: 'it gives no reason' };
+  const reason = cutRunes(goTrimSpace(reasonGiven), WIKI_REVIEW_RULES.verificationReasonMaxChars);
+  const duplicate = answerField(value, 'duplicateOf');
+  const duplicateOf = duplicate === null || duplicate === undefined ? '' : unwrapped(String(duplicate));
   if (verdict === 'duplicate') {
     const candidate = candidates.find((one) => one.number === duplicateOf);
     if (candidate) return { verdict: { verdict, reason, duplicateOf: candidate.id } };

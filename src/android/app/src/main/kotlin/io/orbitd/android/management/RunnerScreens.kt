@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
@@ -46,6 +47,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -592,7 +594,9 @@ private fun EngineRow(runner: JsonObject, health: JsonObject, offline: Boolean, 
     val engine = health.text("engine")
     val installed = health.bool("installed") == true
     val status = RunnerPage.engineStatus(health, runner)
-    val version = if (installed) RunnerPage.engineVersion(health.str("version")) else null
+    // Kimi's site after its version while it has the one login: `2.1.1 · kimi.ai`.
+    val version = if (installed) listOfNotNull(RunnerPage.engineVersion(health.str("version")), RunnerPage.engineSite(health))
+        .takeIf { it.isNotEmpty() }?.joinToString(RunnerCopy.SEP) else null
     val hint = RunnerPage.signInHint(runner, engine)
     val next = RunnerPage.engineNextAccount(runner, engine, now)
     Row(Modifier.fillMaxWidth().clickable(enabled = installed, role = Role.Button, onClick = open).padding(vertical = 8.dp),
@@ -717,12 +721,12 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
             if (health != null && health.bool("installed") == true && RunnerPage.isLoginEngine(engine)) {
                 // Every Google sign-in on the page starts above this footer, so Google's terms are said here, once.
                 val terms = engine == "antigravity" && RunnerPage.antigravityCanSignIn(runner)
-                FormSection(if (RunnerPage.keepsAccounts(engine)) "Accounts" else "Sign-In", footer = if (offline && !terms) RunnerCopy.ENGINES_OFFLINE_FOOTER else null,
+                FormSection(RunnerPage.accountsTitle(runner, engine), footer = if (offline && !terms) RunnerCopy.ENGINES_OFFLINE_FOOTER else null,
                     footerContent = if (terms) { { GoogleSignInTerms(); if (offline) FooterText(RunnerCopy.ENGINES_OFFLINE_FOOTER) } } else null) {
                     val alone = health.list("accounts").size < 2
                     RunnerPage.accountLines(health).forEachIndexed { index, line ->
                         if (index > 0) HorizontalDivider()
-                        AccountRow(api, runner, engine, line, offline, now, signingIn == line.id,
+                        AccountRow(api, runner, engine, line, offline, now, signingIn == line.id, next = RunnerPage.marksNext(runner, engine, line.id, now),
                             canPause = RunnerPage.keepsAccounts(engine) && health.list("accounts").any { it.str("id") == line.id }, alone = alone,
                             foldsBack = signingIn == line.id && landedHere == line.id && line.auth == "yes" && RunnerPage.loginExpiresLine(line, now) == null,
                             signIn = { signingIn = line.id }, close = ::closeSignIn, landed = { landed(line.id) },
@@ -781,15 +785,15 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
 private const val PAUSE_SCOPE = "Personal account · This runner. Paused sessions wait until it resumes or you switch accounts."
 
 /**
- * One account: its name and where it lives, where it stands, its windows — a login about to lapse, a pause, what being
- * signed out costs — and its way (back) in where it is out. Its presses are its ⋯ menu's (the swipe iOS gives it): Rename…,
- * Sign In Again, Pause… or Resume Now and Change Duration…, Remove… for an added one. None reach an offline machine but
- * Rename… and the pause, which Orbit keeps.
+ * One account: its name — NEXT beside it where a new session starts on it ([next]) — and where it lives, where it stands,
+ * its windows — a login about to lapse, a pause, what being signed out costs — and its way (back) in where it is out. Its
+ * presses are its ⋯ menu's (the swipe iOS gives it): Rename…, Sign In Again, Pause… or Resume Now and Change Duration…,
+ * Remove… for an added one. None reach an offline machine but Rename… and the pause, which Orbit keeps.
  */
 @Composable
 private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, line: RunnerPage.AccountLine, offline: Boolean, now: Long,
-                       signingIn: Boolean, canPause: Boolean, alone: Boolean, foldsBack: Boolean, signIn: () -> Unit, close: () -> Unit,
-                       landed: () -> Unit, rename: () -> Unit, remove: () -> Unit, pause: () -> Unit, resume: () -> Unit) {
+                       signingIn: Boolean, next: Boolean, canPause: Boolean, alone: Boolean, foldsBack: Boolean, signIn: () -> Unit,
+                       close: () -> Unit, landed: () -> Unit, rename: () -> Unit, remove: () -> Unit, pause: () -> Unit, resume: () -> Unit) {
     val windows = RunnerPage.accountWindows(runner, engine, line.id)
     val removal = RunnerPage.removal(runner.obj("accountRemove"), engine, line.id)
     val paused = RunnerPage.isPaused(line.pausedUntil, now)
@@ -800,8 +804,14 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(line.name, style = MaterialTheme.typography.titleMedium)
-                line.subtitle?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.muted, maxLines = 1) }
+                // Where Automatic starts the next session: the account pools' mark for the same thing.
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(line.name, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.titleMedium)
+                    if (next) Chip("NEXT")
+                }
+                // What doesn't fit goes from the middle: a Kimi account's site leads the line, and the directory's last part
+                // is what tells two accounts apart.
+                line.subtitle?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.muted, maxLines = 1, overflow = TextOverflow.MiddleEllipsis) }
             }
             RunnerPage.authStatus(line.auth)?.let { (text, tone) -> Text(text, style = MaterialTheme.typography.bodySmall, color = Ink.tone(tone)) }
             Box {
@@ -826,7 +836,9 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
         }
         if (windows.isNotEmpty()) windows.forEach { UsageWindowRow(it, RunnerPage.resetsLine(it, now), withGroup = true) }
         else if (line.envKey) Text(AccountCopy.ENV_KEY_LINE, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
-        else if (line.auth == "yes" && RunnerPage.reportsQuota(engine)) Text(RunnerCopy.NO_QUOTA, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+        else if (line.auth == "yes" && RunnerPage.reportsQuota(engine)) Text(
+            if (RunnerPage.accountNoQuotaLimit(runner, engine, line.id)) RunnerCopy.NO_QUOTA_LIMIT else RunnerCopy.NO_QUOTA,
+            style = MaterialTheme.typography.labelMedium, color = Ink.muted)
         // A login about to lapse, said before it does the way Claude Code says it, with the way to renew it beside it.
         if (!signingIn) RunnerPage.loginExpiresLine(line, now)?.let { expiring ->
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -835,7 +847,7 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
             }
         }
         removal?.second?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.red) }
-        if (signingIn) RunnerSignInCard(api, runner.text("id"), engine, account = line.signInAccount, autoStart = true, onClose = close, onSignedIn = landed)
+        if (signingIn) RunnerSignInCard(api, runner, engine, account = line.signInAccount, autoStart = true, onClose = close, onSignedIn = landed)
         else {
             // Paused is the row's state; Resume and a new duration are its menu's.
             AccountPauseLine(line.pausedUntil)
@@ -903,7 +915,7 @@ private fun AddAccountRow(api: ManagementApi, model: RunnersModel, runner: JsonO
             label = { Text("Account name") }, placeholder = { Text("Work") }, singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { saveName() }))
         // The card's own Cancel or Close puts it away; the name typed so far is saved as it goes.
-        RunnerSignInCard(api, id, engine, accountName = name, autoStart = true, onClose = { saveName(); close() })
+        RunnerSignInCard(api, runner, engine, accountName = name, autoStart = true, onClose = { saveName(); close() })
     } else TextButton(enabled = !offline, onClick = {
         picked = RunnerPage.defaultAccountName(accounts); name = picked
         before = accounts.map { it.text("id") }.toSet(); waiting = null
@@ -941,14 +953,19 @@ private class SignInRelay(private val api: ManagementApi, val runnerId: String, 
     val url get() = if (mine) relay?.str("url") else null
     val userCode get() = if (mine) relay?.str("userCode") else null
     val message get() = if (mine) relay?.str("message") else null
+    /** Kimi: the site the page it signs in on belongs to, read off its address. */
+    val site get() = if (engine == "kimi") KimiSite.ofUrl(url) else null
 
     suspend fun refresh(scope: CoroutineScope) {
         try { adopt(api.get("runners/$runnerId/login").jsonObject, scope) } catch (e: CancellationException) { throw e } catch (_: Exception) { }
     }
-    suspend fun begin(accountName: String?, scope: CoroutineScope) = act(scope) {
+    /** [site]: Kimi's, where the press names one (KimiSite.named); naming none is the runner's bare `kimi login`. */
+    suspend fun begin(accountName: String?, scope: CoroutineScope, site: KimiSite? = null) = act(scope) {
         startedHere = true
         val name = if (adding) accountName?.trim() else null
-        api.post("runners/$runnerId/login", buildJsonObject { put("engine", engine); account?.let { put("account", it) }; name?.let { put("accountName", it) } })
+        api.post("runners/$runnerId/login", buildJsonObject {
+            put("engine", engine); account?.let { put("account", it) }; name?.let { put("accountName", it) }; site?.let { put("region", it.region) }
+        })
     }
     suspend fun submit(scope: CoroutineScope) {
         val trimmed = code.trim()
@@ -991,10 +1008,13 @@ private class SignInRelay(private val api: ManagementApi, val runnerId: String, 
  * Cancel while a sign-in is under way (cancelling it first), Close otherwise — never both. [onSignedIn]: the sign-in landed.
  */
 @Composable
-private fun RunnerSignInCard(api: ManagementApi, runnerId: String, engine: String, account: String? = null, accountName: String? = null,
+private fun RunnerSignInCard(api: ManagementApi, runner: JsonObject, engine: String, account: String? = null, accountName: String? = null,
                              autoStart: Boolean = false, onClose: (() -> Unit)? = null, onSignedIn: (() -> Unit)? = null) {
+    val runnerId = runner.text("id")
     val scope = rememberCoroutineScope()
     val relay = remember(runnerId, engine, account) { SignInRelay(api, runnerId, engine, account, adding = accountName != null) }
+    // A card adding an account signs in under its name: nothing starts while it has none.
+    val named = accountName == null || accountName.isNotBlank()
     val uri = LocalUriHandler.current
     val context = LocalContext.current
     val cli = RunnerPage.engineName(engine)
@@ -1026,27 +1046,51 @@ private fun RunnerSignInCard(api: ManagementApi, runnerId: String, engine: Strin
             // Device flow: the code comes first, and one press both copies it and opens the page it goes into — over there,
             // all that is left is a paste.
             "awaiting_approval" -> {
-                Text(AccountCopy.ENTER_CODE, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+                // Kimi's page belongs to one of its two sites, named so the user knows which account it wants — on a card
+                // adding one, the account being added.
+                val site = relay.site
+                Text((if (accountName != null) site?.enterCodeAdding else site?.enterCode) ?: AccountCopy.ENTER_CODE,
+                    style = MaterialTheme.typography.labelMedium, color = Ink.muted)
                 relay.userCode?.let { code ->
                     SelectionContainer { Text(code, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold), fontFamily = FontFamily.Monospace) }
                 }
                 page?.let { url ->
                     Button(onClick = { relay.userCode?.let { copyText(context, "Sign-in code", it) }; open(url) }) {
-                        Text(if (relay.userCode != null) AccountCopy.COPY_CODE_AND_OPEN else AccountCopy.OPEN_PAGE)
+                        Text(if (relay.userCode != null) site?.copyCodeAndOpen ?: AccountCopy.COPY_CODE_AND_OPEN else site?.openPage ?: AccountCopy.OPEN_PAGE)
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp); Text(AccountCopy.WAITING_FOR_APPROVAL, style = MaterialTheme.typography.labelMedium)
                 }
-                cancel()
+                // The wrong site is the one mistake the user can't see until they are on its page: their account isn't there.
+                // Starting over on the other one — under the same name, for an account being added — is a single press.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    cancel()
+                    site?.other?.let { other ->
+                        TextButton(onClick = { scope.launch { relay.begin(accountName, scope, KimiSite.named(other, runner)) } }, enabled = !relay.busy) {
+                            Text(other.useInstead)
+                        }
+                    }
+                }
             }
             "awaiting_code" -> if (relay.verifying) waiting("Signing in with your code…", "The runner picks it up on its next check-in, so this can take up to a minute.")
             else PasteBack(relay, page, ::open) { cancel() }
             else -> {
-                // Kimi's sign-in starts from its own button: which of its sites is asked first is that card's question.
                 if (engine == "antigravity") GoogleSignInTerms()
                 if (relay.status == "failed") relay.message?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.amber) }
-                Button(onClick = { scope.launch { relay.begin(accountName, scope) } }, enabled = !relay.busy && (accountName == null || accountName.isNotBlank())) {
+                // Kimi's sign-in is itself a choice: kimi.com and kimi.ai keep separate accounts, and left to itself the CLI goes
+                // to the site its installer came from. So the press that starts it picks the site, and nothing is picked for the
+                // user; Current marks the site of the login it signs in again.
+                if (engine == "kimi") {
+                    Text(KimiSite.QUESTION, style = MaterialTheme.typography.labelMedium)
+                    val current = KimiSite.current(runner, account, adding = accountName != null)
+                    KimiSite.entries.forEach { site ->
+                        KimiSiteButton(site, current == site, enabled = !relay.busy && named) {
+                            scope.launch { relay.begin(accountName, scope, KimiSite.named(site, runner)) }
+                        }
+                    }
+                    Text(KimiSite.SEPARATE_ACCOUNTS, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+                } else Button(onClick = { scope.launch { relay.begin(accountName, scope) } }, enabled = !relay.busy && named) {
                     Text(when {
                         relay.busy -> "Starting…"; relay.status == "failed" -> "Try signing in to $cli again"
                         engine == "antigravity" -> AccountCopy.SIGN_IN_WITH_GOOGLE; else -> "Sign in to $cli"
@@ -1056,6 +1100,22 @@ private fun RunnerSignInCard(api: ManagementApi, runnerId: String, engine: Strin
             }
         }
         relay.error?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.red) }
+    }
+}
+
+/** One of Kimi's sites as the press that signs in on it: its domain, whose accounts it holds, and Current on the site of the
+ * login the card signs in again. */
+@Composable
+private fun KimiSiteButton(site: KimiSite, current: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    Surface(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().alpha(if (enabled) 1f else .38f),
+        shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(site.domain, style = MaterialTheme.typography.titleMedium)
+                Text(site.place, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+            }
+            if (current) Chip(KimiSite.CURRENT, brand = true)
+        }
     }
 }
 

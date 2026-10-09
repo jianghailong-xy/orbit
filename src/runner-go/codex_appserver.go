@@ -52,6 +52,13 @@ const (
 	codexInstructionsAdditionalContext
 )
 
+// codexClientName is the name a session's codex app-server is initialized with, which codex carries as
+// the `originator` header and the product token of its User-Agent on every model request. It is the
+// official CLI's own name, not Orbit's, so a session on a pool gateway reaches the model backend with
+// the identity a stock CLI sends there. The version segment codex appends is codex's own, and
+// codexInstructionModeForUserAgent reads only that segment, so the name here does not affect it.
+const codexClientName = "codex_cli_rs"
+
 // codexApprovalFn answers one inbound approval request. nil keeps the fail-closed behaviour that
 // predates the bridge, which is also what the protocol tests exercise.
 type codexApprovalFn func(context.Context, codexApprovalRequest, map[string]interface{}) bool
@@ -1103,6 +1110,7 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 
 func codexAppServerCommandArgs(job *ClaimedSession, stateDir, exe string) []string {
 	args := []string{"app-server", "--stdio", "-c", fmt.Sprintf("sqlite_home=%q", stateDir)}
+	args = appendCodexSessionToolConfig(args)
 	args = appendCodexOrbitMCPConfig(args, exe)
 	return append(args, codexProviderArgs(job.Agent.Env)...)
 }
@@ -1110,8 +1118,8 @@ func codexAppServerCommandArgs(job *ClaimedSession, stateDir, exe string) []stri
 func (a *codexAppServer) initialize(ctx context.Context) error {
 	result, err := a.request(ctx, "initialize", map[string]interface{}{
 		"clientInfo": map[string]interface{}{
-			"name":    "orbit",
-			"title":   "Orbit",
+			"name":    codexClientName,
+			"title":   "Codex CLI",
 			"version": "0.1.0",
 		},
 		"capabilities": map[string]interface{}{"experimentalApi": true},
@@ -1424,7 +1432,9 @@ func codexThreadParams(job *ClaimedSession, execDir, upDir string) map[string]in
 		"approvalPolicy":        codexApprovalPolicy(job.Agent.PermissionMode),
 		"sandbox":               codexSandboxMode(job.Agent.PermissionMode),
 		"runtimeWorkspaceRoots": codexRuntimeWorkspaceRoots(job.Agent.PermissionMode, job, execDir, upDir),
-		"threadSource":          "orbit",
+		// The thread's own source: a user's turn, as the CLI reports one, not Orbit's "orbit" — the
+		// backend sees `thread_source: user` in the turn metadata.
+		"threadSource": "user",
 	}
 	if reviewer := codexApprovalsReviewer(job.Agent.PermissionMode); reviewer != "" {
 		params["approvalsReviewer"] = reviewer

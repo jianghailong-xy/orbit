@@ -181,9 +181,9 @@ public enum RunnerPageFormat {
 
     /// The engines whose CLI keeps a login per directory, so one machine holds several accounts of
     /// them (shared `ACCOUNT_ENGINES`): an Antigravity account is a Google sign-in in a Gemini
-    /// directory of its own.
+    /// directory of its own, a Kimi Code account a KIMI_CODE_HOME of its own.
     public static func keepsAccounts(_ engine: String) -> Bool {
-        engine == "claude" || engine == "codex" || engine == "antigravity"
+        engine == "claude" || engine == "codex" || engine == "antigravity" || engine == "kimi"
     }
 
     /// Antigravity's Default on a runner that runs agy on its own GEMINI_API_KEY (web `runsOnEnvKey`):
@@ -283,9 +283,11 @@ public enum RunnerPageFormat {
 
     /// Which of Kimi's two sites its login is on, said after the version on its Engines row (web's
     /// `2.1.1 · kimi.ai`): the same CLI signs in to either, and a session spends that site's
-    /// subscription. Nil for every other engine, and before Kimi's first sign-in.
+    /// subscription. Nil for every other engine, before Kimi's first sign-in — and with several
+    /// accounts, which can be on different sites: each says its own on the engine page.
     public static func engineSite(_ health: RunnerEngineHealth) -> String? {
-        KimiSite.current(of: health)?.domain
+        guard (health.accounts ?? []).count < 2 else { return nil }
+        return KimiSite.current(of: health)?.domain
     }
 
     /// Whether the Engines row offers Sign In: an engine Orbit signs in, installed, with a login
@@ -312,12 +314,27 @@ public enum RunnerPageFormat {
 
     /// Whether the engine page offers Add Account: an engine that keeps accounts — for Antigravity, on
     /// a runner that relays its Google sign-in and keeps the account it signs in apart from Default's
-    /// (`antigravity-account-login/v1`); an older one would sign Default in again in its place.
+    /// (`antigravity-account-login/v1`), and for Kimi on one that signs the account it adds into a
+    /// KIMI_CODE_HOME of its own (`kimi-account-login/v1`); an older one would sign Default in again in
+    /// its place.
     public static func canAddAccount(_ runner: Runner, engine: String) -> Bool {
         guard keepsAccounts(engine) else { return false }
-        return engine != "antigravity"
-            || (antigravityCanSignIn(runner)
-                && runner.capabilities?.contains(CodexAccounts.antigravityAccountLoginCapability) == true)
+        switch engine {
+        case "antigravity":
+            return antigravityCanSignIn(runner)
+                && runner.capabilities?.contains(CodexAccounts.antigravityAccountLoginCapability) == true
+        case "kimi":
+            return runner.capabilities?.contains(CodexAccounts.kimiAccountLoginCapability) == true
+        default:
+            return true
+        }
+    }
+
+    /// The engine page's name for its section of logins: Accounts where the engine keeps several on
+    /// this runner, Sign-In where it has the one — as Kimi does on a runner that cannot add a second
+    /// (`canAddAccount`), whose page reads as it always has.
+    public static func accountsTitle(_ runner: Runner, engine: String) -> String {
+        keepsAccounts(engine) && (engine != "kimi" || canAddAccount(runner, engine: engine)) ? "Accounts" : "Sign-In"
     }
 
     public static func antigravityCanSignIn(_ runner: Runner) -> Bool {
@@ -384,6 +401,14 @@ public enum RunnerPageFormat {
         return CodexAccounts.label(next, accounts: health.accounts)
     }
 
+    /// Whether the engine page marks `account` NEXT beside its name (web `AccountName`'s chip, the
+    /// account pools' mark for the same thing): the account a new session nobody picked one for starts
+    /// on (`nextAccount`) — so only where the engine has two accounts or more to choose between.
+    public static func marksNext(_ runner: Runner, engine: String, account: String, now: Date = Date()) -> Bool {
+        guard let health = runner.engines?.first(where: { $0.engine == engine }) else { return false }
+        return nextAccount(runner, health: health, now: now) == account
+    }
+
     /// Which of an engine's several accounts a new session starts on (`CodexAccounts.toStartOn`, web's
     /// `accountToStartOn`); nil with one account, or none signed in.
     private static func nextAccount(_ runner: Runner, health: RunnerEngineHealth, now: Date) -> String? {
@@ -398,6 +423,20 @@ public enum RunnerPageFormat {
     public static func accountWindows(_ runner: Runner, engine: String, account: String) -> [PlanUsageRow] {
         let usage = CodexAccounts.usage(engine, planUsage: runner.planUsage, engines: runner.engines)
         return CodexAccounts.snapshot(usage, account: account)?.rows ?? []
+    }
+
+    /// Whether this account's quota was read and its plan carries no quota limit — Kimi only (web's
+    /// `kimiNoQuotaLimit`): a windowless kimi snapshot is a plan with nothing to gauge, said as
+    /// "No quota limit", never as "No quota reported" (a read that failed or never ran). The read must
+    /// have happened (`CodexAccounts.reportedSnapshot` — a Default with `accounts` beside it keeps its
+    /// windowless read, which `snapshot` collapses to nil), and the month's coding share counts though
+    /// no row draws it: a plan that reports it has a limit.
+    public static func accountNoQuotaLimit(_ runner: Runner, engine: String, account: String) -> Bool {
+        guard engine == "kimi" else { return false }
+        let usage = CodexAccounts.usage(engine, planUsage: runner.planUsage, engines: runner.engines)
+        guard let snapshot = CodexAccounts.reportedSnapshot(usage, account: account) else { return false }
+        return snapshot.provider == "kimi" && snapshot.fiveHour == nil && snapshot.sevenDay == nil
+            && snapshot.month == nil && snapshot.monthCode == nil
     }
 
     /// The engines whose quota a runner reads: the ones Orbit signs in.
@@ -418,13 +457,13 @@ public enum RunnerPageFormat {
         /// signed in nor out, with nothing to sign in or pause, its line says what it runs on instead.
         public let envKey: Bool
         public var isDefault: Bool { id == CodexAccounts.defaultID }
-        /// The line under the name: where its login lives — Kimi's, which keeps no directory of its
-        /// own, on which site — and, for a Default renamed in Orbit, that it is still the machine's
-        /// own login (web's DEFAULT mark).
+        /// The line under the name: where its login lives — a Kimi account's after the site its login
+        /// is on, which is each account's own (`kimi.com · ~/.orbit/kimi-accounts/5c2e91a0`) — and, for
+        /// a Default renamed in Orbit, that it is still the machine's own login (web's DEFAULT mark).
         public var subtitle: String? {
-            let place = home ?? site
-            guard isDefault, name != "Default" else { return place }
-            return [place, "Default"].compactMap { $0 }.joined(separator: " · ")
+            let line = [site, home, isDefault && name != "Default" ? "Default" : nil]
+                .compactMap { $0 }.joined(separator: " · ")
+            return line.isEmpty ? nil : line
         }
         /// What a sign-in on this line names: the account, when the runner lists more than one; nil —
         /// the runner's own login, as every sign-in was before accounts — when it doesn't.
@@ -432,7 +471,8 @@ public enum RunnerPageFormat {
         public let pausedUntil: String?
         /// When its login lapses, as the runner read it (`RunnerEngineAccount.loginExpiresAt`).
         public let loginExpiresAt: String?
-        /// Kimi only: the site its login is on, `kimi.com` or `kimi.ai` (`KimiSite`).
+        /// Kimi only: the site its login is on, `kimi.com` or `kimi.ai` (`KimiSite`) — the account's own,
+        /// Default's being the engine's.
         public var site: String? = nil
     }
 
@@ -457,7 +497,7 @@ public enum RunnerPageFormat {
                                home: (account.home ?? account.codexHome).map(tildePath),
                                auth: envKey ? nil : account.auth, envKey: envKey,
                                signInAccount: account.id, pausedUntil: account.pausedUntil,
-                               loginExpiresAt: account.loginExpiresAt)
+                               loginExpiresAt: account.loginExpiresAt, site: KimiSite.site(of: account)?.domain)
         }
     }
 

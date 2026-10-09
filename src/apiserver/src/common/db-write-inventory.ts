@@ -1071,7 +1071,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'Every attempt re-locks the Task and re-derives all four checks inside the closure — the deciding session\'s independence, MAX(revision), the live criterion text and the existing decision. A committed decision replays as itself when the retry says the same thing and is a 409 when it does not, so a retried transport never turns one decision into two and never overwrites one.',
-    effects: 'One derived Task status inside PostgreSQL and one dispatch outside it, both only for a CONFIRM that settles the EVIDENCE_JUDGMENT criterion this task declared: the compare-and-set writes status DONE under the mutex above, and after commit the committed completion is handed to the successor dispatch the other two criteria already use. Nothing else — no Session state, no comment, no notification, no realtime event, and no completion input routed: 0228 removed the request ledger, inbox, device outbox and delivery worker, and this unit rebuilds none of them.',
+    effects: 'One derived Task status inside PostgreSQL, and after commit: the task.changed nudge and the decided-conversation row refresh a submission also sends, then two hands keyed to the decision they follow — for a CONFIRM that settles the EVIDENCE_JUDGMENT criterion this task declared (the compare-and-set writes status DONE under the mutex above), the committed completion is handed to the successor dispatch the other two criteria already use; for a SEND_BACK, the note is handed to the run that submitted the revision as one platform turn keyed by the decision row (EvidenceReviewService.deliverSendBack), best-effort — a fault there is logged and the note stays on the revision in the list read. Nothing else — no Session state, no comment, and no completion input routed: 0228 removed the request ledger, inbox, device outbox and delivery worker, and this unit rebuilds none of them.',
     answer: 'Typed 503 from the global boundary after retry exhaustion. A superseded revision, a rewritten criterion and an already-decided version are explicit 409s; a deciding session that did this work is a 403.',
   },
   {
@@ -1581,6 +1581,19 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     replay: 'The wiki_job id is drawn inside the closure, and the job\'s state is re-evaluated by the UPDATE itself, so a re-run either makes the same job with a fresh id (the rolled-back attempt took its row with it) or finds it made and writes nothing.',
     effects: 'None inside, and none after: the worker\'s next pass claims the job; no task is published.',
     answer: 'Typed 503 from the global boundary; the plan job stays queued or held, and the owner\'s next request or settings change asks again.',
+  },
+  // The rollback sweep's per-job settle (contracts/wiki.contract.json `jobs.executor.rollback`, the
+  // 2026-10-08 incident): one job's whole cancellation, with every row that waits on its conclusion.
+  {
+    at: 'wiki/wiki-executor-sweep.ts#settle',
+    shape: 'TX_RETRIED',
+    locks: 'The wiki_job row by id while still queued, running or waiting (the job table\'s rank), then the wiki_model_request and wiki_repo_op rows of that job still in flight (same rank; their foreign keys to the job take FOR KEY SHARE on the row this transaction already holds), then the one companion row the kind names — the wiki_maintenance_run by id while outcome IS NULL, or the wiki_plan_job by id while still made (rank 60, reaching wiki_space FOR KEY SHARE). Ascending throughout; nothing else is read or locked inside.',
+    identity: 'The job and its state. The first UPDATE matches only a job still in flight, so a worker that settled the job while the sweep read matches no row and the closure writes nothing; a sweep that runs twice finds the first run\'s cancelled row already settled and matches nothing on the second pass.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Every statement re-decides its rows by the same predicates inside the closure — in flight still, no outcome yet, still made — and the reason string is computed before it, so a re-run either settles the same rows the same way or matches none of them. A failure rolls back whole: the job is left entirely in flight, and the next sweep settles it then.',
+    effects: 'None inside. The sweep\'s caller publishes one `wiki.changed` per space a job was cancelled in, after the commit and outside the closure.',
+    answer: 'Typed 503 from the global boundary; the job stays in flight and the next sweep settles it.',
   },
   // The articles (contracts/wiki.contract.json `articles`, migration 0317): one topic's articles
   // replaced together, by a maintenance run of the space or the server's own import.

@@ -89,6 +89,11 @@ export function entryAnchorState(anchors: readonly WikiAnchor[]): WikiAnchorStat
  * An entry's anchors with one report's checks laid over them: each reported anchor's last check
  * replaced, every other anchor as it was.
  *
+ * A check is laid on the anchor its index names only when the identity it carries is that anchor's
+ * (`anchorIdentityMatches`): a check naming another anchor — another path, another symbol, another
+ * commit — is not written at all, and a caller that must not lose it reports it instead of passing
+ * it here silently.
+ *
  * A path or a commit is what the runner found. A symbol the runner found is held to its baseline here,
  * not there: equal is `verified`, anything else `changed` — and a symbol that has no baseline yet
  * takes the region this check found as one (`baselineSha256`), which is how an anchor nobody hashed
@@ -104,7 +109,7 @@ export function anchorsChecked(
   const next = anchors.map((anchor) => ({ ...anchor }) as WikiAnchor);
   for (const reported of checks) {
     const anchor = next[reported.index];
-    if (!anchor) continue;
+    if (!anchor || !anchorIdentityMatches(anchor, reported)) continue;
     let check: WikiAnchorCheck;
     if (anchor.type !== 'symbol') {
       check = { state: reported.state === 'verified' ? 'verified' : 'missing', ref, at };
@@ -128,6 +133,29 @@ export function anchorsChecked(
     next[reported.index] = { ...anchor, check } as WikiAnchor;
   }
   return next;
+}
+
+/**
+ * Whether a reported check is the check of the anchor it would be laid on: the type is the anchor's,
+ * and every identity field the check carries equals the anchor's own — a path anchor's `path`, a
+ * symbol's `path` and `symbol`, a commit's `sha`. A check that carries no identity at all (the
+ * runner's own CLI reports none) matches on the type alone; one that carries a wrong identity
+ * matches nothing, and the server refuses the entry rather than write it on the wrong anchor
+ * (contract `anchorRules.verify.identity`).
+ */
+export function anchorIdentityMatches(anchor: WikiAnchor | undefined, check: WikiAnchorCheckInput): boolean {
+  if (!anchor || anchor.type !== check.type) return false;
+  switch (anchor.type) {
+    case 'path':
+      return check.path === undefined || check.path === anchor.path;
+    case 'symbol':
+      return (check.path === undefined || check.path === anchor.path)
+        && (check.symbol === undefined || check.symbol === anchor.symbol);
+    case 'commit':
+      return check.sha === undefined || check.sha === anchor.sha;
+    default:
+      return false;
+  }
 }
 
 /**
@@ -274,12 +302,35 @@ export function anchorReportEntry(raw: unknown, index: number): AnchorReportEntr
       } else if (!found && check.regionSha256 !== undefined && check.regionSha256 !== null) {
         errors.push({ path: where('regionSha256'), message: 'is only for a symbol that was found' });
       }
+      // The identity the check says it belongs to: only the fields its type names, each only when it
+      // is the right shape. The server applies the check to the anchor this names and to no other
+      // (`anchorIdentityMatches`); a report may leave the identity out, and is then held to the type
+      // at the index alone.
+      if (check.path !== undefined && typeof check.path !== 'string') {
+        errors.push({ path: where('path'), message: 'must be a string: the path of the anchor this check says it checked' });
+      }
+      if (check.symbol !== undefined && typeof check.symbol !== 'string') {
+        errors.push({ path: where('symbol'), message: 'must be a string: the symbol of the anchor this check says it checked' });
+      }
+      if (check.sha !== undefined && (typeof check.sha !== 'string' || !COMMIT_SHA.test(check.sha))) {
+        errors.push({ path: where('sha'), message: 'must be the 40-character sha of the commit anchor this check says it checked' });
+      }
+      if (type === 'path' && (check.symbol !== undefined || check.sha !== undefined)) {
+        errors.push({ path: where(''), message: 'a path check names a path and nothing else' });
+      } else if (type === 'symbol' && check.sha !== undefined) {
+        errors.push({ path: where('sha'), message: 'a symbol check names no sha' });
+      } else if (type === 'commit' && (check.path !== undefined || check.symbol !== undefined)) {
+        errors.push({ path: where(''), message: 'a commit check names a sha and nothing else' });
+      }
       if (errors.length > before) return;
       checks.push({
         index: check.index as number,
         type: type!,
         state: check.state as WikiAnchorCheckInput['state'],
         ...(found ? { regionSha256: check.regionSha256 as string } : {}),
+        ...(typeof check.path === 'string' ? { path: check.path } : {}),
+        ...(typeof check.symbol === 'string' ? { symbol: check.symbol } : {}),
+        ...(typeof check.sha === 'string' ? { sha: check.sha } : {}),
       });
     });
   }

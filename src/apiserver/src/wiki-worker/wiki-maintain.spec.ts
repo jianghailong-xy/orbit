@@ -238,6 +238,8 @@ test('the prompt names the repository, what it is, the topics and the dossier, a
 test('the off-topic answer is read bare and fenced, and nothing else is', () => {
   assert.equal(wikiMaintainOffTopic('{"offTopic": true}'), true);
   assert.equal(wikiMaintainOffTopic('```json\n{"offTopic": true}\n```'), true);
+  // P10's probe (zz_p10_parity_test.go): Go decodes into a struct, so the key reads in any case.
+  assert.equal(wikiMaintainOffTopic('{"OffTopic": true}'), true);
   assert.equal(wikiMaintainOffTopic('{"offTopic": false}'), false);
   assert.equal(wikiMaintainOffTopic('[]'), false);
   assert.equal(wikiMaintainOffTopic('{"offTopic": true'), false);

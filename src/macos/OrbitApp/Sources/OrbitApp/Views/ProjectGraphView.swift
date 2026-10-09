@@ -91,8 +91,9 @@ struct ProjectGraphCard: View {
     }
 }
 
-/// The whole plan at a size its titles can be read at, pinch to zoom.
-private struct ProjectGraphFullScreen: View {
+/// The whole plan at a size its titles can be read at, pinch to zoom — from the project page's Task
+/// graph, and from the start card's Task graph for a plan it lists by level.
+struct ProjectGraphFullScreen: View {
     let graph: ProjectDependencyGraph
     @Binding var expanded: Set<String>
     let onOpenTask: (String) -> Void

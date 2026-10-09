@@ -63,6 +63,7 @@ import { sha256 } from '../common/crypto.util';
 import { redactSecrets } from '../common/secret-redaction';
 import {
   anchorChallengeReason,
+  anchorIdentityMatches,
   anchorReportEntry,
   anchorReportShape,
   anchorsChecked,
@@ -2862,6 +2863,21 @@ export class WikiService {
     const anchors = storedAnchors(entry.anchors);
     const moved = item.checks.find((check) => anchors[check.index]?.type !== check.type);
     if (moved) return stale(`the entry has no ${moved.type} anchor at ${moved.index}: read the anchors list again`);
+    // A check carrying an identity (the path, the symbol, the commit it says it checked) is written
+    // only on the anchor that identity names — whatever the index alone would say. A check naming
+    // another anchor is a report against a list that has moved: nothing of the entry is written,
+    // the run is told, and it fails the job rather than record a verdict on the wrong anchor
+    // (contract `anchorRules.verify.identity`).
+    const alien = item.checks.find((check) => !anchorIdentityMatches(anchors[check.index], check));
+    if (alien) {
+      const held = anchors[alien.index]!;
+      const named = alien.type === 'commit'
+        ? `commit ${String(alien.sha ?? '')}`
+        : alien.type === 'symbol'
+          ? `symbol ${String(alien.symbol ?? '')} in ${String(alien.path ?? '')}`
+          : `path ${String(alien.path ?? '')}`;
+      return stale(`the check at ${alien.index} names ${named}, and the entry holds ${held.type} there: read the anchors list again`);
+    }
     const checked = anchorsChecked(anchors, item.checks, ref, at);
     const state = entryAnchorState(checked);
     const auto = state === 'verified' && (await this.tieredPitfallQualifies(tx, ownerId, entry));

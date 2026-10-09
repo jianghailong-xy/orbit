@@ -3,6 +3,7 @@
 # Turn 结束后的建议输入
 
 **状态**：已实现（2026-10-08）。owner 同日按方案定了 §9 的五项，全部取推荐项；实现中要偏离本文，先改本文。
+2026-10-09 改了 Web 的 Tab 提示（§4.3、§9 补充）。
 **影响面**：runner-go（Claude 适配）、shared（事件类型）、apiserver（领取载荷、账号偏好、几条读路径的排除）、web、OrbitKit + iOS/macOS、Android。
 
 ---
@@ -200,7 +201,8 @@ transcript reducer 里加三行，按 seq 顺序回放，结果天然正确：
 
 ## 4. 交互
 
-效果图：`docs/mocks/prompt-suggestions/01-board.png`（HTML 同目录）。
+效果图：`docs/mocks/prompt-suggestions/01-board.png`（HTML 同目录）。Web 的 Tab 提示 2026-10-09 改过一版：
+`docs/mocks/prompt-suggestions-web-tab/01-board.png`。
 
 ### 4.1 iPhone（基准）：方案甲，建议写在空输入框里
 
@@ -228,8 +230,11 @@ transcript reducer 里加三行，按 seq 顺序回放，结果天然正确：
 
 - **Web**：同甲。判断在 `src/web/src/lib/promptSuggestion.ts`（`currentPromptSuggestion` + `offeredPromptSuggestion`），
   会话页在 `composerPlaceholder` 旁边算出 `offeredSuggestion`（`WorkspaceView.tsx:8867`）。有建议时 textarea 的
-  placeholder 让空，`.composer-suggestion` 叠在 `.composer-field` 第一行上：灰字单行截断，行尾 Use 胶囊带 `Tab`
-  键帽（触屏设备不显示键帽）。Trash、Runner offline、正在回复某条这些状态本来就不提供建议，它们的 placeholder 照旧。
+  placeholder 让空，`.composer-suggestion` 叠在 `.composer-field` 第一行上：灰字单行截断，后面紧跟一个 `Tab`
+  键帽（左栏 Search 的 `⌘K` 那种），没有按钮。键帽只在有鼠标的设备上（`hover: hover`）、光标在输入框里时出现：
+  光标在别处时按 Tab 是切焦点，不会填入。触屏（`hover: none`）没有 Tab 键，行尾仍是 Use 胶囊。输入框的
+  `aria-describedby` 读出「Suggested reply: …. Press Tab to use it.」，触屏不读 Tab 那句。Trash、Runner offline、
+  正在回复某条这些状态本来就不提供建议，它们的 placeholder 照旧。（2026-10-09 起，见 §9 补充。）
 - **Tab**：输入框为空、`/ # @` 菜单没开时，Tab 填入建议。菜单开着时 Tab 仍是选菜单项，这是现有逻辑
   （`WorkspaceView.tsx:10592`），不变；没有建议时 Tab 也不变。Claude Code CLI 本身就是 Tab 接受建议。
 - **macOS / iPad**：和 iPhone 是同一个 SwiftUI `ComposerView`；macOS 的 `TextField` 另接 `.onKeyPress(keys: [.tab])`，
@@ -295,7 +300,7 @@ transcript reducer 里加三行，按 seq 顺序回放，结果天然正确：
 | apiserver | `common/prompt-suggestions-switch.ts`（新）、`queue/queue.service.ts`、`runner-api/runner-api.controller.ts` | §3.1 的规则；领取与重领的 agent 配置 |
 | apiserver | `users/dto.ts`、`users/users.controller.ts` | 账号偏好 `promptSuggestions` |
 | apiserver | `runner-api/session-activity.ts` 及 spec、`common/prompt-suggestions-switch.spec.ts`（新） | 不推进 `lastTurnAt`；规则单测 |
-| web | `lib/promptSuggestion.ts`（新）、`components/WorkspaceView.tsx`、`index.css`、`lib/queries.ts`、`pages/SettingsPage.tsx` | 推导与判断；灰字 + Use + Tab；设置页开关 |
+| web | `lib/promptSuggestion.ts`（新）、`components/WorkspaceView.tsx`、`index.css`、`lib/queries.ts`、`pages/SettingsPage.tsx` | 推导与判断；灰字 + Tab 键帽（触屏 Use）；设置页开关 |
 | web | `lib/promptSuggestion.test.ts`、`components/WorkspaceView.promptSuggestion.test.tsx`（新） | 推导与判断；会话页出现、Use、Tab、打字让位、新消息作废、卡片在等时不出 |
 | OrbitKit | `Models/Enums.swift`、`Transcript/TranscriptReducer.swift`、`App/Composer.swift`、`Models/Preferences.swift`、`App/SettingsHome.swift` | 新事件类型；`TranscriptState.promptSuggestion`（快照兼容）；`ComposerLogic.offeredPromptSuggestion`；偏好与设置行 |
 | OrbitKit | `PromptSuggestionTests.swift`（新）、`SettingsHomeTests.swift`、`SettingsStackWiringTests.swift` | reducer、判断、偏好、ComposerView 接线；设置行 |
@@ -328,3 +333,13 @@ transcript reducer 里加三行，按 seq 顺序回放，结果天然正确：
 | ③ | 哪些会话生成 | **手动会话 + 协调会话** | 只手动会话；也包括任务列表自动跑的会话 |
 | ④ | 缺省开还是关 | **开**，设置里可关 | 关 |
 | ⑤ | 非 Claude 引擎 | **先不做** | 二期用 DeepSeek 补齐（每轮最后一条回复会发给 DeepSeek） |
+
+**补充（owner，2026-10-09）**：「Web 不需要展示 Use Tab 这个，如果要提示 Tab，是否可以展示在提示文字的输入框里」。
+看过 `docs/mocks/prompt-suggestions-web-tab/01-board.png` 后回「按推荐」，四项都取推荐项：
+
+| # | 问题 | 定了 | 没选的 |
+| --- | --- | --- | --- |
+| 1 | Web 的 Tab 提示怎么写 | **灰字后面紧跟一个 Tab 键帽**，桌面不再有 Use | 键帽放行尾；写成文字「· Tab to use」；不提示 |
+| 2 | 键帽什么时候出现 | **光标在输入框里才出现** | 一直出现 |
+| 3 | 手机网页（触屏） | **保留 Use**，和 iPhone App 一样 | 也去掉 |
+| 4 | Mac App 的「Use ⇥」 | **这次只改 Web** | 一起改成键帽 |

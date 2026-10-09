@@ -6431,12 +6431,12 @@ html[data-theme='dark'] .session-tag-chip {
   height: 24px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   pointer-events: none;
   font-size: 15px;
 }
 .composer-suggestion-text {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -6446,11 +6446,11 @@ html[data-theme='dark'] .session-tag-chip {
 .composer-suggestion-use {
   pointer-events: auto;
   flex: none;
-  display: inline-flex;
+  display: none;
   align-items: center;
-  gap: 7px;
   height: 26px;
-  padding: 0 6px 0 11px;
+  margin-left: auto;
+  padding: 0 11px;
   border: 0;
   border-radius: 13px;
   background: color-mix(in srgb, var(--brand) 9%, transparent);
@@ -6467,26 +6467,30 @@ html[data-theme='dark'] .session-tag-chip {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
+/* The key the sidebar's Search row draws for ⌘K (.session-search-kbd), right after the words. */
 .composer-suggestion-key {
-  height: 18px;
-  padding: 0 6px;
+  display: none;
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
   border-radius: 5px;
-  background: var(--bg-raised);
-  box-shadow:
-    inset 0 0 0 1px var(--border),
-    0 1px 0 var(--border);
-  color: var(--text-2);
   font: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 18px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-3);
 }
-/* No keyboard to press Tab on: the button alone. */
+/* A keyboard: the key, and only while the caret is in the box — anywhere else Tab moves focus. */
+@media (hover: hover) {
+  .composer-field:focus-within .composer-suggestion-key {
+    display: inline-block;
+  }
+}
+/* No keyboard to press Tab on: Use instead of the key, and the box's description leaves Tab out. */
 @media (hover: none) {
   .composer-suggestion-use {
-    padding: 0 11px;
+    display: inline-flex;
   }
-  .composer-suggestion-key {
+  .composer-suggestion-tab-hint {
     display: none;
   }
 }
@@ -10454,11 +10458,25 @@ button.chat-jump-start:hover {
    `StartProjectCard.tsx`: the settlement card's shell, answering three questions in order — what
    done is (the criteria), how much is delegated and what still comes to the owner (How it runs),
    and the plan by level — with Start held at the bottom of the scroll and a line under it saying
-   what the press does. Mocks: docs/mocks/start-card-redesign (v2, approved 2026-10-07). */
+   what the press does. Mocks: docs/mocks/start-card-redesign (v2, approved 2026-10-07); its width,
+   its toggles and the plan as a graph: docs/mocks/start-card-web-width (approved 2026-10-09). */
 /* On a phone the start card rises as a sheet (`ProjectStartDialog`), whose own title already asks
    the card's question: the card does not ask it twice. */
 .start-card-sheet .settlement-card-head {
   display: none;
+}
+/* In a conversation as wide as the window, the card keeps the width it was drawn for: a form whose
+   settings sit beside their names, and criteria a reader can follow from line to line. Narrower
+   conversations, the project page's dialog and the phone's sheet are under the cap already. */
+.start-card {
+  max-width: 720px;
+}
+/* The plan as the project page's task graph (`StartPlanGraph`), drawn only while it fits. */
+.start-card-graph {
+  margin: 2px 0 6px;
+}
+.start-card-graph-link {
+  margin-left: 14px;
 }
 .start-card-section {
   display: flex;

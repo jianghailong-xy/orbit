@@ -97,7 +97,7 @@ export function Select<Value extends string = string>({ options, value, onValueC
         onClick={() => { onValueChange(null); trigger.current?.focus(); }}><CloseCircleFilled aria-hidden /></button>}
     </span>
     <BaseSelect.Portal container={layer.container()}>
-      <BaseSelect.Positioner ref={positioner} anchor={anchor} alignItemWithTrigger={false} side={side} align={align} {...placement}
+      <BaseSelect.Positioner ref={positioner} anchor={anchor} alignItemWithTrigger={false} side={side} align={align} {...placement} positionMethod={layer.positionMethod}
         className="orbit-floating-positioner orbit-choice-positioner" data-match-width={matchTriggerWidth}
         style={{ zIndex: layer.zIndex, '--orbit-choice-anchor-width': anchorWidth === undefined ? undefined : `${anchorWidth}px` } as CSSProperties}>
         <BaseSelect.Popup ref={popup} className={`orbit-select-popup${popupClassName ? ` ${popupClassName}` : ''}`} style={popupStyle} finalFocus={returnFocus}>

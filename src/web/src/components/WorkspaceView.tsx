@@ -78,6 +78,7 @@ import {
   type TouchEvent as ReactTouchEvent,
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -7090,6 +7091,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // picking one replaces just that token with `/<name> ` (the trailing space drops the
   // regex match, so the menu auto-hides).
   const taRef = useRef<any>(null);
+  const suggestionHintId = useId();
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Manual composer height (px). null = autoSize auto-grow (up to maxRows); once the user
@@ -10609,6 +10611,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             // the cap truncates; very large content should go through File instead.
             maxLength={MAX_PROMPT_CHARS}
             placeholder={offeredSuggestion ? '' : composerPlaceholder}
+            aria-describedby={offeredSuggestion ? suggestionHintId : undefined}
             value={text}
             disabled={composerDisabled}
             // Typing exits history recall: the next Up starts fresh from this draft.
@@ -10784,9 +10787,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           />
           {offeredSuggestion && (
             <div className="composer-suggestion">
-              <span className="composer-suggestion-text" title={offeredSuggestion}>
+              {/* Drawn for the eye; a screen reader hears the box's description below instead. */}
+              <span className="composer-suggestion-text" title={offeredSuggestion} aria-hidden="true">
                 {offeredSuggestion}
               </span>
+              {/* With a keyboard the grey line itself says how to take it, and there is no button;
+                  Use is for a touch screen, which has no Tab to press. Which one shows is CSS's
+                  call. Drawn in docs/mocks/prompt-suggestions-web-tab. */}
+              <kbd className="composer-suggestion-key" aria-hidden="true">
+                Tab
+              </kbd>
               <button
                 type="button"
                 className="composer-suggestion-use"
@@ -10797,8 +10807,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 aria-label={`Use suggestion: ${offeredSuggestion}`}
                 title="Use this suggestion"
               >
-                Use <kbd className="composer-suggestion-key">Tab</kbd>
+                Use
               </button>
+              <span id={suggestionHintId} className="sr-only">
+                Suggested reply: {offeredSuggestion}.
+                <span className="composer-suggestion-tab-hint"> Press Tab to use it.</span>
+              </span>
             </div>
           )}
           </div>
