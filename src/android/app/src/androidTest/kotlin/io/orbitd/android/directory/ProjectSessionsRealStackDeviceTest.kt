@@ -105,8 +105,16 @@ class ProjectSessionsRealStackDeviceTest {
                 compose.onAllNodes(hasText("${counts.number("done")}/${counts.number("total")}") and hasAnyAncestor(hasTestTag("project-progress-chip")), true)
                     .fetchSemanticsNodes().isNotEmpty()
             }
-            val line = compose.onAllNodes(hasTestTag("project-row-line"), true).fetchSemanticsNodes().firstOrNull()?.config?.getOrNull(SemanticsProperties.Text)?.joinToString()
+            // The row's own line: what the server's coordinator row says it waits on, in its oldest owner item's words when it
+            // names one (SessionLine's waiting word, over every other line the row could say).
+            val line = compose.onAllNodes(hasTestTag("project-row-line") and hasAnyAncestor(row), true).fetchSemanticsNodes().single()
+                .config.getOrNull(SemanticsProperties.Text)?.joinToString()
             record("the list's project row says", line)
+            if (coordinator != null && (coordinator.number("pendingApprovals") ?: 0) > 0 && coordinator.text("waitingKind") == "OWNER_ITEM") {
+                val oldest = io.orbitd.android.cards.NeedsYouLogic.oldestItemWord(io.orbitd.android.cards.NeedsYouLogic.ownerItems(coordinator.objects("ownerItems")))
+                record("the coordinator's oldest owner item", oldest)
+                assertEquals(oldest, line)
+            }
             capture("a05d-stack-list")
 
             // Its sessions page: the server's members, its coordinator first, and its progress.
