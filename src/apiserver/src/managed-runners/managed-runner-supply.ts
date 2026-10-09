@@ -100,6 +100,6 @@ export async function assertManagedFirstSessionRuntime(
       ? `${asked} is not installed and signed in on your managed runner, so this first session cannot start there. ` +
         `Start it on ${ready.join(' or ')}.`
       : 'No runtime is installed and signed in on your managed runner yet, so this first session cannot start. ' +
-        'Sign one in from Providers, then start the session again.',
+        'Sign one in from Infrastructure, then start the session again.',
   });
 }

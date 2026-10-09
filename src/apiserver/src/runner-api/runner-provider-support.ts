@@ -18,13 +18,13 @@ export const DSH_RUNNER_UPGRADE_ERROR =
  */
 export const DSH_NOT_INSTALLED_ERROR =
   'DSH_NOT_INSTALLED: DeepSeek Harness is not installed on this runner, or the runner has not reported it yet; ' +
-  'install it from Providers, then try again';
+  'install it from Infrastructure, then try again';
 export const DSH_PLATFORM_UNSUPPORTED_ERROR =
   'DSH_PLATFORM_UNSUPPORTED: DeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only; ' +
   'use a runner that can run it';
 export const DSH_VERSION_INCOMPATIBLE_ERROR =
   'DSH_VERSION_INCOMPATIBLE: this runner has a DeepSeek Harness version Orbit does not support; ' +
-  'reinstall it from Providers, then try again';
+  'reinstall it from Infrastructure, then try again';
 
 export const PROVIDER_UNAVAILABLE_ERROR = 'Provider is unavailable; check its configuration';
 
