@@ -340,6 +340,9 @@ describe('Rename… on a session row', () => {
   }
   async function startRename(): Promise<HTMLInputElement> {
     await openMenu();
+    // As a person picks it: once the menu has taken focus (its autoFocus lands a few frames after it
+    // opens). Picked sooner, that late focus would land on the menu after the field opened, and close it.
+    await until(() => expect(menu()!.contains(document.activeElement)).toBe(true));
     await click(item('Rename…'));
     await until(() => expect(field()).not.toBeNull());
     return field()!;
