@@ -1,8 +1,8 @@
 import Foundation
 
 /// One reading of the transcript scroll view's geometry. SwiftUI's `ScrollGeometry` is Apple-only
-/// and these three numbers are all the tail-pinning rule needs, so the decision itself lives here —
-/// in the package that builds and tests on Linux.
+/// and these four numbers are all the tail-pinning rules need, so the decisions themselves live
+/// here — in the package that builds and tests on Linux.
 public struct TailScrollSample: Equatable, Sendable {
     /// Vertical content offset.
     public let offset: Double
@@ -10,11 +10,16 @@ public struct TailScrollSample: Equatable, Sendable {
     public let contentHeight: Double
     /// How much content sits below the viewport's bottom edge. Zero at the live tail.
     public let bottomGap: Double
+    /// How far the content is inset from the viewport's top edge: the bars laid over the list, the
+    /// sticky "↑ Your question" header among them. A bar that arrives pushes the rows down by what
+    /// it adds here, and the tail with them, without anybody scrolling.
+    public let topInset: Double
 
-    public init(offset: Double, contentHeight: Double, bottomGap: Double) {
+    public init(offset: Double, contentHeight: Double, bottomGap: Double, topInset: Double = 0) {
         self.offset = offset
         self.contentHeight = contentHeight
         self.bottomGap = bottomGap
+        self.topInset = topInset
     }
 }
 
@@ -104,5 +109,50 @@ public enum TailPinning {
                                      to currentHeight: Double) -> Bool {
         guard wasPinned, previousHeight > 0, currentHeight > 0 else { return false }
         return currentHeight != previousHeight
+    }
+
+    /// Points of play in a reading of the scroll view: a tail this close counts as in place, and an
+    /// offset this far from where the geometry carried it is still the geometry's doing. A push is
+    /// not exactly the inset it answers to once both are rounded to the screen's pixels (measured on
+    /// a Mac: a 30pt header moved the offset 29).
+    static let slop: Double = 2
+
+    /// Whether a pinned transcript should be carried back to its tail because the scroll GEOMETRY
+    /// changed under it while nothing was moving it: the content measured to a new height, or a bar
+    /// arriving over the list — the sticky "↑ Your question" header — and pushing its rows down.
+    ///
+    /// Neither is the viewport resizing (`followsResize`) or the reader leaving the tail (`pinned`),
+    /// and together they left a long conversation opened at its tail short of it, its last line in
+    /// the composer's fade. On an iPhone the header arrives after the first pin and pushes the rows
+    /// down by its height (measured: offset 692 against a tail at 724, every time); on a Mac the
+    /// rows start at estimated heights, the pin lands on the estimate, the content grows as the rows
+    /// on screen are measured (44pt), and then the header pushes it 30 more. Each of those gaps is
+    /// inside `nearBottom`, so the transcript still counted as pinned and the jump-to-latest disc
+    /// never showed. Re-pinning when the header appears is too early: the push lands after the
+    /// re-scroll, and over several frames, as the header animates in. So the answer is asked of
+    /// every reading instead, and the push is followed frame by frame.
+    ///
+    /// `pinned` is the pin as `pinned(...)` decided it for `current`. `moving` is whether anything
+    /// was moving the list: a finger or its coast, or SwiftUI animating a scroll of its own — a jump
+    /// goes where it was sent and is not pulled back mid-flight.
+    ///
+    /// The offset may move only as far as the geometry carried it: not at all while rows grow under
+    /// the viewport, and down by what a bar added while it pushes. A movement past that is a scroll,
+    /// and a scroll is never followed — whoever made it — so a reader who scrolled up stays where
+    /// they are even where the platform does not report the scroll and the rows it uncovered were
+    /// measured in the same breath. The one other movement allowed is this rule's own re-pin landing
+    /// in the same reading as the next frame of a push: what is left out of view then is no more
+    /// than that frame pushed.
+    public static func followsGeometry(pinned: Bool,
+                                       from previous: TailScrollSample,
+                                       to current: TailScrollSample,
+                                       moving: Bool) -> Bool {
+        guard pinned, !moving, current.bottomGap > slop else { return false }
+        let resized = current.contentHeight != previous.contentHeight
+        let pushed = current.topInset - previous.topInset
+        guard resized || pushed != 0 else { return false }
+        // The offset's movement that the push does not explain: zero when the geometry alone moved.
+        let carried = current.offset - previous.offset + pushed
+        return abs(carried) <= slop || current.bottomGap <= pushed + slop
     }
 }

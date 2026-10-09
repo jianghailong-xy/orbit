@@ -633,17 +633,19 @@ struct TranscriptView: View {
     private func tracker(ruler: QuestionRuler) -> some ViewModifier {
         #if os(iOS)
         return ScrollTracker(atBottom: $atBottom, tailOutOfView: $tailOutOfView, ruler: ruler,
-                             recompute: recomputeStuck, scroll: transcriptScroll)
+                             recompute: recomputeStuck, follow: repinAfterResize, scroll: transcriptScroll)
         #else
         return ScrollTracker(atBottom: $atBottom, tailOutOfView: $tailOutOfView, ruler: ruler,
-                             recompute: recomputeStuck)
+                             recompute: recomputeStuck, follow: repinAfterResize)
         #endif
     }
 
     /// The viewport changed size under a pinned transcript — the keyboard rising, the composer
-    /// growing a line, the chrome folding away — and the tail is asked for, the way a tap on the
-    /// jump-to-latest disc asks for it (`heldScroll`: this arrives off a layout report, so the rows
-    /// it names are the ones the next update has, not whatever this frame holds).
+    /// growing a line, the chrome folding away — or the scroll geometry moved its tail without
+    /// anybody scrolling (`ScrollTracker`: rows measured to a new height, the sticky header pushing
+    /// them down), and the tail is asked for, the way a tap on the jump-to-latest disc asks for it
+    /// (`heldScroll`: this arrives off a layout report, so the rows it names are the ones the next
+    /// update has, not whatever this frame holds).
     private func repinAfterResize() {
         // A window opened at a record ends at a gap, and a preview's place is held while its sheet
         // is up: neither follows the tail, so neither follows a resize to it.
@@ -1501,8 +1503,9 @@ private struct ViewportResize: ViewModifier {
 }
 
 /// The single scroll observer: drives the jump-to-latest button's `atBottom` and `tailOutOfView`,
-/// AND feeds the sticky header by stashing the live content offset into `ruler` and asking for a
-/// recompute each frame.
+/// carries a pinned transcript back to its tail when the geometry moves the tail out of view
+/// (`follow`), AND feeds the sticky header by stashing the live content offset into `ruler` and
+/// asking for a recompute each frame.
 /// `onScrollGeometryChange` (macOS 15+/iOS 18+) is read-only — unlike `scrollPosition(id:)` +
 /// `scrollTargetLayout()` it registers no per-row scroll targets, so it won't re-break `List`
 /// virtualization (see the transcript-freeze history). On the earlier floor it's a no-op, leaving
@@ -1515,6 +1518,10 @@ private struct ScrollTracker: ViewModifier {
     @Binding var tailOutOfView: Bool
     let ruler: QuestionRuler
     let recompute: () -> Void
+    /// Asks the transcript for its tail (`TranscriptView.repinAfterResize`): the geometry moved it
+    /// out of view under a pinned reader — the sticky header pushing the rows down as it arrives,
+    /// rows measured taller than they were estimated. See `TailPinning.followsGeometry`.
+    let follow: () -> Void
     #if os(iOS)
     /// The List's own `UIScrollView`, for the one fact UIKit knows better than any geometry: whether
     /// a finger is on it. See `readerIsMoving`.
@@ -1525,6 +1532,9 @@ private struct ScrollTracker: ViewModifier {
     /// sitting still while content is re-laid-out underneath — neither is a reader. `TailPinning`
     /// needs the difference to tell a drag up from the clamp a row that shrank forces.
     @State private var readerDriven = false
+    /// Whether anything is moving the list, SwiftUI's own animated scrolls included: the geometry is
+    /// followed only under a list at rest, so a jump is never pulled back to the tail mid-flight.
+    @State private var scrolling = false
 
     /// What the platform can say about that — see `TailPinning.ReaderEvidence`. iOS reports drags,
     /// measured with a synthesized one on the simulator: `interacting` for the finger and
@@ -1554,18 +1564,25 @@ private struct ScrollTracker: ViewModifier {
             content
                 .onScrollPhaseChange { _, phase in
                     readerDriven = phase != .idle && phase != .animating
+                    scrolling = phase != .idle
                 }
                 .onScrollGeometryChange(for: TailScrollSample.self) { geo in
                     TailScrollSample(offset: Double(geo.contentOffset.y),
                                      contentHeight: Double(geo.contentSize.height),
-                                     bottomGap: Double(geo.contentSize.height - geo.visibleRect.maxY))
+                                     bottomGap: Double(geo.contentSize.height - geo.visibleRect.maxY),
+                                     topInset: Double(geo.contentInsets.top))
                 } action: { was, now in
-                    atBottom = TailPinning.pinned(wasPinned: atBottom, from: was, to: now,
-                                                  readerDriven: readerIsMoving,
-                                                  evidence: Self.evidence)
+                    let pinned = TailPinning.pinned(wasPinned: atBottom, from: was, to: now,
+                                                    readerDriven: readerIsMoving,
+                                                    evidence: Self.evidence)
+                    atBottom = pinned
                     tailOutOfView = now.bottomGap > TailPinning.nearBottom
                     ruler.contentOffset = CGFloat(now.offset)
                     recompute()
+                    if TailPinning.followsGeometry(pinned: pinned, from: was, to: now,
+                                                   moving: scrolling || readerIsMoving) {
+                        follow()
+                    }
                 }
         } else {
             content

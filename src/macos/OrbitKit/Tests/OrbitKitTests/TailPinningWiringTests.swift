@@ -180,6 +180,42 @@ final class TailPinningWiringTests: XCTestCase {
                       "and neither does a preview holding its place behind its sheet")
     }
 
+    /// The tail can leave a pinned reader a third way: the geometry moves under the list. The sticky
+    /// header arrives after the first pin and pushes the rows down by its height; a Mac's rows are
+    /// measured taller than they were estimated. Nothing scrolled and the viewport kept its size, so
+    /// neither the pin nor the resize sees it — a long conversation opened at its tail stopped short
+    /// of it, the last line in the composer's fade (an iPhone: offset 692 against a tail at 724).
+    func testTheTrackerAsksWhetherTheGeometryMovedThePinnedTail() throws {
+        let tracker = try section(
+            try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift"),
+            from: "private struct ScrollTracker",
+            to: "/// Publishes the id of the item currently under")
+
+        XCTAssertTrue(tracker.contains("geo.contentInsets.top"),
+                      "the sample must carry the top inset: the header's push is a change of it")
+        XCTAssertTrue(tracker.contains("TailPinning.followsGeometry("),
+                      "the tracker must hand the decision to the tested rule")
+        XCTAssertTrue(tracker.contains("pinned: pinned"),
+                      "with the pin that same reading decided, or a reader who scrolled up is followed")
+        XCTAssertTrue(tracker.contains("scrolling = phase != .idle"),
+                      "the phase must say when SwiftUI itself is moving the list, not only the reader")
+        XCTAssertTrue(tracker.contains("moving: scrolling || readerIsMoving"),
+                      "and the rule must be told, or a jump in flight is pulled back to the tail")
+        XCTAssertTrue(tracker.contains("follow()"),
+                      "and the answer has to reach the transcript, which owns the scroll")
+    }
+
+    /// …and it reaches the tail the way a resize does, as the held re-pin on both platforms — the
+    /// one `testTheResizeFollowReachesTheTailAsAHeldScroll` holds to its shape.
+    func testTheGeometryFollowReachesTheTailThroughTheResizeRepin() throws {
+        let source = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift")
+        let trackers = try section(source, from: "private func tracker(ruler:",
+                                   to: "private func repinAfterResize")
+
+        XCTAssertEqual(trackers.components(separatedBy: "follow: repinAfterResize").count - 1, 2,
+                       "the iOS and the macOS tracker must both be handed the held re-pin")
+    }
+
     /// Web decides the same question in `tailPinning.ts`, and the two got here by drifting apart:
     /// both carried the gap-plus-direction rule, so both stopped following a reply when a reasoning
     /// row folded. Asserted piece by piece rather than as one expression, so reflowing that line
