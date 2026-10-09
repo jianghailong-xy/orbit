@@ -1564,6 +1564,10 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 	}
 	if msg := engineAuthPreflight(provider, preflightEnv); msg != "" {
 		emit(evError, map[string]interface{}{"message": msg})
+		// The engine probe the Providers page reads can be minutes old and still say Signed in. Re-probe
+		// and beat now (noteEngineSignedOut), as for an Antigravity sign-in agy refuses, rather than leave
+		// the page contradicting this refusal until the next refresh.
+		noteEngineSignedOut()
 		return stFailed, true, false
 	}
 	return providerRuntimeFor(provider).run(sessionProcessArgs{

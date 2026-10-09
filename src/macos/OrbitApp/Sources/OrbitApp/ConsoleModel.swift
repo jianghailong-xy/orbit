@@ -3692,7 +3692,7 @@ final class ConsoleModel {
             // receipt is one of these — the merge already happened, and pointing a reader at it
             // would be pointing them at something with nothing to press.
             case .criteriaDecisionReceipt, .evidenceDecisionReceipt,
-                 .acceptanceConfirmationReceipt, .promotionReceipt:
+                 .acceptanceConfirmationReceipt, .promotionReceipt, .coordinatorQuestionRecord:
                 return nil
             case .acceptanceConfirmation:
                 return waiting(AcceptanceConfirmations.isOpen(acceptanceConfirmation), question: true)
@@ -3881,7 +3881,12 @@ final class ConsoleModel {
         // that fails leaves the last answer standing, and neither may close a card.
         if let items = try? await api.projectOpenItems(projectID: projectID) {
             openItems = items
-            for row in CoordinatorQuestions.open(items) {
+            // The questions that have ended first, each as the record it became where it ended,
+            // with its question card let go of (`adoptQuestionRecords`). Then the open ones — but
+            // not one this console already holds a record of: a read that left before an answer
+            // here and came back after it still lists the question as open.
+            adoptQuestionRecords(items)
+            for row in CoordinatorQuestions.open(items) where questionRecord(row.itemId) == nil {
                 deliver(.coordinatorQuestion(itemID: row.itemId))
             }
             // And the exceptions that became the owner's, which had no card here at all: the
@@ -4340,6 +4345,46 @@ final class ConsoleModel {
         }
     }
 
+    /// The same, for the questions this project's coordinator asked that have ended — answered,
+    /// here or at another end, or withdrawn (§5.2 R10, R12): each drawn as the record it became, at
+    /// the moment it ended (`CoordinatorQuestions.receipts`), and its question card let go of. The
+    /// record is what the in-memory "Answered" line could not be: there after a relaunch, and on a
+    /// device that never saw the question open.
+    private func adoptQuestionRecords(_ items: ProjectOpenItemsView) {
+        for receipt in CoordinatorQuestions.receipts(items) {
+            adoptQuestionRecord(receipt.record)
+        }
+    }
+
+    /// One record in, the question it ended out. A record already drawn is replaced only when the
+    /// read says something new about it — the copy this console drew from its own press until the
+    /// read came back, or an answer that has since reached a coordinator — and it keeps its place:
+    /// the moment it ended does not move. One the read stops carrying (it serves the newest fifty)
+    /// keeps its row, for `adoptReceipts`' reason.
+    private func adoptQuestionRecord(_ record: ProjectClosedQuestion) {
+        decisionCards.removeAll { $0.kind == .coordinatorQuestion(itemID: record.itemId) }
+        let receipt = CoordinatorQuestions.Receipt(record: record)
+        let card = DeliveredDecisionCard(kind: .coordinatorQuestionRecord(record: record),
+                                         placement: .at(receipt.moment))
+        if let drawn = decisionCards.firstIndex(where: { $0.id == receipt.id }) {
+            if decisionCards[drawn] != card { decisionCards[drawn] = card }
+        } else {
+            decisionCards.append(card)
+        }
+    }
+
+    /// The record one question became, once it has ended — the row this conversation draws for it,
+    /// else the read's — or nil while it is still a question. What its card and its review sheet
+    /// draw instead of the question.
+    func questionRecord(_ itemID: String) -> ProjectClosedQuestion? {
+        for card in decisionCards {
+            if case .coordinatorQuestionRecord(let record) = card.kind, record.itemId == itemID {
+                return record
+            }
+        }
+        return openItems?.closedQuestions.first { $0.itemId == itemID }
+    }
+
     /// Where one delivered proposal stands right now — the whole of what decides whether its
     /// buttons may be pressed, and never a frame this card kept.
     func criteriaStanding(_ intentID: String) -> CriteriaDecisionStanding {
@@ -4698,9 +4743,10 @@ final class ConsoleModel {
     /// Answer the coordinator's question, with this device's own credential — no agent between the
     /// press and the door, and no session header on the request (§5.2 R10).
     ///
-    /// The receipt is handed back rather than kept here: the card that made the press is the one
-    /// that shows what was sent and where it went, which is also what the browser's card does. A
-    /// refusal leaves the card standing and says which refusal it met.
+    /// The card becomes the record of the answer at once, drawn from what was sent and where the
+    /// door says it went (`CoordinatorQuestions.answeredHere`); the read that follows replaces it
+    /// with the server's copy of the same record, so nothing stands empty between the press and
+    /// the read. A refusal leaves the card standing and says which refusal it met.
     func answerQuestion(_ row: ProjectOpenItemRow, chosen: CoordinatorQuestionChoice?,
                         text: String) async -> OwnerAnswerReceipt? {
         guard let projectID, let question = row.question,
@@ -4709,6 +4755,8 @@ final class ConsoleModel {
         do {
             let receipt = try await api.answerOpenItem(projectID: projectID, itemID: row.itemId,
                                                        request)
+            adoptQuestionRecord(CoordinatorQuestions.answeredHere(row: row, question: question,
+                                                                  request: request, receipt: receipt))
             await refreshRulerQuestions(force: true)
             return receipt
         } catch {

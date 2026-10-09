@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  ANSWERED_HEADING,
   COORDINATOR_QUESTION_HEADING,
   CoordinatorQuestionCard,
   CoordinatorQuestions,
@@ -16,6 +17,7 @@ import {
   RECOMMENDED,
   SEND_ANSWER,
   WAITING_FOR_COORDINATOR,
+  YOUR_NOTE,
   coordinatorQuestions,
   type ProjectOpenItemRow,
   type ProjectOpenItemsView,
@@ -278,7 +280,13 @@ describe('answering it', () => {
     delivery: { sessionId: '34OAa5LxnQ1JXpUOfN21W', turnId: '4L0l8RFe6zL6GgEFbUBh6L' },
   };
 
-  it('posts the chosen option to the answer door and leaves a receipt', async () => {
+  /** The record the press leaves, as the card in the conversation draws it. */
+  const answered = (): boolean => host.querySelector('.answered-question-card') !== null;
+  /** …and its review, which is mounted behind the card (`ReviewCard` keeps it). */
+  const review = (): string =>
+    document.querySelector(`[data-question-record="${ITEM_ID}"]`)?.textContent ?? '';
+
+  it('posts the chosen option to the answer door and leaves the record of it', async () => {
     apiMock.mockResolvedValue({
       itemId: ITEM_ID,
       state: 'RESOLVED',
@@ -291,18 +299,26 @@ describe('answering it', () => {
     const options = host.querySelectorAll<HTMLInputElement>('input[type="radio"]');
     await act(async () => options[1]!.click());
     await act(async () => press(SEND_ANSWER).click());
-    await until(() => host.textContent!.includes(DELIVERED_TO_COORDINATOR), 'the receipt');
+    await until(answered, 'the record');
 
     expect(apiMock).toHaveBeenCalledTimes(1);
     expect(apiMock.mock.calls[0]![0]).toBe(
       `/projects/${PROJECT_ID}/open-items/${ITEM_ID}/answer`,
     );
     expect(apiMock.mock.calls[0]![1]).toEqual({ method: 'POST', body: { option: 1 } });
-    expect(host.textContent).toContain('Start both now');
-    expect(host.textContent).toContain(DELIVERED_TO_COORDINATOR);
+    // Drawn from what was sent, before any read publishes it: the question it was about, the
+    // option chosen — and, in its review, every option as it was offered and where it went.
+    expect(host.textContent).toContain(ANSWERED_HEADING);
+    expect(host.textContent).toContain(QUESTION);
+    expect(host.querySelector('.answered-question-answer')?.textContent).toBe(
+      'Start both now — expect a merge conflict to resolve',
+    );
+    expect(host.textContent).not.toContain(WAITING_FOR_COORDINATOR);
+    expect(review()).toContain('Start t4 first, then t7 once t4 lands');
+    expect(review()).toContain(DELIVERED_TO_COORDINATOR);
   });
 
-  it('sends a note with the chosen option, and the receipt says both', async () => {
+  it('sends a note with the chosen option, and the record keeps the two apart', async () => {
     apiMock.mockResolvedValue(DELIVERED);
     await draw(<CoordinatorQuestionCard projectId={PROJECT_ID} row={row()} now={NOW} />);
 
@@ -310,15 +326,19 @@ describe('answering it', () => {
     await act(async () => options[1]!.click());
     await type(' they can share a runner ');
     await act(async () => press(SEND_ANSWER).click());
-    await until(() => host.textContent!.includes(DELIVERED_TO_COORDINATOR), 'the receipt');
+    await until(answered, 'the record');
 
     expect(apiMock.mock.calls[0]![1]).toEqual({
       method: 'POST',
       body: { option: 1, text: 'they can share a runner' },
     });
-    expect(host.textContent).toContain(
-      'Start both now — expect a merge conflict to resolve — they can share a runner',
+    expect(host.querySelector('.answered-question-answer')?.textContent).toBe(
+      'Start both now — expect a merge conflict to resolve',
     );
+    expect(host.querySelector('.answered-question-note')?.textContent).toBe(
+      '“they can share a runner”',
+    );
+    expect(review()).toContain(`${YOUR_NOTE}they can share a runner`);
   });
 
   it('takes words alone from the Other row, with no option on the answer', async () => {
@@ -339,13 +359,16 @@ describe('answering it', () => {
     await type('Neither: split session_pool.go first');
     expect(press(SEND_ANSWER).disabled).toBe(false);
     await act(async () => press(SEND_ANSWER).click());
-    await until(() => host.textContent!.includes(DELIVERED_TO_COORDINATOR), 'the receipt');
+    await until(answered, 'the record');
 
     expect(apiMock.mock.calls[0]![1]).toEqual({
       method: 'POST',
       body: { text: 'Neither: split session_pool.go first' },
     });
-    expect(host.textContent).toContain('✓ Neither: split session_pool.go first');
+    expect(host.querySelector('.answered-question-answer')?.textContent).toBe(
+      '“Neither: split session_pool.go first”',
+    );
+    expect(review()).toContain(`${OTHER_OPTION}Neither: split session_pool.go first`);
   });
 
   it('keeps a chosen option chosen when its own row is pressed again', async () => {
@@ -369,8 +392,12 @@ describe('answering it', () => {
     });
     await draw(<CoordinatorQuestionCard projectId={PROJECT_ID} row={row()} now={NOW} />);
     await act(async () => press(SEND_ANSWER).click());
-    await until(() => host.textContent!.includes(WAITING_FOR_COORDINATOR), 'the receipt');
-    expect(host.textContent).toContain(WAITING_FOR_COORDINATOR);
+    await until(answered, 'the record');
+    expect(host.querySelector('.answered-question-waiting')?.textContent).toContain(
+      WAITING_FOR_COORDINATOR,
+    );
+    expect(review()).toContain(WAITING_FOR_COORDINATOR);
+    expect(review()).not.toContain(DELIVERED_TO_COORDINATOR);
   });
 
   it('asks the door nothing for a session that coordinates no project', async () => {
