@@ -200,15 +200,15 @@ type wikiRepoOpIndexContract struct {
 // runWikiRepoOp performs one claimed operation. `progress` is called at each step it reaches, best effort:
 // a report that does not go out costs the control plane a phase, never the answer.
 func runWikiRepoOp(cmd WikiRepoOpCommand, progress func()) wikiRepoOpOutcome {
-	root, ref, err := wikiRepoOpCheckout(cmd)
-	if err != nil {
-		return wikiRepoOpFailed(err.Error())
-	}
 	var input wikiRepoOpInput
 	if raw, marshalErr := json.Marshal(cmd.Input); marshalErr == nil && len(raw) > 0 && string(raw) != "null" {
 		if unmarshalErr := json.Unmarshal(raw, &input); unmarshalErr != nil {
 			return wikiRepoOpFailed(fmt.Sprintf("the operation's input could not be read: %v", unmarshalErr))
 		}
+	}
+	root, ref, err := wikiRepoOpCheckout(cmd, input)
+	if err != nil {
+		return wikiRepoOpFailed(err.Error())
 	}
 	switch cmd.Kind {
 	case "snapshot":
@@ -236,7 +236,14 @@ func wikiRepoOpSucceeded(result map[string]interface{}) wikiRepoOpOutcome {
 // is read of it (design §7): the work directory is a git checkout, its origin is the space's repository,
 // and it starts from the space's first commit. The fetch is part of it: a read of a stale origin/main
 // would be an answer about a commit nobody asked about.
-func wikiRepoOpCheckout(cmd WikiRepoOpCommand) (string, string, error) {
+//
+// Except where the operation names its commits. A read or a diff answers about the commits it was given,
+// and a commit is the same text whichever fetch brought it: when the checkout already has every one of
+// them, no fetch could change the answer and none is run — so the reads a job keeps in flight neither
+// queue for the fetch lock nor race another fetch (fetchWikiOriginMain). The first commit is then asked
+// of those commits themselves rather than of origin/main: each must start from it, or it is another
+// repository's and nothing is read. The ref answered is "" — neither kind reads origin/main.
+func wikiRepoOpCheckout(cmd WikiRepoOpCommand, input wikiRepoOpInput) (string, string, error) {
 	workDir := expandTilde(strings.TrimSpace(cmd.WorkDir))
 	if workDir == "" {
 		return "", "", fmt.Errorf("the operation names no working directory to read the repository in")
@@ -252,18 +259,60 @@ func wikiRepoOpCheckout(cmd WikiRepoOpCommand) (string, string, error) {
 				"nothing was read", root, firstNonEmpty(got, "no origin"), want)
 		}
 	}
-	ref, err := fetchWikiAnchorsRef(root)
-	if err != nil {
-		return "", "", fmt.Errorf("the checkout %s could not be fetched: %w", root, err)
-	}
-	if sha := strings.ToLower(strings.TrimSpace(cmd.RootCommitSha)); sha != "" {
-		roots, _ := wikiImportGit(root, "rev-list", "--max-parents=0", ref)
-		if !contains(strings.Fields(roots), sha) {
-			return "", "", fmt.Errorf("the checkout %s does not start from the space's first commit %s: "+
-				"it is another repository behind the same URL, so nothing was read", root, sha)
+	first := strings.ToLower(strings.TrimSpace(cmd.RootCommitSha))
+	if local := wikiRepoOpLocalCommits(root, cmd.Kind, input); len(local) > 0 {
+		for _, sha := range local {
+			if first != "" && !wikiRepoOpStartsFrom(root, sha, first) {
+				return "", "", fmt.Errorf("the commit %s in the checkout %s does not start from the space's first commit %s: "+
+					"it is another repository's, so nothing was read", sha, root, first)
+			}
 		}
+		return root, "", nil
+	}
+	// A failure here is read in the job's error: it says which operation, in which checkout, and what git said.
+	if err := fetchWikiOriginMain(root); err != nil {
+		return "", "", fmt.Errorf("the %s operation could not fetch origin main into the checkout %s, so nothing was read: %v",
+			cmd.Kind, root, err)
+	}
+	out, code, stderr, err := wikiAnchorGit(root, wikiAnchorGitTimeout, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main^{commit}")
+	ref := strings.TrimSpace(string(out))
+	if err != nil || code != 0 || !wikiCommitSha.MatchString(ref) {
+		return "", "", fmt.Errorf("the %s operation found no commit at origin/main in the checkout %s after the fetch, so "+
+			"nothing was read: %s", cmd.Kind, root, firstNonEmpty(strings.TrimSpace(stderr), errString(err), ref))
+	}
+	if first != "" && !wikiRepoOpStartsFrom(root, ref, first) {
+		return "", "", fmt.Errorf("the checkout %s does not start from the space's first commit %s: "+
+			"it is another repository behind the same URL, so nothing was read", root, first)
 	}
 	return root, ref, nil
+}
+
+// wikiRepoOpLocalCommits is the commits a read or a diff names, when the checkout already has every one of
+// them; nil otherwise, and always for a snapshot or anchors, which ask about origin/main as it is now.
+func wikiRepoOpLocalCommits(root, kind string, input wikiRepoOpInput) []string {
+	var named []string
+	switch kind {
+	case "read":
+		named = []string{input.Sha}
+	case "diff":
+		named = []string{input.From, input.To}
+	}
+	for i, sha := range named {
+		named[i] = strings.ToLower(strings.TrimSpace(sha))
+		if !wikiCommitSha.MatchString(named[i]) {
+			return nil
+		}
+		if _, err := wikiImportGit(root, "cat-file", "-e", named[i]+"^{commit}"); err != nil {
+			return nil
+		}
+	}
+	return named
+}
+
+// wikiRepoOpStartsFrom says whether the history of commit starts from the space's first commit.
+func wikiRepoOpStartsFrom(root, commit, first string) bool {
+	roots, _ := wikiImportGit(root, "rev-list", "--max-parents=0", commit)
+	return contains(strings.Fields(roots), first)
 }
 
 // ── snapshot ────────────────────────────────────────────────────────────────────────────────────
