@@ -58,6 +58,8 @@ jobs:
         run: npm test -w @orbit/web
       - name: Test upgrade source SHA propagation
         run: npm run test:upgrade-source-sha
+      - name: Test macOS runner signing
+        run: npm run test:macos-runner-signing
 
   # Every `*.pg.spec` in the apiserver, against a real PostgreSQL, with a skip counted red.
   #
