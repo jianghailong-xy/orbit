@@ -1103,7 +1103,10 @@ const waitingLabel = (s: any): string => {
 
 // `watching` is this session as an observer — what its row says about the live watches that will
 // resume it (lib/watches `watchingSessions`) — and absent wherever a caller holds no watches.
-export const sessionLine = (s: any, live: boolean, watching?: SessionWatching | null): SessionLine => {
+// `recaps` is the account's Session recaps switch (Settings): on unless turned off, and off means
+// the row falls through to the raw reply exactly as it did before the recap existed. It only ever
+// gates that one line — every live line above it is untouched.
+export const sessionLine = (s: any, live: boolean, watching?: SessionWatching | null, recaps = true): SessionLine => {
   // `sessionReadingState`, not the run's own status: a refused SOURCE is over (SR34) and its row
   // wears what a dead run wears, rather than the Starting line the wait would otherwise draw.
   const state = sessionReadingState(s);
@@ -1160,8 +1163,9 @@ export const sessionLine = (s: any, live: boolean, watching?: SessionWatching | 
   if (s.lastUserText) return sentLine(s.lastUserText);
   // The rolling recap (0418) takes the place of the reply preview it used to show: the sentence
   // the server wrote about the session, not the raw last reply flattened down to one line. Only
-  // here — below every live line above — so a working session still says what it is doing.
-  if (typeof s.recapText === 'string' && s.recapText.trim())
+  // here — below every live line above — so a working session still says what it is doing. Off
+  // with the account's Session recaps switch, the row falls through to the reply preview below.
+  if (recaps && typeof s.recapText === 'string' && s.recapText.trim())
     return { label: recapLabel(s.recapAt), text: s.recapText.trim(), tone: 'preview' };
   if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
   // Nothing to preview at all (a run that died before even its user turn was recorded, or an older
@@ -1958,6 +1962,9 @@ export function WorkspaceView({
   // Workspace — the permission Mode a new session starts in). Cached/deduped with the nav footer.
   const me = useQuery(meQuery());
   const accountDefaultPermissionMode = me.data?.preferences?.defaultPermissionMode;
+  // The account's Session recaps switch (Settings): on unless turned off, so a list row prefers the
+  // server's recap until somebody opts out. Every row builder below reads it through `sessionLine`.
+  const recapsEnabled = me.data?.preferences?.recaps !== false;
   // Configured providers (custom slugs borrowing a built-in runtime) merged into the composer's
   // model list + context-window sizing when the open session/workspace uses one. Cached/deduped
   // app-wide by React Query; empty until it loads (then the model pill's options fill in).
@@ -3185,10 +3192,10 @@ export function WorkspaceView({
       needsYou: sessionNeedsYou,
       motion: (s) => statusGlyphMotion(s, sessionWatching(watchingBySession, s.id)?.word),
       line: (s) => sessionLine(selectedSession?.id === s.id ? selectedSession : s,
-        effectiveView !== 'trash', sessionWatching(watchingBySession, s.id)),
+        effectiveView !== 'trash', sessionWatching(watchingBySession, s.id), recapsEnabled),
     }),
     [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions,
-      effectiveView, listByTag, runner.online, watchingBySession, selectedSession],
+      effectiveView, listByTag, runner.online, watchingBySession, selectedSession, recapsEnabled],
   );
   const listedSessions = useMemo(
     () => openProjectId ? projectMembers : folderListing.entries.flatMap((entry) => entry.kind === 'project'
@@ -9425,7 +9432,7 @@ export function WorkspaceView({
                 // merged row for both status surfaces so the banner and its list warning point at
                 // the same canonical obligation during that refresh gap.
                 const watching = sessionWatching(watchingBySession, s.id);
-                const line = sessionLine(actionSession, openable, watching);
+                const line = sessionLine(actionSession, openable, watching, recapsEnabled);
                 const drag = swipeDrag?.id === s.id ? swipeDrag : null;
                 const swipeTx = drag
                   ? drag.dx

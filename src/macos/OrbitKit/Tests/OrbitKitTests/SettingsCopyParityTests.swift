@@ -102,6 +102,17 @@ final class SettingsCopyParityTests: XCTestCase {
         XCTAssertEqual(SettingsHome.title(.modelRouting), SettingsCopy.smartModelSelection)
     }
 
+    /// Session recaps (0418): the Session defaults card's switch, with its label and hint — the same
+    /// three words on the web page, the phone and (via `SettingsCopyParityTest`) the Android list.
+    func testSessionRecapsSaysWhatTheWebPageSays() throws {
+        let page = try web(Self.settings)
+        assertSays(page, "label=\"\(SettingsCopy.sessionRecaps)\"", in: Self.settings)
+        assertSays(page, "hint=\"\(SettingsCopy.sessionRecapsHint)\"", in: Self.settings)
+        assertSays(page, "checked={prefs.recaps ?? true}", in: Self.settings)
+        assertSays(page, "save.mutate({ recaps: v })", in: Self.settings)
+        XCTAssertEqual(SettingsHome.title(.recaps), SettingsCopy.sessionRecaps)
+    }
+
     /// The edit-profile card's field is called what the web Profile page calls the same value.
     func testTheNameFieldSaysWhatTheProfilePageSays() throws {
         assertSays(try web(Self.profile), ">\(SettingsCopy.nameLabel)</div>", in: Self.profile)

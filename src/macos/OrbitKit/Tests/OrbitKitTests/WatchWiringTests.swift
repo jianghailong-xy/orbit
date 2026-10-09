@@ -87,7 +87,9 @@ final class WatchWiringTests: XCTestCase {
         }
         let row = try slice(source("Views/AgentsView.swift"),
                             from: "struct AgentSessionRow: View {", to: "private func lineColor(")
-        XCTAssertTrue(row.contains("SessionLine.make(for: session, live: !deleted, watching: watching)"))
+        XCTAssertTrue(row.contains("SessionLine.make(for: session, live: !deleted, watching: watching,"))
+        // The account's Session recaps switch is read from the row, off only when explicitly off.
+        XCTAssertTrue(row.contains("recaps: app.user?.preferences?.showRecaps ?? true"))
         XCTAssertTrue(row.contains("StatusGlyphView(glyph: .make(for: session, watching: watching))"))
         // The phone and iPad rows have no leading glyph: their trailing cue is where the eye goes.
         XCTAssertTrue(row.contains("SessionLiveIndicator(session: session, watching: watching)"))
