@@ -1627,10 +1627,11 @@ private struct GrowingTextEditor: UIViewRepresentable {
         // first tap that raised the keyboard at once would lift the composer with it, and the second
         // would land on the keyboard (typing a key or a candidate) instead of the field; a second tap
         // the field took too would drop the caret into the words just filled in, or open the edit
-        // menu. So the keyboard comes up a double-tap interval late then, and a tap on a field already
-        // being edited (the edit menu, Paste) lands as late. An editing field's taps are not all
-        // `UITapGestureRecognizer`s — its tap-and-a-half selection gesture begins on the second press,
-        // and won the race on a CI run — so any of its gestures named for a tap waits too.
+        // menu. So the keyboard comes up a double-tap interval late then. The field's own taps are not
+        // all `UITapGestureRecognizer`s — on iOS 26 its single tap is a `UITextMultiTapRecognizer`,
+        // which won the second tap on a CI run — so any of its gestures named for a tap waits too.
+        // Held back, the multi-tap still focuses the field but no longer toggles the edit menu: while a
+        // guess is on offer, Paste into the empty field is a press and hold (the loupe's, untouched).
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                                shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
             guard gestureRecognizer === doubleTap, let field = gestureRecognizer.view,

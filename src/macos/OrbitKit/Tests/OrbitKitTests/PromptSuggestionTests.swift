@@ -181,7 +181,7 @@ final class PromptSuggestionTests: XCTestCase {
         XCTAssertTrue(field.contains("context.coordinator.doubleTap?.isEnabled = suggestion != nil"),
                       "no guess, no double-tap: the field's taps are its own, with no wait")
         XCTAssertTrue(field.contains("return other is UITapGestureRecognizer || NSStringFromClass(type(of: other)).contains(\"Tap\")"),
-                      "with one, the field's taps wait on the double-tap, its tap-and-a-half selection gesture included")
+                      "with one, the field's taps wait on the double-tap, UIKit's multi-tap text gesture included")
         XCTAssertTrue(field.contains("shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {\n            gestureRecognizer === doubleTap"),
                       "and nothing of the field's that begins stops it")
         XCTAssertTrue(field.contains("UIAccessibilityCustomAction(name: \"Use suggestion\")"), "VoiceOver's way to take it")
