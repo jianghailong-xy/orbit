@@ -231,7 +231,10 @@ class TranscriptDeviceTest {
         // keyboard (iOS folds that chrome while you type; Android doesn't), so this step runs at the emulator's own size.
         shell("wm size reset"); shell("wm density reset")
         try {
-            compose.waitUntil(20_000) { runCatching { compose.activity.resources.configuration.screenWidthDp }.getOrDefault(0) > 400 }
+            // Both resets have landed (each recreates the activity) before the reader is used again.
+            compose.waitUntil(30_000) {
+                runCatching { compose.activity.resources.configuration.let { it.densityDpi != 320 && it.screenWidthDp > 400 } }.getOrDefault(false)
+            }
             awaitText("Latest answer A06C", substring = true)
             if (compose.onAllNodesWithText("Jump to latest").fetchSemanticsNodes().isNotEmpty()) compose.onNodeWithText("Jump to latest").performClick()
             compose.waitForIdle()
