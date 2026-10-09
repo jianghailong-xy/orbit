@@ -47,4 +47,33 @@ class ProviderChoicesTest {
             catalog.sameRuntime("gone").map { it.id })
         assertEquals(listOf("opencode"), catalog.sameRuntime("opencode").map { it.id })
     }
+
+    private val deepseek = obj("""{"slug":"deepseek","label":"DeepSeek","runtime":"claude","presetSlug":"deepseek"}""")
+    private val custom = obj("""{"slug":"my-endpoint","label":"My endpoint","runtime":"anthropic-compatible"}""")
+    private val harness = obj("""{"slug":"deepseek-harness","label":"DeepSeek Harness","runtime":"dsh"}""")
+
+    /** A07-13 (iOS 0557592f8, testEngineTitleNamesTheCLIThatExecutes): the CLI that executes, not the vendor whose models it
+     * writes; a provider nothing can place takes the server's own Claude fallback. */
+    @Test fun theEngineTitleNamesTheCliThatExecutes() {
+        val configured = listOf(deepseek, custom, harness)
+        fun title(provider: String) = ProviderChoices.engineTitle(provider, configured)
+        assertEquals("Claude Code", title("claude"))
+        assertEquals("Claude Code", title("deepseek"))
+        assertEquals("Claude Code", title("my-endpoint"))
+        assertEquals("Codex", title("codex"))
+        assertEquals("Kimi Code", title("kimi"))
+        assertEquals("OpenCode", title("opencode"))
+        assertEquals("Antigravity", title("antigravity"))
+        assertEquals("DeepSeek Harness", title("dsh"))
+        assertEquals("DeepSeek Harness", title("deepseek-harness"))
+        assertEquals("Claude Code", title("nonsense"))
+    }
+
+    /** A held pick adds "→ next" only when it changes the engine (testEngineTitleSaysWhereAHeldPickGoesOnlyWhenTheEngineChanges). */
+    @Test fun theEngineTitleSaysWhereAHeldPickGoesOnlyWhenTheEngineChanges() {
+        assertEquals("Claude Code → Codex", ProviderChoices.engineTitle("claude", emptyList(), next = "codex"))
+        assertEquals("OpenCode → Claude Code", ProviderChoices.engineTitle("opencode", emptyList(), next = "claude"))
+        assertEquals("Claude Code", ProviderChoices.engineTitle("deepseek", listOf(deepseek), next = "claude"))
+        assertEquals("Claude Code", ProviderChoices.engineTitle("claude", emptyList(), next = null))
+    }
 }

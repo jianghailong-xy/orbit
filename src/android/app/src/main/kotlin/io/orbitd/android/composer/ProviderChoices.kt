@@ -1,10 +1,11 @@
 package io.orbitd.android.composer
 
+import io.orbitd.android.management.RunnerPage
 import kotlinx.serialization.json.*
 
 /**
  * OrbitKit `SessionProviderChoices`: what each row of the composer's Provider list says and where it lands — the engines in
- * iOS's order, and why a row can't run on this runner.
+ * iOS's order, why a row can't run on this runner — and the engine named over the model menu.
  */
 internal object ProviderChoices {
     /** The engines a runner signs in, in the picker's order (iOS 25697e200). */
@@ -37,5 +38,15 @@ internal object ProviderChoices {
             return if (borrowed in setOf("codex", "kimi", "antigravity", "dsh")) borrowed else "claude"
         }
         return if (provider in setOf("codex", "kimi", "opencode", "antigravity", "dsh")) provider else "claude"
+    }
+
+    /** The model menu's title (OrbitKit `engineTitle`, web `engineTitleFor`): the CLI running this session — `Claude Code` for a
+     * key it writes DeepSeek's models through — and, while a held pick takes the next turn to another engine, that one after an
+     * arrow. Two providers of one CLI read as one title. */
+    fun engineTitle(provider: String, providers: List<JsonObject>, next: String? = null): String {
+        val runtime = executingRuntime(provider, providers)
+        val name = RunnerPage.engineName(runtime)
+        val after = next?.let { executingRuntime(it, providers) }?.takeIf { it != runtime } ?: return name
+        return "$name → ${RunnerPage.engineName(after)}"
     }
 }

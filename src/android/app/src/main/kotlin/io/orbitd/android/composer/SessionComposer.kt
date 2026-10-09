@@ -237,7 +237,10 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
             }
         }, confirmButton = { TextButton(onClick = { slashScope = null }) { Text("Close") } })
     }
-    if (models && session?.accessDenied != true) ModelChoices(model, state, effective, usable, smart, detail.text("taskId"), openTask) { models = false }
+    // The menu's title: the engine running this session, and where a pick held for the resume takes the next turn (A07-13).
+    val engineTitle = ProviderChoices.engineTitle((if (target == null) detail else effective).text("provider").orEmpty(),
+        state.catalog?.providers.orEmpty(), next = if (target == null) draft.resumeConfig.text("provider") else null)
+    if (models && session?.accessDenied != true) ModelChoices(model, state, effective, engineTitle, usable, smart, detail.text("taskId"), openTask) { models = false }
     if (queued) AlertDialog(onDismissRequest = { queued = false }, title = { Text("Queued messages") }, text = {
         Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
             if (session?.fresh != true) Text("Reconnect to check the queue.")
@@ -330,8 +333,8 @@ internal fun SmartRouteNote(route: JsonObject) = Column(Modifier.testTag("compos
 }
 
 @Composable
-private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: JsonObject, usable: Boolean, smart: JsonObject?, taskId: String?,
-    openTask: ((String) -> Unit)?, close: () -> Unit) {
+private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: JsonObject, engineTitle: String, usable: Boolean, smart: JsonObject?,
+    taskId: String?, openTask: ((String) -> Unit)?, close: () -> Unit) {
     val catalog = state.catalog
     val provider = detail.text("provider") ?: ""
     val chosen = detail.text("model") ?: ""
@@ -339,11 +342,13 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
     fun change(key: String, value: String) { model.config(buildJsonObject { put(key, value) }) }
     AlertDialog(onDismissRequest = close, title = { Text("Model and account") }, text = {
         Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+            // The engine this session runs on (iOS 0557592f8), over everything below that picks for the next turn.
+            Text(engineTitle, Modifier.testTag("composer-engine-title"), fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
             // A task run on smart selection's pick opens on why it is this model, and on where to fix the model for every run.
             smart?.let { SmartRouteNote(it); HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
             if (state.catalogLoading) CircularProgressIndicator()
             state.catalogError?.let { Text(it); TextButton(onClick = model::loadCatalog) { Text("Retry model catalog") } }
-            Text("Current: $provider · $chosen")
             val rows = catalog?.models(provider).orEmpty()
             rows.forEach { row ->
                 TextButton(enabled = enabled, onClick = {
