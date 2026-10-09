@@ -257,7 +257,8 @@ class ComposerDeviceTest {
             val att=stats()["attachments"]!!.jsonObject.values.single().jsonObject
             assertEquals(sha(bytes),att["sha256"]!!.jsonPrimitive.content)
             assertEquals(1,att["references"]!!.jsonArray.size)
-            assertEquals(4,stats()["downloads"]!!.jsonArray.size)
+            // The in-app reader reads the text file as it opens (A07-1); Copy, Share, Open and Download each fetch it again.
+            assertEquals(5,stats()["downloads"]!!.jsonArray.size)
             assertTrue(resolver.persistedUriPermissions.none { it.uri==uri })
         } finally { resolver.delete(uri,null,null) }
     }
@@ -433,9 +434,13 @@ class ComposerDeviceTest {
         awaitText("New session"); compose.onAllNodesWithText("New session")[0].performClick()
         compose.onNodeWithTag("composer-input").performTextInput("账户草稿")
         // Claude's accounts come first and Codex's second (A07-3, A07-10): the last of a label is Codex's, the first Claude's.
+        // Rows of the Provider section only: the Effort section above it has a "Default" of its own.
         fun choose(label:String, current:String="fixture-model", first:Boolean=false) {
             appClick(current); awaitText(label)
-            compose.onAllNodesWithText(label).let { if (first) it.onFirst() else it.onLast() }.performScrollTo().performClick()
+            val provider=compose.onNodeWithText("Provider").fetchSemanticsNode().boundsInRoot.top
+            val rows=compose.onAllNodesWithText(label)
+            val inSection=rows.fetchSemanticsNodes().withIndex().filter { it.value.boundsInRoot.top>provider }.map { it.index }
+            rows[if (first) inSection.first() else inSection.last()].performScrollTo().performClick()
             compose.onNodeWithText("Close").performClick()
         }
         fun quota(label:String) {
@@ -528,8 +533,10 @@ class ComposerDeviceTest {
         compose.onNodeWithContentDescription("Back").performClick()
         awaitText("New session"); compose.onAllNodesWithText("New session")[0].performClick()
         appClick("fixture-model"); awaitText("Switches to soonest reset")
-        val rows = dialogTexts()
-        File(evidence,"a07c-draft-menu.txt").writeText(rows.joinToString("\n"))
+        val all = dialogTexts()
+        File(evidence,"a07c-draft-menu.txt").writeText(all.joinToString("\n"))
+        // The Provider section, below the menu's own title (the draft's engine, A07-13).
+        val rows = all.drop(all.indexOf("Provider") + 1)
         val order = listOf("Claude", "Codex", "Antigravity · Google account", "Kimi", "DeepSeek", "OpenCode")
         assertEquals(order, rows.filter { row -> order.any { row == it || row == "✓ $it" } }.map { it.removePrefix("✓ ") }.distinct())
         capture("a07c-draft-provider-list")
