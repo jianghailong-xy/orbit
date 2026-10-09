@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
 import { AuditOutlined, RollbackOutlined } from '@ant-design/icons';
-import { Button } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import type { ConfirmationReturnCard, ConfirmationReviewRequestCard } from '@orbit/shared';
 import { routeId } from '../lib/idCodec';
 import { AppLink } from './AppLink';
+import { Button } from './ui/Button';
 import { decisionReceiptTime } from './EvidenceDecisionCard';
 import {
   REVIEWER_FALLBACK,

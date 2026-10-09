@@ -1,7 +1,7 @@
 import { useRef, useState, type JSX, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert } from 'antd';
+import { Alert } from './ui/Alert';
 import type {
   IntegrationCheckResult,
   ProjectLandTask,
@@ -790,9 +790,8 @@ export function ProjectPromotionCard({
       {decide.isError ? (
         <Alert
           type="error"
-          showIcon
           className="project-promotion-error"
-          message={`${shortRef(promotion.sourceRef)} was not merged`}
+          title={`${shortRef(promotion.sourceRef)} was not merged`}
           description={(decide.error as Error).message}
         />
       ) : null}

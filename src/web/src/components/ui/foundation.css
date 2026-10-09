@@ -40,6 +40,7 @@
   --orbit-badge-warning: #ff8800;
   --orbit-badge-warning-bg: #fff7e6;
   --orbit-alert-warning-border: #ffce7a;
+  --orbit-alert-info-border: #adceff;
   --orbit-badge-blue: #0958d9;
   --orbit-badge-blue-bg: #e6f4ff;
   --orbit-badge-green: #389e0d;
@@ -111,6 +112,7 @@
   --orbit-badge-warning: #c18d35;
   --orbit-badge-warning-bg: #271f15;
   --orbit-alert-warning-border: #513f20;
+  --orbit-alert-info-border: #1d305b;
   --orbit-badge-blue: #3c89e8;
   --orbit-badge-blue-bg: #111a2c;
   --orbit-badge-green: #6abe39;

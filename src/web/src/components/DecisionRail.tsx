@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Typography } from 'antd';
 import type { ProjectOpenItemRow } from '@orbit/shared';
 import { ACCEPTANCE_CONFIRMATION_TITLE } from './AcceptanceConfirmationCard';
 import {
@@ -15,6 +14,7 @@ import {
 } from './CriteriaDecisionCard';
 import { pendingCriteriaDecisionsQuery, pendingDecisionsQuery } from '../lib/queries';
 import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
+import './ui/Typography.css';
 
 /**
  * What is TRUE right now about this session's open questions, pinned under the header.
@@ -503,12 +503,12 @@ function DecisionRows({ group }: { group: PendingDecisionRow[] }) {
             <RowFacts row={row} />
           </div>
           <div className="decision-rail-why">
-            <Typography.Text type="warning">
+            <span className="orbit-typography orbit-typography-warning">
               {row.decidability.refusal
                 ?? 'no decision can be recorded about this evidence'}
-            </Typography.Text>
+            </span>
             <div>
-              <Typography.Text>{WAITING_ON_YOU_ACTION}</Typography.Text>
+              <span className="orbit-typography">{WAITING_ON_YOU_ACTION}</span>
             </div>
           </div>
         </li>

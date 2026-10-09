@@ -66,7 +66,7 @@ object ProjectAttention {
         val days = ((seconds(now) - at) / DAY).toInt()
         return if (days == 0) "<1d" else "${days}d"
     }
-    private fun elapsedLabel(iso: String?, now: Instant): String? {
+    internal fun elapsedLabel(iso: String?, now: Instant): String? {
         val at = at(iso)
         if (at == Double.NEGATIVE_INFINITY || at > seconds(now)) return null
         val waited = seconds(now) - at
@@ -213,6 +213,7 @@ object ProjectAttention {
         "INTEGRATION_CHECK_FAILED" -> "checks failed"
         "INTEGRATION_ERROR" -> "handling an integration error"
         "TASK_FAILED" -> "handling a failed task"
+        "DELIVERY_REVIEW" -> "reviewing a delivery"
         else -> null
     }
 
