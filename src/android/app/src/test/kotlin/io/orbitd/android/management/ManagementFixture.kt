@@ -6,6 +6,7 @@ import io.orbitd.android.core.net.*
 import io.orbitd.android.core.realtime.EventTransport
 import io.orbitd.android.core.realtime.SseFrame
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.serialization.json.*
 import java.io.IOException
@@ -89,6 +90,8 @@ object ManagementFixture {
 
     fun writes(path: String) = calls.filter { it.endsWith(" $path") && !it.startsWith("GET ") }
 
+    /** Requests answer on the caller's thread, as WatchFixture's do. On IO a page's load resumed on the IO worker under the Compose
+     *  rule's unconfined effects and wrote its state there, racing the first composition (an NPE in addPendingInvalidationsLocked). */
     fun session() = AuthSession(transport, object : CredentialStore {
         private var value: StoredSession? = null
         override suspend fun load() = value
@@ -101,7 +104,7 @@ object ManagementFixture {
         override suspend fun read(account: AccountKey, kind: DataKind, key: String): ByteArray? = null
         override suspend fun write(account: AccountKey, kind: DataKind, key: String, bytes: ByteArray) = Unit
         override suspend fun clearAll() = Unit
-    }, "a13-test", eventTransport = events)
+    }, "a13-test", dispatcher = Dispatchers.Unconfined, eventTransport = events)
 
     suspend fun signIn(session: AuthSession) = session.login(ServerAddress.parse("https://example.test"), "a13@example.test", "fixture")
 
