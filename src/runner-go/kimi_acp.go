@@ -1123,9 +1123,38 @@ type kimiActiveTurn struct {
 	orbitTurnID string
 	text        strings.Builder
 	thought     strings.Builder
-	seenTools   map[string]bool
-	doneTools   map[string]bool
-	plans       int // plan updates seen this turn; makes each one a distinct tool id
+	// textFlushed and thoughtFlushed mark how far into each buffer the durable transcript
+	// already goes; the stretch past the mark has only left the runner as live deltas.
+	textFlushed    int
+	thoughtFlushed int
+	seenTools      map[string]bool
+	doneTools      map[string]bool
+	plans          int // plan updates seen this turn; makes each one a distinct tool id
+}
+
+// Kimi's deltas carry no ordering across kinds, so the transcript's order is the runner's to
+// make: a stretch is closed the moment the stream moves to output of another kind, landing
+// its durable block where it happened — the shape claude's per-block events already have.
+// Buffering the whole turn instead, as this replaced, rendered every thought after every
+// tool call whatever the true order was, and the live drafts above one stretch of reply text
+// could hold a later stretch of reasoning.
+//
+// At most one buffer holds an open stretch at any moment: starting one flushes the other, so
+// a tool call or the turn's end finds one or none to close.
+func (a *kimiActiveTurn) flushThought(emit emitFn) {
+	all := a.thought.String()
+	if thought := strings.TrimSpace(all[a.thoughtFlushed:]); thought != "" {
+		emit(evThinking, map[string]interface{}{"text": thought})
+	}
+	a.thoughtFlushed = len(all)
+}
+
+func (a *kimiActiveTurn) flushText(emit emitFn) {
+	all := a.text.String()
+	if text := strings.TrimSpace(all[a.textFlushed:]); text != "" {
+		emit(evAssistant, map[string]interface{}{"text": text})
+	}
+	a.textFlushed = len(all)
 }
 
 // kimiUsageGauge holds the session's last context reading: usage_update's `used` over its `size`.
@@ -1278,11 +1307,13 @@ func handleKimiNotification(sessionID string, msg kimiRPCMessage, emit emitFn, a
 	switch kind {
 	case "agent_message_chunk":
 		if text := kimiContentText(update["content"]); text != "" {
+			a.flushThought(emit)
 			a.text.WriteString(text)
 			emit(evTextDelta, map[string]interface{}{"text": text})
 		}
 	case "agent_thought_chunk":
 		if text := kimiContentText(update["content"]); text != "" {
+			a.flushText(emit)
 			a.thought.WriteString(text)
 			emit(evThinkingDelta, map[string]interface{}{"text": text})
 		}
@@ -1290,6 +1321,8 @@ func handleKimiNotification(sessionID string, msg kimiRPCMessage, emit emitFn, a
 		id := firstString(update, "toolCallId", "tool_call_id")
 		if id != "" && !a.seenTools[id] {
 			a.seenTools[id] = true
+			a.flushThought(emit)
+			a.flushText(emit)
 			name := firstString(update, "title")
 			input := firstPresent(update, "rawInput", "raw_input")
 			emit(evToolUse, map[string]interface{}{"id": id, "name": name, "input": input})
@@ -1306,6 +1339,8 @@ func handleKimiNotification(sessionID string, msg kimiRPCMessage, emit emitFn, a
 		id := firstString(update, "toolCallId", "tool_call_id")
 		if id != "" && (status == "completed" || status == "failed") && !a.doneTools[id] {
 			a.doneTools[id] = true
+			a.flushThought(emit)
+			a.flushText(emit)
 			emit(evToolResult, map[string]interface{}{
 				"toolUseId": id,
 				"content":   kimiToolOutput(update),
@@ -1321,6 +1356,8 @@ func handleKimiNotification(sessionID string, msg kimiRPCMessage, emit emitFn, a
 		if len(rows) == 0 {
 			return
 		}
+		a.flushThought(emit)
+		a.flushText(emit)
 		a.plans++
 		id := fmt.Sprintf("kimi-plan-%d", a.plans)
 		emit(evToolUse, map[string]interface{}{
@@ -1664,12 +1701,10 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 				}
 			}
 		}
-		if thought := strings.TrimSpace(turn.thought.String()); thought != "" {
-			emit(evThinking, map[string]interface{}{"text": thought})
-		}
-		if text := strings.TrimSpace(turn.text.String()); text != "" {
-			emit(evAssistant, map[string]interface{}{"text": text})
-		}
+		// Whatever the turn was in the middle of when it ended is the only stretch not yet
+		// persisted; everything earlier landed where the stream moved past it.
+		turn.flushThought(emit)
+		turn.flushText(emit)
 		if errorText != "" {
 			emit(evError, map[string]interface{}{"message": errorText})
 		}

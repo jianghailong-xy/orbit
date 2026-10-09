@@ -287,7 +287,8 @@ function reclaimPrisma(
         configured.filter((row) => row.runtime === where.runtime).map(({ slug }) => ({ slug })),
     },
     providerPool: { findFirst: async () => null },
-    runEvent: { aggregate: async () => ({ _max: { seq: 0 } }) },
+    // run_event max(seq) for the reclaim snapshot — raw SQL, never `aggregate`.
+    $queryRaw: async () => [{ max: 0 }],
     $executeRaw: async () => 0,
   } as never;
 }

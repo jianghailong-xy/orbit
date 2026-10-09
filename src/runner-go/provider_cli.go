@@ -10,16 +10,35 @@ import (
 )
 
 // `orbit provider` — the CLI half of the MCP provider_* tools. `--provider` on a session or a
-// task takes a built-in engine slug or one the owner configured, and a configured provider's slug
-// is derived from its label rather than typed by anyone, so the only way to learn one used to be
-// to guess and read the refusal back. `list` is that list.
+// task names where its credential comes from (docs/provider-engine-contract.md §1.3) — an engine's
+// own sign-in, OpenCode's own configuration, an account pool or one of the owner's keys — and a
+// key's slug is derived from its label rather than typed by anyone, so the only way to learn one
+// used to be to guess and read the refusal back. `list` is that list, with the engines each runs.
 //
 // Plain runner auth, no orchestration gate: `orbit task create --provider` is available to every
 // agent, so the discovery of what to pass has to be too. The writes ride the same auth and reach
 // only the runner owner's own providers; from inside a session each first puts a confirmation card
 // in front of the owner (askBeforeCreate), exactly as `orbit task create` does.
 
-const providerHelp = `orbit provider — list and configure the providers a session or task may run on
+// engineNames are the engines a session or a task can name (docs/provider-engine-contract.md §0):
+// the CLI on the runner that runs it, beside the provider its credential comes from. One list, so the
+// CLI flags, the MCP schemas and the help all name the same six.
+var engineNames = []string{providerClaude, providerCodex, providerKimi, providerAntigravity, providerOpenCode, providerDsh}
+
+// engineArgument is how capabilities spell an --engine value: claude|codex|kimi|antigravity|opencode|dsh.
+func engineArgument() string { return "--engine <" + strings.Join(engineNames, "|") + ">" }
+
+// nullableEngineEnum is engineNames as a JSON-schema enum that also takes null: what a task's engine
+// pin accepts, null clearing it.
+func nullableEngineEnum() []interface{} {
+	enum := make([]interface{}, 0, len(engineNames)+1)
+	for _, engine := range engineNames {
+		enum = append(enum, engine)
+	}
+	return append(enum, nil)
+}
+
+const providerHelp = `orbit provider — list and configure the providers sessions and tasks get their credentials from
 
 Usage:
   orbit provider list [--json]
@@ -36,10 +55,19 @@ var providerActionHelp = map[string]string{
 Usage:
   orbit provider list [--json]
 
-Reports every slug accepted by --provider on 'orbit session create', 'orbit task create'
-and 'orbit task update': the built-in engines (builtin true), plus the providers configured
-on the account, each with the runtime it borrows and the models it offers. A slug that is
-not on this list is refused with "provider not available".
+A provider is where a session's credential comes from; the engine is the CLI that runs it
+(--engine: claude for Claude Code, codex for Codex, kimi for Kimi Code, antigravity for
+Antigravity CLI, opencode for OpenCode, dsh for DeepSeek Harness). This reports every slug
+accepted by --provider on 'orbit session create', 'orbit task create', 'orbit task update'
+and 'orbit task batch-pin', each with "engines": the engines it can run, the one it runs on
+when no engine is named first.
+
+The built-in entries (builtin true) are each engine's own sign-in on the runner; opencode is
+OpenCode's own configuration, and dsh is DeepSeek Harness on the account's first enabled
+DeepSeek key. The rest are the account's API keys, each with the protocol its endpoint speaks
+("runtime") and the models it offers, and its account pools. One key can run on several
+engines: a DeepSeek key on Claude Code, OpenCode and DeepSeek Harness. A slug that is not on
+this list is refused with "provider not available".
 `,
 	"create": `orbit provider create — configure a provider on this account, e.g. a self-hosted endpoint
 
@@ -49,11 +77,15 @@ Usage:
 Options:
   --label TEXT        (required) Display name. The slug sessions and tasks name it by is derived
                       from it — read it back from this command's output.
-  --runtime NAME      The coding engine that drives it: claude (default; an endpoint serving the
-                      Anthropic Messages API, e.g. vLLM's /v1/messages), codex (the OpenAI
-                      Responses API) or kimi (Moonshot's API).
-  --base-url URL      (required) The endpoint as that engine will call it. It is resolved on the
-                      machine the session runs on: http://127.0.0.1:8000 is that runner's own port.
+  --runtime PROTOCOL  The protocol the endpoint speaks (the flag keeps its old name): claude
+                      (default; the Anthropic Messages API, e.g. vLLM's /v1/messages), codex (the
+                      OpenAI Responses API), kimi (Moonshot's API) or antigravity (the Gemini API).
+                      It decides which engines can run the key, not one engine: the protocol's
+                      own CLI and OpenCode, DeepSeek Harness too for a DeepSeek key, and only
+                      Claude Code for a Claude subscription token.
+  --base-url URL      (required) The endpoint as an engine running on the key will call it. It is
+                      resolved on the machine the session runs on: http://127.0.0.1:8000 is that
+                      runner's own port.
   --api-key KEY       The key the endpoint expects. An endpoint that checks none still needs a
                       non-empty placeholder.
   --api-key-file -    Read the key from stdin instead, keeping it out of argv and shell history.
@@ -61,7 +93,7 @@ Options:
                         [{"value":"<model id>","label":"<name>","contextWindow":<tokens>,
                           "reasoningLevels":["low","medium","xhigh"]}]
                       contextWindow reaches Claude Code as the model's real window, which it
-                      otherwise assumes is 200k. reasoningLevels (claude runtime only) lists the
+                      otherwise assumes is 200k. reasoningLevels (Claude Code only) lists the
                       efforts the model accepts, of low, medium, high, xhigh and max: every
                       session's effort is moved onto the nearest of them (no effort counts as
                       high, the level Claude Code sends by default), and [] means the model takes
@@ -80,7 +112,9 @@ Usage:
 
 Options:
   --label TEXT
-  --runtime NAME      claude, codex or kimi
+  --runtime PROTOCOL  claude, codex, kimi or antigravity: the protocol the endpoint speaks, as on
+                      create. Refused while an open session or a task pin uses the key on an
+                      engine the new protocol cannot run
   --base-url URL
   --api-key KEY       Replace the stored key; omit to keep it.
   --api-key-file -    Read the replacement key from stdin.
@@ -98,15 +132,17 @@ Usage:
   orbit provider delete SLUG [--json]
 
 SLUG is the one 'orbit provider list' shows. New sessions and tasks can no longer name it, and
-one already pinned to it runs on the built-in claude engine — the runner's own sign-in — the
-next time it starts. Inside a session this is put on a confirmation card first.
+nothing already on it moves to another engine or to the runner's own sign-in: its sessions keep
+their engine and wait, as on a disabled provider, until they are switched to another provider
+that engine runs, and a task pinned to it cannot start again until it is re-pinned. Inside a
+session this is put on a confirmation card first.
 `,
 }
 
 var providerCLICapabilities = []cliCapabilitySpec{
 	{Tool: "provider_list", Argv: []string{"orbit", "provider", "list"}, Usage: "orbit provider list [--json]", Arguments: []string{"--json"}},
-	{Tool: "provider_create", Argv: []string{"orbit", "provider", "create"}, Usage: "orbit provider create --label LABEL --base-url URL (--api-key KEY | --api-key-file -) --models JSON [options]", Arguments: []string{"--label <text> (required)", "--runtime <claude|codex|kimi>", "--base-url <url> (required; resolved on the runner the session runs on)", "--api-key <key> | --api-key-file - (required)", "--models <json array> (required; [{value,label,contextWindow?,reasoningLevels?}])", "--default-model <model id>", "--json"}, Mutates: true},
-	{Tool: "provider_update", Argv: []string{"orbit", "provider", "update"}, Usage: "orbit provider update SLUG [options]", Arguments: []string{"[slug] (required)", "--label <text>", "--runtime <claude|codex|kimi>", "--base-url <url>", "--api-key <key> | --api-key-file -", "--models <json array> (replaces the list)", "--default-model <model id>", "--json"}, Mutates: true},
+	{Tool: "provider_create", Argv: []string{"orbit", "provider", "create"}, Usage: "orbit provider create --label LABEL --base-url URL (--api-key KEY | --api-key-file -) --models JSON [options]", Arguments: []string{"--label <text> (required)", "--runtime <claude|codex|kimi|antigravity> (the protocol the endpoint speaks: Anthropic Messages, OpenAI Responses, Moonshot or Gemini; it decides which engines can run the key)", "--base-url <url> (required; resolved on the runner the session runs on)", "--api-key <key> | --api-key-file - (required)", "--models <json array> (required; [{value,label,contextWindow?,reasoningLevels?}])", "--default-model <model id>", "--json"}, Mutates: true},
+	{Tool: "provider_update", Argv: []string{"orbit", "provider", "update"}, Usage: "orbit provider update SLUG [options]", Arguments: []string{"[slug] (required)", "--label <text>", "--runtime <claude|codex|kimi|antigravity> (the protocol the endpoint speaks)", "--base-url <url>", "--api-key <key> | --api-key-file -", "--models <json array> (replaces the list)", "--default-model <model id>", "--json"}, Mutates: true},
 	{Tool: "provider_delete", Argv: []string{"orbit", "provider", "delete"}, Usage: "orbit provider delete SLUG [--json]", Arguments: []string{"[slug] (required)", "--json"}, Mutates: true},
 }
 
@@ -185,7 +221,7 @@ type providerCLIWriteFlags struct {
 func registerProviderWriteFlags(fs *flag.FlagSet) *providerCLIWriteFlags {
 	return &providerCLIWriteFlags{
 		label:        fs.String("label", "", "display name; the slug is derived from it"),
-		runtime:      fs.String("runtime", "", "claude, codex or kimi"),
+		runtime:      fs.String("runtime", "", "the protocol the endpoint speaks: claude, codex, kimi or antigravity"),
 		baseURL:      fs.String("base-url", "", "the endpoint, resolved on the runner the session runs on"),
 		apiKey:       fs.String("api-key", "", "the key the endpoint expects"),
 		apiKeyFile:   fs.String("api-key-file", "", "read the key from stdin (-)"),

@@ -189,20 +189,23 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 
 ## main 漂移参考层
 
-**位置**：[reference/registry.json](reference/registry.json) 和 `reference/screenshots/{project}/{name}.png`，共 164 张。
+**位置**：[reference/registry.json](reference/registry.json) 和 `reference/screenshots/{project}/{name}.png`，共 206 张。
 
 | 组 | 截图 | 张数 | mainCommits | 生成树（generatedFrom） |
 | --- | --- | ---: | --- | --- |
-| 会话列表行 | session-idle、session-streaming、session-composer-focus、session-attachment-menu、session-attachment-staged、notification-error、breakpoint-961-session（4 个桌面项目） | 28 | `918034e7…`、`f5bdd7fd…` | `f5bdd7fd3`（运行 full2-f5bdd7fd3） |
-| 项目页 | project-overview、project-graph（8 项目），project-graph-fullscreen、breakpoint-639/641-graph（桌面） | 28 | `93d3ec58…` | `93d3ec580`（full2-93d3ec580） |
-| 任务面板与设置：任务面板 | task-detail、task-action-hover/focus/menu、task-share-dialog（8 项目），breakpoint-599/601-dialog（桌面） | 48 | `4088d37e…` | `4088d37e6`（full2-4088d37e6） |
-| 任务面板与设置：设置页（第 5 批按第 6 条追加 A11） | settings、settings-saved（8 项目）。WebKit 的 settings 4 张和桌面 settings-saved 2 张另带 A6 `d233a6cd0`：第 2 批记录过它让这 6 张的滚动条变化，低于阈值，当时没有登记；新参考图在含它的树上生成，所以写进这 6 条 | 16 | `4088d37e…`、`def13409…`；WebKit 那 6 张为 `4088d37e…`、`d233a6cd…`、`def13409…` | `def134095`（full-fix-def134095）；第 1 批为 `4088d37e6`（full2-4088d37e6） |
-| Wiki 961px 暗色 | breakpoint-961-wiki（chromium-dark-desktop）。第 2 批、第 5 批按第 6 条追加 main 提交并替换参考图，旧图在 git 历史里 | 1 | `e64d0c72…`、`6c4e0ac0…`、`2f9cc095…`、`a884fda3…`、`2ba6765d…` | `2ba6765d9`（full-fix-2ba6765d9）；第 2 批为 `a884fda36`（full-maint-a884fda36），第 1 批为 `e64d0c72a`（m5-e64d0c72a） |
-| 资料页（第 2 批，A6） | profile（8 项目），profile-validation（WebKit 桌面 2 个项目） | 10 | `d233a6cd…` | `d233a6cd0`（full-maint-d233a6cd0） |
-| 资料页，第 7 条例外（第 2 批，A6） | profile-validation（Chromium 4 个项目，WebKit 手机 2 个项目） | 6 | `d233a6cd…` | `d233a6cd0` 加 B1 修复 `3ec9cf83d`，即 `dcb5fd1bd`（full-maint-xfix-d233a6cd0），见 `migrationFix` |
+| 会话列表行（第 7 批按第 6 条追加 A12、A13、A14） | session-idle、session-streaming、session-composer-focus、session-attachment-menu、session-attachment-staged、notification-error、breakpoint-961-session（4 个桌面项目）。第 7 批更新其中 26 张；WebKit 桌面的 notification-error 2 张不更新，由已接受层承接（已接受层第 6 条第二种情况） | 28 | `918034e7…`、`f5bdd7fd…`；第 7 批的 26 张再加 `33e0e2e0…`、`cbe6a663…`、`3960c19c…`、`9d3751ec…` | 第 7 批的 26 张为 `9d3751ec2`（full-9d3751ec2）；其余 2 张为 `f5bdd7fd3`（运行 full2-f5bdd7fd3） |
+| 项目页（第 7 批按第 6 条追加 A12） | project-overview、project-graph（8 项目），project-graph-fullscreen、breakpoint-639/641-graph（桌面）。第 7 批更新桌面的 project-overview、project-graph、project-graph-fullscreen（12 张） | 28 | `93d3ec58…`；第 7 批的 12 张再加 `33e0e2e0…`、`cbe6a663…` | 第 7 批的 12 张为 `cbe6a6635`（full-cbe6a6635）；其余为 `93d3ec580`（full2-93d3ec580） |
+| 任务面板与设置：任务面板（第 7 批按第 6 条追加 A12） | task-detail、task-action-hover/focus/menu、task-share-dialog（8 项目），breakpoint-599/601-dialog（桌面）。第 7 批更新桌面的 task-detail、task-action-hover、task-action-focus（12 张）；桌面的 task-action-menu、task-share-dialog（8 张）不更新，由已接受层承接 | 48 | `4088d37e…`；第 7 批的 12 张再加 `33e0e2e0…`、`cbe6a663…` | 第 7 批的 12 张为 `cbe6a6635`（full-cbe6a6635）；其余为 `4088d37e6`（full2-4088d37e6） |
+| 任务面板与设置：设置页（第 5 批按第 6 条追加 A11，第 7 批追加 A12） | settings、settings-saved（8 项目）。WebKit 的 settings 4 张和桌面 settings-saved 2 张另带 A6 `d233a6cd0`：第 2 批记录过它让这 6 张的滚动条变化，低于阈值，当时没有登记；新参考图在含它的树上生成，所以写进这 6 条。第 7 批更新桌面的 settings 4 张和 Chromium 桌面的 settings-saved 2 张；WebKit 桌面的 settings-saved 2 张不更新，由已接受层承接 | 16 | `4088d37e…`、`def13409…`；WebKit 那 6 张为 `4088d37e…`、`d233a6cd…`、`def13409…`；第 7 批的 6 张再加 `33e0e2e0…`、`cbe6a663…` | 第 7 批的 6 张为 `cbe6a6635`（full-cbe6a6635）；其余为 `def134095`（full-fix-def134095）；第 1 批为 `4088d37e6`（full2-4088d37e6） |
+| Wiki 961px 暗色 | breakpoint-961-wiki（chromium-dark-desktop）。第 2 批、第 5 批、第 7 批按第 6 条追加 main 提交并替换参考图，旧图在 git 历史里 | 1 | `e64d0c72…`、`6c4e0ac0…`、`2f9cc095…`、`a884fda3…`、`2ba6765d…`、`33e0e2e0…`、`cbe6a663…` | `cbe6a6635`（full-cbe6a6635）；第 5 批为 `2ba6765d9`（full-fix-2ba6765d9），第 2 批为 `a884fda36`（full-maint-a884fda36），第 1 批为 `e64d0c72a`（m5-e64d0c72a） |
+| 资料页（第 2 批，A6；第 7 批追加 A12） | profile（8 项目），profile-validation（WebKit 桌面 2 个项目）。第 7 批更新桌面的 profile 4 张；WebKit 桌面的 profile-validation 2 张不更新，由已接受层承接 | 10 | `d233a6cd…`；第 7 批的 4 张再加 `33e0e2e0…`、`cbe6a663…` | 第 7 批的 4 张为 `cbe6a6635`（full-cbe6a6635）；其余为 `d233a6cd0`（full-maint-d233a6cd0） |
+| 资料页，第 7 条例外（第 2 批，A6） | profile-validation（Chromium 手机 2 个项目，WebKit 手机 2 个项目） | 4 | `d233a6cd…` | `d233a6cd0` 加 B1 修复 `3ec9cf83d`，即 `dcb5fd1bd`（full-maint-xfix-d233a6cd0），见 `migrationFix` |
+| 资料页，Chromium 桌面（第 2 批 A6，第 7 批追加 A12） | profile-validation（Chromium 桌面 2 个项目）。第 2 批按第 7 条例外生成；第 7 批的生成树 `cbe6a6635` 已含 B1 修复 `3ec9cf83d`，例外不再适用，直接在 X 的树上生成，条目不再带 `migrationFix`（旧条目在 git 历史里） | 2 | `d233a6cd…`、`33e0e2e0…`、`cbe6a663…` | `cbe6a6635`（full-cbe6a6635）；第 2 批为 `dcb5fd1bd`（full-maint-xfix-d233a6cd0） |
 | Wiki 首页窄屏与 959px（第 2 批 A7、A8，第 5 批 A10） | wiki-home、wiki-new-entry（手机 4 个项目），breakpoint-959-wiki（桌面 4 个项目） | 12 | `6c4e0ac0…`、`2f9cc095…`、`2ba6765d…` | `2ba6765d9`（full-fix-2ba6765d9）；第 2 批为 `2f9cc095f`（full-maint-2f9cc095f） |
 | Wiki 目录抽屉（第 2 批 A8，第 5 批 A10） | wiki-contents（手机 4 个项目） | 4 | `2f9cc095…`、`2ba6765d…` | `2ba6765d9`（full-fix-2ba6765d9）；第 2 批为 `2f9cc095f`（full-maint-2f9cc095f） |
-| Wiki 首页桌面与 961px（第 2 批 A7、A8、A9，第 5 批 A10） | wiki-home、wiki-new-entry（桌面 4 个项目），breakpoint-961-wiki（桌面 3 个项目，chromium-dark-desktop 见上面「Wiki 961px 暗色」） | 11 | `6c4e0ac0…`、`2f9cc095…`、`a884fda3…`、`2ba6765d…` | `2ba6765d9`（full-fix-2ba6765d9）；第 2 批为 `a884fda36`（full-maint-a884fda36） |
+| Wiki 首页桌面与 961px（第 2 批 A7、A8、A9，第 5 批 A10，第 7 批 A12） | wiki-home、wiki-new-entry（桌面 4 个项目），breakpoint-961-wiki（桌面 3 个项目，chromium-dark-desktop 见上面「Wiki 961px 暗色」） | 11 | `6c4e0ac0…`、`2f9cc095…`、`a884fda3…`、`2ba6765d…`、`33e0e2e0…`、`cbe6a663…` | `cbe6a6635`（full-cbe6a6635）；第 5 批为 `2ba6765d9`（full-fix-2ba6765d9），第 2 批为 `a884fda36`（full-maint-a884fda36） |
+| 项目列表（第 7 批 A12） | projects-list、projects-search-empty、projects-loading、projects-error（桌面 4 个项目） | 16 | `33e0e2e0…`、`cbe6a663…` | `cbe6a6635`（full-cbe6a6635） |
+| 会话页（第 7 批 A13、A14） | session-idle、session-streaming、session-composer-focus、session-attachment-menu、session-attachment-staged（手机 4 个项目），notification-error（Chromium 手机 2 个项目），breakpoint-959-session（桌面 4 个项目） | 26 | `3960c19c…`、`9d3751ec…` | `9d3751ec2`（full-9d3751ec2） |
 
 **每条登记的字段**：
 
@@ -226,12 +229,15 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 - 第 2 批的生成树都在 P2.3 晋升之后，含 B1。B1 只改变设置页、资料页的成功提示胶囊。所以 profile-validation 中受 B1 影响的 6 张按第 7 条，在 X 加 B1 修复的树上生成，其余截图在 X 的树上生成，不受 B1 影响（见 [p0-drift-2](../p0-drift-2/README.md)）。
 - 第 5 批的生成树 `2ba6765d9` 含 B1 修复和本项目到当时为止晋升进 main 的迁移代码。它的 first-parent 前驱 `7cc52e0cf` 对照当前期望，Wiki 28 张逐字节相同，所以这些迁移代码没有改变这些截图。`2ba6765d9` 让 Wiki 页头读 `GET /api/wiki/spaces/<id>/share`，参考图用补了这条固定响应（`48ebd321c`；生成时的运行器取自 rebase 前的 `82247962c`，`fixtures.mjs` 逐字节相同）的 P0 测试生成，按「场景与固定数据维护」第 5 条，它与 P0 原测试只差这一条响应；同一棵树上两者的截图除 Chromium 噪声外相同（见 [p0-drift-5](../p0-drift-5/README.md)）。
 - 第 5 批设置页的生成树 `def134095` 含 B1 修复和已晋升的 P4.1 设置页迁移。P4.1 的同提交对照里，设置页 16 张有 14 张逐字节相同、2 张是噪声（[p4.1-accepted](../p4.1-accepted/README.md)）。`def134095` 的 first-parent 前驱 `ebf5e6441` 对照当前期望全部通过比较器，只差 A6 的滚动条（WebKit 6 张，低于阈值）和 Chromium 噪声。所以迁移代码没有改变这些截图。新参考图与前一版相比，只多了 `def134095` 新加的 Suggested replies 一行（其下各行随之下移）和 A6 的滚动条，其余只有 Chromium 噪声。
+- 第 7 批的生成树是 `cbe6a6635`（A12：Infrastructure 侧栏）和 `9d3751ec2`（A12、A13、A14：会话页），都含 B1 修复和到当时为止晋升进 main 的迁移代码。它们的 first-parent 前驱 `fce12bc2a`、`51c5c8eeb` 对照登记前的期望都通过比较器，只差已记录的低于阈值差异和 Chromium 噪声；`fce12bc2a` 到 `cbe6a6635` 只改侧栏一列，`d976df772` 到 `3960c19c2` 只改会话页消息列，`51c5c8eeb` 到 `9d3751ec2` 只有输入框上方分隔线与气泡文字的低于阈值变化。所以这些迁移代码没有改变登记的截图。有三张截图例外：深色桌面的 task-action-menu 2 张带着 P3.2 已判定接受、但低于阈值没有登记的菜单差异，WebKit 明色手机的 notification-error 带着 WebKit 滚动锁一批同样处理的滚动条差异；含 X 的 main 树都有这些迁移像素，所以它们不在本层更新，而是按已接受层第 6 条第二种情况在已接受层叠加登记（见第 7 批）。
 
-**未登记**：其余 88 张仍然对照 P0.2。
+**未登记**：其余 46 张不在本层：44 张对照 P0.2 原图；WebKit 手机的 notification-error 2 张由已接受层替换 P0.2 原图（第 6 批、第 7 批）。
 
 **第 2 批**：归因、同环境证明和登记经过见 [p0-drift-2](../p0-drift-2/README.md)。
 
 **第 5 批**：归因、同环境证明和登记经过见 [p0-drift-5](../p0-drift-5/README.md)。
+
+**第 7 批**：归因、同环境证明和登记经过见 [p0-drift-7](../p0-drift-7/README.md)。
 
 ## 「已接受的迁移差异」层
 
@@ -271,12 +277,18 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 | P3.2（[34Za39ACSBoCkYKc80Md8](orbit-task:34Za39ACSBoCkYKc80Md8)）第 2 版证据，`evidenceDigest` `302ca1f5…09bc`，CONFIRM，文档 [p3.2/README.md](../p3.2/README.md) | task-share-dialog（8 个项目）；task-action-menu（4 个浅色项目） | 12 | 第 1 批 A4 的 main 漂移参考（`4088d37e6`） | before `fffcdb532`（P3.2 落地前的项目 tip），after `2925958ae` | [p3.2-accepted](../p3.2-accepted/README.md) |
 | P4.1（[34Za39Do3N6tkmIMP0GBP](orbit-task:34Za39Do3N6tkmIMP0GBP)）第 1 版证据，`evidenceDigest` `9477611a…7d57`，CONFIRM，文档 [p4.1/README.md](../p4.1/README.md) | profile-validation（webkit-light-phone、webkit-dark-phone） | 2 | 第 2 批 A6 的 main 漂移参考（`d233a6cd0`，第 7 条例外，生成于 `dcb5fd1bd`） | before `a84bc61e7`（P4.1 的起点），after `3aa26fb97`（P4.1 落地后的项目 tip） | [p4.1-accepted](../p4.1-accepted/README.md) |
 | WebKit 滚动锁（[34cBi0yt6bFcSmbJFgDPj](orbit-task:34cBi0yt6bFcSmbJFgDPj)）第 1 版证据，`evidenceDigest` `fdb19816…8e7c`，CONFIRM，文档 [webkit-scroll-lock/README.md](../webkit-scroll-lock/README.md) | settings-saved、profile-validation、notification-error（webkit-light-desktop、webkit-dark-desktop、webkit-dark-phone） | 9 | 7 张是 main 漂移参考：settings-saved 的设置页组（生成于 `def134095`），桌面 profile-validation 的第 2 批 A6（`d233a6cd0`），桌面 notification-error 的会话组（生成于 `f5bdd7fd3`）。webkit-dark-phone 的 notification-error 是 P0.2 原图。webkit-dark-phone 的 profile-validation 原是 P4.1 的接受条目，旧条目移入 `previous`，`replaces` 仍是第 2 批 A6 的 main 漂移参考 | before `15b7b5609`（该批的起点），after `b2568f28d`（该批落地项目线的合并） | [webkit-scroll-lock-accepted](../webkit-scroll-lock-accepted/README.md) |
+| 第 7 批（[34cswWfvNasFTq8kDM0Q4](orbit-task:34cswWfvNasFTq8kDM0Q4)），第 6 条第二种情况，引用原判定：P3.2 第 2 版、WebKit 滚动锁第 1 版，旧条目移入 `previous` | A12（main `cbe6a6635` 合入的 `33e0e2e09`，Infrastructure 侧栏）：task-share-dialog（桌面 4 个项目）、task-action-menu（浅色桌面 2 个），settings-saved、profile-validation、notification-error（WebKit 桌面 2 个项目各 3 张） | 12 | 不变：各自原来替换的 main 漂移参考 | before `fce12bc2a`（X 的 first-parent 前驱），after `cbe6a6635`（X） | [p0-drift-7](../p0-drift-7/README.md) |
+| 第 7 批，首次登记：P3.2 判定已接受、但低于阈值没有登记的差异上叠加 main 改动 | A12：task-action-menu（深色桌面 2 个项目，P3.2 第 2 版判定） | 2 | 第 1 批 A4 的 main 漂移参考（`4088d37e6`） | before `fce12bc2a`，after `cbe6a6635` | [p0-drift-7](../p0-drift-7/README.md) |
+| 第 7 批，第 6 条第二种情况，引用 WebKit 滚动锁第 1 版判定，旧条目移入 `previous` | A13（main `3960c19c2`，回合脚注）：notification-error（WebKit 桌面 2 个项目，叠在本批 A12 那一条上；webkit-dark-phone） | 3 | 不变 | before `d976df772`（X 的 first-parent 前驱），after `3960c19c2`（X） | [p0-drift-7](../p0-drift-7/README.md) |
+| 第 7 批，首次登记：WebKit 滚动锁判定已接受、但低于阈值没有登记的差异上叠加 main 改动 | A13：notification-error（webkit-light-phone，WebKit 滚动锁第 1 版判定） | 1 | P0.2 原图 | before `d976df772`，after `3960c19c2` | [p0-drift-7](../p0-drift-7/README.md) |
 
 P3.2 另有 11 张截图的变化低于 P0 比较器阈值（深色 task-action-menu 4 张，webkit-dark-phone 的 task-detail、task-action-hover、task-action-focus，WebKit 桌面的 breakpoint-599/601-dialog 4 张）。登记工具不收这类截图，它们仍对照 main 漂移参考并通过，逐张见 p3.2-accepted。
 
 P4.1 的同提交对照里，其余 250 张截图 before → after 232 张逐字节相同、18 张是 Chromium 噪声，都通过 P0 比较器，逐张见 p4.1-accepted。
 
 WebKit 滚动锁另有 3 张截图（webkit-light-phone 的 settings-saved、profile-validation、notification-error）只差文档滚动条那 8px 一列与 (0,0) 一点，变化低于 P0 比较器阈值，登记工具不收，仍对照当前期望通过；其中 profile-validation 仍是 P4.1 的接受条目。同提交对照里，其余 240 张截图 before → after 224 张逐字节相同、16 张是 Chromium 噪声，都通过 P0 比较器，逐张见 webkit-scroll-lock-accepted。
+
+第 7 批：A14（main `9d3751ec2`，输入框上方的分隔线改为渐隐）对已接受层 4 张 notification-error（WebKit 桌面 2 张、WebKit 手机 2 张）的变化低于 P0 比较器阈值（396–1206 像素，单通道差 ≤20），登记工具不收，它们仍对照 A13 那一条通过；main 漂移层里同一改动随参考图在 `9d3751ec2` 上生成而登记。P4.3b 让 WebKit 桌面的 project-graph-fullscreen 差 9、17 个像素（单通道差 1），同样低于阈值，没有登记，见 p0-drift-7。
 
 ## 维护规则
 
@@ -377,6 +389,7 @@ main 给 P0 页面新增了请求，固定数据没有对应的响应，用例�
 | --- | --- | --- | --- | --- |
 | `5d7801e47` | `GET /api/auth/methods`：资料页的 `SignInMethodsCard` 经 `lib/googleLink.ts` 的 `authMethodsQuery` 读取 | `{ password: true, google: false, googleSignup: false }` | `558a8ba1f` feat(auth): link and unlink Google from the profile page, admin unlink, signInMethods, Sign-in settings (S4)。经 Google 登录项目的合并 `98cdd37d0`、main 的合并 `eee179f5d` 和项目线吸收 main 的 `09cc5760d` 进入项目线 | 没有变化，不需要登记。补固定响应前后，tip 的 252 张截图 248 张逐字节相同，4 张是 Chromium 噪声；资料页 profile 8 张逐字节相同，profile-validation 6 张相同、2 张是 Chromium 噪声（9 和 90 像素，差 1）。吸收 main 的 `09cc5760d` 前后同样没有截图变化。见 [p0-drift-3](../p0-drift-3/README.md) |
 | `48ebd321c` | `GET /api/wiki/spaces/<id>/share`：每个 Wiki 页面页头的 `WikiShareButton`（`components/WikiShareButton.tsx`）经 `api.ts` 的 `getShareLink('WIKI', …)` 读取 | `{ link: null, counts: { documents: 0, footnotes: 0 } }` | `2ba6765d9` docs(mocks): add wiki share mock for share-links。提交标题只提设计稿，提交里同时有 Wiki 分享的服务端和客户端实现，Web 在 `WikiPage.tsx` 的页头挂上 `WikiShareButton`。它是 main 的 first-parent 提交，是项目线吸收 main 的 `1d3cd4c70` 的第二父 | 补固定响应本身不改变截图。同一棵树上，原测试与补了固定响应的测试相比，0 张变化，WebKit 126 张全部逐字节相同：`2ba6765d9` 上 240 张逐字节相同、12 张 Chromium 噪声；项目 tip `1d3cd4c70` 上 235 张、17 张；新基础 `4d77d69b7` 上 246 张、6 张（≤15 像素，单通道差 ≤2）。Wiki 截图的变化来自 `2ba6765d9` 在页头加的 Share 按钮，按 main 漂移参考登记为 A10（28 张），见 [p0-drift-5](../p0-drift-5/README.md) |
+| `f9fd37def` | `GET /api/auth/capabilities`：会话页的 `useManagedRunner`（`lib/managedRunner.ts` 的 `serverCapabilitiesQuery`）读取 | `{ managedRunners: { enabled: false, contractVersion: 1 } }` | `94025579b` feat(managed-runner): shared status display, server-derived state fixture and web status UI。它在 C7 的会话分支上，经 `a0bdb0051`、`835353981`、C7 项目线的 `caf813f5c` 和 main 的合并 `59034ad63`（`87351bf9a` 之后的第一个 first-parent 提交）进入 main；第 7 批 rebase 到含它的 origin/main `896226a23` | 没有变化，不需要登记：同一棵树 `896226a23` 上，原测试与补了固定响应的测试相比截图 0 张变化（WebKit 126 张逐字节相同，Chromium 16 张噪声）；新基础 `17980cb7c` 到 `896226a23` 也是 0 张变化。补之前会话用例 8 个、断点巡检 4 个停在用例结束时的固定数据校验，`unhandled` 只有这一条。见 [p0-drift-7](../p0-drift-7/README.md) |
 
 `5d7801e47` 的取值依据：
 - **服务端的默认回答**：`GET /auth/methods` 由 `SignInProvidersService.methods()`（`src/apiserver/src/auth/sign-in-providers.service.ts`）回答。没有 `sign_in_provider` 记录，或记录没开启、缺 client ID 或密钥时，回答就是 `{ password: true, google: false, googleSignup: false }`。Google 登录要管理员在 Admin → Sign-in 里打开才有（`7bb096cad` feat(auth): store Google sign-in settings, off until an administrator turns it on）。
@@ -394,6 +407,11 @@ main 给 P0 页面新增了请求，固定数据没有对应的响应，用例�
   - `WikiShareButton` 在没有链接、或链接已结束时画 Share 按钮（手机只有图标），有打开的链接时画「Shared · Live」胶囊。`counts` 只在 Share 对话框里显示，P0 场景不打开它。
   - 真实产品里，没分享过的空间页头显示 Share，P0 页面也是。如果取一个打开的链接，页头就成了 Shared · Live，这不是 P0 账号的空间该有的状态。
   - 补固定响应之前，请求得到 501，查询没有数据，按钮同样是 Share。所以补固定响应不改变截图；页头多出的 Share 按钮是 `2ba6765d9` 本身的改动，按 main 漂移参考第 4 条归因、登记（第 5 批的 A10）。
+
+`f9fd37def` 的取值依据：
+- **服务端的默认回答**：`GET /auth/capabilities` 由 `AuthController.capabilities()`（`src/apiserver/src/auth/auth.controller.ts`）回答 `{ managedRunners: { enabled, contractVersion: MANAGED_RUNNER_CONTRACT_VERSION } }`。`enabled` 是进程的开关 `ORBIT_MANAGED_RUNNERS_ENABLED`（`managed-runner-gate.ts`）：缺省、空或 `false` 都是关，只有 `true` 才开；模块图里没有这个开关时同样按关（`MANAGED_RUNNERS_OFF`）。合同版本 `MANAGED_RUNNER_CONTRACT_VERSION` 是 1（`src/shared/src/managedRunner.ts`）。
+- **与已有固定数据一致**：P0 账号唯一的 runner（`/api/runners` 的 `RUNNER`）是普通注册的机器，固定数据里没有 `/api/managed-runner`。开关关着时客户端不读托管状态，也就不需要那条路由。
+- **页面因此显示什么**：`useManagedRunner` 只在 `managedRunnersOffered(capabilities)` 为真（开关开、合同版本是客户端认识的）时读 `/managed-runner` 并画托管 runner 的状态。取 `enabled: false`，会话页与 `94025579b` 之前相同。补固定响应之前请求得到 501、查询出错，同样不画托管界面，所以补固定响应不改变截图。反过来取 `enabled: true`，页面会再读 `/managed-runner`（固定数据没有，仍然失败），并在会话页画托管 runner 的状态，这不是 P0 账号所在服务端的默认状态。
 
 ### 已接受的迁移差异（`accepted/`）
 

@@ -195,7 +195,11 @@ export interface PromotionRetryFacts {
   /** Where the candidate is (`project_promotion.state`). */
   promotionState: string;
   /** The candidate's newest job — its check, or its landing — or null when it never had one. */
-  newestJob: { id: string; kind: string; generation: number; state: string; checks: unknown } | null;
+  newestJob: {
+    id: string; kind: string; generation: number; state: string; checks: unknown;
+    /** RUNNING, and its runner has said nothing past the job's limit (§1.6 `inFlightJobs`). */
+    timedOut?: boolean;
+  } | null;
   /** The candidate's OPEN `INTEGRATION_*` items. */
   openItems: ReadonlyArray<{ id: string; kind: string; assignee: string; assigneeReason: string }>;
 }
@@ -213,17 +217,35 @@ export interface PromotionRetryFacts {
  * owner's card, or the Automatic setting's own rule over a clean result (M-T11). So this door can
  * bring a candidate back to the question and never answers it; a candidate that already passed and
  * is waiting on the owner is refused here, because the only thing left to do with it is theirs.
+ *
+ * A TIMED-OUT CHECK (§2.2 J-T9, one level up). A newest check that is RUNNING but silent past its
+ * limit is judged by the same read the job list draws (`readInFlightJobs`), and a retry of it first
+ * ends it as `ERROR · RUNNER_LOST` — a compare-and-set on the heartbeat it was judged from — then
+ * requeues the check like any other rerun, with the candidate readmitted from CHECKING as well as
+ * BLOCKED: a CHECKING candidate whose check died is asking, it is only its runner that will never
+ * answer. A merge already confirmed is never touched: a timed-out newest job on a CONFIRMED or
+ * RECHECKING candidate is its LAND_PROMOTION, and that one is the abandon door's (J-T10), not this
+ * door's. The account owner may press a timed-out check without an item of theirs, exactly as for a
+ * timed-out landing: nothing has opened one yet.
  */
 export function decidePromotionRetry(facts: PromotionRetryFacts): IntegrationRetryDecision {
   const newest = facts.newestJob;
-  if (newest && (newest.state === 'QUEUED' || newest.state === 'RUNNING')) {
+  // A RUNNING check whose runner stopped reporting past its limit will not end by itself — the same
+  // J-T9 hole a task's landing had (2026-10-09, promotion EgpMcrpirt5G2yVGJimfS: the check's result
+  // was lost to a 500, the runner gave up, and the job held `#check:<project>` so no later check of
+  // the project could ever be claimed). The retry ends it as the ERROR it is and requeues the check.
+  const timedOut = newest !== null && newest.state === 'RUNNING' && newest.timedOut === true;
+  if (!timedOut && newest && (newest.state === 'QUEUED' || newest.state === 'RUNNING')) {
     return refuse(409, INTEGRATION_RETRY_IN_FLIGHT,
       `this candidate's ${newest.kind} (generation ${newest.generation}) is already ${newest.state}: `
       + 'nothing new is queued beside it. Wait for its result — if it fails, its own item reaches you.',
       { newestJob: { jobId: newest.id, kind: newest.kind, generation: newest.generation, state: newest.state } });
   }
-  if (facts.promotionState !== 'BLOCKED') {
-    return refuse(409, INTEGRATION_RETRY_NOT_APPLICABLE, candidateNotBlocked(facts.promotionState),
+  // The timed-out retry re-runs the CHECK, so it reaches only a candidate that is asking: BLOCKED as
+  // always, or CHECKING while its check is the job that died — not one whose merge is in flight.
+  if (facts.promotionState !== 'BLOCKED' && !(timedOut && facts.promotionState === 'CHECKING')) {
+    return refuse(409, INTEGRATION_RETRY_NOT_APPLICABLE,
+      timedOut ? candidateTimedOutNotAsking(facts.promotionState) : candidateNotBlocked(facts.promotionState),
       { promotionState: facts.promotionState });
   }
   if (newest === null) {
@@ -231,7 +253,7 @@ export function decidePromotionRetry(facts: PromotionRetryFacts): IntegrationRet
       'this candidate has no check or landing on record, so there is no failure to run again.',
       { newestJob: null });
   }
-  const failureClass: LandingFailureClass | null = landingFailureClass(newest);
+  const failureClass: LandingFailureClass | null = timedOut ? 'ERROR' : landingFailureClass(newest);
   if (!isRetryableLandingFailure(failureClass)) {
     return refuse(409, INTEGRATION_RETRY_NOT_APPLICABLE, failureClass === 'CONFLICT'
       ? 'this candidate stopped on a CONFLICT with the upstream, and checking the same commits again '
@@ -245,12 +267,15 @@ export function decidePromotionRetry(facts: PromotionRetryFacts): IntegrationRet
   const requester = facts.requester ?? 'COORDINATOR';
   if (requester === 'OWNER') {
     const mine = facts.openItems.filter((item) => item.assignee === 'OWNER');
-    if (mine.length === 0) return ownerOnlyRefusal('blocked merge into main');
+    // A timed-out check has no item to be anybody's yet, and it is the owner's project: their press
+    // is the decision — the same exception J-T1b makes for a timed-out landing.
+    if (mine.length === 0 && !timedOut) return ownerOnlyRefusal('blocked merge into main');
     return {
       ok: true,
       retryOfJobId: newest.id,
       failureClass,
       handle: mine.map((item) => item.id),
+      ...(timedOut ? { endsTimedOutJob: true } : {}),
     };
   }
   const owned = ownerItemRefusal(facts.openItems, 'blocked merge into main');
@@ -262,7 +287,24 @@ export function decidePromotionRetry(facts: PromotionRetryFacts): IntegrationRet
     retryOfJobId: newest.id,
     failureClass,
     handle: mine.map((item) => item.id),
+    ...(timedOut ? { endsTimedOutJob: true } : {}),
   };
+}
+
+/** Why a candidate whose newest job is a timed-out RUNNING one still has nothing for this door. */
+function candidateTimedOutNotAsking(state: string): string {
+  switch (state) {
+    case 'CONFIRMED':
+    case 'RECHECKING':
+      // A timed-out newest job here is the LAND_PROMOTION: this door re-runs the CHECK, and it does
+      // not touch a merge the owner or the Automatic setting already confirmed.
+      return `this candidate's merge is in flight and its newest job is a RUNNING one whose runner has `
+        + 'stopped reporting past its limit — but that job is the merge itself, and this door re-runs '
+        + 'the candidate\'s CHECK, never a confirmed merge. The lost landing job is taken over by '
+        + 'another claim of its runner (J-T3) or ended by the abandon door (J-T10).';
+    default:
+      return candidateNotBlocked(state);
+  }
 }
 
 /** Why a candidate that is not BLOCKED has nothing for this door to do, and what answers it. */

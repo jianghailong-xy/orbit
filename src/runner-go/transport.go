@@ -656,10 +656,12 @@ func (t *Transport) integrationJobProgress(jobID string, b IntegrationJobProgres
 }
 
 // integrationJobResult reports what a claimed job came to. The answer says whether the control
-// plane took it; a 409 means this process's claim had already moved on and it must stop.
-func (t *Transport) integrationJobResult(jobID string, b IntegrationJobResultRequest) (*IntegrationJobResultResponse, error) {
+// plane took it; a 409 means this process's claim had already moved on and it must stop. It takes a
+// context because the report is retried until it is settled (integration_result_spool.go): a runner
+// that is stopping abandons the send it is in, and the copy that waits on disk is sent by the next one.
+func (t *Transport) integrationJobResult(ctx context.Context, jobID string, b IntegrationJobResultRequest) (*IntegrationJobResultResponse, error) {
 	var out IntegrationJobResultResponse
-	if err := t.do(nil, "POST", "/runner/integration-jobs/"+jobID+"/result", b, &out, 30*time.Second); err != nil {
+	if err := t.do(ctx, "POST", "/runner/integration-jobs/"+jobID+"/result", b, &out, 30*time.Second); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -970,6 +972,10 @@ func taskCreateHeaders(agentID, sessionID string) map[string]string {
 }
 
 type SessionMetaResponse struct {
+	// Engine is the engine the session runs on, the one its conversation belongs to. Provider carries
+	// the same engine for an older orbit resume, and is the only one a control plane older than
+	// engines sends (resumeMetaFromServer).
+	Engine           string  `json:"engine,omitempty"`
 	Provider         string  `json:"provider,omitempty"`
 	SessionUUID      string  `json:"sessionUuid"`
 	RuntimeSessionID string  `json:"runtimeSessionId,omitempty"`

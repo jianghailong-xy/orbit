@@ -2768,10 +2768,14 @@ export class RunnerApiController {
         runtimeSessionId: s.runtimeSessionId,
       });
       if (!runtime) continue;
-      const agg = await this.prisma.runEvent.aggregate({
-        where: { sessionId: s.id },
-        _max: { seq: true },
-      });
+      // Raw SQL, never `runEvent.aggregate`: Prisma compiles an aggregate to a MAX over an
+      // OFFSET subquery the planner cannot flatten, so it scans every event this session has
+      // instead of reading the one index tuple `max(seq)` does (cf. QueueService.buildSession).
+      // This runs once per open session on every reclaim, so the difference is the whole
+      // reclaim storm's disk traffic.
+      const [maxSeqRow] = await this.prisma.$queryRaw<Array<{ max: number }>>`
+        SELECT coalesce(max("seq"), 0) AS "max" FROM "run_event" WHERE "session_id" = ${s.id}::uuid
+      `;
       // The stored session model wins over Runtime/ModelProvider defaults, so a resumed process
       // keeps the model it was created with; cross-provider ids are still coerced safely.
       const workspaceCfg: AgentExecConfig = {
@@ -2848,7 +2852,7 @@ export class RunnerApiController {
         leaseOwner: s.inboxLeaseOwner ?? undefined,
         title: s.title,
         sessionUuid: runtime.sessionUuid,
-        maxSeq: agg._max.seq ?? 0,
+        maxSeq: Number(maxSeqRow?.max ?? 0),
         // cf. the claim path: non-null = import PENDING, and the runner performs the import step
         // inside this claim before the spawn (a runner restarted mid-import resumes it here).
         importSourceCwd: s.importSourceCwd ?? undefined,

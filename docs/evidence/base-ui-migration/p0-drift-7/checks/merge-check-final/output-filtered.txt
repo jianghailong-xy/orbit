@@ -1,0 +1,16 @@
+# tree /root/.orbit/worktrees/7b29ebf3-809f-53aa-806b-8c6b5048ea78 commit b767ba00205c2d86535dde81a0f0442327456e4b status: 1 changes
+# argv: npm run build -w @orbit/web && npm run test -w @orbit/web
+# started 2026-10-09T19:06:53Z
+> @orbit/web@0.1.0 build
+> tsc -b && vite build
+vite v8.3.1 building client environment for production...
+✓ 4575 modules transformed.
+(!) Some chunks are larger than 500 kB after minification. Consider:
+✓ built in 1.29s
+> @orbit/web@0.1.0 test
+> vitest run --maxWorkers=2
+ Test Files  380 passed (380)
+      Tests  4961 passed (4961)
+   Start at  03:06:58
+   Duration  306.17s (tests 47%, import 38%, environment 13%, transform 2%)
+# finished 2026-10-09T19:12:04Z exit 0

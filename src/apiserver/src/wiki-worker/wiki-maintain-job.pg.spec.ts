@@ -27,7 +27,14 @@
  *      { id, title }, and the section's material is found by the project's id (2026-10-09: 22P02, nothing written);
  *   8. a worker that stops while the documents step waits for a read: the job is handed back (design §5.4) — the
  *      run not settled, no REPO_OP_FAILED, no read asked again, nothing counted, and the health line still reads the
- *      run under way with no failure — and the next worker takes it over.
+ *      run under way with no failure — and the next worker takes it over;
+ *   9. the plan proposal (2026-10-09, run 28ea4f5c): a new design document's sections named as the proposal prompt
+ *      lists them, `##` and all, are found in the document as the runner finds them, and the proposal is stored;
+ *  10. the anchors' batch (2026-10-10): a page is `listEntriesMax` entries — the most one `anchors` repository
+ *      operation carries, four times what the default page sent — so 400 entries are two operations and not
+ *      eight, each inside `RepoOps.operationBytes`; and
+ *  11. a page of 201 entries: every entry keeps its own check across the page boundary and the report-sized
+ *      writes a page this size is recorded in, and the page's tail entry is written like the rest.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-maintain-job.pg.spec.ts
  *
@@ -36,8 +43,10 @@
  */
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo, Socket } from 'node:net';
+import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { after, afterEach, test } from 'node:test';
 
@@ -56,13 +65,14 @@ import { WikiHealth } from '../wiki/wiki-health';
 import { WikiPlans } from '../wiki/wiki-plan';
 import { WikiRefusalError, WikiService, type WikiPrincipal } from '../wiki/wiki.service';
 import { WikiRepoOps } from './wiki-repo-ops';
-import { WIKI_REPO_OP_CAPABILITY } from '@orbit/shared';
+import { WIKI_ANCHOR_RULES, WIKI_LIMITS, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OPS } from '@orbit/shared';
 import { WikiJobExecutor, WIKI_JOB_RUNNERS, type WikiJobRunner } from './wiki-job-executor';
 import { WIKI_JOB_HANDED_BACK } from './wiki-jobs';
 import { WikiModelRequestQueue } from './wiki-model-queue.service';
 import { WikiModelStatusProbe } from './wiki-model-status';
 import { readWikiSystemModel, type WikiSystemModelConfig } from './wiki-system-model';
 import { wikiMaintainJobRunner, type WikiMaintainJobDeps } from './wiki-maintain-job';
+import { wikiStoredText } from './wiki-stored-text';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const skip = !URL_;
@@ -236,7 +246,10 @@ interface Fixture {
  * One space of the spec's own, with a machine and a checkout behind it, the snapshot the run reads, a
  * settled session record a dossier line may cite, and the run row and job the trigger would have made.
  */
-async function fixture(h: Harness, over: { catchUp?: string | null; expect?: boolean; activeEntries?: number } = {}): Promise<Fixture> {
+async function fixture(
+  h: Harness,
+  over: { catchUp?: string | null; expect?: boolean; activeEntries?: number; snapshot?: { files: Record<string, string>; commits: string[] } } = {},
+): Promise<Fixture> {
   const runnerId = randomUUID();
   await h.prisma.runner.create({
     data: {
@@ -268,13 +281,17 @@ async function fixture(h: Harness, over: { catchUp?: string | null; expect?: boo
     callId, sessionId, JSON.stringify('$ go test ./... → ERR: connect ECONNREFUSED 127.0.0.1:9000'),
   ]);
   // The snapshot the run reads: the index the runner would have uploaded, and the sha the op names.
+  const extra = Object.entries(over.snapshot?.files ?? {});
   const index = JSON.stringify({
     sha: REPO.sha, date: '2026-09-20',
-    files: REPO.paths.map((path) => ({ path, size: 100 })),
-    docs: [{ path: 'docs/README.md', title: 'App', headings: [{ level: 1, text: 'App' }] }],
+    files: [...REPO.paths.map((path) => ({ path, size: 100 })), ...extra.map(([path, text]) => ({ path, size: Buffer.byteLength(text, 'utf8') }))],
+    docs: [
+      { path: 'docs/README.md', title: 'App', headings: [{ level: 1, text: 'App' }] },
+      ...extra.filter(([path]) => path.endsWith('.md')).map(([path, text]) => indexedDoc(path, text)),
+    ],
     symbols: { 'src/app.go': ['main'] },
     contracts: null,
-    commits: REPO.commits,
+    commits: over.snapshot?.commits ?? REPO.commits,
     readme: REPO.readme,
   });
   await h.sql.query(
@@ -311,6 +328,28 @@ async function fixture(h: Harness, over: { catchUp?: string | null; expect?: boo
   });
   await h.prisma.wikiJob.create({ data: { id: jobId, ownerId: h.ownerId, spaceId, kind: 'maintain', input: { runId }, state: 'queued' } });
   return { spaceId, workspaceId, runnerId, sessionId, callId, jobId, runId, position, token: token ?? '' };
+}
+
+/**
+ * A document as the runner's snapshot indexes it (wiki_plan_repo.go `wikiPlanHeadings`): its ATX headings outside
+ * fenced code — a fence closed only by its own kind — none of them empty, and its first level-1 heading as its title.
+ */
+function indexedDoc(file: string, text: string): { path: string; title: string; headings: Array<{ level: number; text: string }> } {
+  const headings: Array<{ level: number; text: string }> = [];
+  let fence = '';
+  for (const line of text.split('\n')) {
+    const opened = /^[\t\n\f\r ]*(```+|~~~+)/u.exec(line);
+    if (opened) {
+      const token = opened[1].slice(0, 3);
+      if (fence === '') fence = token;
+      else if (token === fence) fence = '';
+      continue;
+    }
+    if (fence !== '') continue;
+    const heading = /^(#{1,6})[\t\n\f\r ]+(.*?)[\t\n\f\r ]*#*[\t\n\f\r ]*$/u.exec(line);
+    if (heading && heading[2].trim() !== '') headings.push({ level: heading[1].length, text: heading[2].trim() });
+  }
+  return { path: file, title: headings.find((one) => one.level === 1)?.text ?? '', headings };
 }
 
 /** The workers this case started; a case that fails halfway must not leave one claiming the next one's jobs. */
@@ -365,13 +404,24 @@ async function clearWork(h: Harness): Promise<void> {
   await modelUp(h);
 }
 
+/** What the runner this spec plays answers besides its defaults. */
+interface RunnerPlay {
+  failSnapshot?: boolean;
+  holdReads?: boolean;
+  checkAnchor?: (anchor: Record<string, unknown>) => Record<string, unknown>;
+  /** Files whose reads are answered with their text — and cached, as the result route caches a read. */
+  files?: Record<string, string>;
+  /** What a diff between two commits names. */
+  diff?: { files: Array<{ status: string; path: string }>; docs: string[] };
+}
+
 /**
  * The runner this spec plays: every queued repository operation is answered at once, by kind — but a read, under
  * `holdReads`, which stays queued as on a runner whose fetch hangs.
  */
-async function runRepoOps(h: Harness, over: { failSnapshot?: boolean; holdReads?: boolean; checkAnchor?: (anchor: Record<string, unknown>) => Record<string, unknown> } = {}): Promise<number> {
-  const rows = await h.sql.query<{ id: string; kind: string; input: Record<string, unknown> }>(
-    `SELECT "id", "kind", "input" FROM "wiki_repo_op" WHERE "owner_id" = $1 AND "state" = 'queued' ORDER BY "created_at"`,
+async function runRepoOps(h: Harness, over: RunnerPlay = {}): Promise<number> {
+  const rows = await h.sql.query<{ id: string; kind: string; input: Record<string, unknown>; space_id: string }>(
+    `SELECT "id", "kind", "input", "space_id" FROM "wiki_repo_op" WHERE "owner_id" = $1 AND "state" = 'queued' ORDER BY "created_at"`,
     [h.ownerId],
   ).then((result) => result.rows);
   for (const row of rows) {
@@ -384,9 +434,9 @@ async function runRepoOps(h: Harness, over: { failSnapshot?: boolean; holdReads?
     const result = row.kind === 'snapshot'
       ? { sha: REPO.sha }
       : row.kind === 'read'
-        ? { read: { sha: REPO.sha, items: (Array.isArray(input.items) ? input.items : []).map((item: { path?: unknown; maxChars?: unknown }) => ({ path: String(item.path ?? ''), found: true, text: 'package app\n', chars: 12 })), chars: 12 } }
+        ? { read: { sha: REPO.sha, items: await readItems(h, row.space_id, input, over.files ?? {}), chars: 12 } }
         : row.kind === 'diff'
-          ? { diff: { from: String(input.from ?? ''), to: String(input.to ?? ''), files: [], docs: [] } }
+          ? { diff: { from: String(input.from ?? ''), to: String(input.to ?? ''), files: over.diff?.files ?? [], docs: over.diff?.docs ?? [] } }
           : {
               anchors: {
                 sha: REPO.sha,
@@ -405,12 +455,34 @@ async function runRepoOps(h: Harness, over: { failSnapshot?: boolean; holdReads?
   return rows.length;
 }
 
+/** A read's items: a file the case gives is answered with its text, and cached as the result route caches a read; any other with a stub. */
+async function readItems(h: Harness, spaceId: string, input: Record<string, unknown>, files: Record<string, string>): Promise<Array<Record<string, unknown>>> {
+  const items: Array<Record<string, unknown>> = [];
+  for (const item of (Array.isArray(input.items) ? input.items : []) as Array<{ path?: unknown }>) {
+    const file = String(item.path ?? '');
+    const text = files[file];
+    if (text === undefined) {
+      items.push({ path: file, found: true, text: 'package app\n', chars: 12 });
+      continue;
+    }
+    const stored = wikiStoredText(text);
+    const held = { state: 'found', content: stored.content, contentEncoding: stored.encoding, sizeBytes: BigInt(Buffer.byteLength(text, 'utf8')) };
+    await h.prisma.wikiRepoFile.upsert({
+      where: { spaceId_sha_path: { spaceId, sha: REPO.sha, path: file } },
+      create: { ownerId: h.ownerId, spaceId, sha: REPO.sha, path: file, ...held },
+      update: held,
+    });
+    items.push({ path: file, found: true, text, chars: [...text].length });
+  }
+  return items;
+}
+
 /** Run the workers and the runner until `done`, or fail the case: a job left queued here is the next case's flake. */
 async function pass(
   h: Harness,
   which: { queue: WikiModelRequestQueue; executor: WikiJobExecutor },
   done: () => Promise<boolean>,
-  over: { failSnapshot?: boolean; holdReads?: boolean; checkAnchor?: (anchor: Record<string, unknown>) => Record<string, unknown> } = {},
+  over: RunnerPlay = {},
   rounds = 400,
 ): Promise<void> {
   for (let i = 0; i < rounds; i += 1) {
@@ -720,6 +792,84 @@ test('the documents step reads the confirmed plan through its read, and a sectio
   assert.ok(footnotes.rows.some((note) => note.kind === 'turn' && (note.quote ?? '').includes('fixture')), JSON.stringify(footnotes.rows));
 });
 
+// ── The plan proposal (2026-10-09, run 28ea4f5c) ──────────────────────────────────────────────
+
+/**
+ * What the runner's check of a proposal and the server's are both held to (wiki_maintain_proposal_fixture_test.go,
+ * wiki-maintain-proposal-golden.spec.ts). Its first case is production's: docs/wiki-comment-to-session-design.md
+ * as origin/main held it at fadc587b0, and an answer naming two of its sections as the proposal prompt lists them.
+ */
+const PROPOSAL_FIXTURE = JSON.parse(readFileSync(join(__dirname, '../../../shared/src/wiki-maintain-proposal.fixture.json'), 'utf8')) as {
+  files: Record<string, string>;
+  cases: Array<{ name: string; answer: string }>;
+};
+
+test('a proposal naming a new design document\'s sections as its prompt lists them, `##` and all, is checked in the document as the runner checks it, and stored', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const DOC = 'docs/wiki-comment-to-session-design.md';
+  const text = PROPOSAL_FIXTURE.files[DOC];
+  const production = PROPOSAL_FIXTURE.cases[0];
+  assert.match(production.name, /^production/u);
+  // The commit the plan's references were checked at: origin/main reaches it, and the document landed after it.
+  const base = createHash('sha1').update('the commit the plan was checked at').digest('hex');
+  const fx = await fixture(h, { snapshot: { files: { [DOC]: text }, commits: [base, REPO.sha] } });
+  // No dossiers: the run goes through to the documents step, where the proposal is.
+  h.maintenance.dossierPage = (async () => ({ ...(pageOf(fx) as Record<string, unknown>), facts: 0, dossiers: [] })) as unknown as WikiMaintenance['dossierPage'];
+  const empty = { docs: [], code: [], contracts: [], sessions: null };
+  await h.prisma.wikiPlan.create({
+    data: {
+      spaceId: fx.spaceId, ownerId: h.ownerId, version: 1, status: 'confirmed', origin: 'owner', authorUserId: h.ownerId,
+      confirmedByUserId: h.ownerId, confirmedAt: new Date(), docsMin: 1, docsMax: 10, gate: {},
+      repoSha: base, repoCheck: { sha: base, checked: 0, missing: [] },
+      categories: [{ key: 'dev', title: 'Development', question: 'How it works', forAgents: true }],
+      docs: {
+        create: [{
+          position: 0, category: 'dev', slug: 'wiki-pipeline', title: 'Wiki 流水线', question: 'wiki 怎么维护？',
+          audience: ['新加入的开发者'], scopeIn: ['维护'], lengthMin: 400, lengthMax: 4000,
+          sections: {
+            create: [
+              { position: 0, key: 'overview', title: '总览', kind: 'overview', covers: '这篇讲 wiki 怎么维护。', length: 300, sources: empty },
+              { position: 1, key: 'main', title: '入口', kind: 'flow', covers: 'main 做什么。', length: 400, sources: { ...empty, code: [{ path: 'src/app.go', symbols: ['main'] }] } },
+            ],
+          },
+        }],
+      },
+    },
+  });
+  const prompts: string[] = [];
+  h.model.answer = (hit) => {
+    if (!hit.prompt.includes('# 任务：维护作业的 plan 修改建议')) return writerAnswer(hit.prompt);
+    prompts.push(hit.prompt);
+    return production.answer;
+  };
+  const which = worker(h);
+  await pass(h, which, async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state), {
+    files: { [DOC]: text },
+    diff: { files: [{ status: 'A', path: DOC }], docs: [DOC] },
+  });
+
+  const run = await runRow(h, fx.runId);
+  assert.equal(run.outcome, 'succeeded', run.error ?? '');
+  const docs = (run.report as { docs: { unplaced: unknown; proposal: Record<string, unknown> | null } }).docs;
+  assert.deepEqual(docs.unplaced, { designDocs: 1, entries: 0 }, 'the document is new on origin/main, and no section cites it');
+  // The model was shown the document's sections with their `##`, and named two of them that way.
+  assert.match(prompts[0] ?? '', /章节：[^\n]*## 4\. wiki 怎么跟上；[^\n]*## 12\. 现在的缺口一起补（owner 10-09）；/u);
+  assert.deepEqual(
+    { outcome: docs.proposal?.outcome, rounds: docs.proposal?.rounds, error: docs.proposal?.error ?? null },
+    { outcome: 'proposed', rounds: 1, error: null },
+    'the proposal passes the check in its first round, as it does on the runner',
+  );
+  const stored = await h.prisma.wikiPlanProposal.findMany({ where: { ownerId: h.ownerId, spaceId: fx.spaceId } });
+  assert.equal(stored.length, 1);
+  assert.equal(stored[0].authorJobId, fx.jobId);
+  const sections = (stored[0].change as { doc: { sections: Array<{ sources: { docs: unknown } }> } }).doc.sections;
+  assert.deepEqual(sections.slice(-2).map((section) => section.sources.docs), [
+    [{ path: DOC, section: '## 4. wiki 怎么跟上' }],
+    [{ path: DOC, section: '## 12. 现在的缺口一起补（owner 10-09）' }],
+  ], 'the two new sections cite the document\'s sections as the model named them');
+});
+
 // ── The anchors of a page: every entry keeps its own checks ─────────────────────────────────────
 
 /**
@@ -813,6 +963,127 @@ test('the anchors step records each entry\'s checks on its own anchors — a pag
   const report = (await runRow(h, fx.runId)).report as Record<string, unknown>;
   const anchors = report.anchors as Record<string, number>;
   assert.deepEqual(anchors, { entries: 2, changed: 0, missing: 1 }, 'one entry verified, the broken one out as missing');
+});
+
+/** The `anchors` operations of a run, in the order they were enqueued: how many anchors each carried, how many bytes, and when it ran. */
+async function anchorsOps(h: Harness): Promise<Array<{ anchors: number; bytes: number; createdAt: string; endedAt: string }>> {
+  return h.sql.query<{ anchors: number; bytes: number; createdAt: string; endedAt: string }>(
+    `SELECT jsonb_array_length("input"->'anchors') AS "anchors",
+            octet_length("input"::text) AS "bytes",
+            "created_at" AS "createdAt", "ended_at" AS "endedAt"
+       FROM "wiki_repo_op" WHERE "owner_id" = $1 AND "kind" = 'anchors' AND "state" = 'succeeded'
+      ORDER BY "created_at", "id"`, [h.ownerId],
+  ).then((result) => result.rows.map((row) => ({ anchors: Number(row.anchors), bytes: Number(row.bytes), createdAt: row.createdAt, endedAt: row.endedAt })));
+}
+
+test('the anchors step puts listEntriesMax entries in one repository operation: 400 entries are two operations, not eight', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  // No dossiers: the run proposes nothing, and the anchors step is what this case is about.
+  h.maintenance.dossierPage = (async () => ({ ...(pageOf(fx) as Record<string, unknown>), facts: 0, dossiers: [] })) as unknown as WikiMaintenance['dossierPage'];
+  // 400 live entries, one path anchor each: a page of the list's default size (50) sent these out as
+  // eight repository operations, each one a wait for the runner's next heartbeat.
+  const count = 400;
+  await h.prisma.wikiEntry.createMany({
+    data: Array.from({ length: count }, (_, i) => ({
+      ownerId: h.ownerId, spaceId: fx.spaceId, kind: 'concept', title: `anchored ${i}`, summary: 'a live entry',
+      status: 'active', trust: 'auto', currentRevision: 1, fields: { definition: 'x', boundaries: 'y' }, topics: [],
+      anchors: [{ type: 'path', path: ANCHOR_REPO.file }],
+    })),
+  });
+
+  const which = worker(h);
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded', { checkAnchor: checkAnchorAgainstRepo });
+
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', `the anchors step must not fail: ${job.error ?? ''}`);
+  const ops = await anchorsOps(h);
+  assert.equal(ops.length, Math.ceil(count / WIKI_ANCHOR_RULES.listEntriesMax), 'the page is the batch: 400 entries fill two operations');
+  assert.deepEqual(ops.map((op) => op.anchors), [WIKI_ANCHOR_RULES.listEntriesMax, count - WIKI_ANCHOR_RULES.listEntriesMax], 'each operation carries one anchor an entry, in page order');
+  for (const op of ops) {
+    // What one operation may carry: a page's entries at `listMaxItems` anchors each, and a payload well
+    // inside what a read is packed to (`operationBytes`). A page of path anchors is a few hundred
+    // milliseconds of git on the runner, far inside the 300 s the run waits for it.
+    assert.ok(op.anchors <= WIKI_ANCHOR_RULES.listEntriesMax * WIKI_LIMITS.listMaxItems, `an operation carries at most a page's anchors: ${op.anchors}`);
+    assert.ok(op.bytes < WIKI_REPO_OPS.operationBytes, `an operation's payload stays inside operationBytes: ${op.bytes} bytes`);
+  }
+  // One at a time: the second operation was enqueued only after the first had settled (the runner's
+  // concurrent fetches of one checkout take no lock of their own until 97b8de07f ships).
+  assert.ok(Date.parse(ops[1]!.createdAt) >= Date.parse(ops[0]!.endedAt), `no second operation while one is in flight: ${ops.map((op) => `${op.createdAt}->${op.endedAt}`).join(', ')}`);
+  // Every one of the 400 entries was checked through those two operations.
+  const verified = await h.prisma.wikiEntry.count({ where: { ownerId: h.ownerId, spaceId: fx.spaceId, anchorState: 'verified' } });
+  assert.equal(verified, count, 'no entry is left out by the page boundary');
+  const report = (await runRow(h, fx.runId)).report as Record<string, unknown>;
+  assert.deepEqual(report.anchors, { entries: count, changed: 0, missing: 0 }, 'the report counts every entry once');
+});
+
+test('every entry of a page keeps its own check across the page and the report boundaries, and the page\'s tail is written', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  h.maintenance.dossierPage = (async () => ({ ...(pageOf(fx) as Record<string, unknown>), facts: 0, dossiers: [] })) as unknown as WikiMaintenance['dossierPage'];
+  // 201 entries: the page boundary falls between the 200th and the 201st, and a page this size is written
+  // back in five reports (four of fifty and a tail of one) — each entry's checks must arrive at its own
+  // anchors however the page and its writes are split.
+  const count = 201;
+  // Ids of this case's own (`fade...`, and no other case's): the anchors list orders by id, so the
+  // page boundary and every expected verdict below are read off the entries' own order.
+  const idOf = (i: number): string => `fade0000-0000-4000-8000-${String(i).padStart(12, '0')}`;
+  const pathOf = (i: number): string => `src/entry-${String(i).padStart(3, '0')}.go`;
+  const symbolOf = (i: number): string => `sym${i}`;
+  const ownBaselineOf = (i: number): string => createHash('sha256').update(`a baseline entry ${i} named`).digest('hex');
+  const gone = new Set([3, 197]);
+  await h.prisma.wikiEntry.createMany({
+    data: Array.from({ length: count }, (_, i) => ({
+      ownerId: h.ownerId, spaceId: fx.spaceId, id: idOf(i), kind: 'concept', title: `anchored ${i}`, summary: 'a live entry',
+      status: 'active', trust: 'auto', currentRevision: 1, fields: { definition: 'x', boundaries: 'y' }, topics: [],
+      anchors: [
+        { type: 'path', path: pathOf(i) },
+        ...(i % 4 === 0 ? [{ type: 'symbol', path: pathOf(i), symbol: symbolOf(i), ...(i % 8 === 0 ? { regionSha256: ownBaselineOf(i) } : {}) }] : []),
+      ],
+    })),
+  });
+  // The runner this case plays: a path is there unless it is one of the gone ones, and a symbol's region
+  // hashes from its own name — so a verdict laid on a page-mate, or a check written to the wrong entry,
+  // shows as the wrong region rather than passing.
+  const checkAnchorOf = (anchor: Record<string, unknown>): Record<string, unknown> => {
+    if (anchor.type === 'path') return { ...anchor, state: gone.has(Number(/entry-(\d+)\.go/u.exec(String(anchor.path))?.[1] ?? -1)) ? 'missing' : 'verified' };
+    return { ...anchor, state: 'verified', regionSha256: ANCHOR_REPO.regionOf(String(anchor.symbol ?? '')) };
+  };
+
+  const which = worker(h);
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded', { checkAnchor: checkAnchorOf });
+
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', `the anchors step must not fail: ${job.error ?? ''}`);
+  const ops = await anchorsOps(h);
+  assert.equal(ops.length, 2, '201 entries are two operations');
+  assert.equal(ops[0]!.anchors, count - 1 + 50, 'the first operation carries a full page: the 200 entries\' paths and the 50 symbols of those among them that carry one');
+  assert.equal(ops[1]!.anchors, 1 + 1, 'the second operation carries the page\'s tail entry and its symbol');
+
+  const entries = await h.prisma.wikiEntry.findMany({ where: { ownerId: h.ownerId, spaceId: fx.spaceId }, orderBy: { id: 'asc' } });
+  assert.equal(entries.length, count);
+  let changed = 0;
+  let missing = 0;
+  for (const [i, entry] of entries.entries()) {
+    const anchors = entry.anchors as Array<Record<string, unknown> & { check?: Record<string, unknown> }>;
+    assert.equal(anchors.length, i % 4 === 0 ? 2 : 1, `entry ${i} keeps its own anchors`);
+    assert.equal(anchors[0]!.check?.state, gone.has(i) ? 'missing' : 'verified', `entry ${i}'s path is its own verdict`);
+    if (anchors.length === 2) {
+      const own = i % 8 === 0;
+      assert.equal(anchors[1]!.check?.state, own ? 'changed' : 'verified', `entry ${i}'s symbol is held to ${own ? 'its own' : 'the found'} region`);
+      assert.equal(anchors[1]!.check?.regionSha256, ANCHOR_REPO.regionOf(symbolOf(i)), `entry ${i}'s symbol check carries its own region`);
+      if (own) assert.equal(anchors[1]!.check?.baselineSha256, undefined, 'an entry that named its own baseline keeps it');
+      else assert.equal(anchors[1]!.check?.baselineSha256, ANCHOR_REPO.regionOf(symbolOf(i)), 'an entry with no baseline adopts the region its own check found');
+      if (own) changed += 1;
+    }
+    if (gone.has(i)) missing += 1;
+  }
+  assert.equal(changed, Math.ceil(count / 8), 'every entry that named its own baseline reads changed');
+  assert.equal(missing, gone.size);
+  const report = (await runRow(h, fx.runId)).report as Record<string, unknown>;
+  assert.deepEqual(report.anchors, { entries: count, changed, missing }, 'the counts are the entries\', whatever report a chunk fell in');
 });
 
 test('anchor verdicts that name anchors no entry asked for fail the run: nothing is laid on a guess', { skip }, async () => {

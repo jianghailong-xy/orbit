@@ -17,12 +17,14 @@ import {
   LandingRetryRequest,
   LandingWorkSessionFacts,
   PROMOTION_AUTOMATIC_LAND,
+  endTimedOutLanding,
   integrationSerialKey,
   queuePromotionJob,
   queueTaskBranchCandidate,
   shortBranchName,
   workBranchEndedOn,
 } from './project-integration-job';
+import { readInFlightJobs } from './project-integration-line';
 import { openItemOwed } from './project-open-item';
 import {
   LIVE_PROMOTION_STATES,
@@ -978,9 +980,12 @@ const RETIRABLE_BY_RECEIPT: ReadonlyArray<PromotionState> = ['CHECKING', 'READY'
  * A receipt that says a task's branch landed on the upstream (`MERGED` or `ALREADY_MERGED`) answers
  * the question a candidate for that same branch was asking. The candidate goes `SUPERSEDED`, as when
  * a newer candidate takes its place (M-T6): a merge somewhere else took it. Its check job is stopped
- * as J-T8 asks (a queued one is cancelled, a running one is asked to stop), and the owner's card and
- * the exceptions about it are closed by the platform (`PROMOTION_MOVED_ON`, §4.2) — so a check that
- * reports afterwards finds the candidate gone and opens nothing (`applyPromotionJobResult`).
+ * as J-T8 asks (a queued one is cancelled, a running one is asked to stop) — except a running one
+ * already silent past its limit, which is ended on the spot as `ERROR · RUNNER_LOST` (the J-T9
+ * read and compare-and-set): asking a dead runner to stop would leave the job holding its serial
+ * key with no one able to end it, and the project's checks would be blocked for good. The owner's
+ * card and the exceptions about it are closed by the platform (`PROMOTION_MOVED_ON`, §4.2) — so a
+ * check that reports afterwards finds the candidate gone and opens nothing (`applyPromotionJobResult`).
  *
  * WHAT IT LEAVES ALONE
  * --------------------
@@ -1037,6 +1042,19 @@ export async function retireCandidatesLandedByReceipt(
         where: { id: row.checkJobId, state: 'QUEUED' },
         data: { state: 'CANCELLED', finishedAt: now },
       });
+      // A RUNNING check is asked to stop — unless it already stopped reporting past its limit, in
+      // which case asking is how a job holds its serial key forever: `claimOne` never re-hands a
+      // cancel-requested row, so nobody would ever end it and no later check of the project could be
+      // claimed (2026-10-09: a candidate superseded this way kept `#check:<project>` and blocked the
+      // whole project). A job the read already judges timed out is ended here, in this transaction,
+      // as the ERROR it is — the same J-T9 compare-and-set the retry door uses.
+      const [silent] = await readInFlightJobs(tx, row.projectId, row.checkJobId);
+      if (silent?.state === 'RUNNING' && silent.timedOut === true) {
+        const ended = await endTimedOutLanding(tx, silent);
+        if (ended) continue;
+        // The compare-and-set lost: the job reported again between the read and the write, so it is
+        // talking after all — it gets the ordinary ask-to-stop below.
+      }
       await tx.projectIntegrationJob.updateMany({
         where: { id: row.checkJobId, state: 'RUNNING', cancelRequestedAt: null },
         data: { cancelRequestedAt: now },
@@ -1294,7 +1312,19 @@ async function blockPromotion(
  * own rule (M-T11), exactly as its first check would have. `decided_at` is cleared because the
  * candidate is asking again; a check that fails again blocks it at a new moment.
  *
- * Null when nothing can be queued: the candidate is no longer BLOCKED, or its repository is gone.
+ * The candidate's confirmation is cleared with the re-check, because the re-check asks the merge
+ * question anew: a `confirmed_by_user_id` / `confirmed_at` recorded against an earlier check result
+ * answered a different question (the tree a re-check runs on can differ — the upstream moves), and
+ * left standing it would collide with `project_promotion_automatic_chk` the moment a clean result is
+ * confirmed by the Automatic setting (`confirmed_automatically = true` forbids a named confirmer).
+ * Whoever decides the fresh result decides it fresh: the Automatic setting, or the account owner on a
+ * card the clean check opens as it always did. For a project without Automatic this changes nothing
+ * about the door's reach — it only means the row no longer carries a confirmation the new check has
+ * not earned, and the owner's earlier press is not treated as covering a merge nobody asked them
+ * about again.
+ *
+ * Null when nothing can be queued: the candidate is no longer asking (not BLOCKED, and not CHECKING
+ * for the timed-out re-check this door admits), or its repository is gone.
  */
 export async function requeuePromotionCheck(
   tx: Prisma.TransactionClient,
@@ -1304,7 +1334,10 @@ export async function requeuePromotionCheck(
     where: { id: input.promotionId },
     select: PROMOTION_COLUMNS,
   });
-  if (!promotion || promotion.state !== 'BLOCKED') return null;
+  // CHECKING is the timed-out re-check's state (J-T9): the door has already decided the authority,
+  // and a candidate asking again is exactly what this queueing is for. Anything past asking
+  // (READY and beyond) is refused upstream of here.
+  if (!promotion || (promotion.state !== 'BLOCKED' && promotion.state !== 'CHECKING')) return null;
   const codebase = await tx.projectCodebase.findUnique({
     where: { id: promotion.codebaseId },
     select: { canonicalRepoUrl: true },
@@ -1319,7 +1352,17 @@ export async function requeuePromotionCheck(
   await tx.projectPromotion.update({
     where: { id: promotion.id },
     // Asking again, so nothing blocks it any more: a check that fails again records its own reason.
-    data: { state: 'CHECKING' satisfies PromotionState, checkJobId: jobId, decidedAt: null, blockedReason: null },
+    // The confirmation columns go back to NULL with it: the re-check asks the merge question anew,
+    // and the Automatic setting or the owner decides the fresh result (see the comment above).
+    data: {
+      state: 'CHECKING' satisfies PromotionState,
+      checkJobId: jobId,
+      decidedAt: null,
+      blockedReason: null,
+      confirmedByUserId: null,
+      confirmedAt: null,
+      confirmedAutomatically: false,
+    },
   });
   const queued = await tx.projectIntegrationJob.findUniqueOrThrow({
     where: { id: jobId },
