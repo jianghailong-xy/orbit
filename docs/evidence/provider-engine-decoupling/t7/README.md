@@ -36,13 +36,16 @@ task-pin writes it sent, and any request the fake API left unanswered.
 To repeat: `kit/run.sh <out>`, then `python3 -I kit/compare.py <out> <dir> <commit>`. The scripts carry this
 worktree's absolute paths.
 
-## Found by the capture, fixed on this branch
+## Found by the capture and the review, fixed on this branch
 
 - The task pin listed no account pools under Claude Code (board 6 ④): the panel never read them. It now reads the
   user's pools and the shared pools they are in, as the composer does
   (`TaskDetailPanel.modelRouting.test.tsx` covers it).
 - The hero's engine list, 244px wide, cut "OpenCode" and "DeepSeek Harness" short beside their models. It now has
   the width board 4 ① draws.
+- The OpenCode Provider menu drew the Gemini key with Antigravity's "A"; board 4 ⑤ draws Google Gemini's star. A
+  Gemini key now wears Gemini's mark: T6's change to the same lines of `sessionProviderChoices.ts`, carried byte
+  for byte, so the two land as one.
 
 ## Where the page differs from the boards
 
