@@ -32,6 +32,7 @@ import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
+import io.orbitd.android.directory.orderedWorkspaceRows
 import io.orbitd.android.navigation.*
 import io.orbitd.android.projects.TaskDependencyGraphView
 import io.orbitd.android.taskprojects.*
@@ -497,7 +498,7 @@ private fun DetailsSection(task: JsonObject, data: TaskDetailData, workspaces: L
     Column(Modifier.testTag("task-details"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         val currentAssignee = task.obj("assignee")
         PickerRow(TaskDetailCopy.assigneeLabel, currentAssignee?.text("name") ?: TaskListCopy.unassigned, enabled,
-            listOf<Pair<String?, String>>(null to TaskListCopy.unassigned) + workspaces.map { it.text("id") to (it.text("name") ?: "Workspace") } +
+            listOf<Pair<String?, String>>(null to TaskListCopy.unassigned) + orderedWorkspaceRows(workspaces).map { it.text("id") to (it.text("name") ?: "Workspace") } +
                 listOfNotNull(currentAssignee?.takeIf { a -> workspaces.none { ObjectId.same(it.text("id"), a.text("id")) } }?.let { it.text("id") to (it.text("name") ?: it.text("id").orEmpty()) }),
             tag = "task-assignee") { patch(buildJsonObject { put("assigneeId", it?.let(::JsonPrimitive) ?: JsonNull) }) }
         val picks = TaskDetailLogic.modelHintPicks(task.objects("modelHintOptions"))
