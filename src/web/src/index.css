@@ -1426,8 +1426,8 @@ button.toast--pill:focus-visible {
   font-size: 12px;
   color: var(--text-3);
 }
-/* Qualified by antd's own class: its injected menu styles outrank a single-class rule. */
-.ant-dropdown-menu.tasks-scope-menu {
+/* Qualified by the menu's own class: its styles load after this file and outrank a single-class rule. */
+.orbit-menu.tasks-scope-menu {
   min-width: 260px;
   max-width: min(460px, calc(100vw - 24px));
   max-height: 70vh;
@@ -1459,7 +1459,9 @@ button.toast--pill:focus-visible {
   gap: 12px;
   margin: 16px 0 8px;
 }
-.tasks-search {
+/* Named with the field's class: the Orbit field's own rules load after this sheet, so a bare class
+   of the same weight would lose to them, where it won over the replaced field's. */
+.tasks-search.orbit-text-control {
   width: 200px;
 }
 /* Muted chip surfacing context dropped from the rows: when every task shares one assignee,
@@ -1486,6 +1488,18 @@ button.toast--pill:focus-visible {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Its close mark, as the replaced closable tag drew it: a 10px icon 7px after the text, in the icon
+   grey, darker under the pointer. */
+.tasks-createdin-close {
+  margin-inline-start: 7px;
+  font-size: 10px;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.tasks-createdin-close:hover {
+  color: var(--text-1);
 }
 /* Inline bar with batch actions, shown only while rows are selected. */
 .tasks-bulkbar {
@@ -1597,7 +1611,7 @@ button.toast--pill:focus-visible {
 }
 
 /* The Batches view: one row per label, each carrying the same meter as the header above. */
-.tasks-viewswitch {
+.tasks-viewswitch.orbit-segmented {
   margin: 10px 0 0;
 }
 .tasks-labelfilter {
@@ -1705,7 +1719,7 @@ button.toast--pill:focus-visible {
   min-width: 18px;
   text-align: center;
 }
-.ant-segmented-item-selected .seg-count {
+.orbit-segmented-item:where([data-checked]) .seg-count {
   background: var(--brand-tint);
   color: var(--brand);
 }
@@ -10496,18 +10510,20 @@ button.chat-jump-start:hover {
 .start-card-comes-detail {
   color: var(--text-3);
 }
-/* The two lines, one under the other; the class makes these rules outrank antd's own
-   `.ant-radio-group` / `.ant-radio-wrapper` ones, which would otherwise win on order. */
+/* The two lines, one under the other, each radio at the top of its line beside its label and the
+   hint under it. The radio group's own rules carry its classes and state, so these name the group's
+   class too to stay ahead of them. */
 .project-run-settings .project-run-lines {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.project-run-settings .project-run-lines .ant-radio-wrapper {
+.project-run-settings .orbit-radio-group.project-run-lines > .orbit-choice,
+.project-run-settings .orbit-radio-group.project-run-lines > .orbit-choice:not(:last-child) {
   align-items: flex-start;
   margin-inline-end: 0;
 }
-.project-run-settings .project-run-lines .ant-radio {
+.project-run-settings .project-run-lines .orbit-radio {
   align-self: flex-start;
   margin-top: 3px;
 }
@@ -12430,7 +12446,8 @@ button.chat-jump-start:hover {
   display: flex;
   gap: 8px;
 }
-.tdp-schedule-hint,
+/* The hint is a typography run, whose own rules load after this sheet: named with its class. */
+.tdp-schedule-hint.orbit-typography,
 .tdp-schedule-error {
   font-size: 12px;
   line-height: 1.5;
@@ -12464,9 +12481,13 @@ button.chat-jump-start:hover {
   font-weight: 600;
   color: var(--text-3);
 }
-.tdp-acceptance-criteria-input,
-.tdp-acceptance-command-input {
-  font-size: 13px;
+/* Named with the fields' classes, as their own rules load after this sheet; above 960px only,
+   because below it every field takes the 16px of the iOS zoom rule, as the replaced ones did. */
+@media (min-width: 961px) {
+  .tdp-acceptance-criteria-input.orbit-textarea,
+  .tdp-acceptance-command-input.orbit-input {
+    font-size: 13px;
+  }
 }
 .tdp-acceptance-pair {
   display: flex;
@@ -12487,11 +12508,11 @@ button.chat-jump-start:hover {
   border-radius: 4px;
   padding: 1px 5px;
 }
-.tdp-acceptance-exit-input {
+.tdp-acceptance-exit-input.orbit-input {
   width: 64px;
 }
-.tdp-acceptance-empty,
-.tdp-acceptance-hint,
+.tdp-acceptance-empty.orbit-typography,
+.tdp-acceptance-hint.orbit-typography,
 .tdp-acceptance-error {
   display: block;
   font-size: 12px;
@@ -17464,7 +17485,7 @@ button.chat-jump-start:hover {
   color: var(--text-2);
   font-size: 13px;
 }
-.project-detail-meta .ant-tag {
+.project-detail-meta .orbit-badge {
   margin-inline-end: 0;
 }
 
@@ -17691,7 +17712,7 @@ button.chat-jump-start:hover {
   min-width: 0;
   gap: 9px;
 }
-.project-goal-heading .ant-typography {
+.project-goal-heading .orbit-typography {
   margin: 0;
 }
 .project-goal-icon {
@@ -17702,7 +17723,7 @@ button.chat-jump-start:hover {
   margin-top: 8px;
   color: var(--text-1);
 }
-.project-goal-empty.ant-typography {
+.project-goal-empty.orbit-typography {
   margin: 8px 0 0;
 }
 @media (max-width: 560px) {
@@ -17718,7 +17739,7 @@ button.chat-jump-start:hover {
 .project-blockers {
   margin-bottom: 24px;
 }
-.project-blockers-heading.ant-typography {
+.project-blockers-heading.orbit-typography {
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -17728,7 +17749,7 @@ button.chat-jump-start:hover {
   flex: none;
   white-space: nowrap;
 }
-.project-blockers-summary.ant-typography {
+.project-blockers-summary.orbit-typography {
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -17757,7 +17778,7 @@ button.chat-jump-start:hover {
   font-weight: 600;
   color: var(--text-1);
 }
-.project-blockers-headline .ant-tag {
+.project-blockers-headline .orbit-badge {
   margin-inline-end: 0;
   font-weight: 400;
 }
@@ -17948,11 +17969,16 @@ button.chat-jump-start:hover {
   font-size: 12.5px;
   font-weight: 600;
 }
+/* The whole footer row, the note at its start: it fills the dialog's footer, which lays its
+   content out in a row. */
 .project-blockers-dialog-foot {
   display: flex;
+  flex: 1;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  /* The replaced footer's alignment: a note that wraps keeps its lines to the end. */
+  text-align: end;
 }
 .project-blockers-dialog-note {
   margin-inline-end: auto;
@@ -17983,7 +18009,7 @@ button.chat-jump-start:hover {
 .project-command-center > * {
   min-width: 0;
 }
-.project-ready-heading.ant-typography {
+.project-ready-heading.orbit-typography {
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -17993,7 +18019,7 @@ button.chat-jump-start:hover {
   flex: none;
   white-space: nowrap;
 }
-.project-ready-summary.ant-typography {
+.project-ready-summary.orbit-typography {
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -18231,6 +18257,50 @@ div.landing-jobs-open {
 .project-command-rail > .project-command-coordinator {
   flex: 1 1 auto;
 }
+/* The coordinator's lead press and the caret beside it, joined as one control: the shared edge is
+   one 1px line (the caret laps the lead by its border), only the outer corners are rounded, and
+   between the two primary fills a 1px hover-blue seam stands in for the border, gone while the caret
+   is hovered. A hovered or pressed half is drawn above the other, so its own edge shows. */
+.project-coordinator-split {
+  display: flex;
+  width: 100%;
+}
+.project-coordinator-split > .orbit-button {
+  z-index: 2;
+}
+.project-coordinator-split > .orbit-button:is(:focus, :active) {
+  z-index: 3;
+}
+.project-coordinator-split > .orbit-button:hover {
+  z-index: 4;
+}
+.project-coordinator-split > .project-coordinator-lead {
+  margin-inline-end: -1px;
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+.project-coordinator-split > .project-coordinator-caret {
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+}
+/* The caret at 12px, as the replaced dropdown trigger drew its down arrow. */
+.project-coordinator-split > .project-coordinator-caret .anticon-down {
+  font-size: 12px;
+}
+.project-coordinator-split > .orbit-button-primary:not(:disabled) {
+  transition: none;
+}
+.project-coordinator-split > .project-coordinator-lead.orbit-button-primary:not(:disabled) ~ .project-coordinator-caret.orbit-button-primary:not(:disabled)::before {
+  position: absolute;
+  inset-block: -1px;
+  inset-inline-start: -1px;
+  width: 1px;
+  background-color: var(--orbit-control-primary-hover);
+  content: '';
+}
+.project-coordinator-split > .project-coordinator-lead.orbit-button-primary:not(:disabled) ~ .project-coordinator-caret.orbit-button-primary:not(:disabled):hover::before {
+  display: none;
+}
 
 /* How it runs (mock board3 ④): the settings follow the command centre at full width. The two
    groups keep execution and integration scannable without shrinking the command input into the
@@ -18311,25 +18381,29 @@ div.landing-jobs-open {
 .project-run-settings-grid .project-integration-setting-label {
   padding-top: 4px;
 }
-.project-run-settings-grid .project-run-lines .ant-radio-wrapper-disabled {
+.project-run-settings-grid .project-run-lines .orbit-choice:has([data-disabled]) {
   color: var(--text-1);
   cursor: default;
 }
-.project-run-settings-grid .project-run-lines .ant-radio-wrapper-disabled .ant-radio-disabled + span {
+.project-run-settings-grid .project-run-lines .orbit-choice:has([data-disabled]) .orbit-choice-label {
   color: var(--text-1);
-}
-.project-run-settings-grid .project-run-lines .ant-radio-disabled.ant-radio-checked .ant-radio-inner {
-  border-color: var(--brand);
-  background: var(--brand);
-}
-.project-run-settings-grid .project-run-lines .ant-radio-disabled.ant-radio-checked .ant-radio-inner::after {
-  background-color: #fff;
 }
 .project-run-settings-grid .start-card-mono,
 .project-run-settings-grid .start-card-mono input {
   width: 100%;
 }
-.project-run-settings-grid .project-integration-setting.is-warn .ant-input {
+/* The merge check is an Orbit field here, whose own font rules load after this sheet: the
+   monospace face and size the start card's rule gives it are named with the field's class. The
+   size above 960px only; below it the field takes the iOS zoom rule's 16px, as before. */
+.project-run-settings-grid .start-card-mono.orbit-text-control {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (min-width: 961px) {
+  .project-run-settings-grid .start-card-mono.orbit-text-control {
+    font-size: 12px;
+  }
+}
+.project-run-settings-grid .project-integration-setting.is-warn .orbit-input {
   width: 100%;
 }
 .project-run-settings .project-integration-setting-actions {
@@ -18340,7 +18414,7 @@ div.landing-jobs-open {
   padding: 16px 0 8px;
   text-align: center;
 }
-.project-run-settings-error {
+.project-run-settings-error.orbit-alert {
   margin-top: 10px;
 }
 @media (max-width: 920px) {
@@ -18367,11 +18441,11 @@ div.landing-jobs-open {
   }
 }
 
-/* A task row has flexible copy followed by a fixed count and, sometimes, a disclosure. AntD's
-   List.Meta can visually paint an unbroken identifier outside its computed flex width: its inner
-   content uses width:0 but has no emergency wrap point. That overflow belongs to the document
-   scroller, so one source-symbol list such as `NewProjectDraft|EMPTY_NEW_PROJECT_DRAFT|...` can
-   make the whole project page desktop-wide on a phone. The owned wrapper supplies a real
+/* A task row has flexible copy followed by a fixed count and, sometimes, a disclosure. The row's
+   title-and-description block can visually paint an unbroken identifier outside its computed flex
+   width: its inner content uses width:0 but has no emergency wrap point. That overflow belongs to
+   the document scroller, so one source-symbol list such as `NewProjectDraft|EMPTY_NEW_PROJECT_DRAFT|...`
+   can make the whole project page desktop-wide on a phone. The owned wrapper supplies a real
    shrink-to-fit boundary and the two text spans add wrap opportunities without truncating the
    title or changing the criteria excerpt. */
 .project-task-row-layout {
@@ -18383,7 +18457,7 @@ div.landing-jobs-open {
 }
 .project-task-row-copy,
 .project-task-row-meta,
-.project-task-row-meta .ant-list-item-meta-content {
+.project-task-row-meta .orbit-list-item-meta-content {
   min-width: 0;
 }
 .project-task-row-copy {
@@ -18408,8 +18482,8 @@ div.landing-jobs-open {
 /* A row opens its task over the page (ProjectTaskRow) and is tinted the way a Tasks page row is —
    the same two tokens for "under the pointer" and "open in the panel". The inline padding gives
    the tint room at the row's edges; the negative margin keeps the words where they were. Scoped
-   under .ant-list to outrank AntD's own item padding without !important. */
-.ant-list .project-task-row.is-openable {
+   under .orbit-list to outrank the list's own row padding without !important. */
+.orbit-list .project-task-row.is-openable {
   cursor: pointer;
   padding-inline: 12px;
   margin-inline: -12px;
@@ -18469,6 +18543,10 @@ div.landing-jobs-open {
    judgment, so a row no longer carries a verdict and the head no longer carries a meter. */
 .acceptance-card {
   margin-bottom: 24px;
+}
+/* The rows run edge to edge; each block pads itself. */
+.acceptance-card > .orbit-card-body {
+  padding: 0;
 }
 .acceptance-standing {
   padding: 12px 24px;
@@ -18639,7 +18717,7 @@ div.landing-jobs-open {
 .acceptance-held-up-action {
   color: var(--text-2);
 }
-.acceptance-held-up-action .ant-typography code {
+.acceptance-held-up-action .orbit-typography code {
   margin-inline: 0;
   font-size: 11px;
 }
@@ -18685,7 +18763,7 @@ div.landing-jobs-open {
   border-inline-start: 2px solid var(--border-subtle);
   color: var(--text-2);
 }
-.acceptance-more-meta.ant-typography {
+.acceptance-more-meta.orbit-typography {
   margin-inline-start: 10px;
   font-size: 12px;
 }
@@ -18707,28 +18785,27 @@ div.landing-jobs-open {
    show a condition cut mid-clause. Keep this breakpoint identical to ACCEPTANCE_PHONE_QUERY in
    ProjectAcceptanceCard.tsx. */
 @media (max-width: 560px) {
-  .acceptance-card.ant-card {
+  .acceptance-card.orbit-card {
     overflow: hidden;
     border-radius: 12px;
     box-shadow: 0 2px 10px rgba(31, 35, 41, 0.06);
   }
-  :root[data-theme='dark'] .acceptance-card.ant-card {
+  :root[data-theme='dark'] .acceptance-card.orbit-card {
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.24);
   }
   /* The meter belongs to the whole reading, so on a phone it spans the head instead of sitting
      under only the right-aligned number. The Card head is the positioned containing block. */
-  .acceptance-card.has-meter .ant-card-head {
+  .acceptance-card.has-meter > .orbit-card-head {
     position: relative;
     min-height: 92px;
     padding-bottom: 26px;
   }
-  .acceptance-card .ant-card-head {
+  /* The head keeps a 56px title row above its 1px rule, as the replaced head's wrapper did. */
+  .acceptance-card > .orbit-card-head {
+    min-height: 57px;
     padding-inline: 16px;
   }
-  .acceptance-card .ant-card-head-wrapper {
-    min-height: 56px;
-  }
-  .acceptance-card .ant-card-head-title {
+  .acceptance-card .orbit-card-title {
     font-size: 18px;
   }
   .acceptance-standing {
@@ -18772,7 +18849,7 @@ div.landing-jobs-open {
     padding: 10px 16px 8px;
     text-align: center;
   }
-  .acceptance-more-button.ant-btn {
+  .acceptance-more-button.orbit-button {
     min-height: 44px;
     border-color: var(--border-subtle);
     border-radius: 8px;
@@ -18780,7 +18857,7 @@ div.landing-jobs-open {
     color: var(--text-1);
     font-weight: 600;
   }
-  .acceptance-more-button.ant-btn:hover {
+  .acceptance-more-button.orbit-button:hover {
     border-color: var(--border);
     background: var(--bg-hover);
     color: var(--text-1);
@@ -18793,7 +18870,7 @@ div.landing-jobs-open {
   .acceptance-more-icon.is-expanded {
     transform: rotate(180deg);
   }
-  .acceptance-more-meta.ant-typography {
+  .acceptance-more-meta.orbit-typography {
     display: block;
     margin: 6px 0 0;
     font-size: 11.5px;
@@ -18847,7 +18924,8 @@ div.landing-jobs-open {
   gap: 4px;
   margin-left: auto;
 }
-.projects-scope-action {
+/* Named with the button's class, as the Orbit button's own rules load after this sheet. */
+.projects-scope-action.orbit-button {
   color: var(--text-2);
 }
 .projects-new-button {
@@ -18877,7 +18955,7 @@ div.landing-jobs-open {
 .projects-toolbar-filter {
   width: min(100%, 360px);
 }
-.projects-toolbar-filter .ant-segmented-item {
+.projects-toolbar-filter .orbit-segmented-item {
   flex: 1;
 }
 
@@ -18885,12 +18963,11 @@ div.landing-jobs-open {
    goal is truncated by the box rather than by a character count: how many rendered lines 180
    characters occupy depends on how much of them is CJK (a full-width glyph is twice a Latin one),
    which is what had these rows jumping between 150px and 220px. Sizes track
-   projects-redesign.html: 11px of row padding (set inline, where it beats AntD's own
-   token-generated rule), a 14px/600 title and a 12.5px goal in --text-3.
+   projects-redesign.html: 11px of row padding (set inline, where it beats the list's own row
+   rule), a 14px/600 title and a 12.5px goal in --text-3.
 
-   Laid out here rather than through List.Item.Meta: that component's title and description carry
-   their own margins, which a fixed row height cannot inherit, and its internal element names have
-   already been renamed under us once (antd 5 → 6). */
+   Laid out here rather than through the list's title-and-description block: its title and
+   description carry their own margins, which a fixed row height cannot inherit. */
 .project-row-link {
   display: flex;
   align-items: center;
@@ -19057,11 +19134,15 @@ div.landing-jobs-open {
   .projects-title-actions {
     gap: 2px;
   }
-  .projects-scope-action {
+  .projects-scope-action.orbit-button {
     padding-inline: 8px;
   }
+  /* The button's own icon-only width outranks this width, as the replaced button's did (it is
+     32px wide); the height and padding are named with the button's class to keep winning. */
   .projects-new-button {
     width: 40px;
+  }
+  .projects-new-button.orbit-button {
     height: 40px;
     padding: 0;
   }
@@ -19607,6 +19688,14 @@ div.landing-jobs-open {
 .account-pause-dialog.orbit-overlay,
 .admin-user-dialog.orbit-overlay,
 .pool-dialog.orbit-overlay {
+  line-height: 1.5714285714285714;
+}
+/* And for the project page's and the Tasks page's dialogs (P4.3a). */
+.project-status-dialog.orbit-overlay,
+.project-blockers-dialog.orbit-overlay,
+.project-open-item-dialog.orbit-overlay,
+.project-coordinator-dialog.orbit-overlay,
+.tasks-batch-dialog.orbit-overlay {
   line-height: 1.5714285714285714;
 }
 .watch-card {

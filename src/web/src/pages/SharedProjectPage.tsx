@@ -239,7 +239,9 @@ export function SharedProjectPage({
                 <ProjectTaskGroupsList
                   items={tasks}
                   hasMore={project.tasks.hasMore}
-                  renderRow={(task) => <SharedProjectTaskRow task={task} />}
+                  renderRows={(rows) => (
+                    <List dataSource={rows} rowKey="id" renderItem={(task) => <SharedProjectTaskRow task={task} />} />
+                  )}
                 />
               ) : (
                 <Empty description="No top-level tasks yet" />

@@ -578,7 +578,7 @@ final class ProjectDoneCopyParityTests: XCTestCase {
                       "the projects list no longer says who recorded a done project")
         XCTAssertTrue(page.contains("<span className=\"project-done-provenance\">{doneProvenance(p)}</span>"),
                       "the project page no longer says who recorded it done")
-        XCTAssertTrue(page.contains("{PROJECT_DONE_COPY.readyToClose}</Tag>"),
+        XCTAssertTrue(page.contains("{PROJECT_DONE_COPY.readyToClose}</Badge>"),
                       "the project page no longer says Ready to close beside its status")
     }
 

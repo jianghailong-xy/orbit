@@ -125,7 +125,7 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
         let page = try source(Self.page)
         assertSays(page, "title: '\(ProjectPage.replaceCoordinatorQuestion)'", in: Self.page)
         assertSays(page, "'\(ProjectPage.replaceCoordinatorDetail)'", in: Self.page)
-        assertSays(page, "okText: '\(ProjectPage.replaceCoordinatorConfirm)'", in: Self.page)
+        assertSays(page, "confirmText: '\(ProjectPage.replaceCoordinatorConfirm)'", in: Self.page)
         assertSays(page, "cancelText: '\(ProjectPage.replaceCoordinatorKeep)'", in: Self.page)
     }
 
@@ -192,7 +192,7 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
         assertSays(web, "`${pausedCount} ready in paused lists`", in: Self.queue)
         assertSays(web, ProjectPage.queueEmpty, in: Self.queue)
         let truncated = ProjectPage.queueImpactTruncated(maxTasks: 9)
-        assertSays(web, "message=\"\(truncated.title)\"", in: Self.queue)
+        assertSays(web, "title=\"\(truncated.title)\"", in: Self.queue)
         assertSays(web, "unfinished tasks, so tasks are shown without downstream impact ranking.", in: Self.queue)
         for state in ["Work in progress", "Waiting for runner", "List paused", "Prerequisites complete"] {
             assertSays(web, state, in: Self.queue)

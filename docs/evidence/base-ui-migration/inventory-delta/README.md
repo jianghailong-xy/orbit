@@ -49,8 +49,12 @@ antd 的声明与锁定版本没有变化：`src/web/package.json` 的 declared 
 | [2026-10-08.json](2026-10-08.json) | [浮层第一帧位置](../overlay-first-frame/README.md)登记 `ChoicesFixture.tsx` 新增的 antd `Drawer` 导入（第一帧检查「抽屉内」位置的 AntD 参照），owner 仍为 P6，条目 status 为 `amended`（重述 07d 的条目）；由 `../overlay-first-frame/build-inventory-record.py` 生成。 |
 | [build-record.py](build-record.py) | 由审计 JSON 和 git 历史算出事实，再合入手工归属表（owner 与理由）生成记录。有使用点缺决定时直接失败退出。 |
 | [build-decision.py](build-decision.py) | 从第一份记录复制 9 个待定条目的事实，写入协调者判定的 owner，生成 `2026-10-07b.json`。 |
+| [2026-10-08b.json](2026-10-08b.json) | [P4.3a](orbit-task:34Za39GvWRQ08ZmKOpFNe) 登记协调者 2026-10-08 的三项判定：`ui/Empty.tsx`（079c5f006 新增，注释写明改编自 Ant Design 的 MIT 插图）按 `ui/SelectEmpty.tsx` 的先例归 P6；index.css 「The two lines…」那段注释由 P4.3b 改归 P4.3a（它说明的单选规则只有 ProjectRunSettings 用）；`.ant-popover .watch-row-list` 由 P4.3a 改归 P4.4（它限定的 AntD Popover 在 P4.4 的 WatchRelations.tsx 里）。由 `build-record-08b.py` 从 079c5f006 的审计（`../p4.3a/checks/record-08b-audit.json`）生成。 |
+| [build-record-08b.py](build-record-08b.py) | 只读入排在它前面的记录，确认只剩 `ui/Empty.tsx` 未归属，再从审计和 git 取事实，写入上面三项判定，生成 `2026-10-08b.json`；多出未归属点或判定对不上任何点都直接失败。 |
+| [2026-10-09b.json](2026-10-09b.json) | [P4.3a](orbit-task:34Za39GvWRQ08ZmKOpFNe) 登记协调者 2026-10-09 的判定：P4.3a 跟上 origin/main `19c760ae4` 后 `--check-owners` 报出 3 个未归属点，都是另一个项目（34bmzOkov3xN2yLPrnsCk，Infrastructure 页）带进 main 的测试文件，只用 antd 的 `App` 包裹被测组件（被测的 InfrastructurePage、RunnerDetailPage 本身不导入 antd）：`App.infrastructure.test.tsx`、`InfrastructurePage.overview.test.tsx`、`RunnerDetailPage.engines.test.tsx` → P6，status 记 new（P6 去掉 ConfigProvider/AntApp 时一起去掉；先例是 07c 的 `ProjectDoneConversation.test.tsx`）。文件名用 09b，`2026-10-09.json` 留给在它之后落地的 P4.3b。由 `build-record-09b.py` 从 `dac57bade` 的审计（`../p4.3a/checks/record-09b-audit.json`）生成。 |
+| [build-record-09b.py](build-record-09b.py) | 只读入排在它前面的记录，确认只剩这 3 个测试文件未归属、没有待定点，再从审计和 git 取事实，写入判定，生成 `2026-10-09b.json`；多出未归属点或判定对不上任何点都直接失败。 |
 | [build-record-c.py](build-record-c.py) | 只读入排在它前面的两份记录，算出仍未归属的点，再从审计 JSON、P0.1 基线和 git blame 取出它们的事实，写入协调者的判定，生成 `2026-10-07c.json`。有点缺判定，或判定对不上任何点，都直接失败。 |
-| [verify-record.mjs](verify-record.mjs) | 按读取顺序逐份核对记录与审计是否一致，并做反向对照：拿掉新增/改动、拿掉重新归属、单独检查 P0.1 基线；补充记录必须排在被补充的记录之后。 |
+| [verify-record.mjs](verify-record.mjs) | 按读取顺序逐份核对记录与审计是否一致，并做反向对照：拿掉新增/改动、拿掉重新归属、单独检查 P0.1 基线；补充记录必须排在被补充的记录之后。2026-10-08 起（P4.3a），重新归属的反向对照比较每个点归谁（owner 本身，或待定、未归属），不再只比较有没有归属：08b 把点从一个仍在进行的批次移到另一个，原来的比较看不出变化、会误报失败（实测原版报 `[] ≠ [10699, 19729]`）。07、07b、07c 用各自的审计复核仍然通过（07d 只有 `amended` 条目，不经过这一项）。 |
 | `src/web/scripts/audit-antd.mjs --check-owners` | 新增的只读检查模式；原有的默认、`--json`、`--check-retired` 输出逐字节不变。 |
 | [checks/](checks/) | 本次实际输出，详见文末[复现与验证](#复现与验证)。 |
 

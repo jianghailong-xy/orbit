@@ -1,0 +1,324 @@
+{
+ "screenshots": {
+  "antialias": 169,
+  "beyond": 61,
+  "identical": 394,
+  "missing": 0
+ },
+ "tests": {
+  "notPassedDel": [],
+  "notPassedRef": [],
+  "total": 104
+ },
+ "traces": {
+  "equal": 8,
+  "total": 104
+ },
+ "beyond": [
+  {
+   "shot": "chromium-dark-desktop/p43a-blocker-review.png",
+   "pixels": 3200,
+   "max": 150
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-coordinator-rebind.png",
+   "pixels": 14768,
+   "max": 15
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-run-settings-edited.png",
+   "pixels": 67,
+   "max": 8
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-run-settings-escalation.png",
+   "pixels": 67,
+   "max": 8
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-session-handled-refused.png",
+   "pixels": 42,
+   "max": 10
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-status-cancel.png",
+   "pixels": 48,
+   "max": 5
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-status-done.png",
+   "pixels": 23,
+   "max": 5
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-status-refused.png",
+   "pixels": 28,
+   "max": 5
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-task-attribution-copy.png",
+   "pixels": 14,
+   "max": 14
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-task-attribution-loading.png",
+   "pixels": 12,
+   "max": 14
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-task-attribution.png",
+   "pixels": 14,
+   "max": 14
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-tasks-assign.png",
+   "pixels": 7,
+   "max": 3
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-tasks-delete.png",
+   "pixels": 37,
+   "max": 8
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-tasks-labels.png",
+   "pixels": 4,
+   "max": 4
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-tasks-run.png",
+   "pixels": 7,
+   "max": 3
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-tasks-stop.png",
+   "pixels": 8,
+   "max": 8
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-blocker-review.png",
+   "pixels": 20587,
+   "max": 150
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-coordinator-rebind.png",
+   "pixels": 16682,
+   "max": 15
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-tasks-assign.png",
+   "pixels": 209,
+   "max": 51
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-blocker-review.png",
+   "pixels": 3196,
+   "max": 171
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-coordinator-rebind.png",
+   "pixels": 14721,
+   "max": 10
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-run-settings-edited.png",
+   "pixels": 102,
+   "max": 9
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-run-settings-escalation.png",
+   "pixels": 102,
+   "max": 9
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-session-handled-refused.png",
+   "pixels": 49,
+   "max": 12
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-status-cancel.png",
+   "pixels": 49,
+   "max": 5
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-status-done.png",
+   "pixels": 16,
+   "max": 5
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-status-refused.png",
+   "pixels": 21,
+   "max": 5
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-task-attribution-loading.png",
+   "pixels": 16,
+   "max": 15
+  },
+  {
+   "shot": "chromium-light-phone/p43a-blocker-review.png",
+   "pixels": 31035,
+   "max": 171
+  },
+  {
+   "shot": "chromium-light-phone/p43a-coordinator-landing.png",
+   "pixels": 23660,
+   "max": 3
+  },
+  {
+   "shot": "chromium-light-phone/p43a-coordinator-rebind.png",
+   "pixels": 25329,
+   "max": 10
+  },
+  {
+   "shot": "chromium-light-phone/p43a-coordinator-replace.png",
+   "pixels": 24181,
+   "max": 3
+  },
+  {
+   "shot": "chromium-light-phone/p43a-status-cancel.png",
+   "pixels": 28219,
+   "max": 3
+  },
+  {
+   "shot": "chromium-light-phone/p43a-status-reopen.png",
+   "pixels": 2,
+   "max": 4
+  },
+  {
+   "shot": "chromium-light-phone/p43a-tasks-assign.png",
+   "pixels": 252,
+   "max": 61
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-blocker-review.png",
+   "pixels": 3195,
+   "max": 150
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-coordinator-rebind.png",
+   "pixels": 14790,
+   "max": 15
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-status-reopen.png",
+   "pixels": 50304,
+   "max": 255
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-tasks-assign.png",
+   "pixels": 15382,
+   "max": 255
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-blocker-review.png",
+   "pixels": 2355,
+   "max": 150
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-coordinator-rebind.png",
+   "pixels": 10121,
+   "max": 15
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-delete.png",
+   "pixels": 2077,
+   "max": 167
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-run-queue-resume.png",
+   "pixels": 2329,
+   "max": 209
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-task-schedule-invalid.png",
+   "pixels": 1,
+   "max": 3
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-task-schedule.png",
+   "pixels": 1,
+   "max": 3
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-tasks-assign.png",
+   "pixels": 35,
+   "max": 51
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-tasks-delete.png",
+   "pixels": 2080,
+   "max": 167
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-tasks-stop.png",
+   "pixels": 6465,
+   "max": 167
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-blocker-review.png",
+   "pixels": 3183,
+   "max": 171
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-coordinator-rebind.png",
+   "pixels": 14709,
+   "max": 10
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-status-reopen.png",
+   "pixels": 41679,
+   "max": 255
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-tasks-assign.png",
+   "pixels": 15371,
+   "max": 255
+  },
+  {
+   "shot": "webkit-light-phone/p43a-blocker-review.png",
+   "pixels": 2343,
+   "max": 171
+  },
+  {
+   "shot": "webkit-light-phone/p43a-coordinator-rebind.png",
+   "pixels": 10039,
+   "max": 10
+  },
+  {
+   "shot": "webkit-light-phone/p43a-delete.png",
+   "pixels": 2984,
+   "max": 224
+  },
+  {
+   "shot": "webkit-light-phone/p43a-run-queue-resume.png",
+   "pixels": 3176,
+   "max": 224
+  },
+  {
+   "shot": "webkit-light-phone/p43a-task-schedule-invalid.png",
+   "pixels": 1,
+   "max": 3
+  },
+  {
+   "shot": "webkit-light-phone/p43a-task-schedule.png",
+   "pixels": 1,
+   "max": 3
+  },
+  {
+   "shot": "webkit-light-phone/p43a-tasks-assign.png",
+   "pixels": 26,
+   "max": 62
+  },
+  {
+   "shot": "webkit-light-phone/p43a-tasks-delete.png",
+   "pixels": 2960,
+   "max": 224
+  },
+  {
+   "shot": "webkit-light-phone/p43a-tasks-stop.png",
+   "pixels": 8663,
+   "max": 255
+  }
+ ]
+}
