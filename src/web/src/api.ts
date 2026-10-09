@@ -1222,6 +1222,13 @@ export interface SharedSession {
   scope?: SharedScope;
 }
 
+/** A shared conversation's header as it stands now, and the events it has added since a seq the
+ *  page holds (getSharedEventsAfter). */
+export type SharedSessionNow = Omit<SharedSession, 'hasMore' | 'kind' | 'task' | 'project' | 'scope'> & {
+  /** Where the events after these start; null once these reach the newest. */
+  after: number | null;
+};
+
 /** What a project link opens besides its root page — its tasks with Task pages, its conversations
  *  (its tasks' runs and its coordinator) with Conversations — for the page's links to go to. */
 export interface SharedScope {
@@ -1463,6 +1470,18 @@ export const getSharedEventPage = (
   if (!opts.whole) qs.set('maxPayload', String(MAX_EVENT_PAYLOAD));
   return sharedGet(token, `${sharedConversation(opts.sessionId)}/events?${qs.toString()}`);
 };
+
+/** What a shared conversation has added since `after`, the newest seq the page holds — at most
+ *  `limit` events, oldest first, clipped like the rest — and its header as it stands now. What a
+ *  page following a live conversation asks every few seconds. */
+export const getSharedEventsAfter = (
+  token: string,
+  opts: { after: number; limit: number; sessionId?: string },
+): Promise<SharedSessionNow> =>
+  sharedGet<SharedSessionNow>(
+    token,
+    `${sharedConversation(opts.sessionId)}/events?after=${opts.after}&limit=${opts.limit}&maxPayload=${MAX_EVENT_PAYLOAD}`,
+  );
 
 /** One shared event's untrimmed payload, for a card that arrived `truncated` and was opened. */
 export const getSharedEventFull = (token: string, seq: number, sessionId?: string): Promise<SharedEvent> =>

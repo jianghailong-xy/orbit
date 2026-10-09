@@ -2289,6 +2289,7 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "sessions/auto-retry.service.ts#rearm", class: "ONE_ROW_CAS", statements: 1 },
   { at: "sessions/auto-retry.service.ts#sweep", class: "ONE_ROW_CAS", statements: 2 },
   { at: "sessions/sessions.service.ts#applyAutoTags", class: "INSERT", statements: 1 },
+  { at: "sessions/sessions.service.ts#applyEngineTitle", class: "ONE_ROW_CAS", statements: 1, note: "The runner's naming report: the title moves only while the session still reads the one its claim carried and no project owns it, so a rename made since stands and a repeated report matches nothing." },
   { at: "sessions/sessions.service.ts#beautifySessionLater", class: "ONE_ROW_CAS", statements: 1 },
   { at: "sessions/sessions.service.ts#cancelAutoRetry", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "sessions/sessions.service.ts#commitWorktree", class: "ONE_ROW_CAS", statements: 1 },

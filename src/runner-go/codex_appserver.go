@@ -83,6 +83,13 @@ type codexAppServer struct {
 	notifications chan codexRPCMessage
 	done          chan struct{}
 	doneOnce      sync.Once
+	// sideThreads routes the notifications of a thread Orbit opened for itself — the naming thread
+	// (codex_naming.go) — to the one goroutine waiting on it, rather than to the session's handler,
+	// which drops every thread but the session's own. Guarded by mu.
+	sideThreads map[string]chan codexRPCMessage
+	// orbitMCP is whether this process was started with Orbit's own MCP server
+	// (codexOrbitMCPServer), which a side thread turns off for itself.
+	orbitMCP bool
 
 	orbitExecutable     string
 	instructionMode     codexInstructionMode
@@ -158,7 +165,7 @@ func finishCodexAppTurnFinalize(activeMu *sync.Mutex, active **codexAppActiveTur
 	activeMu.Unlock()
 }
 
-func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, emitFor emitTurnFn, setTurn func(string), _ bool, bg *bgTailer, onRateLimits codexRateLimitSink, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
+func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, emitFor emitTurnFn, setTurn func(string), firstSpawn bool, bg *bgTailer, onRateLimits codexRateLimitSink, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
 	setTurn("")
 	upDir := uploadsDir(job.SessionID)
 	_ = os.MkdirAll(upDir, 0o755)
@@ -466,6 +473,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		}
 	}()
 
+	var namingOnce sync.Once
 	startTurn := func(resp *RunInboxResponse, pendingShellCtx []string) {
 		activeMu.Lock()
 		if active != nil {
@@ -534,6 +542,17 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 				return
 			}
 			recordCodexTurnID(respCopy.TurnID, codexTurnID)
+			// The opening turn is underway: name the session in a side thread of this same
+			// app-server, once, when the control plane asked for it (codex_naming.go).
+			if firstSpawn && !resumedThread && job.Naming != nil {
+				namingOnce.Do(func() {
+					asyncWg.Add(1)
+					go func() {
+						defer asyncWg.Done()
+						nameCodexSession(workerCtx, t, app, job)
+					}()
+				})
+			}
 		}()
 	}
 
@@ -1076,6 +1095,7 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 		notifications:   make(chan codexRPCMessage, 256),
 		done:            make(chan struct{}),
 		orbitExecutable: orbitCLIExecutable(),
+		orbitMCP:        exe != "",
 	}
 	if err := startSessionProcess(cmd); err != nil {
 		cancel()
@@ -1557,7 +1577,7 @@ func (a *codexAppServer) readLoop(r io.Reader) {
 				a.handleServerRequest(msg)
 			} else if msg.ID != nil {
 				a.deliverResponse(msg)
-			} else if msg.Method != "" {
+			} else if msg.Method != "" && !a.routeSideThread(msg) {
 				// Never lose this state transition even if the high-volume notification
 				// channel is full; the next turn must restore compacted instructions. The
 				// durable system event is the control plane's matching boundary for sparse
@@ -1696,7 +1716,14 @@ func (a *codexAppServer) answerElicitation(msg codexRPCMessage) {
 }
 
 func (a *codexAppServer) handleServerRequest(msg codexRPCMessage) {
+	// A thread Orbit opened for itself asks nobody: whatever it raises is declined here, so none of
+	// it reaches the session's permission mode or puts a card in front of its owner.
+	side := a.isSideThread(codexNotificationThreadID(msg))
 	if msg.Method == codexMCPElicitationMethod {
+		if side {
+			_ = a.write(map[string]interface{}{"id": msg.ID, "result": codexElicitationResult(false)})
+			return
+		}
 		a.answerElicitation(msg)
 		return
 	}
@@ -1709,6 +1736,10 @@ func (a *codexAppServer) handleServerRequest(msg codexRPCMessage) {
 				"message": "Orbit runner does not implement app-server request " + msg.Method,
 			},
 		})
+		return
+	}
+	if side {
+		_ = a.write(map[string]interface{}{"id": msg.ID, "result": map[string]interface{}{"decision": request.decision(false)}})
 		return
 	}
 	// Answer on a goroutine: readLoop calls this inline, and an approval blocks on a human who

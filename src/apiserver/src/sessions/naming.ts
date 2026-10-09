@@ -1,5 +1,7 @@
 import { randomUUID } from 'crypto';
+import { AgentProvider, type SessionNamingJob } from '@orbit/shared';
 import { AsyncWorkQueue } from '../common/async-work-queue';
+import { heldKeyOf, type HeldKey, type HeldKeyRow } from '../providers/held-key';
 
 /**
  * Turn a human title into a git-branch-safe slug: lowercase, non-alphanumerics → '-',
@@ -45,12 +47,18 @@ export function titleFromAttachments(fileNames: readonly (string | null)[]): str
   return fileNames.filter(Boolean).join(', ').slice(0, 80) || 'Attachment';
 }
 
-const DEEPSEEK_SYSTEM_PROMPT =
-  'You name and label a software-engineering session. Reply with ONLY a JSON object ' +
-  '{"title": string, "tags": string[]}. "title": a concise summary, at most 6 words ' +
+/** How a title is written, whoever asks for one. */
+const TITLE_RULE =
+  '"title": a concise summary, at most 6 words ' +
   '(or ~16 characters for languages without spaces), no trailing punctuation, written ' +
   "in the SAME language as the user's request — a Chinese request gets a Chinese title, " +
-  'an English request an English one. "tags": 1-3 short semantic labels the user can later ' +
+  'an English request an English one.';
+
+const NAMING_SYSTEM_PROMPT =
+  'You name and label a software-engineering session. Reply with ONLY a JSON object ' +
+  '{"title": string, "tags": string[]}. ' +
+  TITLE_RULE +
+  ' "tags": 1-3 short semantic labels the user can later ' +
   'filter sessions by — the area, component, or kind of work — each at most 2 words and in ' +
   "the title's language. A tag must group this session with OTHER sessions, so never restate " +
   'the title and never name a one-off detail. No other text.';
@@ -96,6 +104,12 @@ export function sanitizeTags(value: unknown): string[] {
   return tags;
 }
 
+/** A title as it is stored: on one line, trimmed and capped like the fallback; undefined if empty. */
+export function sanitizeTitle(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  return value.replace(/\s+/g, ' ').trim().slice(0, 80).trim() || undefined;
+}
+
 /** What one naming pass yields. `tags` is always an array — empty when the model gave none. */
 export interface SessionNaming {
   title?: string;
@@ -103,42 +117,167 @@ export interface SessionNaming {
 }
 
 /**
- * A single DeepSeek naming attempt (an OpenAI-compatible chat call). Returns the parsed
- * `{ title?, tags }`, or null on ANY failure — no key configured, non-200, the per-attempt
- * timeout firing, or a body that isn't the expected JSON. NEVER throws. The explicit race is a
- * hard outer bound even when a fetch implementation ignores abort; abort still actively tears
- * down a normal network request.
+ * What a naming pass reads: the request, the owner's tags, and the key to ask on. Without `key` it is
+ * the server's DeepSeek key (DEEPSEEK_API_KEY); with one, the session's own (sessionHeldKey).
  */
-async function requestNaming(
-  input: { prompt: string; title?: string; knownTags?: string[] },
-  timeoutMs: number,
-): Promise<SessionNaming | null> {
+export interface NamingInput {
+  prompt: string;
+  title?: string;
+  knownTags?: string[];
+  key?: HeldKey;
+}
+
+/**
+ * The model's reply read as `{ title?, tags }`. Only DeepSeek is asked for a JSON mode, so another
+ * vendor's model may fence the object or say something around it: the outermost braces are the
+ * answer. Throws on a reply with no JSON object in it, which the attempt counts as a failure.
+ */
+function parseNaming(content: string): SessionNaming {
+  const start = content.indexOf('{');
+  const end = content.lastIndexOf('}');
+  const parsed = JSON.parse(start >= 0 && end > start ? content.slice(start, end + 1) : content) as {
+    title?: unknown;
+    tags?: unknown;
+  };
+  return { title: sanitizeTitle(parsed.title), tags: sanitizeTags(parsed.tags) };
+}
+
+/** One naming request: where it goes, how it is signed, and where the reply's text sits. */
+interface NamingCall {
+  url: string;
+  headers: Record<string, string>;
+  body: Record<string, unknown>;
+  text: (data: unknown) => unknown;
+}
+
+const chatText = (data: unknown): unknown =>
+  (data as { choices?: { message?: { content?: unknown } }[] } | null)?.choices?.[0]?.message?.content;
+
+/** The text of a reply's text blocks, or undefined when it has none. */
+function joinText(blocks: { text?: unknown }[] | undefined): string | undefined {
+  const texts = (blocks ?? []).map((block) => block.text).filter((t): t is string => typeof t === 'string');
+  return texts.length > 0 ? texts.join('') : undefined;
+}
+
+/** The server's own DeepSeek key: an OpenAI-compatible chat call in DeepSeek's JSON mode. */
+function deepSeekCall(apiKey: string, system: string, task: string): NamingCall {
+  const base = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, '');
+  return {
+    url: `${base}/chat/completions`,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: {
+      model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+      temperature: 0.2,
+      max_tokens: 200,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: task },
+      ],
+    },
+    text: chatText,
+  };
+}
+
+/** Room for a reasoning model, which a session may well run, to think before it answers. */
+const HELD_KEY_MAX_TOKENS = 2048;
+
+/**
+ * The same request on the session's own key, at the endpoint its engine is pointed at and with the
+ * auth that engine is handed — what ProvidersService.testConnection probes: Anthropic Messages, the
+ * OpenAI Responses API (all Codex speaks), Chat Completions (Kimi), or Gemini's generateContent. No
+ * JSON mode: not every vendor behind these serves one, and parseNaming finds the object in plain text.
+ */
+function heldKeyCall(key: HeldKey, system: string, task: string): NamingCall {
+  const base = key.baseUrl.replace(/\/+$/, '');
+  const bearer = { 'Content-Type': 'application/json', Authorization: `Bearer ${key.apiKey}` };
+  switch (key.dialect) {
+    case 'anthropic':
+      return {
+        url: `${base}/v1/messages`,
+        headers: { ...bearer, 'anthropic-version': '2023-06-01' },
+        body: { model: key.model, max_tokens: HELD_KEY_MAX_TOKENS, system, messages: [{ role: 'user', content: task }] },
+        // A thinking model's thoughts come as blocks of their own.
+        text: (data) =>
+          joinText(
+            (data as { content?: { type?: string; text?: unknown }[] } | null)?.content?.filter(
+              (block) => block.type === 'text',
+            ),
+          ),
+      };
+    case 'openai':
+      return {
+        url: `${base}/responses`,
+        headers: bearer,
+        body: { model: key.model, instructions: system, input: task, max_output_tokens: HELD_KEY_MAX_TOKENS },
+        text: (data) =>
+          joinText(
+            (data as { output?: { type?: string; content?: { type?: string; text?: unknown }[] }[] } | null)?.output
+              ?.filter((item) => item.type === 'message')
+              .flatMap((item) => item.content ?? [])
+              .filter((part) => part.type === 'output_text'),
+          ),
+      };
+    case 'openai-compatible':
+      return {
+        url: `${base}/chat/completions`,
+        headers: bearer,
+        body: {
+          model: key.model,
+          max_tokens: HELD_KEY_MAX_TOKENS,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: task },
+          ],
+        },
+        text: chatText,
+      };
+  }
+  // Gemini: the key rides in a header of its own, and a thinking model's thoughts are parts of their own.
+  return {
+    url: `${base}/v1beta/models/${encodeURIComponent(key.model)}:generateContent`,
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key.apiKey },
+    body: {
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [{ role: 'user', parts: [{ text: task }] }],
+      generationConfig: { maxOutputTokens: HELD_KEY_MAX_TOKENS },
+    },
+    text: (data) =>
+      joinText(
+        (
+          data as { candidates?: { content?: { parts?: { text?: unknown; thought?: boolean }[] } }[] } | null
+        )?.candidates?.[0]?.content?.parts?.filter((part) => !part.thought),
+      ),
+  };
+}
+
+/**
+ * A single naming attempt, on the session's own key when `input.key` names one and on the server's
+ * DeepSeek key otherwise. Returns the parsed `{ title?, tags }`, or null on ANY failure — no key at
+ * all, non-200, the per-attempt timeout firing, or a body without the expected JSON. NEVER throws.
+ * The explicit race is a hard outer bound even when a fetch implementation ignores abort; abort still
+ * actively tears down a normal network request.
+ */
+async function requestNaming(input: NamingInput, timeoutMs: number): Promise<SessionNaming | null> {
   const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
-  if (!apiKey) return null;
+  if (!input.key && !apiKey) return null;
   const controller = new AbortController();
   let timeout: ReturnType<typeof setTimeout> | undefined;
   const request = (async (): Promise<SessionNaming | null> => {
-    const base = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, '');
-    const model = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
     const task = [input.title, input.prompt].filter(Boolean).join('\n').slice(0, 600);
     // The owner's own vocabulary. Without it every session coins a fresh near-synonym and the tag
     // filter degrades into a list of one-session labels.
     const system = input.knownTags?.length
-      ? DEEPSEEK_SYSTEM_PROMPT + reusePrompt(input.knownTags)
-      : DEEPSEEK_SYSTEM_PROMPT;
-    const resp = await fetch(`${base}/chat/completions`, {
+      ? NAMING_SYSTEM_PROMPT + reusePrompt(input.knownTags)
+      : NAMING_SYSTEM_PROMPT;
+    const call = input.key ? heldKeyCall(input.key, system, task) : deepSeekCall(apiKey!, system, task);
+    const resp = await fetch(call.url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model,
-        temperature: 0.2,
-        max_tokens: 200,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: task },
-        ],
-      }),
+      // A session's key points wherever its owner typed: a redirect is not followed off it, as the
+      // connection test follows none.
+      redirect: 'manual',
+      headers: call.headers,
+      body: JSON.stringify(call.body),
       signal: controller.signal,
     });
     if (!resp.ok) {
@@ -147,13 +286,9 @@ async function requestNaming(
       await resp.body?.cancel().catch(() => undefined);
       return null;
     }
-    const data = (await resp.json()) as { choices?: { message?: { content?: string } }[] };
-    const content = data?.choices?.[0]?.message?.content;
+    const content = call.text(await resp.json());
     if (typeof content !== 'string') return null;
-    const parsed = JSON.parse(content) as { title?: unknown; tags?: unknown };
-    const title =
-      typeof parsed.title === 'string' && parsed.title.trim() ? parsed.title.trim().slice(0, 80) : undefined;
-    return { title, tags: sanitizeTags(parsed.tags) };
+    return parseNaming(content);
   })().catch(() => null);
   const timedOut = new Promise<null>((resolve) => {
     timeout = setTimeout(() => {
@@ -171,17 +306,18 @@ async function requestNaming(
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Off the hot path: ask DeepSeek for a cleaner display title and a few filing tags. Session
- * creation always uses its synchronous fallback first; this helper can afford a generous timeout
- * and retries. Returns an empty result when there's no key or every attempt failed. NEVER throws.
- * A titled answer ends the loop even with no tags — the title is the part a retry is worth paying
- * for, and a re-ask would just as likely return no tags again.
+ * Off the hot path: ask a model — DeepSeek on the server's key, or the session's own provider on its
+ * key — for a cleaner display title and a few filing tags. Session creation always uses its
+ * synchronous fallback first; this helper can afford a generous timeout and retries. Returns an
+ * empty result when there's no key or every attempt failed. NEVER throws. A titled answer ends the
+ * loop even with no tags — the title is the part a retry is worth paying for, and a re-ask would just
+ * as likely return no tags again.
  */
 export async function beautifySession(
-  input: { prompt: string; title?: string; knownTags?: string[] },
+  input: NamingInput,
   opts: { timeoutMs?: number; retries?: number; backoffMs?: number } = {},
 ): Promise<SessionNaming> {
-  if (!process.env.DEEPSEEK_API_KEY?.trim()) return { tags: [] };
+  if (!input.key && !process.env.DEEPSEEK_API_KEY?.trim()) return { tags: [] };
   const timeoutMs = opts.timeoutMs ?? 30_000;
   const retries = opts.retries ?? 3;
   const backoffMs = opts.backoffMs ?? 1_000;
@@ -193,7 +329,7 @@ export async function beautifySession(
   return { tags: [] };
 }
 
-// Naming is cosmetic. Keep slow or unavailable DeepSeek calls from turning a burst of session
+// Naming is cosmetic. Keep slow or unavailable model calls from turning a burst of session
 // creates into a burst of outbound sockets and timers. The queue is intentionally process-local:
 // a restart merely leaves the already-persisted fallback title in place.
 export const TITLE_BEAUTIFY_CONCURRENCY = 3;
@@ -209,15 +345,49 @@ const beautifyQueue = new AsyncWorkQueue(TITLE_BEAUTIFY_CONCURRENCY);
 export const MAX_KNOWN_TAGS_PROMPTED = 60;
 
 export function enqueueBeautifySession(
-  input: { prompt: string; title?: string; knownTags?: string[] },
+  input: NamingInput,
   opts: { timeoutMs?: number; retries?: number; backoffMs?: number } = {},
 ): Promise<SessionNaming> {
-  if (!process.env.DEEPSEEK_API_KEY?.trim()) return Promise.resolve({ tags: [] });
+  if (!input.key && !process.env.DEEPSEEK_API_KEY?.trim()) return Promise.resolve({ tags: [] });
   // Do not retain an arbitrarily large compose prompt while earlier requests occupy the queue.
   const boundedInput = {
     prompt: input.prompt.slice(0, 600),
     title: input.title?.slice(0, 80),
     knownTags: input.knownTags?.slice(0, MAX_KNOWN_TAGS_PROMPTED),
+    key: input.key,
   };
   return beautifyQueue.run(() => beautifySession(boundedInput, opts));
+}
+
+/**
+ * What a runner names a session under when the engine running it takes a prompt of Orbit's — the
+ * Codex side thread (the claim's `naming.instructions`). A title alone: Claude Code's own naming
+ * answers nothing else, so a session an engine names is filed under no tags either way.
+ */
+export const ENGINE_NAMING_INSTRUCTIONS =
+  'You name a software-engineering session. Reply with ONLY a JSON object {"title": string}. ' +
+  TITLE_RULE +
+  ' No other text.';
+
+/**
+ * The claim's `naming`: whether the engine about to run a session should name it, from inside the
+ * process running it. Only when nothing else will — the server has no DeepSeek key, and the session's
+ * provider holds no key the server may spend (`configuredRow` is the configured row the session's
+ * provider names, null for a built-in engine or a pool), since either of those named it at creation
+ * (SessionsService.beautifySessionLater) — and only on an engine with a way to answer: Claude Code's
+ * own generate_session_title, a Codex side thread. A session whose title is not the one cut from its
+ * prompt has a real one already — given by a person, a task, a project, or an earlier naming — and so
+ * does any session that opened with no words.
+ */
+export function engineNamingJob(
+  session: { title: string; prompt: string; taskId: string | null; titleManagedByProject: boolean; model: string | null },
+  runtime: string,
+  configuredRow: HeldKeyRow | null,
+): SessionNamingJob | undefined {
+  if (process.env.DEEPSEEK_API_KEY?.trim()) return undefined;
+  if (runtime !== AgentProvider.CLAUDE && runtime !== AgentProvider.CODEX) return undefined;
+  if (session.taskId || session.titleManagedByProject) return undefined;
+  if (!session.prompt.trim() || session.title !== titleFromPrompt(session.prompt)) return undefined;
+  if (configuredRow && heldKeyOf(configuredRow, session.model?.trim() || undefined, true)) return undefined;
+  return { description: session.prompt.slice(0, 600), instructions: ENGINE_NAMING_INSTRUCTIONS };
 }

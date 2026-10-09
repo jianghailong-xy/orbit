@@ -58,6 +58,7 @@ import {
   normalizeEffortForRuntimeModel,
 } from '../common/runtime-provider';
 import { worktreeOperationFenceSql } from '../common/session-inbox-fence';
+import { engineNamingJob } from '../sessions/naming';
 import {
   batchActiveTurns,
   runnerActiveTurns,
@@ -756,11 +757,14 @@ export class QueueService {
     // owner is in, which dispatches through the pool gateway; each on a token minted for this claim.
     const declaredIsBuiltin = isBuiltinProvider(declared, declaredProviderBuiltin);
     // A maintenance run is never dispatched through a pool: it has no member to fall back on (its refusal says so).
+    const configuredRow = declaredIsBuiltin
+      ? null
+      : await this.prisma.modelProvider.findFirst({
+          where: { slug: declared!, ...(await usableProviderScope(this.prisma, session.ownerId)) },
+        });
     const customRow = declaredIsBuiltin
       ? null
-      : ((await this.prisma.modelProvider.findFirst({
-          where: { slug: declared!, ...(await usableProviderScope(this.prisma, session.ownerId)) },
-        })) ??
+      : (configuredRow ??
         (maintenance
           ? null
           : ((await this.resolveLoginPool(this.prisma, session, declared!, true)) ??
@@ -859,6 +863,8 @@ export class QueueService {
     // and that absence is the compatibility guarantee, not an omission: it is exactly the payload
     // every runner has always received, so nothing about their behaviour changes (SR46).
     const source = sessionSourceSnapshot(session, await this.sourceBinding(session.sourceCodebaseId));
+    // A session nothing else will name is named by the engine about to run it (engineNamingJob).
+    const naming = maintenance ? undefined : engineNamingJob(session, provider, configuredRow);
     // A maintenance session's run goes on top: its guardrails, and the clean start the runner reads it by.
     return withWikiMaintenanceRun({
       sessionId: session.id,
@@ -976,6 +982,7 @@ export class QueueService {
         env: exec.env,
       },
       source,
+      ...(naming ? { naming } : {}),
     }, maintenance);
   }
 

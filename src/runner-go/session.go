@@ -1790,6 +1790,8 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		// real message prepends + clears it so claude sees it as context (CLI `!` semantics).
 		// Poller-goroutine-local (no lock), and intentionally lost on respawn.
 		var pendingShellCtx []string
+		// Whether this spawn has asked the engine to name the session (session_naming.go).
+		namingAsked := false
 		for pollCtx.Err() == nil {
 			resp, err := t.inbox(pollCtx, job.SessionID, leaseGeneration)
 			if err != nil {
@@ -2057,6 +2059,13 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 						}
 					}
 				}(delivery, resp.TurnID, steer)
+				// The opening request is on its way: the same engine names the session, once, when
+				// the control plane asked it to. Queued behind the user frame on the one writer, and
+				// answered beside the turn rather than after it.
+				if firstSpawn && !steer && !namingAsked && job.Naming != nil {
+					namingAsked = true
+					go askClaudeSessionTitle(procCtx, t, rt, job)
+				}
 			case "shell":
 				if !waitTurnPermit(procCtx) {
 					return

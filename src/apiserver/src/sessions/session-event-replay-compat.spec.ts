@@ -113,6 +113,47 @@ test('a shared transcript event fetched by seq sits behind the same fence', asyn
   assert.ok(captured.values.includes(replayableEventSql));
 });
 
+test('what a shared session added after a seq sits behind the same fence, read after its header', async () => {
+  const reads: string[] = [];
+  let captured: TaggedQuery | undefined;
+  const prisma = {
+    session: {
+      findFirst: async () => {
+        reads.push('header');
+        return {
+          id: SESSION,
+          title: 'shared',
+          status: 'RUNNING',
+          endReason: null,
+          completedAt: null,
+          archivedAt: null,
+          deletedAt: null,
+          createdAt: new Date('2026-08-31T02:00:00Z'),
+          workspace: null,
+        };
+      },
+    },
+    $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      reads.push('events');
+      captured = { strings, values };
+      return [];
+    },
+  };
+  const service = new SessionsService(prisma as never, {} as never, {} as never);
+
+  const now = await service.getSharedEventsAfter(SESSION, { after: 7, maxPayload: 2048 });
+
+  assert.deepEqual(now.events, []);
+  assert.equal(now.after, null);
+  assert.equal(now.runState, 'RUNNING');
+  // The header first: an answer that says the run is over holds every event written before it.
+  assert.deepEqual(reads, ['header', 'events']);
+  assert.ok(captured);
+  assert.match(renderedQuery(captured), /seq > \?/);
+  assert.ok(captured.values.includes(7));
+  assertReplayFence(captured, 'ASC');
+});
+
 test('the SSE history replay applies the same fence while leaving its live half alone', async () => {
   let captured: TaggedQuery | undefined;
   const prisma = {
