@@ -301,7 +301,7 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 		return
 	}
 	if flow.engine == providerAntigravity && runtime.GOOS != "linux" {
-		report(LoginResultRequest{Status: loginFailed, Message: "Antigravity 的 Google 登录暂时只支持 Linux runner", Attempt: attempt})
+		report(LoginResultRequest{Status: loginFailed, Message: "Signing Antigravity in with Google works only on a Linux runner for now.", Attempt: attempt})
 		return
 	}
 	// An engine whose CLI keeps a login per directory can sign in another account; every other

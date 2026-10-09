@@ -354,11 +354,9 @@ describe('ProjectDetailPage — recording the project’s own status', () => {
     // nobody can assert it. The confirmation may not assert it in prose either.
     expect(asked).not.toMatch(/not merged/i);
     expect(asked).not.toMatch(/unmerged/i);
-    expect(asked).not.toContain('未合并');
     expect(asked).not.toContain('NOT_LANDED');
-    // What it says instead, in both languages the copy is written in.
+    // What it says instead.
     expect(asked).toContain('Orbit holds no receipt proving that work landed');
-    expect(asked).toContain('这是证据缺席');
   });
 
   it('leaves the press enabled with a receipt missing, and sends PATCH {status: DONE}', async () => {
@@ -397,7 +395,6 @@ describe('ProjectDetailPage — recording the project’s own status', () => {
     expect(asked).not.toContain('merge receipt');
     // ...and what the reader does need is how much unfinished work they are walking away from.
     expect(asked).toContain(`${UNFINISHED} unfinished tasks stay filed under it and won’t start.`);
-    expect(asked).toContain(`项目下还有 ${UNFINISHED} 个任务没有结束`);
     // ...and what cancelling does to them now: nothing starts them, nothing running is stopped.
     expect(asked).toContain('From then on its tasks do not start');
     expect(asked).toContain('a run already going is not stopped');
@@ -435,7 +432,7 @@ describe('ProjectDetailPage — recording the project’s own status', () => {
     ]);
   });
 
-  it('says “record”, never “mark complete”, and says it in both of the app’s languages', async () => {
+  it('says “record”, never “mark complete”, and says it in English only', async () => {
     // Every string this entry added, as the reader actually receives it: the page's own buttons
     // plus all three confirmations. Scanned rather than grepped out of the source, so copy that is
     // written and never drawn cannot pass, and copy that is drawn cannot hide.
@@ -461,12 +458,9 @@ describe('ProjectDetailPage — recording the project’s own status', () => {
     expect(copy.match(/mark complete/gi) ?? []).toEqual([]);
     expect(copy).toContain('Record as done');
 
-    // Both sides of the app's copy, asserted over what was rendered rather than over the English
-    // half alone — a scan that only knows English reads a Chinese sentence as silence.
-    expect(copy).toMatch(/[一-鿿]/);
-    expect(copy).toContain('按下即是你在为这个目标作出主张');
-    expect(copy).toContain('这表示不再追求这个目标');
-    expect(copy).toContain('重开只是把项目改回 Open');
+    // All of the app's copy is English. These confirmations once carried a Chinese translation
+    // under each sentence; asserted over what was rendered, so a translation cannot come back.
+    expect(copy).not.toMatch(/[一-鿿]/);
     expect(copy).toContain('Recording it is a claim you are making about the goal');
     expect(copy).toContain('This records that the goal is no longer being pursued');
     expect(copy).toContain('Reopening puts this project back to Open');
