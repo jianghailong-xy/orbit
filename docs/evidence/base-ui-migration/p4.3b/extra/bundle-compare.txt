@@ -1,0 +1,41 @@
+start: first-page CSS files 2; JS 3476868 B / gzip 1061158; CSS 481162 B / gzip 79404
+    js assets/index-BPwgHDoX.js 1854179 gzip 548515
+    js assets/rolldown-runtime-hePW80VL.js 716 gzip 430
+    js assets/taskDependencyGraph-D9V_qvrC.js 537329 gzip 173880
+    js assets/projectDependencyGraph-BOEWj2Wa.js 174101 gzip 58226
+    js assets/Transcript-DWHdNnkM.js 905992 gzip 278052
+    js assets/popover-CWvJ9i_m.js 4551 gzip 2055
+    css assets/Transcript-DH3pLqhf.css 6496 gzip 1844
+    css assets/index-DQBSDm_8.css 474666 gzip 77560
+startfix: first-page CSS files 1; JS 3476911 B / gzip 1061190; CSS 481161 B / gzip 78878
+    js assets/index-DbVjK6cw.js 1854198 gzip 548530
+    js assets/rolldown-runtime-hePW80VL.js 716 gzip 430
+    js assets/taskDependencyGraph-D9V_qvrC.js 537329 gzip 173880
+    js assets/projectDependencyGraph-BOEWj2Wa.js 174101 gzip 58226
+    js assets/Transcript-DATcAMZf.js 906016 gzip 278069
+    js assets/popover-CWvJ9i_m.js 4551 gzip 2055
+    css assets/app-BzC8HEfN.css 481161 gzip 78878
+ref: first-page CSS files 1; JS 3477011 B / gzip 1061233; CSS 481411 B / gzip 78916
+    js assets/index-BgMsE1MT.js 1854225 gzip 548548
+    js assets/rolldown-runtime-hePW80VL.js 716 gzip 430
+    js assets/taskDependencyGraph-D9V_qvrC.js 537329 gzip 173880
+    js assets/projectDependencyGraph-BOEWj2Wa.js 174101 gzip 58226
+    js assets/Transcript-DEP1-J9L.js 906089 gzip 278094
+    js assets/popover-CWvJ9i_m.js 4551 gzip 2055
+    css assets/app-B4YZzacc.css 481411 gzip 78916
+del: first-page CSS files 1; JS 3478394 B / gzip 1062179; CSS 482050 B / gzip 79005
+    js assets/index-RP7-BxX9.js 2126637 gzip 631542
+    js assets/rolldown-runtime-hePW80VL.js 716 gzip 430
+    js assets/Floating-BAq9quQp.js 182335 gzip 61603
+    js assets/projectDependencyGraph-DzCMeYwY.js 158397 gzip 52461
+    js assets/Transcript-6UVU7lhg.js 1010309 gzip 316143
+    css assets/app-BdWcOvAC.css 482050 gzip 79005
+start -> startfix: gzip js +32 css -526; bytes js +43 css -1
+   js modules: node_modules/highlight.js/es/core.js +6, node_modules/highlight.js/es/languages/bash.js +6, node_modules/highlight.js/es/languages/c.js +6, node_modules/highlight.js/es/languages/cpp.js +6, node_modules/highlight.js/es/languages/css.js +6, node_modules/highlight.js/es/languages/go.js +6, node_modules/highlight.js/es/languages/java.js +6, node_modules/highlight.js/es/languages/javascript.js +6, node_modules/highlight.js/es/languages/json.js +6, node_modules/highlight.js/es/languages/markdown.js +6, node_modules/highlight.js/es/languages/python.js +6, node_modules/highlight.js/es/languages/rust.js +6, node_modules/highlight.js/es/languages/scss.js +6, node_modules/highlight.js/es/languages/sql.js +6
+   css sources: 
+startfix -> ref: gzip js +43 css +38; bytes js +100 css +250
+   js modules: src/components/ui/Overlay.tsx +125, src/components/ui/Alert.tsx +80
+   css sources: src/components/ui/Overlay.css +205, src/components/ui/Alert.css +185, src/components/ui/foundation.css +76
+ref -> del: gzip js +946 css +89; bytes js +1383 css +639
+   js modules: src/components/ProjectCrossingsCard.tsx +1337, src/components/OwnerConfirmationReopen.tsx +377, src/components/ui/Overlay.tsx +277, node_modules/@rc-component/tooltip/es/placements.js +196, node_modules/@rc-component/trigger/es/index.js +89, src/pages/ProjectsPage.tsx +82, src/components/ProjectSettlementCard.tsx -78, node_modules/@rc-component/util/es/Dom/dynamicCSS.js -74, node_modules/@base-ui/react/internals/constants.mjs +72, node_modules/@ant-design/icons-svg/es/asn/RightOutlined.js -69, node_modules/@rc-component/notification/es/Notifications.js -69, src/components/DecisionRail.tsx +66, node_modules/stylis/src/Prefixer.js +62, node_modules/@ant-design/icons-svg/es/asn/CloseCircleFilled.js +61
+   css sources: src/index.css +2038

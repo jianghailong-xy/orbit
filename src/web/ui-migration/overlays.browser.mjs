@@ -372,6 +372,29 @@ test('dismissal controls, retained form values, long content and bottom sheet re
   await attach(info, 'sizing-and-controls', { escapeAndOutsideOptOut: true, retainedDraft: true, bottomSheet: true, longFooterReachable: true });
 });
 
+test('a dialog taller than the screen keeps its scroll when the control with focus gives way', async ({ page }, info) => {
+  await page.getByRole('button', { name: 'Open Long dialog' }).click();
+  const long = page.getByRole('dialog', { name: 'Long dialog' });
+  await settled(long);
+  // It runs past the screen, so a focus() on it that may scroll brings the viewport to its top.
+  expect(await long.evaluate((el) => el.getBoundingClientRect().height > innerHeight)).toBe(true);
+  const scrolled = () => long.evaluate((el) => el.parentElement.scrollTop);
+  const before = await scrolled();
+  const notYet = long.getByRole('button', { name: 'Not yet' });
+  await notYet.focus();
+  await page.keyboard.press('Enter');
+  await expect(long.getByText('The note goes here.')).toBeVisible();
+  await long.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  // Chromium reports the pressed button's removal and Base UI hands focus back to the dialog; WebKit
+  // reports nothing and focus is left on the body. Either way the dialog stays where it was.
+  const after = await scrolled();
+  const active = await page.evaluate(() => (document.activeElement === document.body ? 'body' : document.activeElement?.getAttribute('role') ?? document.activeElement?.tagName));
+  expect(after).toBe(before);
+  await attach(info, 'focused-control-gives-way', { before, after, active });
+  await page.keyboard.press('Escape');
+  await expect(long).not.toBeVisible();
+});
+
 test('open portals inherit live theme changes and composing Escape preserves the dialog', async ({ page }, info) => {
   await page.getByRole('button', { name: 'Open Dialog', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Workspace dialog' });

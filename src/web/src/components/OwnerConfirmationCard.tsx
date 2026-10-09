@@ -14,7 +14,7 @@ import type {
   OwnerConfirmationReviewView,
   OwnerConfirmationStart,
 } from '@orbit/shared';
-import { Alert } from 'antd';
+import { Alert } from './ui/Alert';
 import { useLocation } from 'react-router-dom';
 import { api } from '../api';
 import { markdownToPlainLines } from '../lib/markdownText';
@@ -653,8 +653,7 @@ export function OwnerConfirmationCard({
             <Alert
               className="evidence-decision-error"
               type={refusal.stale ? 'warning' : 'error'}
-              showIcon
-              message={refusal.title}
+              title={refusal.title}
               description={error.message}
             />
           ) : null}

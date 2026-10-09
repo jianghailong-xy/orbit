@@ -57,7 +57,6 @@ import {
   type Viewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Alert, Button, Empty, Modal, Popover, Spin, Tooltip } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import {
   createContext,
@@ -104,6 +103,13 @@ import {
 // deuteranopia/protanopia simulation in `lib/statusPalette.test.ts`.
 import { EDGE_COLORS } from './TaskDependencyGraph';
 import { TaskStatusPill, taskStatusLabel } from './TaskStatusPill';
+import { Alert } from './ui/Alert';
+import { Button } from './ui/Button';
+import { Dialog } from './ui/Dialog';
+import { Empty } from './ui/Empty';
+import { Popover } from './ui/Popover';
+import { Spinner } from './ui/Spinner';
+import { Tooltip } from './ui/Tooltip';
 
 /**
  * The colour-independent second channel for a failed prerequisite.
@@ -418,14 +424,15 @@ function FoldNode({ data }: NodeProps<FoldFlowNode>) {
         </button>
       ) : (
         <Popover
-          content={<MotifSamples mark={mark} />}
           title={mark.title}
-          trigger="click"
-          placement="bottom"
+          side="bottom"
+          trigger={
+            <button type="button" className="pdg-fold-main nodrag nopan" aria-label={label}>
+              {body}
+            </button>
+          }
         >
-          <button type="button" className="pdg-fold-main nodrag nopan" aria-label={label}>
-            {body}
-          </button>
+          <MotifSamples mark={mark} />
         </Popover>
       )}
       {data.hasOutgoing && (
@@ -1124,7 +1131,7 @@ export function ProjectDependencyGraph({
   if (graph.isLoading) {
     return (
       <div style={{ padding: 48, textAlign: 'center' }}>
-        <Spin />
+        <Spinner />
       </div>
     );
   }
@@ -1132,8 +1139,7 @@ export function ProjectDependencyGraph({
     return (
       <Alert
         type="error"
-        showIcon
-        message="Dependency graph could not be loaded"
+        title="Dependency graph could not be loaded"
         description={graph.error instanceof Error ? graph.error.message : undefined}
         action={
           <Button size="small" danger onClick={() => graph.refetch()}>
@@ -1156,7 +1162,7 @@ export function ProjectDependencyGraph({
           style={stripHeight ? { height: stripHeight } : undefined}
           data-testid="project-dependency-graph"
         >
-          <Tooltip title="Open full-screen graph">
+          <Tooltip content="Open full-screen graph">
             <button
               type="button"
               className="tdg-maximize"
@@ -1182,17 +1188,15 @@ export function ProjectDependencyGraph({
           )}
         </div>
       )}
-      <Modal
+      <Dialog
         className="tdg-modal"
         open={fullScreen}
-        onCancel={() => {
+        onClose={() => {
           setFullScreen(false);
           onClose?.();
         }}
-        footer={null}
         width={narrow ? '100vw' : 'calc(100vw - 48px)'}
         title="Task graph"
-        destroyOnClose
       >
         <div className="tdg-full-canvas">
           <ProjectFlow
@@ -1205,14 +1209,13 @@ export function ProjectDependencyGraph({
             onHover={setHoverMarkId}
           />
         </div>
-      </Modal>
+      </Dialog>
       {/* Opened from the start card, the list it would point at is the card's own, above. */}
       {graph.data?.truncated && !fullScreenOnly ? (
         <Alert
           style={{ marginTop: 8 }}
           type="warning"
-          showIcon
-          message={`This project is larger than one graph request reads (${graph.data.limits.maxTasks.toLocaleString()} tasks).`}
+          title={`This project is larger than one graph request reads (${graph.data.limits.maxTasks.toLocaleString()} tasks).`}
           description="The task list below has all of them, in dependency order."
         />
       ) : null}

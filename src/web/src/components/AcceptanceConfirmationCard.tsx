@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState, type JSX, type Ref } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert } from 'antd';
 import { api } from '../api';
 import {
   acceptanceConfirmationKey,
@@ -18,6 +17,7 @@ import {
 import { CardActionButton, CardActions } from './CardAction';
 import { ENTER_HINT, useDecisionCardKeys } from './CardHotkey';
 import { ReviewCard } from './ReviewCard';
+import { Alert } from './ui/Alert';
 import { useIsMobile } from '../lib/useMediaQuery';
 import { PROVENANCE_LABEL, receiptClock, shortSeal } from './CriteriaDecisionCard';
 // The words this card's second action uses. Imported rather than re-declared, and read inside the
@@ -533,8 +533,7 @@ export function AcceptanceConfirmationCard({
           <Alert
             className="settlement-card-error"
             type="error"
-            showIcon
-            message={CONFIRMATION_NOT_RECORDED}
+            title={CONFIRMATION_NOT_RECORDED}
             description={error.message}
           />
         ) : null}

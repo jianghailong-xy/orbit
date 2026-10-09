@@ -23,7 +23,7 @@
 | `Badge` | 原生 span 状态标签（替代 Tag），tone="default/info/success/warning/error/blue/green/orange/red/gold/purple"（blue 起的六种是被替换标签的同名预设色，明暗主题各取其色板；purple 由 P4.3a 为“等待核验”补上）、icon、children，其余为 span 属性（如 title）。使用可读文字表达状态；没有 ARIA 角色，测试按所在区域与文字定位。 |
 | `Spinner` | 原生 span，size="small/middle"（14/20px），role=status、默认 aria-label="Loading"；嵌入已有加载状态时可设 aria-hidden，避免重复播报。 |
 | `Avatar` | 原生 span 的圆形头像：`size`（px，默认 32）与文字 children，颜色/字号由调用方 style 给出。1px 透明边框、内容居中、行高为字号的 1.5714 倍。给 `src`（及可选 `alt`，默认空）时画图片：铺满边框内侧并按圆裁切，调用方背景在透明边框处仍可见；没有图片或图片加载失败时显示文字。 |
-| `Alert` | role=alert 的状态块：`type="error/warning"`、`title`、`description`、`action`（P4.3a：文字之后 8px 的操作位，如 Retry）、className/style。无说明时 8px/12px 内边距、14px 图标与文字垂直居中；带说明时 20px/24px 内边距、24px 图标顶对齐、16px 标题。8px 圆角。说明或操作为空字符串、`false` 时不画，同被替换组件。 |
+| `Alert` | role=alert 的状态块：`type="error/warning/info"`（info：P4.3b，被替换说明块的信息色底、边框与 InfoCircleFilled 图标，明暗主题取其计算色）、`title`、`description`、`action`（P4.3a：文字之后 8px 的操作位，如 Retry）、className/style。无说明时 8px/12px 内边距、14px 图标与文字垂直居中；带说明时 20px/24px 内边距、24px 图标顶对齐、16px 标题。8px 圆角。说明或操作为空字符串、`false` 时不画，同被替换组件。 |
 | `Empty` | 空状态（P4.3a）：`image="default"`（100px 插图）或 `"simple"`（40px 插图，整块次要文字色、上下 32px），`description`（默认 “No data”），children 是下方 16px 处的操作（如 New project）。两幅插图是被替换组件的 MIT 图形（见 antd-empty.LICENSE），颜色取主题变量，带 “No data” 标题，同被替换组件。 |
 | `Skeleton` | 加载占位（P4.3a）：`rows`（默认 3）条 16px 高、4px 圆角、间隔 16px 的行，末行 61% 宽；1.4s 的流光同被替换组件，不随减少动态效果停止（被替换组件同样不停）。装饰性，`aria-hidden`；列表外边距沿用页面（P6 前为全局 reset 的下方 1em）。 |
 | `Segmented` | radiogroup 分段切换：受控 `value`/`onValueChange`、`options`（value/label/disabled）、aria-label。`size="middle"`（默认，28px 项、11px 文字内边距、6px 轨道圆角、4px 项圆角）或 `"small"`（任务面板的 20px 项、7px 内边距、4px/2px 圆角），轨道均 2px。切换时选中块从旧项滑到新项（0.3s），减少动态效果时直接切换；方向键在项间移动并选中，选中项是唯一的 Tab 停留点。 |
@@ -67,8 +67,8 @@ P4.1（登录、初始化、个人资料、设置）按页面实际需要补齐�
 
 - Dialog：`onClose` 是关闭请求，业务更新 open；默认宽度520px、顶部100px，宽度上限 100vw−32px；<=767px时保留旧弹窗108px顶部和8px边距（上限 100vw−16px）。宽度按视口宽度计，弹层视口出现滚动条时对话框宽度不变；滚动到底止于对话框下缘，与被替换对话框相同。footer 完全由调用方提供，原生表单使用 Button 的 type/form 属性。默认无自动 OK/Cancel。放不下一行的按钮换到下一行，每行靠右、行间无间隙，同被替换对话框里行内排列的按钮（P4.3a：手机上的长确认按钮）。
 - Drawer：相同关闭和焦点约定，`placement="right"`（默认）或 `"bottom"`；width/height 支持 CSS 尺寸，默认378px，底部可用 height="auto"。headerActions 放置已有最大化等动作。复用 Base Dialog，因为现有 Drawer 没有滑动关闭或吸附点；不新增手势。
-- 默认支持 Esc、单击/单指轻点遮罩和 Close 按钮；内部按下、外部释放不关闭。`closeOnEscape`、`closeOnOutsideClick`、`closable` 分别控制三种关闭方式。busy 阻止关闭请求并禁用 Close；调用方负责自己的提交按钮。隐藏 Close 时应提供可访问的退出按钮。
-- 默认聚焦弹层容器，避免手机打开时自动弹出软键盘；initialFocus 可指定原生 ref。默认返回先前焦点；从菜单、触摸入口或会卸载的节点打开时，传 `returnFocus` 指向稳定的触发按钮。不能通过读取第三方 DOM 找触发器。
+- 默认支持 Esc、单击/单指轻点遮罩和 Close 按钮；内部按下、外部释放不关闭。Dialog 的 Close 叠在正文之上（z-index 10，同被替换对话框的关闭按钮高出其弹层基准 10）：没有标题行的对话框（P4.3b 的项目完成、启动项目：title 传 null，由业务样式收起空的标题行）正文从顶上开始，与它重叠。`closeOnEscape`、`closeOnOutsideClick`、`closable` 分别控制三种关闭方式。busy 阻止关闭请求并禁用 Close；调用方负责自己的提交按钮。隐藏 Close 时应提供可访问的退出按钮。
+- 默认聚焦弹层容器，避免手机打开时自动弹出软键盘；initialFocus 可指定原生 ref。默认返回先前焦点；从菜单、触摸入口或会卸载的节点打开时，传 `returnFocus` 指向稳定的触发按钮。不能通过读取第三方 DOM 找触发器。弹层里有焦点的控件消失时（卡片换掉自己的内容，如完成问句的 Not yet），Base UI 把焦点交回弹层容器；容器取得焦点一律不滚动，与首次聚焦相同，所以高于屏幕的对话框不会因此跳到容器顶部（P4.3b）。
 - 默认关闭后卸载正文；`keepMounted` 适用于需保留未提交表单值的场景，关闭时隐藏且退出可访问树。业务页面迁移时明确选择其现有生命周期。
 - ConfirmDialog：`width`（P4.3a，默认 416，协调者“开始新的协调者”提问用 480，让两个较长的回答留在一行）；`kind="success"`（P4.2）是只需确认的通知：成功图标、只有确认键并默认聚焦它（管理员新建用户后显示一次性密码）；默认 `kind="confirm"`。`onConfirm` 返回 Promise 时自动 pending，成功调用 `onClose(true)`；取消/Esc 调用 `onClose(false)`；遮罩不关闭。默认聚焦 Cancel。提交期间按钮/取消/Esc均被锁住，同一事件轮内的重复提交也会被阻止。throw/reject 会保留弹窗，以 role=alert 显示错误并恢复重试/取消；业务已经有 toast 时仍由业务保留。必须返回 mutateAsync/请求 Promise，不能用返回 void 的 mutate 冒充可等待提交。
 
@@ -119,9 +119,9 @@ useOverlayChild 按受控 open 登记旧子层，Esc 先交给最上层旧弹层
 
 复用 `lib/theme.tsx` 的 `ThemeProvider` / `useThemeMode`。唯一主题状态仍是 `system/light/dark`，解析结果写到 `<html data-theme>`；账号偏好为来源，localStorage 为首屏缓存。保留 `index.html` 的同步首屏脚本、theme-color 和原有 boot 样式。不创建第二套主题状态或把 Provider 包在每个控件外。
 
-`main.tsx` 按 `antd/dist/reset.css` → `index.css` → `ui/foundation.css` 加载。`foundation.css` 只声明变量，不引入 reset、全局 button/input 样式、CSS layer 或新的 stacking context；控件样式限定自己的 `.orbit-*` 类或 CSS module。图标继续使用 `@ant-design/icons`。
+`main.tsx` 按 `ui/Overlay.css`、`ReviewCard.css`、highlight.js 的 `github.css` → `antd/dist/reset.css` → `index.css` → `ui/foundation.css` 加载。生产构建把首屏静态导入的全部 CSS 合成一个文件，顺序就是模块第一次被导入的顺序（`vite.config.ts` 的 `codeSplitting` 分组，由 `src/firstPageStylesheet.test.ts` 守着）：前三个在 reset 与 index.css 之前，是此前生产构建一直给它们的位置（入口与懒加载的会话导出共用的 chunk），同权重时 index.css 的规则胜过它们；其余 Orbit 组件样式都在 index.css 之后，与开发模式相同。只有懒加载 chunk 才用到的 CSS（React Flow）仍随那个 chunk 加载。不分组时，入口与懒加载 chunk 共用的组件会被拆进共用 chunk，它的样式链接排在入口样式（含 index.css）之前，层叠随拆包结果变化（P4.3b 记录）。`foundation.css` 只声明变量，不引入 reset、全局 button/input 样式、CSS layer 或新的 stacking context；控件样式限定自己的 `.orbit-*` 类或 CSS module。图标继续使用 `@ant-design/icons`。
 
-行高：Checkbox/Radio/Switch 标签使用无单位的 1.5714（14px 时即 22px），其中字号不同的说明文字按自身字号计算行高，与被替换组件相同。Dialog/Drawer 外壳保持 22px（评审等对话框直接基于它设计）；替换 AntD Modal 的对话框需要被替换的无单位行高时，在业务样式中限定到该对话框（如 `.share-dialog.orbit-overlay`）。业务样式（index.css）覆盖 Orbit 组件类时，要用组件类限定提高优先级（如 `.share-layer-check.orbit-choice`），因为组件样式在 index.css 之后加载。
+行高：Checkbox/Radio/Switch 标签使用无单位的 1.5714（14px 时即 22px），其中字号不同的说明文字按自身字号计算行高，与被替换组件相同。Dialog/Drawer 外壳保持 22px（评审等对话框直接基于它设计）；替换 AntD Modal 的对话框需要被替换的无单位行高时，在业务样式中限定到该对话框（如 `.share-dialog.orbit-overlay`）。业务样式（index.css）覆盖 Orbit 组件类时，要用组件类限定提高优先级（如 `.share-layer-check.orbit-choice`），因为组件样式在 index.css 之后加载（`Overlay.css` 例外，见上）。
 
 颜色优先直接用现有 `--bg-base/raised`、`--text-1/2/3`、`--border`、`--brand` 和状态变量。新增 `--orbit-*` 仅补足控件真实角色；**品牌色与主控件填充不是同一值**：暗色 `--brand=#5b8cff`，主控件实测为 `#2e62dc`，hover 为 `#5585e8`。禁用色和焦点轮廓也来自计算样式，不能从 seed 推测。
 

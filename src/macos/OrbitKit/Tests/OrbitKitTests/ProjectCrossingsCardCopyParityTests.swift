@@ -97,15 +97,12 @@ final class ProjectCrossingsCardCopyParityTests: XCTestCase {
         assertSays(web, "const move = row.kind === '\(ProjectCrossings.moveKind)';", in: Self.card)
         for name in ["MOVE_TASK_SUBJECT_LABEL", "MOVE_TASK_REQUESTED_CRITERION_LABEL",
                      "MOVE_TASK_WITHDRAWN_CRITERION_LABEL"] {
-            assertSays(web, "<Typography.Text type=\"secondary\">{\(name)}: </Typography.Text>", in: Self.card)
+            assertSays(web, "<Text muted>{\(name)}: </Text>", in: Self.card)
         }
-        assertSays(web, "<Typography.Text strong>{row.subjectTask?.title ?? row.title}</Typography.Text>",
-                   in: Self.card)
+        assertSays(web, "<Text strong>{row.subjectTask?.title ?? row.title}</Text>", in: Self.card)
         assertSays(web, "const id = row.subjectTaskPublicId ?? row.subjectTaskId;", in: Self.card)
-        assertSays(web, "<Typography.Text>{requested.text ?? MOVE_TASK_CRITERION_GONE}</Typography.Text>",
-                   in: Self.card)
-        assertSays(web, "<Typography.Text type=\"secondary\">{MOVE_TASK_WITHDRAWN_CRITERION_NOTE}</Typography.Text>",
-                   in: Self.card)
+        assertSays(web, "<Text>{requested.text ?? MOVE_TASK_CRITERION_GONE}</Text>", in: Self.card)
+        assertSays(web, "<Text muted>{MOVE_TASK_WITHDRAWN_CRITERION_NOTE}</Text>", in: Self.card)
     }
 
     // MARK: the state
@@ -155,16 +152,14 @@ final class ProjectCrossingsCardCopyParityTests: XCTestCase {
     func testTheCardsOwnWords() throws {
         let web = try source(Self.card)
         assertSays(web, "title=\"\(ProjectCrossings.title)\"", in: Self.card)
-        assertSays(web, "message=\"\(ProjectCrossings.unreadable)\"", in: Self.card)
-        assertSays(web, "{pending} waiting </Typography.Text>", in: Self.card)
+        assertSays(web, "title=\"\(ProjectCrossings.unreadable)\"", in: Self.card)
+        assertSays(web, "{pending} waiting </span>", in: Self.card)
         XCTAssertEqual(ProjectCrossings.waiting(23), "23 waiting")
-        assertSays(web, "<Typography.Text strong>{title ?? '\(ProjectCrossings.unnamedProject)'}</Typography.Text>",
-                   in: Self.card)
-        assertSays(web, "<Typography.Text type=\"secondary\">\(ProjectCrossings.arrow)</Typography.Text>", in: Self.card)
-        assertSays(web, "<Typography.Text type=\"secondary\">Reason given: {row.reason}</Typography.Text>",
-                   in: Self.card)
+        assertSays(web, "<Text strong>{title ?? '\(ProjectCrossings.unnamedProject)'}</Text>", in: Self.card)
+        assertSays(web, "<Text muted>\(ProjectCrossings.arrow)</Text>", in: Self.card)
+        assertSays(web, "<Text muted>Reason given: {row.reason}</Text>", in: Self.card)
         XCTAssertEqual(ProjectCrossings.reasonGiven("REASON"), "Reason given: REASON")
-        assertSays(web, "message=\"\(ProjectCrossings.notRecorded)\"", in: Self.card)
+        assertSays(web, "title=\"\(ProjectCrossings.notRecorded)\"", in: Self.card)
     }
 
     // MARK: the two presses
@@ -191,9 +186,8 @@ final class ProjectCrossingsCardCopyParityTests: XCTestCase {
         assertTemplate(web, ProjectCrossings.confirmLabel(prompt), [("verb1", "${prompt.verb.toLowerCase()}")],
                        in: Self.card)
         assertSays(web, "onClick={onCancel}> \(ProjectCrossings.cancel) </Button>", in: Self.card)
-        assertSays(web, "<Typography.Text type=\"secondary\">\(ProjectCrossings.crossingKeyLabel) </Typography.Text>",
-                   in: Self.card)
-        assertSays(web, "<Typography.Text code>{row.crossingKey.slice(0, 12)}</Typography.Text>", in: Self.card)
+        assertSays(web, "<Text muted>\(ProjectCrossings.crossingKeyLabel) </Text>", in: Self.card)
+        assertSays(web, "<Code>{row.crossingKey.slice(0, 12)}</Code>", in: Self.card)
         XCTAssertEqual(ProjectCrossings.shortKey(String(repeating: "c", count: 64)).count, 12)
     }
 

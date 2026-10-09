@@ -42,6 +42,7 @@ import io.orbitd.android.wiki.WikiDrawerRow
 import io.orbitd.android.wiki.WikiDestination
 import io.orbitd.android.wiki.wikiEntered
 import io.orbitd.android.watch.WatchDestination
+import io.orbitd.android.watch.WatchStore
 import io.orbitd.android.composer.NewSessionComposer
 import io.orbitd.android.text.LocalReaderResources
 import io.orbitd.android.text.ReaderResources
@@ -147,6 +148,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         val live by remember(app) { app.realtime.state.map { it.handle to it.invalidationRevision }.distinctUntilChanged() }
             .collectAsState(null to 0L)
         val revision = if (live.first === signedIn.handle) live.second else 0L
+        // The sessions parked on a watch that will resume them, as Following last read them: a project row's line says so (A05-6).
+        val watches by remember(signedIn.handle) { WatchStore.of(app.session, signedIn.handle, app.processScope).state }.collectAsState()
         val holder = rememberSaveableStateHolder()
         // A13's settings and runner pages are built anew each time they are pushed, as on iOS: once such a route has
         // left every stack, its saved state goes too, so a cancelled edit or an old draft never comes back.
@@ -217,7 +220,16 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 icon = { Icon(painterResource(R.drawable.ic_workspace), null) },
                                 onClick = { select(workspace.id, OrbitRoute(Destination.WORKSPACE, workspace.id, workspace.id, origin = Origin.DRAWER)) })
                         }
-                        DrawerProjects(api, revision, navigation.section) { key, root -> select(key, root) }
+                        // A drawer project row: the project's sessions page as its root, over its coordinator's workspace — or the one
+                        // showing, or the first — and the project's page when there is no workspace to open it over (iOS 6f5f883c8).
+                        DrawerProjects(api, revision, navigation.section, root = { id ->
+                            val coordinator = (data.sessions["open"].orEmpty() + data.sessions["completed"].orEmpty()).firstOrNull {
+                                it.projectMembership?.isCoordinator == true && ObjectId.same(it.projectMembership?.projectId, id)
+                            }
+                            val over = coordinator?.workspace ?: route.workspaceId ?: workspaces.firstOrNull()?.id
+                            if (over == null) OrbitRoute(Destination.PROJECT, id, origin = Origin.DRAWER)
+                            else OrbitRoute(Destination.PROJECT_SESSIONS, id, over, origin = Origin.DRAWER)
+                        }) { key, root -> select(key, root) }
                         Spacer(Modifier.height(24.dp))
                         val workspace = route.workspaceId ?: workspaces.firstOrNull()?.id
                         Button(onClick = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.DRAFT, workspaceId = workspace, origin = Origin.DRAWER)) },
@@ -249,7 +261,9 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         holder.SaveableStateProvider(Wire.json.encodeToString(route)) {
                             when (route.destination) {
                                 Destination.WORKSPACES -> WorkspaceHome(data, { w -> land(w.id, OrbitRoute(Destination.WORKSPACE, w.id, w.id)) }) { app.realtime.refreshDirectory() }
-                                Destination.WORKSPACE, Destination.FOLDER -> DirectoryScreen(route, data, api, ::open) { app.realtime.refreshDirectory() }
+                                Destination.WORKSPACE, Destination.FOLDER -> DirectoryScreen(route, data, api, ::open, { app.realtime.refreshDirectory() },
+                                    revision, watches.summaries)
+                                Destination.PROJECT_SESSIONS -> SessionProjectPage(app, signedIn.handle, route, data, api, revision, ::open)
                                 Destination.SEARCH -> SearchScreen(api, ::open)
                                 Destination.SESSION -> SessionReader(app, signedIn.handle, route, api, data, ::open) {
                                     navigation = navigation.dropSession(route.id!!)
@@ -309,6 +323,7 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     Destination.FOLDER -> data.folders.firstOrNull { ObjectId.same(it.id, route.id) }?.name ?: "Folder unavailable"
     Destination.SEARCH -> "Search sessions"
     Destination.DRAFT -> "New session"
+    Destination.PROJECT_SESSIONS -> "Project"
     Destination.WIKI, Destination.WIKI_ENTRY -> "Wiki"
     Destination.WIKI_BROWSE -> "Browse"
     Destination.WIKI_INDEX -> "Index"
