@@ -37,6 +37,7 @@ import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitRoute
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
@@ -49,6 +50,11 @@ private class ProvidersModel(private val api: ManagementApi) {
     var own by mutableStateOf<List<JsonObject>>(emptyList()); private set
     var shared by mutableStateOf<List<JsonObject>>(emptyList()); private set
     var access by mutableStateOf<Map<String, JsonObject>>(emptyMap()); private set
+    /** The account's own providers (GET providers/mine), with the ids and endpoints the catalogue leaves out: what tells a DeepSeek
+     * key, and what its balance is asked by. */
+    var mine by mutableStateOf<List<JsonObject>>(emptyList()); private set
+    /** Each DeepSeek key's account balance by provider id, as the server last answered — or why it didn't; absent while asked. */
+    var balances by mutableStateOf<Map<String, DeepSeekBalance.Reading>>(emptyMap()); private set
     var loaded by mutableStateOf(false); private set
     var error by mutableStateOf<String?>(null); private set
     suspend fun load() {
@@ -59,11 +65,21 @@ private class ProvidersModel(private val api: ManagementApi) {
             shared = providerObjects(api.get("providers/shared-pools"))
             loaded = true; error = null
         } catch (e: CancellationException) { throw e } catch (e: Exception) { error = personalFailure(e); return }
-        // A Codex pool of one's own is drawn with its people and keys, read pool by pool.
-        access = own.filter { it.str("engine") == "codex" }.mapNotNull { pool ->
-            try { pool.text("id") to api.get("providers/shared-pools/${pool.text("id")}").jsonObject }
-            catch (e: CancellationException) { throw e } catch (_: Exception) { null }
-        }.toMap()
+        coroutineScope {
+            launch { loadBalances() }
+            // A Codex pool of one's own is drawn with its people and keys, read pool by pool.
+            access = own.filter { it.str("engine") == "codex" }.mapNotNull { pool ->
+                try { pool.text("id") to api.get("providers/shared-pools/${pool.text("id")}").jsonObject }
+                catch (e: CancellationException) { throw e } catch (_: Exception) { null }
+            }.toMap()
+        }
+    }
+    /** The account's own keys read again, then each DeepSeek key's balance among them, side by side (iOS 96e1a1536). A failed read
+     * of the keys leaves the rows as they were: plain keys, no balance. */
+    private suspend fun loadBalances() {
+        val read = try { providerObjects(api.get("providers/mine")) } catch (e: CancellationException) { throw e } catch (_: Exception) { return }
+        mine = read
+        readDeepSeekBalances(api, read) { id, reading -> balances = balances + (id to reading) }
     }
 }
 
@@ -78,6 +94,7 @@ fun ProviderManagement(api: ManagementApi, revision: Long, record: String?, open
     when {
         record?.startsWith("own:") == true -> PoolScreen(api, revision, ownId = record.removePrefix("own:"), sharedId = null, back = back)
         record?.startsWith("shared:") == true -> PoolScreen(api, revision, ownId = null, sharedId = record.removePrefix("shared:"), back = back)
+        record?.startsWith("key:") == true -> DeepSeekKeyPage(api, revision, record.removePrefix("key:"))
         else -> ProvidersOverview(api, revision, open)
     }
 }
@@ -95,7 +112,7 @@ private fun ProvidersOverview(api: ManagementApi, revision: Long, open: (OrbitRo
             TextButton(onClick = { scope.launch { model.load() } }) { Text("Retry") }
         }
         if (!model.loaded) { if (model.error == null) Text("Loading…", Modifier.padding(16.dp), color = Ink.muted); return@Column }
-        FormSection("On your runners", footer = "Signed in on the machine itself — a session spends that subscription, nothing to paste.") {
+        FormSection("On your runners", footer = "Use subscriptions signed in on your machines.") {
             model.runners.forEachIndexed { index, runner ->
                 if (index > 0) HorizontalDivider()
                 Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { open(OrbitRoute(Destination.RUNNER, runner.text("id"))) }.padding(vertical = 8.dp),
@@ -108,8 +125,7 @@ private fun ProvidersOverview(api: ManagementApi, revision: Long, open: (OrbitRo
                 }
             }
         }
-        if (model.own.isNotEmpty() || model.shared.isNotEmpty()) FormSection("Account pools",
-            footer = "Several keys under one name — each session starts on one with room, and moves on when it runs out.") {
+        if (model.own.isNotEmpty() || model.shared.isNotEmpty()) FormSection("Account pools", footer = "Several accounts under one name.") {
             val rows = model.shared.map { "shared:${it.text("id")}" to ProviderPools.shared(it, now) } +
                 model.own.filter { own -> model.shared.none { ObjectId.same(it.text("id"), own.text("id")) } }.map { json ->
                     val pool = ProviderPools.own(json, now)
@@ -141,9 +157,20 @@ private fun ProvidersOverview(api: ManagementApi, revision: Long, open: (OrbitRo
             if (model.keys.isEmpty()) Text("No keys yet", Modifier.padding(vertical = 8.dp), color = Ink.muted)
             model.keys.forEachIndexed { index, key ->
                 if (index > 0) HorizontalDivider()
-                Column(Modifier.padding(vertical = 8.dp)) {
-                    Text(key.str("label") ?: key.text("slug"))
-                    key.str("defaultModel")?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
+                // A DeepSeek key's row ends with its account's balance and opens the key's page (iOS 936ebbd3c).
+                val deepSeek = DeepSeekBalance.key(key, model.mine)?.str("id")
+                Row(Modifier.fillMaxWidth().then(if (deepSeek != null) Modifier.clickable(role = Role.Button) { pool("key:$deepSeek") } else Modifier)
+                    .padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text(key.str("label") ?: key.text("slug"))
+                        providerKeyLine(key)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
+                    }
+                    if (deepSeek != null) {
+                        DeepSeekBalance.rowValue(DeepSeekBalance.state(model.balances[deepSeek]))?.let {
+                            Text(it.label, color = poolTone(it.tone), style = MaterialTheme.typography.bodySmall)
+                        }
+                        Text("›", Modifier.clearAndSetSemantics { }, color = Ink.muted)
+                    }
                 }
             }
         }
