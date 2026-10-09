@@ -169,8 +169,14 @@ function settledSession(over: Record<string, unknown> = {}) {
 
 function settleHarness(session: Record<string, unknown> | null) {
   const sent: { body: string; collapseId?: string }[] = [];
+  const lookups: any[] = [];
   const prisma = {
-    session: { findUnique: async () => session },
+    session: {
+      findUnique: async (args: any) => {
+        lookups.push(args);
+        return session;
+      },
+    },
     deviceToken: { findMany: async () => [{ token: 'device', environment: 'sandbox' }] },
   };
   const service = new PushService(prisma as any, enabledConfig());
@@ -184,7 +190,7 @@ function settleHarness(session: Record<string, unknown> | null) {
   ) => {
     sent.push({ body, collapseId });
   };
-  return { service, sent };
+  return { service, sent, lookups };
 }
 
 test('a settled session alerts its owner, collapsing on the session', async () => {
@@ -237,6 +243,40 @@ test('a vanished session is not an error', async () => {
   const { service, sent } = settleHarness(null);
   await service.notifySessionSettled('s-gone');
   assert.equal(sent.length, 0);
+});
+
+// ── the settle body prefers the recap ──────────────────────────────────────
+
+test('a settled session with a recap says the recap', async () => {
+  const { service, sent, lookups } = settleHarness(
+    settledSession({ recapText: 'Fixed the redirect; tests pass. Next: ship it.' }),
+  );
+
+  await service.notifySessionSettled('s-1');
+
+  const payload = JSON.parse(sent[0].body);
+  assert.equal(payload.kind, 'finished');
+  assert.equal(payload.aps.alert.body, 'Fixed the redirect; tests pass. Next: ship it.');
+  // The recap has to be read off the row — a select that forgets it is silently back to rules.
+  assert.equal(lookups[0].select.recapText, true);
+});
+
+test('a settled session with no recap keeps the rules line', async () => {
+  const { service, sent } = settleHarness(settledSession());
+
+  await service.notifySessionSettled('s-1');
+
+  assert.equal(JSON.parse(sent[0].body).aps.alert.body, 'Finished');
+});
+
+test('a recap too long for a notification is cut', async () => {
+  const { service, sent } = settleHarness(settledSession({ recapText: 'y'.repeat(300) }));
+
+  await service.notifySessionSettled('s-1');
+
+  const body = JSON.parse(sent[0].body).aps.alert.body as string;
+  assert.equal(body.length, 200);
+  assert.ok(body.endsWith('…'));
 });
 
 test('approval push initially requires a canonical Open, non-ending RUNNING session', async () => {
