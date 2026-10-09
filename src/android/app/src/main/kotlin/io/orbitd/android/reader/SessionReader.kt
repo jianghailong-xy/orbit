@@ -28,6 +28,7 @@ import io.orbitd.android.cards.CardReviewSheet
 import io.orbitd.android.cards.NeedsYouLogic
 import io.orbitd.android.cards.SessionCardsReads
 import io.orbitd.android.cards.rememberSessionCards
+import io.orbitd.android.core.cards.CardPreviews
 import io.orbitd.android.cards.ReaderSide
 import io.orbitd.android.cards.SessionCards
 import io.orbitd.android.cards.SessionNeedsYouBar
@@ -165,6 +166,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         composerFocused = true
         composeFocus++
     }
+    // A08-3: while a review is open the transcript does not follow its tail, so closing it returns to the card's place.
+    LaunchedEffect(cards.review) { if (cards.review != null) follow = false }
     CompositionLocalProvider(LocalReaderResources provides resources, LocalTaskActivity provides taskActivity) {
         SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -208,6 +211,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                             // The rail is the item before the tail; a card in it is brought into view once it is drawn.
                             list.scrollToItem((list.layoutInfo.totalItemsCount - 2).coerceAtLeast(0))
                             CardFocus.request(route.id!!, row)
+                            // A08-3: a card answered in a review opens it, over the card it scrolled to (iOS 419fa780b). Evidence and
+                            // exceptions are answered in place, so the press only shows them.
+                            state.session?.let { live -> cards.shown(live).firstOrNull { it.key == row } }
+                                ?.takeIf { CardPreviews.preview(it) != null }?.let { cards.open(it.key) }
                         }
                     })
                 // Capture all lazy intervals in this composition, preserving A05's measurement fix.
