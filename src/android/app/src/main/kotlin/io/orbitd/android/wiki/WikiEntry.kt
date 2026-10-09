@@ -37,6 +37,7 @@ import io.orbitd.android.directory.LoadingMessage
 import io.orbitd.android.directory.StatusMessage
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitRoute
+import io.orbitd.android.toast.OrbitToasts
 import kotlinx.coroutines.launch
 import java.time.Instant
 
@@ -53,6 +54,7 @@ internal fun WikiEntryScreen(store: WikiStore, route: OrbitRoute, data: Director
     var retiring by rememberSaveable { mutableStateOf(false) }
     var reason by rememberSaveable { mutableStateOf("") }
     var notice by rememberSaveable { mutableStateOf<String?>(null) }
+    var noticeTitle by rememberSaveable { mutableStateOf(WikiCopy.entrySaveFailed) }
     var menu by remember { mutableStateOf(false) }
     var refreshing by remember { mutableStateOf(false) }
     LaunchedEffect(entryId) { store.loadEntry(entryId) }
@@ -60,7 +62,7 @@ internal fun WikiEntryScreen(store: WikiStore, route: OrbitRoute, data: Director
     val detail = state.detail(entryId)
     // The cards this page names are asked for whenever what it names changes — on the first read and after every re-read.
     LaunchedEffect(detail) { detail?.let { store.noteLinkCards(wikiEntryCardRefs(it)) } }
-    fun finish(answer: String?, done: String) { if (answer != null) notice = answer else WikiToast.show(done) }
+    fun finish(answer: String?, done: String, failed: String) { if (answer != null) { noticeTitle = failed; notice = answer } else OrbitToasts.show(done) }
     PageBar.Bind(route, title = "", actions = if (detail == null) null else ({
         TextButton(onClick = { form = "edit" }, enabled = !state.busy, modifier = Modifier.testTag("wiki-entry-edit")) { Text(WikiCopy.edit) }
         Box {
@@ -79,7 +81,7 @@ internal fun WikiEntryScreen(store: WikiStore, route: OrbitRoute, data: Director
                     val slug = state.spaces.firstOrNull { sameWikiId(it.id, detail.entry.spaceId) }?.slug ?: state.currentSpace?.slug
                     if (!slug.isNullOrEmpty()) {
                         clipboard.setText(AnnotatedString("${nav.server.trimEnd('/')}/wiki/$slug/e/${wikiPublicId(detail.entry.id)}"))
-                        WikiToast.show(WikiCopy.linkCopied)
+                        OrbitToasts.show(WikiCopy.linkCopied)
                     }
                 })
             }
@@ -94,8 +96,8 @@ internal fun WikiEntryScreen(store: WikiStore, route: OrbitRoute, data: Director
                 state.linkTitle("session", id) ?: data.sessions.values.flatten().firstOrNull { ObjectId.same(it.id, id) }?.name
             }, sourceTitle = { source -> wikiSourceCard(source)?.let { (kind, id) -> state.linkTitle(kind, id) } },
                 openSession = nav::session, openTask = nav::task,
-                confirm = { scope.launch { finish(store.confirm(detail.entry), WikiModeCopy.confirmed) } },
-                reject = { why -> scope.launch { finish(store.reject(detail.entry.id, why), WikiModeCopy.rejected) } })
+                confirm = { scope.launch { finish(store.confirm(detail.entry), WikiModeCopy.confirmed, WikiCopy.entryConfirmFailed) } },
+                reject = { why -> scope.launch { finish(store.reject(detail.entry.id, why), WikiModeCopy.rejected, WikiCopy.entryRejectFailed) } })
             state.isMissing(entryId) -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { StatusMessage(WikiCopy.noEntrySelected, "") }
             state.loadFailed(entryId) -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 StatusMessage("The entry couldn't be loaded", "Check the connection, then try again.") { scope.launch { store.loadEntry(entryId) } }
@@ -107,7 +109,7 @@ internal fun WikiEntryScreen(store: WikiStore, route: OrbitRoute, data: Director
     if (form != null && shown != null) WikiEntryForm(form == "edit", shown, close = { form = null }) { title, summary ->
         val edit = form == "edit"
         val answer = if (edit) store.edit(shown, title, summary) else store.supersede(shown, title, summary)
-        finish(answer, if (edit) WikiCopy.saved else WikiCopy.superseded)
+        finish(answer, if (edit) WikiCopy.saved else WikiCopy.superseded, if (edit) WikiCopy.entrySaveFailed else WikiCopy.entrySupersedeFailed)
         answer == null
     }
     if (retiring) AlertDialog(onDismissRequest = { retiring = false; reason = "" }, title = { Text(WikiCopy.retire) },
@@ -119,10 +121,10 @@ internal fun WikiEntryScreen(store: WikiStore, route: OrbitRoute, data: Director
             val why = reason.trim(); reason = ""; retiring = false
             val entry = state.detail(entryId)?.entry
             // A retirement says why, as the web's does: no reason, no Retire.
-            if (entry != null && why.isNotEmpty()) scope.launch { finish(store.retire(entry, why), WikiCopy.retired) }
+            if (entry != null && why.isNotEmpty()) scope.launch { finish(store.retire(entry, why), WikiCopy.retired, WikiCopy.entryRetireFailed) }
         }) { Text(WikiCopy.retireConfirm, color = if (reason.isNotBlank()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)) } },
         dismissButton = { TextButton(onClick = { retiring = false; reason = "" }) { Text("Cancel") } })
-    WikiRefusalAlert(notice) { notice = null }
+    WikiRefusalAlert(noticeTitle, notice) { notice = null }
 }
 
 /** Edit or Supersede: the title and the one-line summary, and what the write does. */

@@ -13,7 +13,11 @@ import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.directory.DirectoryApi
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
+import androidx.compose.foundation.layout.Column
+import io.orbitd.android.toast.OrbitToasts
+import io.orbitd.android.toast.ToastHost
 import org.junit.After
+import org.junit.Before
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -39,6 +43,7 @@ class WorktreeBarTest {
     private lateinit var model: WorktreeModel
 
     @After fun close() { scope.cancel() }
+    @Before fun quiet() = OrbitToasts.clear()
 
     private fun session(vararg fields: Pair<String, JsonElement>) = JsonObject(mapOf(
         "id" to JsonPrimitive(id), "status" to JsonPrimitive("AWAITING_INPUT"), "isolationStatus" to JsonPrimitive("worktree"),
@@ -54,7 +59,8 @@ class WorktreeBarTest {
         val handle = runBlocking { server.signIn() }
         model = WorktreeModel(DirectoryApi(server.auth, handle), id, scope)
         runBlocking { model.loadDetail() }
-        compose.runOnUiThread { compose.activity.setContent { MaterialTheme { WorktreeBar(model) { opened += it } } } }
+        // The bar's outcomes are the app's toasts (A05-4): the shell's host draws them, here under the bar so neither covers the other.
+        compose.runOnUiThread { compose.activity.setContent { MaterialTheme { Column { WorktreeBar(model) { opened += it }; ToastHost({}, {}, {}) } } } }
         compose.waitForIdle()
     }
 

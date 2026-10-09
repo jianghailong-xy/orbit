@@ -23,6 +23,7 @@ import org.junit.runner.Description
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import io.orbitd.android.toast.OrbitToasts
 
 /** The Wiki and Watch pages inside the real shell over the controlled server ([WikiShell]): a write that outlives its
  * page, a stale op the server applied nothing for, what a page shows when it is opened again, which account events
@@ -42,8 +43,8 @@ class WikiShellTest {
     val compose = createAndroidComposeRule<MainActivity>()
     private val shell = WikiShell
 
-    /** WikiToast is one per process, and Robolectric restarts the clock for every test: an earlier test's toast is cleared. */
-    @Before fun start() { shell.reset(); WikiToast.text = null }
+    /** The app's toasts are one per process, and Robolectric restarts the clock for every test: an earlier test's toast is cleared. */
+    @Before fun start() { shell.reset(); OrbitToasts.clear() }
 
     // MARK: P1-1 — a write runs to its end, whatever happens to the page that asked for it
 
