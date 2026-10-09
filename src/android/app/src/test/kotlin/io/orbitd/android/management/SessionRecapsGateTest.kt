@@ -53,6 +53,17 @@ class SessionRecapsGateTest {
         compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty()
     }
 
+    /// The switch's row, once the account read behind it has landed: before that the row is drawn
+    /// disabled (`SettingsSwitch`'s `enabled = record.ready`) and a press on it does nothing, which
+    /// is a test that waits out its whole timeout for a write it never asked for.
+    private fun readySwitch(): SemanticsMatcher {
+        val row = hasText("Session recaps") and isToggleable() and isEnabled()
+        compose.waitUntil(60_000) {
+            runCatching { compose.onNode(row).assertExists(); true }.getOrDefault(false)
+        }
+        return row
+    }
+
     /** Absent on the server means on — the switch reads on, and its hint is the shared sentence — and flipping it writes `recaps`
      * alone, `false` included. */
     @Test fun settingsHasTheSwitchWrittenAloneAsRecaps() {
@@ -63,7 +74,7 @@ class SessionRecapsGateTest {
         }
         await("Session recaps")
         compose.onNodeWithText(SESSION_RECAPS_HINT, useUnmergedTree = true).assertExists()
-        val row = hasText("Session recaps") and isToggleable()
+        val row = readySwitch()
         compose.onNode(row).assertIsOn()
         compose.onNode(row).performScrollTo().performClick()
         compose.waitUntil(60_000) { fixture.recaps == false }
@@ -87,7 +98,7 @@ class SessionRecapsGateTest {
             }
         }
         await("session recaps: on"); await("Session recaps")
-        compose.onNode(hasText("Session recaps") and isToggleable()).performScrollTo().performClick()
+        compose.onNode(readySwitch()).performScrollTo().performClick()
         await("session recaps: off")
         assertEquals(false, fixture.recaps)
     }
