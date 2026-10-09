@@ -22,6 +22,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
+import io.orbitd.android.composer.ProviderChoices
 import io.orbitd.android.composer.SessionComposer
 import io.orbitd.android.cards.CardFocus
 import io.orbitd.android.cards.CardReceiptSheet
@@ -179,9 +180,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val dshFailure = remember(rows, snapshotDetail) {
         rows.any { it.event.type == "error" && DshRuntime.repair(it.event.body().trim()) != null } || DshRuntime.repair(snapshotDetail?.string("error")) != null
     }
-    val engineUnsaid = snapshotDetail != null && snapshotDetail.string("engine") == null &&
-        snapshotDetail.string("provider")?.let { it !in setOf("claude", "codex", "kimi", "antigravity", "opencode", DshRuntime.ENGINE) } == true
-    LaunchedEffect(dshFailure || engineUnsaid, console.runnerId) { if (dshFailure || engineUnsaid) console.reload() }
+    val engineFromKeys = snapshotDetail?.let(ProviderChoices::engineFromKeys) == true
+    LaunchedEffect(dshFailure || engineFromKeys, console.runnerId) { if (dshFailure || engineFromKeys) console.reload() }
     LaunchedEffect(worktree, state.denied) {
         if (!state.denied) worktree.poll { (worktree.state.value.detail ?: snapshotDetail)?.let { it.string("runStatus") ?: it.string("status") } in
             setOf("RUNNING", "AWAITING_INPUT", "INTERRUPTED") }

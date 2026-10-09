@@ -92,6 +92,11 @@ internal object ProviderChoices {
      * one its provider borrows, as before the server said. */
     fun engine(detail: JsonObject, providers: List<JsonObject>) = detail.text("engine") ?: executingRuntime(detail.text("provider").orEmpty(), providers)
 
+    /** Whether only the account's keys can say that engine: a server that doesn't say it, on a provider that is no engine's own name
+     * (a key, or a pool). */
+    fun engineFromKeys(detail: JsonObject) = detail.text("engine") == null &&
+        detail.text("provider")?.let { it !in setOf("claude", "codex", "kimi", "antigravity", "opencode", "dsh") } == true
+
     /** The model menu's title (OrbitKit `engineTitle`, web `engineTitleFor`): the CLI running this session — `Claude Code` for a
      * key it writes DeepSeek's models through — and, while a held pick takes the next turn to another engine, that one after an
      * arrow. Two providers of one CLI read as one title. */

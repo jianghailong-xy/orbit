@@ -69,8 +69,7 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
     /** Whether [effective] — a session's detail, or a draft's workspace, under the picks held for it — runs on DeepSeek Harness: the
      * server's `engine`, else the CLI its provider borrows, which only the account's keys can say. */
     private suspend fun executesDsh(effective: JsonObject): Boolean {
-        val provider = effective.text("provider").orEmpty()
-        val keys = if (effective.text("engine") != null || provider in setOf("claude", "codex", "kimi", "antigravity", "opencode", DshRuntime.ENGINE)) emptyList()
+        val keys = if (!ProviderChoices.engineFromKeys(effective)) emptyList()
             else runCatching { api.read(listOf("providers")).jsonArray.filterIsInstance<JsonObject>() }.getOrDefault(emptyList())
         return ProviderChoices.engine(effective, keys) == DshRuntime.ENGINE
     }
