@@ -3719,9 +3719,40 @@ export class SessionsService {
    *
    * `events` is the transcript's TAIL page — the newest `limit` (default 200) — with `hasMore`,
    * not the whole history: a coordinator's transcript is megabytes, and the anonymous door was
-   * handing all of it to whoever asked. Older events page in over getSharedEventPage.
+   * handing all of it to whoever asked. Older events page in over getSharedEventPage, and newer
+   * ones over getSharedEventsAfter.
    */
   async getSharedTranscript(sessionId: string, opts: { limit?: number; maxPayload?: number } = {}) {
+    const head = await this.sharedHead(sessionId);
+    // A share is another historical transcript reader, so it observes the same replay contract as
+    // the authenticated page/SSE paths. In particular, do not expose live-only rows accidentally
+    // persisted by an older API during a rolling deployment (or spend a public response on their
+    // repeated foreground-shell snapshots). The page query is the owner's own (eventPage).
+    const { events, hasMore } = await this.eventPage(sessionId, opts);
+    return { ...head, events, hasMore };
+  }
+
+  /**
+   * What a shared session has added since `after`, a seq its public page already holds, and how it
+   * stands now: the root's header fields with the events just newer than that seq, oldest first,
+   * and `after` the cursor to the rest, null once they reach the newest. A page following a live
+   * session asks this every few seconds, so one read both grows its tail and redraws its state.
+   *
+   * The header is read first. A run that ends between the two reads is then still running in this
+   * answer, and the page asks once more; read the other way round, the answer could say the run is
+   * over while its last events are not in it.
+   */
+  async getSharedEventsAfter(
+    sessionId: string,
+    opts: { after: number; limit?: number; maxPayload?: number },
+  ) {
+    const head = await this.sharedHead(sessionId);
+    return { ...head, ...(await this.eventPageAfter(sessionId, opts)) };
+  }
+
+  /** A shared session's header — what its public page says of it above the transcript — and nothing
+   *  else about it (see getSharedTranscript). A trashed session is the link's 404. */
+  private async sharedHead(sessionId: string) {
     const session = await this.prisma.session.findFirst({
       where: { id: sessionId, deletedAt: null },
       select: {
@@ -3738,11 +3769,6 @@ export class SessionsService {
     });
     if (!session) throw linkNotFound();
     const stateful = withSessionState(session);
-    // A share is another historical transcript reader, so it observes the same replay contract as
-    // the authenticated page/SSE paths. In particular, do not expose live-only rows accidentally
-    // persisted by an older API during a rolling deployment (or spend a public response on their
-    // repeated foreground-shell snapshots). The page query is the owner's own (eventPage).
-    const { events, hasMore } = await this.eventPage(session.id, opts);
     return {
       title: session.title,
       workspaceName: session.workspace?.name ?? null,
@@ -3753,8 +3779,6 @@ export class SessionsService {
       lifecycleState: stateful.lifecycleState,
       filingState: stateful.filingState,
       createdAt: session.createdAt,
-      events,
-      hasMore,
     };
   }
 
@@ -3944,18 +3968,9 @@ export class SessionsService {
       select: { id: true },
     });
     if (!session) throw new NotFoundException('session not found');
-    const take = Math.min(Math.max(Math.trunc(opts.limit ?? 200), 1), 500);
     const after = Math.trunc(opts.after);
-    const [rows, older] = await Promise.all([
-      this.prisma.$queryRaw<PageRow[]>`
-        SELECT seq, type, payload, turn_id AS "turnId", created_at AS "createdAt"
-        FROM run_event
-        WHERE session_id = ${id}::uuid
-          AND seq > ${after}
-          AND ${replayableEventSql}
-        ORDER BY seq ASC
-        LIMIT ${take + 1}
-      `,
+    const [newer, older] = await Promise.all([
+      this.eventPageAfter(id, opts),
       this.prisma.$queryRaw<{ found: boolean }[]>`
         SELECT EXISTS (
           SELECT 1 FROM run_event
@@ -3965,13 +3980,36 @@ export class SessionsService {
         ) AS "found"
       `,
     ]);
-    const hasNewer = rows.length > take;
-    const events = hasNewer ? rows.slice(0, take) : rows;
     const hasOlder = older[0]?.found === true;
     return {
-      events: events.map((e) => toPageEvent(e, opts.maxPayload)),
+      events: newer.events,
       hasMore: hasOlder,
-      before: hasOlder ? (events[0]?.seq ?? after + 1) : null,
+      before: hasOlder ? (newer.events[0]?.seq ?? after + 1) : null,
+      after: newer.after,
+    };
+  }
+
+  /** getEventPageAfter's newer half, for a session the caller has already resolved — by owner there,
+   *  by share link in getSharedEventsAfter: `limit` events with seq above `after`, oldest first, and
+   *  the cursor to the page after them, null once they reach the newest event. */
+  private async eventPageAfter(
+    id: string,
+    opts: { after: number; limit?: number; maxPayload?: number },
+  ): Promise<Pick<TranscriptPage, 'events' | 'after'>> {
+    const take = Math.min(Math.max(Math.trunc(opts.limit ?? 200), 1), 500);
+    const rows = await this.prisma.$queryRaw<PageRow[]>`
+      SELECT seq, type, payload, turn_id AS "turnId", created_at AS "createdAt"
+      FROM run_event
+      WHERE session_id = ${id}::uuid
+        AND seq > ${Math.trunc(opts.after)}
+        AND ${replayableEventSql}
+      ORDER BY seq ASC
+      LIMIT ${take + 1}
+    `;
+    const hasNewer = rows.length > take;
+    const events = hasNewer ? rows.slice(0, take) : rows;
+    return {
+      events: events.map((e) => toPageEvent(e, opts.maxPayload)),
       after: hasNewer ? events[events.length - 1].seq : null,
     };
   }
