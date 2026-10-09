@@ -34,6 +34,8 @@ import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -57,6 +59,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
+import io.orbitd.android.R
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.navigation.Destination
@@ -172,14 +175,14 @@ private fun styled(text: String, strong: List<String> = emptyList(), code: List<
     code.filter { it.isNotEmpty() }.forEach { word -> text.indexOf(word).takeIf { it >= 0 }?.let { addStyle(SpanStyle(fontFamily = FontFamily.Monospace), it, it + word.length) } }
 }
 
-/** RunnersSettingsList: every runner, Edit to reorder or remove, and Add Runner under them. */
+/** RunnersSettingsList: every runner — a row opens it, its handle reorders it and its ⋯ menu removes it, with no Edit mode (iOS
+ * 91316c246) — and Add Runner under them. */
 @Composable
 fun RunnersList(api: ManagementApi, revision: Long, openRunner: (String) -> Unit) {
     val model = remember(api) { RunnersModel(api) }
     val resumed = rememberResumed()
     val now = rememberNow()
     val scope = rememberCoroutineScope()
-    var editing by rememberSaveable { mutableStateOf(false) }
     var adding by rememberSaveable { mutableStateOf(false) }
     var removing by remember { mutableStateOf<JsonObject?>(null) }
     var drag by remember { mutableStateOf<RunnerDrag?>(null) }
@@ -207,22 +210,20 @@ fun RunnersList(api: ManagementApi, revision: Long, openRunner: (String) -> Unit
                         }
                     }
                     if (model.runners.isNotEmpty()) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            TextButton(onClick = { editing = !editing }) { Text(if (editing) "Done" else "Edit") }
-                        }
                         FormSection {
-                            // Edit mode moves a row by dragging its handle, as on iOS: rows trade places as it passes half
-                            // of the next one, and the order goes out once, when it is let go. The drag is measured on
-                            // the list, which stays put, not on the row, which moves with the finger.
+                            // A row moves by dragging its handle, as the Wiki plan's Edit sheet moves a section (the owner's
+                            // decision, card 34bs0PdYUHHwiKHYn3rCp): rows trade places as it passes half of the next one, and the
+                            // order goes out once, when it is let go. The drag is measured on the list, which stays put, not on
+                            // the row, which moves with the finger.
                             val shown = drag?.order?.mapNotNull { id -> model.runners.firstOrNull { it.text("id") == id } } ?: model.runners
-                            Column(Modifier.onPlaced { list = it }.pointerInput(editing) {
-                                if (editing) awaitEachGesture {
+                            Column(Modifier.onPlaced { list = it }.pointerInput(Unit) {
+                                awaitEachGesture {
                                     val down = awaitFirstDown(requireUnconsumed = false)
                                     // Only the handle of a row shown now: a removed row's handle lay where the next row moved to.
                                     val current = model.runners.map { it.text("id") }
                                     val id = handles.entries.firstOrNull { it.key in current && it.value.contains(down.position) }?.key ?: return@awaitEachGesture
                                     drag = RunnerDrag(id, current, 0f)
-                                    // Let go, cancelled, or cut short by Edit turning off: the rows stand in order again.
+                                    // Let go or cancelled: the rows stand in order again.
                                     try {
                                         val ended = verticalDrag(down.id) { change -> drag = drag?.moved(change.positionChange().y, heights); change.consume() }
                                         val order = drag?.order
@@ -239,7 +240,7 @@ fun RunnersList(api: ManagementApi, revision: Long, openRunner: (String) -> Unit
                                         val dragged = drag?.id == id
                                         Box(Modifier.onSizeChanged { heights[id] = it.height }.zIndex(if (dragged) 1f else 0f)
                                             .graphicsLayer { translationY = if (dragged) drag?.offset ?: 0f else 0f }) {
-                                            RunnerRow(runner, model.workspacesOf(id), model.latestVersion, now, editing,
+                                            RunnerRow(runner, model.workspacesOf(id), model.latestVersion, now,
                                                 canMoveUp = index > 0, canMoveDown = index < shown.lastIndex,
                                                 open = { openRunner(id) }, remove = { removing = runner },
                                                 move = { by -> scope.launch {
@@ -271,7 +272,7 @@ fun RunnersList(api: ManagementApi, revision: Long, openRunner: (String) -> Unit
     if (adding) AddRunnerDialog(api, onDismiss = { adding = false }) { id -> adding = false; openRunner(id) }
 }
 
-/** One drag in Edit mode: the row being moved, the order as it stands, and how far the row is from its slot. */
+/** One drag of a row's handle: the row being moved, the order as it stands, and how far the row is from its slot. */
 internal data class RunnerDrag(val id: String, val order: List<String>, val offset: Float) {
     /** Moved by [dy]: it takes the next row's place once past half of it, and the offset is kept relative to its new slot. */
     fun moved(dy: Float, heights: Map<String, Int>): RunnerDrag {
@@ -288,37 +289,46 @@ internal data class RunnerDrag(val id: String, val order: List<String>, val offs
     }
 }
 
+/** One runner: a press opens it, its handle — the list's drag — moves it, and its ⋯ menu removes it (iOS's swipe). TalkBack, which
+ * cannot drag, moves it with the row's Move up and Move down actions. */
 @Composable
-private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: String?, now: Long, editing: Boolean,
+private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: String?, now: Long,
                       canMoveUp: Boolean, canMoveDown: Boolean, open: () -> Unit, remove: () -> Unit, move: (Int) -> Unit, handle: Modifier) {
     val items = RunnerPage.attention(runner, workspaces, now, latest)
     val name = RunnerPage.displayName(runner)
-    // In Edit mode the row opens nothing; TalkBack, which cannot drag, moves it by these actions instead.
-    Row(Modifier.fillMaxWidth().then(if (!editing) Modifier.clickable(role = Role.Button, onClick = open) else Modifier.semantics(mergeDescendants = true) {
-            customActions = listOfNotNull(CustomAccessibilityAction("Move up") { move(-1); true }.takeIf { canMoveUp },
-                CustomAccessibilityAction("Move down") { move(1); true }.takeIf { canMoveDown })
-        }).padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        StatusDot(RunnerPage.presence(runner, now))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(name, Modifier.weight(1f), maxLines = 2)
-                RunnerPage.slots(runner, now)?.let { (active, max) ->
-                    Text(RunnerCopy.slots(active, max), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-                    Spacer(Modifier.width(7.dp))
-                    Gauge(if (max > 0) active.toFloat() / max else 0f, if (active >= max) Ink.amber else MaterialTheme.colorScheme.primary, Modifier.width(44.dp))
+    var menu by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.weight(1f).clickable(role = Role.Button, onClick = open).semantics {
+                customActions = listOfNotNull(CustomAccessibilityAction("Move up") { move(-1); true }.takeIf { canMoveUp },
+                    CustomAccessibilityAction("Move down") { move(1); true }.takeIf { canMoveDown })
+            }.padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            StatusDot(RunnerPage.presence(runner, now))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(name, Modifier.weight(1f), maxLines = 2)
+                    RunnerPage.slots(runner, now)?.let { (active, max) ->
+                        Text(RunnerCopy.slots(active, max), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
+                        Spacer(Modifier.width(7.dp))
+                        Gauge(if (max > 0) active.toFloat() / max else 0f, if (active >= max) Ink.amber else MaterialTheme.colorScheme.primary, Modifier.width(44.dp))
+                    }
+                }
+                Text(RunnerPage.listSubtitle(runner, now), style = MaterialTheme.typography.bodySmall, color = Ink.muted, maxLines = 1)
+                RunnerPage.listAttentionLine(items)?.let { line ->
+                    Text("⚠ $line", style = MaterialTheme.typography.bodySmall, color = Ink.tone(RunnerPage.listTone(items) ?: "warn"), maxLines = 2)
                 }
             }
-            Text(RunnerPage.listSubtitle(runner, now), style = MaterialTheme.typography.bodySmall, color = Ink.muted, maxLines = 1)
-            RunnerPage.listAttentionLine(items)?.let { line ->
-                Text("⚠ $line", style = MaterialTheme.typography.bodySmall, color = Ink.tone(RunnerPage.listTone(items) ?: "warn"), maxLines = 2)
+        }
+        Box {
+            TextButton(onClick = { menu = true }) { Text("⋯", Modifier.clearAndSetSemantics { contentDescription = "More for $name" }) }
+            DropdownMenu(menu, { menu = false }) {
+                DropdownMenuItem(text = { Text(AccountCopy.REMOVE, color = Ink.red) }, onClick = { menu = false; remove() })
             }
         }
-        if (editing) {
-            TextButton(onClick = remove) { Text("Remove", color = Ink.red) }
-            Text("≡", handle.semantics { contentDescription = "Reorder $name" }.padding(horizontal = 8.dp, vertical = 4.dp),
-                style = MaterialTheme.typography.titleLarge, color = Ink.muted)
-        } else Chevron()
+        // The handle a row is dragged by; the drag itself is the list's.
+        Box(handle.size(48.dp).testTag("runner-handle:${runner.text("id")}").clearAndSetSemantics { }, contentAlignment = Alignment.Center) {
+            Icon(painterResource(R.drawable.ic_reorder), null, tint = Ink.muted)
+        }
     }
 }
 
