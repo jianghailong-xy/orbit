@@ -111,8 +111,8 @@ function RouteProbe() {
   return <output data-testid="location">{location.pathname + location.search}</output>;
 }
 
-/** `matches` for the projects breakpoint only — everything else answers false, which is what
- *  antd's own breakpoint subscriptions want and is the desktop reading they already assume. */
+/** `matches` for the projects breakpoint only — everything else answers false, which is the
+ *  desktop reading every other breakpoint subscription already assumes. */
 function stubViewport(phone: boolean): void {
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: phone && query === '(max-width: 640px)',
@@ -204,13 +204,18 @@ function currentLocation(): string | null {
   return mountedContainer().querySelector('[data-testid="location"]')?.textContent ?? null;
 }
 
-function segment(label: string): HTMLInputElement {
-  const item = [...mountedContainer().querySelectorAll('.ant-segmented-item')].find((el) =>
-    el.textContent?.trim().startsWith(label),
-  );
+/** The scope control's options, by their role in its radio group. */
+const segments = (): HTMLElement[] =>
+  [...mountedContainer().querySelectorAll<HTMLElement>('[role="radiogroup"] [role="radio"]')];
+
+function segment(label: string): HTMLElement {
+  const item = segments().find((el) => el.textContent?.trim().startsWith(label));
   expect(item, `segment ${label}`).toBeTruthy();
-  return item!.querySelector('input')! as HTMLInputElement;
+  return item!;
 }
+
+/** Whether a segment is the one selected, as its radio state says. */
+const checked = (label: string): boolean => segment(label).getAttribute('aria-checked') === 'true';
 
 async function click(element: HTMLElement, assertion: () => void): Promise<void> {
   await act(async () => {
@@ -230,7 +235,7 @@ function button(label: string): HTMLButtonElement {
 /** The tags inside project ROWS. Scoped to the row head so a status word appearing in a section
  *  header or a pill cannot answer for the badge this is about. */
 const rowTags = (): string[] =>
-  [...mountedContainer().querySelectorAll('.project-row-head .ant-tag')].map((el) =>
+  [...mountedContainer().querySelectorAll('.project-row-head .orbit-badge')].map((el) =>
     (el.textContent ?? '').trim(),
   );
 

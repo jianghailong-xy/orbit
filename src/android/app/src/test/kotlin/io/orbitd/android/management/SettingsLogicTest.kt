@@ -15,10 +15,20 @@ class SettingsLogicTest {
         assertEquals("25 active", settingsSharedLinksValue(25))
         assertEquals("orbit.example.com", settingsInstanceName("https://orbit.example.com/"))
         assertEquals("10.0.2.2:3000", settingsInstanceName("http://10.0.2.2:3000/orbit/"))
-        assertEquals("Sign out of orbit.example.com?", settingsSignOutTitle("orbit.example.com"))
-        assertEquals("Sign out?", settingsSignOutTitle(null))
+        assertEquals("Sign out?", SETTINGS_SIGN_OUT_TITLE)
         assertEquals(listOf("Default", "Accept Edits", "Plan", "Auto", "Don't Ask", "Bypass"), personalPermissions.map { it.second })
         assertEquals("Share task", settingsTitle("share", "TASK:abc"))
+    }
+
+    /** UserPreferences.smartModelSelection: on only for an explicit true; absent, or anything but a boolean, is off. */
+    @Test fun smartModelSelectionIsOnOnlyForAnExplicitTrue() {
+        fun prefs(json: String) = Json.parseToJsonElement(json).jsonObject
+        assertTrue(smartModelSelection(prefs("""{"modelRouting":true}""")))
+        assertFalse(smartModelSelection(prefs("""{"modelRouting":false}""")))
+        assertFalse(smartModelSelection(prefs("""{"theme":"dark"}""")))
+        assertFalse(smartModelSelection(prefs("""{"modelRouting":"true"}""")))
+        assertFalse(smartModelSelection(prefs("""{"modelRouting":1}""")))
+        assertFalse(smartModelSelection(null))
     }
 
     @Test fun profileSavesThePhotoFirstThenTheNameOnlyWhenEitherChanged() {

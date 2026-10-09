@@ -132,3 +132,39 @@ describe('Menu keys pressed before focus enters the open menu', () => {
     expect(trigger().getAttribute('aria-expanded')).toBe('false');
   });
 });
+
+describe('Menu that leaves the arrow keys to the page', () => {
+  it('lets ↑ and ↓ on its closed trigger reach the page, and keeps them once it is open', async () => {
+    const reached: string[] = [];
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key.startsWith('Arrow')) reached.push(event.key);
+    };
+    window.addEventListener('keydown', onKey);
+    try {
+      await act(async () => root!.render(<Menu trigger={<button type="button">Add attachment</button>} items={items} openOnArrowKeys={false} />));
+      trigger().focus();
+      await press('ArrowDown');
+      await press('ArrowUp');
+      await runFrames();
+      expect(trigger().getAttribute('aria-expanded')).toBe('false');
+      expect(reached).toEqual(['ArrowDown', 'ArrowUp']);
+
+      // Enter still opens it, and the open menu's arrows are its own.
+      await press('Enter');
+      expect(trigger().getAttribute('aria-expanded')).toBe('true');
+      expect(highlighted()).toBe('File');
+      await press('ArrowDown');
+      await runFrames();
+      expect(highlighted()).toBe('Image');
+      expect(reached).toEqual(['ArrowDown', 'ArrowUp']);
+    } finally {
+      window.removeEventListener('keydown', onKey);
+    }
+  });
+
+  it('opens on the arrows by default', async () => {
+    await press('ArrowDown');
+    expect(trigger().getAttribute('aria-expanded')).toBe('true');
+    expect(highlighted()).toBe('File');
+  });
+});

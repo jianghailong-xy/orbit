@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { ConflictException } from '@nestjs/common';
+import { MODEL_UNAVAILABLE } from '@orbit/shared';
 
-import { managedRuntimeReady, managedRuntimeSupply } from './managed-runner-supply';
+import { assertManagedFirstSessionRuntime, managedRuntimeReady, managedRuntimeSupply } from './managed-runner-supply';
 
 // Model supply on a managed runner: what its heartbeat reported installed and signed in, and the
 // order a first session takes it in. A runtime that is not reported ready is never supply.
@@ -56,4 +58,26 @@ test("a session bringing its own credential needs the CLI installed, not the CLI
   assert.equal(managedRuntimeReady(runner, 'claude', { bringsOwnCredentials: true }), true);
   assert.equal(managedRuntimeReady(runner, 'codex', { bringsOwnCredentials: true }), false);
   assert.deepEqual(managedRuntimeSupply(runner), [], 'and it is still not supply of its own');
+});
+
+test('a first session with no runtime ready is refused, to be signed in from Infrastructure', async () => {
+  const prisma = { session: { findFirst: async () => null } } as never;
+  await assert.rejects(
+    assertManagedFirstSessionRuntime(prisma, {
+      workspaceId: 'w',
+      runtime: 'claude',
+      bringsOwnCredentials: false,
+      runner: { engines: [engine('claude', { auth: 'no' })] },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof ConflictException);
+      assert.deepEqual(error.getResponse(), {
+        code: MODEL_UNAVAILABLE,
+        message:
+          'No runtime is installed and signed in on your managed runner yet, so this first session cannot start. ' +
+          'Sign one in from Infrastructure, then start the session again.',
+      });
+      return true;
+    },
+  );
 });

@@ -124,7 +124,7 @@ describe('a turn a watch queued', () => {
     expect(text(row, '.bgwake-name')).toBe(`Task ${uuidToBase62(TASK).slice(-8)}`);
     expect(text(row, '.bgwake-status')).toBe('FAILED');
     expect(row.querySelector('.bgwake-time')?.textContent).not.toBe('');
-    expect(text(row, '.bgwake-details-label')).toBe('详情');
+    expect(text(row, '.bgwake-details-label')).toBe('Details');
     // A task that failed takes the error tone, as a failed job's line does.
     expect(line.classList.contains('is-failed')).toBe(true);
   });

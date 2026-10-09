@@ -11,6 +11,8 @@ export interface ConfirmOptions {
   confirmText?: string;
   cancelText?: string;
   danger?: boolean;
+  /** Wider than the 416px default when two long answers must stay on one line. */
+  width?: number;
   onConfirm: () => unknown | Promise<unknown>;
   returnFocus?: RefObject<HTMLElement | null>;
 }
@@ -26,7 +28,7 @@ export function ConfirmDialog({ open, ...props }: ConfirmDialogProps) {
 }
 
 function Confirmation({ kind = 'confirm', title, description, confirmText = 'OK', cancelText = 'Cancel', danger = false,
-  onConfirm, onClose, returnFocus }: Omit<ConfirmDialogProps, 'open'>) {
+  width = 416, onConfirm, onClose, returnFocus }: Omit<ConfirmDialogProps, 'open'>) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submitting = useRef(false);
@@ -57,7 +59,7 @@ function Confirmation({ kind = 'confirm', title, description, confirmText = 'OK'
     ? <CheckCircleFilled className="orbit-confirm-icon orbit-confirm-icon-success" aria-hidden />
     : <ExclamationCircleFilled className="orbit-confirm-icon" aria-hidden />;
   return <OverlaySurface kind="confirm" open title={<>{icon}{title}</>}
-    description={description} width={416} busy={pending} closable={false} closeOnOutsideClick={false}
+    description={description} width={width} busy={pending} closable={false} closeOnOutsideClick={false}
     initialFocus={success ? acknowledge : cancel} returnFocus={returnFocus} onClose={() => { if (!submitting.current) onClose(false); }}
     footer={<>
       {!success && <Button ref={cancel} disabled={pending} onClick={() => { if (!submitting.current) onClose(false); }}>{cancelText}</Button>}

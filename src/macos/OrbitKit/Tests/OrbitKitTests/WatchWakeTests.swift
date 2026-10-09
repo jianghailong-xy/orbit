@@ -160,7 +160,7 @@ final class WatchWakeTests: XCTestCase {
         XCTAssertFalse(WatchWakeCard.isFailed(wake), "done is no failure")
         // A lone target is the line itself: nothing of it stays out of the fold.
         XCTAssertTrue(WatchWakeCard.failures(wake).shown.isEmpty)
-        XCTAssertEqual(WatchWakeCard.details, "详情")
+        XCTAssertEqual(WatchWakeCard.details, "Details")
     }
 
     /// The fixture's Match: one task FAILED. The line takes the error tone a failed job's line takes.

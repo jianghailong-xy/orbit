@@ -230,11 +230,11 @@ const slashProbeTimeout = 60 * time.Second
 // process spawn per fresh machine, not one per restart. Retried on the caller's rescan tick
 // while still empty, because engines install on demand — `claude` is often not on PATH yet at
 // start-up. Best-effort throughout: a failure leaves the registry exactly as it was.
-func ensureClaudeSlashRegistry(ctx context.Context, workDir string) bool {
+func ensureClaudeSlashRegistry(ctx context.Context) bool {
 	if !slashReg.emptyFor(providerClaude) || !claudeCLIAvailable() {
 		return false
 	}
-	commands, skills, err := probeClaudeSlashAssets(ctx, workDir)
+	commands, skills, err := probeClaudeSlashAssets(ctx)
 	if err != nil {
 		logln("slash registry probe failed:", err)
 		return false
@@ -252,7 +252,17 @@ func ensureClaudeSlashRegistry(ctx context.Context, workDir string) bool {
 // prompt: with an empty stream-json stdin the CLI waits for a message and emits nothing at all,
 // so there is no handshake to read. `--no-session-persistence` keeps the throwaway out of the
 // user's `claude --resume` list.
-func probeClaudeSlashAssets(ctx context.Context, workDir string) (commands, skills []string, err error) {
+func probeClaudeSlashAssets(ctx context.Context) (commands, skills []string, err error) {
+	// Slash availability is cwd-scoped, but this probe runs in the runner's private probe directory
+	// rather than in the runner's own workDir — the directory `orbit register` ran in, ~/Desktop as
+	// often as not on a Mac — because Claude Code reads the whole tree below its working directory
+	// as it starts (see privateProbeDir). From an empty directory the handshake still lists the
+	// built-ins, plugin skills and the user's own ~/.claude assets; each agent's project assets are
+	// covered by the disk scan and learned from its sessions' own handshakes.
+	dir, err := privateProbeDir(claudeProbeDirName)
+	if err != nil {
+		return nil, nil, err
+	}
 	cctx, cancel := context.WithTimeout(ctx, slashProbeTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(cctx, "claude",
@@ -261,13 +271,7 @@ func probeClaudeSlashAssets(ctx context.Context, workDir string) (commands, skil
 		"--verbose",
 		"--no-session-persistence",
 	)
-	// Slash availability is cwd-scoped, so probe from the runner's own working dir — the same
-	// host-level root the disk scan uses. Agent-level assets are already covered by that scan.
-	if workDir != "" {
-		if _, statErr := os.Stat(workDir); statErr == nil {
-			cmd.Dir = workDir
-		}
-	}
+	cmd.Dir = dir
 	cmd.Env = envWithAgent(nil)
 	out, err := cmd.Output()
 	if err != nil {

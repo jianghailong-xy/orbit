@@ -1,0 +1,29 @@
+tree: del de2426d9cca647553565b3bfbe09d9f2dbe5d5e2
+load: 22.19 29.56 30.79 13/5593 2595670
+started: 2026-10-09T03:44:53Z
+
+Running 20 tests using 1 worker
+
+  ✓   1 [webkit-light-desktop] › ui-migration/p43a-reload-probe.browser.mjs:10:3 › reload probe 0 (2.3s)
+  ✓   2 [webkit-light-desktop] › ui-migration/p43a-reload-probe.browser.mjs:10:3 › reload probe 1 (2.1s)
+  ✓   3 [webkit-light-desktop] › ui-migration/p43a-reload-probe.browser.mjs:10:3 › reload probe 2 (2.0s)
+  ✓   4 [webkit-light-desktop] › ui-migration/p43a-reload-probe.browser.mjs:10:3 › reload probe 3 (2.2s)
+  ✓   5 [webkit-light-desktop] › ui-migration/p43a-reload-probe.browser.mjs:10:3 › reload probe 4 (2.2s)
+  ✓   6 [webkit-light-desktop] › ui-migration/p43a-reload-probe.browser.mjs:10:3 › reload probe 5 (2.6s)
+  ✓   7 [webkit-light-desktop] › ui-migration/p43a-reload-probe.browser.mjs:10:3 › reload probe 6 (2.5s)
+  ✓   8 [webkit-light-desktop] › ui-migration/p43a-reload-probe.browser.mjs:10:3 › reload probe 7 (2.5s)
+  ✓   9 [webkit-light-desktop] › ui-migration/p43a-reload-probe.browser.mjs:10:3 › reload probe 8 (2.8s)
+  ✓  10 [webkit-light-desktop] › ui-migration/p43a-reload-probe.browser.mjs:10:3 › reload probe 9 (2.8s)
+  ✓  11 [webkit-dark-desktop] › ui-migration/p43a-reload-probe.browser.mjs:10:3 › reload probe 0 (1.8s)
+  ✓  12 [webkit-dark-desktop] › ui-migration/p43a-reload-probe.browser.mjs:10:3 › reload probe 1 (1.8s)
+  ✓  13 [webkit-dark-desktop] › ui-migration/p43a-reload-probe.browser.mjs:10:3 › reload probe 2 (2.1s)
+  ✓  14 [webkit-dark-desktop] › ui-migration/p43a-reload-probe.browser.mjs:10:3 › reload probe 3 (2.0s)
+  ✓  15 [webkit-dark-desktop] › ui-migration/p43a-reload-probe.browser.mjs:10:3 › reload probe 4 (2.4s)
+  ✓  16 [webkit-dark-desktop] › ui-migration/p43a-reload-probe.browser.mjs:10:3 › reload probe 5 (2.3s)
+  ✓  17 [webkit-dark-desktop] › ui-migration/p43a-reload-probe.browser.mjs:10:3 › reload probe 6 (2.4s)
+  ✓  18 [webkit-dark-desktop] › ui-migration/p43a-reload-probe.browser.mjs:10:3 › reload probe 7 (2.6s)
+  ✓  19 [webkit-dark-desktop] › ui-migration/p43a-reload-probe.browser.mjs:10:3 › reload probe 8 (2.8s)
+  ✓  20 [webkit-dark-desktop] › ui-migration/p43a-reload-probe.browser.mjs:10:3 › reload probe 9 (3.0s)
+
+  20 passed (49.5s)
+exit=0

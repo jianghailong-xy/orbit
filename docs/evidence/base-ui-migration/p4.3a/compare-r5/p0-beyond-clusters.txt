@@ -1,0 +1,2 @@
+chromium-dark-desktop  breakpoint-639-projects.png    all=     7 gt2=     3 max=  4 clusters=  1 [3px x16-23 y216-223 m4]
+chromium-dark-phone    projects-search-empty.png      all=    13 gt2=     4 max=  4 clusters=  2 [3px x16-23 y216-223 m4] [1px x16-23 y152-159 m3]

@@ -9,8 +9,9 @@ import type { Runner } from './TasksSidePanel';
 import type { RunEvent } from './Transcript';
 
 /**
- * A reply that has finished is its words and nothing else: no row of actions under it. The only row
- * a conversation's messages carry is the user bubble's, the copy button and the time.
+ * A reply that has finished is its words and nothing else. The only rows around the messages are the
+ * user bubble's and the one a finished turn ends in (owner, 2026-10-09): each a copy button and a
+ * time, nothing more.
  *
  * The wiki is written by the agent's `wiki_propose` and by its own import and maintenance jobs, not
  * by hand from a message (owner, 2026-09-26), so the session page offers no way to file one into it.
@@ -42,6 +43,7 @@ const ANSWERED = 'It does. A runner update never evicts a turn that is still run
 const EVENTS: RunEvent[] = [
   { seq: 1, type: 'user', turnId: 'turn-1', ts: '2026-09-26T09:00:00.000Z', payload: { text: ASKED } },
   { seq: 2, type: 'assistant', turnId: 'turn-1', ts: '2026-09-26T09:00:30.000Z', payload: { text: ANSWERED } },
+  { seq: 3, type: 'turn_end', turnId: 'turn-1', ts: '2026-09-26T09:00:31.000Z', payload: { subtype: 'success' } },
 ];
 
 /** Anything on the page offering to put a message into the wiki, by its words or by its label. */
@@ -54,13 +56,16 @@ function expectTheTwoMessagesAsTheyWere(page: HTMLElement) {
   expect([...reply!.children].map((el) => el.className), 'the reply is its words alone').toEqual(['md']);
   expect(reply!.textContent).toBe(ANSWERED);
 
-  // One copy button and one time on the page, both in the user bubble's row: nothing drew a row of
-  // its own under the reply, inside its box or around it.
+  // Two copy buttons and two times on the page, in the user bubble's row and the turn's: nothing else
+  // drew a row of its own, inside the reply's box or around it.
   const meta = page.querySelector<HTMLElement>('.chat-user-meta');
   expect(meta, "the user bubble's row").not.toBeNull();
   expect([...meta!.children].map((el) => el.className)).toEqual(['chat-copy', 'chat-time']);
-  expect(page.querySelectorAll('.chat-copy')).toHaveLength(1);
-  expect(page.querySelectorAll('.chat-time')).toHaveLength(1);
+  const foot = page.querySelector<HTMLElement>('.chat-turn-foot');
+  expect(foot, 'the row the turn ended in').not.toBeNull();
+  expect([...foot!.children].map((el) => el.className)).toEqual(['chat-copy', 'chat-time']);
+  expect(page.querySelectorAll('.chat-copy')).toHaveLength(2);
+  expect(page.querySelectorAll('.chat-time')).toHaveLength(2);
 }
 
 function expectNoWikiEntryPoint(page: HTMLElement) {
@@ -88,7 +93,7 @@ describe('a settled reply in the transcript', () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
   });
 
-  it('carries no row of actions under it', async () => {
+  it('is its words alone, and its turn ends in a copy button and a time', async () => {
     await act(async () => {
       root.render(
         <MemoryRouter>

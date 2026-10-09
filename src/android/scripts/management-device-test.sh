@@ -51,7 +51,7 @@ sha256sum "$apk" "$tests" > "$output/apks.sha256"
 # A signed-out, empty debug installation: no earlier session or cache is carried into the fixture.
 "$adb" -s "$serial" shell pm clear "$package" > "$output/pm-clear.txt"
 test=io.orbitd.android.management.ManagementDeviceTest
-"$adb" -s "$serial" shell am instrument -w -r -e class "$test#settingsProfileSharingNotificationsAndRolesUseTheRealRoutes,$test#workspaceRunnerProvidersAndSessionShareUseTheRealRoutes,$test#antigravityAccountsOneWindowAndTheSignInCard,$test#mainPagesInTheAccountsDarkAppearance,$test#mainPagesAtTwiceTheFontSize" \
+"$adb" -s "$serial" shell am instrument -w -r -e class "$test#settingsProfileSharingNotificationsAndRolesUseTheRealRoutes,$test#workspaceRunnerProvidersAndSessionShareUseTheRealRoutes,$test#antigravityAccountsOneWindowAndTheSignInCard,$test#kimiAccountsSiteFirstTwoAccountsAndNext,$test#runnersListRemovesARowThenReordersTheNextByDragging,$test#accessTokensSmartSelectionAndDeepSeekBalance,$test#mainPagesInTheAccountsDarkAppearance,$test#mainPagesAtTwiceTheFontSize" \
   io.orbitd.android.debug.test/androidx.test.runner.AndroidJUnitRunner > "$output/instrumentation.txt" 2>&1 || true
 "$adb" -s "$serial" exec-out run-as "$package" tar -cf - -C files a13-management > "$output/captures.tar" || true
 tar --no-same-owner -xf "$output/captures.tar" -C "$output" || true
@@ -64,13 +64,18 @@ tar --no-same-owner -xf "$output/captures.tar" -C "$output" || true
   io.orbitd.android.debug.test/androidx.test.runner.AndroidJUnitRunner > "$output/instrumentation-talkback.txt" 2>&1 || true
 "$adb" -s "$serial" exec-out run-as "$package" tar -cf - -C files a13-management > "$output/captures-talkback.tar" || true
 tar --no-same-owner -xf "$output/captures-talkback.tar" -C "$output" || true
-grep -F 'OK (5 tests)' "$output/instrumentation.txt"
+grep -F 'OK (8 tests)' "$output/instrumentation.txt"
 grep -F 'OK (1 test)' "$output/instrumentation-talkback.txt"
 if grep -E 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed|INSTRUMENTATION_STATUS_CODE: -[234]' "$output/instrumentation.txt" "$output/instrumentation-talkback.txt"; then exit 1; fi
 for screenshot in settings-home settings-home-dark edit-profile change-password notifications shared-links permission-revoked sign-out-confirm \
   admin-users admin-user admin-demoted settings-home-font200 session-share workspace-settings runners-list runner-offline runner-online runner-update-failed \
   runner-engine runner-deep-link providers codex-pool \
   agy-runner-engines agy-engine agy-engine-terms accounts-state account-menu sign-in-paste sign-in-pasted sign-in-folded sign-in-device-code \
+  kimi-runner-one kimi-engine-one kimi-sign-in-again-default kimi-add-account kimi-add-device-code kimi-add-use-instead kimi-engine-two \
+  kimi-sign-in-again-work kimi-runner-two next-claude next-codex next-antigravity kimi-old-runner \
+  runners-handles runners-row-menu runners-remove-confirm runners-removed runners-dragged \
+  a13d-settings-sessions a13d-smart-selection-on a13d-settings-account a13d-access-tokens a13d-revoke-confirm a13d-access-tokens-revoked \
+  a13d-access-tokens-ended a13d-providers a13d-deepseek-key a13d-deepseek-key-low a13d-deepseek-key-provider a13d-deepseek-key-rejected \
   dark-session-share dark-workspace-settings dark-settings-home dark-edit-profile dark-notifications dark-shared-links dark-admin-users \
   dark-runners-list dark-runner dark-runner-engine dark-providers dark-codex-pool \
   font200-session-share font200-workspace-settings font200-settings-home font200-edit-profile font200-notifications font200-shared-links \

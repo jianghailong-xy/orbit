@@ -9,5 +9,5 @@ import (
 )
 
 func startAntigravityGooglePTY(cmd *exec.Cmd, out io.Writer) (io.WriteCloser, <-chan struct{}, error) {
-	return nil, nil, errors.New("Antigravity 的 Google 登录暂时只支持 Linux runner")
+	return nil, nil, errors.New("Signing Antigravity in with Google works only on a Linux runner for now.")
 }

@@ -3,7 +3,6 @@ import type { ReactElement } from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { SessionLifecycleState, SessionRunState } from '@orbit/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -196,8 +195,7 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   apiMock.mockReset();
   landedOn = '';
-  // antd's message layer measures nothing, but its Modal/Select siblings subscribe to breakpoints
-  // on mount and jsdom ships no matchMedia.
+  // The dialogs and the select subscribe to breakpoints on mount, and jsdom ships no matchMedia.
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: false,
     media: query,
@@ -235,24 +233,22 @@ async function mount(node: ReactElement): Promise<void> {
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>
-        {/* The toast surface. Without it AntD's `App.useApp()` hands back no-ops and the one
-            sentence a replaced conversation has to produce would go nowhere — silently. */}
-        <AntApp>
-          <MemoryRouter initialEntries={['/projects/x']}>
-            <Routes>
-              <Route path="*" element={node} />
-            </Routes>
-            <Probe />
-            <ToastViewport />
-          </MemoryRouter>
-        </AntApp>
+        <MemoryRouter initialEntries={['/projects/x']}>
+          <Routes>
+            <Route path="*" element={node} />
+          </Routes>
+          <Probe />
+          {/* The toast surface: without it the one sentence a replaced conversation has to
+              produce would go nowhere — silently. */}
+          <ToastViewport />
+        </MemoryRouter>
       </QueryClientProvider>,
     );
   });
   await settle();
 }
 
-/** React Query answers on a macrotask, and antd's message layer paints on another. */
+/** React Query answers on a macrotask, and the toast layer paints on another. */
 async function settle(): Promise<void> {
   for (let i = 0; i < 4; i += 1) {
     await act(async () => {
@@ -280,12 +276,12 @@ const section = (): ReactElement => (
 const buttonLabels = (): string[] =>
   [...container.querySelectorAll('button')].map((b) => (b.textContent ?? '').trim());
 
-/** The same press, over the WHOLE document: an antd menu and a confirm dialog are portals, and a
+/** The same press, over the WHOLE document: a menu and a confirm dialog are portals, and a
  *  container-scoped query cannot see either. `container` is inside `document.body`, so this finds
  *  the card's own buttons too. */
 async function pressAny(label: RegExp): Promise<void> {
-  // Buttons AND menu items: an antd menu row is an `li[role=menuitem]`, so a query for `button`
-  // alone reports "no such control" about something plainly on screen.
+  // Buttons AND menu items: a menu row is a `[role=menuitem]`, not a button, so a query for
+  // `button` alone reports "no such control" about something plainly on screen.
   const target = [...document.body.querySelectorAll<HTMLElement>('button, [role="menuitem"]')].find(
     (el) => label.test((el.textContent ?? '').trim()),
   );
@@ -304,6 +300,35 @@ async function openCoordinatorMenu(): Promise<void> {
     caret!.click();
   });
   await settle();
+}
+
+/** A mouse press as a browser delivers it — pointer and mouse down and up, then the click — which a
+ *  list option needs before it takes a click as a choice rather than a keyboard activation. */
+async function pressLikeAMouse(el: HTMLElement): Promise<void> {
+  await act(async () => {
+    const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
+    el.dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse' }));
+    el.dispatchEvent(new MouseEvent('mousedown', init));
+    el.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0, pointerType: 'mouse' }));
+    el.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
+    el.dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
+  });
+  await settle();
+}
+
+/** Open the open dialog's workspace picker and pick the workspace by name. */
+async function pickWorkspace(name: string, what: string): Promise<void> {
+  const picker = document.querySelector<HTMLElement>('[role="dialog"] [role="combobox"]');
+  expect(picker, 'the dialog draws a workspace picker').toBeTruthy();
+  await act(async () => {
+    picker!.click();
+  });
+  await settle();
+  const option = [...document.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')].find((o) =>
+    (o.textContent ?? '').includes(name),
+  );
+  expect(option, what).toBeTruthy();
+  await pressLikeAMouse(option!);
 }
 
 async function press(label: RegExp): Promise<void> {
@@ -546,9 +571,9 @@ describe('ProjectCoordinatorSection — what a press costs', () => {
     expect(buttonLabels().some((l) => /Rebind/i.test(l))).toBe(false);
   });
 
-  // The one test here that drives antd's own machinery — a Modal portal, a Select dropdown and
-  // two more paints — rather than just this section's. What it waits on is a loaded machine's
-  // render, not a hang, so the case budget is the suite's.
+  // The one test here that drives a dialog portal and a select's list as well as this section —
+  // two more paints. What it waits on is a loaded machine's render, not a hang, so the case budget
+  // is the suite's.
   it('rebinds the landing rather than retrying, from a read that already says no press can win', async () => {
     const writes: Array<[string, unknown]> = [];
     serve(unavailableStatus(), (path) => {
@@ -587,22 +612,9 @@ describe('ProjectCoordinatorSection — what a press costs', () => {
     expect(document.body.textContent).toContain('Rebind coordination workspace');
 
     // Pick the spare and confirm. The dialog is a portal, so the option is found on the document.
-    await act(async () => {
-      (document.querySelector('.ant-select-content') as HTMLElement | null)?.dispatchEvent(
-        new MouseEvent('mousedown', { bubbles: true }),
-      );
-    });
-    await settle();
-    const option = [...document.querySelectorAll('.ant-select-item-option')].find((o) =>
-      (o.textContent ?? '').includes('orbit-spare'),
-    );
-    expect(option, 'the spare workspace is offered').toBeTruthy();
-    await act(async () => {
-      (option as HTMLElement).click();
-    });
-    await settle();
+    await pickWorkspace('orbit-spare', 'the spare workspace is offered');
 
-    const ok = [...document.querySelectorAll('.ant-modal button')].find((b) =>
+    const ok = [...document.querySelectorAll('[role="dialog"] button')].find((b) =>
       /^Rebind$/.test((b.textContent ?? '').trim()),
     );
     expect(ok, 'the dialog confirms with Rebind').toBeTruthy();
@@ -644,22 +656,9 @@ describe('ProjectCoordinatorSection — what a press costs', () => {
     // Said where the decision is made, because it cannot be taken back after it.
     expect(document.body.textContent).toMatch(/cannot be moved to another workspace later/);
 
-    await act(async () => {
-      (document.querySelector('.ant-select-content') as HTMLElement | null)?.dispatchEvent(
-        new MouseEvent('mousedown', { bubbles: true }),
-      );
-    });
-    await settle();
-    const option = [...document.querySelectorAll('.ant-select-item-option')].find((o) =>
-      (o.textContent ?? '').includes('orbit-spare'),
-    );
-    expect(option, 'the workspaces this owner has are offered').toBeTruthy();
-    await act(async () => {
-      (option as HTMLElement).click();
-    });
-    await settle();
+    await pickWorkspace('orbit-spare', 'the workspaces this owner has are offered');
 
-    const ok = [...document.querySelectorAll('.ant-modal button')].find((b) =>
+    const ok = [...document.querySelectorAll('[role="dialog"] button')].find((b) =>
       /Start coordinator here/.test((b.textContent ?? '').trim()),
     );
     expect(ok, 'the dialog confirms by opening the coordinator').toBeTruthy();

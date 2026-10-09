@@ -651,7 +651,7 @@ func (b *bgTailer) alertIfNobodyIsWatching(job *bgJob, status string, exit int) 
 		return
 	}
 	// Read on a lock screen: what ended, how it ended, and the id that reads the rest.
-	message := fmt.Sprintf("后台%s %s 已结束（退出码 %d）：%s", job.kind, job.id, exit, job.command)
+	message := fmt.Sprintf("Background %s %s ended (exit code %d): %s", job.kind, job.id, exit, job.command)
 	if err := b.notify(message); err != nil {
 		logln("could not alert the owner about background job", job.id+":", err)
 	}

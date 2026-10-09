@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // A combined `git diff` over three files: a modify, an add (+++ b/…), and a delete (+++ is
@@ -237,6 +238,157 @@ func TestLiveDiffReportsCommittedDeletionWhenIgnoredCopyRemains(t *testing.T) {
 	if len(patches) != 1 || patches[0].Path != "kept-local.txt" || !strings.Contains(patches[0].Patch, "deleted file mode") {
 		t.Fatalf("committed deletion patch missing or incorrect: %+v", patches)
 	}
+}
+
+// The temp index is HEAD read over a copy of the checkout's own index, so the stat data git cached
+// for every unchanged file carries over and `add -A` hashes only what changed. Read into an empty
+// index, it hashed every tracked file: 1.5–14 s per turn on Orbit's own checkout under load, and
+// the turn's completion waited on it, leaving a stopped session Running that long. A clean filter
+// that logs each file git hashes shows which ones were read.
+func TestLiveDiffHashesOnlyWhatChanged(t *testing.T) {
+	repo := initRepo(t)
+	hashed := filepath.Join(t.TempDir(), "hashed")
+	mustGit(t, repo, "config", "filter.spy.clean", "echo %f >> '"+hashed+"'; cat")
+	if err := os.WriteFile(filepath.Join(repo, ".gitattributes"), []byte("*.txt filter=spy\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	names := []string{"a.txt", "b.txt", "c.txt"}
+	for _, name := range names {
+		if err := os.WriteFile(filepath.Join(repo, name), []byte(name+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustGit(t, repo, "add", ".")
+	mustGit(t, repo, "commit", "-m", "files the turn leaves alone")
+	baseSha := mustGit(t, repo, "rev-parse", "HEAD")
+	// Cache every file's stat well before the index's own mtime, as a checkout at rest has it.
+	then := time.Now().Add(-time.Hour)
+	for _, name := range append([]string{".gitattributes", "base.txt"}, names...) {
+		if err := os.Chtimes(filepath.Join(repo, name), then, then); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustGit(t, repo, "update-index", "--refresh")
+	if err := os.WriteFile(filepath.Join(repo, "b.txt"), []byte("changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(hashed); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+
+	files, _ := liveDiff(&Worktree{Path: repo, BaseSha: baseSha})
+	if len(files) != 1 || files[0].Path != "b.txt" || files[0].Status != "M" {
+		t.Fatalf("only b.txt changed, got %+v", files)
+	}
+	log, err := os.ReadFile(hashed)
+	if err != nil {
+		t.Fatalf("git should have hashed the changed file: %v", err)
+	}
+	for _, name := range strings.Fields(string(log)) {
+		if name != "b.txt" {
+			t.Fatalf("only the changed file should be hashed, git hashed %q", strings.Fields(string(log)))
+		}
+	}
+}
+
+// The checkout a session runs in is a linked worktree, whose index lives under the repo's .git. Its
+// own staging (here a new file) is in that index but not in HEAD, so the seeded index drops it as
+// `read-tree HEAD` would, and `add -A` puts it back from disk.
+func TestLiveDiffSeedsItsIndexFromTheCheckouts(t *testing.T) {
+	wt := sessionWorktree(t, "sSeeded") // leaves work.txt untracked
+	if err := os.WriteFile(filepath.Join(wt.Path, "base.txt"), []byte("edited\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wt.Path, "staged.txt"), []byte("staged\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, wt.Path, "add", "staged.txt")
+
+	idx := filepath.Join(t.TempDir(), "index")
+	env := append(os.Environ(), "GIT_INDEX_FILE="+idx)
+	if !unboundedWorktreeGitOps.seedIndexFromCheckout(wt.Path, idx, env) {
+		t.Fatal("a linked worktree's index should seed the temp index")
+	}
+	if entries := mustGitEnv(t, wt.Path, env, "ls-files"); entries != "base.txt" {
+		t.Fatalf("the seeded index should hold exactly HEAD's entries, got %q", entries)
+	}
+
+	files, _ := liveDiff(wt)
+	want := []ChangedFile{
+		{Path: "base.txt", Additions: 1, Deletions: 1, Status: "M"},
+		{Path: "staged.txt", Additions: 1, Deletions: 0, Status: "A"},
+		{Path: "work.txt", Additions: 1, Deletions: 0, Status: "A"},
+	}
+	if fmt.Sprint(files) != fmt.Sprint(want) {
+		t.Fatalf("live diff = %+v, want %+v", files, want)
+	}
+}
+
+// An edit git can only catch by content (same size and mtime as the cached entry, made in the
+// instant the index was written) must still show. Git catches it by comparing the entry's mtime
+// with the index file's own, so the copy the temp index starts from keeps the original's. Stamped
+// with the time of the copy, the edit read as clean and was missing from the live diff.
+func TestLiveDiffSeesARacilyCleanEdit(t *testing.T) {
+	repo := initRepo(t)
+	// An edit always moves the file's ctime, the one stat field a test cannot put back.
+	mustGit(t, repo, "config", "core.trustctime", "false")
+	commitFile(t, repo, "f.txt", "aaaa\n", "f")
+	baseSha := mustGit(t, repo, "rev-parse", "HEAD")
+	f := filepath.Join(repo, "f.txt")
+	then := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(f, then, then); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, repo, "update-index", "--refresh") // the index caches f.txt's stat as of `then`
+	if err := os.WriteFile(f, []byte("bbbb\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{f, filepath.Join(repo, ".git", "index")} {
+		if err := os.Chtimes(p, then, then); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if changed := mustGit(t, repo, "diff-files", "--name-only"); changed != "f.txt" {
+		t.Fatalf("test setup: git itself should see the racily clean edit, got %q", changed)
+	}
+
+	files, _ := liveDiff(&Worktree{Path: repo, BaseSha: baseSha})
+	if len(files) != 1 || files[0].Path != "f.txt" || files[0].Status != "M" {
+		t.Fatalf("the racily clean edit should be reported as a modification, got %+v", files)
+	}
+}
+
+// Mid-conflict the checkout's index holds unmerged entries, which `read-tree -m` refuses. The live
+// diff then starts from an empty index, as it always did, and still reports what is on disk.
+func TestLiveDiffFallsBackToAnEmptyIndexMidConflict(t *testing.T) {
+	repo := initRepo(t)
+	mustGit(t, repo, "checkout", "-b", "other")
+	commitFile(t, repo, "base.txt", "other\n", "other side")
+	mustGit(t, repo, "checkout", "main")
+	commitFile(t, repo, "base.txt", "main\n", "main side")
+	baseSha := mustGit(t, repo, "rev-parse", "HEAD")
+	if _, err := git(repo, "merge", "other"); err == nil {
+		t.Fatal("test setup: the merge should conflict")
+	}
+	idx := filepath.Join(t.TempDir(), "index")
+	if unboundedWorktreeGitOps.seedIndexFromCheckout(repo, idx, append(os.Environ(), "GIT_INDEX_FILE="+idx)) {
+		t.Fatal("an index with unmerged entries should not seed the temp index")
+	}
+
+	files, _ := liveDiff(&Worktree{Path: repo, BaseSha: baseSha})
+	if len(files) != 1 || files[0].Path != "base.txt" || files[0].Status != "M" {
+		t.Fatalf("the conflicted file should be reported from the checkout, got %+v", files)
+	}
+}
+
+// mustGitEnv is mustGit with extra environment (GIT_INDEX_FILE).
+func mustGitEnv(t *testing.T, dir string, env []string, args ...string) string {
+	t.Helper()
+	out, err := gitEnv(dir, env, args...)
+	if err != nil {
+		t.Fatalf("git %s: %v", strings.Join(args, " "), err)
+	}
+	return out
 }
 
 // TestMergeToMainRebaseLinear: a branch forked before main advanced rebases onto main's tip,
