@@ -1,0 +1,53 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "354aaed689f16f4293de2700a0adda22d451cca9",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "54BCAEE3-B7A6-45DE-9FDC-5A8B4BF7C88A.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "RecapShotTeststestMacShowsTheRecapOnTheSessionList-off-notes_0_2C275703-025C-4690-B783-0973CCF6142D.txt",
+        "timestamp" : 1791584597.46
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "354aaed689f16f4293de2700a0adda22d451cca9",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "D9793CBD-5E6D-428F-9F27-FA66540FB6A9.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-requests_0_BF915B16-9CA8-4265-8C30-C38E3427FB23.txt",
+        "timestamp" : 1791584597.457
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "354aaed689f16f4293de2700a0adda22d451cca9",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "9C4396CD-D198-4A67-B801-366539CBC00E.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "tree-mac-list-with-recaps-off_0_22DAE942-CDE1-46BE-AF0A-1FD1A6D61DD2.txt",
+        "timestamp" : 1791584596.402
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "354aaed689f16f4293de2700a0adda22d451cca9",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "FEB186D6-5A72-45B6-A975-9BBC04AC348B.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-list-with-recaps-off_0_1B96DEC7-8588-4364-9565-E3E77D4FA224.png",
+        "timestamp" : 1791584596.245
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "354aaed689f16f4293de2700a0adda22d451cca9",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "C8E21234-1F2F-4B84-A988-FF2DC0FF764E.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "no-window-mac-list-with-recaps-off_0_88435682-6711-41CC-BC61-B1150D535EBA.txt",
+        "timestamp" : 1791584589.238
+      }
+    ],
+    "testIdentifier" : "RecapShotTests/testMacShowsTheRecapOnTheSessionList()",
+    "testIdentifierURL" : "test://com.apple.xcode/RecapProbe/RecapMacProbeUITests/RecapShotTests/testMacShowsTheRecapOnTheSessionList"
+  }
+]

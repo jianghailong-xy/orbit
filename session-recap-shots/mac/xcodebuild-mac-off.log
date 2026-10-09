@@ -1,0 +1,210 @@
+Command line invocation:
+    /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/xcodebuild test -project RecapProbe.xcodeproj -scheme RecapMacProbe -destination platform=macOS -derivedDataPath .dd-mac -resultBundlePath results/mac-off.xcresult CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-
+
+Build settings from command line:
+    CODE_SIGN_IDENTITY = -
+    CODE_SIGNING_ALLOWED = YES
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  swift-markdown: https://github.com/apple/swift-markdown @ 0.9.0
+  OrbitKit: /Users/runner/work/orbit/orbit/src/macos/OrbitKit
+  Sparkle: https://github.com/sparkle-project/Sparkle @ 2.10.0
+  cmark-gfm: https://github.com/swiftlang/swift-cmark.git @ 0.9.0
+
+Writing result bundle at path:
+	/Users/runner/work/orbit/orbit/.recap-probe/results/mac-off.xcresult
+
+--- xcodebuild: WARNING: Using the first of multiple matching destinations:
+{ platform:macOS, arch:arm64, id:354aaed689f16f4293de2700a0adda22d451cca9, name:My Mac }
+{ platform:macOS, arch:x86_64, id:354aaed689f16f4293de2700a0adda22d451cca9, name:My Mac }
+note: Using codesigning identity override: -
+ComputePackagePrebuildTargetDependencyGraph
+
+Prepare packages
+
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (12 targets)
+    Target 'RecapMacProbeUITests' in project 'RecapProbe'
+        ➜ Explicit dependency on target 'RecapMacProbe' in project 'RecapProbe'
+    Target 'RecapMacProbe' in project 'RecapProbe'
+        ➜ Explicit dependency on target 'OrbitKit' in project 'OrbitKit'
+        ➜ Explicit dependency on target 'Sparkle' in project 'Sparkle'
+    Target 'Sparkle' in project 'Sparkle' (no dependencies)
+    Target 'OrbitKit' in project 'OrbitKit'
+        ➜ Explicit dependency on target 'OrbitKit' in project 'OrbitKit'
+        ➜ Explicit dependency on target 'Markdown' in project 'swift-markdown'
+    Target 'OrbitKit' in project 'OrbitKit'
+        ➜ Explicit dependency on target 'Markdown' in project 'swift-markdown'
+    Target 'Markdown' in project 'swift-markdown'
+        ➜ Explicit dependency on target 'Markdown' in project 'swift-markdown'
+        ➜ Explicit dependency on target 'CAtomic' in project 'swift-markdown'
+        ➜ Explicit dependency on target 'cmark-gfm' in project 'cmark-gfm'
+        ➜ Explicit dependency on target 'cmark-gfm-extensions' in project 'cmark-gfm'
+    Target 'Markdown' in project 'swift-markdown'
+        ➜ Explicit dependency on target 'CAtomic' in project 'swift-markdown'
+        ➜ Explicit dependency on target 'cmark-gfm' in project 'cmark-gfm'
+        ➜ Explicit dependency on target 'cmark-gfm-extensions' in project 'cmark-gfm'
+    Target 'cmark-gfm-extensions' in project 'cmark-gfm'
+        ➜ Explicit dependency on target 'cmark-gfm-extensions' in project 'cmark-gfm'
+        ➜ Explicit dependency on target 'cmark-gfm' in project 'cmark-gfm'
+    Target 'cmark-gfm-extensions' in project 'cmark-gfm'
+        ➜ Explicit dependency on target 'cmark-gfm' in project 'cmark-gfm'
+    Target 'cmark-gfm' in project 'cmark-gfm'
+        ➜ Explicit dependency on target 'cmark-gfm' in project 'cmark-gfm'
+    Target 'cmark-gfm' in project 'cmark-gfm' (no dependencies)
+    Target 'CAtomic' in project 'swift-markdown' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ExecuteExternalTool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -arch arm64 -isysroot /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version
+
+ExecuteExternalTool /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/actool --version --output-format xml1
+
+ExecuteExternalTool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
+
+ReadFileContents /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/share/docc/features.json
+
+Build description signature: ca2251eec7ac09b48bf1a7d2d3d82fd1
+Build description path: /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Intermediates.noindex/XCBuildData/ca2251eec7ac09b48bf1a7d2d3d82fd1.xcbuilddata
+ClangStatCache /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/SDKStatCaches.noindex/macosx26.5-25F70-688ef53f1462e2c8f657fdc38a81448fee0e6409aa6676c5e6c013d148225433.sdkstatcache
+    cd /Users/runner/work/orbit/orbit/.recap-probe/RecapProbe.xcodeproj
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk -o /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/SDKStatCaches.noindex/macosx26.5-25F70-688ef53f1462e2c8f657fdc38a81448fee0e6409aa6676c5e6c013d148225433.sdkstatcache
+
+ProcessInfoPlistFile /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Products/Debug/RecapMacProbe.app/Contents/Info.plist /Users/runner/work/orbit/orbit/.recap-probe/Info.plist (in target 'RecapMacProbe' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    builtin-infoPlistUtility /Users/runner/work/orbit/orbit/.recap-probe/Info.plist -producttype com.apple.product-type.application -genpkginfo /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Products/Debug/RecapMacProbe.app/Contents/PkgInfo -expandbuildsettings -platform macosx -additionalcontentfile /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Intermediates.noindex/RecapProbe.build/Debug/RecapMacProbe.build/assetcatalog_generated_info.plist -scanforprivacyfile /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Products/Debug/RecapMacProbe.app/Contents/Frameworks/Sparkle.framework -o /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Products/Debug/RecapMacProbe.app/Contents/Info.plist
+
+CopySwiftLibs /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Products/Debug/RecapMacProbe.app (in target 'RecapMacProbe' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Products/Debug/RecapMacProbe.app/Contents/MacOS/RecapMacProbe.debug.dylib --scan-folder /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Products/Debug/RecapMacProbe.app/Contents/Frameworks --scan-folder /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Products/Debug/RecapMacProbe.app/Contents/PlugIns --scan-folder /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Products/Debug/RecapMacProbe.app/Contents/Library/SystemExtensions --scan-folder /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Products/Debug/RecapMacProbe.app/Contents/Extensions --platform macosx --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.3spG8H/Metal.xctoolchain --toolchain /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Products/Debug/RecapMacProbe.app/Contents/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Intermediates.noindex/RecapProbe.build/Debug/RecapMacProbe.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os --back-deploy-swift-span
+
+ProcessInfoPlistFile /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Products/Debug/RecapMacProbeUITests-Runner.app/Contents/PlugIns/RecapMacProbeUITests.xctest/Contents/Info.plist /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Intermediates.noindex/RecapProbe.build/Debug/RecapMacProbeUITests.build/empty-RecapMacProbeUITests.plist (in target 'RecapMacProbeUITests' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    builtin-infoPlistUtility /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Intermediates.noindex/RecapProbe.build/Debug/RecapMacProbeUITests.build/empty-RecapMacProbeUITests.plist -producttype com.apple.product-type.bundle.ui-testing -expandbuildsettings -platform macosx -additionalcontentfile /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Intermediates.noindex/RecapProbe.build/Debug/RecapMacProbeUITests.build/ProductTypeInfoPlistAdditions.plist -o /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Products/Debug/RecapMacProbeUITests-Runner.app/Contents/PlugIns/RecapMacProbeUITests.xctest/Contents/Info.plist
+
+CopySwiftLibs /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Products/Debug/RecapMacProbeUITests-Runner.app/Contents/PlugIns/RecapMacProbeUITests.xctest (in target 'RecapMacProbeUITests' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Products/Debug/RecapMacProbeUITests-Runner.app/Contents/PlugIns/RecapMacProbeUITests.xctest/Contents/MacOS/RecapMacProbeUITests --scan-folder /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Products/Debug/RecapMacProbeUITests-Runner.app/Contents/PlugIns/RecapMacProbeUITests.xctest/Contents/Frameworks --scan-folder /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Products/Debug/RecapMacProbeUITests-Runner.app/Contents/PlugIns/RecapMacProbeUITests.xctest/Contents/PlugIns --scan-folder /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Products/Debug/RecapMacProbeUITests-Runner.app/Contents/PlugIns/RecapMacProbeUITests.xctest/Contents/Library/SystemExtensions --scan-folder /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Products/Debug/RecapMacProbeUITests-Runner.app/Contents/PlugIns/RecapMacProbeUITests.xctest/Contents/Extensions --platform macosx --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.3spG8H/Metal.xctoolchain --toolchain /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Products/Debug/RecapMacProbeUITests-Runner.app/Contents/PlugIns/RecapMacProbeUITests.xctest/Contents/Frameworks --strip-bitcode --scan-executable /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/orbit/orbit/.recap-probe/.dd-mac/Build/Intermediates.noindex/RecapProbe.build/Debug/RecapMacProbeUITests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os --back-deploy-swift-span
+
+2026-10-09 22:22:50.965715+0000 RecapMacProbeUITests-Runner[17569:54528] [Default] Running tests...
+Test Suite 'All tests' started at 2026-10-09 22:22:51.747.
+Test Suite 'RecapMacProbeUITests.xctest' started at 2026-10-09 22:22:51.748.
+Test Suite 'RecapShotTests' started at 2026-10-09 22:22:51.748.
+Test Case '-[RecapMacProbeUITests.RecapShotTests testMacShowsTheRecapOnTheSessionList]' started.
+    t =     0.00s Start Test at 2026-10-09 22:22:51.749
+    t =     0.31s Set Up
+    t =     0.45s Open io.orbitd.recapmacprobe
+    t =     0.45s     Launch io.orbitd.recapmacprobe
+2026-10-09 22:22:52.695 xcodebuild[16646:52303] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 22:22:52.695 xcodebuild[16646:52303] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.99s         Wait for accessibility to load
+    t =     2.23s         Setting up automation session
+    t =     2.26s         Wait for io.orbitd.recapmacprobe to idle
+    t =     2.28s Get number of matches for: Descendants matching type Window
+    t =     3.19s Get number of matches for: Descendants matching type Window
+    t =     3.71s Get number of matches for: Descendants matching type Window
+    t =     4.25s Get number of matches for: Descendants matching type Window
+    t =     4.78s Get number of matches for: Descendants matching type Window
+    t =     5.31s Get number of matches for: Descendants matching type Window
+    t =     5.82s Get number of matches for: Descendants matching type Window
+    t =     6.35s Get number of matches for: Descendants matching type Window
+    t =     6.87s Get number of matches for: Descendants matching type Window
+    t =     7.39s Get number of matches for: Descendants matching type Window
+    t =     7.92s Get number of matches for: Descendants matching type Window
+    t =     8.45s Get number of matches for: Descendants matching type Window
+    t =     8.98s Get number of matches for: Descendants matching type Window
+    t =     9.52s Get number of matches for: Descendants matching type Window
+    t =    10.04s Get number of matches for: Descendants matching type Window
+    t =    10.57s Get number of matches for: Descendants matching type Window
+    t =    11.09s Get number of matches for: Descendants matching type Window
+    t =    11.61s Get number of matches for: Descendants matching type Window
+    t =    12.13s Get number of matches for: Descendants matching type Window
+    t =    12.65s Get number of matches for: Descendants matching type Window
+    t =    13.17s Get number of matches for: Descendants matching type Window
+    t =    13.70s Get number of matches for: Descendants matching type Window
+    t =    14.22s Get number of matches for: Descendants matching type Window
+    t =    14.75s Get number of matches for: Descendants matching type Window
+    t =    15.27s Get number of matches for: Descendants matching type Window
+    t =    15.81s Get number of matches for: Descendants matching type Window
+    t =    16.33s Get number of matches for: Descendants matching type Window
+    t =    16.86s Get number of matches for: Descendants matching type Window
+    t =    17.38s Requesting snapshot of accessibility hierarchy for app with pid 17929
+    t =    17.45s Requesting snapshot of accessibility hierarchy for app with pid 17929
+    t =    17.49s Added attachment named 'no-window-mac-list-with-recaps-off.txt'
+    t =    17.50s Type 'n' key with modifiers '⌘' (0x10)
+    t =    17.50s     Wait for io.orbitd.recapmacprobe to idle
+    t =    17.51s     Find the Target Application 'io.orbitd.recapmacprobe'
+    t =    17.54s     Check for interrupting elements affecting "RecapMacProbe" Application
+    t =    17.54s     Synthesize event
+    t =    18.98s     Wait for io.orbitd.recapmacprobe to idle
+    t =    18.98s Get number of matches for: Descendants matching type Window
+    t =    19.10s Get number of matches for: Descendants matching type Window
+    t =    19.13s Checking existence of `Any (First Match)`
+    t =    19.19s Checking existence of `StaticText (First Match)`
+    t =    19.24s Checking existence of `Any (First Match)`
+    t =    19.96s Checking existence of `Any (First Match)`
+    t =    20.05s Checking existence of `StaticText (First Match)`
+    t =    20.15s Checking existence of `StaticText (First Match)`
+    t =    22.24s Checking existence of `Any (First Match)`
+    t =    22.30s Checking existence of `StaticText (First Match)`
+    t =    22.34s Checking existence of `StaticText (First Match)`
+    t =    22.40s Checking existence of `Any (First Match)`
+    t =    22.44s Checking existence of `StaticText (First Match)`
+    t =    22.50s Checking existence of `StaticText (First Match)`
+    t =    22.54s Checking existence of `Any (First Match)`
+    t =    22.58s Checking existence of `StaticText (First Match)`
+    t =    22.63s Checking existence of `StaticText (First Match)`
+    t =    22.68s Checking existence of `Any (First Match)`
+    t =    22.72s Checking existence of `StaticText (First Match)`
+    t =    22.76s Checking existence of `Any (First Match)`
+    t =    22.80s Checking existence of `Any (First Match)`
+    t =    22.85s Checking existence of `StaticText (First Match)`
+    t =    22.90s Checking existence of `StaticText (First Match)`
+    t =    22.94s Checking existence of `Any (First Match)`
+    t =    22.99s Checking existence of `StaticText (First Match)`
+    t =    23.04s Checking existence of `StaticText (First Match)`
+    t =    24.29s Checking existence of `Window (First Match)`
+    t =    24.30s Checking existence of `Window (First Match)`
+    t =    24.30s Checking existence of `Window (First Match)`
+    t =    24.30s Find the Window (First Match)
+    t =    24.50s Added attachment named 'mac-list-with-recaps-off'
+    t =    24.50s Requesting snapshot of accessibility hierarchy for app with pid 17929
+    t =    24.59s Requesting snapshot of accessibility hierarchy for app with pid 17929
+    t =    24.65s Added attachment named 'tree-mac-list-with-recaps-off.txt'
+    t =    24.66s Terminate io.orbitd.recapmacprobe:17929
+    t =    25.71s Added attachment named 'mac-requests.txt'
+    t =    25.71s Tear Down
+    t =    25.71s     Added attachment named 'RecapShotTeststestMacShowsTheRecapOnTheSessionList-off-notes.txt'
+Test Case '-[RecapMacProbeUITests.RecapShotTests testMacShowsTheRecapOnTheSessionList]' passed (25.783 seconds).
+Test Suite 'RecapShotTests' passed at 2026-10-09 22:23:17.532.
+	 Executed 1 test, with 0 failures (0 unexpected) in 25.783 (25.784) seconds
+Test Suite 'RecapMacProbeUITests.xctest' passed at 2026-10-09 22:23:17.533.
+	 Executed 1 test, with 0 failures (0 unexpected) in 25.783 (25.785) seconds
+Test Suite 'All tests' passed at 2026-10-09 22:23:17.533.
+	 Executed 1 test, with 0 failures (0 unexpected) in 25.783 (25.786) seconds
+2026-10-09 22:23:17.999 xcodebuild[16646:52303] [MT] IDETestOperationsObserverDebug: 28.380 elapsed -- Testing started completed.
+2026-10-09 22:23:18.000 xcodebuild[16646:52303] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-09 22:23:18.000 xcodebuild[16646:52303] [MT] IDETestOperationsObserverDebug: 28.380 sec, +28.380 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.recap-probe/results/mac-off.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

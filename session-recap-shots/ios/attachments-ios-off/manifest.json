@@ -1,0 +1,52 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "31A42372-5117-4D3B-A08B-EE3C4F2527D6.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "RecapShotTeststestIPhoneShowsTheRecapOnTheSessionList-off-notes_0_B2B6AC31-9D6C-4D00-9AF5-2141A498C089.txt",
+        "timestamp" : 1791585063.207
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "2D6F3338-B4F8-4641-9C85-FF556BEC5A1A.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-requests_0_1D1D16A5-34AF-4306-B2B9-28EE585E3E63.txt",
+        "timestamp" : 1791585063.2
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "602B4E97-12DC-4710-A102-69C918E86F4B.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "tree-ios-list-with-recaps-off_0_87C90916-47DD-4EBB-A91A-1F996A1F9CCE.txt",
+        "timestamp" : 1791585062.1
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "25DB6A34-B872-4CAA-872B-61ECA22F101B.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-list-with-recaps-off_0_48440D98-A8C1-4A80-810A-BC3E150A82D5.png",
+        "timestamp" : 1791585061.313
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "7DB3699C-EF23-40F0-B975-411279BA7CA8.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "RecapShotTests/testIPhoneShowsTheRecapOnTheSessionList()",
+    "testIdentifierURL" : "test://com.apple.xcode/RecapProbe/RecapProbeUITests/RecapShotTests/testIPhoneShowsTheRecapOnTheSessionList"
+  }
+]

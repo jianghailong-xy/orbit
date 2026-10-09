@@ -1,0 +1,79 @@
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+==> stub ready on 127.0.0.1:8765 (pid 4667, after 3s, flags: )
+==> mac-on (recaps-on)
+Test Case '-[RecapMacProbeUITests.RecapShotTests testMacShowsTheRecapOnTheSessionList]' started.
+Test Case '-[RecapMacProbeUITests.RecapShotTests testMacShowsTheRecapOnTheSessionList]' passed (119.520 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 119.520 (119.522) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 119.520 (119.522) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 119.520 (119.524) seconds
+** TEST SUCCEEDED **
+==> stub ready on 127.0.0.1:8765 (pid 16639, after 2s, flags: --recaps-off)
+==> mac-off (recaps-off)
+Test Case '-[RecapMacProbeUITests.RecapShotTests testMacShowsTheRecapOnTheSessionList]' started.
+Test Case '-[RecapMacProbeUITests.RecapShotTests testMacShowsTheRecapOnTheSessionList]' passed (25.783 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 25.783 (25.784) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 25.783 (25.785) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 25.783 (25.786) seconds
+** TEST SUCCEEDED **
+==> stub ready on 127.0.0.1:8765 (pid 18889, after 2s, flags: )
+==> ios-on (recaps-on)
+Test Case '-[RecapProbeUITests.RecapShotTests testIPhoneShowsTheRecapOnTheSessionList]' started.
+Test Case '-[RecapProbeUITests.RecapShotTests testIPhoneShowsTheRecapOnTheSessionList]' passed (96.926 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 96.926 (96.929) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 96.926 (96.931) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 96.926 (96.933) seconds
+** TEST SUCCEEDED **
+==> stub ready on 127.0.0.1:8765 (pid 39018, after 2s, flags: --recaps-off)
+==> ios-off (recaps-off)
+Test Case '-[RecapProbeUITests.RecapShotTests testIPhoneShowsTheRecapOnTheSessionList]' started.
+Test Case '-[RecapProbeUITests.RecapShotTests testIPhoneShowsTheRecapOnTheSessionList]' passed (22.399 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 22.399 (22.402) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 22.399 (22.403) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 22.399 (22.409) seconds
+** TEST SUCCEEDED **
+.recap-probe/run.sh: line 107: 39018 Terminated: 15          python3 -u stub.py 8765 "$1" "${@:2}" > "$1.out" 2>&1
+/Users/runner/work/orbit/orbit/.recap-probe/shots/ios:
+total 2944
+drwxr-xr-x  21 runner  staff     672 Oct  9 22:31 .
+drwxr-xr-x   5 runner  staff     160 Oct  9 22:31 ..
+drwxr-xr-x   8 runner  staff     256 Oct  9 22:31 attachments-ios-off
+drwxr-xr-x  10 runner  staff     320 Oct  9 22:29 attachments-ios-on
+-rw-r--r--   1 runner  staff  190735 Oct  9 22:28 ios-list-with-recap.png
+-rw-r--r--   1 runner  staff  179722 Oct  9 22:31 ios-list-with-recaps-off.png
+-rw-r--r--@  1 runner  staff    3207 Oct  9 22:31 ios-requests.txt
+-rw-r--r--   1 runner  staff  351620 Oct  9 22:28 ios-settings-session-recaps.png
+-rw-r--r--   1 runner  staff      39 Oct  9 22:31 not-served.txt
+-rw-r--r--@  1 runner  staff     294 Oct  9 22:31 RecapShotTeststestIPhoneShowsTheRecapOnTheSessionList-off-notes.txt
+-rw-r--r--@  1 runner  staff     702 Oct  9 22:28 RecapShotTeststestIPhoneShowsTheRecapOnTheSessionList-on-notes.txt
+-rw-r--r--   1 runner  staff    3257 Oct  9 22:31 requests-off.log
+-rw-r--r--   1 runner  staff       0 Oct  9 22:29 requests-off.log.out
+-rw-r--r--   1 runner  staff    7953 Oct  9 22:28 requests-on.log
+-rw-r--r--   1 runner  staff       0 Oct  9 22:23 requests-on.log.out
+-rw-r--r--@  1 runner  staff   14938 Oct  9 22:28 tree-ios-list-with-recap.txt
+-rw-r--r--@  1 runner  staff   14638 Oct  9 22:31 tree-ios-list-with-recaps-off.txt
+-rw-r--r--@  1 runner  staff   31266 Oct  9 22:28 tree-ios-settings-session-recaps.txt
+-rw-r--r--   1 runner  staff     157 Oct  9 22:31 writes.txt
+-rw-r--r--   1 runner  staff   15447 Oct  9 22:31 xcodebuild-ios-off.log
+-rw-r--r--   1 runner  staff  663600 Oct  9 22:29 xcodebuild-ios-on.log
+
+/Users/runner/work/orbit/orbit/.recap-probe/shots/mac:
+total 2408
+drwxr-xr-x  19 runner  staff     608 Oct  9 22:31 .
+drwxr-xr-x   5 runner  staff     160 Oct  9 22:31 ..
+drwxr-xr-x   8 runner  staff     256 Oct  9 22:23 attachments-mac-off
+drwxr-xr-x  12 runner  staff     384 Oct  9 22:22 attachments-mac-on
+-rw-r--r--   1 runner  staff   66611 Oct  9 22:22 mac-list-with-recap.png
+-rw-r--r--   1 runner  staff   65233 Oct  9 22:23 mac-list-with-recaps-off.png
+-rw-r--r--   1 runner  staff   96019 Oct  9 22:22 mac-settings-session-recaps.png
+-rw-r--r--   1 runner  staff   65316 Oct  9 22:21 mac-window-mac-list-with-recap.png
+-rw-r--r--   1 runner  staff   98949 Oct  9 22:22 mac-window-mac-settings-session-recaps.png
+-rw-r--r--   1 runner  staff      39 Oct  9 22:31 not-served.txt
+-rw-r--r--   1 runner  staff     632 Oct  9 22:31 recap-window-mac-list-with-recap.log
+-rw-r--r--   1 runner  staff    1328 Oct  9 22:31 recap-window-mac-settings-session-recaps.log
+-rw-r--r--   1 runner  staff    2608 Oct  9 22:23 requests-off.log
+-rw-r--r--   1 runner  staff       0 Oct  9 22:22 requests-off.log.out
+-rw-r--r--   1 runner  staff    6058 Oct  9 22:22 requests-on.log
+-rw-r--r--   1 runner  staff       0 Oct  9 22:15 requests-on.log.out
+-rw-r--r--   1 runner  staff     157 Oct  9 22:31 writes.txt
+-rw-r--r--   1 runner  staff   18994 Oct  9 22:23 xcodebuild-mac-off.log
+-rw-r--r--   1 runner  staff  781274 Oct  9 22:22 xcodebuild-mac-on.log

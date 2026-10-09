@@ -1,0 +1,40 @@
+22:22:29 [recaps-off] stub on :8765 recaps=OFF args=[--recaps-off] pid=16639
+22:22:30 [recaps-off] "GET /api/sessions HTTP/1.1" 200 -
+22:22:52 [recaps-off] RESET (nothing is mutable in this stub)
+22:22:52 [recaps-off] "POST /__reset HTTP/1.1" 200 -
+22:23:10 [recaps-off] "GET /api/wiki/spaces HTTP/1.1" 200 -
+22:23:10 [recaps-off] "GET /api/agents HTTP/1.1" 200 -
+22:23:10 [recaps-off] "GET /api/users/me HTTP/1.1" 200 -
+22:23:10 [recaps-off] "GET /api/events HTTP/1.1" 200 -
+22:23:10 [recaps-off] "GET /api/runners HTTP/1.1" 200 -
+22:23:10 [recaps-off] "GET /api/users/me HTTP/1.1" 200 -
+22:23:10 [recaps-off] "GET /api/agents HTTP/1.1" 200 -
+22:23:10 [recaps-off] "GET /api/sessions?view=open&since= HTTP/1.1" 200 -
+22:23:10 [recaps-off] "GET /api/providers HTTP/1.1" 200 -
+22:23:10 [recaps-off] "GET /api/providers HTTP/1.1" 200 -
+22:23:10 [recaps-off] "GET /api/providers/pools HTTP/1.1" 200 -
+22:23:10 [recaps-off] "GET /api/sessions?view=open HTTP/1.1" 200 -
+22:23:10 [recaps-off] "GET /api/providers/shared-pools HTTP/1.1" 200 -
+22:23:10 [recaps-off] "GET /api/providers/pools HTTP/1.1" 200 -
+22:23:11 [recaps-off] "GET /api/wiki/spaces HTTP/1.1" 200 -
+22:23:11 [recaps-off] "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+22:23:11 [recaps-off] "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+22:23:11 [recaps-off] "GET /api/agents HTTP/1.1" 200 -
+22:23:11 [recaps-off] "GET /api/providers/shared-pools HTTP/1.1" 200 -
+22:23:11 [recaps-off] "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+22:23:11 [recaps-off] "GET /api/session-tags HTTP/1.1" 200 -
+22:23:11 [recaps-off] "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+22:23:11 [recaps-off] "GET /api/watches HTTP/1.1" 200 -
+22:23:11 [recaps-off] "GET /api/watches HTTP/1.1" 200 -
+22:23:11 [recaps-off] "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+22:23:11 [recaps-off] "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+22:23:11 [recaps-off] NOT SERVED /api/auth/capabilities
+22:23:11 [recaps-off] "GET /api/auth/capabilities HTTP/1.1" 404 -
+22:23:11 [recaps-off] "GET /api/sessions?view=open HTTP/1.1" 200 -
+22:23:11 [recaps-off] "GET /api/runners HTTP/1.1" 200 -
+22:23:11 [recaps-off] "GET /api/providers HTTP/1.1" 200 -
+22:23:11 [recaps-off] "GET /api/providers/pools HTTP/1.1" 200 -
+22:23:11 [recaps-off] "GET /api/providers/shared-pools HTTP/1.1" 200 -
+22:23:11 [recaps-off] "GET /api/task-lists HTTP/1.1" 200 -
+22:23:12 [recaps-off] "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+22:23:15 [recaps-off] "GET /api/sessions?view=open HTTP/1.1" 200 -

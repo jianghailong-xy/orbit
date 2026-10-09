@@ -1,0 +1,89 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "354aaed689f16f4293de2700a0adda22d451cca9",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "639A665E-AA1D-4025-94C1-5E40CC496B4D.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "RecapShotTeststestMacShowsTheRecapOnTheSessionList-on-notes_0_BAC81167-2EC9-4A8D-A768-B2271E05F2CA.txt",
+        "timestamp" : 1791584544.064
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "354aaed689f16f4293de2700a0adda22d451cca9",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "29566D74-7BA6-41E3-87CE-BED367A9C2D5.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-requests_0_83652C53-97A3-4401-8AF0-CB6882F420FD.txt",
+        "timestamp" : 1791584544.006
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "354aaed689f16f4293de2700a0adda22d451cca9",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "F4713A7C-36CF-4161-823D-C7BF64B10C02.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "tree-mac-settings-session-recaps_0_A1F3A4E3-9208-4E5B-854B-53663A7A9D7F.txt",
+        "timestamp" : 1791584542.864
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "354aaed689f16f4293de2700a0adda22d451cca9",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "6E20E086-C337-4357-9A53-B0F907BC6F40.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-settings-session-recaps_0_F75FD475-58EC-43FE-84A8-B0A13A7F0077.png",
+        "timestamp" : 1791584542.629
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "354aaed689f16f4293de2700a0adda22d451cca9",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "C5A8641E-4A4F-4AE9-897F-59C4DA4881CA.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "missing-band-mac-settings-session-recaps_0_AD37DD9D-098B-4620-BC7A-F2CC08686B12.txt",
+        "timestamp" : 1791584537.961
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "354aaed689f16f4293de2700a0adda22d451cca9",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "C0B2E096-E808-490B-B38B-4C6C015E8486.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "no-window-mac-settings-session-recaps_0_BA71B46E-28C2-4EAE-94D0-484C09D132A3.txt",
+        "timestamp" : 1791584494.154
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "354aaed689f16f4293de2700a0adda22d451cca9",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "7F685908-DA17-4E60-A690-DAC6F0973EBA.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "tree-mac-list-with-recap_0_D82A1BF5-237E-46D4-A28F-C348E22BD541.txt",
+        "timestamp" : 1791584473.338
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "354aaed689f16f4293de2700a0adda22d451cca9",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "E546230E-427F-486D-A515-E497041F2D45.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-list-with-recap_0_E52CB67F-6067-4D42-90B0-846E3EA60E05.png",
+        "timestamp" : 1791584473.06
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "354aaed689f16f4293de2700a0adda22d451cca9",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "1F565881-2E0E-4B37-AC57-89240FCC9D59.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "no-window-mac-list-with-recap_0_DAB7B879-164D-408D-B70D-31F3C731CCF9.txt",
+        "timestamp" : 1791584448.508
+      }
+    ],
+    "testIdentifier" : "RecapShotTests/testMacShowsTheRecapOnTheSessionList()",
+    "testIdentifierURL" : "test://com.apple.xcode/RecapProbe/RecapMacProbeUITests/RecapShotTests/testMacShowsTheRecapOnTheSessionList"
+  }
+]
