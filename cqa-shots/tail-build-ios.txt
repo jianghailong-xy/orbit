@@ -1,0 +1,300 @@
+    t =    30.20s Tear Down
+Test Case '-[CqaProbeUITests.AnsweredShotTests test6Withdrawn]' passed (30.434 seconds).
+Test Case '-[CqaProbeUITests.AnsweredShotTests test7AnsweredHereAndAfterRelaunch]' started.
+    t =     0.00s Start Test at 2026-10-09 02:18:47.370
+    t =     0.02s Set Up
+    t =     0.05s Open io.orbitd.cqaprobe
+    t =     0.05s     Launch io.orbitd.cqaprobe
+    t =     0.05s         Terminate io.orbitd.cqaprobe:31853
+2026-10-09 02:18:48.454 xcodebuild[8158:29998] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 02:18:48.454 xcodebuild[8158:29998] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     2.10s         Setting up automation session
+    t =     3.78s         Wait for io.orbitd.cqaprobe to idle
+    t =     6.15s Checking existence of `Any (First Match)`
+    t =     7.95s Checking existence of `Any (First Match)`
+    t =    11.31s Get all elements bound by index for: Descendants matching type StaticText
+    t =    11.42s Find the StaticText (Element at index 0)
+    t =    11.48s Find the StaticText (Element at index 1)
+    t =    11.52s Find the StaticText (Element at index 2)
+    t =    11.58s Find the StaticText (Element at index 3)
+    t =    11.67s Find the StaticText (Element at index 4)
+    t =    11.75s Find the StaticText (Element at index 5)
+    t =    11.81s Find the StaticText (Element at index 6)
+    t =    11.85s Find the StaticText (Element at index 7)
+    t =    11.90s Find the StaticText (Element at index 8)
+    t =    11.95s Find the StaticText (Element at index 9)
+    t =    12.00s Find the StaticText (Element at index 10)
+    t =    12.04s Find the StaticText (Element at index 11)
+    t =    12.10s Find the StaticText (Element at index 12)
+    t =    12.16s Find the StaticText (Element at index 13)
+    t =    12.20s Find the StaticText (Element at index 14)
+    t =    12.25s Find the StaticText (Element at index 15)
+    t =    12.31s Find the StaticText (Element at index 16)
+    t =    12.35s Find the StaticText (Element at index 17)
+    t =    12.41s Find the StaticText (Element at index 18)
+    t =    12.46s Find the StaticText (Element at index 19)
+    t =    12.51s Get all elements bound by index for: Descendants matching type Button
+    t =    12.56s Find the Button (Element at index 0)
+    t =    12.62s Find the Button (Element at index 1)
+    t =    12.66s Find the Button (Element at index 2)
+    t =    12.72s Find the Button (Element at index 3)
+    t =    12.77s Find the Button (Element at index 4)
+    t =    12.82s Find the Button (Element at index 5)
+    t =    12.88s Find the Button (Element at index 6)
+    t =    12.93s Find the Button (Element at index 7)
+    t =    12.99s Find the Button (Element at index 8)
+    t =    13.04s Find the Button (Element at index 9)
+    t =    13.08s Find the Button (Element at index 10)
+    t =    13.14s Find the Button (Element at index 11)
+    t =    13.19s Find the Button (Element at index 12)
+    t =    13.24s Find the Button (Element at index 13)
+    t =    13.34s Find the Button (Element at index 14)
+    t =    13.40s Find the Button (Element at index 15)
+    t =    13.46s Find the Button (Element at index 16)
+    t =    13.52s Find the Button (Element at index 17)
+    t =    13.57s Find the Button (Element at index 18)
+    t =    13.63s Find the Button (Element at index 19)
+    t =    13.69s Find the Button (Element at index 20)
+    t =    13.75s Find the Button (Element at index 21)
+    t =    13.93s Added attachment named 'ios-08-open-question'
+    t =    13.93s Checking existence of `Button (First Match)`
+    t =    14.09s Tap Button (First Match)
+    t =    14.09s     Wait for io.orbitd.cqaprobe to idle
+    t =    14.10s     Find the Button (First Match)
+    t =    14.25s     Check for interrupting elements affecting "The coordinator has a question, 灰度回退之后的收尾都做完了：
+
+- 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。
+- 灰度期间写错的结论已经清零，失败计数也归零。
+- 三处修复都已经在生产上。
+
+请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。
+
+有一个代价：切换那一刻如果正好有一轮维护在跑，这一轮会在下次自检时被拒，已经做的就白做了（上次约 20 分钟）。现在一轮要 2 小时左右，很难等到空档。, View details & act" Button
+    t =    14.31s     Synthesize event
+    t =    14.61s     Wait for io.orbitd.cqaprobe to idle
+    t =    15.26s Checking existence of `Any (First Match)`
+    t =    17.10s Waiting 5.0s for Button (First Match) to exist
+    t =    18.11s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    18.11s         Checking existence of `Button (First Match)`
+    t =    18.45s Find the Button (First Match)
+    t =    18.78s Tap "等新一轮刚开始时再切, 盯着下一轮维护一开始就切，浪费最少；可能要等当前这一轮跑完，最长约 2 小时。" Button
+    t =    18.78s     Wait for io.orbitd.cqaprobe to idle
+    t =    18.78s     Find the "等新一轮刚开始时再切, 盯着下一轮维护一开始就切，浪费最少；可能要等当前这一轮跑完，最长约 2 小时。" Button
+    t =    19.17s     Check for interrupting elements affecting "等新一轮刚开始时再切, 盯着下一轮维护一开始就切，浪费最少；可能要等当前这一轮跑完，最长约 2 小时。" Button
+    t =    19.26s     Synthesize event
+    t =    19.57s     Wait for io.orbitd.cqaprobe to idle
+    t =    21.22s Added attachment named 'ios-08b-picked'
+    t =    21.22s Checking existence of `"Send answer" Button`
+    t =    21.36s Tap "Send answer" Button
+    t =    21.36s     Wait for io.orbitd.cqaprobe to idle
+    t =    21.36s     Find the "Send answer" Button
+    t =    21.48s     Check for interrupting elements affecting "Send answer" Button
+    t =    21.57s     Synthesize event
+    t =    21.87s     Wait for io.orbitd.cqaprobe to idle
+    t =    21.87s Checking existence of `Any (First Match)`
+    t =    23.63s Get all elements bound by index for: Descendants matching type StaticText
+    t =    23.72s Find the StaticText (Element at index 0)
+    t =    23.80s Find the StaticText (Element at index 1)
+    t =    23.87s Find the StaticText (Element at index 2)
+    t =    23.94s Find the StaticText (Element at index 3)
+    t =    24.01s Find the StaticText (Element at index 4)
+    t =    24.09s Find the StaticText (Element at index 5)
+    t =    24.18s Find the StaticText (Element at index 6)
+    t =    24.24s Find the StaticText (Element at index 7)
+    t =    24.32s Find the StaticText (Element at index 8)
+    t =    24.40s Find the StaticText (Element at index 9)
+    t =    24.50s Find the StaticText (Element at index 10)
+    t =    24.58s Find the StaticText (Element at index 11)
+    t =    24.67s Find the StaticText (Element at index 12)
+    t =    24.74s Find the StaticText (Element at index 13)
+    t =    24.83s Find the StaticText (Element at index 14)
+    t =    24.91s Find the StaticText (Element at index 15)
+    t =    24.98s Find the StaticText (Element at index 16)
+    t =    25.05s Find the StaticText (Element at index 17)
+    t =    25.13s Find the StaticText (Element at index 18)
+    t =    25.21s Find the StaticText (Element at index 19)
+    t =    25.29s Find the StaticText (Element at index 20)
+    t =    25.37s Find the StaticText (Element at index 21)
+    t =    25.45s Find the StaticText (Element at index 22)
+    t =    25.53s Find the StaticText (Element at index 23)
+    t =    25.62s Find the StaticText (Element at index 24)
+    t =    25.70s Find the StaticText (Element at index 25)
+    t =    25.78s Find the StaticText (Element at index 26)
+    t =    25.85s Find the StaticText (Element at index 27)
+    t =    25.93s Find the StaticText (Element at index 28)
+    t =    26.00s Find the StaticText (Element at index 29)
+    t =    26.08s Find the StaticText (Element at index 30)
+    t =    26.16s Find the StaticText (Element at index 31)
+    t =    26.25s Find the StaticText (Element at index 32)
+    t =    26.34s Get all elements bound by index for: Descendants matching type Button
+    t =    26.42s Find the Button (Element at index 0)
+    t =    26.49s Find the Button (Element at index 1)
+    t =    26.56s Find the Button (Element at index 2)
+    t =    26.63s Find the Button (Element at index 3)
+    t =    26.71s Find the Button (Element at index 4)
+    t =    26.78s Find the Button (Element at index 5)
+    t =    26.85s Find the Button (Element at index 6)
+    t =    26.92s Find the Button (Element at index 7)
+    t =    27.00s Find the Button (Element at index 8)
+    t =    27.07s Find the Button (Element at index 9)
+    t =    27.16s Find the Button (Element at index 10)
+    t =    27.24s Find the Button (Element at index 11)
+    t =    27.31s Find the Button (Element at index 12)
+    t =    27.39s Find the Button (Element at index 13)
+    t =    27.47s Find the Button (Element at index 14)
+    t =    27.55s Find the Button (Element at index 15)
+    t =    27.62s Find the Button (Element at index 16)
+    t =    27.71s Find the Button (Element at index 17)
+    t =    27.79s Find the Button (Element at index 18)
+    t =    27.87s Find the Button (Element at index 19)
+    t =    27.95s Find the Button (Element at index 20)
+    t =    28.03s Find the Button (Element at index 21)
+    t =    28.13s Find the Button (Element at index 22)
+    t =    28.37s Added attachment named 'ios-08c-answered-sheet'
+    t =    28.37s Waiting 5.0s for "Close" Button to exist
+    t =    29.44s     Checking `Expect predicate `existsNoRetry == 1` for object "Close" Button`
+    t =    29.44s         Checking existence of `"Close" Button`
+    t =    29.56s Tap "Close" Button
+    t =    29.56s     Wait for io.orbitd.cqaprobe to idle
+    t =    29.56s     Find the "Close" Button
+    t =    29.69s     Check for interrupting elements affecting "xmark" Button
+    t =    29.79s     Synthesize event
+    t =    30.10s     Wait for io.orbitd.cqaprobe to idle
+    t =    32.12s Waiting 20.0s for Button (First Match) to exist
+    t =    33.16s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    33.16s         Checking existence of `Button (First Match)`
+    t =    33.34s Checking existence of `Button (First Match)`
+    t =    33.52s Find the Button (First Match)
+    t =    33.71s Find the "Answered, 10:19, 灰度回退之后的收尾都做完了： 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。 灰度期间写错的结论已经清零，失败计数也归零。 三处修复都已经在生产上。 请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。 有一个代价：切换那一刻如果正好有一轮维护在跑，这一轮会在下次自检时被拒，已经做的就白做了（上次约 20 分钟）。现在一轮要 2 小时左右，很难等到空档。, 等新一轮刚开始时再切, View details" Button
+    t =    33.89s Find the "Answered, 10:19, 灰度回退之后的收尾都做完了： 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。 灰度期间写错的结论已经清零，失败计数也归零。 三处修复都已经在生产上。 请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。 有一个代价：切换那一刻如果正好有一轮维护在跑，这一轮会在下次自检时被拒，已经做的就白做了（上次约 20 分钟）。现在一轮要 2 小时左右，很难等到空档。, 等新一轮刚开始时再切, View details" Button
+    t =    34.07s Find the "Answered, 10:19, 灰度回退之后的收尾都做完了： 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。 灰度期间写错的结论已经清零，失败计数也归零。 三处修复都已经在生产上。 请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。 有一个代价：切换那一刻如果正好有一轮维护在跑，这一轮会在下次自检时被拒，已经做的就白做了（上次约 20 分钟）。现在一轮要 2 小时左右，很难等到空档。, 等新一轮刚开始时再切, View details" Button
+    t =    34.24s Find the "Answered, 10:19, 灰度回退之后的收尾都做完了： 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。 灰度期间写错的结论已经清零，失败计数也归零。 三处修复都已经在生产上。 请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。 有一个代价：切换那一刻如果正好有一轮维护在跑，这一轮会在下次自检时被拒，已经做的就白做了（上次约 20 分钟）。现在一轮要 2 小时左右，很难等到空档。, 等新一轮刚开始时再切, View details" Button
+    t =    34.42s Checking existence of `Button (First Match)`
+    t =    34.61s Get all elements bound by index for: Descendants matching type StaticText
+    t =    34.68s Find the StaticText (Element at index 0)
+    t =    34.74s Find the StaticText (Element at index 1)
+    t =    34.81s Find the StaticText (Element at index 2)
+    t =    34.87s Find the StaticText (Element at index 3)
+    t =    34.92s Find the StaticText (Element at index 4)
+    t =    34.97s Find the StaticText (Element at index 5)
+    t =    35.02s Find the StaticText (Element at index 6)
+    t =    35.08s Find the StaticText (Element at index 7)
+    t =    35.13s Find the StaticText (Element at index 8)
+    t =    35.18s Find the StaticText (Element at index 9)
+    t =    35.24s Find the StaticText (Element at index 10)
+    t =    35.30s Find the StaticText (Element at index 11)
+    t =    35.36s Find the StaticText (Element at index 12)
+    t =    35.42s Find the StaticText (Element at index 13)
+    t =    35.47s Find the StaticText (Element at index 14)
+    t =    35.53s Find the StaticText (Element at index 15)
+    t =    35.59s Find the StaticText (Element at index 16)
+    t =    35.66s Find the StaticText (Element at index 17)
+    t =    35.71s Find the StaticText (Element at index 18)
+    t =    35.78s Find the StaticText (Element at index 19)
+    t =    35.84s Find the StaticText (Element at index 20)
+    t =    35.90s Get all elements bound by index for: Descendants matching type Button
+    t =    35.97s Find the Button (Element at index 0)
+    t =    36.02s Find the Button (Element at index 1)
+    t =    36.07s Find the Button (Element at index 2)
+    t =    36.12s Find the Button (Element at index 3)
+    t =    36.17s Find the Button (Element at index 4)
+    t =    36.23s Find the Button (Element at index 5)
+    t =    36.29s Find the Button (Element at index 6)
+    t =    36.34s Find the Button (Element at index 7)
+    t =    36.39s Find the Button (Element at index 8)
+    t =    36.44s Find the Button (Element at index 9)
+    t =    36.50s Find the Button (Element at index 10)
+    t =    36.56s Find the Button (Element at index 11)
+    t =    36.62s Find the Button (Element at index 12)
+    t =    36.67s Find the Button (Element at index 13)
+    t =    36.73s Find the Button (Element at index 14)
+    t =    36.79s Find the Button (Element at index 15)
+    t =    36.91s Find the Button (Element at index 16)
+    t =    36.98s Find the Button (Element at index 17)
+    t =    37.04s Find the Button (Element at index 18)
+    t =    37.10s Find the Button (Element at index 19)
+    t =    37.16s Find the Button (Element at index 20)
+    t =    37.22s Find the Button (Element at index 21)
+    t =    37.40s Added attachment named 'ios-08d-answered-card'
+    t =    37.40s Terminate io.orbitd.cqaprobe:33215
+    t =    38.47s Open io.orbitd.cqaprobe
+    t =    38.47s     Launch io.orbitd.cqaprobe
+2026-10-09 02:19:25.867 xcodebuild[8158:29998] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 02:19:25.868 xcodebuild[8158:29998] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    39.40s         Setting up automation session
+    t =    40.65s         Wait for io.orbitd.cqaprobe to idle
+    t =    42.65s Checking existence of `Any (First Match)`
+    t =    44.25s Checking existence of `Any (First Match)`
+    t =    47.40s Waiting 20.0s for Button (First Match) to exist
+    t =    48.41s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    48.41s         Checking existence of `Button (First Match)`
+    t =    48.60s Checking existence of `Button (First Match)`
+    t =    48.74s Find the Button (First Match)
+    t =    48.91s Find the "Answered, 10:19, 灰度回退之后的收尾都做完了： 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。 灰度期间写错的结论已经清零，失败计数也归零。 三处修复都已经在生产上。 请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。 有一个代价：切换那一刻如果正好有一轮维护在跑，这一轮会在下次自检时被拒，已经做的就白做了（上次约 20 分钟）。现在一轮要 2 小时左右，很难等到空档。, 等新一轮刚开始时再切, View details" Button
+    t =    49.13s Find the "Answered, 10:19, 灰度回退之后的收尾都做完了： 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。 灰度期间写错的结论已经清零，失败计数也归零。 三处修复都已经在生产上。 请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。 有一个代价：切换那一刻如果正好有一轮维护在跑，这一轮会在下次自检时被拒，已经做的就白做了（上次约 20 分钟）。现在一轮要 2 小时左右，很难等到空档。, 等新一轮刚开始时再切, View details" Button
+    t =    49.27s Find the "Answered, 10:19, 灰度回退之后的收尾都做完了： 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。 灰度期间写错的结论已经清零，失败计数也归零。 三处修复都已经在生产上。 请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。 有一个代价：切换那一刻如果正好有一轮维护在跑，这一轮会在下次自检时被拒，已经做的就白做了（上次约 20 分钟）。现在一轮要 2 小时左右，很难等到空档。, 等新一轮刚开始时再切, View details" Button
+    t =    49.41s Find the "Answered, 10:19, 灰度回退之后的收尾都做完了： 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。 灰度期间写错的结论已经清零，失败计数也归零。 三处修复都已经在生产上。 请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。 有一个代价：切换那一刻如果正好有一轮维护在跑，这一轮会在下次自检时被拒，已经做的就白做了（上次约 20 分钟）。现在一轮要 2 小时左右，很难等到空档。, 等新一轮刚开始时再切, View details" Button
+    t =    49.58s Checking existence of `Button (First Match)`
+    t =    49.73s Get all elements bound by index for: Descendants matching type StaticText
+    t =    49.80s Find the StaticText (Element at index 0)
+    t =    49.86s Find the StaticText (Element at index 1)
+    t =    49.92s Find the StaticText (Element at index 2)
+    t =    49.97s Find the StaticText (Element at index 3)
+    t =    50.03s Find the StaticText (Element at index 4)
+    t =    50.08s Find the StaticText (Element at index 5)
+    t =    50.13s Find the StaticText (Element at index 6)
+    t =    50.18s Find the StaticText (Element at index 7)
+    t =    50.23s Find the StaticText (Element at index 8)
+    t =    50.29s Find the StaticText (Element at index 9)
+    t =    50.34s Find the StaticText (Element at index 10)
+    t =    50.39s Find the StaticText (Element at index 11)
+    t =    50.47s Find the StaticText (Element at index 12)
+    t =    50.52s Find the StaticText (Element at index 13)
+    t =    50.58s Find the StaticText (Element at index 14)
+    t =    50.63s Find the StaticText (Element at index 15)
+    t =    50.69s Find the StaticText (Element at index 16)
+    t =    50.75s Find the StaticText (Element at index 17)
+    t =    50.82s Find the StaticText (Element at index 18)
+    t =    50.89s Find the StaticText (Element at index 19)
+    t =    50.95s Find the StaticText (Element at index 20)
+    t =    51.02s Get all elements bound by index for: Descendants matching type Button
+    t =    51.08s Find the Button (Element at index 0)
+    t =    51.13s Find the Button (Element at index 1)
+    t =    51.19s Find the Button (Element at index 2)
+    t =    51.26s Find the Button (Element at index 3)
+    t =    51.32s Find the Button (Element at index 4)
+    t =    51.39s Find the Button (Element at index 5)
+    t =    51.46s Find the Button (Element at index 6)
+    t =    51.51s Find the Button (Element at index 7)
+    t =    51.56s Find the Button (Element at index 8)
+    t =    51.61s Find the Button (Element at index 9)
+    t =    51.66s Find the Button (Element at index 10)
+    t =    51.72s Find the Button (Element at index 11)
+    t =    51.77s Find the Button (Element at index 12)
+    t =    51.81s Find the Button (Element at index 13)
+    t =    51.86s Find the Button (Element at index 14)
+    t =    51.92s Find the Button (Element at index 15)
+    t =    51.97s Find the Button (Element at index 16)
+    t =    52.02s Find the Button (Element at index 17)
+    t =    52.07s Find the Button (Element at index 18)
+    t =    52.13s Find the Button (Element at index 19)
+    t =    52.18s Find the Button (Element at index 20)
+    t =    52.36s Added attachment named 'ios-09-after-relaunch'
+    t =    52.37s Tear Down
+Test Case '-[CqaProbeUITests.AnsweredShotTests test7AnsweredHereAndAfterRelaunch]' passed (52.788 seconds).
+Test Suite 'AnsweredShotTests' passed at 2026-10-09 02:19:40.159.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 303.197 (303.202) seconds
+Test Suite 'CqaProbeUITests.xctest' passed at 2026-10-09 02:19:40.161.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 303.197 (303.204) seconds
+Test Suite 'All tests' passed at 2026-10-09 02:19:40.161.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 303.197 (303.206) seconds
+2026-10-09 02:20:02.232 xcodebuild[8158:29998] [MT] IDETestOperationsObserverDebug: 368.171 elapsed -- Testing started completed.
+2026-10-09 02:20:02.233 xcodebuild[8158:29998] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-09 02:20:02.233 xcodebuild[8158:29998] [MT] IDETestOperationsObserverDebug: 368.171 sec, +368.171 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.cqa-probe/results/ios.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

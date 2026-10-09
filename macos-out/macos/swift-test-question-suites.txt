@@ -1,0 +1,86 @@
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testAnAnswerNoCoordinatorHasHadSaysItWaits]' started.
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testAnAnswerNoCoordinatorHasHadSaysItWaits]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testAnOptionAloneIsItsLabelWithNothingOwed]' started.
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testAnOptionAloneIsItsLabelWithNothingOwed]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testAnOptionAndANoteAreTwoLinesNotOneSentence]' started.
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testAnOptionAndANoteAreTwoLinesNotOneSentence]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testAnOptionTheQuestionNeverOfferedTicksNothing]' started.
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testAnOptionTheQuestionNeverOfferedTicksNothing]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testAQuestionWithoutOptionsIsAnsweredInWords]' started.
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testAQuestionWithoutOptionsIsAnsweredInWords]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testARecordThisBuildCannotReadDoesNotFailTheRead]' started.
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testARecordThisBuildCannotReadDoesNotFailTheRead]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testAWithdrawnQuestionSaysWhoTookItBackAndWhy]' started.
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testAWithdrawnQuestionSaysWhoTookItBackAndWhy]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testEachRecordIsAReceiptAtTheMomentItEnded]' started.
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testEachRecordIsAReceiptAtTheMomentItEnded]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testRecordsAreAdoptedOldestFirst]' started.
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testRecordsAreAdoptedOldestFirst]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheAnswerSentHereIsTheRecordTheReadWillPublish]' started.
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheAnswerSentHereIsTheRecordTheReadWillPublish]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheBarCountsNoRecordAndTheCardsDrawThem]' started.
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheBarCountsNoRecordAndTheCardsDrawThem]' passed (0.024 seconds).
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheCardOpensWithTheQuestionAsPlainText]' started.
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheCardOpensWithTheQuestionAsPlainText]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheFooterSaysWhoWhenAndWhereItWent]' started.
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheFooterSaysWhoWhenAndWhereItWent]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheOtherRowIsTheOwnersWordsQuoted]' started.
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheOtherRowIsTheOwnersWordsQuoted]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testThePressDrawsTheRecordFromWhatItSentBeforeTheReadComesBack]' started.
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testThePressDrawsTheRecordFromWhatItSentBeforeTheReadComesBack]' passed (0.017 seconds).
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheReadDecodesTheRecordsAndAnOlderServerHasNone]' started.
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheReadDecodesTheRecordsAndAnOlderServerHasNone]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheReadDrawsEveryRecordAndNeverPutsTheQuestionBack]' started.
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheReadDrawsEveryRecordAndNeverPutsTheQuestionBack]' passed (0.015 seconds).
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheSheetOfAQuestionWithoutOptionsHasAReadOnlyAnswerBox]' started.
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheSheetOfAQuestionWithoutOptionsHasAReadOnlyAnswerBox]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheSheetOfAWithdrawnQuestionTicksNothing]' started.
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheSheetOfAWithdrawnQuestionTicksNothing]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheSheetTicksTheChosenOptionAndKeepsTheNoteInsideIt]' started.
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheSheetTicksTheChosenOptionAndKeepsTheNoteInsideIt]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheSheetTicksTheOtherRowOverTheOwnersWords]' started.
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheSheetTicksTheOtherRowOverTheOwnersWords]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheTimeCarriesTheDateOnceItIsNotToday]' started.
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheTimeCarriesTheDateOnceItIsNotToday]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheTranscriptDrawsTheRecordWhereItEnded]' started.
+Test Case '-[OrbitKitTests.CoordinatorQuestionRecordTests testTheTranscriptDrawsTheRecordWhereItEnded]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testAFailedCheckSaysSo]' started.
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testAFailedCheckSaysSo]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testAnAutomaticMergeSaysSoAndHowToUndoIt]' started.
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testAnAutomaticMergeSaysSoAndHowToUndoIt]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testAQuestionGoesStaleInPlaceRatherThanVanishing]' started.
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testAQuestionGoesStaleInPlaceRatherThanVanishing]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testConfirmationDoesNotInventARunningMerge]' started.
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testConfirmationDoesNotInventARunningMerge]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testEachCardHasItsOwnRowID]' started.
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testEachCardHasItsOwnRowID]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testMergePreviewDoesNotReportPassedForMissingOrFailedChecks]' started.
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testMergePreviewDoesNotReportPassedForMissingOrFailedChecks]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testMergePreviewKeepsLongCommandsOutOfTheTranscript]' started.
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testMergePreviewKeepsLongCommandsOutOfTheTranscript]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testOnlyAReadyCandidateIsConfirmable]' started.
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testOnlyAReadyCandidateIsConfirmable]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testOnlyTheOwnersQuestionsAreDrawn]' started.
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testOnlyTheOwnersQuestionsAreDrawn]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testTheAnswerIsOnlySendableWhenTheDoorWouldTakeIt]' started.
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testTheAnswerIsOnlySendableWhenTheDoorWouldTakeIt]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testTheAskedFootnoteReadsLikeTheBrowsers]' started.
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testTheAskedFootnoteReadsLikeTheBrowsers]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testTheBoxSaysWhatItsTextWillBe]' started.
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testTheBoxSaysWhatItsTextWillBe]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testTheMergeCardDrawsTheFourStatesAndNothingElse]' started.
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testTheMergeCardDrawsTheFourStatesAndNothingElse]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testTheMergeCardSaysWhatIsBeingMerged]' started.
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testTheMergeCardSaysWhatIsBeingMerged]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testTheMergeCardsHeadingsAreTheDesignsWords]' started.
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testTheMergeCardsHeadingsAreTheDesignsWords]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testTheMergedCardIsAReceipt]' started.
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testTheMergedCardIsAReceipt]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testTheMergePressWordingIsTheBrowsersDeclarations]' started.
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testTheMergePressWordingIsTheBrowsersDeclarations]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testTheMergingAndBlockedCardsSayWhoHasIt]' started.
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testTheMergingAndBlockedCardsSayWhoHasIt]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testTheOwnerItemWordsAreTheBrowsersDeclarations]' started.
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testTheOwnerItemWordsAreTheBrowsersDeclarations]' passed (0.007 seconds).
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testTheQuestionCardsWordsAreTheBrowsersDeclarations]' started.
+Test Case '-[OrbitKitTests.OwnerItemCardsTests testTheQuestionCardsWordsAreTheBrowsersDeclarations]' passed (0.002 seconds).

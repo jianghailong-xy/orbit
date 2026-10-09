@@ -1,0 +1,80 @@
+90 |                        value: spun)
+91 |             .onAppear { spun = running }
+92 |             .onChange(of: running) { spun = $0 }
+   |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+93 |     }
+94 | }
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[396/448] Compiling OrbitApp RowSwipeActions.swift
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:92:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+90 |                        value: spun)
+91 |             .onAppear { spun = running }
+92 |             .onChange(of: running) { spun = $0 }
+   |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+93 |     }
+94 | }
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[397/448] Compiling OrbitApp RunnerControlPane.swift
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:92:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+90 |                        value: spun)
+91 |             .onAppear { spun = running }
+92 |             .onChange(of: running) { spun = $0 }
+   |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+93 |     }
+94 | }
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[398/448] Compiling OrbitApp TaskStartCardView.swift
+[399/448] Compiling OrbitApp TasksView.swift
+[400/448] Compiling OrbitApp ToastHost.swift
+[401/448] Compiling OrbitApp TopInsetClearOfRefresh.swift
+[402/448] Compiling OrbitApp Typography.swift
+[403/448] Compiling OrbitApp WatchViews.swift
+[404/448] Compiling OrbitApp WatchWakeCardView.swift
+[405/448] Compiling OrbitApp WatchingCard.swift
+[406/448] Compiling OrbitApp WikiActivityView.swift
+[407/448] Compiling OrbitApp WikiArticleView.swift
+[408/448] Compiling OrbitApp WikiContentsColumn.swift
+[409/448] Compiling OrbitApp WikiDocScreens.swift
+[410/448] Compiling OrbitApp WikiDocView.swift
+[411/448] Compiling OrbitApp WikiJobView.swift
+[412/448] Compiling OrbitApp WikiPlanView.swift
+[413/448] Compiling OrbitApp WikiRunView.swift
+[414/448] Compiling OrbitApp WikiScreens.swift
+[415/448] Compiling OrbitApp WikiSettingsView.swift
+[416/448] Compiling OrbitApp WikiView.swift
+[417/448] Compiling OrbitApp WorktreeBar.swift
+[418/448] Compiling OrbitApp WorktreeFilePreview.swift
+[419/448] Compiling OrbitApp WatchesModel.swift
+[420/448] Compiling OrbitApp WikiModel.swift
+[421/448] Compiling OrbitApp WorktreeModel.swift
+[422/448] Compiling OrbitApp RunnerEnginePage.swift
+[423/448] Compiling OrbitApp RunnerNamePage.swift
+[424/448] Compiling OrbitApp RunnerPageParts.swift
+[425/448] Compiling OrbitApp RunnerSignInView.swift
+[426/448] Compiling OrbitApp SessionCoordinatorBadge.swift
+[427/448] Compiling OrbitApp SessionFolderPage.swift
+[428/448] Compiling OrbitApp SessionListSearch.swift
+[429/448] Compiling OrbitApp SessionMessageCardView.swift
+[430/448] Compiling OrbitApp SessionMoveSheet.swift
+[431/448] Compiling OrbitApp SessionMoveTargetPage.swift
+[432/448] Compiling OrbitApp SessionProjectListSupport.swift
+[433/448] Compiling OrbitApp SessionProjectPage.swift
+[434/448] Compiling OrbitApp SessionRenameAlert.swift
+[435/448] Compiling OrbitApp SessionReplyCardView.swift
+[436/448] Compiling OrbitApp SessionRowActions.swift
+[437/448] Compiling OrbitApp SessionSearchView.swift
+[438/448] Compiling OrbitApp SessionTagViews.swift
+[439/448] Compiling OrbitApp SettingsAdminView.swift
+[440/448] Compiling OrbitApp SettingsSheet.swift
+[441/448] Compiling OrbitApp ShareSheet.swift
+[442/448] Compiling OrbitApp SkillsRunnersView.swift
+[443/448] Compiling OrbitApp TaskDetailParts.swift
+[444/448] Compiling OrbitApp TaskListParts.swift
+[445/448] Compiling OrbitApp TaskRunHandoffCard.swift
+[445/448] Write Objects.LinkFileList
+[446/448] Linking OrbitApp
+[447/448] Applying OrbitApp
+Build complete! (104.36s)

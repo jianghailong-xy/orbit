@@ -1,0 +1,18 @@
+Test Case '-[CqaProbeUITests.AnsweredShotTests test1TwoAnswersAndTheSheet]' started.
+Test Case '-[CqaProbeUITests.AnsweredShotTests test1TwoAnswersAndTheSheet]' passed (79.526 seconds).
+Test Case '-[CqaProbeUITests.AnsweredShotTests test2OptionAndNote]' started.
+Test Case '-[CqaProbeUITests.AnsweredShotTests test2OptionAndNote]' passed (41.833 seconds).
+Test Case '-[CqaProbeUITests.AnsweredShotTests test3Other]' started.
+Test Case '-[CqaProbeUITests.AnsweredShotTests test3Other]' passed (35.101 seconds).
+Test Case '-[CqaProbeUITests.AnsweredShotTests test4NoOptions]' started.
+Test Case '-[CqaProbeUITests.AnsweredShotTests test4NoOptions]' passed (31.647 seconds).
+Test Case '-[CqaProbeUITests.AnsweredShotTests test5Waiting]' started.
+Test Case '-[CqaProbeUITests.AnsweredShotTests test5Waiting]' passed (31.869 seconds).
+Test Case '-[CqaProbeUITests.AnsweredShotTests test6Withdrawn]' started.
+Test Case '-[CqaProbeUITests.AnsweredShotTests test6Withdrawn]' passed (30.434 seconds).
+Test Case '-[CqaProbeUITests.AnsweredShotTests test7AnsweredHereAndAfterRelaunch]' started.
+Test Case '-[CqaProbeUITests.AnsweredShotTests test7AnsweredHereAndAfterRelaunch]' passed (52.788 seconds).
+	 Executed 7 tests, with 0 failures (0 unexpected) in 303.197 (303.202) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 303.197 (303.204) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 303.197 (303.206) seconds
+** TEST SUCCEEDED **

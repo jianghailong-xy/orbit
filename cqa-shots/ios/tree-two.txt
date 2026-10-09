@@ -1,0 +1,205 @@
+Attributes: Application, 0x113d4c500, pid: 21516, label: 'CqaProbe'
+Element subtree:
+ →Application, 0x113d4c500, pid: 21516, label: 'CqaProbe'
+    Window (Main), 0x113d4f5c0, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x113d4f700, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x113d4f840, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x113d4ef80, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x113d4f980, {{0.0, 0.0}, {402.0, 874.0}}
+              StaticText, 0x113d4e800, {{22.0, 84.8}, {52.3, 26.3}}, label: 'Orbit'
+              Button, 0x113d4f200, {{251.7, 76.0}, {44.0, 44.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+              CollectionView, 0x113d4f340, {{0.0, 128.0}, {305.7, 746.0}}
+                Other, 0x113d4f480, {{0.0, -1364.0}, {305.7, 3206.0}}
+                Cell, 0x113d4fc00, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x113d4e580, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x113d4e6c0, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x113d4fac0, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x113d4c3c0, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x113d4c280, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x113d4df40, {{0.0, 128.0}, {305.3, 44.3}}
+                        Button, 0x113d4e080, {{0.0, 128.0}, {305.3, 44.3}}, label: 'Projects'
+                          Image, 0x113d4e940, {{26.3, 142.3}, {15.3, 15.3}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                          StaticText, 0x113d4c000, {{58.0, 140.0}, {62.3, 20.3}}, label: 'Projects'
+                Cell, 0x113d4c140, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x113d4e300, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x113d4e440, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x113d4c640, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x113d4c780, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x113d4de00, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x113d4ebc0, {{0.0, 172.3}, {305.3, 44.3}}
+                        Button, 0x113d4ed00, {{0.0, 172.3}, {305.3, 44.3}}, label: 'Tasks'
+                          Image, 0x113d4ee40, {{24.7, 186.0}, {18.7, 17.0}}, identifier: 'checklist', label: 'checklist'
+                          StaticText, 0x113d4f0c0, {{58.0, 184.3}, {43.0, 20.3}}, label: 'Tasks'
+                Cell, 0x113d4e1c0, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x113d4fd40, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x113d4fe80, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x113d4ea80, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x102e53ac0, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x102e53c00, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x102e53d40, {{0.0, 216.7}, {305.3, 44.3}}
+                        Button, 0x102e53e80, {{0.0, 216.7}, {305.3, 44.3}}, label: 'Wiki'
+                          Image, 0x102e53840, {{27.0, 230.0}, {14.0, 18.0}}, identifier: 'book.closed', label: 'book.closed'
+                          StaticText, 0x102e53980, {{58.0, 228.7}, {32.7, 20.3}}, label: 'Wiki'
+                Cell, 0x102e53480, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x102e53700, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x102e535c0, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x102e53200, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x113dcc000, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x113dcc140, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x113dcc280, {{0.0, 261.0}, {305.3, 44.7}}
+                        StaticText, 0x113dcc3c0, {{0.0, 261.0}, {305.3, 44.7}}, label: 'Workspaces'
+                Cell, 0x113dcc500, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x113dcc640, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x113dcc780, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x113dcc8c0, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x113dcca00, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x113dccb40, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x113dccc80, {{0.0, 305.7}, {305.3, 44.3}}
+                        Button, 0x113dccdc0, {{0.0, 305.7}, {305.3, 44.3}}, label: 'orbit-develop,  · HPC'
+                          Other, 0x113dccf00, {{24.7, 320.0}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x113dcd040, {{24.7, 320.0}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x113dcd180, {{58.0, 317.7}, {103.0, 20.3}}, label: 'orbit-develop'
+                          StaticText, 0x113dcd2c0, {{161.0, 317.7}, {47.7, 20.3}}, label: ' · HPC'
+                Other, 0x113dcd400, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x113dcd540, {{299.3, 649.7}, {3.0, 221.3}}
+                Other, 0x113dcd680, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x113dcd7c0, {{299.3, 649.7}, {3.0, 221.3}}
+              Button, 0x113dcd900, {{10.0, 788.7}, {165.0, 43.0}}, label: 'New session'
+                Image, 0x113dcda40, {{31.0, 801.0}, {18.3, 18.3}}, identifier: 'square.and.pencil', label: 'Compose'
+                StaticText, 0x113dcdb80, {{57.0, 799.8}, {100.0, 20.3}}, label: 'New session'
+              Button, 0x113dcdcc0, {{251.7, 788.0}, {44.0, 44.0}}, identifier: 'gearshape', label: 'Settings'
+              Other, 0x113dcde00, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x113dcdf40, {{0.0, 62.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI32NavigationStackHosting'
+                  Button, 0x113dce080, {{16.0, 62.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Back'
+                  Other, 0x113dce1c0, {{80.0, 66.7}, {242.0, 34.7}}
+                    Other, 0x113dce300, {{80.0, 66.7}, {242.0, 34.7}}
+                      Button, 0x113dce440, {{80.0, 66.7}, {242.0, 34.7}}, label: 'Wiki 服务端执行, Project coordinator, Waiting for your reply · Open · 1h ago'
+                        StaticText, 0x113dce580, {{89.5, 66.7}, {122.7, 20.3}}, label: 'Wiki 服务端执行'
+                        StaticText, 0x113dce6c0, {{218.0, 69.3}, {77.7, 15.3}}, label: 'Project coordinator'
+                        Image, 0x113dce800, {{304.3, 70.7}, {7.3, 12.3}}, identifier: 'chevron.right', label: 'Forward'
+                        StaticText, 0x113dce940, {{103.8, 88.0}, {194.3, 13.3}}, label: 'Waiting for your reply · Open · 1h ago'
+                  Other, 0x113dcea80, {{346.0, 66.0}, {36.0, 36.0}}, label: 'Session actions'
+                    Other, 0x113dcebc0, {{346.0, 66.0}, {36.0, 36.0}}
+                      Button, 0x113dced00, {{350.0, 66.0}, {28.0, 36.0}}, label: 'Session actions'
+                        Button, 0x113dcee40, {{350.0, 66.0}, {28.0, 36.0}}
+                          Image, 0x113dcef80, {{354.0, 82.0}, {20.0, 4.3}}, identifier: 'ellipsis', label: 'More'
+                Other, 0x113dcf0c0, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x113dcf200, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x113dcf340, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x113dcf480, {{0.0, 0.0}, {402.0, 874.0}}
+                        Other, 0x113dcf5c0, {{0.0, 116.0}, {402.0, 603.0}}
+                        CollectionView, 0x113dcf700, {{0.0, 0.0}, {402.0, 719.0}}
+                          Other, 0x113dcf840, {{0.0, -1322.0}, {402.0, 3593.0}}
+                          Other, 0x113dcf980, {{0.0, 0.0}, {402.0, 719.0}}
+                            Other, 0x113dcfac0, {{0.0, 0.0}, {402.0, 170.8}}
+                          Other, 0x113dcfc00, {{0.0, 0.0}, {402.0, 719.0}}
+                          Cell, 0x113dcfd40, {{0.0, 116.0}, {402.0, 124.0}}
+                            Other, 0x113dcfe80, {{0.0, 116.0}, {402.0, 124.0}}
+                              Other, 0x113db8000, {{0.0, 116.0}, {402.0, 124.0}}
+                                Other, 0x113db8140, {{0.0, 116.0}, {402.0, 124.0}}
+                            Other, 0x113db8280, {{0.0, 116.0}, {402.0, 124.0}}
+                              Other, 0x113db83c0, {{0.0, 116.0}, {402.0, 124.0}}
+                                Other, 0x113db8500, {{0.0, 116.0}, {402.0, 124.0}}
+                                  TextView, 0x113db8640, {{104.0, 130.0}, {270.0, 77.0}}, value: 灰度回退之后的收尾做完了吗？做完了就...
+                                    TextView, 0x113db8780, {{104.0, 130.0}, {270.0, 76.6}}, label: '灰度回退之后的收尾做完了吗？做完了就把重开灰度和真实数据对照一起问我。'
+                                    Other, 0x113db88c0, {{341.0, 130.0}, {30.0, 77.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x113db8a00, {{368.0, 133.0}, {3.0, 71.0}}
+                                    Other, 0x113db8b40, {{104.0, 174.0}, {270.0, 30.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x113db8c80, {{107.0, 201.0}, {264.0, 3.0}}
+                                  Button, 0x113db8dc0, {{316.0, 218.7}, {28.0, 15.0}}, identifier: 'doc.on.doc', label: 'Copy'
+                                  StaticText, 0x113db8f00, {{350.0, 219.3}, {36.0, 13.3}}, label: '2h ago'
+                          Cell, 0x113db9040, {{0.0, 240.0}, {402.0, 89.0}}
+                            Other, 0x113db9180, {{0.0, 240.0}, {402.0, 89.0}}
+                              Other, 0x113db92c0, {{0.0, 240.0}, {402.0, 89.0}}
+                                Other, 0x113db9400, {{0.0, 240.0}, {402.0, 89.0}}
+                            Other, 0x113db9540, {{0.0, 240.0}, {402.0, 89.0}}
+                              Other, 0x113db9680, {{0.0, 240.0}, {402.0, 89.0}}
+                                Other, 0x113db97c0, {{0.0, 240.0}, {402.0, 89.0}}
+                                  TextView, 0x113db9900, {{16.0, 246.0}, {361.0, 77.0}}, value: 收尾都做完了。我用 ask_owne...
+                                    TextView, 0x113db9a40, {{16.0, 246.0}, {361.0, 76.6}}, label: '收尾都做完了。我用 ask_owner 提了两个问题：什么时候重开灰度，和真实数据对照怎么取文件。你答复之前我不动生产。'
+                                    Other, 0x113db9b80, {{344.0, 246.0}, {30.0, 77.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x113db9cc0, {{371.0, 249.0}, {3.0, 71.0}}
+                                    Other, 0x113db9e00, {{16.0, 290.0}, {361.0, 30.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x113db9f40, {{19.0, 317.0}, {355.0, 3.0}}
+                          Cell, 0x113dba080, {{0.0, 329.0}, {402.0, 172.0}}
+                            Other, 0x113dba1c0, {{0.0, 329.0}, {402.0, 172.0}}
+                              Other, 0x113dba300, {{0.0, 329.0}, {402.0, 172.0}}
+                                Other, 0x113dba440, {{0.0, 329.0}, {402.0, 172.0}}
+                            Other, 0x113dba580, {{0.0, 329.0}, {402.0, 172.0}}
+                              Other, 0x113dba6c0, {{0.0, 329.0}, {402.0, 172.0}}
+                                Other, 0x113dba800, {{0.0, 329.0}, {402.0, 172.0}}
+                                  Button, 0x113dba940, {{0.0, 329.0}, {402.0, 172.0}}, label: 'Answered, 08:29, 灰度回退之后的收尾都做完了： 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。 灰度期间写错的结论已经清零，失败计数也归零。 三处修复都已经在生产上。 请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。 有一个代价：切换那一刻如果正好有一轮维护在跑，这一轮会在下次自检时被拒，已经做的就白做了（上次约 20 分钟）。现在一轮要 2 小时左右，很难等到空档。, 现在重开，接受这个代价（推荐）, View details', Selected
+                                    Image, 0x113dbaa80, {{35.0, 354.3}, {12.0, 11.3}}, identifier: 'questionmark.bubble.fill', label: 'questionmark.bubble.fill'
+                                    StaticText, 0x113dbabc0, {{60.0, 349.8}, {79.7, 20.3}}, label: 'Answered'
+                                    StaticText, 0x113dbad00, {{335.7, 352.2}, {36.3, 15.7}}, label: '08:29'
+                                    StaticText, 0x113dbae40, {{30.0, 383.0}, {339.0, 33.7}}, label: '灰度回退之后的收尾都做完了： 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。 灰度期间写错的结论已经清零，失败计数也归零。 三处修复都已经在生产上。 请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。 有一个代价：切换那一刻如果正好有一轮维护在跑，这一轮会在下次自检时被拒，已经做的就白做了（上次约 20 分钟）。现在一轮要 2 小时左右，很难等到空档。'
+                                    Image, 0x113dbaf80, {{31.0, 427.7}, {11.0, 11.0}}, identifier: 'checkmark.circle.fill', label: 'Selected', Selected
+                                    StaticText, 0x113dbb0c0, {{49.0, 420.7}, {253.0, 20.3}}, label: '现在重开，接受这个代价（推荐）'
+                                    StaticText, 0x113dbb200, {{30.0, 465.3}, {76.7, 15.7}}, label: 'View details'
+                                    Image, 0x113dbb340, {{364.7, 467.3}, {6.7, 11.7}}, identifier: 'chevron.right', label: 'Forward'
+                          Cell, 0x113dbb480, {{0.0, 501.0}, {402.0, 172.0}}
+                            Other, 0x113dbb5c0, {{0.0, 501.0}, {402.0, 172.0}}
+                              Other, 0x113dbb700, {{0.0, 501.0}, {402.0, 172.0}}
+                                Other, 0x113dbb840, {{0.0, 501.0}, {402.0, 172.0}}
+                            Other, 0x113dbb980, {{0.0, 501.0}, {402.0, 172.0}}
+                              Other, 0x113dbbac0, {{0.0, 501.0}, {402.0, 172.0}}
+                                Other, 0x113dbbc00, {{0.0, 501.0}, {402.0, 172.0}}
+                                  Button, 0x113dbbd40, {{0.0, 501.0}, {402.0, 172.0}}, label: 'Answered, 08:29, 灰度跑完之后，要用真实数据对照一次新旧两条路径的结果：在只读事务里导出模型请求、回答和结论，约 100 条，跟旧路径逐条比对。 导出要从生产库取文件，有三种做法。, 批准经现有 SSH 取文件（推荐）, View details', Selected
+                                    Image, 0x113dbbe80, {{35.0, 526.3}, {12.0, 11.3}}, identifier: 'questionmark.bubble.fill', label: 'questionmark.bubble.fill'
+                                    StaticText, 0x113dd8000, {{60.0, 521.8}, {79.7, 20.3}}, label: 'Answered'
+                                    StaticText, 0x113dd8140, {{335.7, 524.2}, {36.3, 15.7}}, label: '08:29'
+                                    StaticText, 0x113dd8280, {{30.0, 555.0}, {339.0, 33.7}}, label: '灰度跑完之后，要用真实数据对照一次新旧两条路径的结果：在只读事务里导出模型请求、回答和结论，约 100 条，跟旧路径逐条比对。 导出要从生产库取文件，有三种做法。'
+                                    Image, 0x113dd83c0, {{31.0, 599.7}, {11.0, 11.0}}, identifier: 'checkmark.circle.fill', label: 'Selected', Selected
+                                    StaticText, 0x113dd8500, {{49.0, 592.7}, {244.0, 20.3}}, label: '批准经现有 SSH 取文件（推荐）'
+                                    StaticText, 0x113dd8640, {{30.0, 637.3}, {76.7, 15.7}}, label: 'View details'
+                                    Image, 0x113dd8780, {{364.7, 639.3}, {6.7, 11.7}}, identifier: 'chevron.right', label: 'Forward'
+                          Cell, 0x113dd88c0, {{0.0, 673.0}, {402.0, 97.0}}
+                            Other, 0x113dd8a00, {{0.0, 673.0}, {402.0, 97.0}}
+                              Other, 0x113dd8b40, {{0.0, 673.0}, {402.0, 97.0}}
+                                Other, 0x113dd8c80, {{0.0, 673.0}, {402.0, 97.0}}
+                            Other, 0x113dd8dc0, {{0.0, 673.0}, {402.0, 97.0}}
+                              Other, 0x113dd8f00, {{0.0, 673.0}, {402.0, 97.0}}
+                                Other, 0x113dd9040, {{0.0, 673.0}, {402.0, 97.0}}
+                                  TextView, 0x113dd9180, {{97.0, 687.0}, {277.0, 50.0}}, value: From Orbit · owner...
+                                    TextView, 0x113dd92c0, {{97.0, 687.0}, {277.0, 49.3}}, label: 'From Orbit · owner answer: 两个问题都已答复。'
+                                    Other, 0x113dd9400, {{341.0, 687.0}, {30.0, 50.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x113dd9540, {{368.0, 690.0}, {3.0, 44.0}}
+                                    Other, 0x113dd9680, {{97.0, 709.0}, {277.0, 25.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x113dd97c0, {{100.0, 731.0}, {271.0, 3.0}}
+                                  Button, 0x113dd9900, {{317.7, 748.7}, {28.0, 15.0}}, identifier: 'doc.on.doc', label: 'Copy'
+                                  StaticText, 0x113dd9a40, {{351.7, 749.3}, {34.3, 13.3}}, label: '1h ago'
+                          Other, 0x113dd9b80, {{369.0, 116.0}, {30.0, 603.0}}, label: 'Vertical scroll bar, 2 pages', value: 0%
+                            Other, 0x113dd9cc0, {{396.0, 709.0}, {3.0, 7.0}}
+                          Other, 0x113dd9e00, {{369.0, 116.0}, {30.0, 603.0}}, label: 'Vertical scroll bar, 2 pages', value: 0%
+                            Other, 0x113dd9f40, {{396.0, 709.0}, {3.0, 7.0}}
+                        Button, 0x113dda080, {{179.0, 669.0}, {44.0, 44.0}}, label: 'Scroll to latest'
+                          Image, 0x113dda1c0, {{179.0, 669.0}, {44.0, 44.0}}, identifier: 'arrow.down', label: 'Down'
+                          Other, 0x113dda300, {{179.0, 669.0}, {44.0, 44.0}}
+                        Other, 0x113dda440, {{201.0, 739.0}, {0.0, 0.0}}
+                        TextView, 0x113dda580, {{32.0, 754.0}, {338.0, 22.0}}
+                          StaticText, 0x113dda6c0, {{32.0, 754.0}, {338.0, 20.3}}, label: 'Message…'
+                          Other, 0x113dda800, {{337.0, 754.0}, {30.0, 22.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x113dda940, {{364.0, 737.0}, {3.0, 36.0}}
+                          Other, 0x113ddaa80, {{32.0, 762.0}, {338.0, 11.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                            Other, 0x113ddabc0, {{35.0, 770.0}, {332.0, 3.0}}
+                        Button, 0x113ddad00, {{24.0, 790.0}, {32.0, 32.0}}, label: 'Add'
+                          Button, 0x113ddae40, {{24.0, 790.0}, {32.0, 32.0}}
+                            Image, 0x113ddaf80, {{24.0, 790.0}, {32.0, 32.0}}, identifier: 'plus', label: 'Add'
+                        Button, 0x113ddb0c0, {{64.0, 797.0}, {51.0, 18.0}}, label: 'Default'
+                          Button, 0x113ddb200, {{64.0, 797.0}, {51.0, 18.0}}
+                            StaticText, 0x113ddb340, {{64.0, 797.0}, {51.0, 18.0}}, label: 'Default'
+                        Button, 0x113ddb480, {{212.7, 797.0}, {101.3, 18.0}}, label: 'Model Opus 5.5, effort High'
+                          Button, 0x113ddb5c0, {{212.7, 797.0}, {101.3, 18.0}}
+                            StaticText, 0x113ddb700, {{212.7, 797.0}, {64.3, 18.0}}, label: 'Opus 5.5'
+                            StaticText, 0x113ddb840, {{282.0, 797.0}, {32.0, 18.0}}, label: 'High'
+                        Button, 0x113ddb980, {{322.1, 798.1}, {15.8, 15.8}}, label: 'Context window not reported yet'
+                        Button, 0x113ddbac0, {{346.0, 790.0}, {32.0, 32.0}}, identifier: 'arrow.up.circle.fill', label: 'Arrow Up Circle', Disabled
+                Other, 0x113ddbc00, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x113ddbd40, {{0.0, 0.0}, {402.0, 874.0}}
+Path to element:
+ →Application, 0x113d4c500, pid: 21516, label: 'CqaProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.cqaprobe'
+  Output: {
+    Application, 0x113ddbe80, pid: 21516, label: 'CqaProbe'
+  }

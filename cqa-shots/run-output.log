@@ -1,0 +1,56 @@
+==> stub ready after 2s
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+Test Case '-[CqaProbeUITests.AnsweredShotTests test1TwoAnswersAndTheSheet]' started.
+Test Case '-[CqaProbeUITests.AnsweredShotTests test1TwoAnswersAndTheSheet]' passed (79.526 seconds).
+Test Case '-[CqaProbeUITests.AnsweredShotTests test2OptionAndNote]' started.
+Test Case '-[CqaProbeUITests.AnsweredShotTests test2OptionAndNote]' passed (41.833 seconds).
+Test Case '-[CqaProbeUITests.AnsweredShotTests test3Other]' started.
+Test Case '-[CqaProbeUITests.AnsweredShotTests test3Other]' passed (35.101 seconds).
+Test Case '-[CqaProbeUITests.AnsweredShotTests test4NoOptions]' started.
+Test Case '-[CqaProbeUITests.AnsweredShotTests test4NoOptions]' passed (31.647 seconds).
+Test Case '-[CqaProbeUITests.AnsweredShotTests test5Waiting]' started.
+Test Case '-[CqaProbeUITests.AnsweredShotTests test5Waiting]' passed (31.869 seconds).
+Test Case '-[CqaProbeUITests.AnsweredShotTests test6Withdrawn]' started.
+Test Case '-[CqaProbeUITests.AnsweredShotTests test6Withdrawn]' passed (30.434 seconds).
+Test Case '-[CqaProbeUITests.AnsweredShotTests test7AnsweredHereAndAfterRelaunch]' started.
+Test Case '-[CqaProbeUITests.AnsweredShotTests test7AnsweredHereAndAfterRelaunch]' passed (52.788 seconds).
+	 Executed 7 tests, with 0 failures (0 unexpected) in 303.197 (303.202) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 303.197 (303.204) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 303.197 (303.206) seconds
+** TEST SUCCEEDED **
+.cqa-probe/run.sh: line 53:  7152 Terminated: 15          python3 -u stub.py 8765 "$OUT/ios/requests.log" > "$OUT/ios/stub.out" 2>&1
+total 15640
+drwxr-xr-x  34 runner  staff    1088 Oct  9 02:20 .
+drwxr-xr-x   3 runner  staff      96 Oct  9 02:07 ..
+-rw-r--r--@  1 runner  staff    6845 Oct  9 02:15 AnsweredShotTeststest1TwoAnswersAndTheSheet-notes.txt
+-rw-r--r--@  1 runner  staff    5475 Oct  9 02:16 AnsweredShotTeststest2OptionAndNote-notes.txt
+-rw-r--r--@  1 runner  staff    3498 Oct  9 02:17 AnsweredShotTeststest3Other-notes.txt
+-rw-r--r--@  1 runner  staff    2722 Oct  9 02:17 AnsweredShotTeststest4NoOptions-notes.txt
+-rw-r--r--@  1 runner  staff    5494 Oct  9 02:18 AnsweredShotTeststest5Waiting-notes.txt
+-rw-r--r--@  1 runner  staff    3616 Oct  9 02:18 AnsweredShotTeststest6Withdrawn-notes.txt
+-rw-r--r--@  1 runner  staff    9598 Oct  9 02:19 AnsweredShotTeststest7AnsweredHereAndAfterRelaunch-notes.txt
+drwxr-xr-x  28 runner  staff     896 Oct  9 02:20 attachments
+-rw-r--r--   1 runner  staff  446264 Oct  9 02:15 ios-01-two-answered.png
+-rw-r--r--   1 runner  staff  519844 Oct  9 02:15 ios-02-sheet.png
+-rw-r--r--   1 runner  staff  524969 Oct  9 02:15 ios-02b-sheet-scrolled.png
+-rw-r--r--   1 runner  staff  264992 Oct  9 02:16 ios-03-note.png
+-rw-r--r--   1 runner  staff  568154 Oct  9 02:16 ios-03b-note-sheet.png
+-rw-r--r--   1 runner  staff  268863 Oct  9 02:16 ios-04-other.png
+-rw-r--r--   1 runner  staff  408696 Oct  9 02:17 ios-04b-other-sheet.png
+-rw-r--r--   1 runner  staff  272114 Oct  9 02:17 ios-05-no-options.png
+-rw-r--r--   1 runner  staff  273777 Oct  9 02:17 ios-05b-no-options-sheet.png
+-rw-r--r--   1 runner  staff  269081 Oct  9 02:18 ios-06-waiting.png
+-rw-r--r--   1 runner  staff  518971 Oct  9 02:18 ios-06b-waiting-sheet.png
+-rw-r--r--   1 runner  staff  301305 Oct  9 02:18 ios-07-withdrawn.png
+-rw-r--r--   1 runner  staff  385785 Oct  9 02:18 ios-07b-withdrawn-sheet.png
+-rw-r--r--   1 runner  staff  400990 Oct  9 02:19 ios-08-open-question.png
+-rw-r--r--   1 runner  staff  596788 Oct  9 02:19 ios-08b-picked.png
+-rw-r--r--   1 runner  staff  518584 Oct  9 02:19 ios-08c-answered-sheet.png
+-rw-r--r--   1 runner  staff  286060 Oct  9 02:19 ios-08d-answered-card.png
+-rw-r--r--   1 runner  staff  261508 Oct  9 02:19 ios-09-after-relaunch.png
+-rw-r--r--   1 runner  staff    2930 Oct  9 02:20 not-served.txt
+-rw-r--r--   1 runner  staff   37043 Oct  9 02:19 requests.log
+-rw-r--r--   1 runner  staff      79 Oct  9 02:07 stub.out
+-rw-r--r--@  1 runner  staff   26545 Oct  9 02:15 tree-sheet.txt
+-rw-r--r--@  1 runner  staff   20452 Oct  9 02:15 tree-two.txt
+-rw-r--r--   1 runner  staff  746747 Oct  9 02:20 xcodebuild-ios.log

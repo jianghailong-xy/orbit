@@ -1,0 +1,26 @@
+live-open texts: Orbit ¦ New session ¦ Workspaces ¦ 现场作答 ¦ Project coordinator ¦ Waiting for your reply · Open · 2h ago ¦ Projects ¦ Tasks ¦ Wiki ¦ orbit-develop ¦  · HPC ¦ Message… ¦ 1 open question ¦ Default ¦ Opus 5.5 ¦ High ¦ 2h ago ¦ The coordinator has a question ¦ 灰度回退之后的收尾都做完了：
+
+- 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。
+- 灰度期间写错的结论已经清零，失败计数也归零。
+- 三处修复都已经在生产上。
+
+请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。
+
+有一个代价：切换那一刻如果正好有一轮维护在跑，这一轮会在下次自检时被拒，已经做的就白做了（上次约 20 分钟）。现在一轮要 2 小时左右，很难等到空档。 ¦ View details & act
+live-open buttons: Search sessions ¦ New session ¦ Settings ¦ Back ¦ 现场作答, Project coordinator, Waiting for your reply · Open · 2h ago ¦ Session actions ¦ Projects ¦ Tasks ¦ Wiki ¦ orbit-develop,  · HPC ¦ Add ¦ Default ¦ Model Opus 5.5, effort High ¦ Context window not reported yet ¦ Arrow Up Circle ¦ 1 open question ¦ Copy ¦ The coordinator has a question, 灰度回退之后的收尾都做完了：
+
+- 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。
+- 灰度期间写错的结论已经清零，失败计数也归零。
+- 三处修复都已经在生产上。
+
+请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。
+
+有一个代价：切换那一刻如果正好有一轮维护在跑，这一轮会在下次自检时被拒，已经做的就白做了（上次约 20 分钟）。现在一轮要 2 小时左右，很难等到空档。, View details & act
+live-sheet texts: Orbit ¦ New session ¦ Answered ¦ Workspaces ¦ 现场作答 ¦ Project coordinator ¦ Waiting for your reply · Open · 2h ago ¦ Projects ¦ Tasks ¦ Wiki ¦ orbit-develop ¦  · HPC ¦ Message… ¦ Default ¦ Opus 5.5 ¦ High ¦ Answered by you · 10:19 ¦ Delivered to the current coordinator ¦ FROM COORDINATOR ¦ asked 08:10 ¦ 现在重开，接受这个代价（推荐） ¦ Recommended ¦ 不专门挑时间。白做的最多是当前这一轮已经跑掉的部分，下一轮会重新读到，不会丢东西。 ¦ 等新一轮刚开始时再切 ¦ 盯着下一轮维护一开始就切，浪费最少；可能要等当前这一轮跑完，最长约 2 小时。 ¦ 先不重开 ¦ 执行器保持现状，灰度暂停。 ¦ 2h ago ¦ Answered ¦ 10:19 ¦ 灰度回退之后的收尾都做完了： 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。 灰度期间写错的结论已经清零，失败计数也归零。 三处修复都已经在生产上。 请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。 有一个代价：切换那一刻如果正好有一轮维护在跑，这一轮会在下次自检时被拒，已经做的就白做了（上次约 20 分钟）。现在一轮要 2 小时左右，很难等到空档。 ¦ 等新一轮刚开始时再切 ¦ View details
+live-sheet buttons: Sheet Grabber ¦ Search sessions ¦ New session ¦ Settings ¦ Back ¦ 现场作答, Project coordinator, Waiting for your reply · Open · 2h ago ¦ Session actions ¦ Close ¦ Projects ¦ Tasks ¦ Wiki ¦ orbit-develop,  · HPC ¦ Add ¦ Default ¦ Model Opus 5.5, effort High ¦ Context window not reported yet ¦ Arrow Up Circle ¦ Copy ¦ Answered, 10:19, 灰度回退之后的收尾都做完了： 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。 灰度期间写错的结论已经清零，失败计数也归零。 三处修复都已经在生产上。 请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。 有一个代价：切换那一刻如果正好有一轮维护在跑，这一轮会在下次自检时被拒，已经做的就白做了（上次约 20 分钟）。现在一轮要 2 小时左右，很难等到空档。, 等新一轮刚开始时再切, View details
+live-record: card 9 label="Answered, 10:19, 灰度回退之后的收尾都做完了： 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。 灰度期间写错的结论已经清零，失败计数也归零。 三处修复都已经在生产上。 请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。 有一个代价：切换那一刻如果正好有一轮维护在跑，这一轮会在下次自检时被拒，已经做的就白做了（上次约 20 分钟）。现在一轮要 2 小时左右，很难等到空档。, 等新一轮刚开始时再切, View details" value="" frame=(0.0, 247.0, 402.0, 172.0) hittable=true
+live-record texts: Orbit ¦ New session ¦ Workspaces ¦ 现场作答 ¦ Project coordinator ¦ Waiting for your reply · Open · 2h ago ¦ Projects ¦ Tasks ¦ Wiki ¦ orbit-develop ¦  · HPC ¦ Message… ¦ Default ¦ Opus 5.5 ¦ High ¦ 2h ago ¦ Answered ¦ 10:19 ¦ 灰度回退之后的收尾都做完了： 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。 灰度期间写错的结论已经清零，失败计数也归零。 三处修复都已经在生产上。 请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。 有一个代价：切换那一刻如果正好有一轮维护在跑，这一轮会在下次自检时被拒，已经做的就白做了（上次约 20 分钟）。现在一轮要 2 小时左右，很难等到空档。 ¦ 等新一轮刚开始时再切 ¦ View details
+live-record buttons: Search sessions ¦ New session ¦ Settings ¦ Back ¦ 现场作答, Project coordinator, Waiting for your reply · Open · 2h ago ¦ Session actions ¦ Projects ¦ Tasks ¦ Wiki ¦ orbit-develop,  · HPC ¦ Scroll to latest ¦ Add ¦ Default ¦ Model Opus 5.5, effort High ¦ Context window not reported yet ¦ Arrow Up Circle ¦ Copy ¦ Answered, 10:19, 灰度回退之后的收尾都做完了： 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。 灰度期间写错的结论已经清零，失败计数也归零。 三处修复都已经在生产上。 请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。 有一个代价：切换那一刻如果正好有一轮维护在跑，这一轮会在下次自检时被拒，已经做的就白做了（上次约 20 分钟）。现在一轮要 2 小时左右，很难等到空档。, 等新一轮刚开始时再切, View details
+relaunch: card 9 label="Answered, 10:19, 灰度回退之后的收尾都做完了： 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。 灰度期间写错的结论已经清零，失败计数也归零。 三处修复都已经在生产上。 请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。 有一个代价：切换那一刻如果正好有一轮维护在跑，这一轮会在下次自检时被拒，已经做的就白做了（上次约 20 分钟）。现在一轮要 2 小时左右，很难等到空档。, 等新一轮刚开始时再切, View details" value="" frame=(0.0, 247.0, 402.0, 172.0) hittable=true
+relaunch texts: Orbit ¦ New session ¦ Workspaces ¦ 现场作答 ¦ Project coordinator ¦ Waiting for your reply · Open · 2h ago ¦ Projects ¦ Tasks ¦ Wiki ¦ orbit-develop ¦  · HPC ¦ Message… ¦ Default ¦ Opus 5.5 ¦ High ¦ 2h ago ¦ Answered ¦ 10:19 ¦ 灰度回退之后的收尾都做完了： 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。 灰度期间写错的结论已经清零，失败计数也归零。 三处修复都已经在生产上。 请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。 有一个代价：切换那一刻如果正好有一轮维护在跑，这一轮会在下次自检时被拒，已经做的就白做了（上次约 20 分钟）。现在一轮要 2 小时左右，很难等到空档。 ¦ 等新一轮刚开始时再切 ¦ View details
+relaunch buttons: Search sessions ¦ New session ¦ Settings ¦ Back ¦ 现场作答, Project coordinator, Waiting for your reply · Open · 2h ago ¦ Session actions ¦ Projects ¦ Tasks ¦ Wiki ¦ orbit-develop,  · HPC ¦ Add ¦ Default ¦ Model Opus 5.5, effort High ¦ Context window not reported yet ¦ Arrow Up Circle ¦ Copy ¦ Answered, 10:19, 灰度回退之后的收尾都做完了： 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。 灰度期间写错的结论已经清零，失败计数也归零。 三处修复都已经在生产上。 请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。 有一个代价：切换那一刻如果正好有一轮维护在跑，这一轮会在下次自检时被拒，已经做的就白做了（上次约 20 分钟）。现在一轮要 2 小时左右，很难等到空档。, 等新一轮刚开始时再切, View details
