@@ -38,8 +38,14 @@ interface OffsetData {
  * unrounded position to the middle of the part of the anchor the callout covers. Floating UI centres
  * the arrow from the rounded position and the callout's whole-pixel width; the difference is handed
  * to the stylesheet as --orbit-arrow-nudge on the positioner (`positionerRef`).
+ *
+ * `pointAt` is the edge a callout was asked to align to above or below its anchor, when it should point
+ * its arrow at the anchor's centre as the replaced popover's `arrow.pointAtCenter` did. That edge then
+ * sits 20px (the arrow's 12px inset and half its 16px width) before or after the anchor's centre, and
+ * nothing slides. Flipped to the other edge, rc-trigger measured from the anchor's near corner instead:
+ * the new edge sits 20px past the anchor's edge on the side the callout was aligned to.
  */
-export function useWholePixelOffsets(anchor: RefObject<Element | null>, gap: number, padding?: number) {
+export function useWholePixelOffsets(anchor: RefObject<Element | null>, gap: number, padding?: number, pointAt?: 'start' | 'end') {
   const positionerRef = useRef<HTMLDivElement>(null);
   const sideOffset = ({ side }: OffsetData) => {
     const rect = anchor.current?.getBoundingClientRect();
@@ -57,7 +63,10 @@ export function useWholePixelOffsets(anchor: RefObject<Element | null>, gap: num
     // Where Base UI puts the popup's leading edge before this offset, and where rc-trigger did.
     const base = align === 'start' ? start : align === 'end' ? start + size - own : start + size / 2 - own / 2;
     let edge = align === 'end' ? Math.ceil(start + size) - own : Math.floor(base);
-    if (padding !== undefined && vertical) {
+    if (pointAt && vertical && align !== 'center') {
+      const at = align === pointAt ? start + size / 2 : align === 'end' ? start : start + size;
+      edge = align === 'end' ? Math.ceil(at + 20) - own : Math.floor(at - 20);
+    } else if (padding !== undefined && vertical) {
       const slid = Math.max(padding, Math.min(base, document.documentElement.clientWidth - padding - own));
       if (slid !== base) edge = Math.floor(slid);
       const covered = (Math.max(slid, rect.left) + Math.min(slid + own, rect.right)) / 2;
