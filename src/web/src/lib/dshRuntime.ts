@@ -3,21 +3,19 @@ import type { RunnerEngineHealth } from '@orbit/shared';
 /**
  * What the clients need to know about DeepSeek Harness (`dsh`) that no other engine shares.
  *
- * Harness has no sign-in on the runner: its credential is a configured provider's API key
- * (the `deepseek-harness` preset, runtime `dsh`), handed to the session at dispatch. So a runner
- * can only be asked whether it can START Harness — it declares `provider:dsh`, and its engine
- * report says the pinned CLI is installed on a platform it admits — never whether a key works:
- * the handshake and the model catalogue do not validate one (docs/deepseek-harness-runtime-
+ * Harness has no sign-in on the runner: it runs on a DeepSeek key — the same key Claude Code and
+ * OpenCode run on (docs/provider-engine-contract.md §2.1) — handed to the session at dispatch. So a
+ * runner can only be asked whether it can START Harness — it declares `provider:dsh`, and its engine
+ * report says the pinned CLI is installed on a platform it admits — never whether a key works: the
+ * handshake and the model catalogue do not validate one (docs/deepseek-harness-runtime-
  * environment.md, "目录与健康状态"). An invalid key surfaces in the session that used it.
- *
- * The existing `deepseek` preset is a different thing: an Anthropic-compatible endpoint driven by
- * Claude Code. Nothing here applies to it.
  */
 
-/** The preset a Harness API key is connected from. */
+/** The retired preset keys were connected from for Harness before it became an engine. A row made
+ *  from it is a DeepSeek key like any other, and its old connect address leads to DeepSeek's. */
 export const DSH_PRESET_SLUG = 'deepseek-harness';
-/** Where that key is connected. */
-export const DSH_CONNECT_HREF = `/providers/new/${DSH_PRESET_SLUG}`;
+/** Where the DeepSeek key Harness runs on is connected. */
+export const DSH_CONNECT_HREF = '/providers/new/deepseek';
 /** The heartbeat capability the server requires before it creates, resumes or hands out a dsh
  *  session (sessions.service, queue.service). */
 export const DSH_RUNNER_CAPABILITY = 'provider:dsh';

@@ -115,8 +115,9 @@ describe('providerChoices', () => {
     expect(providerChoices([gemini], catalog, undefined, health).map((c) => c.slug)).toEqual(['claude', 'codex', 'gemini', 'kimi', 'opencode']);
     expect(providerChoices([gemini], catalog, undefined, health, [], undefined, ready, false).some((c) => c.slug === 'antigravity')).toBe(false);
     expect(providerChoices([gemini], catalog, undefined, undefined, [], undefined, ready, true).find((c) => c.slug === 'antigravity')).toMatchObject({ labelDetail: 'env key' });
+    // A Gemini key keeps its own name and Google Gemini's mark, whichever engine runs it.
     expect(providerChoices([gemini], catalog).find((c) => c.slug === 'gemini')).toMatchObject({
-      label: 'Antigravity', labelDetail: 'API key', glyphKey: 'antigravity', modelLabel: 'Gemini 3.8 Flash',
+      label: 'Gemini', labelDetail: 'API key', glyphKey: 'gemini', modelLabel: 'Gemini 3.8 Flash',
     });
     expect(providerChoices([{ ...gemini, label: 'Work Gemini' }], catalog).find((c) => c.slug === 'gemini')?.label).toBe('Work Gemini');
   });
@@ -501,13 +502,15 @@ describe('brandForProvider', () => {
     expect(brandForProvider('kimi', 'Kimi').glyphKey).toBe('moonshot');
   });
 
-  it('gives the Antigravity engine and Gemini preset the same mark', () => {
+  it('gives the Antigravity engine its own mark, and a Gemini key Google Gemini’s', () => {
     const { brand, glyphKey } = brandForProvider('antigravity', 'Antigravity');
     expect(glyphKey).toBe('antigravity');
     expect(brand).toEqual({ mono: 'A', from: '#3186ff', to: '#00b95c' });
     expect(PROVIDER_GLYPHS.antigravity).toBeTruthy();
-    expect(brandForProvider('gemini', 'Gemini', 'gemini')).toEqual({ brand, glyphKey });
-    expect(brandForProvider('gemini-2', 'Work Gemini', 'gemini')).toEqual({ brand, glyphKey });
+    const gemini = { brand: { mono: 'G', from: '#4285f4', to: '#9b72cb' }, glyphKey: 'gemini' };
+    expect(PROVIDER_GLYPHS.gemini).toBeTruthy();
+    expect(brandForProvider('gemini', 'Gemini', 'gemini')).toEqual(gemini);
+    expect(brandForProvider('gemini-2', 'Work Gemini', 'gemini')).toEqual(gemini);
   });
 
   it('resolves every glyph key it hands out to actual artwork', () => {
@@ -895,11 +898,12 @@ describe('a Codex pool somebody was added to, in their picker', () => {
 });
 
 describe('runtimeSummary', () => {
-  it('says which CLI a vendor on its own API runs on, and the dialect of the rest', () => {
-    expect(runtimeSummary('antigravity')).toBe('Runs on the Antigravity CLI');
-    expect(runtimeSummary('kimi')).toBe('Runs on the Kimi CLI');
+  it('names the protocol a key’s endpoint speaks, never an engine — a key runs on several', () => {
+    expect(runtimeSummary('antigravity')).toBe('Gemini API');
+    expect(runtimeSummary('kimi')).toBe('Moonshot API');
     expect(runtimeSummary('codex')).toBe('OpenAI-compatible');
     expect(runtimeSummary('claude')).toBe('Anthropic-compatible');
+    expect(runtimeSummary('dsh')).toBe('Anthropic-compatible');
   });
 });
 

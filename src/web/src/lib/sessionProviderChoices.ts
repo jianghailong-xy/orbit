@@ -123,26 +123,16 @@ const ENGINE_LABELS: Record<string, string> = {
   [AgentProvider.DSH]: 'DeepSeek Harness',
 };
 
-/** Use the runtime's name for the Gemini preset while preserving names the user gave their keys. */
-export const providerDisplayLabel = (label: string, presetSlug?: string | null): string =>
-  presetSlug === 'gemini' && label === 'Gemini' ? 'Antigravity' : label;
-
-/** One line about a provider's endpoint, for the gallery card and the connect form's identity bar.
- *  Claude and Codex borrow a CLI to speak a dialect the vendor exposes for it, so the dialect is
- *  the useful fact. Kimi and Antigravity are a CLI on its vendor's own API, where it isn't. */
-export const runtimeSummary = (runtime?: string | null, presetSlug?: string | null): string =>
-  runtime === AgentProvider.KIMI
-    ? 'Runs on the Kimi CLI'
-    : runtime === AgentProvider.ANTIGRAVITY
-      ? 'Runs on the Antigravity CLI'
-      : runtime === AgentProvider.DSH
-        ? 'Runs on DeepSeek Harness'
-        : runtime === AgentProvider.CODEX
-          ? 'OpenAI-compatible'
-          : // DeepSeek's two presets share a vendor and a key; which agent runs is what tells them apart.
-            presetSlug === 'deepseek'
-            ? 'Runs on Claude Code'
-            : 'Anthropic-compatible';
+/** The protocol a key's endpoint speaks (its row's `runtime`), for the connect form's identity bar.
+ *  Not an engine: a key runs on several (`engines`), and the protocol is what decides which. */
+export const runtimeSummary = (runtime?: string | null): string =>
+  runtime === AgentProvider.CODEX
+    ? 'OpenAI-compatible'
+    : runtime === AgentProvider.KIMI
+      ? 'Moonshot API'
+      : runtime === AgentProvider.ANTIGRAVITY
+        ? 'Gemini API'
+        : 'Anthropic-compatible';
 
 // A built-in engine has no ModelProvider row, so it has no preset to inherit a look from. Borrow
 // the vendor preset that ships the same mark: the engine and the BYOK provider are the same
@@ -153,7 +143,8 @@ export const ENGINE_PRESET: Record<string, string> = {
   [AgentProvider.KIMI]: 'moonshot',
 };
 
-// Antigravity's environment key and configured Gemini keys share one runtime identity.
+// Antigravity, the engine, ships no preset to borrow a mark from. A Gemini key is Google Gemini's
+// and wears that preset's own.
 const ENGINE_BRAND: Record<string, { brand: ProviderBrand; glyphKey: string }> = {
   [AgentProvider.ANTIGRAVITY]: {
     brand: { mono: 'A', from: '#3186ff', to: '#00b95c' },
@@ -174,7 +165,6 @@ export function brandForProvider(
   label: string,
   presetSlug?: string | null,
 ): { brand: ProviderBrand; glyphKey?: string } {
-  if ((presetSlug ?? slug) === 'gemini') return ENGINE_BRAND[AgentProvider.ANTIGRAVITY];
   if (slug === AgentProvider.DSH && !presetSlug) presetSlug = DSH_PRESET_SLUG;
   const presetKey = presetSlug ?? ENGINE_PRESET[slug];
   const preset = presetKey ? PROVIDER_PRESETS.find((p) => p.slug === presetKey) : undefined;
@@ -366,7 +356,7 @@ export function providerChoices(
             : byokBlocker(health);
       return {
         slug: p.slug,
-        label: providerDisplayLabel(p.label, p.presetSlug),
+        label: p.label,
         kind: 'byok' as const,
         ...(runtime === AgentProvider.ANTIGRAVITY ? { labelDetail: 'API key' } : {}),
         // DeepSeek's key runs on either agent; say which one this row is.
@@ -419,7 +409,7 @@ export function providerChoices(
           .filter((p) => p.runsOnOpenCode && !poolSlugs.has(p.slug))
           .map((p) => ({
             slug: openCodeKeyChoice(p.slug),
-            label: providerDisplayLabel(p.label, p.presetSlug),
+            label: p.label,
             kind: 'byok' as const,
             ...brandForProvider(p.slug, p.label, p.presetSlug),
             modelLabel: defaultModelLabel(openCodeKeyChoice(p.slug), modelCatalog, configured, runtimeDefaultModels),
