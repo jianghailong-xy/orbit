@@ -1,6 +1,10 @@
 package io.orbitd.android.reader
 
 import kotlinx.serialization.json.*
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import kotlin.math.floor
 
 /**
  * Failures a runtime reports as ordinary text, and which of them fix themselves — OrbitKit's
@@ -52,6 +56,49 @@ internal object EngineErrors {
         if (text == null) return false
         val lower = text.trimStart().lowercase()
         return usageLimitMarkers.any { lower.indexOf(it) in 0..USAGE_LIMIT_MAX_OFFSET }
+    }
+
+    /** How long a re-send after a transient provider error waits, by attempts spent (shared retry.ts): seconds, not the
+     * quota's minutes — an overloaded API is usually back within one. The length is also the cap. */
+    private val apiErrorBackoffSeconds = listOf(30L, 2 * 60L, 5 * 60L)
+
+    /** How many auto-retries a transient provider error gets before it is handed back. */
+    val maxApiErrorRetries get() = apiErrorBackoffSeconds.size
+
+    /** When a re-send after a transient provider error would fire, or null once the attempts are spent — jittered as the
+     * server does, so sessions that hit one overload don't all come due at once. */
+    fun apiErrorRetryAt(attempts: Int, nowMs: Long, rand: () -> Double = { Math.random() }): Long? {
+        val step = apiErrorBackoffSeconds.getOrNull(attempts)?.takeIf { attempts >= 0 } ?: return null
+        return nowMs + (step + floor(rand() * step * 0.25).toLong()) * 1000
+    }
+
+    /** Claude Code's own "resets 6:20pm (Europe/Berlin)", or "resets Aug 3, 1pm (Europe/Berlin)" when not today. */
+    private val resetsAt = Regex("resets\\s+(?:([A-Za-z]{3})[a-z]*\\.?\\s+(\\d{1,2}),\\s*)?(\\d{1,2})(?::(\\d{2}))?\\s*([ap])\\.?m\\.?\\s*\\(([^)]+)\\)",
+        RegexOption.IGNORE_CASE)
+    private val months = listOf("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
+
+    /**
+     * When the quota comes back, read out of the runtime's own message — null when it names no time it can be pinned to,
+     * including every Codex phrasing (no zone). The fallback source: cancelling drops the server's armed `retryAt`, so putting
+     * the switch back needs the moment again. A bare time already past is tomorrow's; a dated one already past next year's.
+     */
+    fun parseQuotaResetAt(text: String?, nowMs: Long): Long? {
+        val match = resetsAt.find(text ?: return null) ?: return null
+        val (monthName, dayText, hourText, minuteText, meridiem, zoneName) = match.destructured
+        val zone = runCatching { ZoneId.of(zoneName) }.getOrNull() ?: return null
+        val hour12 = hourText.toIntOrNull()?.takeIf { it in 1..12 } ?: return null
+        val hour = hour12 % 12 + if (meridiem.lowercase() == "p") 12 else 0
+        val minute = minuteText.ifEmpty { "0" }.toInt().takeIf { it <= 59 } ?: return null
+        val now = Instant.ofEpochMilli(nowMs).atZone(zone)
+        fun at(year: Int, month: Int, day: Int) = runCatching { ZonedDateTime.of(year, month, day, hour, minute, 0, 0, zone) }.getOrNull()
+        if (monthName.isNotEmpty()) {
+            val month = months.indexOf(monthName.lowercase()).takeIf { it >= 0 } ?: return null
+            val dated = at(now.year, month + 1, dayText.toInt()) ?: return null
+            return if (dated.toInstant().toEpochMilli() >= nowMs) dated.toInstant().toEpochMilli()
+                else at(now.year + 1, month + 1, dayText.toInt())?.toInstant()?.toEpochMilli()
+        }
+        val bare = at(now.year, now.monthValue, now.dayOfMonth) ?: return null
+        return (if (bare.toInstant().toEpochMilli() > nowMs) bare else bare.plusDays(1)).toInstant().toEpochMilli()
     }
 
     /** The auto-retry card's own title for a failure that fixes itself (OrbitKit `AutoRetryLogic`). */
