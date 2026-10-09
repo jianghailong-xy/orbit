@@ -1,0 +1,1 @@
+chromium-dark-desktop  p41-profile-photo.png          all=   318 gt2=   144 max= 30 clusters=  1 [144px x16-47 y856-879 m30]

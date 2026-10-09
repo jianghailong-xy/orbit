@@ -1,6 +1,5 @@
 import { useEffect, useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Input, InputNumber, Radio, Select, Spin, Switch } from 'antd';
 import type { IntegrationLine, ProjectIntegrationView, ProjectPauseState } from '@orbit/shared';
 import { api } from '../api';
 import {
@@ -40,6 +39,14 @@ import {
 import { projectIntegrationQuery } from '../lib/queries';
 import { ago } from '../lib/watches';
 import { START_MAX_CONCURRENT_TASKS } from './StartProjectCard';
+import { Alert } from './ui/Alert';
+import { Button } from './ui/Button';
+import { Input } from './ui/Input';
+import { NumberInput } from './ui/NumberInput';
+import { Radio, RadioGroup } from './ui/Radio';
+import { Select } from './ui/Select';
+import { Spinner } from './ui/Spinner';
+import { Switch } from './ui/Switch';
 
 /**
  * "How it runs" — every setting the start card set, in one block on the project page once the
@@ -237,13 +244,12 @@ export function ProjectRunSettings({
         {integration.isError ? (
           <Alert
             type="error"
-            showIcon
-            message="How it runs could not be loaded"
+            title="How it runs could not be loaded"
             description={integration.error instanceof Error ? integration.error.message : undefined}
           />
         ) : (
           <div className="project-run-settings-loading">
-            <Spin size="small" />
+            <Spinner size="small" aria-busy="true" />
           </div>
         )}
       </section>
@@ -288,12 +294,13 @@ export function ProjectRunSettings({
           <div className="project-integration-setting">
             <div className="project-integration-setting-label">{RUN_TASKS_LAND_ON}</div>
             <div>
-              <Radio.Group
+              {/* An empty value checks neither line: the project has not decided one. */}
+              <RadioGroup<IntegrationLine | ''>
                 className="project-run-lines"
                 aria-label={RUN_TASKS_LAND_ON}
-                value={draft.line}
+                value={draft.line ?? ''}
                 disabled={view.locked}
-                onChange={(event) => set({ line: event.target.value })}
+                onValueChange={(line) => set({ line: line || null })}
               >
                 <Radio value="PROJECT_BRANCH">
                   <b>{RUN_LINE_PROJECT_BRANCH}</b> · <code className="start-card-branch" title={branch}>{shortBranch(branch)}</code>
@@ -309,7 +316,7 @@ export function ProjectRunSettings({
                     <div className="project-integration-setting-hint">{RUN_LINE_MAIN_HINT}</div>
                   )}
                 </Radio>
-              </Radio.Group>
+              </RadioGroup>
               {view.locked ? (
                 <div className="project-integration-setting-hint">
                   {runLineLocked(view.startedAt ? ago(view.startedAt, now) : null)}
@@ -325,7 +332,7 @@ export function ProjectRunSettings({
                 <Switch
                   checked={draft.automatic}
                   aria-label={RUN_AUTOMATIC}
-                  onChange={(automatic) => set({ automatic })}
+                  onCheckedChange={(automatic) => set({ automatic })}
                 />
                 <span>{draft.automatic ? RUN_SWITCH_ON : RUN_SWITCH_OFF}</span>
               </div>
@@ -338,14 +345,14 @@ export function ProjectRunSettings({
           <div className="project-integration-setting">
             <div className="project-integration-setting-label">{RUN_AT_MOST}</div>
             <div className="start-card-inline">
-              <InputNumber
+              <NumberInput
                 className="start-card-count"
                 min={1}
                 max={START_MAX_CONCURRENT_TASKS}
                 precision={0}
                 value={draft.maxConcurrentTasks}
                 aria-label={RUN_AT_MOST}
-                onChange={(value) => set({ maxConcurrentTasks: typeof value === 'number' ? value : null })}
+                onValueChange={(value) => set({ maxConcurrentTasks: value })}
               />
               <span>{runTasksAtATime(draft.maxConcurrentTasks)}</span>
             </div>
@@ -363,7 +370,7 @@ export function ProjectRunSettings({
                 value={draft.mergeCheckCommand}
                 placeholder={RUN_MERGE_CHECK_PLACEHOLDER}
                 aria-label={RUN_MERGE_CHECK}
-                status={missingCheck ? 'warning' : undefined}
+                warning={missingCheck}
                 onChange={(event) => set({ mergeCheckCommand: event.target.value })}
               />
               <div className="project-integration-setting-hint">{RUN_MERGE_CHECK_HINT}</div>
@@ -375,14 +382,14 @@ export function ProjectRunSettings({
             <div className="project-integration-setting-label">{RUN_ESCALATE_AFTER}</div>
             <div>
               <Select
-                value={draft.escalationSeconds}
+                value={String(draft.escalationSeconds)}
                 style={{ width: 140 }}
                 aria-label={RUN_ESCALATE_AFTER}
-                onChange={(escalationSeconds) => set({ escalationSeconds })}
+                onValueChange={(seconds) => { if (seconds !== null) set({ escalationSeconds: Number(seconds) }); }}
                 options={(ESCALATION_CHOICES.some((choice) => choice.seconds === draft.escalationSeconds)
                   ? ESCALATION_CHOICES
                   : [...ESCALATION_CHOICES, { seconds: draft.escalationSeconds, label: escalationLabel(draft.escalationSeconds) }]
-                ).map((choice) => ({ value: choice.seconds, label: choice.label }))}
+                ).map((choice) => ({ value: String(choice.seconds), label: choice.label }))}
               />
               <div className="project-integration-setting-hint">{RUN_ESCALATE_HINT}</div>
             </div>
@@ -392,7 +399,7 @@ export function ProjectRunSettings({
 
       <div className="project-integration-setting-actions">
         <Button
-          type="primary"
+          variant="primary"
           size="small"
           disabled={!dirty || !complete}
           loading={save.isPending}
@@ -421,8 +428,7 @@ export function ProjectRunSettings({
         <Alert
           className="project-run-settings-error"
           type="error"
-          showIcon
-          message={RUN_NOT_SAVED}
+          title={RUN_NOT_SAVED}
           description={save.error.message}
         />
       ) : null}
@@ -430,8 +436,7 @@ export function ProjectRunSettings({
         <Alert
           className="project-run-settings-error"
           type="error"
-          showIcon
-          message={move.variables === 'resume' ? RUN_NOT_RESUMED : RUN_NOT_PAUSED}
+          title={move.variables === 'resume' ? RUN_NOT_RESUMED : RUN_NOT_PAUSED}
           description={move.error.message}
         />
       ) : null}

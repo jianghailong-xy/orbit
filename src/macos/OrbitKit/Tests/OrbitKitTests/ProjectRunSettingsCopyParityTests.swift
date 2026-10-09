@@ -153,12 +153,12 @@ final class ProjectRunSettingsCopyParityTests: XCTestCase {
         assertDeclares(web, "RUN_NOT_RESUMED", RunSettings.notResumed)
 
         let block = try flat(Self.block)
-        assertSays(block, "message=\"\(RunSettings.notLoaded)\"", in: Self.block)
+        assertSays(block, "title=\"\(RunSettings.notLoaded)\"", in: Self.block)
         assertSays(block, "{START_HOW_IT_RUNS}</span>", in: Self.block)
         assertSays(block, "{RUN_APPLIES_FROM_NEXT_TASK}</span>", in: Self.block)
         assertSays(block, "{paused ? RUN_RESUME : RUN_PAUSE}", in: Self.block)
-        assertSays(block, "message={move.variables === 'resume' ? RUN_NOT_RESUMED : RUN_NOT_PAUSED}", in: Self.block)
-        assertSays(block, "message={RUN_NOT_SAVED}", in: Self.block)
+        assertSays(block, "title={move.variables === 'resume' ? RUN_NOT_RESUMED : RUN_NOT_PAUSED}", in: Self.block)
+        assertSays(block, "title={RUN_NOT_SAVED}", in: Self.block)
         // The Automatic sentence follows the line — the one chosen, or a project branch while none is.
         assertSays(block, "{runAutomaticHint(draft.line ?? 'PROJECT_BRANCH')}", in: Self.block)
     }

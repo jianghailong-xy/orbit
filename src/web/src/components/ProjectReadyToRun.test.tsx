@@ -183,10 +183,10 @@ describe('ProjectReadyToRun', () => {
     expect(summary?.title).toBe('7 ready · sorted by work unblocked');
 
     const headingRule =
-      styles.match(/\.project-ready-heading\.ant-typography\s*\{([^}]*)\}/)?.[1] ?? '';
+      styles.match(/\.project-ready-heading\.orbit-typography\s*\{([^}]*)\}/)?.[1] ?? '';
     const labelRule = styles.match(/\.project-ready-heading-label\s*\{([^}]*)\}/)?.[1] ?? '';
     const summaryRule =
-      styles.match(/\.project-ready-summary\.ant-typography\s*\{([^}]*)\}/)?.[1] ?? '';
+      styles.match(/\.project-ready-summary\.orbit-typography\s*\{([^}]*)\}/)?.[1] ?? '';
     expect(headingRule).toContain('display: flex');
     expect(headingRule).toContain('align-items: baseline');
     expect(headingRule).toContain('min-width: 0');
@@ -324,8 +324,7 @@ describe('ProjectReadyToRun', () => {
     await click(button!);
     await tick();
 
-    // AntD replaces the button node when its loading icon mounts, so assert against the live node
-    // rather than the pre-click reference that may now be detached from the document.
+    // Assert against the live node rather than the pre-click reference: a re-render may replace it.
     const startingButton = container.querySelector<HTMLButtonElement>(
       '[aria-label="Run Backend: blocking-root endpoint"]',
     );
@@ -446,10 +445,14 @@ describe('ProjectReadyToRun', () => {
       'Other automatic or scheduled work in the list can also dispatch once resumed.',
     );
 
-    const confirm = document.body.querySelector<HTMLButtonElement>(
-      '.ant-popconfirm .ant-btn-primary',
+    // The question's own confirm, by its name inside the question (the row's press has the same words).
+    const question = [...document.body.querySelectorAll<HTMLElement>('[role="dialog"]')].find((dialog) =>
+      dialog.textContent?.includes('Resume “FineWeb downloads”?'),
     );
-    expect(confirm).not.toBeNull();
+    const confirm = [...(question?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+      (button) => button.textContent?.trim() === 'Resume list',
+    );
+    expect(confirm).toBeDefined();
     await click(confirm!);
     await tick();
     await tick();
@@ -531,7 +534,7 @@ describe('ProjectReadyToRun', () => {
   it('renders loading and isolated read-error states', async () => {
     apiMock.mockReturnValue(new Promise(() => {}));
     await mount(<ProjectReadyToRun projectId="p1" />);
-    expect(container.querySelector('.ant-spin')).not.toBeNull();
+    expect(container.querySelector('[role="status"][aria-label="Loading"]')).not.toBeNull();
     expect(container.textContent).not.toContain('No tasks are ready, running');
 
     await act(async () => root.unmount());
