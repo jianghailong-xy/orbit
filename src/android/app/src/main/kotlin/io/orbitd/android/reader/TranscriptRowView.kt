@@ -34,7 +34,8 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 
 @Composable
-internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, live: Transcript?, open: (String) -> Unit, highlighted: Boolean = false) {
+internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, live: Transcript?, open: (String) -> Unit, highlighted: Boolean = false,
+    detailOnly: Boolean = false) {
     val event = row.event
     val clipboard = LocalClipboardManager.current
     var expanded by rememberSaveable(row.key) { mutableStateOf(false) }
@@ -79,32 +80,66 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
     val bg = when { highlighted -> MaterialTheme.colorScheme.secondaryContainer
         event.type == "user" -> MaterialTheme.colorScheme.surfaceVariant
         else -> MaterialTheme.colorScheme.surface }
+    // The runtime's calls whose work outlives them: a sub-agent (Agent; Task before 2.x) and a Workflow.
+    val taskKind = (shown.fields.string("name") ?: shown.fields.string("toolName")).takeIf { event.type == "tool_use" && it in setOf("Agent", "Task", "Workflow") }
+    val activity = LocalTaskActivity.current
+    val progress = if (taskKind != null) activity?.progress(event.toolId()) else null
+    val resultText = result?.let { contentText(it.fields["content"]) ?: it.fields.string("result") }
     Column(Modifier.fillMaxWidth().background(bg).padding(10.dp).testTag(row.key), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(title, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium)
+        if (!detailOnly) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text(title, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.labelMedium)
+            // A workflow's agents done out of all, an agent's tool calls.
+            progress?.let(TaskProgressCopy::badge)?.let { badge -> Text(badge, Modifier.padding(start = 6.dp)
+                .background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 5.dp, vertical = 1.dp),
+                fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            Spacer(Modifier.weight(1f))
             TextButton(enabled = !loading, onClick = { loadFull(copy = true) }) { Text("Copy message") }
         }
         if (tool) {
             val isError = result?.fields?.string("isError") == "true" || result?.fields?.string("is_error") == "true"
             val liveOutput = live?.toolOutputs?.get(event.toolId())?.string("content")
-            val progress = live?.taskProgress?.get(event.toolId())
-            Text(when { isError -> "Failed"; result != null || event.type == "tool_result" -> "Complete"; else -> "Awaiting result" },
-                color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-            TextButton(onClick = { expanded = !expanded; if (expanded && (shown.truncated || result?.truncated == true)) loadFull() }) {
-                Text(if (expanded) "Hide input and output" else "Show input and output")
+            // The call returned the moment its work started, so its own "Complete" would sit on work just begun.
+            val taskRunning = taskKind != null && activity?.isRunning(event.toolId()) == true
+            if (taskKind == "Workflow") TaskProgressCopy.workflowTitle(shown.fields["input"], resultText, progress)?.let {
+                Text(it, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
-            progress?.let { Text(contentText(it["progress"]) ?: it.toString(), style = MaterialTheme.typography.bodySmall) }
-            if (expanded) {
-                shown.fields["input"]?.let { input -> Text("Input", style = MaterialTheme.typography.labelMedium); CodeText(input.toString(), "json") }
-                val output = contentText((result ?: shown).fields["content"]) ?: (result ?: shown).fields.string("result") ?: liveOutput
+            if (!detailOnly) {
+                Text(when { isError -> "Failed"; taskRunning -> "Running"; result != null || event.type == "tool_result" -> "Complete"; else -> "Awaiting result" },
+                    color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = { expanded = !expanded; if (expanded && (shown.truncated || result?.truncated == true)) loadFull() }) {
+                    Text(if (expanded) "Hide input and output" else "Show input and output")
+                }
+                if (taskRunning) progress?.let(TaskProgressCopy::trayLine)?.let { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            }
+            if (expanded || detailOnly) {
+                // A workflow opens to its progress, its script folded under it; a sub-agent's totals close its transcript.
+                if (taskKind == "Workflow" && progress != null) TaskProgressView(progress, row) { card ->
+                    TranscriptRowView(card, model, live, open, detailOnly = true)
+                }
+                val script = ((shown.fields["input"] as? JsonObject)?.get("script") as? JsonPrimitive)?.contentOrNull
+                if (taskKind == "Workflow" && script != null) {
+                    var scriptOpen by rememberSaveable(row.key) { mutableStateOf(false) }
+                    TextButton(onClick = { scriptOpen = !scriptOpen }) { Text((if (scriptOpen) "▾ " else "▸ ") + "Workflow script") }
+                    if (scriptOpen) CodeText(script, "js")
+                } else shown.fields["input"]?.let { input -> Text("Input", style = MaterialTheme.typography.labelMedium); CodeText(input.toString(), "json") }
+                // Workflow progress rows open these same agents; the rest stay ordinary nested records.
+                val shownAgents = progress?.agents.orEmpty().mapNotNull { it.transcriptKey }.toSet()
+                val nested = row.children.filter { !(it.event.type == "tool_use" && it.event.toolId() in shownAgents) }
+                if (taskKind != null && taskKind != "Workflow" && progress != null) TaskProgressView(progress)
+                // A launch receipt says only that the work started: hidden once the progress speaks for the work,
+                // and always for an agent's ack. A workflow before any progress keeps it.
+                val receipt = !isError && resultText != null && (if (taskKind == "Workflow") BackgroundReceipt.workflow(resultText) != null
+                    else taskKind != null && BackgroundReceipt.agentId(resultText) != null)
+                val output = (if (receipt && (progress != null || taskKind != "Workflow")) null else resultText)
+                    ?: (if (result == null) contentText(shown.fields["content"]) ?: shown.fields.string("result") ?: liveOutput else null)
                 output?.let { Text("Output", style = MaterialTheme.typography.labelMedium); CodeText(it) }
                 contentImages((result ?: shown).fields["content"]).forEach { TranscriptImage(it, "Tool result image", open) }
                 if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (error) TextButton(onClick = { loadFull() }) { Text("Couldn't load full output · Retry") }
-                if (row.children.isNotEmpty()) {
-                    Text("${row.children.size} subagent records", style = MaterialTheme.typography.labelMedium)
-                    row.children.take(4).forEach { child -> TranscriptRowView(child, model, live, open) }
-                    if (row.children.size > 4) TextButton(onClick = { childrenOpen = true }) { Text("Open subagent transcript") }
+                if (nested.isNotEmpty()) {
+                    Text("${nested.size} subagent records", style = MaterialTheme.typography.labelMedium)
+                    nested.take(4).forEach { child -> TranscriptRowView(child, model, live, open) }
+                    if (nested.size > 4) TextButton(onClick = { childrenOpen = true }) { Text("Open subagent transcript") }
                 }
             } else liveOutput?.let { Text(it.takeLast(240), maxLines = 3, style = MaterialTheme.typography.bodySmall) }
         } else if (event.type in setOf("error", "notice", "auto_retry")) {
@@ -136,7 +171,9 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
     if (childrenOpen) Dialog({ childrenOpen = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize().safeDrawingPadding()) { Column {
             TextButton(onClick = { childrenOpen = false }) { Text("Close subagent transcript") }
-            LazyColumn { items(row.children, key = { it.key }) { TranscriptRowView(it, model, live, open) } }
+            val shownAgents = progress?.agents.orEmpty().mapNotNull { it.transcriptKey }.toSet()
+            LazyColumn { items(row.children.filter { !(it.event.type == "tool_use" && it.event.toolId() in shownAgents) }, key = { it.key }) {
+                TranscriptRowView(it, model, live, open) } }
         } }
     }
 }

@@ -119,7 +119,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             positioning = false
         }
     }
-    CompositionLocalProvider(LocalReaderResources provides resources) {
+    // Background agents' and workflows' progress, as their cards and the background list read it.
+    val background = state.session?.snapshot?.background
+    val taskActivity = remember(transcript?.taskProgress, state.window.events, background) {
+        TaskActivity.of(transcript?.taskProgress, state.window.events, background.orEmpty())
+    }
+    CompositionLocalProvider(LocalReaderResources provides resources, LocalTaskActivity provides taskActivity) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val otherInputHasKeyboard = WindowInsets.ime.getBottom(LocalDensity.current) > 0 && !composerFocused
         val composerHeight = if (otherInputHasKeyboard) 0.dp else if (maxHeight < 320.dp) maxHeight else maxHeight * 0.65f
