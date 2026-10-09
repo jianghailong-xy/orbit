@@ -23,7 +23,9 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
@@ -254,6 +256,7 @@ private sealed interface ProjectDialog {
     data object Share : ProjectDialog
     data object Done : ProjectDialog
     data object OpenItems : ProjectDialog
+    data object LandingJobs : ProjectDialog
 }
 
 @Composable
@@ -439,7 +442,7 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             }
         }) }
         openItemsAttention(state, doc, enabled, openSheet = { dialog = ProjectDialog.OpenItems }, startOwn = { dialog = ProjectDialog.Start })
-        overviewSection(state, doc, now, openTask)
+        overviewSection(state, doc, now, openTask) { dialog = ProjectDialog.LandingJobs }
         coordinatorSection(state, doc, now, enabled, openCoordinator = { openCoordinator() }, replace = { finished ->
             if (finished) replaceCoordinator() else dialog = ProjectDialog.Replace })
         if (started != false) item(key = "runs") {
@@ -542,6 +545,13 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
         ProjectDialog.Done -> ProjectDoneSheet(api, id, state, now, enabled, close = { dialog = null }) { body ->
             attempt("${ProjectDone.notRecorded} — ") { api.done(id, body) }
         }
+        // The jobs the landing row counts, read off the page's own integration read, which its polls keep current. Retry answers the
+        // line read again, which the list redraws from at once; then the page reads everything again (iOS `retryIntegrationJob`).
+        ProjectDialog.LandingJobs -> LandingJobsSheet(state.integration?.let { ProjectPage.landingJobLines(it, now, state.integrationReadAt, state.integrationReadFailed) }.orEmpty(),
+            retry = { jobId ->
+                attempt("") { api.retryJob(id, jobId)?.let { view -> state.integration = view; state.integrationReadAt = Instant.now(); state.integrationReadFailed = false } }
+                    ?.let { "${ProjectPage.landingRetryFailed} — ${it.trimEnd('.')}." }
+            }, openTask = { taskId -> dialog = null; openTask(taskId) }, close = { dialog = null })
         ProjectDialog.OpenItems -> OpenItemsSheet(state, doc, now, enabled, startOwn = { dialog = ProjectDialog.Start }, recordDone = { dialog = ProjectDialog.Done },
             // Review on the coordinator's request to start: into its conversation, onto the start card.
             reviewStart = { row -> dialog = null; openCoordinator(row.text("itemId")?.let { "start:$it" }) }, perform = perform,
@@ -747,7 +757,7 @@ private fun OpenItemRow(row: JsonObject, now: Instant, enabled: Boolean, perform
     HorizontalDivider()
 }
 
-private fun LazyListScope.overviewSection(state: ProjectPageState, doc: JsonObject, now: Instant, openTask: (String) -> Unit) {
+private fun LazyListScope.overviewSection(state: ProjectPageState, doc: JsonObject, now: Instant, openTask: (String) -> Unit, openJobs: () -> Unit) {
     val panorama = state.panorama ?: return
     val buckets = panorama.obj("buckets") ?: JsonObject(emptyMap())
     val status = ProjectDoc.status(doc)
@@ -759,7 +769,9 @@ private fun LazyListScope.overviewSection(state: ProjectPageState, doc: JsonObje
     item(key = "overview") {
         SectionHead("Work overview", panorama.obj("shape")?.let(ProjectPage::overviewSubtitle))
         Column(Modifier.testTag("project-overview"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            state.integration?.let { view -> ProjectPage.landingLine(view, now, state.integrationReadAt, state.integrationReadFailed)?.let { LandingRow(it) } }
+            // On a server that lists its jobs, a press on the row opens them; an older server's row stays a row.
+            state.integration?.let { view -> ProjectPage.landingLine(view, now, state.integrationReadAt, state.integrationReadFailed)?.let {
+                LandingRow(it, if (ProjectPage.inFlightJobs(view) != null) openJobs else null) } }
             cells.chunked(2).forEach { pair -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 pair.forEach { cell -> Column(Modifier.weight(1f).testTag("overview:${cell.key}")) {
                     // The lane's shape carries its colour; the label stays the page's ink (`overviewCell`).
@@ -791,21 +803,89 @@ private fun LazyListScope.overviewSection(state: ProjectPageState, doc: JsonObje
     }
 }
 
-/** The landing in flight (ProjectLandingRow.swift): what the platform is doing while the counts stand still. */
+/** The landing in flight (ProjectLandingRow.swift): what the platform is doing while the counts stand still — and, on a server that
+ * lists its jobs, a press that opens them. */
 @Composable
-private fun LandingRow(line: LandingLine) {
-    Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)).padding(10.dp).testTag("landing-row"),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (line.running) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp) else Text("◌", color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun LandingRow(line: LandingLine, openJobs: (() -> Unit)?) {
+    Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+        .then(if (openJobs != null) Modifier.clickable(role = Role.Button, onClick = openJobs) else Modifier).padding(10.dp).testTag("landing-row"),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        LandingLineView(line, Modifier.weight(1f))
+        if (openJobs != null) Text("›", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** One landing line: the ring (spinning while it runs), what is landing and how far it got, and its clock. A job the server judged
+ * timed out is in the warning ink with a triangle where the ring was: nothing moves for a runner that stopped reporting. */
+@Composable
+private fun LandingLineView(line: LandingLine, modifier: Modifier = Modifier) {
+    val warning = LocalOrbitColors.current.needsYou
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        when {
+            line.timedOut -> Icon(painterResource(R.drawable.ic_warning), null, Modifier.size(16.dp).testTag("landing-timed-out"), tint = warning)
+            line.running -> CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+            else -> Text("◌", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         Column(Modifier.weight(1f)) {
             Text(listOfNotNull(line.word, line.what).joinToString(" · "), fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                color = if (line.running) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                color = if (line.timedOut) warning else if (line.running) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
             Text(listOfNotNull(line.state, line.updated).joinToString(" · "), style = MaterialTheme.typography.labelMedium,
-                color = if (line.running) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                color = if (line.timedOut) warning else if (line.running) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(line.clockLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(line.clock, style = MaterialTheme.typography.labelLarge)
+            Text(line.clock, style = MaterialTheme.typography.labelLarge, color = if (line.timedOut) warning else Color.Unspecified)
+        }
+    }
+}
+
+/** "2 jobs in flight" — what pressing the landing row opens (iOS `ProjectLandingJobsSheet`): every job the row counts, one row each,
+ * drawn as the landing row itself with its task's title. A task's row opens that task; a job the server says can be retried offers
+ * Retry, and a Retry that did not go through says why under its row. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LandingJobsSheet(lines: List<LandingJobLine>, retry: suspend (String) -> String?, openTask: (String) -> Unit, close: () -> Unit) {
+    // The jobs a Retry is on its way for take no second press; why one did not go through stays under its row.
+    var retrying by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var failures by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    val scope = rememberCoroutineScope()
+    ModalBottomSheet(onDismissRequest = close, modifier = Modifier.testTag("landing-jobs-sheet")) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 24.dp)) {
+            Box(Modifier.fillMaxWidth()) {
+                Text(ProjectPage.landingJobsTitle(lines.size), Modifier.align(Alignment.Center).semantics { heading() }.testTag("landing-jobs-title"),
+                    style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                IconButton(onClick = close, modifier = Modifier.align(Alignment.CenterEnd).testTag("landing-jobs-close")) {
+                    Icon(painterResource(R.drawable.ic_close), "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Column(Modifier.padding(top = 8.dp).fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))) {
+                lines.forEachIndexed { index, row ->
+                    if (index > 0) HorizontalDivider(Modifier.padding(start = 38.dp))
+                    Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp).testTag("landing-job:${row.jobId}"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // A job with no task keeps the chevron's room, so every row's clock lines up.
+                        Row(Modifier.fillMaxWidth().then(if (row.taskId != null) Modifier.clickable(role = Role.Button) { openTask(row.taskId) } else Modifier),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                LandingLineView(row.line)
+                                row.detail?.let { Text(it, Modifier.testTag("landing-job:${row.jobId}:detail"), style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            }
+                            Text("›", Modifier.alpha(if (row.taskId != null) 1f else 0f).clearAndSetSemantics { }, fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        if (row.retryable) OutlinedButton(onClick = {
+                            if (row.jobId !in retrying) {
+                                retrying = retrying + row.jobId; failures = failures - row.jobId
+                                scope.launch {
+                                    try { retry(row.jobId)?.let { failures = failures + (row.jobId to it) } } finally { retrying = retrying - row.jobId }
+                                }
+                            }
+                        }, enabled = row.jobId !in retrying, modifier = Modifier.testTag("landing-job:${row.jobId}:retry")) { Text(ProjectPage.landingRetry) }
+                        failures[row.jobId]?.let { Text(it, Modifier.testTag("landing-job:${row.jobId}:failure"), style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error) }
+                    }
+                }
+            }
         }
     }
 }

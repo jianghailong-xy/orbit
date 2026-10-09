@@ -98,6 +98,150 @@ class ProjectPageTest {
         assertEquals(listOf("1m 20s", "0m 40s", "0m 0s", "0m 59s", "60m 0s", "0m 0s"), listOf(80.0, 40.0, 0.0, 59.0, 3600.0, -5.0).map(ProjectPage::landingClock))
     }
 
+    // MARK: the jobs in flight (iOS 3a5c576fc, ProjectPageTests; docs/mocks/landing-jobs-sheet)
+
+    /** One `inFlightJobs` element, its instants counted in seconds before `now`. */
+    private fun job(id: String, kind: String = "LAND_TASK", state: String = "RUNNING", phase: String? = "FETCH", taskId: String? = "t-c5",
+        title: String? = "C5 · 托管 runner", generation: Int = 1, started: Long = 80, queued: Long = 95, heartbeat: Long? = 20,
+        runner: String? = "workstation-gpu", retriedBy: String? = null, timedOut: Boolean = false, limit: Int? = 600, retryable: Boolean = false) = buildJsonObject {
+        put("jobId", id); put("kind", kind); put("state", state); put("phase", phase); put("taskId", taskId); put("taskTitle", title)
+        put("generation", generation); put("startedAt", iso(started)); put("queuedAt", iso(queued)); put("heartbeatAt", heartbeat?.let(::iso))
+        put("runnerName", runner); put("retriedBy", retriedBy); put("timedOut", timedOut); put("limitSeconds", limit); put("retryable", retryable)
+    }
+    private fun integration(integrating: Int, queued: Int, inFlight: JsonObject, jobs: List<JsonObject>?) = buildJsonObject {
+        put("integratingCount", integrating); put("queuedCount", queued); put("inFlight", inFlight); jobs?.let { put("inFlightJobs", JsonArray(it)) }
+    }
+    private fun inFlight(title: String? = null, state: String = "RUNNING", started: Long, kind: String? = null, phase: String? = null, heartbeat: Long? = null) =
+        buildJsonObject {
+            put("taskTitle", title); put("state", state); put("startedAt", iso(started)); put("kind", kind); put("phase", phase); put("heartbeatAt", heartbeat?.let(::iso))
+        }
+    /** The 21:57 screen: a landing whose runner took it 110 minutes ago and has said nothing since, and a merge into main queued behind it. */
+    private fun stuckLanding() = integration(1, 1, inFlight("C5 · 托管 runner", started = 6_630, kind = "LAND_TASK", phase = "FETCH", heartbeat = 6_620), listOf(
+        job("j-c5", started = 6_630, queued = 6_640, heartbeat = 6_620, timedOut = true, retryable = true),
+        job("j-merge", kind = "LAND_PROMOTION", state = "QUEUED", phase = null, taskId = null, title = null, started = 2_468, queued = 2_468, heartbeat = null,
+            runner = null, limit = null)))
+
+    @Test fun theHelpersSayTheCountTheLimitTheTitleAndTheClockTime() {
+        assertEquals("2 jobs", ProjectPage.landingJobsCount(2, 0)); assertEquals("2 jobs · 1 timed out", ProjectPage.landingJobsCount(2, 1))
+        assertEquals("limit 10m", ProjectPage.landingLimit(600)); assertEquals("limit 75m", ProjectPage.landingLimit(4_500))
+        // Rounded as `Math.round` rounds: half a minute goes up.
+        assertEquals("limit 11m", ProjectPage.landingLimit(630)); assertEquals("limit 10m", ProjectPage.landingLimit(629))
+        assertEquals("1 job in flight", ProjectPage.landingJobsTitle(1)); assertEquals("2 jobs in flight", ProjectPage.landingJobsTitle(2))
+        assertEquals("0 jobs in flight", ProjectPage.landingJobsTitle(0))
+        val claimed = Instant.parse("2026-10-07T12:07:30.000Z")
+        assertEquals("12:07", ProjectPage.landingClockTime(claimed, ZoneOffset.UTC)); assertEquals("20:07", ProjectPage.landingClockTime(claimed, ZoneOffset.ofHours(8)))
+        assertEquals("08:07", ProjectPage.landingClockTime(claimed, ZoneOffset.ofHours(-4)))
+        assertEquals("22:15", ProjectPage.landingClockTime(claimed.plusSeconds(36_480), ZoneOffset.UTC))
+        assertEquals("00:12", ProjectPage.landingClockTime(claimed.plusSeconds(43_500), ZoneOffset.UTC))
+    }
+
+    /** On a server that lists its jobs, the count says how many timed out, and a lead the server judged timed out says so. */
+    @Test fun theLandingLineSaysTheLeadTimedOutAndCountsTheTimedOutJobs() {
+        assertEquals(LandingLine("Landing", "2 jobs · 1 timed out", false, "Timed out", "110m", "No report for", "limit 10m", timedOut = true),
+            ProjectPage.landingLine(stuckLanding(), now, now, false))
+        // One job: the name slot is its task, as ever.
+        val one = integration(1, 0, inFlight("C5", started = 6_630, kind = "LAND_TASK", phase = "CHECK"),
+            listOf(job("j", phase = "CHECK", started = 6_630, heartbeat = null, timedOut = true, limit = 4_200)))
+        val line = ProjectPage.landingLine(one, now, now, false)!!
+        assertEquals("C5", line.what); assertEquals("no report since the claim, when the runner never made one", "110m", line.clock)
+        assertEquals("limit 70m", line.updated)
+        // Jobs in flight that did not time out: the count alone.
+        val running = integration(1, 1, inFlight("C5", started = 80, kind = "LAND_TASK", phase = "FETCH", heartbeat = 20),
+            listOf(job("j1"), job("j2", state = "QUEUED", phase = null, heartbeat = null, runner = null)))
+        assertEquals(LandingLine("Landing", "2 jobs", true, "fetching", "1m 20s", "Elapsed", "Updated just now"), ProjectPage.landingLine(running, now, now, false))
+    }
+
+    /** "Update unavailable" is this app unable to read the server, and it outranks what the last read said — a timed-out lead included. */
+    @Test fun theLandingLineCannotReadTheServerEvenWhenTheLeadTimedOut() {
+        for ((updatedAt, failed) in listOf(now to true, now.minusSeconds(91) to false)) {
+            val line = ProjectPage.landingLine(stuckLanding(), now, updatedAt, failed)!!
+            assertEquals("Update unavailable", line.state); assertFalse(line.running); assertFalse(line.timedOut)
+            assertEquals("2 jobs · 1 timed out", line.what); assertEquals("Elapsed", line.clockLabel)
+            // Frozen at the runner's last report, ten seconds after its claim.
+            assertEquals("0m 10s", line.clock); assertEquals("Updated 110m ago", line.updated)
+        }
+    }
+
+    /** A server that lists its jobs decides what timed out: an old heartbeat alone is no longer "Update unavailable". */
+    @Test fun aServerThatListsItsJobsIsNotSecondGuessedFromTheHeartbeat() {
+        val flight = inFlight("T", started = 720, kind = "LAND_TASK", phase = "CHECK", heartbeat = 660)
+        val listed = integration(1, 0, flight, listOf(job("j", phase = "CHECK", started = 720, heartbeat = 660, limit = 4_200)))
+        assertEquals(LandingLine("Landing", "T", true, "checking", "12m 0s", "Elapsed", "Updated 11m ago"), ProjectPage.landingLine(listed, now, now, false))
+        // An empty list is still a server that lists them; no list at all is an older server, whose row keeps the guess it always made.
+        assertEquals("checking", ProjectPage.landingLine(integration(1, 0, flight, emptyList()), now, now, false)?.state)
+        val older = ProjectPage.landingLine(integration(1, 0, flight, null), now, now, false)!!
+        assertEquals("Update unavailable", older.state); assertFalse(older.timedOut)
+        assertNull("an older server's absence is not none in flight", ProjectPage.inFlightJobs(integration(1, 0, flight, null)))
+    }
+
+    /** One line per job, in the server's order, each drawn as the row: its task in the name slot, a running job's phase and clock, a queued job's wait. */
+    @Test fun theJobLinesDrawEachJobAsTheRow() {
+        val view = integration(1, 2, inFlight(started = 80), listOf(job("j1"), job("j2", phase = "REBASE", started = 130, heartbeat = null),
+            // Re-queued after an earlier claim: the raw row still carries that claim's step and report, and neither is this wait's.
+            job("j3", state = "QUEUED", phase = "PUSH", started = 2_468, heartbeat = 3_000, runner = null, limit = null)))
+        val lines = ProjectPage.landingJobLines(view, now, now.minusSeconds(75), false)
+        assertEquals(listOf("j1", "j2", "j3"), lines.map { it.jobId })
+        assertEquals(LandingJobLine("j1", "t-c5", LandingLine("Landing", "C5 · 托管 runner", true, "fetching", "1m 20s", "Elapsed", "Updated just now"), null, false), lines[0])
+        // No report yet: how fresh the line is comes from the read, as the row's does.
+        assertEquals(LandingLine("Landing", "C5 · 托管 runner", true, "rebasing", "2m 10s", "Elapsed", "Updated 1m ago"), lines[1].line)
+        assertEquals(LandingLine("Landing", "C5 · 托管 runner", false, "queued", "41m 8s", "Queued for", "Updated 1m ago"), lines[2].line)
+        assertNull(lines[2].detail)
+        assertEquals("an older server lists nothing", emptyList<LandingJobLine>(), ProjectPage.landingJobLines(integration(1, 0, inFlight(started = 80), null), now, null, false))
+    }
+
+    /** A timed-out job says who took it and when, where it stopped, and whether a push may already have happened — and offers Retry
+     * when the server says it can be retried. */
+    @Test fun aTimedOutJobSaysWhereItsRunnerStoppedAndOffersRetry() {
+        val zone = ZoneOffset.ofHours(8)
+        val at = ProjectPage.landingClockTime(Instant.parse(iso(6_630)), zone)
+        val lines = ProjectPage.landingJobLines(stuckLanding(), now, now, false, zone)
+        assertEquals(listOf("j-c5", "j-merge"), lines.map { it.jobId })
+        assertEquals(LandingJobLine("j-c5", "t-c5", LandingLine("Landing", "C5 · 托管 runner", false, "Timed out", "110m", "No report for", "limit 10m", timedOut = true),
+            "Runner workstation-gpu took it at $at · stopped at fetching · no push recorded", true), lines[0])
+        // A promotion lands no single task: no title, nothing to open.
+        assertEquals(LandingJobLine("j-merge", null, LandingLine("Merge to main", null, false, "queued", "41m 8s", "Queued for", "Updated just now"), null, false), lines[1])
+        fun detail(phase: String?, runner: String? = "workstation-gpu") = ProjectPage.landingJobLines(integration(0, 0, inFlight(started = 6_630),
+            listOf(job("j", phase = phase, started = 6_630, heartbeat = 6_620, runner = runner, timedOut = true))), now, now, false, zone).first().detail
+        assertEquals("Runner workstation-gpu took it at $at · stopped at pushing · may have been pushed", detail("PUSH"))
+        assertEquals("Runner workstation-gpu took it at $at · stopped at verifying · may have been pushed", detail("VERIFY"))
+        assertEquals("Runner workstation-gpu took it at $at · stopped at merging · no push recorded", detail("MERGE"))
+        assertEquals("The runner took it at $at · stopped at running · no push recorded", detail(null, runner = null))
+        assertEquals("The runner took it at $at · stopped at fetching · no push recorded", detail("FETCH", runner = ""))
+        // Retry is the server's to offer: a timed-out job it will not take has none.
+        val refused = integration(0, 0, inFlight(started = 6_630), listOf(job("j", started = 6_630, heartbeat = 6_620, timedOut = true, retryable = false)))
+        assertFalse(ProjectPage.landingJobLines(refused, now, now, false).first().retryable)
+    }
+
+    /** The run a retry started says which generation it is, who asked, and when. */
+    @Test fun aRetriedJobSaysItsGenerationAndWhoAsked() {
+        val zone = ZoneOffset.UTC
+        val at = ProjectPage.landingClockTime(Instant.parse(iso(12)), zone)
+        val view = integration(0, 0, inFlight(started = 12), listOf(job("j2", generation = 2, started = 12, queued = 12, heartbeat = 2, retriedBy = "OWNER"),
+            job("j3", state = "QUEUED", phase = null, generation = 3, started = 12, queued = 12, heartbeat = null, runner = null, retriedBy = "COORDINATOR", limit = null)))
+        val lines = ProjectPage.landingJobLines(view, now, now, false, zone)
+        assertEquals(listOf("Generation 2 · retried by you at $at", "Generation 3 · retried by the coordinator at $at"), lines.map { it.detail })
+        assertEquals("fetching", lines[0].line.state); assertEquals("0m 12s", lines[0].line.clock)
+    }
+
+    /** While this app cannot read the server, every job says so — the timed-out one too — and its clock stops where the row's does. */
+    @Test fun theJobLinesCannotReadTheServerEither() {
+        val lines = ProjectPage.landingJobLines(stuckLanding(), now, now, true)
+        assertEquals(listOf("Update unavailable", "Update unavailable"), lines.map { it.line.state })
+        assertEquals(listOf(false, false), lines.map { it.line.timedOut }); assertEquals(listOf(false, false), lines.map { it.line.running })
+        assertEquals("0m 10s", lines[0].line.clock); assertEquals("Updated 110m ago", lines[0].line.updated)
+        assertTrue(lines[0].detail!!.endsWith("stopped at fetching · no push recorded")); assertTrue(lines[0].retryable)
+        assertEquals("Update unavailable", ProjectPage.landingJobLines(stuckLanding(), now, now.minusSeconds(91), false).first().line.state)
+    }
+
+    /** An element that leaves its optional facts out reads as their empty forms; one that is not an object is an older server's list. */
+    @Test fun aSparseJobReadsAsItsEmptyFormsAndAnUnreadableListAsNone() {
+        val sparse = integration(0, 1, inFlight(state = "QUEUED", started = 30), listOf(j("""{"jobId":"j","kind":"LAND_TASK","state":"QUEUED","startedAt":"s","queuedAt":"q"}""")))
+        val line = ProjectPage.landingJobLines(sparse, now, now, false).single()
+        assertEquals(LandingJobLine("j", null, LandingLine("Landing", null, false, "queued", "0m 0s", "Queued for", "Updated just now"), null, false), line)
+        assertNull(ProjectPage.inFlightJobs(j("""{"inFlightJobs":[1,2]}""")))
+        assertNull(ProjectPage.inFlightJobs(j("""{"inFlightJobs":"later"}""")))
+    }
+
     // MARK: criteria
 
     @Test fun criterionWorkSaysWhereMetWorkIsAndNamesWhatHoldsUnmetWork() {

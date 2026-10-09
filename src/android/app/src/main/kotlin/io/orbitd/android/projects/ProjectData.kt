@@ -56,6 +56,9 @@ class ProjectApi(private val auth: AuthSession, private val handle: SessionHandl
     suspend fun authorize(id: String, body: JsonObject) = send(body.text("expectedConfigRevision").orEmpty(), listOf("projects", id), HttpMethod.PATCH, body)
     suspend fun updateIntegration(id: String, body: JsonObject, revision: String) = send(revision, listOf("projects", id, "integration"), HttpMethod.PATCH, body)
     suspend fun pause(id: String, paused: Boolean, revision: String) = send(revision, listOf("projects", id, if (paused) "pause" else "resume"))
+    /** The owner's Retry on a landing job the integration read says can be retried: its silent generation ends and the next one is
+     * queued. Answers the integration view read again. */
+    suspend fun retryJob(id: String, jobId: String) = send("retry:$jobId", listOf("projects", id, "integration", "jobs", jobId, "retry")) as? JsonObject
     suspend fun start(id: String, body: JsonObject) = send(body.text("criteriaDigest").orEmpty(), listOf("projects", id, "start"), body = body)
     suspend fun delete(id: String) = send("delete", listOf("projects", id), HttpMethod.DELETE)
     suspend fun resumeFuse(id: String, episode: String) = send(episode, listOf("projects", id, "fuse", episode, "resume"))
