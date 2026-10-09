@@ -1,6 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { DownOutlined } from '@ant-design/icons';
-import { Button, Dropdown, Space } from 'antd';
 import {
   type CoordinatorFuseUsage,
   type CoordinatorWakeups,
@@ -8,6 +7,8 @@ import {
   SessionRunState,
 } from '@orbit/shared';
 import { CoordinatorProgressRows } from './ProjectProgressStatus';
+import { Button } from './ui/Button';
+import { Menu } from './ui/Menu';
 
 /**
  * A project's coordination session, drawn as the four states it can actually be in — and, inside
@@ -490,7 +491,7 @@ function NeverOpened({
                 <span style={{ fontSize: 12.5, color: 'var(--text-2)' }}>Opens in</span>
                 <NameChip name={landing.workspaceName as string} tone="neutral" />
               </span>
-              <Button type="link" size="small" style={{ padding: 0, height: 'auto' }} onClick={() => onAction?.('change-workspace')}>
+              <Button variant="link" size="small" style={{ padding: 0, height: 'auto' }} onClick={() => onAction?.('change-workspace')}>
                 Change
               </Button>
             </div>
@@ -506,11 +507,11 @@ function NeverOpened({
           // Not a disabled Start: the press would 400, and what clears that refusal is naming a
           // workspace, which is a thing this card can ask for. The name travels with the open,
           // so this button decides the landing and opens the conversation in one press.
-          <Button type="primary" block onClick={() => onAction?.('change-workspace')}>
+          <Button variant="primary" style={{ width: '100%' }} onClick={() => onAction?.('change-workspace')}>
             Choose a workspace…
           </Button>
         ) : (
-          <Button type="primary" block onClick={() => onAction?.('start')}>
+          <Button variant="primary" style={{ width: '100%' }} onClick={() => onAction?.('start')}>
             Start coordinator
           </Button>
         )}
@@ -626,36 +627,33 @@ function Live({
           completed on the way), so it sits behind the caret, where it is chosen rather than hit.
           The menu states the consequence, and the page asks again before ending a live one.
         */}
-        <Space.Compact block>
-          <Button type="primary" style={{ flex: 1 }} onClick={() => onAction?.('open')}>
+        <div className="project-coordinator-split">
+          <Button variant="primary" className="project-coordinator-lead" style={{ flex: 1 }} onClick={() => onAction?.('open')}>
             {finished || !needsReply ? 'Open coordinator' : 'Reply to coordinator'}
           </Button>
-          <Dropdown
-            trigger={['click']}
-            placement="bottomRight"
-            menu={{
-              style: { width: 330 },
-              items: [
-                {
-                  key: 'replace',
-                  label: (
-                    <div style={{ padding: '3px 0', maxWidth: 300 }}>
-                      <div style={{ fontSize: 13.5, fontWeight: 600 }}>Start a new coordinator</div>
-                      <div style={{ ...MUTED, whiteSpace: 'normal' }}>
-                        {finished
-                          ? 'Opens empty. This conversation stays completed and readable, and stops being the one this project is coordinated from.'
-                          : 'Completes this conversation first, then opens an empty one. Nothing is deleted — it stays readable.'}
-                      </div>
+          <Menu
+            align="end"
+            popupStyle={{ width: 330 }}
+            items={[
+              {
+                key: 'replace',
+                textValue: 'Start a new coordinator',
+                label: (
+                  <div style={{ padding: '3px 0', maxWidth: 300 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 600 }}>Start a new coordinator</div>
+                    <div style={{ ...MUTED, whiteSpace: 'normal' }}>
+                      {finished
+                        ? 'Opens empty. This conversation stays completed and readable, and stops being the one this project is coordinated from.'
+                        : 'Completes this conversation first, then opens an empty one. Nothing is deleted — it stays readable.'}
                     </div>
-                  ),
-                  onClick: () => onAction?.('replace'),
-                },
-              ],
-            }}
-          >
-            <Button type="primary" aria-label="More coordinator actions" icon={<DownOutlined />} />
-          </Dropdown>
-        </Space.Compact>
+                  </div>
+                ),
+                onSelect: () => onAction?.('replace'),
+              },
+            ]}
+            trigger={<Button variant="primary" className="project-coordinator-caret" aria-label="More coordinator actions" icon={<DownOutlined />} />}
+          />
+        </div>
       </div>
     </>
   );
@@ -695,7 +693,7 @@ function Trashed({
       ) : null}
 
       <div style={ACTIONS}>
-        <Button type="primary" style={{ flex: 1 }} onClick={() => onAction?.('start')}>
+        <Button variant="primary" style={{ flex: 1 }} onClick={() => onAction?.('start')}>
           Start a {nth(coordination.coordinatorGeneration, 2)} coordinator
         </Button>
         {restorable ? <Button onClick={() => onAction?.('restore-session')}>Restore</Button> : null}
@@ -731,7 +729,7 @@ function Unavailable({
 
       <div style={ACTIONS}>
         {fix ? (
-          <Button type="primary" size="small" onClick={() => onAction?.(fix.action)}>
+          <Button variant="primary" size="small" onClick={() => onAction?.(fix.action)}>
             {fix.label}
           </Button>
         ) : null}

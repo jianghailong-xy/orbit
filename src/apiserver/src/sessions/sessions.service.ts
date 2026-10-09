@@ -5,9 +5,11 @@ import {
   ForbiddenException,
   HttpException,
   HttpStatus,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   type ConversationTurn,
@@ -182,14 +184,16 @@ import {
 import {
   accountPoolRuntime,
   adminOnlyProviderRefusal,
+  builtinSessionEngine,
   execRuntime,
   isBuiltinProvider,
+  keyRowEngine,
   openCodeKeyRows,
   resolveProviderExec,
   runsOnOpenCode,
-  sessionExecRuntime,
   usableProviderScope,
 } from '../providers/custom-provider';
+import { recordedEngine, sessionEngine, type SessionEngineFacts } from '../providers/session-engine';
 import { ownsModel } from '../providers/preset-overlay';
 import { sessionHeldKey } from '../providers/held-key';
 import {
@@ -213,6 +217,13 @@ import {
 } from './transcript-around';
 import { EngineSignedOutConflict, engineSignInAction, signedOutEngineRefusal } from './engine-signin-preflight';
 import { assertManagedFirstSessionRuntime } from '../managed-runners/managed-runner-supply';
+import {
+  MANAGED_RUNNER_DEMAND,
+  NOT_MANAGED,
+  type ManagedDemandSource,
+  type ManagedRunnerDemand,
+  type ManagedRunnerDemandAnswer,
+} from '../managed-runners/managed-runner-demand';
 import { antigravityState, hasGeminiEnvKey } from '../common/antigravity-readiness';
 import { DSH_RUNNER_UPGRADE_ERROR, dshRuntimeUnavailable } from '../runner-api/runner-provider-support';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
@@ -614,6 +625,13 @@ interface ResolvedProviderSwitch {
   customRow: Awaited<ReturnType<Prisma.TransactionClient['modelProvider']['findFirst']>>;
   changed: boolean;
   keepsModel: boolean;
+  /** The engine the session runs on — before the switch and after it, since a switch moves the
+   *  credential and never the engine (Session.engine, or the old rules for a row without one). */
+  engine: AgentProvider;
+  /** Whether that engine is not recorded on the row yet, so the write that moves the credential has to
+   *  record it first: derived from the credential being left, it would otherwise be derived from the
+   *  one being moved to next time (docs/provider-engine-contract.md §1.1). */
+  recordsEngine: boolean;
 }
 
 /**
@@ -675,7 +693,23 @@ export class SessionsService {
     private readonly prisma: PrismaService,
     private readonly queue: QueueService,
     private readonly realtime: RealtimeService,
+    /**
+     * Demand for a managed runner (managed-runners/managed-runner-demand.ts): a session queued or
+     * revived for one wakes it. It answers `managed: false` without reading anything while the
+     * switch is off, and for every self-managed runner; absent in the specs that build this service
+     * by hand, which is the same.
+     */
+    @Optional() @Inject(MANAGED_RUNNER_DEMAND) private readonly managedDemand?: ManagedRunnerDemand,
   ) {}
+
+  /**
+   * Work for `runnerId` has just been recorded — a session or a turn queued — or is about to be, as
+   * a revive asks before the offline gate: a managed runner asleep, draining or waiting for capacity
+   * is asked to wake. Never throws.
+   */
+  private wakeManagedRunner(runnerId: string | null | undefined, source: ManagedDemandSource): Promise<ManagedRunnerDemandAnswer> {
+    return this.managedDemand ? this.managedDemand.requested(runnerId, source) : Promise.resolve(NOT_MANAGED);
+  }
 
   /**
    * Do a write UNDER the right to do it, in one transaction.
@@ -1259,6 +1293,10 @@ export class SessionsService {
         status: RunStatus.PENDING,
         provider,
         providerBuiltin,
+        // The engine it runs on for good (Session.engine): the runtime resolved above, which the
+        // claim, the reload, steer, move and meta all read from here on instead of deriving it
+        // from the credential again.
+        engine: runtime,
         // Pre-generate the Claude session id so the runner spawns with --session-id.
         // Codex/Kimi/OpenCode/Antigravity create and return their own thread id after process init.
         runtimeSessionId: runtime === AgentProvider.CLAUDE ? runtimeSessionId : null,
@@ -1353,6 +1391,8 @@ export class SessionsService {
     // reach the engine.
     if (attachmentsAlone) await this.seedOpeningTurn(session);
     this.queue.notifySessionQueued();
+    // A task run, a delegation or a message opening a session on a sleeping managed runner wakes it.
+    await this.wakeManagedRunner(session.assignedRunnerId, 'session');
     // Push the new session to the owner's control-plane stream (GET /api/events) so other
     // clients see it appear without polling.
     this.realtime.publishSessionCreated(session.id);
@@ -1514,6 +1554,8 @@ export class SessionsService {
             status: RunStatus.PENDING,
             provider: AgentProvider.CLAUDE,
             providerBuiltin: true,
+            // A Claude Code transcript is a Claude Code conversation.
+            engine: AgentProvider.CLAUDE,
             // The Claude session id is pre-generated FOR us, by claude, when the transcript was
             // recorded; the runner resumes it instead of minting one.
             runtimeSessionId: dto.claudeSessionId,
@@ -1544,6 +1586,7 @@ export class SessionsService {
       loggedRetry(this.logger, 'session.import'),
     );
     this.queue.notifySessionQueued();
+    await this.wakeManagedRunner(session.assignedRunnerId, 'session');
     this.realtime.publishSessionCreated(session.id);
     return withSessionState(session);
   }
@@ -4794,8 +4837,9 @@ export class SessionsService {
    * start failing in front of the user instead (docs/codex-turn-steer-contract.md §6.1).
    * Both answers must be yes, and either one being unknown means no.
    *
-   * The runtime is resolved with the same `execRuntime` dispatch uses, so a configured
-   * (BYOK) provider is judged by the built-in runtime it borrows rather than by its slug.
+   * The runtime is the session's own engine (sessionEngine, the column dispatch reads), so a
+   * configured (BYOK) session is judged by the CLI that runs it rather than by its slug — and an
+   * edit, a disabling or a deletion of its key cannot change the answer.
    *
    * The runner is judged by what it declared on its own last heartbeat. That snapshot can
    * only be stale in one direction that matters — a machine downgraded since it last spoke —
@@ -4805,12 +4849,7 @@ export class SessionsService {
    */
   private async runtimeTakesSteer(
     tx: Prisma.TransactionClient,
-    session: {
-      provider: string;
-      providerBuiltin: boolean;
-      ownerId: string;
-      assignedRunnerId: string | null;
-    },
+    session: SessionEngineFacts & { assignedRunnerId: string | null },
   ) {
     // A session with no runner assigned has nothing running to steer either — engineTurnInFlight
     // is asked first — so an absent runner only ever reads as "declared nothing", which withholds
@@ -4822,7 +4861,7 @@ export class SessionsService {
         })
       : null;
     return supportsTargetBoundCurrentWorkSteer(
-      await sessionExecRuntime(tx, session),
+      (await sessionEngine(tx, session)) ?? '',
       runner?.capabilities,
     );
   }
@@ -4836,12 +4875,7 @@ export class SessionsService {
   private async steerTargetIfLive(
     tx: Prisma.TransactionClient,
     sessionId: string,
-    session: {
-      provider: string;
-      providerBuiltin: boolean;
-      ownerId: string;
-      assignedRunnerId: string | null;
-    },
+    session: SessionEngineFacts & { assignedRunnerId: string | null },
   ): Promise<{ id: string } | null> {
     const live = await this.liveEngineTurn(tx, sessionId);
     if (!live || !(await this.runtimeTakesSteer(tx, session))) return null;
@@ -4853,12 +4887,7 @@ export class SessionsService {
    * capability gate; routing-v1 is required only for explicit, exact-target CURRENT_WORK. */
   private async runtimeTakesLegacySteer(
     tx: Prisma.TransactionClient,
-    session: {
-      provider: string;
-      providerBuiltin: boolean;
-      ownerId: string;
-      assignedRunnerId: string | null;
-    },
+    session: SessionEngineFacts & { assignedRunnerId: string | null },
   ): Promise<boolean> {
     const runner = session.assignedRunnerId
       ? await tx.runner.findUnique({
@@ -4866,7 +4895,7 @@ export class SessionsService {
           select: { capabilities: true },
         })
       : null;
-    return supportsMidTurnSteer(await sessionExecRuntime(tx, session), runner?.capabilities);
+    return supportsMidTurnSteer((await sessionEngine(tx, session)) ?? '', runner?.capabilities);
   }
 
   private async insertTurnLocked(
@@ -5137,6 +5166,7 @@ export class SessionsService {
     // turnComplete, and every one of those decisions is taken from the Session row read under the
     // lock inside the closure. A victim wrote no turn, so a re-run enqueues once — and the delivery
     // notice to the runner is outside the loop, after commit.
+    let turnRunnerId: string | null = null;
     const queued = await withTransactionRetry(this.prisma, async (tx) => {
       // THE RIGHT TO WRITE THIS TURN, first and held to commit. A delivery whose lease was taken
       // over while it was getting here must not enqueue the prompt anyway — the receipt would
@@ -5161,6 +5191,7 @@ export class SessionsService {
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('session not found');
       const session = await tx.session.findUniqueOrThrow({ where: { id } });
+      turnRunnerId = session.assignedRunnerId;
       // A committed operation owns its key even after its Session later ends or moves to Trash.
       // Check the durable receipt while holding the Session lock before any lifecycle, attachment
       // or budget decision. Hard purge remains a 404 because there is no owner-scoped Session row
@@ -5475,6 +5506,9 @@ export class SessionsService {
     }));
     if (queued.wakeQueue) this.queue.notifySessionQueued();
     if (queued.wakeInbox) this.realtime.notifyInbox(id);
+    // A message, a scheduled wakeup, a watch or a task's prompt that left the session waiting for its
+    // runner wakes a sleeping managed runner. A turn joining a running one needs no wake.
+    if (queued.wakeQueue) await this.wakeManagedRunner(turnRunnerId, 'turn');
     // No transcript event exists until the runner leases this turn. Tell every focused client to
     // refresh the durable queue now, so a message queued on web appears on iOS (and vice versa).
     if (!queued.idempotent) this.realtime.publishQueuedTurnsChanged(id);
@@ -7439,6 +7473,12 @@ export class SessionsService {
     ) {
       throw SessionsService.resumeBlocked(initialCapabilities.resumeBlockedReason);
     }
+    // Before the offline gate below: a managed runner that is asleep, draining, starting or waiting
+    // for capacity is asked to wake, and comes back by itself — so its revive is queued, the way a
+    // message to a parked session waits for its runner, instead of refused as offline.
+    const askedManagedRunner = initialCapabilities.resumeBlockedReason === 'RUNNER_OFFLINE';
+    const managedComingBack = askedManagedRunner
+      && (await this.wakeManagedRunner(session.assignedRunnerId, 'resume')).comingBack;
 
     // Re-check capability and revive under the same Session row lock used by complete/delete.
     // This closes the race where Trash could win after the fast read but before the turn insert.
@@ -7629,7 +7669,7 @@ export class SessionsService {
         throw SessionsService.resumeBlocked(capabilities.resumeBlockedReason);
       }
       if (existing) return { turn: existing, wasCompleted: false, wasRevived: false };
-      if (capabilities.resumeBlockedReason) {
+      if (capabilities.resumeBlockedReason && !(capabilities.resumeBlockedReason === 'RUNNER_OFFLINE' && managedComingBack)) {
         throw SessionsService.resumeBlocked(capabilities.resumeBlockedReason);
       }
       if (
@@ -7661,11 +7701,8 @@ export class SessionsService {
       // A revive keeps its runtime and durable id. Resolve that boundary and the still-unverified
       // Harness permission policy before accepting the next turn.
       const next = await this.resolveProviderSwitch(tx, current, dto.provider);
-      const resumeRuntime = execRuntime({
-        declaredProvider: next.provider,
-        declaredProviderBuiltin: next.providerBuiltin,
-        customRow: next.customRow,
-      });
+      // The engine it revives on is its own, whichever credential it now takes.
+      const resumeRuntime = next.engine;
       if (resumeRuntime === AgentProvider.DSH) {
         if (!current.assignedRunner?.capabilitiesReportedAt || !current.assignedRunner.capabilities?.includes('provider:dsh')) {
           throw new ConflictException(DSH_RUNNER_UPGRADE_ERROR);
@@ -7711,15 +7748,10 @@ export class SessionsService {
       // as a live switch does (updateConfig). The claim that picks the revive up carries the
       // conversation there.
       const accounts = await this.accountOnProviderSwitch(tx, id, next, dto.account);
+      // Normalized for the engine that will run it: a Codex, Kimi or Antigravity session on a key or a
+      // pool has that engine's levels, not the Claude ones its slug used to be read as.
       const normalizedEffort =
-        dto.effort !== undefined
-          ? normalizeEffortForProvider(
-              resumeRuntime === AgentProvider.DSH
-                ? resumeRuntime
-                : normalizeRuntimeProvider(next.provider, next.providerBuiltin),
-              dto.effort,
-            )
-          : undefined;
+        dto.effort !== undefined ? normalizeEffortForProvider(resumeRuntime, dto.effort) : undefined;
       // Fast mode re-applied on the way back up. No process to reload here — the row goes PENDING
       // and the claim builds one from it — so the only question is whether the value is true, and
       // the claim polices it against whatever model this revive resolves to.
@@ -7770,6 +7802,8 @@ export class SessionsService {
           ...(dto.permissionMode !== undefined ? { permissionMode: dto.permissionMode } : {}),
           ...(dto.effort !== undefined ? { effort: normalizedEffort } : {}),
           ...(normalizedFastMode !== undefined ? { fastMode: normalizedFastMode } : {}),
+          // Its engine recorded before its credential moves, so nothing derives it from the new one.
+          ...(next.recordsEngine ? { engine: next.engine } : {}),
           ...(next.changed
             ? { provider: next.provider, providerBuiltin: next.providerBuiltin }
             : {}),
@@ -7820,6 +7854,9 @@ export class SessionsService {
     if (revived.wasCompleted) this.realtime.publishSessionCreated(id);
     else if (revived.wasRevived) this.realtime.publishSessionUpdated(id);
     this.queue.notifySessionQueued();
+    // A revived run waits for its runner like any queued turn: a managed one not asked above — its
+    // heartbeat still looked fresh — is asked now.
+    if (revived.wasRevived && !askedManagedRunner) await this.wakeManagedRunner(session.assignedRunnerId, 'resume');
     return {
       turnId: revived.turn.id,
       seq: revived.turn.seq,
@@ -8031,6 +8068,7 @@ export class SessionsService {
       ownerId: string;
       provider: string;
       providerBuiltin: boolean;
+      engine: string | null;
       model: string | null;
     },
     requested: string | undefined,
@@ -8049,6 +8087,16 @@ export class SessionsService {
         (await adminOnlyProviderRefusal(tx, session.ownerId, declared)) ?? `provider not available: "${declared}"`,
       );
     }
+    // The engine it runs on: its own, else what its current credential ran it on — a key's row runtime
+    // whether or not the key is enabled now, a pool's engine. Never the Claude a disabled key used to be
+    // read as: that is what let a switch move a session onto another CLI.
+    const recorded = recordedEngine(session.engine);
+    const engine =
+      recorded ??
+      fromPool ??
+      (currentRow ? keyRowEngine(currentRow.runtime) : builtinSessionEngine(declared, session.providerBuiltin));
+    if (!engine) throw new BadRequestException(`provider runtime not available: "${currentRow?.runtime}"`);
+    const recordsEngine = !recorded;
     if (requested === undefined || requested === declared) {
       if (currentRow?.enabled === false) throw new BadRequestException('provider is disabled');
       return {
@@ -8057,6 +8105,8 @@ export class SessionsService {
         customRow: currentRow,
         changed: false,
         keepsModel: true,
+        engine,
+        recordsEngine,
       };
     }
     // Mirrors create(): membership of the enum, deliberately not isBuiltinProvider(), so a
@@ -8085,15 +8135,9 @@ export class SessionsService {
       );
     }
     if (poolRuntime) await this.assertUsablePool(session.ownerId, requested, tx);
-    // A session already on a pool has no row either, and runs on that pool's engine — a shared pool's
-    // on Codex, which the Claude a slug nothing holds falls back to would misread.
-    const from =
-      fromPool ??
-      execRuntime({
-        declaredProvider: declared,
-        declaredProviderBuiltin: session.providerBuiltin,
-        customRow: currentRow,
-      });
+    // The session keeps its engine (above); the target has to run on it. A pool has no row, and runs on
+    // its own engine — a shared pool's on Codex.
+    const from = engine;
     const to =
       poolRuntime ??
       execRuntime({
@@ -8112,6 +8156,8 @@ export class SessionsService {
       customRow: targetRow,
       changed: true,
       keepsModel: !targetRow || ownsModel(targetRow, session.model ?? ''),
+      engine,
+      recordsEngine,
     };
   }
 
@@ -8188,7 +8234,9 @@ export class SessionsService {
       const poolRuntime = isBuiltinProvider(next.provider, next.providerBuiltin) || next.customRow
         ? null
         : await accountPoolRuntime(tx, ownerId, next.provider);
+      // Resolved on the session's own engine: the switch moved the credential, not the CLI.
       const exec = resolveProviderExec({
+        engine: next.engine,
         declaredProvider: poolRuntime ?? next.provider,
         declaredProviderBuiltin: poolRuntime ? true : next.providerBuiltin,
         customRow: next.customRow,
@@ -8269,6 +8317,8 @@ export class SessionsService {
           permissionMode: normalizedPermissionMode,
           ...(dto.effort !== undefined ? { effort: normalizedEffort } : {}),
           ...(normalizedFastMode !== undefined ? { fastMode: normalizedFastMode } : {}),
+          // Its engine recorded before its credential moves, so nothing derives it from the new one.
+          ...(next.recordsEngine ? { engine: next.engine } : {}),
           ...(next.changed
             ? { provider: next.provider, providerBuiltin: next.providerBuiltin }
             : {}),
@@ -8828,6 +8878,7 @@ export class SessionsService {
     retryAt: true,
     provider: true,
     providerBuiltin: true,
+    engine: true,
     workspaceId: true,
     folderId: true,
     assignedRunnerId: true,
@@ -8883,7 +8934,8 @@ export class SessionsService {
           },
         })
       : 0;
-    const runtime = await sessionExecRuntime(db, session);
+    // The session's own engine, which a move never changes and its credential never decided.
+    const runtime = await sessionEngine(db, session);
     const verdict = sessionMoveVerdict({
       ...session,
       coordinatesProject: session.coordinatorForProject != null,

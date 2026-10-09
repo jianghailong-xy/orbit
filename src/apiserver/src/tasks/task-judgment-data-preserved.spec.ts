@@ -2165,7 +2165,30 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // only on a file row with a text — each added only when absent. No row is written, backfilled or deleted; no
       // other column, and no function, trigger, type or index, is created, replaced or dropped; `task`, `project`
       // and the six preserved objects are named nowhere.
-      '0412_wiki_stored_text_encoding'],
+      '0412_wiki_stored_text_encoding',
+      // Managed runner capacity, wake and sleep (0413): one new table, `managed_runner_capacity`,
+      // with its unique pool key and three CHECKs (totals and reserved figures never below zero, a
+      // named location); four nullable columns with no default on `managed_runner` (0399's table) and
+      // one nullable JSONB column with no default on `runner` — catalog-only. No existing column,
+      // constraint, index, function, trigger or type is altered or dropped; no `task`, `project` or
+      // `project_acceptance_*` object nor any of the six preserved triggers/functions is named, so
+      // it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: the manager writes
+      // the pool row on first use, and every stored mapping and runner reads NULL.
+      '0413_managed_runner_capacity',
+      // A session's engine, recorded (0414, docs/provider-engine-contract.md §1, §5, §7.1): one nullable TEXT
+      // with no default on `session` and one on `task` (`engine`), each held by a CHECK to the six engines,
+      // which every stored row satisfies because the column reads NULL in it; then a backfill that writes
+      // `engine` and nothing else, and only where it is NULL — two UPDATEs of `session`, and one of `task` over
+      // the rows with a provider pin. That `task` UPDATE fires no row trigger of `task`'s: each is `UPDATE OF`
+      // columns it does not write, the DONE fence's (`status`, `completion_fence_revision`) among them, so it
+      // is not another writer of the DONE fence. The three statement-level AFTER UPDATE triggers it does fire
+      // (`project_task_status_count_move`, `task_dispatch_epoch_update`, `task_list_task_count_relist`) act on
+      // a change of `status`, `run_at`, `project_id` or `list_id`, which no row of it has. On `session`: an
+      // immutability trigger for the column, an acquisition guard, an engine-from-task-pin insert trigger, and
+      // 0080's, 0372/0377's and 0377's runtime claim guards replaced by bodies that read the column first. No
+      // `project` or `project_acceptance_*` object, none of the six preserved triggers/functions and neither
+      // half of the 0177 pair is named, and no row is inserted or deleted.
+      '0414_session_engine'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

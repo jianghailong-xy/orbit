@@ -1,0 +1,158 @@
+Test Suite 'Selected tests' started at 2026-10-09 02:03:23.137
+Test Suite 'AcceptanceConfirmationCopyParityTests' started at 2026-10-09 02:03:23.138
+Test Suite 'AcceptanceConfirmationCopyParityTests' passed at 2026-10-09 02:03:23.361
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.223 (0.223) seconds
+Test Suite 'BackgroundJobsCopyParityTests' started at 2026-10-09 02:03:23.361
+Test Suite 'BackgroundJobsCopyParityTests' passed at 2026-10-09 02:03:23.459
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.098 (0.098) seconds
+Test Suite 'BackgroundWakeCopyParityTests' started at 2026-10-09 02:03:23.459
+Test Suite 'BackgroundWakeCopyParityTests' passed at 2026-10-09 02:03:23.676
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.217 (0.217) seconds
+Test Suite 'CodexSignInCopyParityTests' started at 2026-10-09 02:03:23.676
+Test Suite 'CodexSignInCopyParityTests' passed at 2026-10-09 02:03:23.936
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.259 (0.259) seconds
+Test Suite 'ComposerMenuCopyParityTests' started at 2026-10-09 02:03:23.936
+Test Suite 'ComposerMenuCopyParityTests' passed at 2026-10-09 02:03:24.222
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.287 (0.287) seconds
+Test Suite 'CreateCardCopyParityTests' started at 2026-10-09 02:03:24.222
+Test Suite 'CreateCardCopyParityTests' passed at 2026-10-09 02:03:24.242
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.019 (0.019) seconds
+Test Suite 'CriteriaChangeCardCopyParityTests' started at 2026-10-09 02:03:24.242
+Test Suite 'CriteriaChangeCardCopyParityTests' passed at 2026-10-09 02:03:24.249
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.008 (0.008) seconds
+Test Suite 'CriteriaDecisionCopyParityTests' started at 2026-10-09 02:03:24.249
+Test Suite 'CriteriaDecisionCopyParityTests' passed at 2026-10-09 02:03:24.363
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.113 (0.113) seconds
+Test Suite 'DeepSeekBalanceCopyParityTests' started at 2026-10-09 02:03:24.363
+Test Suite 'DeepSeekBalanceCopyParityTests' passed at 2026-10-09 02:03:24.819
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.456 (0.456) seconds
+Test Suite 'EvidenceDecisionCopyParityTests' started at 2026-10-09 02:03:24.819
+Test Suite 'EvidenceDecisionCopyParityTests' passed at 2026-10-09 02:03:24.843
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.024 (0.024) seconds
+Test Suite 'OpenItemDeliveryCopyParityTests' started at 2026-10-09 02:03:24.843
+Test Suite 'OpenItemDeliveryCopyParityTests' passed at 2026-10-09 02:03:25.010
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.168 (0.168) seconds
+Test Suite 'OrbitLinkCopyParityTests' started at 2026-10-09 02:03:25.010
+Test Suite 'OrbitLinkCopyParityTests' passed at 2026-10-09 02:03:25.018
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.008 (0.008) seconds
+Test Suite 'OwnerConfirmationCopyParityTests' started at 2026-10-09 02:03:25.018
+Test Suite 'OwnerConfirmationCopyParityTests' passed at 2026-10-09 02:03:25.173
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.155 (0.155) seconds
+Test Suite 'PoolAccessCopyParityTests' started at 2026-10-09 02:03:25.173
+Test Suite 'PoolAccessCopyParityTests' passed at 2026-10-09 02:03:25.537
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.364 (0.364) seconds
+Test Suite 'ProjectAttentionCopyParityTests' started at 2026-10-09 02:03:25.537
+Test Suite 'ProjectAttentionCopyParityTests' passed at 2026-10-09 02:03:25.876
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.339 (0.339) seconds
+Test Suite 'ProjectCrossingsCardCopyParityTests' started at 2026-10-09 02:03:25.876
+Test Suite 'ProjectCrossingsCardCopyParityTests' passed at 2026-10-09 02:03:25.890
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.014 (0.014) seconds
+Test Suite 'ProjectDoneCopyParityTests' started at 2026-10-09 02:03:25.890
+src/macos/OrbitKit/Tests/OrbitKitTests/ProjectDoneCopyParityTests.swift:581: error: ProjectDoneCopyParityTests.testTheRowsSayTheWebsWords : XCTAssertTrue failed - the project page no longer says Ready to close beside its status
+Test Suite 'ProjectDoneCopyParityTests' failed at 2026-10-09 02:03:26.096
+	 Executed 13 tests, with 1 failure (0 unexpected) in 0.206 (0.206) seconds
+Test Suite 'ProjectMergeCopyParityTests' started at 2026-10-09 02:03:26.096
+Test Suite 'ProjectMergeCopyParityTests' passed at 2026-10-09 02:03:26.098
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'ProjectPageCopyParityTests' started at 2026-10-09 02:03:26.098
+src/macos/OrbitKit/Tests/OrbitKitTests/ProjectPageCopyParityTests.swift:84: error: ProjectPageCopyParityTests.testAProjectNobodyStartedIsTaggedNotStarted : XCTAssertTrue failed - src/web/src/pages/ProjectsPage.tsx no longer says <Tag color="default">{NOT_STARTED}</Tag>
+src/macos/OrbitKit/Tests/OrbitKitTests/ProjectPageCopyParityTests.swift:191: error: ProjectPageCopyParityTests.testTheHeaderSaysReadyToCloseAndWhoRecordedItDone : XCTAssertTrue failed - src/web/src/pages/ProjectsPage.tsx no longer says <Tag color="gold">{PROJECT_DONE_COPY.readyToClose}</Tag>
+Test Suite 'ProjectPageCopyParityTests' failed at 2026-10-09 02:03:26.163
+	 Executed 9 tests, with 2 failures (0 unexpected) in 0.065 (0.065) seconds
+Test Suite 'ProjectPageSectionsCopyParityTests' started at 2026-10-09 02:03:26.163
+src/macos/OrbitKit/Tests/OrbitKitTests/ProjectPageSectionsCopyParityTests.swift:128: error: ProjectPageSectionsCopyParityTests.testTheCoordinatorCardsWords : XCTAssertTrue failed - src/web/src/pages/ProjectsPage.tsx no longer says okText: 'Complete and start a new one'
+src/macos/OrbitKit/Tests/OrbitKitTests/ProjectPageSectionsCopyParityTests.swift:195: error: ProjectPageSectionsCopyParityTests.testTheRunQueueWords : XCTAssertTrue failed - src/web/src/components/ProjectReadyToRun.tsx no longer says message="Impact ranking not computed"
+Test Suite 'ProjectPageSectionsCopyParityTests' failed at 2026-10-09 02:03:26.258
+	 Executed 9 tests, with 2 failures (0 unexpected) in 0.095 (0.095) seconds
+Test Suite 'ProjectRunSettingsCopyParityTests' started at 2026-10-09 02:03:26.258
+src/macos/OrbitKit/Tests/OrbitKitTests/ProjectRunSettingsCopyParityTests.swift:156: error: ProjectRunSettingsCopyParityTests.testHowItRunsSaysTheWebsWords : XCTAssertTrue failed - src/web/src/components/ProjectRunSettings.tsx no longer says message="How it runs could not be loaded"
+src/macos/OrbitKit/Tests/OrbitKitTests/ProjectRunSettingsCopyParityTests.swift:160: error: ProjectRunSettingsCopyParityTests.testHowItRunsSaysTheWebsWords : XCTAssertTrue failed - src/web/src/components/ProjectRunSettings.tsx no longer says message={move.variables === 'resume' ? RUN_NOT_RESUMED : RUN_NOT_PAUSED}
+src/macos/OrbitKit/Tests/OrbitKitTests/ProjectRunSettingsCopyParityTests.swift:161: error: ProjectRunSettingsCopyParityTests.testHowItRunsSaysTheWebsWords : XCTAssertTrue failed - src/web/src/components/ProjectRunSettings.tsx no longer says message={RUN_NOT_SAVED}
+Test Suite 'ProjectRunSettingsCopyParityTests' failed at 2026-10-09 02:03:26.380
+	 Executed 7 tests, with 3 failures (0 unexpected) in 0.122 (0.122) seconds
+Test Suite 'ProjectStartedCopyParityTests' started at 2026-10-09 02:03:26.380
+Test Suite 'ProjectStartedCopyParityTests' passed at 2026-10-09 02:03:26.382
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'ReferencedTaskCopyParityTests' started at 2026-10-09 02:03:26.382
+Test Suite 'ReferencedTaskCopyParityTests' passed at 2026-10-09 02:03:26.387
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.006 (0.006) seconds
+Test Suite 'RunnerPageCopyParityTests' started at 2026-10-09 02:03:26.387
+Test Suite 'RunnerPageCopyParityTests' passed at 2026-10-09 02:03:26.415
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.028 (0.028) seconds
+Test Suite 'SessionCreatedTasksCopyParityTests' started at 2026-10-09 02:03:26.415
+Test Suite 'SessionCreatedTasksCopyParityTests' passed at 2026-10-09 02:03:26.419
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.004 (0.004) seconds
+Test Suite 'SessionMessageCopyParityTests' started at 2026-10-09 02:03:26.419
+Test Suite 'SessionMessageCopyParityTests' passed at 2026-10-09 02:03:26.522
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.103 (0.103) seconds
+Test Suite 'SessionProjectCopyParityTests' started at 2026-10-09 02:03:26.522
+Test Suite 'SessionProjectCopyParityTests' passed at 2026-10-09 02:03:26.524
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'SessionRequestCopyParityTests' started at 2026-10-09 02:03:26.524
+Test Suite 'SessionRequestCopyParityTests' passed at 2026-10-09 02:03:26.525
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'SessionRunStartCopyParityTests' started at 2026-10-09 02:03:26.525
+Test Suite 'SessionRunStartCopyParityTests' passed at 2026-10-09 02:03:27.007
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.482 (0.482) seconds
+Test Suite 'SettingsCopyParityTests' started at 2026-10-09 02:03:27.007
+Test Suite 'SettingsCopyParityTests' passed at 2026-10-09 02:03:27.472
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.465 (0.465) seconds
+Test Suite 'SharePanelCopyParityTests' started at 2026-10-09 02:03:27.472
+Test Suite 'SharePanelCopyParityTests' passed at 2026-10-09 02:03:27.702
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.23 (0.23) seconds
+Test Suite 'SharedPoolCopyParityTests' started at 2026-10-09 02:03:27.702
+Test Suite 'SharedPoolCopyParityTests' passed at 2026-10-09 02:03:27.737
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.034 (0.034) seconds
+Test Suite 'StartProjectCardCopyParityTests' started at 2026-10-09 02:03:27.737
+Test Suite 'StartProjectCardCopyParityTests' passed at 2026-10-09 02:03:27.760
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.023 (0.023) seconds
+Test Suite 'TaskDetailCopyParityTests' started at 2026-10-09 02:03:27.760
+src/macos/OrbitKit/Tests/OrbitKitTests/TaskDetailCopyParityTests.swift:199: error: TaskDetailCopyParityTests.testTheAttributionWords : XCTAssertTrue failed - src/web/src/components/TaskAttributionCard.tsx no longer says: Trigger </Typography.Text>
+src/macos/OrbitKit/Tests/OrbitKitTests/TaskDetailCopyParityTests.swift:200: error: TaskDetailCopyParityTests.testTheAttributionWords : XCTAssertTrue failed - src/web/src/components/TaskAttributionCard.tsx no longer says: message="Attribution boundary could not be loaded"
+src/macos/OrbitKit/Tests/OrbitKitTests/TaskDetailCopyParityTests.swift:113: error: TaskDetailCopyParityTests.testTheDependenciesWords : XCTAssertTrue failed - src/web/src/components/TaskDependencyList.tsx no longer says: okText="Remove"
+Test Suite 'TaskDetailCopyParityTests' failed at 2026-10-09 02:03:28.123
+	 Executed 13 tests, with 3 failures (0 unexpected) in 0.363 (0.363) seconds
+Test Suite 'TaskJudgmentCopyParityTests' started at 2026-10-09 02:03:28.123
+Test Suite 'TaskJudgmentCopyParityTests' passed at 2026-10-09 02:03:28.334
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.211 (0.211) seconds
+Test Suite 'TaskListCopyParityTests' started at 2026-10-09 02:03:28.334
+Test Suite 'TaskListCopyParityTests' passed at 2026-10-09 02:03:28.355
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.02 (0.02) seconds
+Test Suite 'TaskProgressCopyParityTests' started at 2026-10-09 02:03:28.355
+Test Suite 'TaskProgressCopyParityTests' passed at 2026-10-09 02:03:28.382
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.027 (0.027) seconds
+Test Suite 'TaskRunHandoffCopyParityTests' started at 2026-10-09 02:03:28.382
+Test Suite 'TaskRunHandoffCopyParityTests' passed at 2026-10-09 02:03:28.385
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+Test Suite 'TaskStartCopyParityTests' started at 2026-10-09 02:03:28.385
+Test Suite 'TaskStartCopyParityTests' passed at 2026-10-09 02:03:28.642
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.257 (0.257) seconds
+Test Suite 'WatchStripCopyParityTests' started at 2026-10-09 02:03:28.642
+Test Suite 'WatchStripCopyParityTests' passed at 2026-10-09 02:03:28.763
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.121 (0.121) seconds
+Test Suite 'WatchWakeCopyParityTests' started at 2026-10-09 02:03:28.763
+Test Suite 'WatchWakeCopyParityTests' passed at 2026-10-09 02:03:29.204
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.441 (0.441) seconds
+Test Suite 'WikiArticlesCopyParityTests' started at 2026-10-09 02:03:29.204
+Test Suite 'WikiArticlesCopyParityTests' passed at 2026-10-09 02:03:29.351
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.147 (0.147) seconds
+Test Suite 'WikiCopyParityTests' started at 2026-10-09 02:03:29.351
+Test Suite 'WikiCopyParityTests' passed at 2026-10-09 02:03:30.693
+	 Executed 21 tests, with 0 failures (0 unexpected) in 1.342 (1.342) seconds
+Test Suite 'WikiDocsCopyParityTests' started at 2026-10-09 02:03:30.693
+Test Suite 'WikiDocsCopyParityTests' passed at 2026-10-09 02:03:30.788
+	 Executed 15 tests, with 0 failures (0 unexpected) in 0.095 (0.095) seconds
+Test Suite 'WikiHealthCopyParityTests' started at 2026-10-09 02:03:30.788
+Test Suite 'WikiHealthCopyParityTests' passed at 2026-10-09 02:03:30.835
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.047 (0.047) seconds
+Test Suite 'WikiPlanCopyParityTests' started at 2026-10-09 02:03:30.835
+Test Suite 'WikiPlanCopyParityTests' passed at 2026-10-09 02:03:31.050
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.215 (0.215) seconds
+Test Suite 'WikiReviewModeCopyParityTests' started at 2026-10-09 02:03:31.050
+Test Suite 'WikiReviewModeCopyParityTests' passed at 2026-10-09 02:03:31.122
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.072 (0.072) seconds
+Test Suite 'WikiServerExecutionCopyParityTests' started at 2026-10-09 02:03:31.122
+Test Suite 'WikiServerExecutionCopyParityTests' passed at 2026-10-09 02:03:31.145
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.023 (0.023) seconds
+Test Suite 'Selected tests' failed at 2026-10-09 02:03:31.145
+	 Executed 388 tests, with 11 failures (0 unexpected) in 8.003 (8.003) seconds

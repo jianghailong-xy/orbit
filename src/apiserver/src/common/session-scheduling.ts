@@ -35,6 +35,16 @@ export const UNSETTLED_SESSION_STATUSES: RunStatus[] = [RunStatus.PENDING, RunSt
  * GUC, and migration 0367 does the same for an Antigravity row and
  * `orbit.runner_supports_antigravity` — GUCs only the claim path sets. A second writer would
  * therefore no-op without raising. Add new work-dispatch paths to the queue, not beside it.
+ *
+ * Migration 0414 adds the same barrier for every session with a recorded engine (Session.engine):
+ * PENDING -> RUNNING, and taking its inbox lease (a new `inbox_lease_owner` or
+ * `inbox_lease_generation`), need `orbit.claim_reads_session_engine` declared in the transaction —
+ * a claim is skipped without it, a lease write is refused with an error. It is declared by
+ * QueueService.trySessionClaim, by the runner lease routes (RunnerApiController takeover-leases and
+ * activate-leases, through assertDshLeaseSupport) and by the inbox's account-pause fence
+ * (RunnerApiController.dequeueTurn). A server terminal revive's v5 handoff marker is not a lease, and
+ * clearing one never is. Any new writer of those transitions declares it too, or it fails on every
+ * session there is.
  */
 
 /**

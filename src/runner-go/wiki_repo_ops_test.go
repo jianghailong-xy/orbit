@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The repository operations (contracts/wiki.contract.json `repoOps`, design §7), against a throwaway
@@ -484,6 +485,148 @@ func TestWikiRepoOpRefusesACheckoutThatIsNotTheSpacesRepository(t *testing.T) {
 	// And the URL check still passes for that checkout: it is the root commit that refused it.
 	if normalizeWikiRepoURL(f.bare) != cmd.RepoURLNorm {
 		t.Fatalf("the fixture's url norm moved: %q", cmd.RepoURLNorm)
+	}
+}
+
+// A read or a diff of commits the checkout already has runs no fetch: a commit is the same text whichever
+// fetch brought it, so origin/main stays where it was. The first commit is still held — asked of the
+// commits named rather than of origin/main. A commit the checkout lacks is fetched, and a snapshot always is.
+func TestWikiRepoOpReadAndDiffOfCommitsTheCheckoutHasRunNoFetch(t *testing.T) {
+	f := newWikiRepoOpFixture(t)
+	second := f.push(t, "second", func() { f.write(t, "docs/other.md", "# The other half\n\nSecond.\n") })
+	mustGit(t, f.checkout, "fetch", "-q", "origin")
+	third := f.push(t, "third", func() { f.write(t, "docs/other.md", "# The other half\n\nThird.\n") })
+	originMain := func() string { return mustGit(t, f.checkout, "rev-parse", "refs/remotes/origin/main") }
+
+	read := runWikiRepoOp(f.command(t, "read", map[string]interface{}{
+		"sha": second, "items": []map[string]interface{}{{"path": "docs/other.md"}},
+	}), nil)
+	if answer := decodeResult[wikiRepoOpReadAnswer](t, read, "read"); !strings.Contains(answer.Items[0].Text, "Second.") {
+		t.Fatalf("the read at %s answered %+v", second, answer.Items)
+	}
+	diff := runWikiRepoOp(f.command(t, "diff", map[string]interface{}{"from": f.first, "to": second}), nil)
+	if answer := decodeResult[wikiRepoOpDiffAnswer](t, diff, "diff"); len(answer.Files) != 1 || answer.Files[0].Path != "docs/other.md" {
+		t.Fatalf("the diff answered %+v", answer.Files)
+	}
+	if got := originMain(); got != second {
+		t.Fatalf("origin/main is %s after a read and a diff of commits the checkout has, want %s where it was: they fetched", got, second)
+	}
+
+	// A commit of another history in the checkout — it does not start from the space's first commit — is
+	// another repository's, and is refused although nothing was fetched.
+	mustGit(t, f.checkout, "checkout", "-q", "--orphan", "stranger")
+	if err := os.WriteFile(filepath.Join(f.checkout, "stranger.md"), []byte("# not the space's\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, f.checkout, "add", "stranger.md")
+	mustGit(t, f.checkout, "commit", "-q", "-m", "a history of its own")
+	stranger := mustGit(t, f.checkout, "rev-parse", "HEAD")
+	mustGit(t, f.checkout, "checkout", "-q", "main")
+	for _, cmd := range []WikiRepoOpCommand{
+		f.command(t, "read", map[string]interface{}{"sha": stranger, "items": []map[string]interface{}{{"path": "stranger.md"}}}),
+		f.command(t, "diff", map[string]interface{}{"from": f.first, "to": stranger}),
+	} {
+		refused := runWikiRepoOp(cmd, nil)
+		if refused.state != "failed" || !strings.Contains(refused.err, "does not start from the space's first commit") {
+			t.Fatalf("a %s of a commit from another history was answered: %+v", cmd.Kind, refused)
+		}
+	}
+	if got := originMain(); got != second {
+		t.Fatalf("origin/main is %s after the refusals, want %s: they fetched", got, second)
+	}
+
+	// A commit the checkout does not have is fetched first.
+	fetched := runWikiRepoOp(f.command(t, "read", map[string]interface{}{
+		"sha": third, "items": []map[string]interface{}{{"path": "docs/other.md"}},
+	}), nil)
+	if answer := decodeResult[wikiRepoOpReadAnswer](t, fetched, "read"); !strings.Contains(answer.Items[0].Text, "Third.") {
+		t.Fatalf("the read at %s answered %+v", third, answer.Items)
+	}
+	if got := originMain(); got != third {
+		t.Fatalf("origin/main is %s after a read of a commit the checkout lacked, want %s: it did not fetch", got, third)
+	}
+	// A snapshot asks about origin/main as it is now, and always fetches.
+	fourth := f.push(t, "fourth", func() { f.write(t, "docs/other.md", "# The other half\n\nFourth.\n") })
+	snapshot := runWikiRepoOp(f.command(t, "snapshot", map[string]interface{}{"skipSha": third}), nil)
+	if snapshot.state != "succeeded" || snapshot.sha != fourth {
+		t.Fatalf("the snapshot = %s at %q (%s), want one built at %s", snapshot.state, snapshot.sha, snapshot.err, fourth)
+	}
+}
+
+// holdOriginMainRefLock takes the lock git itself takes on refs/remotes/origin/main, the way a fetch the
+// wiki's own lock does not cover — a session starting in the checkout, an integration job — holds it for
+// the moment it writes the ref.
+func holdOriginMainRefLock(t *testing.T, checkout string) string {
+	t.Helper()
+	lock := filepath.Join(checkout, ".git", "refs", "remotes", "origin", "main.lock")
+	if err := os.MkdirAll(filepath.Dir(lock), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(lock, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(lock) })
+	return lock
+}
+
+// pauseBetweenRefLockAttempts replaces the wait between two fetches of a ref another process held with
+// `pause`, for this test.
+func pauseBetweenRefLockAttempts(t *testing.T, pause func(time.Duration)) {
+	t.Helper()
+	restore := integrationFetchLockPause
+	integrationFetchLockPause = pause
+	t.Cleanup(func() { integrationFetchLockPause = restore })
+}
+
+// Another fetch holding the ref's lock is waited out: the operation's fetch is refused it, and the same
+// fetch, tried again once that fetch is done, answers (integrationFetch's answer to the same race).
+func TestWikiRepoOpFetchWaitsOutARefLockAnotherFetchHolds(t *testing.T) {
+	f := newWikiRepoOpFixture(t)
+	moved := f.push(t, "main moves", func() { f.write(t, "docs/moved.md", "# Moved\n") })
+	lock := holdOriginMainRefLock(t, f.checkout)
+	released := false
+	pauseBetweenRefLockAttempts(t, func(time.Duration) {
+		if !released {
+			released = true
+			_ = os.Remove(lock)
+		}
+	})
+
+	outcome := runWikiRepoOp(f.command(t, "snapshot", map[string]interface{}{}), nil)
+	if outcome.state != "succeeded" || outcome.result["sha"] != moved {
+		t.Fatalf("the snapshot = %s %v (%s), want one at %s once the other fetch let go", outcome.state, outcome.result["sha"], outcome.err, moved)
+	}
+	if !released {
+		t.Fatal("the fetch never met the held ref lock, so this tested nothing")
+	}
+}
+
+// A fetch that fails says which operation it was, in which checkout, and what git said — in the
+// operation's own words, not those of `orbit wiki anchors verify`, which a reader of a failed read would
+// otherwise go and look for.
+func TestWikiRepoOpFetchFailureSaysWhichOperationInWhichCheckout(t *testing.T) {
+	f := newWikiRepoOpFixture(t)
+	moved := f.push(t, "main moves", func() { f.write(t, "docs/moved.md", "# Moved\n") })
+	root := mustGit(t, f.checkout, "rev-parse", "--show-toplevel")
+	// Held for every attempt: a lock that outlives the retries is a failure, and is reported as one.
+	holdOriginMainRefLock(t, f.checkout)
+	pauseBetweenRefLockAttempts(t, func(time.Duration) {})
+
+	// The read first: a fetch refused the ref still stores what it brought, and a read of a commit the
+	// checkout then has would rightly run no fetch at all.
+	for _, cmd := range []WikiRepoOpCommand{
+		f.command(t, "read", map[string]interface{}{"sha": moved, "items": []map[string]interface{}{{"path": "docs/moved.md"}}}),
+		f.command(t, "snapshot", map[string]interface{}{}),
+		f.command(t, "anchors", map[string]interface{}{"anchors": []map[string]interface{}{{"index": 0, "type": "path", "path": "docs/moved.md"}}}),
+	} {
+		outcome := runWikiRepoOp(cmd, nil)
+		want := "the " + cmd.Kind + " operation could not fetch origin main into the checkout " + root + ", so nothing was read: "
+		if outcome.state != "failed" || !strings.Contains(outcome.err, want) || !strings.Contains(outcome.err, "cannot lock ref 'refs/remotes/origin/main'") {
+			t.Fatalf("the %s's failed fetch = %s %q, want %q with git's own words", cmd.Kind, outcome.state, outcome.err, want)
+		}
+		if strings.Contains(outcome.err, "anchors verify") || strings.Contains(outcome.err, "nothing was checked") {
+			t.Fatalf("the %s's failed fetch borrows anchors verify's words: %q", cmd.Kind, outcome.err)
+		}
 	}
 }
 

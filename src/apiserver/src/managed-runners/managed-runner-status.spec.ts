@@ -34,6 +34,10 @@ function mapping(change: Partial<ManagedRunner> = {}): ManagedRunner {
     reservation: null,
     demandRevision: 0,
     lastDemandAt: null,
+    capacityRevision: null,
+    drainDemandRevision: null,
+    stopRequestedAt: null,
+    stopAcknowledgedAt: null,
     initialProvider: null,
     resourceProfileId: 'p',
     resourceOperationId: null,
@@ -147,6 +151,11 @@ test('READY reports the runtime it was found ready with; waiting on model supply
   assert.equal(waiting.usable, false);
   assert.equal(waiting.initialProvider, null);
   assert.deepEqual(waiting.reason, managedRunnerReason('MODEL_UNAVAILABLE'));
+  assert.equal(
+    waiting.reason?.message,
+    'The runner is up, but none of its runtimes is installed and signed in, so it cannot start a session. ' +
+      'Sign one in from Infrastructure; a runner that has stopped waiting for it can then be retried.',
+  );
   assert.equal(waiting.reason?.retryable, true);
   assert.equal(waiting.actions.canRetry, false, 'nothing to retry while it is still waiting');
 });

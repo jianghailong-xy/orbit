@@ -30,6 +30,8 @@
 .orbit-menu-item[data-disabled] { color: var(--orbit-control-disabled-text); cursor: not-allowed; background: transparent; }
 .orbit-menu-separator { height: 1px; margin: 4px 0; line-height: 0; background: var(--orbit-border-split); }
 .orbit-menu-group-label { padding: 5px 12px; color: var(--text-3); }
+/* A group's items sit 8px in on each side, as in the replaced menu. */
+.orbit-menu-group-list { margin: 0 8px; }
 .orbit-menu-check { display: inline-flex; width: 14px; }
 .orbit-menu-check:not([data-checked]) { visibility: hidden; }
 .orbit-popover { --orbit-callout-bg: var(--orbit-bg-elevated); position: relative; padding: 12px; max-width: min(100vw - 16px, var(--available-width)); }

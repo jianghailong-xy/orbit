@@ -55,6 +55,7 @@ function harness({
   const strandedQueries: unknown[] = [];
   const queryCalls: unknown[][] = [];
   const executeCalls: unknown[][] = [];
+  const statements: string[] = [];
   const tx = {
     $queryRaw: async (...args: unknown[]) => {
       queryCalls.push(args);
@@ -82,7 +83,10 @@ function harness({
       return [];
     },
     $executeRaw: async (...args: unknown[]) => {
-      executeCalls.push(args);
+      statements.push(sql(args));
+      // The writes alone, which is what the cases below count; the transaction-local declarations
+      // are in `statements`, in order with them.
+      if (!sql(args).includes('set_config(')) executeCalls.push(args);
       return 1;
     },
   };
@@ -120,6 +124,7 @@ function harness({
       { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
     ),
     executeCalls,
+    statements,
     preflightCalls,
     queryCalls,
     strandedQueries,
@@ -143,6 +148,9 @@ test('activate-leases registers and installs a generation under the owned Sessio
   assert.match(sql(h.executeCalls[1]), /SET "inbox_lease_generation" = \?::uuid/);
   assert.deepEqual(h.executeCalls[1].slice(1), [GENERATION, SESSION_ID]);
   assert.match(sql(h.executeCalls[2]), /"lease_generation" IS DISTINCT FROM \?::uuid/);
+  // Installed by a transaction that has said it reads the session's recorded engine (migration 0414).
+  const install = h.statements.findIndex((statement) => /SET "inbox_lease_generation" = \?::uuid/.test(statement));
+  assert.equal(h.statements[install - 1], "SELECT set_config('orbit.claim_reads_session_engine', '1', true)");
 });
 
 test('an already-installed generation returns without taking the Session row lock', async () => {

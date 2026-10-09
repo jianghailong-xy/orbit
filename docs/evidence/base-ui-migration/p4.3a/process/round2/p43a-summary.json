@@ -1,0 +1,889 @@
+{
+ "screenshots": {
+  "antialias": 125,
+  "beyond": 174,
+  "identical": 317,
+  "missing": 0
+ },
+ "tests": {
+  "notPassedDel": [],
+  "notPassedRef": [],
+  "total": 104
+ },
+ "traces": {
+  "equal": 8,
+  "total": 104
+ },
+ "beyond": [
+  {
+   "shot": "chromium-dark-desktop/p43a-blocker-review.png",
+   "pixels": 3200,
+   "max": 150
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-coordinator-menu.png",
+   "pixels": 72,
+   "max": 186
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-coordinator-rebind.png",
+   "pixels": 29136,
+   "max": 158
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-coordinator-replace.png",
+   "pixels": 58,
+   "max": 79
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-coordinator.png",
+   "pixels": 44,
+   "max": 144
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-delete-refused.png",
+   "pixels": 18763,
+   "max": 180
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-open-items.png",
+   "pixels": 58,
+   "max": 144
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-overview-loading.png",
+   "pixels": 59,
+   "max": 144
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-overview.png",
+   "pixels": 44,
+   "max": 144
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-run-queue.png",
+   "pixels": 58,
+   "max": 144
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-run-settings-edited.png",
+   "pixels": 81,
+   "max": 8
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-run-settings-escalation.png",
+   "pixels": 81,
+   "max": 8
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-run-settings-locked.png",
+   "pixels": 216,
+   "max": 193
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-status-cancel.png",
+   "pixels": 40,
+   "max": 5
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-status-done.png",
+   "pixels": 15,
+   "max": 5
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-status-refused.png",
+   "pixels": 20,
+   "max": 5
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-tasks-assign.png",
+   "pixels": 35545,
+   "max": 188
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-tasks-created-in.png",
+   "pixels": 172,
+   "max": 82
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-tasks-delete.png",
+   "pixels": 51328,
+   "max": 178
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-tasks-failed.png",
+   "pixels": 255,
+   "max": 142
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-tasks-labels.png",
+   "pixels": 252,
+   "max": 98
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-tasks-run.png",
+   "pixels": 7,
+   "max": 3
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-tasks-scope.png",
+   "pixels": 2335,
+   "max": 200
+  },
+  {
+   "shot": "chromium-dark-desktop/p43a-tasks-stop.png",
+   "pixels": 42173,
+   "max": 188
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-acceptance-all.png",
+   "pixels": 23,
+   "max": 21
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-acceptance-method.png",
+   "pixels": 6886,
+   "max": 118
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-blocker-refused.png",
+   "pixels": 21591,
+   "max": 98
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-blocker-resolve.png",
+   "pixels": 15433,
+   "max": 98
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-blocker-review.png",
+   "pixels": 21858,
+   "max": 150
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-coordinator-menu.png",
+   "pixels": 83,
+   "max": 186
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-coordinator-rebind.png",
+   "pixels": 28685,
+   "max": 191
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-coordinator-replace.png",
+   "pixels": 42257,
+   "max": 235
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-overview-loading.png",
+   "pixels": 44,
+   "max": 144
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-overview.png",
+   "pixels": 44,
+   "max": 144
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-run-queue-resume.png",
+   "pixels": 6260,
+   "max": 167
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-run-settings-locked.png",
+   "pixels": 216,
+   "max": 193
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-shared-tasks.png",
+   "pixels": 53,
+   "max": 20
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-tasks-assign.png",
+   "pixels": 3381,
+   "max": 158
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-tasks-created-in.png",
+   "pixels": 172,
+   "max": 82
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-tasks-delete.png",
+   "pixels": 21040,
+   "max": 167
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-tasks-failed.png",
+   "pixels": 263,
+   "max": 142
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-tasks-labels.png",
+   "pixels": 374,
+   "max": 98
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-tasks-scope.png",
+   "pixels": 2335,
+   "max": 200
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-tasks-subtasks.png",
+   "pixels": 11,
+   "max": 21
+  },
+  {
+   "shot": "chromium-dark-phone/p43a-tasks.png",
+   "pixels": 23,
+   "max": 21
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-blocker-review.png",
+   "pixels": 3196,
+   "max": 171
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-coordinator-menu.png",
+   "pixels": 72,
+   "max": 163
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-coordinator-rebind.png",
+   "pixels": 18776,
+   "max": 217
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-coordinator-replace.png",
+   "pixels": 70,
+   "max": 77
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-coordinator.png",
+   "pixels": 44,
+   "max": 140
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-delete-refused.png",
+   "pixels": 15615,
+   "max": 224
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-open-items.png",
+   "pixels": 50,
+   "max": 140
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-overview-loading.png",
+   "pixels": 62,
+   "max": 140
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-overview.png",
+   "pixels": 44,
+   "max": 140
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-run-queue.png",
+   "pixels": 50,
+   "max": 140
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-run-settings-edited.png",
+   "pixels": 102,
+   "max": 9
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-run-settings-escalation.png",
+   "pixels": 102,
+   "max": 9
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-run-settings-locked.png",
+   "pixels": 216,
+   "max": 194
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-session-handled-refused.png",
+   "pixels": 49,
+   "max": 12
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-status-cancel.png",
+   "pixels": 49,
+   "max": 5
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-status-done.png",
+   "pixels": 16,
+   "max": 5
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-status-refused.png",
+   "pixels": 21,
+   "max": 5
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-task-attribution-copy.png",
+   "pixels": 13,
+   "max": 15
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-task-attribution-loading.png",
+   "pixels": 16,
+   "max": 15
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-task-attribution.png",
+   "pixels": 13,
+   "max": 15
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-tasks-assign.png",
+   "pixels": 14030,
+   "max": 224
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-tasks-created-in.png",
+   "pixels": 168,
+   "max": 93
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-tasks-delete.png",
+   "pixels": 27043,
+   "max": 224
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-tasks-failed.png",
+   "pixels": 253,
+   "max": 192
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-tasks-labels.png",
+   "pixels": 484,
+   "max": 112
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-tasks-scope.png",
+   "pixels": 2356,
+   "max": 224
+  },
+  {
+   "shot": "chromium-light-desktop/p43a-tasks-stop.png",
+   "pixels": 28417,
+   "max": 224
+  },
+  {
+   "shot": "chromium-light-phone/p43a-acceptance-all.png",
+   "pixels": 23,
+   "max": 24
+  },
+  {
+   "shot": "chromium-light-phone/p43a-acceptance-method.png",
+   "pixels": 6880,
+   "max": 112
+  },
+  {
+   "shot": "chromium-light-phone/p43a-blocker-refused.png",
+   "pixels": 32139,
+   "max": 112
+  },
+  {
+   "shot": "chromium-light-phone/p43a-blocker-resolve.png",
+   "pixels": 25885,
+   "max": 112
+  },
+  {
+   "shot": "chromium-light-phone/p43a-blocker-review.png",
+   "pixels": 32310,
+   "max": 171
+  },
+  {
+   "shot": "chromium-light-phone/p43a-coordinator-landing.png",
+   "pixels": 23660,
+   "max": 3
+  },
+  {
+   "shot": "chromium-light-phone/p43a-coordinator-menu.png",
+   "pixels": 81,
+   "max": 163
+  },
+  {
+   "shot": "chromium-light-phone/p43a-coordinator-rebind.png",
+   "pixels": 49279,
+   "max": 249
+  },
+  {
+   "shot": "chromium-light-phone/p43a-coordinator-replace.png",
+   "pixels": 47198,
+   "max": 245
+  },
+  {
+   "shot": "chromium-light-phone/p43a-overview-loading.png",
+   "pixels": 44,
+   "max": 140
+  },
+  {
+   "shot": "chromium-light-phone/p43a-overview.png",
+   "pixels": 44,
+   "max": 140
+  },
+  {
+   "shot": "chromium-light-phone/p43a-run-queue-resume.png",
+   "pixels": 14276,
+   "max": 224
+  },
+  {
+   "shot": "chromium-light-phone/p43a-run-settings-locked.png",
+   "pixels": 216,
+   "max": 194
+  },
+  {
+   "shot": "chromium-light-phone/p43a-shared-tasks.png",
+   "pixels": 54,
+   "max": 26
+  },
+  {
+   "shot": "chromium-light-phone/p43a-status-cancel.png",
+   "pixels": 28219,
+   "max": 3
+  },
+  {
+   "shot": "chromium-light-phone/p43a-status-reopen.png",
+   "pixels": 2,
+   "max": 4
+  },
+  {
+   "shot": "chromium-light-phone/p43a-tasks-assign.png",
+   "pixels": 42109,
+   "max": 239
+  },
+  {
+   "shot": "chromium-light-phone/p43a-tasks-created-in.png",
+   "pixels": 168,
+   "max": 93
+  },
+  {
+   "shot": "chromium-light-phone/p43a-tasks-delete.png",
+   "pixels": 12521,
+   "max": 224
+  },
+  {
+   "shot": "chromium-light-phone/p43a-tasks-failed.png",
+   "pixels": 274,
+   "max": 192
+  },
+  {
+   "shot": "chromium-light-phone/p43a-tasks-labels.png",
+   "pixels": 400,
+   "max": 112
+  },
+  {
+   "shot": "chromium-light-phone/p43a-tasks-scope.png",
+   "pixels": 2356,
+   "max": 224
+  },
+  {
+   "shot": "chromium-light-phone/p43a-tasks-subtasks.png",
+   "pixels": 11,
+   "max": 24
+  },
+  {
+   "shot": "chromium-light-phone/p43a-tasks.png",
+   "pixels": 23,
+   "max": 24
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-blocker-review.png",
+   "pixels": 3195,
+   "max": 150
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-coordinator-menu.png",
+   "pixels": 81,
+   "max": 186
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-coordinator-rebind.png",
+   "pixels": 14790,
+   "max": 15
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-coordinator-replace.png",
+   "pixels": 58,
+   "max": 79
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-coordinator.png",
+   "pixels": 44,
+   "max": 144
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-delete-refused.png",
+   "pixels": 16675,
+   "max": 180
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-open-items.png",
+   "pixels": 44,
+   "max": 144
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-overview-loading.png",
+   "pixels": 44,
+   "max": 144
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-overview.png",
+   "pixels": 44,
+   "max": 144
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-run-queue.png",
+   "pixels": 44,
+   "max": 144
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-run-settings-locked.png",
+   "pixels": 224,
+   "max": 194
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-status-reopen.png",
+   "pixels": 54305,
+   "max": 255
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-tasks-assign.png",
+   "pixels": 50025,
+   "max": 255
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-tasks-created-in.png",
+   "pixels": 172,
+   "max": 82
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-tasks-delete.png",
+   "pixels": 46157,
+   "max": 178
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-tasks-failed.png",
+   "pixels": 255,
+   "max": 143
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-tasks-labels.png",
+   "pixels": 244,
+   "max": 98
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-tasks-scope.png",
+   "pixels": 2377,
+   "max": 200
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-tasks-search.png",
+   "pixels": 274,
+   "max": 165
+  },
+  {
+   "shot": "webkit-dark-desktop/p43a-tasks-stop.png",
+   "pixels": 38242,
+   "max": 188
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-acceptance-method.png",
+   "pixels": 7476,
+   "max": 167
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-blocker-refused.png",
+   "pixels": 1294,
+   "max": 98
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-blocker-resolve.png",
+   "pixels": 1297,
+   "max": 98
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-blocker-review.png",
+   "pixels": 3632,
+   "max": 150
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-coordinator-menu.png",
+   "pixels": 80,
+   "max": 186
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-coordinator-rebind.png",
+   "pixels": 10121,
+   "max": 15
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-coordinator-replace.png",
+   "pixels": 39728,
+   "max": 230
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-delete.png",
+   "pixels": 6787,
+   "max": 167
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-overview-loading.png",
+   "pixels": 44,
+   "max": 144
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-run-queue-resume.png",
+   "pixels": 7581,
+   "max": 209
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-run-settings-locked.png",
+   "pixels": 224,
+   "max": 194
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-tasks-assign.png",
+   "pixels": 35,
+   "max": 51
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-tasks-created-in.png",
+   "pixels": 172,
+   "max": 82
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-tasks-delete.png",
+   "pixels": 20056,
+   "max": 167
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-tasks-failed.png",
+   "pixels": 255,
+   "max": 143
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-tasks-labels.png",
+   "pixels": 244,
+   "max": 98
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-tasks-scope.png",
+   "pixels": 2377,
+   "max": 200
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-tasks-search.png",
+   "pixels": 544,
+   "max": 167
+  },
+  {
+   "shot": "webkit-dark-phone/p43a-tasks-stop.png",
+   "pixels": 11077,
+   "max": 167
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-blocker-review.png",
+   "pixels": 3183,
+   "max": 171
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-coordinator-menu.png",
+   "pixels": 80,
+   "max": 163
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-coordinator-rebind.png",
+   "pixels": 14709,
+   "max": 10
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-coordinator-replace.png",
+   "pixels": 52,
+   "max": 77
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-coordinator.png",
+   "pixels": 44,
+   "max": 140
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-delete-refused.png",
+   "pixels": 16799,
+   "max": 224
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-open-items.png",
+   "pixels": 44,
+   "max": 140
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-overview-loading.png",
+   "pixels": 44,
+   "max": 140
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-overview.png",
+   "pixels": 44,
+   "max": 140
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-run-queue.png",
+   "pixels": 44,
+   "max": 140
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-run-settings-locked.png",
+   "pixels": 224,
+   "max": 195
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-status-reopen.png",
+   "pixels": 46721,
+   "max": 255
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-tasks-assign.png",
+   "pixels": 24175,
+   "max": 255
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-tasks-created-in.png",
+   "pixels": 168,
+   "max": 93
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-tasks-delete.png",
+   "pixels": 29356,
+   "max": 224
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-tasks-failed.png",
+   "pixels": 250,
+   "max": 194
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-tasks-labels.png",
+   "pixels": 248,
+   "max": 112
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-tasks-scope.png",
+   "pixels": 2384,
+   "max": 224
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-tasks-search.png",
+   "pixels": 617,
+   "max": 224
+  },
+  {
+   "shot": "webkit-light-desktop/p43a-tasks-stop.png",
+   "pixels": 30149,
+   "max": 224
+  },
+  {
+   "shot": "webkit-light-phone/p43a-acceptance-method.png",
+   "pixels": 7539,
+   "max": 224
+  },
+  {
+   "shot": "webkit-light-phone/p43a-blocker-refused.png",
+   "pixels": 1291,
+   "max": 112
+  },
+  {
+   "shot": "webkit-light-phone/p43a-blocker-resolve.png",
+   "pixels": 1293,
+   "max": 112
+  },
+  {
+   "shot": "webkit-light-phone/p43a-blocker-review.png",
+   "pixels": 3626,
+   "max": 171
+  },
+  {
+   "shot": "webkit-light-phone/p43a-coordinator-menu.png",
+   "pixels": 79,
+   "max": 163
+  },
+  {
+   "shot": "webkit-light-phone/p43a-coordinator-rebind.png",
+   "pixels": 10039,
+   "max": 10
+  },
+  {
+   "shot": "webkit-light-phone/p43a-coordinator-replace.png",
+   "pixels": 40939,
+   "max": 244
+  },
+  {
+   "shot": "webkit-light-phone/p43a-delete.png",
+   "pixels": 8072,
+   "max": 224
+  },
+  {
+   "shot": "webkit-light-phone/p43a-overview-loading.png",
+   "pixels": 44,
+   "max": 140
+  },
+  {
+   "shot": "webkit-light-phone/p43a-run-queue-resume.png",
+   "pixels": 8465,
+   "max": 224
+  },
+  {
+   "shot": "webkit-light-phone/p43a-run-settings-locked.png",
+   "pixels": 224,
+   "max": 195
+  },
+  {
+   "shot": "webkit-light-phone/p43a-tasks-assign.png",
+   "pixels": 26,
+   "max": 62
+  },
+  {
+   "shot": "webkit-light-phone/p43a-tasks-created-in.png",
+   "pixels": 168,
+   "max": 93
+  },
+  {
+   "shot": "webkit-light-phone/p43a-tasks-delete.png",
+   "pixels": 16666,
+   "max": 224
+  },
+  {
+   "shot": "webkit-light-phone/p43a-tasks-failed.png",
+   "pixels": 250,
+   "max": 194
+  },
+  {
+   "shot": "webkit-light-phone/p43a-tasks-labels.png",
+   "pixels": 248,
+   "max": 112
+  },
+  {
+   "shot": "webkit-light-phone/p43a-tasks-scope.png",
+   "pixels": 2384,
+   "max": 224
+  },
+  {
+   "shot": "webkit-light-phone/p43a-tasks-search.png",
+   "pixels": 287,
+   "max": 224
+  },
+  {
+   "shot": "webkit-light-phone/p43a-tasks-stop.png",
+   "pixels": 13866,
+   "max": 255
+  }
+ ]
+}

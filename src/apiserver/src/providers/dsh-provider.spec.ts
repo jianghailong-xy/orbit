@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { validate } from 'class-validator';
 import { AgentProvider } from '@orbit/shared';
-import { execRuntime, isBuiltinProvider, resolveProviderExec, sessionExecRuntime } from './custom-provider';
+import { execRuntime, isBuiltinProvider, resolveProviderExec } from './custom-provider';
+import { sessionEngine } from './session-engine';
 import { CreateModelProviderDto, TestModelProviderDto, UpdateModelProviderDto } from './dto';
 import { encryptSecret } from './provider-crypto';
 import { followsRuntimeCatalog, ownsModel, withPreset } from './preset-overlay';
@@ -146,14 +147,14 @@ test('P1a dsh keyword collisions preserve configured providers and pools', async
   assert.equal(execRuntime({ declaredProvider: 'dsh', declaredProviderBuiltin: true, customRow: null }), AgentProvider.DSH);
   const session = { provider: 'dsh', providerBuiltin: false, ownerId: OWNER };
   const rowDb = { user: admin, modelProvider: { findFirst: async () => colliding } };
-  assert.equal(await sessionExecRuntime(rowDb as never, session), AgentProvider.CLAUDE);
+  assert.equal(await sessionEngine(rowDb as never, session), AgentProvider.CLAUDE);
   const poolDb = {
     user: admin,
     modelProvider: { findFirst: async () => null },
     providerPool: { findFirst: async () => ({ shared: false, engine: 'codex' }) },
   };
-  assert.equal(await sessionExecRuntime(poolDb as never, session), AgentProvider.CODEX);
-  assert.equal(await sessionExecRuntime({} as never, { ...session, providerBuiltin: true }), AgentProvider.DSH);
+  assert.equal(await sessionEngine(poolDb as never, session), AgentProvider.CODEX);
+  assert.equal(await sessionEngine({} as never, { ...session, providerBuiltin: true }), AgentProvider.DSH);
   for (const [rows, pools, runtime] of [
     [[colliding], [], 'claude'], [[], [{ slug: 'dsh', label: 'Existing pool', shared: false, engine: 'codex' }], 'codex'],
   ] as const) {

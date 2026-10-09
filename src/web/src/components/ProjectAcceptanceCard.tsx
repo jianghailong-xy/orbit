@@ -1,7 +1,6 @@
 import { DownOutlined } from '@ant-design/icons';
 import { useId, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, Card, Skeleton, Typography } from 'antd';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { api } from '../api';
@@ -10,6 +9,11 @@ import { useMediaQuery } from '../lib/useMediaQuery';
 import { AppLink } from './AppLink';
 import { ProjectTaskLink } from './ProjectTaskLink';
 import { TaskStatusPill } from './TaskStatusPill';
+import { Alert } from './ui/Alert';
+import { Button } from './ui/Button';
+import { Card } from './ui/Card';
+import { Skeleton } from './ui/Skeleton';
+import './ui/Typography.css';
 
 /**
  * What this project is held to, drawn from `GET /projects/:id` → `acceptanceCriteriaItems`.
@@ -250,7 +254,7 @@ function RequiredAction({ code }: { code: string }) {
   if (sentence === undefined) {
     return (
       <span className="acceptance-held-up-action">
-        <Typography.Text code>{code}</Typography.Text>
+        <span className="orbit-typography"><code>{code}</code></span>
       </span>
     );
   }
@@ -513,19 +517,17 @@ export function AcceptanceCriteriaCard({
     <Card
       className="acceptance-card"
       title="Acceptance criteria"
-      styles={{ body: { padding: 0 } }}
       extra={action}
     >
       {pending ? (
         <div className="acceptance-block">
-          <Skeleton active title={false} paragraph={{ rows: 3 }} />
+          <Skeleton rows={3} />
         </div>
       ) : error ? (
         <div className="acceptance-block">
           <Alert
             type="error"
-            showIcon
-            message="Acceptance criteria could not be loaded"
+            title="Acceptance criteria could not be loaded"
             description={error instanceof Error ? error.message : undefined}
           />
         </div>
@@ -552,29 +554,30 @@ export function AcceptanceCriteriaCard({
             <div className="acceptance-block acceptance-more">
               <Button
                 size="small"
-                block={phone}
+                style={phone ? { width: '100%' } : undefined}
                 className="acceptance-more-button"
                 aria-expanded={expanded}
                 aria-controls={criteriaListId}
                 onClick={() => setExpanded((current) => !current)}
+                icon={phone ? (
+                  <DownOutlined
+                    className={`acceptance-more-icon${expanded ? ' is-expanded' : ''}`}
+                    aria-hidden
+                  />
+                ) : undefined}
+                iconPlacement="end"
               >
                 {expanded
                   ? `Show first ${previewLimit} criteria`
                   : phone
                     ? `View all ${criteria.length} criteria`
                     : `Show all ${criteria.length} criteria`}
-                {phone ? (
-                  <DownOutlined
-                    className={`acceptance-more-icon${expanded ? ' is-expanded' : ''}`}
-                    aria-hidden
-                  />
-                ) : null}
               </Button>
-              <Typography.Text type="secondary" className="acceptance-more-meta">
+              <span className="acceptance-more-meta orbit-typography orbit-typography-secondary">
                 {expanded
                   ? `Showing all ${criteria.length} criteria`
                   : `${criteria.length - shown.length} more not shown`}
-              </Typography.Text>
+              </span>
             </div>
           ) : null}
           <OutcomeNote />

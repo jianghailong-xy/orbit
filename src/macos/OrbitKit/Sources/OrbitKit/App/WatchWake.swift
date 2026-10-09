@@ -250,7 +250,7 @@ public enum WatchWakeCard {
     }
 
     /// What the line's chevron is labelled: the background line's word for a fold that holds no job.
-    public static let details = "详情"
+    public static let details = "Details"
 
     private static func noun(_ target: WatchWakeTarget) -> String {
         target.kind == .session ? "Session" : "Task"
