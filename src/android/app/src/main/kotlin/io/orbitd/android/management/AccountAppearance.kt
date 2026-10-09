@@ -17,18 +17,20 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 
 val LocalAppearanceChanged = staticCompositionLocalOf<(String) -> Unit> { {} }
-/** The account's smart model selection switch (`preferences.modelRouting`; off unless the owner turned it on), read with the theme
- * from the same `users/me`: what the composer's ✦ is gated on (OrbitKit `ComposerLogic.smartRoute`). */
+/** The account's smart model selection switch (`preferences.modelRouting`; off unless the owner turned it on, iOS
+ * UserPreferences.smartModelSelection), read with the theme from the same `users/me`. While it is off no page draws smart selection:
+ * the composer's ✦ (OrbitKit `ComposerLogic.smartRoute`), the task page's Suggested and tier tags, the workspace form's Task runs.
+ * Settings' switch sets it the moment the server has taken the change. */
 val LocalSmartSelection = compositionLocalOf { false }
+val LocalSmartSelectionChanged = staticCompositionLocalOf<(Boolean) -> Unit> { {} }
 
 // androidx.activity's own defaults for the navigation bar's scrim (EdgeToEdge.kt).
 private val LightScrim = Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
 private val DarkScrim = Color.argb(0x80, 0x1b, 0x1b, 0x1b)
 
-/** The server owns the preference. A new login cannot inherit the previous account's theme. */
+/** The server owns the preferences. A new login cannot inherit the previous account's theme, or its smart model selection. */
 @Composable
 fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
     val auth by app.session.state.collectAsState()
@@ -39,6 +41,7 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
     var theme by remember(handle) { mutableStateOf("system") }
     var smartSelection by remember(handle) { mutableStateOf(false) }
     var appearanceVersion by remember(handle) { mutableLongStateOf(0L) }
+    var smartSelectionVersion by remember(handle) { mutableLongStateOf(0L) }
     var resume by remember { mutableIntStateOf(0) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle) {
@@ -49,10 +52,12 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
     LaunchedEffect(handle, resume, revision) {
         if (handle != null) {
             val version = appearanceVersion
+            val smartVersion = smartSelectionVersion
             try {
                 val user = ManagementApi(app.session, handle).get("users/me") as JsonObject
                 if (version == appearanceVersion) theme = (user["preferences"] as? JsonObject)?.text("theme") ?: "system"
-                smartSelection = (user["preferences"] as? JsonObject)?.get("modelRouting") == JsonPrimitive(true)
+                // A read that left before the switch was pressed does not take its answer back.
+                if (smartVersion == smartSelectionVersion) smartSelection = smartModelSelection(user["preferences"] as? JsonObject)
             } catch (cancel: CancellationException) { throw cancel }
             catch (_: Exception) { /* Keep this account's last known preference until the next refresh. */ }
         }
@@ -67,7 +72,8 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
             navigationBarStyle = SystemBarStyle.auto(LightScrim, DarkScrim) { dark })
         onDispose { }
     }
-    CompositionLocalProvider(LocalAppearanceChanged provides { appearanceVersion++; theme = it }, LocalSmartSelection provides smartSelection) {
+    CompositionLocalProvider(LocalAppearanceChanged provides { appearanceVersion++; theme = it }, LocalSmartSelection provides smartSelection,
+        LocalSmartSelectionChanged provides { smartSelectionVersion++; smartSelection = it }) {
         OrbitTheme(darkTheme = dark, content = content)
     }
 }

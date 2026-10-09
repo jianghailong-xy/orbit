@@ -58,7 +58,7 @@ data class MoveTarget(val workspaceId: String, val name: String, val reason: Str
 data class MoveTargets(val workspaceId: String? = null, val folderId: String? = null,
     val folders: List<MoveFolder> = emptyList(), val reason: String? = null,
     val needsEnd: Boolean = false, val branch: String? = null, val changedFiles: Int = 0,
-    val targets: List<MoveTarget> = emptyList())
+    val unmergedFiles: Int = 0, val mergeTarget: String? = null, val targets: List<MoveTarget> = emptyList())
 
 /** iOS's order (AgentListLogic.ordered): the server's — placed workspaces by position, then never-placed ones
  * (position null) oldest first — with the workspaces that have no runner moved to the bottom. */
