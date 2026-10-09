@@ -91,7 +91,7 @@ describe('dshRunnerState', () => {
 describe('dshRepair', () => {
   it('maps the runner codes and key-rejection evidence, and nothing vaguer', () => {
     // The runner's own wording, as an older runner still writes it.
-    expect(dshRepair('DSH_CREDENTIAL_MISSING: configure a DeepSeek Harness API key for this session')).toBe('needsKey');
+    expect(dshRepair('DSH_CREDENTIAL_MISSING: DeepSeek Harness runs on a DeepSeek API key, and this session has none; connect one in Orbit')).toBe('needsKey');
     expect(dshRepair('dsh session/prompt (-32603): Invalid API key provided')).toBe('invalidKey');
     expect(dshRepair('dsh session/prompt (-32603): authentication_error status 401')).toBe('invalidKey');
     expect(dshRepair('DeepSeek Harness requires a newer Orbit runner with dsh support; update this runner first')).toBe(

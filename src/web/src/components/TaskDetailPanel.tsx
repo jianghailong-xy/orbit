@@ -55,6 +55,8 @@ import { supersessionNote, taskOutcomeChip } from '../lib/taskOutcome';
 import { taskStartOwnedByCompletionDeclaration, type FilterableTask } from '../lib/taskFilters';
 import type { ProjectTaskVerificationState } from '../lib/projectDependencyGraph';
 import { meQuery, ownerConfirmationQuery, providersQuery, runnersQuery } from '../lib/queries';
+import { poolsAsProviders, providerPoolsQuery } from '../lib/providerPools';
+import { sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import { useToast } from '../lib/toast';
 import {
@@ -785,11 +787,21 @@ export function TaskDetailPanel({
   });
 
   // The engine/provider/model pins below need the same sources the New Session pickers use: the
-  // owner's keys, and the model catalogue the assignee's runner reported — model ids are per-machine,
-  // so they come from that runner.
+  // owner's keys and account pools — the shared pools they are in first, as the composer lists them —
+  // and the model catalogue the assignee's runner reported — model ids are per-machine, so they come
+  // from that runner.
   const providersQ = useQuery(providersQuery());
+  const accountPoolsQ = useQuery(providerPoolsQuery());
+  const sharedPoolsQ = useQuery(sharedPoolsQuery());
   const runnersQ = useQuery(runnersQuery());
-  const configuredProviders: ConfiguredProvider[] = providersQ.data ?? [];
+  const accountPools = useMemo(
+    () => [...(sharedPoolsQ.data ?? []).map(sharedPoolAsProviderPool), ...(accountPoolsQ.data ?? [])],
+    [sharedPoolsQ.data, accountPoolsQ.data],
+  );
+  const configuredProviders: ConfiguredProvider[] = useMemo(
+    () => [...(providersQ.data ?? []), ...poolsAsProviders(accountPools)],
+    [providersQ.data, accountPools],
+  );
   const assigneeWorkspace = workspaceList.find((a) => a.id === task?.assignee?.id);
   const assigneeRunner = (runnersQ.data ?? []).find((r) => r.id === assigneeWorkspace?.runnerId);
   const navigate = useNavigate();
@@ -808,6 +820,7 @@ export function TaskDetailPanel({
     configured: configuredProviders,
     modelCatalog: assigneeRunner?.modelCatalog,
     runtimeDefaultModels: assigneeRunner?.runtimeDefaultModels,
+    pools: accountPools,
     antigravity: assigneeRunner?.antigravity,
     antigravityKeyAvailable: assigneeWorkspace
       ? assigneeWorkspace.antigravityKeyAvailableByRunner?.[assigneeRunner?.id] === true

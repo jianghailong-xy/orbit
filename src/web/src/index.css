@@ -17486,8 +17486,10 @@ button.chat-jump-start:hover {
 .np-pop .ant-popover-container {
   padding: 6px;
 }
+/* Wide enough for the longest engine name (Antigravity CLI, DeepSeek Harness) beside the model it
+   would run (board 4 ①). */
 .np-list {
-  width: 244px;
+  width: 312px;
 }
 .np-row {
   display: flex;

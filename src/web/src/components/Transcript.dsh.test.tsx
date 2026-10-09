@@ -51,7 +51,7 @@ describe('DeepSeek Harness transcript', () => {
 
   it('turns a missing or rejected key into a fix on the key, with the retry — and calls it a DeepSeek key (board 8)', () => {
     const missing = render([
-      { seq: 1, type: 'error', payload: { message: 'DSH_CREDENTIAL_MISSING: configure a DeepSeek Harness API key for this session; runner and workspace .env credentials are not used' } },
+      { seq: 1, type: 'error', payload: { message: 'DSH_CREDENTIAL_MISSING: DeepSeek Harness runs on a DeepSeek API key, and this session has none; connect one in Orbit (runner and workspace .env credentials are not used)' } },
     ]);
     expect(missing).toContain('data-dsh-repair="needsKey"');
     expect(missing).toContain('DeepSeek Harness needs a DeepSeek key');
@@ -92,7 +92,7 @@ describe('DeepSeek Harness transcript', () => {
   });
 
   it('leaves other runtimes and context-free views to the plain error line', () => {
-    const message = 'DSH_CREDENTIAL_MISSING: configure a DeepSeek Harness API key for this session';
+    const message = 'DSH_CREDENTIAL_MISSING: DeepSeek Harness runs on a DeepSeek API key, and this session has none; connect one in Orbit';
     expect(render([{ seq: 1, type: 'error', payload: { message } }], { ...help, runtime: 'claude' })).not.toContain('data-dsh-repair');
     expect(render([{ seq: 1, type: 'error', payload: { message } }], null)).not.toContain('data-dsh-repair');
   });

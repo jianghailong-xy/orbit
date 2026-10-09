@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeId } from '../lib/idCodec';
 import { meQuery, type UserPreferences } from '../lib/queries';
 import type { ConfiguredProvider } from '../lib/workspaceDefaults';
+import { PROVIDER_POOLS_KEY, type ProviderPool } from '../lib/providerPools';
+import { SHARED_POOLS_KEY } from '../lib/sharedPools';
 
 /**
  * Smart model selection in the task panel (docs/model-routing-design.md §9; the web mock §2–§3).
@@ -122,6 +124,7 @@ async function mount(
   machine: Record<string, unknown> = {},
   providers: ConfiguredProvider[] = [],
   preferences: UserPreferences = { modelRouting: true },
+  pools: ProviderPool[] = [],
 ): Promise<void> {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
   client.setQueryData(meQuery().queryKey, { id: 'u1', email: 'a@b.c', name: 'A', createdAt: '2026-01-01T00:00:00Z', preferences });
@@ -142,6 +145,8 @@ async function mount(
     },
   ]);
   client.setQueryData(['providers'], providers);
+  client.setQueryData(PROVIDER_POOLS_KEY, pools);
+  client.setQueryData(SHARED_POOLS_KEY, []);
   container = document.createElement('div');
   document.body.appendChild(container);
   const next = createRoot(container);
@@ -427,10 +432,14 @@ describe('the task pin: an engine, then a credential it runs (board 6)', { timeo
   });
 
   it('lists the runner sign-in as Claude Code’s default, then its pools and keys', async () => {
-    await mount(detail({ engine: 'claude' }), {}, dshRunner, keys);
+    const pool: ProviderPool = {
+      id: 'pool-1', slug: 'claude-accounts', label: 'Claude accounts', engine: 'claude', resetsAt: null, unavailable: null,
+      members: [{ id: 'm1', slug: 'claude-team-a', label: 'Claude Team A', presetSlug: 'anthropic', enabled: true, planUsage: null, state: 'NO_QUOTA', resetsAt: null, next: true }],
+    } as ProviderPool;
+    await mount(detail({ engine: 'claude' }), {}, dshRunner, keys, undefined, [pool]);
     expect(placeholderOf('Provider')).toBe('Engine default · sign-in on wikova');
-    expect((await openField('Provider')).map(words)).toEqual(['Engine defaultrunner sign-in', 'DeepSeek', 'DeepSeek 2', 'Z.AI (GLM)']);
-    expect(groupLabels()).toEqual(['Your keys']);
+    expect((await openField('Provider')).map(words)).toEqual(['Engine defaultrunner sign-in', 'Claude accounts', 'DeepSeek', 'DeepSeek 2', 'Z.AI (GLM)']);
+    expect(groupLabels()).toEqual(['Account pools', 'Your keys']);
   });
 
   it('pins a credential together with the engine it runs on', async () => {

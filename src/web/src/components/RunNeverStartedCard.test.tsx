@@ -144,7 +144,7 @@ describe('a session with no SOURCE refusal', () => {
 
   it('calls the missing credential a DeepSeek key, not a key of the engine', () => {
     const card = facts(
-      { status: 'QUEUED', numTurns: 0, engineStartedAt: null, error: 'DSH_CREDENTIAL_MISSING: configure a DeepSeek Harness API key for this session' },
+      { status: 'QUEUED', numTurns: 0, engineStartedAt: null, error: 'DSH_CREDENTIAL_MISSING: DeepSeek Harness runs on a DeepSeek API key, and this session has none; connect one in Orbit' },
       { runtime: 'dsh' },
     );
     expect(card.why).toBe('DeepSeek Harness needs a DeepSeek key');
