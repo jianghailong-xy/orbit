@@ -57,8 +57,8 @@ internal class SessionConsole(val app: OrbitApplication, val handle: SessionHand
     val installInFlight get() = (runner?.get("install") as? JsonObject)?.string("status") in setOf("pending", "installing")
     val canInstallAntigravity get() = runner != null && !RunnerPage.isOffline(runner!!, System.currentTimeMillis()) &&
         (antigravity?.get("supported") as? JsonPrimitive)?.booleanOrNull == true && !installing && !installInFlight
-    /** Google sign-in can run on this runner (googleLogin `available`); else why not, in the runner page's words. */
-    val googleSignIn get() = antigravity?.string("googleLogin") == "available"
+    /** Google sign-in can run on this runner (the runner page's own rule, A13c); else why not, in the runner page's words. */
+    val googleSignIn get() = runner?.let(RunnerPage::antigravityCanSignIn) == true
     val googleSignInHint get() = RunnerPage.antigravityLoginHint(antigravity?.string("googleLogin"))
 
     fun installAntigravity() {
