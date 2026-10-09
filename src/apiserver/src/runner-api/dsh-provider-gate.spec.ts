@@ -54,7 +54,8 @@ test('P1b dsh reclaim withholds unsupported Harness while retaining legacy check
       runner: { findUnique: async () => ({ capabilities: [], capabilitiesReportedAt: new Date() }) },
       session: { findMany: async () => [row('dsh', 'dsh'), row('claude', 'claude')] },
       modelProvider: { findMany: async () => [] }, user: { findUnique: async () => null },
-      runEvent: { aggregate: async () => ({ _max: { seq: 0 } }) },
+      // run_event max(seq) for the reclaim snapshot — raw SQL, never `aggregate`.
+      $queryRaw: async () => [{ max: 0 }],
     };
     const response = await controller(prisma, {}).reclaim(runner, SESSION_SOURCE_PIN_V1, request);
     assert.deepEqual(response.sessions.map((session) => session.sessionId), ['claude']);

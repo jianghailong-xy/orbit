@@ -602,8 +602,8 @@ describe('the start card’s plan as a graph', () => {
     };
   };
 
-  it('draws a plan that fits the 720px card, and lists one squeezed into a phone’s sheet', () => {
-    // The card's canvas inside its 720px cap; the review sheet on a 390pt phone.
+  it('draws a plan that fits a wide conversation, and lists one squeezed into a phone’s sheet', () => {
+    // The card's canvas at the transcript's full width; the review sheet on a 390pt phone.
     expect(startPlanGraphFits(wikiPlan(), 688)).toBe(true);
     expect(startPlanGraphFits(wikiPlan(), 358)).toBe(false);
   });

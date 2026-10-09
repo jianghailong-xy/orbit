@@ -2,8 +2,35 @@
   "rule": "Accepted migration differences for the P0 regression. Only a P0 screenshot whose difference from its current expectation (the P0.2 original or its main drift reference) the coordinator CONFIRMed in a migration batch's evidence may be registered, after that batch landed, with the before and after originals of the batch's same-commit comparison in the P0.2 environment. Nothing else is registered here. Maintenance rules: ../README.md.",
   "screenshots": [
     {
+      "screenshot": "chromium-dark-desktop/task-action-menu.png",
+      "sha256": "f25867226da7cf56e5ddb500545e331cf56447d14a8b9dfca4fd5ce072c01fee",
+      "replaces": {
+        "layer": "p0-drift",
+        "sha256": "7af4c91081813d74bebd31f87e1cdb8ce87b8b239ccbd85e061e0c1034796b45"
+      },
+      "decision": {
+        "taskId": "34Za39ACSBoCkYKc80Md8",
+        "evidenceRevision": 2,
+        "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+        "verdict": "CONFIRM",
+        "document": "p3.2/README.md"
+      },
+      "difference": "叠在已接受差异上的 main 改动（已接受层第 6 条第二种情况）：main cbe6a6635（Merge refs/heads/project/34aithLozDanSv6nq0IAi into refs/heads/main，项目线 first-parent 上的提交）合入 33e0e2e09（feat(web): Runners and Providers become one Infrastructure page），桌面侧栏的 Runners、Providers 两行合成一行 Infrastructure，其下各段上移一行（36px）。X 的树已含该页面的迁移代码，所以不更新 main 漂移层：before 是 X 的 first-parent 前驱 fce12bc2a，after 是 X 的树 cbe6a6635。本截图此前没有已接受条目：P3.2 让深色 task-action-menu 的菜单变化低于 P0 比较器阈值（p3.2-accepted 逐张列出，登记工具不收），含 cbe6a6635 的每一棵 main 树都带着它，在 X 的树上重新生成 main 漂移参考会把这部分迁移像素放进 main 漂移层，所以按同一判定叠在其上登记。before 对照当前期望（第 1 批 A4 的 main 漂移参考）只差 P3.2 记录的菜单像素（Chromium 466、WebKit 489 个，单通道差 45，比较器通过）；before → after 只在侧栏列（x 16–262、y 172–391）变化。原判定：P3.2 第 2 版证据的 CONFIRM。归因证据（main 漂移规则 (a)–(c)）和逐张数据见 p0-drift-7/README.md「归因」与 attribution/attribution.json；同提交原件的运行见 p0-drift-7/attribution/runs/。",
+      "sameCommit": {
+        "before": {
+          "commit": "fce12bc2a4c7cd46fb3c7b903ab49edfe8bcb186",
+          "sha256": "fe9a650f2062b605980ddc8612ac9e5b87a02fe7eb38cbd379047bfc8c1806cc"
+        },
+        "after": {
+          "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+          "sha256": "f25867226da7cf56e5ddb500545e331cf56447d14a8b9dfca4fd5ce072c01fee"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      }
+    },
+    {
       "screenshot": "chromium-dark-desktop/task-share-dialog.png",
-      "sha256": "2dbf515d731728a7ee9fcccc8f37c31c5725b315b0dea0e0f330face2612c3ce",
+      "sha256": "4d8e1b6a6796a0432cca1f79b8528047b8afbd8ce4baa79a6cbf99d2ead5ba38",
       "replaces": {
         "layer": "p0-drift",
         "sha256": "31621a609fbd9d82fdfe83bcacf5506a7c1efdf48b1419aaf77a9e3274fc53f3"
@@ -15,18 +42,42 @@
         "verdict": "CONFIRM",
         "document": "p3.2/README.md"
       },
-      "difference": "P3.2 把分享对话框换成 Orbit Dialog（P2.1 约定：打开时聚焦对话框本身）。P0 task 场景打开分享对话框后按一次 Tab：旧对话框先聚焦 Close、Tab 到 Access；Orbit 先聚焦对话框、Tab 到 Close。截图上超过抗锯齿级的差异只有焦点环的位置：before 在 Access 按钮（Anyone with the link）上，after 在右上角的 Close 按钮上；其余是每通道不超过 2 级的抗锯齿级差异（Chromium 手机上遍及对话框区域）。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-share-dialog 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+      "difference": "叠在已接受差异上的 main 改动（已接受层第 6 条第二种情况）：main cbe6a6635（Merge refs/heads/project/34aithLozDanSv6nq0IAi into refs/heads/main，项目线 first-parent 上的提交）合入 33e0e2e09（feat(web): Runners and Providers become one Infrastructure page），桌面侧栏的 Runners、Providers 两行合成一行 Infrastructure，其下各段上移一行（36px）。X 的树已含该页面的迁移代码，所以不更新 main 漂移层：before 是 X 的 first-parent 前驱 fce12bc2a，after 是 X 的树 cbe6a6635。本截图：before 与当前已接受期望（P3.2 的 after 原件）逐字节相同；before → after 只在侧栏列（x 16–262、y 172–391）变化，分享对话框的遮罩下侧栏同样变化，对话框本身和 P3.2 接受的焦点约定、Share… 行高差都不变。原判定：P3.2 第 2 版证据的 CONFIRM，旧条目在 previous。归因证据（main 漂移规则 (a)–(c)）和逐张数据见 p0-drift-7/README.md「归因」与 attribution/attribution.json；同提交原件的运行见 p0-drift-7/attribution/runs/。",
       "sameCommit": {
         "before": {
-          "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
-          "sha256": "31621a609fbd9d82fdfe83bcacf5506a7c1efdf48b1419aaf77a9e3274fc53f3"
-        },
-        "after": {
-          "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+          "commit": "fce12bc2a4c7cd46fb3c7b903ab49edfe8bcb186",
           "sha256": "2dbf515d731728a7ee9fcccc8f37c31c5725b315b0dea0e0f330face2612c3ce"
         },
+        "after": {
+          "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+          "sha256": "4d8e1b6a6796a0432cca1f79b8528047b8afbd8ce4baa79a6cbf99d2ead5ba38"
+        },
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
-      }
+      },
+      "previous": [
+        {
+          "sha256": "2dbf515d731728a7ee9fcccc8f37c31c5725b315b0dea0e0f330face2612c3ce",
+          "decision": {
+            "taskId": "34Za39ACSBoCkYKc80Md8",
+            "evidenceRevision": 2,
+            "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+            "verdict": "CONFIRM",
+            "document": "p3.2/README.md"
+          },
+          "difference": "P3.2 把分享对话框换成 Orbit Dialog（P2.1 约定：打开时聚焦对话框本身）。P0 task 场景打开分享对话框后按一次 Tab：旧对话框先聚焦 Close、Tab 到 Access；Orbit 先聚焦对话框、Tab 到 Close。截图上超过抗锯齿级的差异只有焦点环的位置：before 在 Access 按钮（Anyone with the link）上，after 在右上角的 Close 按钮上；其余是每通道不超过 2 级的抗锯齿级差异（Chromium 手机上遍及对话框区域）。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-share-dialog 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+          "sameCommit": {
+            "before": {
+              "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+              "sha256": "31621a609fbd9d82fdfe83bcacf5506a7c1efdf48b1419aaf77a9e3274fc53f3"
+            },
+            "after": {
+              "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+              "sha256": "2dbf515d731728a7ee9fcccc8f37c31c5725b315b0dea0e0f330face2612c3ce"
+            },
+            "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+          }
+        }
+      ]
     },
     {
       "screenshot": "chromium-dark-phone/task-share-dialog.png",
@@ -57,7 +108,7 @@
     },
     {
       "screenshot": "chromium-light-desktop/task-action-menu.png",
-      "sha256": "82e929f91db530ce8dafc4f688a479a1942236725558465dc2df26456fa89a9a",
+      "sha256": "e9234a96e06fc13c50eac67f15521d088dcaf10f7577a2ee8210693dd174f76f",
       "replaces": {
         "layer": "p0-drift",
         "sha256": "a96c90d797da2516fed17d9a236df05942ccdeb16752a73aaa36de00f87de355"
@@ -69,22 +120,46 @@
         "verdict": "CONFIRM",
         "document": "p3.2/README.md"
       },
-      "difference": "P3.2 把任务面板的 More 菜单换成 Orbit Menu（P2.2 约定：打开后焦点移入菜单）。旧菜单打开后焦点留在 More 按钮上，所以 before 的 More 按钮有焦点环；Orbit Menu 把焦点移入菜单，after 的 More 按钮没有焦点环。菜单本身的位置、尺寸与文字与旧组件一致。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-action-menu 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+      "difference": "叠在已接受差异上的 main 改动（已接受层第 6 条第二种情况）：main cbe6a6635（Merge refs/heads/project/34aithLozDanSv6nq0IAi into refs/heads/main，项目线 first-parent 上的提交）合入 33e0e2e09（feat(web): Runners and Providers become one Infrastructure page），桌面侧栏的 Runners、Providers 两行合成一行 Infrastructure，其下各段上移一行（36px）。X 的树已含该页面的迁移代码，所以不更新 main 漂移层：before 是 X 的 first-parent 前驱 fce12bc2a，after 是 X 的树 cbe6a6635。本截图：before 与当前已接受期望（P3.2 的 after 原件）逐字节相同；before → after 只在侧栏列（x 16–262、y 172–391）变化，More 菜单与 P3.2 接受的打开即聚焦约定不变。原判定：P3.2 第 2 版证据的 CONFIRM，旧条目在 previous。归因证据（main 漂移规则 (a)–(c)）和逐张数据见 p0-drift-7/README.md「归因」与 attribution/attribution.json；同提交原件的运行见 p0-drift-7/attribution/runs/。",
       "sameCommit": {
         "before": {
-          "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
-          "sha256": "a96c90d797da2516fed17d9a236df05942ccdeb16752a73aaa36de00f87de355"
-        },
-        "after": {
-          "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+          "commit": "fce12bc2a4c7cd46fb3c7b903ab49edfe8bcb186",
           "sha256": "82e929f91db530ce8dafc4f688a479a1942236725558465dc2df26456fa89a9a"
         },
+        "after": {
+          "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+          "sha256": "e9234a96e06fc13c50eac67f15521d088dcaf10f7577a2ee8210693dd174f76f"
+        },
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
-      }
+      },
+      "previous": [
+        {
+          "sha256": "82e929f91db530ce8dafc4f688a479a1942236725558465dc2df26456fa89a9a",
+          "decision": {
+            "taskId": "34Za39ACSBoCkYKc80Md8",
+            "evidenceRevision": 2,
+            "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+            "verdict": "CONFIRM",
+            "document": "p3.2/README.md"
+          },
+          "difference": "P3.2 把任务面板的 More 菜单换成 Orbit Menu（P2.2 约定：打开后焦点移入菜单）。旧菜单打开后焦点留在 More 按钮上，所以 before 的 More 按钮有焦点环；Orbit Menu 把焦点移入菜单，after 的 More 按钮没有焦点环。菜单本身的位置、尺寸与文字与旧组件一致。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-action-menu 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+          "sameCommit": {
+            "before": {
+              "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+              "sha256": "a96c90d797da2516fed17d9a236df05942ccdeb16752a73aaa36de00f87de355"
+            },
+            "after": {
+              "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+              "sha256": "82e929f91db530ce8dafc4f688a479a1942236725558465dc2df26456fa89a9a"
+            },
+            "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+          }
+        }
+      ]
     },
     {
       "screenshot": "chromium-light-desktop/task-share-dialog.png",
-      "sha256": "1a695d12ea388d8085d9c122eb2113603be3b9fb2e5a6fd0728a2c56aa8e9f3f",
+      "sha256": "64f02d0417b70ffaa52c5a74be668ae4ebdc99d7ce407e90924b2c2629f36828",
       "replaces": {
         "layer": "p0-drift",
         "sha256": "4e17a8be17426fb9f30176b813a601723dc34dea6fe0608c5c83c322ccc49fc8"
@@ -96,18 +171,42 @@
         "verdict": "CONFIRM",
         "document": "p3.2/README.md"
       },
-      "difference": "P3.2 把分享对话框换成 Orbit Dialog（P2.1 约定：打开时聚焦对话框本身）。P0 task 场景打开分享对话框后按一次 Tab：旧对话框先聚焦 Close、Tab 到 Access；Orbit 先聚焦对话框、Tab 到 Close。截图上超过抗锯齿级的差异只有焦点环的位置：before 在 Access 按钮（Anyone with the link）上，after 在右上角的 Close 按钮上；其余是每通道不超过 2 级的抗锯齿级差异（Chromium 手机上遍及对话框区域）。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-share-dialog 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+      "difference": "叠在已接受差异上的 main 改动（已接受层第 6 条第二种情况）：main cbe6a6635（Merge refs/heads/project/34aithLozDanSv6nq0IAi into refs/heads/main，项目线 first-parent 上的提交）合入 33e0e2e09（feat(web): Runners and Providers become one Infrastructure page），桌面侧栏的 Runners、Providers 两行合成一行 Infrastructure，其下各段上移一行（36px）。X 的树已含该页面的迁移代码，所以不更新 main 漂移层：before 是 X 的 first-parent 前驱 fce12bc2a，after 是 X 的树 cbe6a6635。本截图：before 与当前已接受期望（P3.2 的 after 原件）逐字节相同；before → after 只在侧栏列（x 16–262、y 172–391）变化，分享对话框的遮罩下侧栏同样变化，对话框本身和 P3.2 接受的焦点约定、Share… 行高差都不变。原判定：P3.2 第 2 版证据的 CONFIRM，旧条目在 previous。归因证据（main 漂移规则 (a)–(c)）和逐张数据见 p0-drift-7/README.md「归因」与 attribution/attribution.json；同提交原件的运行见 p0-drift-7/attribution/runs/。",
       "sameCommit": {
         "before": {
-          "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
-          "sha256": "4e17a8be17426fb9f30176b813a601723dc34dea6fe0608c5c83c322ccc49fc8"
-        },
-        "after": {
-          "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+          "commit": "fce12bc2a4c7cd46fb3c7b903ab49edfe8bcb186",
           "sha256": "1a695d12ea388d8085d9c122eb2113603be3b9fb2e5a6fd0728a2c56aa8e9f3f"
         },
+        "after": {
+          "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+          "sha256": "64f02d0417b70ffaa52c5a74be668ae4ebdc99d7ce407e90924b2c2629f36828"
+        },
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
-      }
+      },
+      "previous": [
+        {
+          "sha256": "1a695d12ea388d8085d9c122eb2113603be3b9fb2e5a6fd0728a2c56aa8e9f3f",
+          "decision": {
+            "taskId": "34Za39ACSBoCkYKc80Md8",
+            "evidenceRevision": 2,
+            "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+            "verdict": "CONFIRM",
+            "document": "p3.2/README.md"
+          },
+          "difference": "P3.2 把分享对话框换成 Orbit Dialog（P2.1 约定：打开时聚焦对话框本身）。P0 task 场景打开分享对话框后按一次 Tab：旧对话框先聚焦 Close、Tab 到 Access；Orbit 先聚焦对话框、Tab 到 Close。截图上超过抗锯齿级的差异只有焦点环的位置：before 在 Access 按钮（Anyone with the link）上，after 在右上角的 Close 按钮上；其余是每通道不超过 2 级的抗锯齿级差异（Chromium 手机上遍及对话框区域）。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-share-dialog 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+          "sameCommit": {
+            "before": {
+              "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+              "sha256": "4e17a8be17426fb9f30176b813a601723dc34dea6fe0608c5c83c322ccc49fc8"
+            },
+            "after": {
+              "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+              "sha256": "1a695d12ea388d8085d9c122eb2113603be3b9fb2e5a6fd0728a2c56aa8e9f3f"
+            },
+            "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+          }
+        }
+      ]
     },
     {
       "screenshot": "chromium-light-phone/task-action-menu.png",
@@ -165,7 +264,7 @@
     },
     {
       "screenshot": "webkit-dark-desktop/notification-error.png",
-      "sha256": "aa47ee44b7ffee6ac589b93a022b2d4303e9d9992851f7372e4a82e6c0dbb597",
+      "sha256": "81d4258380981e3d42b523842c8078ba8143ad978c886a3113888aba0415c2a3",
       "replaces": {
         "layer": "p0-drift",
         "sha256": "d12982adfe17589b6c970851d0d2a80d5c8c35cfd37d9da72f6b28f4cb557797"
@@ -177,22 +276,68 @@
         "verdict": "CONFIRM",
         "document": "webkit-scroll-lock/README.md"
       },
-      "difference": "WebKit 对话框滚动锁一批给 lib/toast.tsx 的读屏 live region 加了 position: fixed。它挂在 body 末尾，原先按 absolute 的静态位置排在视口下缘之外，第一次出通知后文档比视口高 1px，Linux WebKit 因全站 8px 的 ::-webkit-scrollbar 给文档画出滚动条；修复后文档始终一个视口高。P0 的 settings-saved、profile-validation、notification-error 都在出通知后截图，after 相对 before 只有两件事：（1）文档滚动条消失：before 右侧 8px 是没有绘制的透明列（RGBA 0,0,0,0），(0,0) 多一个灰点（明色 217,217,217，暗色 74,74,77），after 两者都没有，右侧 8px 是页面本身；（2）桌面主区按 1280 排而不是 1272：居中内容右移 4px，靠右内容和通知列（ToastViewport 按视口宽度定位）右移 8px，左侧导航不变；手机布局视口始终是 390，内容和通知都不动。本截图：文档滚动条消失；会话页消息列与输入框宽 8px，错误卡片、靠右的用户气泡和输入框右侧的模型与发送键右移 8px；归为其它的像素（明 253、暗 326 个）是错误卡片右移后露出的标题文字与卡片阴影边。出处：webkit-scroll-lock/README.md「P0 的影响：12 张 WebKit 截图，9 张需要重登」逐张说明表中该截图一行；协调者对该批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6）把这 9 张接受为该批的迁移差异。该批 compare/p0-changed-webkit.json 的不同像素数与 shots/p0/classes.json 的逐像素归类（灰 = 文档滚动条，蓝 = 右移 4px，绿 = 右移 8px，红 = 其它），与本条 before → after 相同。",
+      "difference": "叠在已接受差异上的 main 改动（已接受层第 6 条第二种情况）：main 3960c19c2（feat(web): copy · time under each finished turn's reply，main first-parent 上的单个提交，经项目线 17980cb7c 吸收 main 87351bf9a 进入）在每个结束的回合下面加一行复制键和结束时间（12:00 PM），取代原来 12px 的空白分隔，其下的内容随之下移。X 的树已含该页面的迁移代码（WebKit 滚动锁修复），所以不更新 main 漂移层：before 是 X 的 first-parent 前驱 d976df772，after 是 X 的树 3960c19c2。之后的 main 9d3751ec2（输入框上方的分隔线改为渐隐）对本截图的变化低于 P0 比较器阈值，登记工具不收，记在 p0-drift-7。本截图：before 复现当前已接受期望（第 7 批 A12 那一条的 after 原件）；before → after 只在消息列（x ≥ 621）变化，侧栏、错误卡片的位置与文档滚动条的消失都不变。原判定：WebKit 滚动锁一批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6），旧条目在 previous。归因证据（main 漂移规则 (a)–(c)）和逐张数据见 p0-drift-7/README.md「归因」与 attribution/attribution.json；同提交原件的运行见 p0-drift-7/attribution/runs/。",
       "sameCommit": {
         "before": {
-          "commit": "15b7b56093139c7b502e6618e9700ef78c9cccba",
-          "sha256": "d12982adfe17589b6c970851d0d2a80d5c8c35cfd37d9da72f6b28f4cb557797"
+          "commit": "d976df77261512d2b98e3e0c35b2b8c7270d4aa4",
+          "sha256": "41ee2a5447597982f1d8fc8b06d4c036db9f2a8dbfbf90c473e5aacd339db558"
         },
         "after": {
-          "commit": "b2568f28d8bb87d12eec762d1f810562503ed2d9",
-          "sha256": "aa47ee44b7ffee6ac589b93a022b2d4303e9d9992851f7372e4a82e6c0dbb597"
+          "commit": "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+          "sha256": "81d4258380981e3d42b523842c8078ba8143ad978c886a3113888aba0415c2a3"
         },
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
-      }
+      },
+      "previous": [
+        {
+          "sha256": "aa47ee44b7ffee6ac589b93a022b2d4303e9d9992851f7372e4a82e6c0dbb597",
+          "decision": {
+            "taskId": "34cBi0yt6bFcSmbJFgDPj",
+            "evidenceRevision": 1,
+            "evidenceDigest": "fdb19816d1e31af2dc3463fe3e359c68b7ba86084f284f24009f8b92dc468e7c",
+            "verdict": "CONFIRM",
+            "document": "webkit-scroll-lock/README.md"
+          },
+          "difference": "WebKit 对话框滚动锁一批给 lib/toast.tsx 的读屏 live region 加了 position: fixed。它挂在 body 末尾，原先按 absolute 的静态位置排在视口下缘之外，第一次出通知后文档比视口高 1px，Linux WebKit 因全站 8px 的 ::-webkit-scrollbar 给文档画出滚动条；修复后文档始终一个视口高。P0 的 settings-saved、profile-validation、notification-error 都在出通知后截图，after 相对 before 只有两件事：（1）文档滚动条消失：before 右侧 8px 是没有绘制的透明列（RGBA 0,0,0,0），(0,0) 多一个灰点（明色 217,217,217，暗色 74,74,77），after 两者都没有，右侧 8px 是页面本身；（2）桌面主区按 1280 排而不是 1272：居中内容右移 4px，靠右内容和通知列（ToastViewport 按视口宽度定位）右移 8px，左侧导航不变；手机布局视口始终是 390，内容和通知都不动。本截图：文档滚动条消失；会话页消息列与输入框宽 8px，错误卡片、靠右的用户气泡和输入框右侧的模型与发送键右移 8px；归为其它的像素（明 253、暗 326 个）是错误卡片右移后露出的标题文字与卡片阴影边。出处：webkit-scroll-lock/README.md「P0 的影响：12 张 WebKit 截图，9 张需要重登」逐张说明表中该截图一行；协调者对该批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6）把这 9 张接受为该批的迁移差异。该批 compare/p0-changed-webkit.json 的不同像素数与 shots/p0/classes.json 的逐像素归类（灰 = 文档滚动条，蓝 = 右移 4px，绿 = 右移 8px，红 = 其它），与本条 before → after 相同。",
+          "sameCommit": {
+            "before": {
+              "commit": "15b7b56093139c7b502e6618e9700ef78c9cccba",
+              "sha256": "d12982adfe17589b6c970851d0d2a80d5c8c35cfd37d9da72f6b28f4cb557797"
+            },
+            "after": {
+              "commit": "b2568f28d8bb87d12eec762d1f810562503ed2d9",
+              "sha256": "aa47ee44b7ffee6ac589b93a022b2d4303e9d9992851f7372e4a82e6c0dbb597"
+            },
+            "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+          }
+        },
+        {
+          "sha256": "41ee2a5447597982f1d8fc8b06d4c036db9f2a8dbfbf90c473e5aacd339db558",
+          "decision": {
+            "taskId": "34cBi0yt6bFcSmbJFgDPj",
+            "evidenceRevision": 1,
+            "evidenceDigest": "fdb19816d1e31af2dc3463fe3e359c68b7ba86084f284f24009f8b92dc468e7c",
+            "verdict": "CONFIRM",
+            "document": "webkit-scroll-lock/README.md"
+          },
+          "difference": "叠在已接受差异上的 main 改动（已接受层第 6 条第二种情况）：main cbe6a6635（Merge refs/heads/project/34aithLozDanSv6nq0IAi into refs/heads/main，项目线 first-parent 上的提交）合入 33e0e2e09（feat(web): Runners and Providers become one Infrastructure page），桌面侧栏的 Runners、Providers 两行合成一行 Infrastructure，其下各段上移一行（36px）。X 的树已含该页面的迁移代码，所以不更新 main 漂移层：before 是 X 的 first-parent 前驱 fce12bc2a，after 是 X 的树 cbe6a6635。本截图：before 与当前已接受期望（WebKit 滚动锁一批的 after 原件）逐字节相同；before → after 只在侧栏列（x 8–270、y 172–391）变化：会话页侧栏里选中的工作区一行随之上移，所以比其它页面多出这一行。消息列、错误卡片与文档滚动条的消失都不变。原判定：WebKit 滚动锁一批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6），旧条目在 previous。归因证据（main 漂移规则 (a)–(c)）和逐张数据见 p0-drift-7/README.md「归因」与 attribution/attribution.json；同提交原件的运行见 p0-drift-7/attribution/runs/。",
+          "sameCommit": {
+            "before": {
+              "commit": "fce12bc2a4c7cd46fb3c7b903ab49edfe8bcb186",
+              "sha256": "aa47ee44b7ffee6ac589b93a022b2d4303e9d9992851f7372e4a82e6c0dbb597"
+            },
+            "after": {
+              "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+              "sha256": "41ee2a5447597982f1d8fc8b06d4c036db9f2a8dbfbf90c473e5aacd339db558"
+            },
+            "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+          }
+        }
+      ]
     },
     {
       "screenshot": "webkit-dark-desktop/profile-validation.png",
-      "sha256": "8d686d6d4ca78d33f82deaebdd45e5eb9cb8095c4dcc7a25c66364ddbc00ebd1",
+      "sha256": "58f0e4f9a87920c1cd63294d295a003e0367e6be82eb055cf484b6e033e15036",
       "replaces": {
         "layer": "p0-drift",
         "sha256": "52a0f5eb9e5e9a474dc8c828ac753791e27146e693e4f9f535bae273b7019a3e"
@@ -204,22 +349,46 @@
         "verdict": "CONFIRM",
         "document": "webkit-scroll-lock/README.md"
       },
-      "difference": "WebKit 对话框滚动锁一批给 lib/toast.tsx 的读屏 live region 加了 position: fixed。它挂在 body 末尾，原先按 absolute 的静态位置排在视口下缘之外，第一次出通知后文档比视口高 1px，Linux WebKit 因全站 8px 的 ::-webkit-scrollbar 给文档画出滚动条；修复后文档始终一个视口高。P0 的 settings-saved、profile-validation、notification-error 都在出通知后截图，after 相对 before 只有两件事：（1）文档滚动条消失：before 右侧 8px 是没有绘制的透明列（RGBA 0,0,0,0），(0,0) 多一个灰点（明色 217,217,217，暗色 74,74,77），after 两者都没有，右侧 8px 是页面本身；（2）桌面主区按 1280 排而不是 1272：居中内容右移 4px，靠右内容和通知列（ToastViewport 按视口宽度定位）右移 8px，左侧导航不变；手机布局视口始终是 390，内容和通知都不动。本截图：文档滚动条消失；资料卡片列右移 4px；“Name saved”胶囊随通知列右移 8px，与 Chromium 桌面的位置一致；归为其它的 3 个像素（明暗都在 x 584）在右移内容的边缘，与 before 右移 4px 后各通道差 8 级以内，是抗锯齿。出处：webkit-scroll-lock/README.md「P0 的影响：12 张 WebKit 截图，9 张需要重登」逐张说明表中该截图一行；协调者对该批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6）把这 9 张接受为该批的迁移差异。该批 compare/p0-changed-webkit.json 的不同像素数与 shots/p0/classes.json 的逐像素归类（灰 = 文档滚动条，蓝 = 右移 4px，绿 = 右移 8px，红 = 其它），与本条 before → after 相同。",
+      "difference": "叠在已接受差异上的 main 改动（已接受层第 6 条第二种情况）：main cbe6a6635（Merge refs/heads/project/34aithLozDanSv6nq0IAi into refs/heads/main，项目线 first-parent 上的提交）合入 33e0e2e09（feat(web): Runners and Providers become one Infrastructure page），桌面侧栏的 Runners、Providers 两行合成一行 Infrastructure，其下各段上移一行（36px）。X 的树已含该页面的迁移代码，所以不更新 main 漂移层：before 是 X 的 first-parent 前驱 fce12bc2a，after 是 X 的树 cbe6a6635。本截图：before 与当前已接受期望（WebKit 滚动锁一批的 after 原件）逐字节相同；before → after 只在侧栏列（x 16–262、y 172–391）变化，资料卡片列、“Name saved”胶囊和文档滚动条的消失都不变。原判定：WebKit 滚动锁一批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6），旧条目在 previous。归因证据（main 漂移规则 (a)–(c)）和逐张数据见 p0-drift-7/README.md「归因」与 attribution/attribution.json；同提交原件的运行见 p0-drift-7/attribution/runs/。",
       "sameCommit": {
         "before": {
-          "commit": "15b7b56093139c7b502e6618e9700ef78c9cccba",
-          "sha256": "52a0f5eb9e5e9a474dc8c828ac753791e27146e693e4f9f535bae273b7019a3e"
-        },
-        "after": {
-          "commit": "b2568f28d8bb87d12eec762d1f810562503ed2d9",
+          "commit": "fce12bc2a4c7cd46fb3c7b903ab49edfe8bcb186",
           "sha256": "8d686d6d4ca78d33f82deaebdd45e5eb9cb8095c4dcc7a25c66364ddbc00ebd1"
         },
+        "after": {
+          "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+          "sha256": "58f0e4f9a87920c1cd63294d295a003e0367e6be82eb055cf484b6e033e15036"
+        },
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
-      }
+      },
+      "previous": [
+        {
+          "sha256": "8d686d6d4ca78d33f82deaebdd45e5eb9cb8095c4dcc7a25c66364ddbc00ebd1",
+          "decision": {
+            "taskId": "34cBi0yt6bFcSmbJFgDPj",
+            "evidenceRevision": 1,
+            "evidenceDigest": "fdb19816d1e31af2dc3463fe3e359c68b7ba86084f284f24009f8b92dc468e7c",
+            "verdict": "CONFIRM",
+            "document": "webkit-scroll-lock/README.md"
+          },
+          "difference": "WebKit 对话框滚动锁一批给 lib/toast.tsx 的读屏 live region 加了 position: fixed。它挂在 body 末尾，原先按 absolute 的静态位置排在视口下缘之外，第一次出通知后文档比视口高 1px，Linux WebKit 因全站 8px 的 ::-webkit-scrollbar 给文档画出滚动条；修复后文档始终一个视口高。P0 的 settings-saved、profile-validation、notification-error 都在出通知后截图，after 相对 before 只有两件事：（1）文档滚动条消失：before 右侧 8px 是没有绘制的透明列（RGBA 0,0,0,0），(0,0) 多一个灰点（明色 217,217,217，暗色 74,74,77），after 两者都没有，右侧 8px 是页面本身；（2）桌面主区按 1280 排而不是 1272：居中内容右移 4px，靠右内容和通知列（ToastViewport 按视口宽度定位）右移 8px，左侧导航不变；手机布局视口始终是 390，内容和通知都不动。本截图：文档滚动条消失；资料卡片列右移 4px；“Name saved”胶囊随通知列右移 8px，与 Chromium 桌面的位置一致；归为其它的 3 个像素（明暗都在 x 584）在右移内容的边缘，与 before 右移 4px 后各通道差 8 级以内，是抗锯齿。出处：webkit-scroll-lock/README.md「P0 的影响：12 张 WebKit 截图，9 张需要重登」逐张说明表中该截图一行；协调者对该批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6）把这 9 张接受为该批的迁移差异。该批 compare/p0-changed-webkit.json 的不同像素数与 shots/p0/classes.json 的逐像素归类（灰 = 文档滚动条，蓝 = 右移 4px，绿 = 右移 8px，红 = 其它），与本条 before → after 相同。",
+          "sameCommit": {
+            "before": {
+              "commit": "15b7b56093139c7b502e6618e9700ef78c9cccba",
+              "sha256": "52a0f5eb9e5e9a474dc8c828ac753791e27146e693e4f9f535bae273b7019a3e"
+            },
+            "after": {
+              "commit": "b2568f28d8bb87d12eec762d1f810562503ed2d9",
+              "sha256": "8d686d6d4ca78d33f82deaebdd45e5eb9cb8095c4dcc7a25c66364ddbc00ebd1"
+            },
+            "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+          }
+        }
+      ]
     },
     {
       "screenshot": "webkit-dark-desktop/settings-saved.png",
-      "sha256": "4bc4460111b9a46477d497933e0b5eaf245906ddacd6d25316a1ad407fca0fc2",
+      "sha256": "e7bb335b8da6f305b7a8cff0cbc1529bf848c8515a89eb85da601393573f2887",
       "replaces": {
         "layer": "p0-drift",
         "sha256": "9f4cbab3da76449c9b15a04849d5a152217d55a3399b8357be53f6bf7a032bee"
@@ -231,22 +400,73 @@
         "verdict": "CONFIRM",
         "document": "webkit-scroll-lock/README.md"
       },
-      "difference": "WebKit 对话框滚动锁一批给 lib/toast.tsx 的读屏 live region 加了 position: fixed。它挂在 body 末尾，原先按 absolute 的静态位置排在视口下缘之外，第一次出通知后文档比视口高 1px，Linux WebKit 因全站 8px 的 ::-webkit-scrollbar 给文档画出滚动条；修复后文档始终一个视口高。P0 的 settings-saved、profile-validation、notification-error 都在出通知后截图，after 相对 before 只有两件事：（1）文档滚动条消失：before 右侧 8px 是没有绘制的透明列（RGBA 0,0,0,0），(0,0) 多一个灰点（明色 217,217,217，暗色 74,74,77），after 两者都没有，右侧 8px 是页面本身；（2）桌面主区按 1280 排而不是 1272：居中内容右移 4px，靠右内容和通知列（ToastViewport 按视口宽度定位）右移 8px，左侧导航不变；手机布局视口始终是 390，内容和通知都不动。本截图：文档滚动条消失；设置卡片列右移 4px；“Setting saved”胶囊随通知列右移 8px，与 Chromium 桌面的位置一致；归为其它的几个像素（明 4、暗 2 个）在右移内容的边缘，与 before 右移 4px 后各通道只差 1 级，是抗锯齿。出处：webkit-scroll-lock/README.md「P0 的影响：12 张 WebKit 截图，9 张需要重登」逐张说明表中该截图一行；协调者对该批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6）把这 9 张接受为该批的迁移差异。该批 compare/p0-changed-webkit.json 的不同像素数与 shots/p0/classes.json 的逐像素归类（灰 = 文档滚动条，蓝 = 右移 4px，绿 = 右移 8px，红 = 其它），与本条 before → after 相同。",
+      "difference": "叠在已接受差异上的 main 改动（已接受层第 6 条第二种情况）：main cbe6a6635（Merge refs/heads/project/34aithLozDanSv6nq0IAi into refs/heads/main，项目线 first-parent 上的提交）合入 33e0e2e09（feat(web): Runners and Providers become one Infrastructure page），桌面侧栏的 Runners、Providers 两行合成一行 Infrastructure，其下各段上移一行（36px）。X 的树已含该页面的迁移代码，所以不更新 main 漂移层：before 是 X 的 first-parent 前驱 fce12bc2a，after 是 X 的树 cbe6a6635。本截图：before 与当前已接受期望（WebKit 滚动锁一批的 after 原件）逐字节相同；before → after 只在侧栏列（x 16–262、y 172–391）变化，设置卡片列、胶囊与通知列的位置，以及文档滚动条的消失都不变。原判定：WebKit 滚动锁一批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6），旧条目在 previous。归因证据（main 漂移规则 (a)–(c)）和逐张数据见 p0-drift-7/README.md「归因」与 attribution/attribution.json；同提交原件的运行见 p0-drift-7/attribution/runs/。",
       "sameCommit": {
         "before": {
-          "commit": "15b7b56093139c7b502e6618e9700ef78c9cccba",
-          "sha256": "9f4cbab3da76449c9b15a04849d5a152217d55a3399b8357be53f6bf7a032bee"
+          "commit": "fce12bc2a4c7cd46fb3c7b903ab49edfe8bcb186",
+          "sha256": "4bc4460111b9a46477d497933e0b5eaf245906ddacd6d25316a1ad407fca0fc2"
         },
         "after": {
-          "commit": "b2568f28d8bb87d12eec762d1f810562503ed2d9",
-          "sha256": "4bc4460111b9a46477d497933e0b5eaf245906ddacd6d25316a1ad407fca0fc2"
+          "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+          "sha256": "e7bb335b8da6f305b7a8cff0cbc1529bf848c8515a89eb85da601393573f2887"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      },
+      "previous": [
+        {
+          "sha256": "4bc4460111b9a46477d497933e0b5eaf245906ddacd6d25316a1ad407fca0fc2",
+          "decision": {
+            "taskId": "34cBi0yt6bFcSmbJFgDPj",
+            "evidenceRevision": 1,
+            "evidenceDigest": "fdb19816d1e31af2dc3463fe3e359c68b7ba86084f284f24009f8b92dc468e7c",
+            "verdict": "CONFIRM",
+            "document": "webkit-scroll-lock/README.md"
+          },
+          "difference": "WebKit 对话框滚动锁一批给 lib/toast.tsx 的读屏 live region 加了 position: fixed。它挂在 body 末尾，原先按 absolute 的静态位置排在视口下缘之外，第一次出通知后文档比视口高 1px，Linux WebKit 因全站 8px 的 ::-webkit-scrollbar 给文档画出滚动条；修复后文档始终一个视口高。P0 的 settings-saved、profile-validation、notification-error 都在出通知后截图，after 相对 before 只有两件事：（1）文档滚动条消失：before 右侧 8px 是没有绘制的透明列（RGBA 0,0,0,0），(0,0) 多一个灰点（明色 217,217,217，暗色 74,74,77），after 两者都没有，右侧 8px 是页面本身；（2）桌面主区按 1280 排而不是 1272：居中内容右移 4px，靠右内容和通知列（ToastViewport 按视口宽度定位）右移 8px，左侧导航不变；手机布局视口始终是 390，内容和通知都不动。本截图：文档滚动条消失；设置卡片列右移 4px；“Setting saved”胶囊随通知列右移 8px，与 Chromium 桌面的位置一致；归为其它的几个像素（明 4、暗 2 个）在右移内容的边缘，与 before 右移 4px 后各通道只差 1 级，是抗锯齿。出处：webkit-scroll-lock/README.md「P0 的影响：12 张 WebKit 截图，9 张需要重登」逐张说明表中该截图一行；协调者对该批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6）把这 9 张接受为该批的迁移差异。该批 compare/p0-changed-webkit.json 的不同像素数与 shots/p0/classes.json 的逐像素归类（灰 = 文档滚动条，蓝 = 右移 4px，绿 = 右移 8px，红 = 其它），与本条 before → after 相同。",
+          "sameCommit": {
+            "before": {
+              "commit": "15b7b56093139c7b502e6618e9700ef78c9cccba",
+              "sha256": "9f4cbab3da76449c9b15a04849d5a152217d55a3399b8357be53f6bf7a032bee"
+            },
+            "after": {
+              "commit": "b2568f28d8bb87d12eec762d1f810562503ed2d9",
+              "sha256": "4bc4460111b9a46477d497933e0b5eaf245906ddacd6d25316a1ad407fca0fc2"
+            },
+            "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+          }
+        }
+      ]
+    },
+    {
+      "screenshot": "webkit-dark-desktop/task-action-menu.png",
+      "sha256": "f021d6622b6b3c0172481654af3c951ecc8c9e841407397a6b8f73166e8d9d71",
+      "replaces": {
+        "layer": "p0-drift",
+        "sha256": "bc9adad4cf04c7645a341086ac12f630e58586155fa044e4733380d5708ea406"
+      },
+      "decision": {
+        "taskId": "34Za39ACSBoCkYKc80Md8",
+        "evidenceRevision": 2,
+        "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+        "verdict": "CONFIRM",
+        "document": "p3.2/README.md"
+      },
+      "difference": "叠在已接受差异上的 main 改动（已接受层第 6 条第二种情况）：main cbe6a6635（Merge refs/heads/project/34aithLozDanSv6nq0IAi into refs/heads/main，项目线 first-parent 上的提交）合入 33e0e2e09（feat(web): Runners and Providers become one Infrastructure page），桌面侧栏的 Runners、Providers 两行合成一行 Infrastructure，其下各段上移一行（36px）。X 的树已含该页面的迁移代码，所以不更新 main 漂移层：before 是 X 的 first-parent 前驱 fce12bc2a，after 是 X 的树 cbe6a6635。本截图此前没有已接受条目：P3.2 让深色 task-action-menu 的菜单变化低于 P0 比较器阈值（p3.2-accepted 逐张列出，登记工具不收），含 cbe6a6635 的每一棵 main 树都带着它，在 X 的树上重新生成 main 漂移参考会把这部分迁移像素放进 main 漂移层，所以按同一判定叠在其上登记。before 对照当前期望（第 1 批 A4 的 main 漂移参考）只差 P3.2 记录的菜单像素（Chromium 466、WebKit 489 个，单通道差 45，比较器通过）；before → after 只在侧栏列（x 16–262、y 172–391）变化。原判定：P3.2 第 2 版证据的 CONFIRM。归因证据（main 漂移规则 (a)–(c)）和逐张数据见 p0-drift-7/README.md「归因」与 attribution/attribution.json；同提交原件的运行见 p0-drift-7/attribution/runs/。",
+      "sameCommit": {
+        "before": {
+          "commit": "fce12bc2a4c7cd46fb3c7b903ab49edfe8bcb186",
+          "sha256": "4bef0aae71a0d09bafe2ec12b6f24d3adda32c331823a09e8b8cdb05b219ec34"
+        },
+        "after": {
+          "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+          "sha256": "f021d6622b6b3c0172481654af3c951ecc8c9e841407397a6b8f73166e8d9d71"
         },
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
       }
     },
     {
       "screenshot": "webkit-dark-desktop/task-share-dialog.png",
-      "sha256": "1ac55c143850623b7f6c0c2091978bd9a97c26a26af64828bd9c1bc8c2397907",
+      "sha256": "b25516ca0e3d7e25fe5bad276b3d5fc30725f41c171f00c7f29dfa962d9f8d6e",
       "replaces": {
         "layer": "p0-drift",
         "sha256": "16239de70c56fda957b05d03c3b0dd762972620680e5c601bedf25e3220086e4"
@@ -258,22 +478,46 @@
         "verdict": "CONFIRM",
         "document": "p3.2/README.md"
       },
-      "difference": "P3.2 把分享对话框换成 Orbit Dialog（P2.1 约定：打开时聚焦对话框本身）。P0 task 场景打开分享对话框后按一次 Tab：旧对话框先聚焦 Close、Tab 到 Access；Orbit 先聚焦对话框、Tab 到 Close。截图上超过抗锯齿级的差异只有焦点环的位置：before 在 Access 按钮（Anyone with the link）上，after 在右上角的 Close 按钮上；其余是每通道不超过 2 级的抗锯齿级差异（Chromium 手机上遍及对话框区域）。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-share-dialog 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+      "difference": "叠在已接受差异上的 main 改动（已接受层第 6 条第二种情况）：main cbe6a6635（Merge refs/heads/project/34aithLozDanSv6nq0IAi into refs/heads/main，项目线 first-parent 上的提交）合入 33e0e2e09（feat(web): Runners and Providers become one Infrastructure page），桌面侧栏的 Runners、Providers 两行合成一行 Infrastructure，其下各段上移一行（36px）。X 的树已含该页面的迁移代码，所以不更新 main 漂移层：before 是 X 的 first-parent 前驱 fce12bc2a，after 是 X 的树 cbe6a6635。本截图：before 与当前已接受期望（P3.2 的 after 原件）逐字节相同；before → after 只在侧栏列（x 16–262、y 172–391）变化，分享对话框的遮罩下侧栏同样变化，对话框本身和 P3.2 接受的焦点约定、Share… 行高差都不变。原判定：P3.2 第 2 版证据的 CONFIRM，旧条目在 previous。归因证据（main 漂移规则 (a)–(c)）和逐张数据见 p0-drift-7/README.md「归因」与 attribution/attribution.json；同提交原件的运行见 p0-drift-7/attribution/runs/。",
       "sameCommit": {
         "before": {
-          "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
-          "sha256": "16239de70c56fda957b05d03c3b0dd762972620680e5c601bedf25e3220086e4"
-        },
-        "after": {
-          "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+          "commit": "fce12bc2a4c7cd46fb3c7b903ab49edfe8bcb186",
           "sha256": "1ac55c143850623b7f6c0c2091978bd9a97c26a26af64828bd9c1bc8c2397907"
         },
+        "after": {
+          "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+          "sha256": "b25516ca0e3d7e25fe5bad276b3d5fc30725f41c171f00c7f29dfa962d9f8d6e"
+        },
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
-      }
+      },
+      "previous": [
+        {
+          "sha256": "1ac55c143850623b7f6c0c2091978bd9a97c26a26af64828bd9c1bc8c2397907",
+          "decision": {
+            "taskId": "34Za39ACSBoCkYKc80Md8",
+            "evidenceRevision": 2,
+            "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+            "verdict": "CONFIRM",
+            "document": "p3.2/README.md"
+          },
+          "difference": "P3.2 把分享对话框换成 Orbit Dialog（P2.1 约定：打开时聚焦对话框本身）。P0 task 场景打开分享对话框后按一次 Tab：旧对话框先聚焦 Close、Tab 到 Access；Orbit 先聚焦对话框、Tab 到 Close。截图上超过抗锯齿级的差异只有焦点环的位置：before 在 Access 按钮（Anyone with the link）上，after 在右上角的 Close 按钮上；其余是每通道不超过 2 级的抗锯齿级差异（Chromium 手机上遍及对话框区域）。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-share-dialog 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+          "sameCommit": {
+            "before": {
+              "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+              "sha256": "16239de70c56fda957b05d03c3b0dd762972620680e5c601bedf25e3220086e4"
+            },
+            "after": {
+              "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+              "sha256": "1ac55c143850623b7f6c0c2091978bd9a97c26a26af64828bd9c1bc8c2397907"
+            },
+            "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+          }
+        }
+      ]
     },
     {
       "screenshot": "webkit-dark-phone/notification-error.png",
-      "sha256": "05b985e2a10990b802e16267d3e273fac6aa07deb9964e2c9a5994542b444928",
+      "sha256": "3354b55c94dde9139364cbf417ff3a9ec88ced8c38f868db2d4b40291085d02f",
       "replaces": {
         "layer": "p0.2",
         "sha256": "f5d6ab570e4a9c77bfb60c69d1dccc3ba90caa1f14ef699e7dc34223ce4c0dc8"
@@ -285,18 +529,42 @@
         "verdict": "CONFIRM",
         "document": "webkit-scroll-lock/README.md"
       },
-      "difference": "WebKit 对话框滚动锁一批给 lib/toast.tsx 的读屏 live region 加了 position: fixed。它挂在 body 末尾，原先按 absolute 的静态位置排在视口下缘之外，第一次出通知后文档比视口高 1px，Linux WebKit 因全站 8px 的 ::-webkit-scrollbar 给文档画出滚动条；修复后文档始终一个视口高。P0 的 settings-saved、profile-validation、notification-error 都在出通知后截图，after 相对 before 只有两件事：（1）文档滚动条消失：before 右侧 8px 是没有绘制的透明列（RGBA 0,0,0,0），(0,0) 多一个灰点（明色 217,217,217，暗色 74,74,77），after 两者都没有，右侧 8px 是页面本身；（2）桌面主区按 1280 排而不是 1272：居中内容右移 4px，靠右内容和通知列（ToastViewport 按视口宽度定位）右移 8px，左侧导航不变；手机布局视口始终是 390，内容和通知都不动。本截图：只有文档滚动条消失，右侧 8px 由透明变为页面（含 .app-view 自己的滚动条），(0,0) 一点；内容与通知都不动。明色手机的同一张变化相同，按 P0 比较器低于阈值（透明列按白色比较），不登记。出处：webkit-scroll-lock/README.md「P0 的影响：12 张 WebKit 截图，9 张需要重登」逐张说明表中该截图一行；协调者对该批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6）把这 9 张接受为该批的迁移差异。该批 compare/p0-changed-webkit.json 的不同像素数与 shots/p0/classes.json 的逐像素归类（灰 = 文档滚动条，蓝 = 右移 4px，绿 = 右移 8px，红 = 其它），与本条 before → after 相同。",
+      "difference": "叠在已接受差异上的 main 改动（已接受层第 6 条第二种情况）：main 3960c19c2（feat(web): copy · time under each finished turn's reply，main first-parent 上的单个提交，经项目线 17980cb7c 吸收 main 87351bf9a 进入）在每个结束的回合下面加一行复制键和结束时间（12:00 PM），取代原来 12px 的空白分隔，其下的内容随之下移。X 的树已含该页面的迁移代码（WebKit 滚动锁修复），所以不更新 main 漂移层：before 是 X 的 first-parent 前驱 d976df772，after 是 X 的树 3960c19c2。之后的 main 9d3751ec2（输入框上方的分隔线改为渐隐）对本截图的变化低于 P0 比较器阈值，登记工具不收，记在 p0-drift-7。本截图：before 与当前已接受期望（WebKit 滚动锁一批的 after 原件）逐字节相同或只在噪声范围内；before → after 只在消息列变化，文档滚动条的消失不变。原判定：WebKit 滚动锁一批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6），旧条目在 previous。归因证据（main 漂移规则 (a)–(c)）和逐张数据见 p0-drift-7/README.md「归因」与 attribution/attribution.json；同提交原件的运行见 p0-drift-7/attribution/runs/。",
       "sameCommit": {
         "before": {
-          "commit": "15b7b56093139c7b502e6618e9700ef78c9cccba",
-          "sha256": "f5d6ab570e4a9c77bfb60c69d1dccc3ba90caa1f14ef699e7dc34223ce4c0dc8"
-        },
-        "after": {
-          "commit": "b2568f28d8bb87d12eec762d1f810562503ed2d9",
+          "commit": "d976df77261512d2b98e3e0c35b2b8c7270d4aa4",
           "sha256": "05b985e2a10990b802e16267d3e273fac6aa07deb9964e2c9a5994542b444928"
         },
+        "after": {
+          "commit": "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+          "sha256": "3354b55c94dde9139364cbf417ff3a9ec88ced8c38f868db2d4b40291085d02f"
+        },
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
-      }
+      },
+      "previous": [
+        {
+          "sha256": "05b985e2a10990b802e16267d3e273fac6aa07deb9964e2c9a5994542b444928",
+          "decision": {
+            "taskId": "34cBi0yt6bFcSmbJFgDPj",
+            "evidenceRevision": 1,
+            "evidenceDigest": "fdb19816d1e31af2dc3463fe3e359c68b7ba86084f284f24009f8b92dc468e7c",
+            "verdict": "CONFIRM",
+            "document": "webkit-scroll-lock/README.md"
+          },
+          "difference": "WebKit 对话框滚动锁一批给 lib/toast.tsx 的读屏 live region 加了 position: fixed。它挂在 body 末尾，原先按 absolute 的静态位置排在视口下缘之外，第一次出通知后文档比视口高 1px，Linux WebKit 因全站 8px 的 ::-webkit-scrollbar 给文档画出滚动条；修复后文档始终一个视口高。P0 的 settings-saved、profile-validation、notification-error 都在出通知后截图，after 相对 before 只有两件事：（1）文档滚动条消失：before 右侧 8px 是没有绘制的透明列（RGBA 0,0,0,0），(0,0) 多一个灰点（明色 217,217,217，暗色 74,74,77），after 两者都没有，右侧 8px 是页面本身；（2）桌面主区按 1280 排而不是 1272：居中内容右移 4px，靠右内容和通知列（ToastViewport 按视口宽度定位）右移 8px，左侧导航不变；手机布局视口始终是 390，内容和通知都不动。本截图：只有文档滚动条消失，右侧 8px 由透明变为页面（含 .app-view 自己的滚动条），(0,0) 一点；内容与通知都不动。明色手机的同一张变化相同，按 P0 比较器低于阈值（透明列按白色比较），不登记。出处：webkit-scroll-lock/README.md「P0 的影响：12 张 WebKit 截图，9 张需要重登」逐张说明表中该截图一行；协调者对该批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6）把这 9 张接受为该批的迁移差异。该批 compare/p0-changed-webkit.json 的不同像素数与 shots/p0/classes.json 的逐像素归类（灰 = 文档滚动条，蓝 = 右移 4px，绿 = 右移 8px，红 = 其它），与本条 before → after 相同。",
+          "sameCommit": {
+            "before": {
+              "commit": "15b7b56093139c7b502e6618e9700ef78c9cccba",
+              "sha256": "f5d6ab570e4a9c77bfb60c69d1dccc3ba90caa1f14ef699e7dc34223ce4c0dc8"
+            },
+            "after": {
+              "commit": "b2568f28d8bb87d12eec762d1f810562503ed2d9",
+              "sha256": "05b985e2a10990b802e16267d3e273fac6aa07deb9964e2c9a5994542b444928"
+            },
+            "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+          }
+        }
+      ]
     },
     {
       "screenshot": "webkit-dark-phone/profile-validation.png",
@@ -405,7 +673,7 @@
     },
     {
       "screenshot": "webkit-light-desktop/notification-error.png",
-      "sha256": "b0dafa152e0862a583d18ccb6749b5be97e83b382e5bb564413c3517276353c1",
+      "sha256": "aedb996376254d90b3516e24f7b9a7dcbfdc5ee12199f468daf72a0a622e8af4",
       "replaces": {
         "layer": "p0-drift",
         "sha256": "f71ec3a6eb401180c4ef3c2afdb95a9f939f69a723f1edb59527c7884ce6b324"
@@ -417,22 +685,68 @@
         "verdict": "CONFIRM",
         "document": "webkit-scroll-lock/README.md"
       },
-      "difference": "WebKit 对话框滚动锁一批给 lib/toast.tsx 的读屏 live region 加了 position: fixed。它挂在 body 末尾，原先按 absolute 的静态位置排在视口下缘之外，第一次出通知后文档比视口高 1px，Linux WebKit 因全站 8px 的 ::-webkit-scrollbar 给文档画出滚动条；修复后文档始终一个视口高。P0 的 settings-saved、profile-validation、notification-error 都在出通知后截图，after 相对 before 只有两件事：（1）文档滚动条消失：before 右侧 8px 是没有绘制的透明列（RGBA 0,0,0,0），(0,0) 多一个灰点（明色 217,217,217，暗色 74,74,77），after 两者都没有，右侧 8px 是页面本身；（2）桌面主区按 1280 排而不是 1272：居中内容右移 4px，靠右内容和通知列（ToastViewport 按视口宽度定位）右移 8px，左侧导航不变；手机布局视口始终是 390，内容和通知都不动。本截图：文档滚动条消失；会话页消息列与输入框宽 8px，错误卡片、靠右的用户气泡和输入框右侧的模型与发送键右移 8px；归为其它的像素（明 253、暗 326 个）是错误卡片右移后露出的标题文字与卡片阴影边。出处：webkit-scroll-lock/README.md「P0 的影响：12 张 WebKit 截图，9 张需要重登」逐张说明表中该截图一行；协调者对该批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6）把这 9 张接受为该批的迁移差异。该批 compare/p0-changed-webkit.json 的不同像素数与 shots/p0/classes.json 的逐像素归类（灰 = 文档滚动条，蓝 = 右移 4px，绿 = 右移 8px，红 = 其它），与本条 before → after 相同。",
+      "difference": "叠在已接受差异上的 main 改动（已接受层第 6 条第二种情况）：main 3960c19c2（feat(web): copy · time under each finished turn's reply，main first-parent 上的单个提交，经项目线 17980cb7c 吸收 main 87351bf9a 进入）在每个结束的回合下面加一行复制键和结束时间（12:00 PM），取代原来 12px 的空白分隔，其下的内容随之下移。X 的树已含该页面的迁移代码（WebKit 滚动锁修复），所以不更新 main 漂移层：before 是 X 的 first-parent 前驱 d976df772，after 是 X 的树 3960c19c2。之后的 main 9d3751ec2（输入框上方的分隔线改为渐隐）对本截图的变化低于 P0 比较器阈值，登记工具不收，记在 p0-drift-7。本截图：before 复现当前已接受期望（第 7 批 A12 那一条的 after 原件）；before → after 只在消息列（x ≥ 621）变化，侧栏、错误卡片的位置与文档滚动条的消失都不变。原判定：WebKit 滚动锁一批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6），旧条目在 previous。归因证据（main 漂移规则 (a)–(c)）和逐张数据见 p0-drift-7/README.md「归因」与 attribution/attribution.json；同提交原件的运行见 p0-drift-7/attribution/runs/。",
       "sameCommit": {
         "before": {
-          "commit": "15b7b56093139c7b502e6618e9700ef78c9cccba",
-          "sha256": "f71ec3a6eb401180c4ef3c2afdb95a9f939f69a723f1edb59527c7884ce6b324"
+          "commit": "d976df77261512d2b98e3e0c35b2b8c7270d4aa4",
+          "sha256": "86ba60f9ca515365d30e449d43e3204a30922c4000177f0c99993e831714ecac"
         },
         "after": {
-          "commit": "b2568f28d8bb87d12eec762d1f810562503ed2d9",
-          "sha256": "b0dafa152e0862a583d18ccb6749b5be97e83b382e5bb564413c3517276353c1"
+          "commit": "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+          "sha256": "aedb996376254d90b3516e24f7b9a7dcbfdc5ee12199f468daf72a0a622e8af4"
         },
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
-      }
+      },
+      "previous": [
+        {
+          "sha256": "b0dafa152e0862a583d18ccb6749b5be97e83b382e5bb564413c3517276353c1",
+          "decision": {
+            "taskId": "34cBi0yt6bFcSmbJFgDPj",
+            "evidenceRevision": 1,
+            "evidenceDigest": "fdb19816d1e31af2dc3463fe3e359c68b7ba86084f284f24009f8b92dc468e7c",
+            "verdict": "CONFIRM",
+            "document": "webkit-scroll-lock/README.md"
+          },
+          "difference": "WebKit 对话框滚动锁一批给 lib/toast.tsx 的读屏 live region 加了 position: fixed。它挂在 body 末尾，原先按 absolute 的静态位置排在视口下缘之外，第一次出通知后文档比视口高 1px，Linux WebKit 因全站 8px 的 ::-webkit-scrollbar 给文档画出滚动条；修复后文档始终一个视口高。P0 的 settings-saved、profile-validation、notification-error 都在出通知后截图，after 相对 before 只有两件事：（1）文档滚动条消失：before 右侧 8px 是没有绘制的透明列（RGBA 0,0,0,0），(0,0) 多一个灰点（明色 217,217,217，暗色 74,74,77），after 两者都没有，右侧 8px 是页面本身；（2）桌面主区按 1280 排而不是 1272：居中内容右移 4px，靠右内容和通知列（ToastViewport 按视口宽度定位）右移 8px，左侧导航不变；手机布局视口始终是 390，内容和通知都不动。本截图：文档滚动条消失；会话页消息列与输入框宽 8px，错误卡片、靠右的用户气泡和输入框右侧的模型与发送键右移 8px；归为其它的像素（明 253、暗 326 个）是错误卡片右移后露出的标题文字与卡片阴影边。出处：webkit-scroll-lock/README.md「P0 的影响：12 张 WebKit 截图，9 张需要重登」逐张说明表中该截图一行；协调者对该批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6）把这 9 张接受为该批的迁移差异。该批 compare/p0-changed-webkit.json 的不同像素数与 shots/p0/classes.json 的逐像素归类（灰 = 文档滚动条，蓝 = 右移 4px，绿 = 右移 8px，红 = 其它），与本条 before → after 相同。",
+          "sameCommit": {
+            "before": {
+              "commit": "15b7b56093139c7b502e6618e9700ef78c9cccba",
+              "sha256": "f71ec3a6eb401180c4ef3c2afdb95a9f939f69a723f1edb59527c7884ce6b324"
+            },
+            "after": {
+              "commit": "b2568f28d8bb87d12eec762d1f810562503ed2d9",
+              "sha256": "b0dafa152e0862a583d18ccb6749b5be97e83b382e5bb564413c3517276353c1"
+            },
+            "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+          }
+        },
+        {
+          "sha256": "86ba60f9ca515365d30e449d43e3204a30922c4000177f0c99993e831714ecac",
+          "decision": {
+            "taskId": "34cBi0yt6bFcSmbJFgDPj",
+            "evidenceRevision": 1,
+            "evidenceDigest": "fdb19816d1e31af2dc3463fe3e359c68b7ba86084f284f24009f8b92dc468e7c",
+            "verdict": "CONFIRM",
+            "document": "webkit-scroll-lock/README.md"
+          },
+          "difference": "叠在已接受差异上的 main 改动（已接受层第 6 条第二种情况）：main cbe6a6635（Merge refs/heads/project/34aithLozDanSv6nq0IAi into refs/heads/main，项目线 first-parent 上的提交）合入 33e0e2e09（feat(web): Runners and Providers become one Infrastructure page），桌面侧栏的 Runners、Providers 两行合成一行 Infrastructure，其下各段上移一行（36px）。X 的树已含该页面的迁移代码，所以不更新 main 漂移层：before 是 X 的 first-parent 前驱 fce12bc2a，after 是 X 的树 cbe6a6635。本截图：before 与当前已接受期望（WebKit 滚动锁一批的 after 原件）逐字节相同；before → after 只在侧栏列（x 8–270、y 172–391）变化：会话页侧栏里选中的工作区一行随之上移，所以比其它页面多出这一行。消息列、错误卡片与文档滚动条的消失都不变。原判定：WebKit 滚动锁一批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6），旧条目在 previous。归因证据（main 漂移规则 (a)–(c)）和逐张数据见 p0-drift-7/README.md「归因」与 attribution/attribution.json；同提交原件的运行见 p0-drift-7/attribution/runs/。",
+          "sameCommit": {
+            "before": {
+              "commit": "fce12bc2a4c7cd46fb3c7b903ab49edfe8bcb186",
+              "sha256": "b0dafa152e0862a583d18ccb6749b5be97e83b382e5bb564413c3517276353c1"
+            },
+            "after": {
+              "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+              "sha256": "86ba60f9ca515365d30e449d43e3204a30922c4000177f0c99993e831714ecac"
+            },
+            "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+          }
+        }
+      ]
     },
     {
       "screenshot": "webkit-light-desktop/profile-validation.png",
-      "sha256": "9f1ee22bac54e35d0e5a72d5e0e430912e72e596cce0f8835ea53b6aa0a202f1",
+      "sha256": "d2e26d04427a7bae6e44cf9dadd0e4ea1c7a4c3722b8792b7ef2b5bd177e8038",
       "replaces": {
         "layer": "p0-drift",
         "sha256": "93218ccee8fd996ba118008834cd9aba8da2f39f3267397403da2f6d9032fae4"
@@ -444,22 +758,46 @@
         "verdict": "CONFIRM",
         "document": "webkit-scroll-lock/README.md"
       },
-      "difference": "WebKit 对话框滚动锁一批给 lib/toast.tsx 的读屏 live region 加了 position: fixed。它挂在 body 末尾，原先按 absolute 的静态位置排在视口下缘之外，第一次出通知后文档比视口高 1px，Linux WebKit 因全站 8px 的 ::-webkit-scrollbar 给文档画出滚动条；修复后文档始终一个视口高。P0 的 settings-saved、profile-validation、notification-error 都在出通知后截图，after 相对 before 只有两件事：（1）文档滚动条消失：before 右侧 8px 是没有绘制的透明列（RGBA 0,0,0,0），(0,0) 多一个灰点（明色 217,217,217，暗色 74,74,77），after 两者都没有，右侧 8px 是页面本身；（2）桌面主区按 1280 排而不是 1272：居中内容右移 4px，靠右内容和通知列（ToastViewport 按视口宽度定位）右移 8px，左侧导航不变；手机布局视口始终是 390，内容和通知都不动。本截图：文档滚动条消失；资料卡片列右移 4px；“Name saved”胶囊随通知列右移 8px，与 Chromium 桌面的位置一致；归为其它的 3 个像素（明暗都在 x 584）在右移内容的边缘，与 before 右移 4px 后各通道差 8 级以内，是抗锯齿。出处：webkit-scroll-lock/README.md「P0 的影响：12 张 WebKit 截图，9 张需要重登」逐张说明表中该截图一行；协调者对该批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6）把这 9 张接受为该批的迁移差异。该批 compare/p0-changed-webkit.json 的不同像素数与 shots/p0/classes.json 的逐像素归类（灰 = 文档滚动条，蓝 = 右移 4px，绿 = 右移 8px，红 = 其它），与本条 before → after 相同。",
+      "difference": "叠在已接受差异上的 main 改动（已接受层第 6 条第二种情况）：main cbe6a6635（Merge refs/heads/project/34aithLozDanSv6nq0IAi into refs/heads/main，项目线 first-parent 上的提交）合入 33e0e2e09（feat(web): Runners and Providers become one Infrastructure page），桌面侧栏的 Runners、Providers 两行合成一行 Infrastructure，其下各段上移一行（36px）。X 的树已含该页面的迁移代码，所以不更新 main 漂移层：before 是 X 的 first-parent 前驱 fce12bc2a，after 是 X 的树 cbe6a6635。本截图：before 与当前已接受期望（WebKit 滚动锁一批的 after 原件）逐字节相同；before → after 只在侧栏列（x 16–262、y 172–391）变化，资料卡片列、“Name saved”胶囊和文档滚动条的消失都不变。原判定：WebKit 滚动锁一批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6），旧条目在 previous。归因证据（main 漂移规则 (a)–(c)）和逐张数据见 p0-drift-7/README.md「归因」与 attribution/attribution.json；同提交原件的运行见 p0-drift-7/attribution/runs/。",
       "sameCommit": {
         "before": {
-          "commit": "15b7b56093139c7b502e6618e9700ef78c9cccba",
-          "sha256": "93218ccee8fd996ba118008834cd9aba8da2f39f3267397403da2f6d9032fae4"
-        },
-        "after": {
-          "commit": "b2568f28d8bb87d12eec762d1f810562503ed2d9",
+          "commit": "fce12bc2a4c7cd46fb3c7b903ab49edfe8bcb186",
           "sha256": "9f1ee22bac54e35d0e5a72d5e0e430912e72e596cce0f8835ea53b6aa0a202f1"
         },
+        "after": {
+          "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+          "sha256": "d2e26d04427a7bae6e44cf9dadd0e4ea1c7a4c3722b8792b7ef2b5bd177e8038"
+        },
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
-      }
+      },
+      "previous": [
+        {
+          "sha256": "9f1ee22bac54e35d0e5a72d5e0e430912e72e596cce0f8835ea53b6aa0a202f1",
+          "decision": {
+            "taskId": "34cBi0yt6bFcSmbJFgDPj",
+            "evidenceRevision": 1,
+            "evidenceDigest": "fdb19816d1e31af2dc3463fe3e359c68b7ba86084f284f24009f8b92dc468e7c",
+            "verdict": "CONFIRM",
+            "document": "webkit-scroll-lock/README.md"
+          },
+          "difference": "WebKit 对话框滚动锁一批给 lib/toast.tsx 的读屏 live region 加了 position: fixed。它挂在 body 末尾，原先按 absolute 的静态位置排在视口下缘之外，第一次出通知后文档比视口高 1px，Linux WebKit 因全站 8px 的 ::-webkit-scrollbar 给文档画出滚动条；修复后文档始终一个视口高。P0 的 settings-saved、profile-validation、notification-error 都在出通知后截图，after 相对 before 只有两件事：（1）文档滚动条消失：before 右侧 8px 是没有绘制的透明列（RGBA 0,0,0,0），(0,0) 多一个灰点（明色 217,217,217，暗色 74,74,77），after 两者都没有，右侧 8px 是页面本身；（2）桌面主区按 1280 排而不是 1272：居中内容右移 4px，靠右内容和通知列（ToastViewport 按视口宽度定位）右移 8px，左侧导航不变；手机布局视口始终是 390，内容和通知都不动。本截图：文档滚动条消失；资料卡片列右移 4px；“Name saved”胶囊随通知列右移 8px，与 Chromium 桌面的位置一致；归为其它的 3 个像素（明暗都在 x 584）在右移内容的边缘，与 before 右移 4px 后各通道差 8 级以内，是抗锯齿。出处：webkit-scroll-lock/README.md「P0 的影响：12 张 WebKit 截图，9 张需要重登」逐张说明表中该截图一行；协调者对该批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6）把这 9 张接受为该批的迁移差异。该批 compare/p0-changed-webkit.json 的不同像素数与 shots/p0/classes.json 的逐像素归类（灰 = 文档滚动条，蓝 = 右移 4px，绿 = 右移 8px，红 = 其它），与本条 before → after 相同。",
+          "sameCommit": {
+            "before": {
+              "commit": "15b7b56093139c7b502e6618e9700ef78c9cccba",
+              "sha256": "93218ccee8fd996ba118008834cd9aba8da2f39f3267397403da2f6d9032fae4"
+            },
+            "after": {
+              "commit": "b2568f28d8bb87d12eec762d1f810562503ed2d9",
+              "sha256": "9f1ee22bac54e35d0e5a72d5e0e430912e72e596cce0f8835ea53b6aa0a202f1"
+            },
+            "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+          }
+        }
+      ]
     },
     {
       "screenshot": "webkit-light-desktop/settings-saved.png",
-      "sha256": "3f7a0158db8fd5c2eaa210c45386bf7d37377bba6a9c23f7705f719bc12ace99",
+      "sha256": "676287ec035cae6e8efab01d34f54f5eb698449dfab38570f4bcc7b861b1cafe",
       "replaces": {
         "layer": "p0-drift",
         "sha256": "7fb81b5733dd607a66a469727f8cfc5fab817b2b9d8aff9dc4c4c0fefa7cb773"
@@ -471,22 +809,46 @@
         "verdict": "CONFIRM",
         "document": "webkit-scroll-lock/README.md"
       },
-      "difference": "WebKit 对话框滚动锁一批给 lib/toast.tsx 的读屏 live region 加了 position: fixed。它挂在 body 末尾，原先按 absolute 的静态位置排在视口下缘之外，第一次出通知后文档比视口高 1px，Linux WebKit 因全站 8px 的 ::-webkit-scrollbar 给文档画出滚动条；修复后文档始终一个视口高。P0 的 settings-saved、profile-validation、notification-error 都在出通知后截图，after 相对 before 只有两件事：（1）文档滚动条消失：before 右侧 8px 是没有绘制的透明列（RGBA 0,0,0,0），(0,0) 多一个灰点（明色 217,217,217，暗色 74,74,77），after 两者都没有，右侧 8px 是页面本身；（2）桌面主区按 1280 排而不是 1272：居中内容右移 4px，靠右内容和通知列（ToastViewport 按视口宽度定位）右移 8px，左侧导航不变；手机布局视口始终是 390，内容和通知都不动。本截图：文档滚动条消失；设置卡片列右移 4px；“Setting saved”胶囊随通知列右移 8px，与 Chromium 桌面的位置一致；归为其它的几个像素（明 4、暗 2 个）在右移内容的边缘，与 before 右移 4px 后各通道只差 1 级，是抗锯齿。出处：webkit-scroll-lock/README.md「P0 的影响：12 张 WebKit 截图，9 张需要重登」逐张说明表中该截图一行；协调者对该批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6）把这 9 张接受为该批的迁移差异。该批 compare/p0-changed-webkit.json 的不同像素数与 shots/p0/classes.json 的逐像素归类（灰 = 文档滚动条，蓝 = 右移 4px，绿 = 右移 8px，红 = 其它），与本条 before → after 相同。",
+      "difference": "叠在已接受差异上的 main 改动（已接受层第 6 条第二种情况）：main cbe6a6635（Merge refs/heads/project/34aithLozDanSv6nq0IAi into refs/heads/main，项目线 first-parent 上的提交）合入 33e0e2e09（feat(web): Runners and Providers become one Infrastructure page），桌面侧栏的 Runners、Providers 两行合成一行 Infrastructure，其下各段上移一行（36px）。X 的树已含该页面的迁移代码，所以不更新 main 漂移层：before 是 X 的 first-parent 前驱 fce12bc2a，after 是 X 的树 cbe6a6635。本截图：before 与当前已接受期望（WebKit 滚动锁一批的 after 原件）逐字节相同；before → after 只在侧栏列（x 16–262、y 172–391）变化，设置卡片列、胶囊与通知列的位置，以及文档滚动条的消失都不变。原判定：WebKit 滚动锁一批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6），旧条目在 previous。归因证据（main 漂移规则 (a)–(c)）和逐张数据见 p0-drift-7/README.md「归因」与 attribution/attribution.json；同提交原件的运行见 p0-drift-7/attribution/runs/。",
       "sameCommit": {
         "before": {
-          "commit": "15b7b56093139c7b502e6618e9700ef78c9cccba",
-          "sha256": "7fb81b5733dd607a66a469727f8cfc5fab817b2b9d8aff9dc4c4c0fefa7cb773"
-        },
-        "after": {
-          "commit": "b2568f28d8bb87d12eec762d1f810562503ed2d9",
+          "commit": "fce12bc2a4c7cd46fb3c7b903ab49edfe8bcb186",
           "sha256": "3f7a0158db8fd5c2eaa210c45386bf7d37377bba6a9c23f7705f719bc12ace99"
         },
+        "after": {
+          "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+          "sha256": "676287ec035cae6e8efab01d34f54f5eb698449dfab38570f4bcc7b861b1cafe"
+        },
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
-      }
+      },
+      "previous": [
+        {
+          "sha256": "3f7a0158db8fd5c2eaa210c45386bf7d37377bba6a9c23f7705f719bc12ace99",
+          "decision": {
+            "taskId": "34cBi0yt6bFcSmbJFgDPj",
+            "evidenceRevision": 1,
+            "evidenceDigest": "fdb19816d1e31af2dc3463fe3e359c68b7ba86084f284f24009f8b92dc468e7c",
+            "verdict": "CONFIRM",
+            "document": "webkit-scroll-lock/README.md"
+          },
+          "difference": "WebKit 对话框滚动锁一批给 lib/toast.tsx 的读屏 live region 加了 position: fixed。它挂在 body 末尾，原先按 absolute 的静态位置排在视口下缘之外，第一次出通知后文档比视口高 1px，Linux WebKit 因全站 8px 的 ::-webkit-scrollbar 给文档画出滚动条；修复后文档始终一个视口高。P0 的 settings-saved、profile-validation、notification-error 都在出通知后截图，after 相对 before 只有两件事：（1）文档滚动条消失：before 右侧 8px 是没有绘制的透明列（RGBA 0,0,0,0），(0,0) 多一个灰点（明色 217,217,217，暗色 74,74,77），after 两者都没有，右侧 8px 是页面本身；（2）桌面主区按 1280 排而不是 1272：居中内容右移 4px，靠右内容和通知列（ToastViewport 按视口宽度定位）右移 8px，左侧导航不变；手机布局视口始终是 390，内容和通知都不动。本截图：文档滚动条消失；设置卡片列右移 4px；“Setting saved”胶囊随通知列右移 8px，与 Chromium 桌面的位置一致；归为其它的几个像素（明 4、暗 2 个）在右移内容的边缘，与 before 右移 4px 后各通道只差 1 级，是抗锯齿。出处：webkit-scroll-lock/README.md「P0 的影响：12 张 WebKit 截图，9 张需要重登」逐张说明表中该截图一行；协调者对该批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6）把这 9 张接受为该批的迁移差异。该批 compare/p0-changed-webkit.json 的不同像素数与 shots/p0/classes.json 的逐像素归类（灰 = 文档滚动条，蓝 = 右移 4px，绿 = 右移 8px，红 = 其它），与本条 before → after 相同。",
+          "sameCommit": {
+            "before": {
+              "commit": "15b7b56093139c7b502e6618e9700ef78c9cccba",
+              "sha256": "7fb81b5733dd607a66a469727f8cfc5fab817b2b9d8aff9dc4c4c0fefa7cb773"
+            },
+            "after": {
+              "commit": "b2568f28d8bb87d12eec762d1f810562503ed2d9",
+              "sha256": "3f7a0158db8fd5c2eaa210c45386bf7d37377bba6a9c23f7705f719bc12ace99"
+            },
+            "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+          }
+        }
+      ]
     },
     {
       "screenshot": "webkit-light-desktop/task-action-menu.png",
-      "sha256": "8379a8c00abae3054fe3891bd6ef8c46d50e4e634a29d7ae451c883681d8f679",
+      "sha256": "1d9a855f85f816adb23963b43c84dec303bdadce91b9c373bd73ecdc733624cc",
       "replaces": {
         "layer": "p0-drift",
         "sha256": "36b9d7ee7bff653f16c5f96e7c2e2efaf68edf659eec5761d4578f71fb4c7194"
@@ -498,22 +860,46 @@
         "verdict": "CONFIRM",
         "document": "p3.2/README.md"
       },
-      "difference": "P3.2 把任务面板的 More 菜单换成 Orbit Menu（P2.2 约定：打开后焦点移入菜单）。旧菜单打开后焦点留在 More 按钮上，所以 before 的 More 按钮有焦点环；Orbit Menu 把焦点移入菜单，after 的 More 按钮没有焦点环。菜单本身的位置、尺寸与文字与旧组件一致。WebKit 另有 “Share…” 菜单项地球图标底行约 30 像素的差异：Vite 的 CSS 压缩器把行高 1.5714285714285714 写成 1.57143，WebKit 偶尔多出 1/64px 行高（「未消除的差异」第 5 条）。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-action-menu 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+      "difference": "叠在已接受差异上的 main 改动（已接受层第 6 条第二种情况）：main cbe6a6635（Merge refs/heads/project/34aithLozDanSv6nq0IAi into refs/heads/main，项目线 first-parent 上的提交）合入 33e0e2e09（feat(web): Runners and Providers become one Infrastructure page），桌面侧栏的 Runners、Providers 两行合成一行 Infrastructure，其下各段上移一行（36px）。X 的树已含该页面的迁移代码，所以不更新 main 漂移层：before 是 X 的 first-parent 前驱 fce12bc2a，after 是 X 的树 cbe6a6635。本截图：before 与当前已接受期望（P3.2 的 after 原件）逐字节相同；before → after 只在侧栏列（x 16–262、y 172–391）变化，More 菜单与 P3.2 接受的打开即聚焦约定不变。原判定：P3.2 第 2 版证据的 CONFIRM，旧条目在 previous。归因证据（main 漂移规则 (a)–(c)）和逐张数据见 p0-drift-7/README.md「归因」与 attribution/attribution.json；同提交原件的运行见 p0-drift-7/attribution/runs/。",
       "sameCommit": {
         "before": {
-          "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
-          "sha256": "36b9d7ee7bff653f16c5f96e7c2e2efaf68edf659eec5761d4578f71fb4c7194"
-        },
-        "after": {
-          "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+          "commit": "fce12bc2a4c7cd46fb3c7b903ab49edfe8bcb186",
           "sha256": "8379a8c00abae3054fe3891bd6ef8c46d50e4e634a29d7ae451c883681d8f679"
         },
+        "after": {
+          "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+          "sha256": "1d9a855f85f816adb23963b43c84dec303bdadce91b9c373bd73ecdc733624cc"
+        },
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
-      }
+      },
+      "previous": [
+        {
+          "sha256": "8379a8c00abae3054fe3891bd6ef8c46d50e4e634a29d7ae451c883681d8f679",
+          "decision": {
+            "taskId": "34Za39ACSBoCkYKc80Md8",
+            "evidenceRevision": 2,
+            "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+            "verdict": "CONFIRM",
+            "document": "p3.2/README.md"
+          },
+          "difference": "P3.2 把任务面板的 More 菜单换成 Orbit Menu（P2.2 约定：打开后焦点移入菜单）。旧菜单打开后焦点留在 More 按钮上，所以 before 的 More 按钮有焦点环；Orbit Menu 把焦点移入菜单，after 的 More 按钮没有焦点环。菜单本身的位置、尺寸与文字与旧组件一致。WebKit 另有 “Share…” 菜单项地球图标底行约 30 像素的差异：Vite 的 CSS 压缩器把行高 1.5714285714285714 写成 1.57143，WebKit 偶尔多出 1/64px 行高（「未消除的差异」第 5 条）。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-action-menu 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+          "sameCommit": {
+            "before": {
+              "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+              "sha256": "36b9d7ee7bff653f16c5f96e7c2e2efaf68edf659eec5761d4578f71fb4c7194"
+            },
+            "after": {
+              "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+              "sha256": "8379a8c00abae3054fe3891bd6ef8c46d50e4e634a29d7ae451c883681d8f679"
+            },
+            "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+          }
+        }
+      ]
     },
     {
       "screenshot": "webkit-light-desktop/task-share-dialog.png",
-      "sha256": "4634e7383d149329a3e04748bdfead764ba32fe269f8b31f7fd0c688d9730f21",
+      "sha256": "b6bb1d236105d93b5d9465e7704d0b06085bf4aae500c9dbc6fe75a1ceefa927",
       "replaces": {
         "layer": "p0-drift",
         "sha256": "f5e3fec75e233fb1e63a765a39c08e6be9d40ccbae2e58c181e66b4d6a2645a9"
@@ -525,15 +911,66 @@
         "verdict": "CONFIRM",
         "document": "p3.2/README.md"
       },
-      "difference": "P3.2 把分享对话框换成 Orbit Dialog（P2.1 约定：打开时聚焦对话框本身）。P0 task 场景打开分享对话框后按一次 Tab：旧对话框先聚焦 Close、Tab 到 Access；Orbit 先聚焦对话框、Tab 到 Close。截图上超过抗锯齿级的差异只有焦点环的位置：before 在 Access 按钮（Anyone with the link）上，after 在右上角的 Close 按钮上；其余是每通道不超过 2 级的抗锯齿级差异（Chromium 手机上遍及对话框区域）。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-share-dialog 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+      "difference": "叠在已接受差异上的 main 改动（已接受层第 6 条第二种情况）：main cbe6a6635（Merge refs/heads/project/34aithLozDanSv6nq0IAi into refs/heads/main，项目线 first-parent 上的提交）合入 33e0e2e09（feat(web): Runners and Providers become one Infrastructure page），桌面侧栏的 Runners、Providers 两行合成一行 Infrastructure，其下各段上移一行（36px）。X 的树已含该页面的迁移代码，所以不更新 main 漂移层：before 是 X 的 first-parent 前驱 fce12bc2a，after 是 X 的树 cbe6a6635。本截图：before 与当前已接受期望（P3.2 的 after 原件）逐字节相同；before → after 只在侧栏列（x 16–262、y 172–391）变化，分享对话框的遮罩下侧栏同样变化，对话框本身和 P3.2 接受的焦点约定、Share… 行高差都不变。原判定：P3.2 第 2 版证据的 CONFIRM，旧条目在 previous。归因证据（main 漂移规则 (a)–(c)）和逐张数据见 p0-drift-7/README.md「归因」与 attribution/attribution.json；同提交原件的运行见 p0-drift-7/attribution/runs/。",
       "sameCommit": {
         "before": {
-          "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
-          "sha256": "f5e3fec75e233fb1e63a765a39c08e6be9d40ccbae2e58c181e66b4d6a2645a9"
+          "commit": "fce12bc2a4c7cd46fb3c7b903ab49edfe8bcb186",
+          "sha256": "4634e7383d149329a3e04748bdfead764ba32fe269f8b31f7fd0c688d9730f21"
         },
         "after": {
-          "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
-          "sha256": "4634e7383d149329a3e04748bdfead764ba32fe269f8b31f7fd0c688d9730f21"
+          "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+          "sha256": "b6bb1d236105d93b5d9465e7704d0b06085bf4aae500c9dbc6fe75a1ceefa927"
+        },
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+      },
+      "previous": [
+        {
+          "sha256": "4634e7383d149329a3e04748bdfead764ba32fe269f8b31f7fd0c688d9730f21",
+          "decision": {
+            "taskId": "34Za39ACSBoCkYKc80Md8",
+            "evidenceRevision": 2,
+            "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+            "verdict": "CONFIRM",
+            "document": "p3.2/README.md"
+          },
+          "difference": "P3.2 把分享对话框换成 Orbit Dialog（P2.1 约定：打开时聚焦对话框本身）。P0 task 场景打开分享对话框后按一次 Tab：旧对话框先聚焦 Close、Tab 到 Access；Orbit 先聚焦对话框、Tab 到 Close。截图上超过抗锯齿级的差异只有焦点环的位置：before 在 Access 按钮（Anyone with the link）上，after 在右上角的 Close 按钮上；其余是每通道不超过 2 级的抗锯齿级差异（Chromium 手机上遍及对话框区域）。出处：p3.2/README.md「P0 页面矩阵（同提交对照）」task-share-dialog 行与「未消除的差异」第 6 条（焦点约定）；第 2 版证据 r2c-p0-task-compare.json 中该截图的像素数与最大级数，与本条 before → after 相同。",
+          "sameCommit": {
+            "before": {
+              "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+              "sha256": "f5e3fec75e233fb1e63a765a39c08e6be9d40ccbae2e58c181e66b4d6a2645a9"
+            },
+            "after": {
+              "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+              "sha256": "4634e7383d149329a3e04748bdfead764ba32fe269f8b31f7fd0c688d9730f21"
+            },
+            "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+          }
+        }
+      ]
+    },
+    {
+      "screenshot": "webkit-light-phone/notification-error.png",
+      "sha256": "a10102f4bcd92c8f6295caf9b560bb5cb0b25d0de28deb98696a8a71b3f7799d",
+      "replaces": {
+        "layer": "p0.2",
+        "sha256": "a29eb4ac4bf476776583d8bce42555fc88d73139ad58f662741c4dc7070c37c8"
+      },
+      "decision": {
+        "taskId": "34cBi0yt6bFcSmbJFgDPj",
+        "evidenceRevision": 1,
+        "evidenceDigest": "fdb19816d1e31af2dc3463fe3e359c68b7ba86084f284f24009f8b92dc468e7c",
+        "verdict": "CONFIRM",
+        "document": "webkit-scroll-lock/README.md"
+      },
+      "difference": "叠在已接受差异上的 main 改动（已接受层第 6 条第二种情况）：main 3960c19c2（feat(web): copy · time under each finished turn's reply，main first-parent 上的单个提交，经项目线 17980cb7c 吸收 main 87351bf9a 进入）在每个结束的回合下面加一行复制键和结束时间（12:00 PM），取代原来 12px 的空白分隔，其下的内容随之下移。X 的树已含该页面的迁移代码（WebKit 滚动锁修复），所以不更新 main 漂移层：before 是 X 的 first-parent 前驱 d976df772，after 是 X 的树 3960c19c2。之后的 main 9d3751ec2（输入框上方的分隔线改为渐隐）对本截图的变化低于 P0 比较器阈值，登记工具不收，记在 p0-drift-7。本截图此前没有已接受条目：WebKit 滚动锁一批让 WebKit 明色手机的 notification-error 只差文档滚动条那 8px 一列与 (0,0) 一点，低于 P0 比较器阈值，判定写明不登记（webkit-scroll-lock-accepted「未登记的截图」），含 3960c19c2 的每一棵 main 树都带着它，在 X 的树上生成 main 漂移参考会把这部分迁移像素放进 main 漂移层，所以按同一判定叠在其上登记。before 对照当前期望（P0.2 原图）只差这一列和一点（比较器通过）；before → after 在消息列变化。原判定：WebKit 滚动锁一批第 1 版证据的 CONFIRM（判定记录 fRJrSzK3CevsTPV4xEki6）。归因证据（main 漂移规则 (a)–(c)）和逐张数据见 p0-drift-7/README.md「归因」与 attribution/attribution.json；同提交原件的运行见 p0-drift-7/attribution/runs/。",
+      "sameCommit": {
+        "before": {
+          "commit": "d976df77261512d2b98e3e0c35b2b8c7270d4aa4",
+          "sha256": "a5295cf3dc9fecaa41b0404bc12cc62ba9e6cf8d0b00fc022c3ed82f4d495961"
+        },
+        "after": {
+          "commit": "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+          "sha256": "a10102f4bcd92c8f6295caf9b560bb5cb0b25d0de28deb98696a8a71b3f7799d"
         },
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
       }

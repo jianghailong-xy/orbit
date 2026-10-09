@@ -146,6 +146,11 @@ export async function installFixtures(page, { theme = 'light', scenario = 'defau
     // page read GET /auth/methods. The server's default answer: Google sign-in is off until an
     // administrator turns it on, so the password alone (SignInProvidersService.methods()).
     if (method === 'GET' && path === '/api/auth/methods') return json({ password: true, google: false, googleSignup: false });
+    // main 94025579b (feat(managed-runner): shared status display, server-derived state fixture and web status UI;
+    // into main with 59034ad63) made the session page read GET /auth/capabilities. The server's default answer:
+    // managed runners stay off until ORBIT_MANAGED_RUNNERS_ENABLED=true (AuthController.capabilities), so the
+    // page shows no managed-runner UI and reads no managed-runner status.
+    if (method === 'GET' && path === '/api/auth/capabilities') return json({ managedRunners: { enabled: false, contractVersion: 1 } });
     if (method === 'GET' && path === '/api/runners') return json([RUNNER]);
     if (method === 'GET' && path === '/api/workspaces') return json([WORKSPACE]);
     if (method === 'GET' && path === '/api/providers') return json([]);

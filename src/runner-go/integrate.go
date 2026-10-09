@@ -1063,11 +1063,14 @@ func tailOf(s string, n int) string {
 
 // runIntegrationJobAndReport does one job and tells the control plane what it came to.
 //
-// The report is the only thing that matters here, so it is retried: a job that did the work and
-// could not say so would be re-claimed after its lease expired and would do the whole thing again,
-// including an hour of checks. A 4xx is NOT retried — that is the control plane saying this
-// process's claim moved on, and the right answer to that is to stop.
-func runIntegrationJobAndReport(t *Transport, job IntegrationJobCommand) {
+// The report is the only thing that matters here, so it is retried — with capped backoff, for as long
+// as this process lives, and over a copy on disk that survives it — until the control plane takes it
+// or refuses it for good (integration_result_spool.go). A job that did the work and could not say so
+// would be re-claimed after its lease expired and would do the whole thing again, including an hour of
+// checks; and one the control plane cannot be told about at all is held RUNNING by it for a lease
+// owner that never comes back. ctx is the run loop's: a runner that is stopping leaves the report
+// spooled rather than pretending the send was the last word.
+func runIntegrationJobAndReport(ctx context.Context, t *Transport, job IntegrationJobCommand) {
 	logln("integration job", job.JobID, job.Kind, job.SourceRef, "->", job.TargetRef)
 	result := runIntegrationJob(job, func(phase string, moved *IntegrationUpstreamMoved) {
 		// Best effort: the lease renewal matters, the phase is for a reader, and the work carries
@@ -1103,19 +1106,5 @@ func runIntegrationJobAndReport(t *Transport, job IntegrationJobCommand) {
 		ErrorCode:          result.ErrorCode,
 		ErrorDetail:        result.ErrorDetail,
 	}
-	for attempt := 0; attempt < 5; attempt++ {
-		answer, err := t.integrationJobResult(job.JobID, body)
-		if err == nil {
-			logln("integration job", job.JobID, "reported", result.State,
-				fmt.Sprintf("accepted=%v receipts=%d", answer.Accepted, len(answer.ReceiptIDs)))
-			return
-		}
-		var httpErr *transportHTTPError
-		if errors.As(err, &httpErr) && httpErr.statusCode >= 400 && httpErr.statusCode < 500 {
-			logln("integration job", job.JobID, "result refused:", err)
-			return
-		}
-		logln("integration job", job.JobID, "result not delivered, retrying:", err)
-		time.Sleep(time.Duration(attempt+1) * 2 * time.Second)
-	}
+	deliverIntegrationResult(ctx, t, job.JobID, body)
 }

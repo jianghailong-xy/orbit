@@ -41,8 +41,9 @@ func TestAThinkingBlockCarriesHowLongItsStretchStreamed(t *testing.T) {
 	}
 }
 
-// Kimi closes one block for the whole turn, at its end. Between its first thought and that block
-// sit tool calls and a streamed reply, none of which is reasoning.
+// A block whose message holds more than reasoning: claude streams the reply text of an
+// assistant message before the durable frame that closes its thinking block, so between a
+// stretch and its block sit tool calls and reply text, none of which is reasoning.
 func TestReasoningTheModelPausedIsCountedWithoutThePause(t *testing.T) {
 	var c thinkingClock
 	c.observe(evThinkingDelta, map[string]interface{}{"text": "first I need the file"}, thinkingAt(0))

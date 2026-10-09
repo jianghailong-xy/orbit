@@ -38,6 +38,8 @@ enum class CardFamily {
     TOOL, QUESTION, PLAN, CREATE, BATCH, DAG, BLOCKER, PROVIDER,
     EVIDENCE, OWNER_CONFIRMATION, REVIEW, CRITERIA_CHANGE, ACCEPTANCE, START,
     OWNER_QUESTION, EXCEPTION, PROMOTION, WIKI, SESSION_REQUEST, BACKGROUND,
+    /** A revision waiting for its project's paused coordinator, or sent to it once back (`CoordinatorQueue`). */
+    COORDINATOR_QUEUE,
 }
 
 enum class CardVerb(val label: String) {
@@ -54,7 +56,7 @@ enum class CardVerb(val label: String) {
     WIKI_REVERT("Revert run"), WIKI_REJECT_ENTRY("Reject entry"), PLAN_CONFIRM("Confirm plan"), PLAN_ACCEPT("Accept proposal"), PLAN_REJECT("Reject proposal"),
     WIKI_RECONFIRM("Re-confirm entry"), WIKI_AMEND("Amend entry"), WIKI_RETIRE("Retire entry"),
     WATCH_PAUSE("Pause watch"), WATCH_RESUME("Resume watch"), WATCH_CANCEL("Cancel watch"),
-    REOPEN_TASK("Reopen"),
+    REOPEN_TASK("Reopen"), DECIDE_MYSELF("Decide it myself"),
 }
 
 /** The server address and the exact version drawn. No action is inferred from an event's prose. */
@@ -133,6 +135,28 @@ object CardCatalog {
                 add(InteractionCard("evidence:$task:$revision", CardFamily.EVIDENCE, "Completion evidence", row, id,
                     projectId, task, "$revision:$deciding", if (allowed) listOf(CardVerb.CONFIRM_EVIDENCE, CardVerb.SEND_BACK) else emptyList(),
                     context = buildJsonObject { put("decidingSessionId", deciding) }))
+            }
+            // A revision waiting for this project's paused coordinator, then the line it becomes once sent to it: drawn where its
+            // evidence card would be, under that card's address, so one turns into the next in place (`CoordinatorQueue`).
+            queue.objects("waitingOnCoordinator").forEach { row ->
+                val task = row.text("taskId") ?: return@forEach
+                val revision = row.text("evidenceRevision") ?: return@forEach
+                if (projectId == null || row.text("projectId") != projectId) return@forEach
+                val deciding = queue.text("decidingSessionId") ?: return@forEach
+                val allowed = row.obj("decidability")?.flag("decidable") == true && row.obj("independence")?.flag("independent") == true
+                add(InteractionCard("evidence:$task:$revision", CardFamily.COORDINATOR_QUEUE, CoordinatorQueue.title, row, id,
+                    projectId, task, "$revision:$deciding", if (allowed) listOf(CardVerb.DECIDE_MYSELF) else emptyList(),
+                    context = buildJsonObject {
+                        put("decidingSessionId", deciding); put("coordinatorQueue", "waiting")
+                        put("coordinator", JsonObject(detail.filterKeys { it in CoordinatorQueue.coordinatorFields }))
+                    }))
+            }
+            queue.objects("sentToCoordinator").forEach { row ->
+                val task = row.text("taskId") ?: return@forEach
+                val revision = row.text("evidenceRevision") ?: return@forEach
+                if (projectId == null || row.text("projectId") != projectId) return@forEach
+                add(InteractionCard("evidence:$task:$revision", CardFamily.COORDINATOR_QUEUE, CoordinatorQueue.sent, row, id, projectId,
+                    task, "sent:${row.text("deliveredAt")}", context = buildJsonObject { put("coordinatorQueue", "sent") }))
             }
             queue.objects("decided").forEach { receipt ->
                 add(receipt(CardFamily.EVIDENCE, "Evidence decision recorded", receipt, id, receipt.text("taskId") ?: "", receipt.text("evidenceRevision") ?: ""))
@@ -245,4 +269,52 @@ object CardCatalog {
                 session, project, promotion, "${row.text("sourceSha")}:${row.text("state")}", actions, if (merging) PromotionCards.mergingStatusLine(row) else row.text("state")))
         }
     }
+}
+
+/**
+ * An Automatic project's completion evidence while its coordinator is paused — a usage limit, a 429, an expired sign-in, a runner
+ * that went away, a retry it is parked on — or not yet handed it (project 34cygPTQe5LPUT7tdUAzG; the pending read's
+ * `waitingOnCoordinator` and `sentToCoordinator`, read for the coordinator's own conversation). Such a revision waits for the
+ * coordinator, not for the owner: it is drawn where its evidence card would be and asks nothing — no needs-you count reads this
+ * family — until Decide it myself opens the evidence card it still is. Once handed over it is one line saying when. The words are
+ * the project's, the same on every client.
+ */
+object CoordinatorQueue {
+    const val title = "Waiting for the coordinator"
+    const val explanation = "It goes to the coordinator when it’s back. You can still decide now."
+    const val decideHere = "It gets this when it’s back. Decide here only if you don’t want to wait."
+    const val back = "Coordinator is back · it gets this when its current turn ends"
+    const val sent = "Sent to the coordinator"
+    private const val paused = "Coordinator paused"
+
+    /** What the waiting card reads of the coordinator's own session to say why it waits: its run, what it failed with or last
+     * said, and the retry it is parked on. */
+    val coordinatorFields = setOf("status", "runState", "error", "lastAssistantText", "retryAt")
+
+    /** "Coordinator paused · weekly limit · resets 19:00" for the quota [window] that ran out, else "Coordinator paused · retries
+     * 19:00"; without a [time] it names none. */
+    fun pausedLine(window: String?, time: String?): String = when {
+        window != null -> listOfNotNull(paused, window, time?.let { "resets $it" }).joinToString(" · ")
+        time != null -> "$paused · retries $time"
+        else -> paused
+    }
+
+    /** "Sent to the coordinator · 20:05". */
+    fun sentLine(time: String?): String = listOfNotNull(sent, time).joinToString(" · ")
+
+    /** Whether the coordinator is still paused, as the server reads it (`conversationIsPaused`): its run failed, or it waits on a
+     * retry it armed. A revision still waiting for one that is neither goes to it when its current turn ends. */
+    fun isPaused(coordinator: JsonObject): Boolean =
+        coordinator.text("retryAt") != null || (coordinator.text("runState") ?: coordinator.text("status")) == "FAILED"
+
+    fun isSent(card: InteractionCard) = card.family == CardFamily.COORDINATOR_QUEUE && card.context.text("coordinatorQueue") == "sent"
+
+    /** Whether [card] is a waiting revision that Decide it myself opened (`decideMyself`). */
+    fun isDecidingMyself(card: InteractionCard) = card.context.flag("decidingMyself")
+
+    /** What Decide it myself opens: the evidence card the revision still is — Confirm done and Chat about this, the same request
+     * as the same deciding session — still saying what it waits for. Null for a card that offers no such press. */
+    fun decideMyself(card: InteractionCard): InteractionCard? = if (CardVerb.DECIDE_MYSELF !in card.actions) null
+        else card.copy(family = CardFamily.EVIDENCE, actions = listOf(CardVerb.CONFIRM_EVIDENCE, CardVerb.SEND_BACK),
+            context = JsonObject(card.context + ("decidingMyself" to JsonPrimitive(true))))
 }
