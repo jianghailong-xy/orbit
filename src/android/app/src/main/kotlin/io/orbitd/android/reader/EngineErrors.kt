@@ -55,13 +55,16 @@ internal object EngineErrors {
     }
 
     /** The auto-retry card's own title for a failure that fixes itself (OrbitKit `AutoRetryLogic`). */
-    fun autoRetryTitle(quota: Boolean, message: String): String {
-        if (!quota) return "Provider unavailable"
+    fun autoRetryTitle(quota: Boolean, message: String): String =
+        if (!quota) "Provider unavailable" else "${quotaWindow(message).replaceFirstChar(Char::uppercase)} reached"
+
+    /** Which quota window a usage-limit message says ran out (web `quotaWindow`): the runtime's "session limit" is its 5-hour one. */
+    fun quotaWindow(message: String): String {
         val m = message.lowercase()
         return when {
-            m.contains("hit your session limit") -> "5-hour limit reached"
-            m.contains("hit your weekly limit") -> "Weekly limit reached"
-            else -> "Usage limit reached"
+            m.contains("hit your session limit") -> "5-hour limit"
+            m.contains("hit your weekly limit") -> "weekly limit"
+            else -> "usage limit"
         }
     }
 }
