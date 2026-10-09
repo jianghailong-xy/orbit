@@ -374,7 +374,8 @@ describe('Gemini task provider pins', () => {
     if (builtin) expect(builtin.textContent).toContain('env key');
     expect(options.some((option) => option.textContent === 'OpenCode')).toBe(true);
     const provider = options.find((option) => option.textContent?.includes('API key'))!;
-    expect(provider.textContent).toContain('Antigravity');
+    // The key by its own name: a Gemini key is no longer shown as the engine it ran on.
+    expect(provider.textContent).toContain('Gemini');
     expect(provider.textContent).toContain('Update runner');
     await press(provider, 'Gemini needing a runner update');
     expect(where).toBe('/infrastructure');

@@ -12,8 +12,8 @@ vi.mock('../api', async (original) => ({ ...(await original<typeof import('../ap
 const apiMock = vi.mocked(api);
 const gemini = {
   id: 'gemini-key', slug: 'gemini', label: 'Gemini', presetSlug: 'gemini', runtime: 'antigravity',
-  baseUrl: 'https://generativelanguage.googleapis.com', models: [], defaultModel: null,
-  followsPreset: true, enabled: true, hasApiKey: true,
+  engines: ['antigravity', 'opencode'], baseUrl: 'https://generativelanguage.googleapis.com', models: [],
+  defaultModel: null, followsPreset: true, enabled: true, hasApiKey: true,
 };
 const runner = (over: Partial<Runner> = {}): Runner => ({
   id: '33zx0JhRhJo8rd25d3qAM', name: 'HPC', online: true,
@@ -21,6 +21,14 @@ const runner = (over: Partial<Runner> = {}): Runner => ({
   antigravity: { supported: true, installed: true, version: 'agy 1.2.16', envKeyAvailable: false },
   ...over,
 });
+
+/** An element's words, without the monograms drawn on its marks (OpenCode's "O"). */
+const words = (el: Element | null | undefined) => {
+  if (!el) return null;
+  const copy = el.cloneNode(true) as Element;
+  copy.querySelectorAll('.provider-tile').forEach((tile) => tile.remove());
+  return copy.textContent?.replace(/\s+/g, ' ').trim() ?? null;
+};
 
 describe('Antigravity identity and readiness on the Infrastructure page', () => {
   let root: Root;
@@ -67,28 +75,19 @@ describe('Antigravity identity and readiness on the Infrastructure page', () => 
     });
   }
 
-  it('counts only online machines that declare support and have the CLI, and scrolls to their cards', async () => {
-    await mount([
-      runner(), runner({ id: 'offline', online: false }),
-      runner({ id: 'old', antigravity: { supported: false, installed: true, version: '1.2.16', envKeyAvailable: false } }),
-      runner({ id: 'missing', antigravity: { supported: true, installed: false, version: null, envKeyAvailable: false } }),
-    ]);
-    const key = container.querySelector('.prov-runtime')!;
-    expect(container.querySelector('.prov-cell-name')?.textContent).toBe('Antigravity');
-    expect(container.querySelector('a[href="/providers/new/gemini"] .pc-name')?.textContent).toBe('Antigravity');
-    expect(container.querySelector('[data-engine="antigravity"] .re-name')?.textContent).toBe('Antigravity');
-    expect(key.textContent).toContain('Runs on the Antigravity CLI');
-    expect(key.textContent).toContain('Ready on 1 machine');
-    expect(key.querySelector('a')?.textContent).toBe('See machines ↑');
-    scroll.mockClear();
-    await act(async () => (key.querySelector('a') as HTMLAnchorElement).click());
-    expect(scroll.mock.calls).toEqual([[{ behavior: 'smooth', block: 'start' }]]);
-    expect(scroll.mock.contexts[0]).toBe(container.querySelector('#machines'));
+  it('keeps a Gemini key its own name under Google Gemini, says which engines run it, and calls the engine Antigravity CLI', async () => {
+    await mount([runner(), runner({ id: 'offline', online: false })]);
+    expect(container.querySelector('.prov-group b')?.textContent).toBe('Google Gemini');
+    expect(container.querySelector('.prov-key .prov-cell-name')?.textContent).toBe('Gemini');
+    expect(words(container.querySelector('.prov-key .prov-engines'))).toBe('Antigravity CLI · OpenCode');
+    // Which machines can run it is the machines' to say, on their own rows: the key no longer does.
+    expect(container.querySelector('.prov-key')?.textContent).not.toContain('Ready on');
+    expect(container.querySelector('a[href="/providers/new/gemini"] .pc-name')?.textContent).toBe('Google Gemini');
+    expect(container.querySelector('[data-engine="antigravity"] .re-name')?.textContent).toBe('Antigravity CLI');
   });
 
-  it('warns when no online machine is ready and offers installation on the focused CLI row', async () => {
+  it('offers installation on the focused CLI row of a machine without the CLI', async () => {
     await mount([runner({ antigravity: { supported: true, installed: false, version: null, envKeyAvailable: false } })]);
-    expect(container.querySelector('.prov-runtime')?.textContent).toContain('Not ready on any machine');
     const row = container.querySelector('[data-engine="antigravity"]')!;
     expect(row.classList.contains('focused')).toBe(true);
     expect(row.textContent).toContain('Not installed — Orbit can install it here');

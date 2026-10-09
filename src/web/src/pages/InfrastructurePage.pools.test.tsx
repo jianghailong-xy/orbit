@@ -32,6 +32,7 @@ const key = (n: number, label: string, over: Partial<ProviderRow> = {}): Provide
   slug: `anthropic-${n}`,
   label,
   runtime: 'claude',
+  engines: ['claude', 'opencode'] as ProviderRow['engines'],
   baseUrl: 'https://api.anthropic.com',
   models: [],
   defaultModel: null,
