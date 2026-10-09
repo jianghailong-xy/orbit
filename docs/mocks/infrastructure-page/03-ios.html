@@ -1,0 +1,129 @@
+<!doctype html><html><head><meta charset="utf-8"><style>:root {
+  --tint: #3E69F6; --tint-bg: rgba(62,105,246,.12);
+  --amber: #FF9500; --amber-ink: #B35A00; --green: #34C759; --green-ink: #248A3D; --red: #FF3B30;
+  --label: #000; --label-2: rgba(60,60,67,.6); --label-3: rgba(60,60,67,.3); --sep: rgba(60,60,67,.18);
+  --surface: #fff; --grouped: #F2F2F7; --fill: rgba(0,0,0,.065); --glass: rgba(255,255,255,.62);
+  --mark: rgba(255,59,48,.85);
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 40px; background: #e4e4e9; font: 15px/1.4 "Nimbus Sans", "Noto Sans CJK SC", sans-serif; -webkit-font-smoothing: antialiased; }
+.row { display: flex; gap: 40px; align-items: flex-start; }
+.phone { width: 393px; height: 852px; overflow: hidden; position: relative; border-radius: 44px; flex: none;
+  box-shadow: 0 18px 44px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.08); color: var(--label); background: var(--grouped); }
+.status { height: 59px; display: flex; align-items: center; justify-content: space-between; padding: 0 28px 0 39px; font-size: 17px; font-weight: 600; }
+.status .r { display: flex; align-items: center; gap: 5px; font-size: 15px; font-weight: 500; }
+.bars { display: flex; align-items: flex-end; gap: 1.5px; height: 11px; }
+.bars i { width: 3px; background: var(--label); border-radius: 1px; }
+.batt { display: flex; align-items: center; justify-content: center; width: 25px; height: 12px; border: 1.5px solid var(--label-3); border-radius: 4px; font-size: 9px; font-weight: 700; position: relative; }
+.nav { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; position: relative; }
+.nav .ttl { position: absolute; left: 70px; right: 70px; text-align: center; font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.platter { display: flex; align-items: center; justify-content: center; height: 44px; background: var(--glass); border-radius: 999px; flex: none;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08), inset 0 0 0 .5px rgba(0,0,0,.05); }
+.platter.circle { width: 44px; }
+.ico { width: 20px; height: 20px; stroke: var(--label); fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.scroll { position: absolute; left: 0; right: 0; bottom: 0; overflow: hidden; }
+.card { background: var(--surface); margin: 0 16px; border-radius: 26px; overflow: hidden; position: relative; }
+.card.mk, .phead.mk, .sheet.mk { overflow: visible; }
+.sh { display: flex; align-items: baseline; padding: 18px 32px 7px; font-size: 13px; font-weight: 600; color: var(--label-2); text-transform: none; letter-spacing: 0; }
+.sh:first-child { padding-top: 6px; }
+.shr { margin-left: auto; font-weight: 500; font-size: 12.5px; }
+.sf { padding: 7px 32px 4px; font-size: 13px; line-height: 1.38; color: var(--label-2); }
+.mark { display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.av { display: inline-flex; align-items: center; justify-content: center; flex: none; border-radius: 50%; color: #fff; font-weight: 600; }
+.lrow { display: flex; align-items: center; gap: 12px; min-height: 51.5px; padding: 0 16px; position: relative; }
+.lrow + .lrow::before, .arow + .arow::before, .arow + .lrow::before, .fact + .fact::before, .trow2 + .trow2::before {
+  content: ""; position: absolute; top: 0; left: 16px; right: 0; border-top: .33px solid #E1E1E4; }
+.lrow .lt { flex: 1; min-width: 0; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lrow .lv { flex: none; font-size: 17px; color: var(--label-2); }
+.chev { width: 13px; height: 13px; stroke: var(--label-3); fill: none; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.tintrow { color: var(--tint); }
+.arow { display: flex; gap: 12px; align-items: flex-start; padding: 11px 16px 12px; position: relative; }
+.arow .av { margin-top: 2px; }
+.ab { flex: 1; min-width: 0; }
+.at { font-size: 16.5px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.you { font-size: 13px; font-weight: 400; color: var(--label-2); margin-left: 3px; }
+.chipx { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .02em; border-radius: 5px; padding: 1px 5px; margin-left: 4px;
+  background: var(--fill); color: var(--label-2); vertical-align: 2px; }
+.chipx.brand { background: var(--tint-bg); color: var(--tint); }
+.as { font-size: 14px; color: var(--label-2); margin-top: 2px; }
+.as.ok { color: var(--green-ink); } .as.run { color: var(--tint); } .as.warn { color: var(--amber-ink); } .as.bad { color: #C9261B; }
+.why { font-size: 13px; color: #C9261B; margin-top: 4px; line-height: 1.35; }
+.rowact { margin-top: 9px; }
+.ar { flex: none; width: 64px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; padding-top: 3px; }
+.pct { font-size: 14px; color: var(--label-2); font-variant-numeric: tabular-nums; }
+.gauge { width: 56px; height: 5px; border-radius: 3px; background: var(--fill); overflow: hidden; display: block; }
+.gauge i { display: block; height: 100%; border-radius: 3px; }
+.btn { display: inline-block; font-size: 14px; font-weight: 600; border-radius: 999px; padding: 6px 14px; }
+.btn.primary { background: var(--tint); color: #fff; }
+.btn.wide { display: block; text-align: center; padding: 13px; font-size: 17px; border-radius: 14px; margin: 12px 16px 0; }
+.phead { margin: 4px 16px 0; padding: 14px 0 4px; position: relative; }
+.phl { display: flex; gap: 12px; align-items: center; padding: 0 4px; }
+.pht { font-size: 17px; font-weight: 600; }
+.phs { font-size: 14px; color: var(--label-2); margin-top: 1px; }
+.phead .btn.wide { margin: 14px 0 0; }
+.trow2 { display: flex; align-items: center; justify-content: space-between; min-height: 51.5px; padding: 0 16px; position: relative; }
+.trow2 .lt { font-size: 17px; }
+.toggle { width: 51px; height: 31px; border-radius: 16px; background: var(--green); position: relative; flex: none; }
+.toggle::after { content: ""; position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,.2); }
+.scrim { position: absolute; inset: 0; background: rgba(0,0,0,.22); }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; top: 118px; background: var(--grouped); border-radius: 36px 36px 0 0; box-shadow: 0 -8px 30px rgba(0,0,0,.12); }
+.grab { width: 36px; height: 5px; border-radius: 3px; background: rgba(60,60,67,.3); margin: 6px auto 0; }
+.snav { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px 6px; }
+.stt { font-size: 17px; font-weight: 600; }
+.slead { padding: 6px 24px 12px; font-size: 15px; line-height: 1.4; color: var(--label); }
+.fact { padding: 11px 16px; font-size: 14.5px; line-height: 1.38; color: var(--label-2); position: relative; }
+.fact b { color: var(--label); font-weight: 600; }
+.risk { margin: 0 16px; padding: 11px 14px; border-radius: 14px; background: rgba(255,149,0,.14); color: var(--amber-ink); font-size: 14px; line-height: 1.38; }
+.snote { padding: 10px 28px 0; font-size: 13px; color: var(--label-2); line-height: 1.38; text-align: center; }
+.mk { outline: 1.6px dashed var(--mark); outline-offset: 4px; border-radius: 26px; }
+.mk::after { content: attr(data-n); position: absolute; top: -12px; right: -12px; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--amber); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; z-index: 5; }
+.sheet.mk { outline-offset: -3px; border-radius: 36px 36px 0 0; }
+.sheet.mk::after { top: 10px; right: 14px; }
+.lrow.two { min-height: 62px; }
+.lt2 { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.lt2 .lt { flex: none; }
+.lsub { font-size: 13.5px; color: var(--label-2); margin-top: 1px; }
+.phead.mk::after { top: 2px; right: -10px; }
+
+.as.sm { font-size: 13px; }
+.shr.bad { color: #C9261B; } .shr.warn { color: var(--amber-ink); }
+.wins { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+.winh { display: flex; justify-content: space-between; font-size: 13px; color: var(--label-2); }
+.winh b { color: var(--label); font-weight: 600; }
+.wgauge { display: block; height: 5px; border-radius: 3px; background: var(--fill); overflow: hidden; margin-top: 4px; }
+.wgauge i { display: block; height: 100%; border-radius: 3px; }
+.wres { font-size: 11px; color: var(--label-2); margin-top: 4px; }
+.arow .mark { margin-top: 2px; }
+.url { text-align: center; font-size: 13px; color: var(--label-2); margin-top: 6px; }
+.hint { font-size: 15px; color: var(--label-2); margin-top: 14px; }
+.codebox { background: var(--surface); border-radius: 18px; padding: 16px; text-align: center; margin-top: 14px; }
+.code { font: 600 22px/1.2 "DejaVu Sans Mono", monospace; letter-spacing: 2px; }
+.copy { font-size: 13px; color: var(--tint); margin-top: 8px; }
+.wait { display: flex; align-items: center; gap: 8px; font-size: 15px; margin-top: 14px; }
+.spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(60,60,67,.25); border-top-color: rgba(60,60,67,.7); }
+.expiry { font-size: 13px; color: var(--label-2); margin-top: 14px; }
+.cancel { text-align: center; color: var(--tint); font-size: 17px; margin-top: 18px; }
+.done { display: flex; gap: 12px; align-items: flex-start; }
+.done .ok { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--green-ink); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; }
+.dt { font-size: 17px; font-weight: 600; }
+.ds { font-size: 15px; color: var(--label-2); margin-top: 4px; line-height: 1.35; }
+
+.board{display:flex;flex-direction:column;gap:14px}
+.cap{width:393px;font:14px/1.45 "Noto Sans SC",sans-serif;color:#3a3a40}
+.cap b{display:block;font-size:16px;color:#000;margin-bottom:3px}
+.lv.warn{color:var(--amber-ink)} .lv.ok{color:var(--green-ink)}
+.lsub.warn{color:var(--amber-ink)}
+.attn{background:#fff;margin:0 16px;border-radius:26px;position:relative}
+.attn .lrow .dot{width:9px;height:9px;border-radius:50%;background:var(--amber);flex:none;margin:0 4px 0 2px}
+.attn .lrow .dot.off{background:var(--label-3)}
+.pill{font-size:14px;font-weight:600;color:#fff;background:var(--tint);border-radius:999px;padding:5px 13px;flex:none}
+.pill.ghost{background:var(--fill);color:var(--tint)}
+.eng .lsub{white-space:normal;line-height:1.3}
+.tagok{font-size:12px;font-weight:600;color:var(--green-ink);background:rgba(52,199,89,.14);border-radius:6px;padding:1px 6px;margin-left:6px;vertical-align:2px}
+.tagno{font-size:12px;font-weight:600;color:var(--label-2);background:var(--fill);border-radius:6px;padding:1px 6px;margin-left:6px;vertical-align:2px}
+.plus{color:var(--tint);font-size:26px;font-weight:300;line-height:1}
+.acct{padding-left:54px}
+.mini{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none;width:70px}
+.mini .gauge{width:60px}
+</style></head><body><div class="row"><div class="board"><div class="phone"><div class="status"><span>10:04</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">80</span></span></div><div class="nav"><span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span><span class="ttl">Settings</span><span></span></div><div class="scroll" style="top:103px"><div class="sh">Sessions</div><div class="card"><div class="lrow "><span class="mark" style="width:29px;height:29px;border-radius:7px;background:#AF52DE;color:#fff;font-size:15px">✦</span><span class="lt">Agents</span><span class="lv "></span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div><div class="lrow "><span class="mark" style="width:29px;height:29px;border-radius:7px;background:#5856D6;color:#fff;font-size:15px">⇄</span><span class="lt">Session orchestration</span><span class="lv "></span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div></div><div class="sh">Machines &amp; models</div><div class="card mk" data-n="1"><div class="lrow "><span class="mark" style="width:29px;height:29px;border-radius:7px;background:#007AFF;color:#fff;font-size:15px">▭</span><span class="lt">Runners</span><span class="lv ">2 of 3 online</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div><div class="lrow "><span class="mark" style="width:29px;height:29px;border-radius:7px;background:#34C759;color:#fff;font-size:15px">⏻</span><span class="lt">Providers</span><span class="lv "></span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div></div><div class="sf">两个入口：登录在 Runner → 引擎页做；Providers 页又把同样的 runner 列一遍，外加 key 和池。</div><div class="sh">Account</div><div class="card"><div class="lrow "><span class="mark" style="width:29px;height:29px;border-radius:7px;background:#8E8E93;color:#fff;font-size:15px">●</span><span class="lt">Profile</span><span class="lv ">Wikova</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div><div class="lrow "><span class="mark" style="width:29px;height:29px;border-radius:7px;background:#8E8E93;color:#fff;font-size:15px">⚙</span><span class="lt">Preferences</span><span class="lv "></span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div></div></div></div><div class="cap"><b>现在 · 设置</b>Runners 和 Providers 两行。Providers 页的「On your runners」就是 runner 列表的重复，用户要分清两页各管什么。</div></div><div class="board"><div class="phone"><div class="status"><span>10:04</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">80</span></span></div><div class="nav"><span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span><span class="ttl">Settings</span><span></span></div><div class="scroll" style="top:103px"><div class="sh">Sessions</div><div class="card"><div class="lrow "><span class="mark" style="width:29px;height:29px;border-radius:7px;background:#AF52DE;color:#fff;font-size:15px">✦</span><span class="lt">Agents</span><span class="lv "></span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div><div class="lrow "><span class="mark" style="width:29px;height:29px;border-radius:7px;background:#5856D6;color:#fff;font-size:15px">⇄</span><span class="lt">Session orchestration</span><span class="lv "></span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div></div><div class="sh">Machines &amp; models</div><div class="card mk" data-n="2"><div class="lrow "><span class="mark" style="width:29px;height:29px;border-radius:7px;background:#007AFF;color:#fff;font-size:15px">▭</span><span class="lt">Infrastructure</span><span class="lv warn">1 needs you</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div></div><div class="sf">Your machines, the subscriptions signed in on them, and your API keys.</div><div class="sh">Account</div><div class="card"><div class="lrow "><span class="mark" style="width:29px;height:29px;border-radius:7px;background:#8E8E93;color:#fff;font-size:15px">●</span><span class="lt">Profile</span><span class="lv ">Wikova</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div><div class="lrow "><span class="mark" style="width:29px;height:29px;border-radius:7px;background:#8E8E93;color:#fff;font-size:15px">⚙</span><span class="lt">Preferences</span><span class="lv "></span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div></div></div></div><div class="cap"><b>之后 · 设置</b>合成一行「Infrastructure」，右侧直接显示有没有要处理的事。</div></div><div class="board"><div class="phone"><div class="status"><span>10:04</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">80</span></span></div><div class="nav"><span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span><span class="ttl">Infrastructure</span><span class="platter circle"><span class="plus">+</span></span></div><div class="scroll" style="top:103px"><div class="sh">Needs you</div><div class="attn mk" data-n="3"><div class="lrow two"><span class="dot"></span><span class="lt2"><span class="lt" style="font-size:16px"><b>Codex</b> signed out</span><span class="lsub">on Mac Studio</span></span><span class="pill">Sign In</span></div><div class="lrow two"><span class="dot off"></span><span class="lt2"><span class="lt" style="font-size:16px"><b>ThinkPad</b> is offline</span><span class="lsub">Last seen yesterday</span></span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div></div><div class="sh">What agents can run on</div><div class="card eng mk" data-n="4"><div class="lrow two "><span class="mark" style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#d97757,#c15f3c);color:#fff;font-weight:700;font-size:14px">✳</span><span class="lt2"><span class="lt">Claude Code<span class="tagok">Ready</span></span><span class="lsub">2 machines · 3 keys · 1 pool</span></span><span class="lv "></span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div><div class="lrow two "><span class="mark" style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#4b5158,#1f2226);color:#fff;font-weight:700;font-size:14px">◎</span><span class="lt2"><span class="lt">Codex<span class="tagok">Ready</span></span><span class="lsub">HPC ×2</span></span><span class="lv "></span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div><div class="lrow two "><span class="mark" style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#2a2a2a,#000);color:#fff;font-weight:700;font-size:14px">K</span><span class="lt2"><span class="lt">Kimi Code<span class="tagok">Ready</span></span><span class="lsub">HPC</span></span><span class="lv "></span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div><div class="lrow two "><span class="mark" style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#3fb4f0,#16c18a);color:#fff;font-weight:700;font-size:14px">A</span><span class="lt2"><span class="lt">Antigravity<span class="tagno">Not set up</span></span><span class="lsub">Install on a machine</span></span><span class="lv "></span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div></div><div class="sh">Machines<span class="shr">7 / 12 busy</span></div><div class="card"><div class="lrow two "><span class="mark" style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#8e8e93,#636366);color:#fff;font-weight:700;font-size:14px">⌘</span><span class="lt2"><span class="lt">Mac Studio</span><span class="lsub"><span class="warn">2 / 4 running · 1 engine signed out</span></span></span><span class="lv "></span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div><div class="lrow two "><span class="mark" style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#8e8e93,#636366);color:#fff;font-weight:700;font-size:14px">▣</span><span class="lt2"><span class="lt">HPC</span><span class="lsub">5 / 8 running · All signed in</span></span><span class="lv "></span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div><div class="lrow two "><span class="mark" style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#8e8e93,#636366);color:#fff;font-weight:700;font-size:14px">▣</span><span class="lt2"><span class="lt">ThinkPad</span><span class="lsub">1 of 3 signed in</span></span><span class="lv ">Offline</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div><div class="lrow "><span class="lt"><span class="tintrow">Add Machine</span></span><span class="lv "></span></div></div><div class="sh">Account pools</div><div class="card"><div class="lrow "><span class="mark" style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#d97757,#c15f3c);color:#fff;font-weight:700;font-size:14px">✳</span><span class="lt">Claude keys</span><span class="lv ">1 of 2 available</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div></div><div class="sh">API keys</div><div class="card"><div class="lrow "><span class="mark" style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#d97757,#c15f3c);color:#fff;font-weight:700;font-size:14px">✳</span><span class="lt">Anthropic (Claude)</span><span class="lv "></span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div><div class="lrow "><span class="mark" style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#5a7cff,#3b5bdb);color:#fff;font-weight:700;font-size:14px">D</span><span class="lt">DeepSeek</span><span class="lv "></span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div></div></div></div><div class="cap"><b>之后 · Infrastructure</b>③ 需要处理：退出登录、离线，能就地修。④ 每个引擎现在能用什么付费。下面依次是机器、账号池、API key；右上 + 统一新增机器 / API key / 池。</div></div><div class="board"><div class="phone"><div class="status"><span>10:04</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">80</span></span></div><div class="nav"><span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span><span class="ttl">Mac Studio</span><span></span></div><div class="scroll" style="top:103px"><div class="sh">Capacity</div><div class="card"><div class="lrow"><span class="lt">Running</span><span class="lv">2 of 4</span></div></div><div class="sh">Engines</div><div class="card mk" data-n="5"><div class="lrow two "><span class="mark" style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#d97757,#c15f3c);color:#fff;font-weight:700;font-size:14px">✳</span><span class="lt2"><span class="lt">Claude Code</span><span class="lsub">2.1.4 · 2 of 2 accounts available</span></span><span class="lv "></span></div><div class="lrow two acct"><span class="lt2"><span class="lt" style="font-size:16px">Personal Max <span class="chipx brand">NEXT</span></span><span class="lsub">5-hour 38% · resets 02:01</span></span><span class="mini"><span class="pct">38%</span><span class="gauge"><i style="width:38%;background:var(--tint)"></i></span></span></div><div class="lrow two acct"><span class="lt2"><span class="lt" style="font-size:16px">Work</span><span class="lsub">Signed in · no quota reported</span></span></div><div class="lrow acct"><span class="lt tintrow" style="font-size:16px">Add Account</span></div><div class="lrow two"><span class="mark" style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#4b5158,#1f2226);color:#fff;font-weight:700;font-size:14px">◎</span><span class="lt2"><span class="lt">Codex</span><span class="lsub warn">Signed out</span></span><span class="pill">Sign In</span></div><div class="lrow two"><span class="mark" style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#2a2a2a,#000);color:#fff;font-weight:700;font-size:14px">K</span><span class="lt2"><span class="lt">Kimi Code</span><span class="lsub">Not installed</span></span><span class="pill ghost">Install</span></div></div><div class="sf">Signed in on this machine — only sessions here spend it.</div><div class="sh">Workspaces</div><div class="card"><div class="lrow "><span class="lt">orbit</span><span class="lv ">Claude Code</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div></div><div class="sh">About this machine</div><div class="card"><div class="lrow "><span class="lt">Version</span><span class="lv ">v0.1.240</span></div><div class="lrow "><span class="lt">Host</span><span class="lv ">mac-studio.local</span></div></div></div></div><div class="cap"><b>之后 · 机器详情</b>引擎和账号直接挂在机器下，登录、加账号、安装都在这里完成，不再跳去别的页面。</div></div></div></body></html>
