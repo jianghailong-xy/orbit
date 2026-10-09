@@ -11,7 +11,8 @@
 //         accounts of Claude Code and of Codex; Antigravity on a Google sign-in that lapsed; Codex Default holding reset credits
 //         (2 unless A07C_CREDITS says) — and its part in a reset the app asks for (docs/codex-rate-limit-reset-contract.md §6):
 //         the consume answered `reset`, then the refresh with one credit fewer. a07c-pool: Codex only.
-//   refresh  a new weekly-limit session and a new failed one in place of those a run answered (seed.json updated).
+//   refresh  a new weekly-limit session, a new failed one and a new claimed pool session in place of those a run answered or
+//         the server failed (seed.json updated).
 //   dump  what the server now says of those runners, providers, pools, sessions and reset operations, as JSON (to argv[3]).
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -112,6 +113,20 @@ async function stoppedSessions() {
   const failed = await until('the failed turn to settle', async () => { const d = await detail(fail.id); return ['FAILED', 'AWAITING_INPUT'].includes(state(d)) && d.numTurns > 0 ? d : null; });
   return { quota: { id: quota.id, title: 'A07c weekly limit', retryAt: armed.retryAt }, fail: { id: fail.id, title: 'A07c failed turn', status: state(failed) } };
 }
+/** A session on the shared pool in a07c-pool's workspace, claimed through the runner's own claim: the claim is where the server
+ * picks the pool's key (poolKeyId). What it hands the runner is not kept or printed. */
+async function poolSession(registered, workspaceId, slug) {
+  const token = registered['a07c-pool'].runnerToken;
+  await heartbeat('a07c-pool', token);
+  const pooled = await call('POST', '/sessions', owner, { workspaceId, title: 'A07c shared pool', prompt: 'A07c: a session on the shared pool', provider: slug });
+  await until('a07c-pool to claim the pool session', async () => {
+    const res = await fetch(`${API}/runner/sessions/claim`, { headers: { authorization: `Bearer ${token}`, ...headers('a07c-pool') } });
+    const job = res.ok ? JSON.parse((await res.text()) || 'null') : null;
+    return job?.sessionId ? job.sessionId : null;
+  }, { timeoutMs: 120_000, everyMs: 1_000 });
+  const onPool = await detail(pooled.id);
+  return { id: pooled.id, title: 'A07c shared pool', poolKeyId: onPool.poolKeyId ?? null, status: state(onPool) };
+}
 
 if (mode === 'seed') {
   const deepseek = await call('POST', '/providers/mine', owner, { label: 'DeepSeek', runtime: 'claude', baseUrl: ENDPOINT,
@@ -139,14 +154,7 @@ if (mode === 'seed') {
   // On the runner's own Codex sign-in (Default): the account its reset credits belong to.
   const codexSession = await call('POST', '/sessions', owner, { workspaceId: workspaces['a07c-engines'].id, title: 'A07c Codex reset',
     prompt: 'A07c: the Codex reset card', provider: 'codex', codexAccount: 'default' });
-  const pooled = await call('POST', '/sessions', owner, { workspaceId: workspaces['a07c-pool'].id, title: 'A07c shared pool',
-    prompt: 'A07c: a session on the shared pool', provider: pool.slug });
-  // The claim is where the server picks the pool's key (poolKeyId). What it hands the runner is not kept or printed.
-  await until('a07c-pool to claim the pool session', async () => {
-    const res = await fetch(`${API}/runner/sessions/claim`, { headers: { authorization: `Bearer ${registered['a07c-pool'].runnerToken}`, ...headers('a07c-pool') } });
-    const job = res.ok ? JSON.parse((await res.text()) || 'null') : null;
-    return job?.sessionId ? job.sessionId : null;
-  }, { timeoutMs: 120_000, everyMs: 1_000 });
+  const pooled = await poolSession(registered, workspaces['a07c-pool'].id, pool.slug);
   const stopped = await stoppedSessions();
   const upload = async (name, mime, text) => {
     const form = new FormData();
@@ -160,15 +168,15 @@ if (mode === 'seed') {
   const files = await session({ title: 'A07c files', prompt: 'A07c: two files attached', attachmentIds: [notes.id, log.id] });
 
   await until('the files session to answer', async () => state(await detail(files.id)) === 'AWAITING_INPUT');
-  const onPool = await detail(pooled.id);
   seed.a07c = {
     enginesRunner: { id: runnerId('a07c-engines'), name: 'a07c-engines' },
     enginesWorkspace: { id: workspaces['a07c-engines'].id, name: workspaces['a07c-engines'].name },
     poolRunner: { id: runnerId('a07c-pool'), name: 'a07c-pool' },
+    poolWorkspace: { id: workspaces['a07c-pool'].id, name: workspaces['a07c-pool'].name },
     keys: { deepseek: { id: deepseek.id, slug: deepseek.slug, label: deepseek.label } },
     sharedPool: { id: pool.id, slug: pool.slug, label: pool.label, keys: (pool.keys ?? []).map((k) => ({ id: k.id, label: k.label })) },
     sessions: { codex: { id: codexSession.id, title: 'A07c Codex reset' },
-      pool: { id: pooled.id, title: 'A07c shared pool', poolKeyId: onPool.poolKeyId ?? null, status: state(onPool) },
+      pool: pooled,
       ...stopped,
       files: { id: files.id, title: 'A07c files', attachments: [notes.id, log.id] } },
     how: 'a07c-stack.mjs seed: POST /providers/mine, /providers/shared-pools(+keys), /runner/register, /runner/heartbeat, /workspaces, ' +
@@ -177,7 +185,10 @@ if (mode === 'seed') {
   writeFileSync(seedFile, JSON.stringify(seed, null, 2));
   console.log(JSON.stringify(seed.a07c, null, 2));
 } else if (mode === 'refresh') {
-  Object.assign(seed.a07c.sessions, await stoppedSessions());
+  const registered = JSON.parse(readFileSync(tokens, 'utf8'));
+  const poolWorkspace = seed.a07c.poolWorkspace?.id ?? (await call('GET', '/workspaces', owner)).find((w) => w.name === 'a07c-pool').id;
+  seed.a07c.poolWorkspace = { id: poolWorkspace, name: 'a07c-pool' };
+  Object.assign(seed.a07c.sessions, await stoppedSessions(), { pool: await poolSession(registered, poolWorkspace, seed.a07c.sharedPool.slug) });
   writeFileSync(seedFile, JSON.stringify(seed, null, 2));
   console.log(JSON.stringify(seed.a07c.sessions, null, 2));
 } else if (mode === 'run') {

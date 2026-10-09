@@ -124,7 +124,12 @@ class ComposerStackDeviceTest {
         compose.waitUntil(60_000) { has(hasTestTag("composer-model")) }
     }
     /** The transcript is a lazy list that opens on its latest row: bring a row further up into view before reading it. */
-    private fun reveal(matcher: SemanticsMatcher) { compose.onNodeWithTag("transcript-list").performScrollToNode(matcher); compose.waitForIdle() }
+    private fun reveal(matcher: SemanticsMatcher) {
+        val list = compose.onNodeWithTag("transcript-list")
+        // The search moves on from where the list stands: from its first row when the row is above.
+        try { list.performScrollToNode(matcher) } catch (_: AssertionError) { list.performScrollToIndex(0); list.performScrollToNode(matcher) }
+        compose.waitForIdle()
+    }
     private fun openModelMenu() {
         compose.waitUntil(30_000) { has(hasTestTag("composer-model") and isEnabled()) }
         compose.onNodeWithTag("composer-model").performClick()
