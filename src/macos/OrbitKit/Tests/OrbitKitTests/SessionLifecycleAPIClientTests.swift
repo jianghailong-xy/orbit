@@ -120,7 +120,7 @@ final class SessionLifecycleAPIClientTests: XCTestCase {
 
         let turns = try await client().queuedTurns(sessionID: "session-1")
 
-        XCTAssertEqual(recorder.paths, ["/api/sessions/session-1/turns"])
+        XCTAssertEqual(recorder.paths, ["/api/sessions/session-1/turns?view=active"])
         XCTAssertEqual(recorder.methods, ["GET"])
         XCTAssertEqual(turns.first?.turnId, "turn-1")
         XCTAssertEqual(turns.first?.content, "from web")

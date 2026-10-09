@@ -222,7 +222,7 @@ import {
   readDispatchRefusal,
   recordDispatchRefusal,
 } from '../tasks/task-dispatch-refusal';
-import { CurrentRunner } from './current-runner.decorator';
+import { CurrentManagedRunnerInstance, CurrentRunner } from './current-runner.decorator';
 import { reclaimRuntimeIds } from './reclaim-runtime';
 import {
   RUNTIME_STARTED_EVENT_TYPES,
@@ -371,6 +371,7 @@ import {
 } from '../projects/session-source';
 import { providerDispatchWhereOn, providerSlugsOn, sessionExecRuntime } from '../providers/custom-provider';
 import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-delete';
+import { reauthorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -2371,6 +2372,8 @@ export class RunnerApiController {
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
     @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
     @Res({ passthrough: true }) res?: Response,
+    /** A managed runner's authorized instance: the claim re-checks it where work is handed out. */
+    @CurrentManagedRunnerInstance() managedInstance?: ManagedRunnerInstance,
   ): Promise<ClaimedSession | null> {
     // The long poll outlives the request otherwise: a runner that stopped — a self-update re-exec, a
     // restart, its own claim timeout — leaves it waiting here, and the session it claims next is
@@ -2413,7 +2416,12 @@ export class RunnerApiController {
       await this.markSourceProtocolUnsupported(runner.id);
     }
     const job = await this.queue.claimSessionForRunner(
-      { id: runner.id, supportedProviders, ...(dshUnavailable ? { dshUnavailable } : {}) },
+      {
+        id: runner.id,
+        supportedProviders,
+        ...(dshUnavailable ? { dshUnavailable } : {}),
+        ...(managedInstance ? { managedInstance } : {}),
+      },
       LONG_POLL_MS,
       supportsTerminalHandoff,
       supportsSourcePin,
@@ -3299,11 +3307,16 @@ export class RunnerApiController {
      *  is the process that will actually execute the turn, and it may have been downgraded
      *  since. */
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
+    /** A managed runner's authorized instance, asked again before every later round of the poll. */
+    @CurrentManagedRunnerInstance() managedInstance?: ManagedRunnerInstance,
   ): Promise<RunInboxResponse> {
     const generation = parseLeaseGeneration(leaseGeneration);
     const declared = parseRunnerCapabilities(capabilities) ?? [];
     const deadline = Date.now() + INBOX_LONG_POLL_MS;
-    for (;;) {
+    for (let round = 0; ; round += 1) {
+      // The guard answered when the poll began; an instance fenced or superseded during it is
+      // refused before it is handed a turn (managed-runner-instance.ts).
+      if (managedInstance && round > 0) await reauthorizeManagedRunnerInstance(this.prisma, managedInstance);
       const turn = await this.dequeueTurn(
         sessionId,
         runner.id,

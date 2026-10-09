@@ -1,5 +1,9 @@
-# Optional TEST template only. Replace every __...__ value from an authorized environment
-# record; do not apply before the per-PVC single-writer admission/cessation gates are ready.
+# Optional TEST template only: the Pod the managed runner manager creates for one generation of one
+# user's runner. src/apiserver/src/managed-runners/managed-runner-resources.ts builds exactly this,
+# and its spec compares the two. Replace every __...__ value from an authorized environment record.
+# Never apply it by hand in place of the manager: the single-Pod admission guard
+# (admission/pod-admission-webhook.template.json) refuses it unless the manager reserved its
+# generation, and must be installed before any managed PVC is usable.
 # Uses an EXISTING per-user PVC; installs no Ceph/CSI/StorageClass or server infrastructure.
 apiVersion: v1
 kind: Pod
@@ -9,6 +13,12 @@ metadata:
   labels:
     app.kubernetes.io/name: orbit-managed-runner
     orbit-test-environment: __TEST_ENVIRONMENT_ID__
+  annotations:
+    orbit.dev/owner-id: __OWNER_UUID__
+    orbit.dev/runner-id: __RUNNER_UUID__
+    # The generation the manager reserved for this Pod; the runner reads it back below.
+    orbit.dev/generation: "__RESERVED_GENERATION__"
+    orbit.dev/pvc-uid: __DATA_PVC_UID__
 spec:
   restartPolicy: Never
   automountServiceAccountToken: false
@@ -64,10 +74,23 @@ spec:
           value: __STABLE_USER_RUNNER_NAME__
         - name: ORBIT_RUNNER_MAX_CONCURRENT
           value: "__AUTHORIZED_SESSION_CONCURRENCY__"
-        - name: ORBIT_RUNNER_ENROLLMENT_TOKEN_FILE
-          value: /run/orbit-enrollment/token
-        # On rebuild set ORBIT_RUNNER_EXPECTED_ID to the recorded ID and remove the
-        # enrollment env/mount/volume. Missing credentials must never cause re-enrollment.
+        # The runner row the manager created. The entrypoint refuses a volume or config of another.
+        - name: ORBIT_RUNNER_EXPECTED_ID
+          value: __RUNNER_UUID__
+        # This generation's credential, issued by the manager; never an enrollment token.
+        - name: ORBIT_RUNNER_CREDENTIAL_FILE
+          value: /run/orbit-bootstrap/token
+        # Which instance this is, as the API server recorded it. The entrypoint checks the generation
+        # against the bootstrap Secret's, and `orbit run` sends both with every request; the control
+        # plane accepts the credential from this generation and Pod UID only.
+        - name: ORBIT_MANAGED_RUNNER_GENERATION
+          valueFrom:
+            fieldRef:
+              fieldPath: "metadata.annotations['orbit.dev/generation']"
+        - name: ORBIT_MANAGED_RUNNER_POD_UID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.uid
         # Supply an explicitly authorized test model credential separately; this template
         # deliberately contains no model key, kubeconfig, Ceph key, or account-home mount.
       resources:
@@ -82,8 +105,8 @@ spec:
           mountPath: /var/lib/orbit
         - name: temporary
           mountPath: /tmp
-        - name: enrollment
-          mountPath: /run/orbit-enrollment
+        - name: bootstrap
+          mountPath: /run/orbit-bootstrap
           readOnly: true
   volumes:
     - name: user-state
@@ -92,12 +115,15 @@ spec:
     - name: temporary
       emptyDir:
         sizeLimit: __AUTHORIZED_TMP_SIZE__
-    - name: enrollment
+    - name: bootstrap
       secret:
-        secretName: __TARGET_USERS_ONE_TIME_TEST_ENROLLMENT_SECRET__
+        # mr-boot-<runner uuid>: replaced by the manager when the generation advances.
+        secretName: __BOOTSTRAP_SECRET__
         # Only this bootstrap Secret is readable by the runner. Do not use fsGroup:
         # recursive group-mode expansion can invalidate private ORBIT_HOME permissions.
         defaultMode: 0444
         items:
           - key: token
             path: token
+          - key: generation
+            path: generation

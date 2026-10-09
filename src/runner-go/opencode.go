@@ -924,6 +924,11 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 		for name, value := range bgJobEnv(job.SessionID) {
 			environment[name] = value
 		}
+		// A managed runner's instance, which `orbit mcp` sends with the runner credential.
+		for _, pair := range managedInstanceEnv() {
+			name, value, _ := strings.Cut(pair, "=")
+			environment[name] = value
+		}
 		mcp["orbit"] = map[string]interface{}{
 			"type":        "local",
 			"command":     []string{executable, "mcp"},

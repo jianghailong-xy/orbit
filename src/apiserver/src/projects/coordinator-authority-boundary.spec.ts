@@ -103,6 +103,8 @@ async function runnerFromAgentCredential(): Promise<Runner> {
         return { id: RUN, ownerId: OWNER, owner: { disabledAt: null } };
       },
     },
+    // A self-managed runner: no managed runner mapping binds its credential to an instance.
+    managedRunner: { findUnique: async () => null },
   } as never);
   const request: Record<string, unknown> = {
     headers: { authorization: `Bearer ${credential}` },

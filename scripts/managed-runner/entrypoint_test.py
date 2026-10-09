@@ -24,7 +24,9 @@ class ForegroundExec(BaseException):
     pass
 
 
-class EntrypointTest(unittest.TestCase):
+class EntrypointFixture(unittest.TestCase):
+    """Scratch volume, mocked mount, recorded enrollment and exec; no tests of its own."""
+
     def setUp(self):
         spec = importlib.util.spec_from_file_location("managed_runner_entrypoint", ENTRYPOINT)
         self.runner = importlib.util.module_from_spec(spec)
@@ -127,6 +129,8 @@ class EntrypointTest(unittest.TestCase):
         self.popen.assert_not_called()
         self.foreground.assert_not_called()
 
+
+class EntrypointTest(EntrypointFixture):
     def test_first_start_registers_once_and_execs_foreground(self):
         self.start()
         self.popen.assert_called_once()
@@ -352,6 +356,130 @@ class EntrypointTest(unittest.TestCase):
         finally:
             fcntl.flock(lock, fcntl.LOCK_UN)
             os.close(lock)
+
+
+
+RUNNER_ID = "0b6f5f6e-6f0a-4c5e-9b9e-2a3c4d5e6f70"
+POD_UID = "7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f"
+
+
+class ManagedBootstrapTest(EntrypointFixture):
+    """The manager's Pod: the runner exists, its credential is issued for one generation, and the
+    Pod states its generation and UID through the Downward API. No enrollment, ever."""
+
+    def setUp(self):
+        super().setUp()
+        self.bootstrap = Path(self.scratch.name) / "orbit-bootstrap"
+        self.bootstrap.mkdir()
+        self.issue(1, "generation-1-credential")
+        os.environ.pop("ORBIT_RUNNER_ENROLLMENT_TOKEN_FILE")
+        os.environ.update({
+            "ORBIT_RUNNER_NAME": "orbit-managed",
+            "ORBIT_RUNNER_EXPECTED_ID": RUNNER_ID,
+            "ORBIT_RUNNER_CREDENTIAL_FILE": str(self.bootstrap / "token"),
+            "ORBIT_MANAGED_RUNNER_GENERATION": "1",
+            "ORBIT_MANAGED_RUNNER_POD_UID": POD_UID,
+        })
+
+    def issue(self, generation, credential):
+        for name, value in (("token", credential), ("generation", str(generation))):
+            path = self.bootstrap / name
+            if path.exists():
+                path.chmod(0o600)
+            path.write_text(value)
+            path.chmod(0o444)
+
+    def started_env(self):
+        self.start()
+        self.popen.assert_not_called()
+        return self.foreground.call_args.args[2]
+
+    def test_first_start_uses_the_manager_credential_and_never_enrolls(self):
+        env = self.started_env()
+        config = json.loads(self.config.read_text())
+        self.assertEqual(config["runnerId"], RUNNER_ID)
+        self.assertEqual(config["runnerToken"], "generation-1-credential")
+        self.assertEqual(config["serverUrl"], "https://control.example.test")
+        self.assertEqual(config["workDir"], str(self.runner.paths()[2]))
+        self.assertIs(config["autoInstallEngines"], False)
+        self.assertEqual(stat.S_IMODE(self.config.stat().st_mode), 0o600)
+        self.assertFalse((self.orbit / "registration-pending.json").exists())
+        # The instance rides into `orbit run`, which sends it with every request.
+        self.assertEqual(env["ORBIT_MANAGED_RUNNER_GENERATION"], "1")
+        self.assertEqual(env["ORBIT_MANAGED_RUNNER_POD_UID"], POD_UID)
+        self.assertNotIn("ORBIT_RUNNER_CREDENTIAL_FILE", env)
+        marker = json.loads((self.orbit / "managed-instance.json").read_text())
+        self.assertEqual(marker, {"runnerId": RUNNER_ID, "generation": 1, "podUid": POD_UID})
+        self.assertEqual(json.loads((self.orbit / "container-identity.json").read_text())["runnerId"], RUNNER_ID)
+
+    def test_the_next_generation_replaces_only_the_credential(self):
+        self.started_env()
+        state = self.runner.ROOT / "home/.orbit/worktrees/session/work.txt"
+        state.parent.mkdir(parents=True, exist_ok=True)
+        state.write_text("retained")
+        before = json.loads(self.config.read_text())
+        self.foreground.reset_mock()
+        self.issue(2, "generation-2-credential")
+        os.environ.update({"ORBIT_MANAGED_RUNNER_GENERATION": "2",
+                           "ORBIT_MANAGED_RUNNER_POD_UID": "9e8d7c6b-5a49-4382-9716-152433221100"})
+        env = self.started_env()
+        after = json.loads(self.config.read_text())
+        self.assertEqual(after.pop("runnerToken"), "generation-2-credential")
+        before.pop("runnerToken")
+        self.assertEqual(after, before, "the runner identity and every other setting are kept")
+        self.assertEqual(state.read_text(), "retained")
+        self.assertEqual(env["ORBIT_MANAGED_RUNNER_GENERATION"], "2")
+        self.assertEqual(json.loads((self.orbit / "managed-instance.json").read_text())["generation"], 2)
+
+    def test_a_credential_issued_for_another_generation_is_refused(self):
+        self.issue(2, "generation-2-credential")
+        self.assert_refused()
+        self.assertFalse(self.config.exists())
+
+    def test_a_stale_pod_cannot_run_on_a_volume_a_later_generation_used(self):
+        self.started_env()
+        self.foreground.reset_mock()
+        self.issue(3, "generation-3-credential")
+        os.environ.update({"ORBIT_MANAGED_RUNNER_GENERATION": "3",
+                           "ORBIT_MANAGED_RUNNER_POD_UID": "9e8d7c6b-5a49-4382-9716-152433221100"})
+        self.started_env()
+        newest = self.config.read_bytes()
+        self.foreground.reset_mock()
+        # Generation 2's Pod, late: refused, and the newer credential is not overwritten.
+        self.issue(2, "generation-2-credential")
+        os.environ.update({"ORBIT_MANAGED_RUNNER_GENERATION": "2",
+                           "ORBIT_MANAGED_RUNNER_POD_UID": "11111111-2222-4333-8444-555555555555"})
+        self.assert_refused()
+        self.assertEqual(self.config.read_bytes(), newest)
+        # Another Pod of the current generation: refused too.
+        self.issue(3, "generation-3-credential")
+        os.environ.update({"ORBIT_MANAGED_RUNNER_GENERATION": "3",
+                           "ORBIT_MANAGED_RUNNER_POD_UID": "11111111-2222-4333-8444-555555555555"})
+        self.assert_refused()
+
+    def test_another_runners_volume_is_refused(self):
+        self.write_config(runnerId="1d2c3b4a-0000-4000-8000-000000000000")
+        self.assert_refused()
+        self.config.unlink()
+        self.runner.durable_json(self.orbit / "managed-instance.json",
+                                 {"runnerId": "1d2c3b4a-0000-4000-8000-000000000000", "generation": 1, "podUid": POD_UID})
+        self.assert_refused()
+
+    def test_missing_or_ambiguous_identity_is_refused_without_enrolling(self):
+        for variable, value in (("ORBIT_MANAGED_RUNNER_GENERATION", ""), ("ORBIT_MANAGED_RUNNER_GENERATION", "0"),
+                                ("ORBIT_MANAGED_RUNNER_POD_UID", ""), ("ORBIT_MANAGED_RUNNER_POD_UID", "mr-pod"),
+                                ("ORBIT_RUNNER_EXPECTED_ID", ""), ("ORBIT_RUNNER_EXPECTED_ID", "not-a-uuid"),
+                                ("ORBIT_RUNNER_ENROLLMENT_TOKEN_FILE", str(self.token))):
+            with self.subTest(variable=variable, value=value), mock.patch.dict(os.environ, {variable: value}):
+                self.assert_refused()
+        self.issue(1, "")
+        self.assert_refused()
+        self.assertFalse(self.config.exists())
+
+    def test_an_uncertain_enrollment_on_the_volume_is_refused(self):
+        self.runner.prepare()
+        self.runner.durable_json(self.orbit / "registration-pending.json", {"name": "old-attempt"})
+        self.assert_refused()
 
 
 if __name__ == "__main__":

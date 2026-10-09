@@ -13,14 +13,14 @@ import type { ManagedRunnerProfile } from './managed-runner-profile';
  * PVC and Pod names to it), so a retried or concurrent create can only ever meet the same object.
  * The PVC has no owner reference: no Pod, Job or other disposable compute owns a data volume.
  *
- * One deliberate difference from the Pod example: the example enrolls with a one-time enrollment
- * token through `orbit register`, which matches runners by name. A managed runner's row already
- * exists, so the manager issues that row's credential itself and hands it over in the bootstrap
- * Secret, mounted at /run/orbit-bootstrap and named by ORBIT_RUNNER_CREDENTIAL_FILE; the
- * enrollment variable is not set, so an image that only knows enrollment stops before registering.
- * The control plane keeps only the credential's hash (docs/managed-runner-design.md, "Identity and
- * durable mapping"). Teaching the image entrypoint to consume it, per generation, is the
- * single-writer work that follows.
+ * A managed runner does not enroll: its row already exists, so the manager issues that row's
+ * credential itself, for one generation, and hands it over in the bootstrap Secret — mounted at
+ * /run/orbit-bootstrap, the credential named by ORBIT_RUNNER_CREDENTIAL_FILE and its generation
+ * beside it. The control plane keeps only the credential's hash (docs/managed-runner-design.md,
+ * "Identity and durable mapping"). The Pod tells the runner which instance it is through the
+ * Downward API: its generation annotation and its own UID, as ORBIT_MANAGED_RUNNER_GENERATION and
+ * ORBIT_MANAGED_RUNNER_POD_UID, which the image entrypoint checks against the Secret and the runner
+ * sends with every request (managed-runner-instance.ts).
  */
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -39,7 +39,12 @@ export const MANAGED_WORKSPACE_NAME = 'Default';
 export const MANAGED_POD_TERMINATION_GRACE_SECONDS = 240;
 export const BOOTSTRAP_MOUNT = '/run/orbit-bootstrap';
 export const BOOTSTRAP_KEY = 'token';
+/** The bootstrap Secret's second key: the generation its credential was issued for. */
+export const BOOTSTRAP_GENERATION_KEY = 'generation';
 export const CREDENTIAL_FILE_ENV = 'ORBIT_RUNNER_CREDENTIAL_FILE';
+/** The instance identity the runner sends (runner-go managed_instance.go), from the Downward API. */
+export const GENERATION_ENV = 'ORBIT_MANAGED_RUNNER_GENERATION';
+export const POD_UID_ENV = 'ORBIT_MANAGED_RUNNER_POD_UID';
 
 function canonical(runnerId: string): string {
   const id = runnerId.toLowerCase();
@@ -50,6 +55,16 @@ function canonical(runnerId: string): string {
 export const managedPodName = (runnerId: string): string => `mr-${canonical(runnerId)}`;
 export const managedPvcName = (runnerId: string): string => `mr-data-${canonical(runnerId)}`;
 export const managedSecretName = (runnerId: string): string => `mr-boot-${canonical(runnerId)}`;
+/** The ConfigMap an operator writes a fencing receipt into (managed-runner-fencing.ts). */
+export const managedFencingReceiptName = (runnerId: string): string => `mr-fence-${canonical(runnerId)}`;
+/** A dry-run Pod the admission guard must refuse: proof the guard is in force before a real create. */
+export const managedAdmissionProbeName = (runnerId: string): string => `mr-${canonical(runnerId)}-admission-probe`;
+
+/** The runner UUID a managed PVC name was derived from, or null for any other name. */
+export function runnerIdOfManagedPvc(claimName: string): string | null {
+  const match = /^mr-data-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.exec(claimName);
+  return match ? match[1] : null;
+}
 
 /** What every builder and check needs to know about the mapping. */
 export interface ManagedRunnerIdentity {
@@ -97,8 +112,17 @@ export function buildManagedSecret(identity: ManagedRunnerIdentity, credential: 
         [GENERATION_ANNOTATION]: String(identity.generation),
       },
     },
-    data: { [BOOTSTRAP_KEY]: Buffer.from(credential, 'utf8').toString('base64') },
+    data: {
+      [BOOTSTRAP_KEY]: Buffer.from(credential, 'utf8').toString('base64'),
+      [BOOTSTRAP_GENERATION_KEY]: Buffer.from(String(identity.generation), 'utf8').toString('base64'),
+    },
   };
+}
+
+/** The generation a bootstrap Secret says it was issued for, or null when it says none. */
+export function secretGeneration(secret: Secret): number | null {
+  const said = secret.metadata.annotations?.[GENERATION_ANNOTATION];
+  return said && /^[1-9][0-9]*$/.test(said) ? Number(said) : null;
 }
 
 /** The credential a bootstrap Secret carries, or null when it carries none. */
@@ -178,6 +202,10 @@ export function buildManagedPod(identity: ManagedRunnerIdentity, pvcUid: string,
             { name: 'ORBIT_RUNNER_MAX_CONCURRENT', value: String(runner.maxConcurrent) },
             { name: 'ORBIT_RUNNER_EXPECTED_ID', value: identity.runnerId },
             { name: CREDENTIAL_FILE_ENV, value: `${BOOTSTRAP_MOUNT}/${BOOTSTRAP_KEY}` },
+            // Which instance this is, as the API server recorded it: never a value the manager or
+            // the runner could get wrong for another Pod.
+            { name: GENERATION_ENV, valueFrom: { fieldRef: { fieldPath: `metadata.annotations['${GENERATION_ANNOTATION}']` } } },
+            { name: POD_UID_ENV, valueFrom: { fieldRef: { fieldPath: 'metadata.uid' } } },
           ],
           resources: runner.resources.runner,
           volumeMounts: [...stateMounts, { name: 'bootstrap', mountPath: BOOTSTRAP_MOUNT, readOnly: true }],
@@ -193,7 +221,10 @@ export function buildManagedPod(identity: ManagedRunnerIdentity, pvcUid: string,
           secret: {
             secretName: managedSecretName(identity.runnerId),
             defaultMode: 0o444,
-            items: [{ key: BOOTSTRAP_KEY, path: BOOTSTRAP_KEY }],
+            items: [
+              { key: BOOTSTRAP_KEY, path: BOOTSTRAP_KEY },
+              { key: BOOTSTRAP_GENERATION_KEY, path: BOOTSTRAP_GENERATION_KEY },
+            ],
           },
         },
       ],
@@ -271,4 +302,44 @@ export function podIdentityProblem(pod: Pod, identity: ManagedRunnerIdentity, pv
 /** Whether a Pod has finished: its containers ran and stopped, and it will not start again. */
 export function podTerminated(pod: Pod): boolean {
   return pod.status?.phase === 'Succeeded' || pod.status?.phase === 'Failed';
+}
+
+/**
+ * The reasons of a DisruptionTarget condition the control plane writes for a node it cannot reach
+ * or has been told is out of service — PodGC and the taint manager. A Pod they made terminal was
+ * declared stopped on its node's behalf, which is exactly when its processes cannot be vouched for.
+ */
+const CONTROL_PLANE_DISRUPTIONS: ReadonlySet<string> = new Set(['DeletionByPodGC', 'DeletionByTaintManager']);
+
+function declaredContainers(pod: Pod, key: 'initContainers' | 'containers'): string[] {
+  const list = pod.spec[key];
+  return Array.isArray(list) ? list.map((c) => (c as { name?: unknown }).name).filter((n): n is string => typeof n === 'string') : [];
+}
+
+/**
+ * Whether the kubelet reported this Pod stopped (docs/managed-runner-design.md, "Single Pod and
+ * single writer protection"): a terminal phase, a report for every container the Pod declares —
+ * each terminated, or still waiting because it never started — at least one of them terminated, and
+ * no sign that the control plane made the Pod terminal for an unreachable node. Container states
+ * are written by the kubelet alone. This is half of a stop proof; the Pod object's deletion and the
+ * volume's detachment are the rest.
+ */
+export function podStopConfirmed(pod: Pod): boolean {
+  if (!podTerminated(pod)) return false;
+  const status = pod.status ?? {};
+  const markedByControlPlane = (status.conditions ?? []).some(
+    (c) => c.type === 'DisruptionTarget' && c.status === 'True' && CONTROL_PLANE_DISRUPTIONS.has(c.reason ?? ''),
+  );
+  if (markedByControlPlane) return false;
+  const declared = [...declaredContainers(pod, 'initContainers'), ...declaredContainers(pod, 'containers')];
+  const reported = new Map([...(status.initContainerStatuses ?? []), ...(status.containerStatuses ?? [])].map((c) => [c.name, c.state]));
+  if (declared.length === 0) return false;
+  let terminated = 0;
+  for (const name of declared) {
+    const state = reported.get(name);
+    if (!state || state.running) return false;
+    if (state.terminated) terminated += 1;
+    else if (!state.waiting) return false;
+  }
+  return terminated > 0;
 }

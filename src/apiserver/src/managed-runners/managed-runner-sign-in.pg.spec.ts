@@ -56,7 +56,12 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { Global, Module, ValidationPipe, type INestApplication } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { toUuid } from '@orbit/shared';
+import {
+  MANAGED_RUNNER_GENERATION_HEADER,
+  MANAGED_RUNNER_INSTANCE_CAPABILITY,
+  MANAGED_RUNNER_POD_UID_HEADER,
+  toUuid,
+} from '@orbit/shared';
 import type { ManagedRunner, PrismaClient } from '@prisma/client';
 import { json, urlencoded } from 'express';
 import { Client } from 'pg';
@@ -76,12 +81,21 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { outsideThePoolGateway } from '../providers/pool-gateway.controller';
 import { FakeKubeCluster } from '../test-support/fake-kube-client';
+import { installManagedRunnerAdmission } from '../test-support/managed-runner-admission.fixture';
 import { assertTripwireQuiet, bootScrubbedApiserver } from '../test-support/managed-runner-apiserver';
 import { testManagedRunnerProfile } from '../test-support/managed-runner-profile.fixture';
-import type { ManagedKubeClient, Secret } from './kube-client';
+import type { ManagedKubeClient, Pod, Secret } from './kube-client';
 import { EVERY_ACCOUNT } from './managed-runner-eligibility';
 import { ManagedRunnerManager, type ReconcileOutcome } from './managed-runner-manager';
-import { MANAGED_RUNNER_NAME, MANAGED_WORKSPACE_DIR, bootstrapCredentialOf, managedPodName, managedPvcName, managedSecretName } from './managed-runner-resources';
+import {
+  GENERATION_ANNOTATION,
+  MANAGED_RUNNER_NAME,
+  MANAGED_WORKSPACE_DIR,
+  bootstrapCredentialOf,
+  managedPodName,
+  managedPvcName,
+  managedSecretName,
+} from './managed-runner-resources';
 import { MANAGED_RUNNER_KUBE_CLIENT_FACTORY, MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from './managed-runner-runtime';
 import { ManagedRunnerWorker } from './managed-runner-worker';
 import { ManagedRunnerService } from './managed-runner.service';
@@ -222,7 +236,8 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
 
   // ── (B) on: the whole AppModule in this process, against a fake cluster ─────────────────────
   const profile = testManagedRunnerProfile({ lifecycle: { pollIntervalSeconds: 1, backoffBaseSeconds: 1, backoffMaxSeconds: 2 } });
-  const cluster = new FakeKubeCluster(profile.kubernetes.namespace);
+  // With the environment's single-Pod admission guard installed, as the manager requires.
+  const cluster = installManagedRunnerAdmission(new FakeKubeCluster(profile.kubernetes.namespace), db as unknown as PrismaService, profile);
   /** Every Kubernetes call waits on this while it is held: open unless a case holds it. */
   let held: Promise<void> = Promise.resolve();
   let attempted = 0;
@@ -242,7 +257,9 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
       persistentVolumeClaims: resource(inner.persistentVolumeClaims),
       secrets: resource(inner.secrets),
       pods: resource(inner.pods),
+      configMaps: resource(inner.configMaps),
       getPersistentVolume: wrap(inner.getPersistentVolume),
+      listVolumeAttachments: wrap(inner.listVolumeAttachments),
     };
   };
   const realClient: string[] = [];
@@ -334,9 +351,18 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
   const statusOf = async (token: string) => (await call(server, 'GET', '/api/managed-runner', token)).json;
   /** The credential the manager handed the runner in its bootstrap Secret. */
   const runnerCredential = (runnerId: string) => bootstrapCredentialOf(cluster.object<Secret>('secrets', managedSecretName(runnerId))!)!;
+  /** What a managed runner sends with every request: the instance its Pod is (managed-runner-instance.ts). */
+  const instanceHeaders = (runnerId: string): Record<string, string> => {
+    const pod = cluster.object<Pod>('pods', managedPodName(runnerId))!;
+    return {
+      'x-orbit-runner-capabilities': MANAGED_RUNNER_INSTANCE_CAPABILITY,
+      [MANAGED_RUNNER_GENERATION_HEADER]: pod.metadata.annotations![GENERATION_ANNOTATION],
+      [MANAGED_RUNNER_POD_UID_HEADER]: pod.metadata.uid!,
+    };
+  };
   /** The runner's heartbeat, with the engine health a real one reports. */
   const heartbeat = async (runnerId: string, engines: unknown[]) => {
-    const beat = await call(server, 'POST', '/api/runner/heartbeat', runnerCredential(runnerId), { engines, version: '0.1.0' });
+    const beat = await call(server, 'POST', '/api/runner/heartbeat', runnerCredential(runnerId), { engines, version: '0.1.0' }, instanceHeaders(runnerId));
     assert.ok(beat.status === 200 || beat.status === 201, `heartbeat: ${beat.text}`);
   };
   /** Provisioned up to its one Pod, then heartbeating with `engines`, until `state`. */
@@ -451,7 +477,7 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
     const session = await call(server, 'POST', '/api/sessions', token, { workspaceId: workspace.id, prompt: 'hello', title: 'first session' });
     assert.equal(session.status, 201, session.text);
     assert.equal(session.json.provider, 'codex');
-    const claim = await call(server, 'GET', '/api/runner/sessions/claim', runnerCredential(mapping.runnerId));
+    const claim = await call(server, 'GET', '/api/runner/sessions/claim', runnerCredential(mapping.runnerId), undefined, instanceHeaders(mapping.runnerId));
     assert.equal(claim.status, 200, claim.text);
     assert.equal(toUuid(claim.json.sessionId), toUuid(session.json.id), 'the managed runner claimed the first session');
     assert.equal(claim.json.provider, 'codex');
@@ -658,7 +684,7 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
   // ── (C) the manager on the test's clock ────────────────────────────────────────────────────
   await t.test('(C) no supply until the startup deadline: FAILED with MODEL_UNAVAILABLE, retryable; a retry once one is signed in is READY', async () => {
     const clockProfile = testManagedRunnerProfile();
-    const fake = new FakeKubeCluster(clockProfile.kubernetes.namespace);
+    const fake = installManagedRunnerAdmission(new FakeKubeCluster(clockProfile.kubernetes.namespace), db as unknown as PrismaService, clockProfile);
     const clock = { ms: Date.parse('2026-10-07T08:00:00.000Z') };
     const now = () => new Date(clock.ms);
     const manager = new ManagedRunnerManager(db as unknown as PrismaService, fake.client(), clockProfile, { holder: 'clock', now, random: () => 0.5, log: quiet });
