@@ -1543,6 +1543,11 @@ export type SessionListItem = Record<string, any> & {
   sessionState?: string | null;
   runStatus?: string | null;
   status?: string | null;
+  /** The rolling recap and when the server wrote it (0418), the list's preferred line: shown in
+   *  place of lastAssistantText while it is set. Null (or absent, from an older server) on a
+   *  session no pass has recapped yet. */
+  recapText?: string | null;
+  recapAt?: string | null;
 };
 
 /** The repair conversation attached to a merge recovery on its parent session. */
@@ -1615,6 +1620,10 @@ export interface SessionDetail {
   prompt?: string | null;
   createdAt?: string;
   lastTurnAt?: string | null;
+  /** The rolling recap and when the server wrote it (0418) — the same line the list row carries.
+   *  Null on a session no pass has recapped yet. */
+  recapText?: string | null;
+  recapAt?: string | null;
   startedAt?: string | null;
   finishedAt?: string | null;
   error?: string | null;

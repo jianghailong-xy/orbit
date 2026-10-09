@@ -159,6 +159,7 @@ import {
   titleFromAttachments,
   titleFromPrompt,
 } from './naming';
+import { enqueueRecap, type RecapOutcome } from './recap';
 import {
   broaden,
   normalizeSearchQuery,
@@ -3013,6 +3014,10 @@ export class SessionsService {
       lastAssistantText: string | null;
       lastToolUse: string | null;
       lastUserText: string | null;
+      // The rolling recap and when it was written (0418): the line the list prefers to the raw
+      // last reply. Both null on a session no pass has recapped yet.
+      recapText: string | null;
+      recapAt: Date | null;
       mergeStatus: string | null;
       sourceState: SourceState;
       sourceRefusalCode: SourceRefusalCode | null;
@@ -3095,6 +3100,10 @@ export class SessionsService {
         left(s.last_assistant_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastAssistantText",
         s.last_tool_use   AS "lastToolUse",
         left(s.last_user_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastUserText",
+        -- The rolling recap (0418), clipped like the previews above. A session with no recap yet
+        -- answers nulls, which is what the row falls back from to lastAssistantText.
+        left(s.recap_text, ${SessionsService.PREVIEW_LEN}::int) AS "recapText",
+        s.recap_at        AS "recapAt",
         s.merge_status    AS "mergeStatus",
         -- The SOURCE snapshot (migration 0231), for the "this run never started" card: which
         -- baseline this run was to start from, and — when a runner refused it — the code, and the
@@ -3263,6 +3272,8 @@ export class SessionsService {
         lastAssistantText: r.lastAssistantText,
         lastToolUse: r.lastToolUse,
         lastUserText: r.lastUserText,
+        recapText: r.recapText,
+        recapAt: r.recapAt,
         mergeStatus: r.mergeStatus,
         // The SOURCE snapshot, passed through as the columns hold it: a row that resolves nothing
         // is `UNBOUND` with nulls, which is the shape a card tests before it draws anything.
@@ -4587,6 +4598,21 @@ export class SessionsService {
       await this.insertTurn(id, { kind: 'diff', clientTurnId: randomUUID() });
     }
     this.realtime.notifyInbox(id);
+  }
+
+  /**
+   * Regenerate this session's recap now — POST /sessions/:id/recap, the one pass a person asks
+   * for. `force` is the whole difference from the settle hooks: the two-minute window does not
+   * apply, so the answer is about the session as it stands rather than the last time a turn
+   * ended. Everything else still does — the kill switch, the minimum event count, and a
+   * deployment with no key to spend answer `written: false` with the reason, which is what the
+   * caller shows instead of a recap. The pass goes through the same bounded queue, and the caller
+   * waits for it: this door is a request somebody is looking at, not a settle path.
+   */
+  async refreshRecap(ownerId: string, id: string): Promise<RecapOutcome> {
+    const session = await this.prisma.session.findFirst({ where: { id, ownerId }, select: { id: true } });
+    if (!session) throw new NotFoundException('session not found');
+    return enqueueRecap({ db: this.prisma, sessionId: id, force: true });
   }
 
   // The session list shows the last reply as a single ellipsised line, so it only
