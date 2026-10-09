@@ -1091,7 +1091,7 @@ export class RunnerApiController {
         // to send a leaseOwner or a draining flag writes NULL: no active lease, not draining.
         heartbeatLeaseOwner,
         heartbeatDraining: typeof dto?.draining === 'boolean' ? dto.draining : null,
-        // Per-engine health for the Providers page. Sanitized on the way in as well as out, so a
+        // Per-engine health for Infrastructure. Sanitized on the way in as well as out, so a
         // malformed report can't be stored as a claim about this machine; an older runner omits
         // the field entirely and keeps whatever was last known.
         engines:

@@ -141,7 +141,7 @@ export class RunnersService {
         // Same: reported, not configured. Withdraws Bypass from this machine's Mode pickers, which
         // is the only reason clients need to know (see ROOT_REFUSED_PERMISSION_MODES).
         runsAsRoot: true,
-        // Reported too: why this runner is or isn't updating itself, for the Runners page's card
+        // Reported too: why this runner is or isn't updating itself, for its card on Infrastructure
         // and its Update Runner Now. Re-sanitized below, null for a runner that does not report it.
         selfUpdate: true,
         // The runner page's Capacity › Keep Free reads the floor it writes (PATCH minFreeDiskMb),
@@ -156,8 +156,8 @@ export class RunnersService {
         heartbeatLeaseOwner: true,
         heartbeatDraining: true,
         // Per-engine health, and any install the user started for one of them — both drive the
-        // Providers page's "On your runners" section. The accounts carry the names given them here
-        // (namedRunnerEngines), not only the ones the runner reports.
+        // engine rows under each machine on Infrastructure. The accounts carry the names given
+        // them here (namedRunnerEngines), not only the ones the runner reports.
         engines: true,
         accountNames: true,
         accountPauses: true,
@@ -166,7 +166,7 @@ export class RunnersService {
         installCommand: true,
         installMessage: true,
         installMode: true,
-        // The account-removal relay the Providers page reads its outcome from: which engine's
+        // The account-removal relay Infrastructure reads its outcome from: which engine's
         // store, which slot is going, and — when the machine refused — what it said.
         accountRemoveEngine: true,
         codexAccountRemoveAccount: true,

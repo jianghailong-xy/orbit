@@ -107,7 +107,7 @@ function sessionAccountLogin(
   if (pick && pick !== DEFAULT_ACCOUNT) {
     const slot = accountOnRunner(engine, pick, runnerEngines);
     if (!slot) return null;
-    // Named the way the Providers page names its row, which is never who the account is: its
+    // Named the way Infrastructure names its row, which is never who the account is: its
     // email and id stay on the machine, and the runner reports neither.
     return { auth: slot.auth, name: slot.name ? `"${slot.name}"` : slot.id, dir: accountDir(slot) };
   }
@@ -125,7 +125,7 @@ function sessionAccountLogin(
  * A runtime that is signed out fails EVERY session started against it, a second or two after
  * creation, until a human signs it back in. That is a state the control plane already knows: the
  * runner probes each engine's own auth command every five minutes (and immediately after anything
- * changes it) and reports the result on its heartbeat — the same fact the Runners page draws and
+ * changes it) and reports the result on its heartbeat — the same fact Infrastructure draws and
  * the sign-out push announces. Answering at create time turns hours of identically-dead sessions,
  * each holding a git checkout, into one refusal the caller can act on: an overnight OAuth
  * expiry produced 50 of them here before anyone noticed.
@@ -211,7 +211,7 @@ export function signedOutEngineRefusal(args: {
     heartbeatMs >= (args.nowMs ?? Date.now()) - SESSION_RUNNER_OFFLINE_AFTER_MS;
   if (!online) return null;
 
-  // Named as the Providers page names them: with what each account was called in Orbit.
+  // Named as Infrastructure names them: with what each account was called in Orbit.
   const engines = namedRunnerEngines({ engines: args.runner.engines, accountNames: args.runner.accountNames });
   const health = engines?.find((e) => e.engine === runtime);
   if (!engines || !health) return null;
@@ -225,7 +225,7 @@ export function signedOutEngineRefusal(args: {
     if (slot) {
       return slot.auth === 'no'
         ? `Antigravity account ${slot.name ? `"${slot.name}"` : slot.id} is signed out on runner "${machine}" — every session run on that account fails immediately. ` +
-          'Sign it in from the Providers page, then start this session again.'
+          'Sign it in from Infrastructure, then start this session again.'
         : null;
     }
     return health.auth === 'no' ? antigravityRefusal(health, args.runner, machine) : null;
@@ -249,18 +249,18 @@ export function signedOutEngineRefusal(args: {
         : LOGIN_COMMANDS[runtime];
     return (
       `${label} account ${login.name} is signed out on runner "${machine}" — every session run on that account fails immediately. ` +
-      `Sign it in from the Providers page, or run \`${command}\` on that machine, then start this session again.`
+      `Sign it in from Infrastructure, or run \`${command}\` on that machine, then start this session again.`
     );
   }
   return (
     `${label} is signed out on runner "${machine}" — every session started there fails immediately. ` +
-    `Sign in from the Runners page, or run \`${LOGIN_COMMANDS[runtime]}\` on that machine, then start this session again.`
+    `Sign in from Infrastructure, or run \`${LOGIN_COMMANDS[runtime]}\` on that machine, then start this session again.`
   );
 }
 
 /** The Gemini key, the way out of an Antigravity refusal on any runner. */
 const GEMINI_KEY_WAY_OUT =
-  'connect Gemini in Providers (/providers/new/gemini) — Orbit stores the key encrypted — and start this session on Gemini';
+  'connect Gemini under API keys on Infrastructure (/providers/new/gemini) — Orbit stores the key encrypted — and start this session on Gemini';
 
 /**
  * Built-in Antigravity has no credential of its own on that runner: no Google sign-in that answers,
@@ -275,7 +275,7 @@ function antigravityRefusal(health: RunnerEngineHealth, runner: EnginePreflightR
       : `Antigravity has no Google sign-in or Gemini API key on runner "${machine}".`;
   switch (antigravityGoogleLogin(runner)) {
     case 'available':
-      return `${head} Sign in with Google from the Providers page, or ${GEMINI_KEY_WAY_OUT}.`;
+      return `${head} Sign in with Google from Infrastructure, or ${GEMINI_KEY_WAY_OUT}.`;
     case 'unsupported_platform':
       return `${head} Signing in with Google works on Linux runners only for now, so ${GEMINI_KEY_WAY_OUT}.`;
     default:
@@ -286,7 +286,7 @@ function antigravityRefusal(health: RunnerEngineHealth, runner: EnginePreflightR
 /**
  * The sign-in that clears a refusal of `runtime` on this runner, when Orbit can start it from the
  * browser: Antigravity's Google sign-in, on a runner that relays it. The other engines' refusals
- * name their Runners-page sign-in in words, as they always have.
+ * name their sign-in on Infrastructure in words, as they always have.
  */
 export function engineSignInAction(
   runtime: string,
