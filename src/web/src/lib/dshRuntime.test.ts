@@ -133,9 +133,10 @@ describe('DeepSeek Harness identity in the pickers', () => {
     expect(runtimeForProvider('deepseek-harness', [harness, deepseek])).toBe('dsh');
     expect(runtimeForProvider('dsh', [])).toBe('dsh');
     expect(runtimeForProvider('deepseek', [harness, deepseek])).toBe('claude');
-    expect(runtimeSummary('dsh', 'deepseek-harness')).toBe('Runs on DeepSeek Harness');
-    expect(runtimeSummary(undefined, 'deepseek')).toBe('Runs on Claude Code');
-    expect(runtimeSummary(undefined, 'anthropic')).toBe('Anthropic-compatible');
+    // Whichever engine runs them, both rows speak Anthropic's protocol: that is what their pages say,
+    // never an engine.
+    expect(runtimeSummary('dsh')).toBe('Anthropic-compatible');
+    expect(runtimeSummary('claude')).toBe('Anthropic-compatible');
   });
 
   it('lists models from the runner catalogue and never falls back to a Claude model', () => {
