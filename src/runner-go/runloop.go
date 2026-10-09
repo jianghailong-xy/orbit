@@ -1232,6 +1232,13 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}, t.heartbeat)
 			if err != nil {
 				logln("heartbeat failed:", err)
+				// A managed instance the control plane will never accept again (superseded, fenced,
+				// its credential replaced) stops claiming and drains rather than beat on forever.
+				if isManagedInstanceRevoked(err) {
+					managedInstanceRevokedSeen.Store(true)
+					logln("this managed runner instance is no longer authorized; stopping claims and draining sessions")
+					loopCancel()
+				}
 				return
 			}
 			// The Codex rate-limit reset step a claim holds for this process, if any. Its freshness
@@ -1938,6 +1945,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				break
 			}
 			logln("claim failed:", err)
+			if isManagedInstanceRevoked(err) {
+				managedInstanceRevokedSeen.Store(true)
+			}
 			if !isRetryableTransportError(err) {
 				logln("claim failure is permanent; stopping runner")
 				loopCancel()

@@ -40,7 +40,7 @@ import { loginCodeRelay } from './login-code-relay';
 import { engineKeepsAccounts } from '../common/runner-engines';
 import { ACCOUNT_ID_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunnerDto } from './dto';
 import { accountPauseUntil } from '../common/account-pause';
-import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-delete';
+import { refuseManagedRunnerDeletion, refuseManagedRunnerRotation } from '../managed-runners/managed-runner-delete';
 
 // Three missed 30s heartbeats — a runner quieter than this reads as offline.
 const OFFLINE_AFTER_MS = 90_000;
@@ -927,6 +927,7 @@ export class RunnersService {
   async rotateToken(ownerId: string, id: string) {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
     if (!runner) throw new NotFoundException('runner not found');
+    await refuseManagedRunnerRotation(this.prisma, id);
     const token = generateToken(32);
     await this.prisma.runner.update({ where: { id }, data: { tokenHash: sha256(token) } });
     return { token };

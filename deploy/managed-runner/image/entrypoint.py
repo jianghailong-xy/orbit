@@ -5,6 +5,7 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import re
 import signal
 import stat
 import subprocess
@@ -14,6 +15,11 @@ from urllib.parse import urlsplit
 
 ROOT = Path("/var/lib/orbit")
 UID = GID = 10001
+UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+GENERATION = re.compile(r"[1-9][0-9]{0,9}")
+# The instance identity the Pod states through the Downward API; `orbit run` sends it with every
+# request (src/runner-go/managed_instance.go).
+INSTANCE_ENV = ("ORBIT_MANAGED_RUNNER_GENERATION", "ORBIT_MANAGED_RUNNER_POD_UID")
 
 
 def paths():
@@ -57,7 +63,8 @@ def prepare(initialize=False):
             path.mkdir(mode=0o700)
         private_path(path, directory=True, initialize=initialize)
     orbit = paths()[1]
-    for name in ("config.json", "container-identity.json", "registration-pending.json", "container.lock"):
+    for name in ("config.json", "container-identity.json", "registration-pending.json", "container.lock",
+                 "managed-instance.json"):
         path = orbit / name
         if path.exists() or path.is_symlink():
             private_path(path, initialize=initialize)
@@ -197,12 +204,84 @@ def register():
         raise ValueError("enrollment failed; reconcile the persisted attempt before retrying")
 
 
+def managed_instance():
+    """The manager's Pod (ORBIT_RUNNER_CREDENTIAL_FILE): which runner, generation and Pod this is.
+
+    The runner row already exists and the manager issued its credential for one generation, in the
+    bootstrap Secret beside the generation it was issued for. The Pod states its own generation and
+    UID through the Downward API. A Secret of another generation is a Pod started against a credential
+    that is not its own: refused, as is anything missing or malformed. Never an enrollment.
+    """
+    if os.environ.get("ORBIT_RUNNER_ENROLLMENT_TOKEN_FILE"):
+        raise ValueError("a managed runner Pod is given a runner credential, never an enrollment token")
+    expected = os.environ.get("ORBIT_RUNNER_EXPECTED_ID", "").strip()
+    generation = os.environ.get(INSTANCE_ENV[0], "").strip()
+    pod_uid = os.environ.get(INSTANCE_ENV[1], "").strip().lower()
+    if not UUID.fullmatch(expected):
+        raise ValueError("a managed runner Pod needs ORBIT_RUNNER_EXPECTED_ID, its runner's UUID")
+    if not GENERATION.fullmatch(generation) or not UUID.fullmatch(pod_uid):
+        raise ValueError("a managed runner Pod needs its generation and Pod UID from the Downward API")
+    credential_file = Path(os.environ["ORBIT_RUNNER_CREDENTIAL_FILE"])
+    credential = credential_file.read_text().strip()
+    issued_for = (credential_file.parent / "generation").read_text().strip()
+    if not credential:
+        raise ValueError("empty managed runner credential")
+    if issued_for != generation:
+        raise ValueError(f"the bootstrap credential was issued for generation {issued_for or '?'}, "
+                         f"not this Pod's generation {generation}")
+    return {"runnerId": expected, "generation": int(generation), "podUid": pod_uid}, credential
+
+
+def adopt_managed_credential(instance, credential):
+    """Write the manager's identity and this generation's credential into the runner config.
+
+    The runner ID is the mapping's; a config or volume that names another runner, server or work
+    directory is not this runner's volume and is refused. A volume a later generation has already
+    run on, or another Pod of this generation, is refused too: this Pod is stale. Only the
+    credential changes from one generation to the next.
+    """
+    _, orbit, workspace = paths()
+    if (orbit / "registration-pending.json").exists():
+        raise ValueError("this volume holds an uncertain enrollment; reconcile it before a managed start")
+    marker = orbit / "managed-instance.json"
+    if marker.exists():
+        previous = read_json(marker)
+        if previous.get("runnerId") != instance["runnerId"]:
+            raise ValueError("this volume belongs to another managed runner")
+        if not isinstance(previous.get("generation"), int) or previous["generation"] > instance["generation"]:
+            raise ValueError("a later generation of this runner has already run on this volume; this Pod is stale")
+        if previous["generation"] == instance["generation"] and previous.get("podUid") != instance["podUid"]:
+            raise ValueError("another Pod of this generation has already run on this volume")
+    server = server_url()
+    config_path = orbit / "config.json"
+    if config_path.exists():
+        config = read_json(config_path)
+        if (config.get("runnerId") != instance["runnerId"] or config.get("serverUrl") != server
+                or config.get("workDir") != str(workspace) or config.get("autoInstallEngines", False) is not False):
+            raise ValueError("retained config does not match this managed runner")
+    else:
+        name = os.environ.get("ORBIT_RUNNER_NAME", "").strip()
+        concurrency = os.environ.get("ORBIT_RUNNER_MAX_CONCURRENT", "")
+        if not name or not concurrency.isdecimal() or int(concurrency) < 1:
+            raise ValueError("a managed runner needs its name and a positive max concurrency")
+        config = {"serverUrl": server, "runnerId": instance["runnerId"], "name": name, "labels": [],
+                  "maxConcurrent": int(concurrency), "workDir": str(workspace), "autoInstallEngines": False}
+    if config.get("runnerToken") != credential:
+        config["runnerToken"] = credential
+        durable_json(config_path, config)
+    durable_json(marker, instance)
+
+
 def run():
     prepare()
     lock_fd = lock_volume()
     try:
         config = paths()[1] / "config.json"
-        if not config.exists():
+        instance = None
+        if os.environ.get("ORBIT_RUNNER_CREDENTIAL_FILE"):
+            instance, credential = managed_instance()
+            adopt_managed_credential(instance, credential)
+        elif not config.exists():
             register()
         identity = load_identity()
         marker = paths()[1] / "container-identity.json"
@@ -211,7 +290,10 @@ def run():
         pending = paths()[1] / "registration-pending.json"
         if pending.exists():
             pending.unlink()
-        os.execvpe("/usr/local/bin/orbit", ["orbit", "run"], clean_env())
+        env = clean_env()
+        if instance:
+            env.update({INSTANCE_ENV[0]: str(instance["generation"]), INSTANCE_ENV[1]: instance["podUid"]})
+        os.execvpe("/usr/local/bin/orbit", ["orbit", "run"], env)
     finally:
         os.close(lock_fd)
 

@@ -12,6 +12,7 @@ import {
   type KubeClientFactory,
 } from './managed-runner-runtime';
 import { MANAGED_RUNNER_SIGN_IN } from './managed-runner-sign-in';
+import { ManagedRunnerAdmissionController, ManagedRunnerAdmissionGuard } from './managed-runner-admission.controller';
 import { ManagedRunnerController } from './managed-runner.controller';
 import { ManagedRunnerService } from './managed-runner.service';
 
@@ -26,9 +27,10 @@ import { ManagedRunnerService } from './managed-runner.service';
  */
 @Global()
 @Module({
-  controllers: [ManagedRunnerController],
+  controllers: [ManagedRunnerController, ManagedRunnerAdmissionController],
   providers: [
     ManagedRunnerEnabledGuard,
+    ManagedRunnerAdmissionGuard,
     {
       provide: MANAGED_RUNNER_RUNTIME,
       inject: [MANAGED_RUNNER_GATE, ConfigService, PrismaService, { token: MANAGED_RUNNER_KUBE_CLIENT_FACTORY, optional: true }],
