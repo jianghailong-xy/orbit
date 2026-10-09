@@ -18,6 +18,7 @@ import type { WikiDocs } from '../wiki/wiki-docs';
 import { ownerEnvLiterals } from '../wiki/wiki-dossier';
 import { encodeCursorToken, type WikiMaintenance } from '../wiki/wiki-maintenance';
 import { finishWikiMaintenanceJob } from '../wiki/wiki-maintenance-run';
+import { stripNul } from '../runner-api/strip-nul';
 import type { WikiPlans } from '../wiki/wiki-plan';
 import { WikiRefusalError, type WikiPrincipal, type WikiService } from '../wiki/wiki.service';
 import { WikiJobContentError, WikiJobInfraError, type WikiJobContext, type WikiJobRunner } from './wiki-job-executor';
@@ -336,12 +337,13 @@ class WikiMaintainRun {
       this.jobContext.log(`stopped at ${stop.step} (infra): ${stop.cause.message}`);
       throw new WikiJobInfraError(stop.message);
     }
+    // The run's report and error can quote what the model wrote: without any U+0000 (contract `jobs.serverWrites`).
     const answer = await finishWikiMaintenanceJob(this.deps.prisma, this.deps.maintenance, job.ownerId, job.spaceId, job.id, {
       to: stop === null ? this.cursor : null,
       outcome: stop === null ? 'succeeded' : 'failed',
-      error: stop === null ? null : cutRunes(stop.message, 2000),
+      error: stop === null ? null : stripNul(cutRunes(stop.message, 2000)),
       failureKind: stop === null ? null : stop.kind,
-      report: this.report as unknown as Record<string, unknown>,
+      report: stripNul(this.report as unknown as Record<string, unknown>),
     });
     if (stop === null) {
       this.jobContext.log(`every step succeeded: the cursor is at ${answer.state.position ?? '(unmoved)'}`);
@@ -775,7 +777,9 @@ class WikiMaintainRun {
     const body: Record<string, unknown> = { ops: list, rationale };
     if (dryRun) body.dryRun = true;
     else body.idempotencyKey = `wiki-maintain-${sha256Hex(`${this.runId}\u0000${JSON.stringify(list)}`).slice(0, 32)}`;
-    const answer = await this.deps.wiki.submitChangeset(wikiMaintainJobPrincipal(job.ownerId, job.id), job.spaceId, body);
+    // What the model wrote goes to the shared writer without any U+0000 (contract `jobs.serverWrites`): Postgres keeps
+    // none, and a model may copy one out of the code it was shown — the runner gate drops it from a report the same way.
+    const answer = await this.deps.wiki.submitChangeset(wikiMaintainJobPrincipal(job.ownerId, job.id), job.spaceId, stripNul(body));
     if (!Array.isArray(answer.ops)) {
       // A request refused whole: the answer carries no op outcomes, and the run stops on it as the runner's.
       const code = typeof answer.code === 'string' ? answer.code : 'WIKI_SCHEMA';
@@ -1236,7 +1240,9 @@ class WikiMaintainRun {
   private async writeDocument(slug: string, request: WikiDocsWriteRequest): Promise<WikiDocsWriteAnswer> {
     const { job } = this.jobContext;
     try {
-      const answer = await this.deps.docs.write(this.jobPrincipal(), job.spaceId, slug, request as unknown as Record<string, unknown>);
+      // What the model wrote goes to the shared writer without any U+0000 (contract `jobs.serverWrites`): Postgres keeps
+      // none, and a model may copy one out of the code it was shown — the runner gate drops it from a report the same way.
+      const answer = await this.deps.docs.write(this.jobPrincipal(), job.spaceId, slug, stripNul(request) as unknown as Record<string, unknown>);
       return { status: answer.status, sections: answer.sections, counts: answer.counts };
     } catch (error) {
       if (error instanceof WikiRefusalError) throw new WikiDocsWriteRefused(refusalText(job.spaceId, error));
@@ -1403,7 +1409,7 @@ class WikiMaintainRun {
       try {
         const stored = await this.deps.plans.proposeServer(
           { ownerId: this.jobContext.job.ownerId, spaceId: this.jobContext.job.spaceId, wikiJobId: this.jobContext.job.id },
-          request as unknown as Record<string, unknown>,
+          stripNul(request) as unknown as Record<string, unknown>,
         );
         out.outcome = 'proposed';
         out.id = stored.id;

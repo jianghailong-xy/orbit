@@ -7470,6 +7470,10 @@ model WikiModelRequest {
   answer    String?
   /// What had arrived when the call was interrupted; kept across a requeue.
   partial      String?
+  /// How `answer` and `partial` read back (0411, contract `modelQueue.answerEncoding`): `text` as they are, or
+  /// `base64` — the text's UTF-8 bytes, for one with a U+0000 in it, which Postgres cannot keep in text.
+  answerEncoding  String @default("text") @map("answer_encoding")
+  partialEncoding String @default("text") @map("partial_encoding")
   inputTokens  Int?    @map("input_tokens")
   outputTokens Int?    @map("output_tokens")
   httpStatus   Int?    @map("http_status")

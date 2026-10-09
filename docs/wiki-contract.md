@@ -1949,8 +1949,9 @@ JSON 里是 `docs.build.server`、`jobs.kindRuns.docs_build` 与 `plan.jobs.serv
 - **写入**：经 `WikiDocs.write`，和 runner 门是同一个写入口，身份是服务端自己（`origin: 'maintenance'`、无会话、无用户）；一次写一节，
   一次构建的写入一个一个来；`model` 是 System model 的名字。被拒（`WIKI_DOC_INVALID`、`WIKI_PLAN_STALE`、`WIKI_PLAN_UNCONFIRMED`）就是
   这一节失败，原因照 runner 的说法写。
-- **脚注里的 NUL**（`docs.build.server.nul`，2026-10-09）：脚注的 `excerpt` 和 `quote` 写入时去掉 U+0000——它们是文档展示的那几行，
-  Postgres 的 text 存不下 NUL。交给模型的材料保留它（§25.1），文件本身在原文缓存里完整保存（§26.4）。
+- **写入里的 NUL**（`docs.build.server.nul`，2026-10-09）：一节的写入——Markdown、脚注的 `quote` 和 `excerpt`、处置的理由——交给
+  `WikiDocs.write` 之前去掉 U+0000（§24.4 `jobs.serverWrites`）：脚注的 `excerpt` 是代码的那几行，可能带着文件里的 NUL，模型也可能把
+  NUL 抄进文字。交给模型的材料保留它（§25.1），文件本身在原文缓存里完整保存（§26.4）。
 - **进度与结束**：每开始写一篇和结束时，写 plan 作业的 `progress`（21.9 的 `{ docs: { done, total }, current }`）和作业自己的 progress。
   拿起的节全部写成或无变化：plan 作业以 succeeded 结束，带写的版本和 `WikiPlanBuildReport`；作业成功，报告是这次构建的 summary。
   有节没写成：其余节照常写完，plan 作业以失败结束（`<n> sections were left unwritten`），作业以 content 失败结束、报告留在行上——
@@ -2128,6 +2129,13 @@ JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5
   在跑的模型请求和仓库操作取消；maintain 作业的运行行记为 `failed` / `infra`、写上错误，不计连续失败，游标没动，下一次运行会重读这次没读完的
   内容；plan_draft / plan_revise / docs_build 作业的 plan 作业以失败结束、写上错误，仍保留 `job_id`——plan 页显示起草或生成失败，owner 的
   下次请求会建新的。
+- **作业写出去的模型产出不带 NUL**（`jobs.serverWrites`，2026-10-09）：作业从模型回答里得出、交给共用写入者的东西，一律先去掉 U+0000
+  再交——文档的节、脚注和处置（`WikiDocs.write`）、文章（`WikiArticles.write`）、changeset 的 op（维护和导入的 `submitChangeset`）、
+  核实结论（`recordVerifications`）、plan 草稿与修改建议、plan 作业结束时带的最后一稿和错误、维护运行的报告和错误。做法和 runner 门对
+  runner 回报的处理一样（`runner-api/strip-nul.ts`）。作业自己行上的 progress、report、error，以及一次调用的 error，也这样写。
+  模型可能把展示给它的代码里的 NUL 抄进回答：回答本身按模型发来的原样保存、原样解析（§25.1），所以 JSON 字符串里的原始 NUL 照样解析
+  失败，和 Go 的解析器一样；模型写成 `\u0000` 的，在交给写入者时去掉，不再以 22P05 写入失败。runner 门上 wiki 的写入路由不做这一步，
+  runner 路径遇到这种写入会回 500——旧路径不改，随旧路径一起删除。
 
 ### 24.5 执行器开关 `jobs.executor`
 
@@ -2288,6 +2296,9 @@ JSON 里是 `modelQueue` 一节；设计见 `docs/wiki-server-execution-design.m
 - `request` 里的 system 或 prompt 含 U+0000 时——prompt 带着仓库的原文，源文件里可能有 NUL（§26.4）——两段都按 UTF-8 字节的 base64 存，
   旁边写 `encoding: "base64"`；领取时解码，发给模型的就是流水线拼出的那次调用，和 runner 路径一样逐字节相同。`request_sha256` 按调用
   本身算，不按列里存的形式（`modelQueue.requestEncoding`）。
+- `answer` 和 `partial` 含 U+0000 时——模型可能把代码里的 NUL 抄进回答——按 UTF-8 字节的 base64 存，`answer_encoding` /
+  `partial_encoding`（迁移 `0411_wiki_stored_text_encoding`）说明怎么读回；每个读者都解码，流水线解析的就是模型发来的原文，和 runner
+  路径一样（`modelQueue.answerEncoding`）。2026-10-09 之前，回答里有原始 NUL 时写入以 22021 失败，调用一直 running 到租约过期再重问。
 - `(job_id, step, unit, attempt)` 唯一，`(step, unit)` 是这次调用在作业里的地址；`attempt` 是这一单元的第几次（真重做才 +1），
   `attempts` 是这一行被跑过几次（租约过期和可重试失败各记一次，退避读它）。
 - `state`：`queued` / `running` / `succeeded` / `failed` / `cancelled`；`error_kind`：`retryable` / `unauthorized` / `other`。
@@ -2358,7 +2369,7 @@ JSON 里是 `modelQueue` 一节；设计见 `docs/wiki-server-execution-design.m
 ## 26. 仓库操作 `wiki_repo_op`、快照缓存与原文缓存（服务端执行 P2）
 
 JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` §4.3 和 §7。迁移 `0402_wiki_repo_op`（操作、分片暂存与快照缓存）
-、`0406_wiki_repo_file`（按 (space, sha, path) 保存读到的原文）和 `0411_wiki_repo_file_content_encoding`（原文怎么读回）；服务端实现在
+、`0406_wiki_repo_file`（按 (space, sha, path) 保存读到的原文）和 `0411_wiki_stored_text_encoding`（原文怎么读回）；服务端实现在
 `src/apiserver/src/wiki-worker/`（表、领取、结算、快照与原文缓存 `wiki-repo-ops.ts`、`pg_notify` 监听 `wiki-repo-op-notify.ts`、
 两个通道共用的 LISTEN 连接 `wiki-notify-channel.ts`），runner 侧在 `src/runner-go/wiki_repo_ops.go`（四种操作复用
 `wiki_plan_repo.go` 的索引和 `wiki_anchors.go` 的锚点检查）；共享常量在 `src/shared/src/wikiRepoOps.ts`。
@@ -2425,7 +2436,7 @@ JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` 
   `read`。新的快照落地时，这个空间只留它那个 sha 的行（和快照一起换代）；空间删除时随复合外键一起删。`cut` 是只声明了
   `wiki-repo-op/v1` 的 runner 给的窗口：读旧路径的调用者能用，声明了整文件能力的调用者按未命中重新读。
 - 上传途中死掉的进程不会破坏缓存：分片先落在 `wiki_repo_op_fragment`（挂在操作上，随操作删），只有结算那一刻才写缓存。
-- **原文逐字节保存**（`repoOps.storedText`，迁移 `0411_wiki_repo_file_content_encoding`，2026-10-09）：Postgres 的 `text` 和 `jsonb`
+- **原文逐字节保存**（`repoOps.storedText`，迁移 `0411_wiki_stored_text_encoding`，2026-10-09）：Postgres 的 `text` 和 `jsonb`
   都存不下 U+0000（22021 / 22P05），源文件里却可能有——main 上有 3 个文件在字面量里带原始 NUL。`wiki_repo_file.content_encoding`
   说明 `content` 怎么读回：`text` 是原样（没有 NUL 的文件，以及此前缓存的每一行），`base64` 是原文 UTF-8 字节的 base64（含 NUL 的文件）。
   读缓存时解码，所以交给文档构建、plan 的符号回退和维护的文本，和 runner 上 `git show` 打印的逐字节相同。

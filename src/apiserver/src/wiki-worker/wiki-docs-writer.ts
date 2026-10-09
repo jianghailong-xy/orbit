@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import { WIKI_DOC_BUILD_RULES, WIKI_DOC_RULES, WIKI_REPO_OPS, uuidToBase62, type WikiDocMaterialRecord } from '@orbit/shared';
-import { stripNul } from '../runner-api/strip-nul';
 import { collapseWhitespace, cutRunes, goTrimSpace } from './wiki-import-extract';
 
 /**
@@ -1186,11 +1185,7 @@ export interface WikiDocFootnote {
   found?: boolean;
 }
 
-/**
- * A footnote as the write sends it: the contract's fields, the empty ones left out as Go's omitempty leaves them.
- * The excerpt and the quote go without any U+0000 (contract `docs.build.server.nul`): they are the lines a
- * document shows, Postgres keeps no NUL in text, and the file they come from is kept whole in the read cache.
- */
+/** A footnote as the write sends it: the contract's fields, the empty ones left out as Go's omitempty leaves them. */
 export function wikiDocFootnoteWire(footnote: WikiDocFootnote): Record<string, unknown> {
   const out: Record<string, unknown> = { kind: footnote.kind };
   if (footnote.path) out.path = footnote.path;
@@ -1198,11 +1193,11 @@ export function wikiDocFootnoteWire(footnote: WikiDocFootnote): Record<string, u
   if (footnote.lines) out.lines = { start: footnote.lines.start, end: footnote.lines.end };
   if (footnote.section) out.section = footnote.section;
   if (footnote.symbol) out.symbol = footnote.symbol;
-  if (footnote.excerpt) out.excerpt = stripNul(footnote.excerpt);
+  if (footnote.excerpt) out.excerpt = footnote.excerpt;
   if (footnote.verified !== undefined && footnote.verified !== null) out.verified = footnote.verified;
   if (footnote.ref) out.ref = footnote.ref;
   if (footnote.chars) out.chars = { start: footnote.chars.start, end: footnote.chars.end };
-  out.quote = footnote.quote === null ? null : stripNul(footnote.quote);
+  out.quote = footnote.quote;
   if (footnote.viaEntryId) out.viaEntryId = footnote.viaEntryId;
   return out;
 }

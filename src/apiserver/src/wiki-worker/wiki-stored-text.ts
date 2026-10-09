@@ -63,6 +63,17 @@ export function wikiStoredText(text: string): WikiStoredText {
   return wikiTextIsStorable(text) ? { content: text, encoding: 'text' } : { content: wikiTextBase64(text), encoding: 'base64' };
 }
 
+/**
+ * A model's text as a row keeps it (contract `modelQueue.answerEncoding`): as `wikiStoredText` keeps it, except
+ * that a lone surrogate is not refused. A partial can end in half of a pair the stream split between two deltas,
+ * and a text column has always kept that the way the driver writes it, as U+FFFD; a NUL is what needs the bytes.
+ */
+export function wikiStoredModelText(text: string): WikiStoredText {
+  return text.includes(NUL)
+    ? { content: Buffer.from(text, 'utf8').toString('base64'), encoding: 'base64' }
+    : { content: text, encoding: 'text' };
+}
+
 /** The text a row keeps, read back: `base64` decoded to the bytes it was, anything else as it is. */
 export function wikiTextFromStored(content: string, encoding: string | null | undefined): string {
   return encoding === 'base64' ? Buffer.from(content, 'base64').toString('utf8') : content;

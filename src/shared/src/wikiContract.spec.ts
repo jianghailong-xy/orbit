@@ -1887,9 +1887,16 @@ describe('wiki contract', () => {
     expect(sql).toContain(`CREATE TABLE IF NOT EXISTS "${queue.table}"`);
     for (const column of queue.columns) expect(sql).toContain(`"${column}"`);
     expect(queue.identity).toMatch(/\(job_id, step, unit, attempt\) is unique/u);
-    // A call whose text has a U+0000 is kept as its bytes (repoOps.storedText), and the digest stays the call's.
+    // A call whose text has a U+0000 is kept as its bytes (repoOps.storedText), and the digest stays the call's; so is
+    // an answer or a partial, in the columns the stored-text migration adds; and what a job writes out of an answer
+    // goes to the shared writer without one, as the runner gate's strip-nul does.
     expect(queue.requestEncoding).toMatch(/`encoding: "base64"`/u);
     expect(queue.requestEncoding).toMatch(/`request_sha256` is the call's/u);
+    expect(queue.answerEncoding).toMatch(/`answer_encoding` \/ `partial_encoding`/u);
+    const stored = readFileSync(path.join(ROOT, CONTRACT.repoOps.storedText.migration), 'utf8');
+    for (const column of ['answer_encoding', 'partial_encoding']) expect(stored).toContain(`ADD COLUMN IF NOT EXISTS "${column}" TEXT NOT NULL DEFAULT 'text'`);
+    expect(CONTRACT.jobs.serverWrites).toMatch(/src\/apiserver\/src\/runner-api\/strip-nul\.ts/u);
+    expect(existsSync(path.join(ROOT, 'src/apiserver/src/runner-api/strip-nul.ts'))).toBe(true);
     expect(sql).toContain('CONSTRAINT "wiki_model_request_unit_key" UNIQUE ("job_id", "step", "unit", "attempt")');
     // The claim's order and its lock are the statement's, in the worker; the queue's sets and numbers are here.
     expect(queue.states).toEqual([...WIKI_MODEL_REQUEST_STATES]);

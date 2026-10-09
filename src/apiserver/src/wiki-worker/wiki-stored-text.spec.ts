@@ -10,6 +10,7 @@ import { test } from 'node:test';
 import { wikiModelRequestCallOf, wikiModelRequestSha256, wikiModelRequestStored } from './wiki-model-queue';
 import {
   wikiJsonIsStorable,
+  wikiStoredModelText,
   wikiStoredText,
   wikiTextBase64,
   wikiTextFromStored,
@@ -84,4 +85,16 @@ test('the model queue keeps a call as it is, or as base64 beside `encoding`, and
   assert.deepEqual(back, carrying, 'the claim reads back the call the pipeline made');
   // The digest is the call's, so a replay of the same unit still meets its own row.
   assert.equal(wikiModelRequestSha256(back), wikiModelRequestSha256(carrying));
+});
+
+test('a model\'s answer is kept as it is, or — with a NUL copied into it — as its bytes, and a split pair is no refusal', () => {
+  const answer = `### 本节\n本节依据 C1 写成一句话[C1]。\n\n引文：\n[C1] 「sep := "a${NUL}b"」\n`;
+  const kept = wikiStoredModelText(answer);
+  assert.equal(kept.encoding, 'base64');
+  assert.equal(wikiTextFromStored(kept.content, kept.encoding), answer, 'read back to the text the model sent');
+  assert.deepEqual(wikiStoredModelText('中文 😀'), { content: '中文 😀', encoding: 'text' });
+  // A partial cut between the two halves of a pair the stream split across deltas: kept as text, as it always was —
+  // the driver writes the half as U+FFFD — rather than refused the way a file's text with one is.
+  assert.deepEqual(wikiStoredModelText(`a${HIGH}`), { content: `a${HIGH}`, encoding: 'text' });
+  assert.equal(wikiStoredModelText(`${NUL}${HIGH}`).encoding, 'base64');
 });

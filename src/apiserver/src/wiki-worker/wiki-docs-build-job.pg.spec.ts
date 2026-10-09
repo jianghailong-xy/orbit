@@ -1035,3 +1035,58 @@ test('a section whose code has a raw NUL in it builds: the model is shown the co
     h.model.answer = asWritten;
   }
 });
+
+// ── 10. a NUL in the model's answer (2026-10-09) ─────────────────────────────────────────────────────
+
+test('a NUL in the model\'s answer, raw or as \\u0000: the build succeeds, the answer is kept as it came, and what is written has no NUL', { skip, timeout: 180_000 }, async () => {
+  const h = await boot();
+  await modelUp(h);
+  const s = await scene(h, 'nul-answer');
+  const version = await draft(h, s, planFor(s));
+  executor('canary', [s.owner.id]);
+  await confirm(h, s, version);
+  const [row] = await builds(h, s.spaceId);
+  const HEAD = createHash('sha1').update(`head-${randomUUID()}`).digest('hex');
+  playRunner(h, s.runner.id, () => tree(HEAD));
+  // A writer that copies a NUL into what it writes: raw in the flow section — the sentence and its quote — and as the
+  // six characters \u0000 in the conventions section, which is not JSON, so they stay the text the model wrote.
+  const asWritten = h.model.answer;
+  h.model.answer = (prompt) => {
+    const text = asWritten(prompt);
+    // Which section a write prompt is for is its header's number: the outline below it names every section.
+    const section = /^# 任务：写文档《[^》]*》的第 (\d+) 节/mu.exec(prompt)?.[1];
+    if (section === '2') return text.replace(/写成一句话/gu, `写成一句${NUL}话`).replace(/「/gu, `「${NUL}`);
+    if (section === '3') return text.replace(/写成一句话/gu, '写成一句\\u0000话');
+    return text;
+  };
+  try {
+    const ended = await buildEnd(h, worker(h), row.job_id!);
+    assert.equal(ended.state, 'succeeded', JSON.stringify(ended));
+    assert.deepEqual([ended.report?.written, ended.report?.failed], [3, 0]);
+
+    // The answers were kept as the model sent them: the one with a raw NUL as its bytes, read back to the same text.
+    const { rows: writes } = await h.sql.query<{ answer: string; answer_encoding: string }>(
+      `SELECT "answer", "answer_encoding" FROM "wiki_model_request" WHERE "job_id" = $1 AND "step" = 'docs_write' AND "state" = 'succeeded'`,
+      [row.job_id]);
+    const kept = writes.map((one) => (one.answer_encoding === 'base64' ? Buffer.from(one.answer, 'base64').toString('utf8') : one.answer));
+    assert.ok(writes.some((one) => one.answer_encoding === 'base64'), 'the answer with a raw NUL is kept as its bytes');
+    assert.ok(kept.some((text) => text.includes(`写成一句${NUL}话`)), 'and read back with its NUL');
+    assert.ok(kept.some((text) => text.includes('写成一句\\u0000话')), 'the escaped one is kept as the six characters it is');
+
+    // What was written has no NUL: the raw one left out, the escaped one the text the model wrote.
+    const { rows: sentences } = await h.sql.query<{ text: string }>(
+      `SELECT t."text" FROM "wiki_doc_sentence" t JOIN "wiki_doc_section" x ON x."id" = t."section_id"
+         JOIN "wiki_doc" d ON d."id" = x."doc_id" WHERE d."space_id" = $1`, [s.spaceId]);
+    assert.ok(sentences.length > 0);
+    assert.ok(sentences.every((one) => !one.text.includes(NUL)), JSON.stringify(sentences));
+    // The flow section is the one citing the code (C1): its sentence, the NUL the model put in it left out.
+    assert.ok(sentences.some((one) => one.text.includes('依据 C1 写成一句话')), 'the flow section\'s sentence, its NUL left out');
+    assert.ok(sentences.some((one) => one.text.includes('写成一句\\u0000话')), 'the conventions section\'s sentence, as the model wrote it');
+    const { rows: notes } = await h.sql.query<{ quote: string | null }>(
+      `SELECT f."quote" FROM "wiki_doc_footnote" f JOIN "wiki_doc_sentence" t ON t."id" = f."sentence_id"
+         JOIN "wiki_doc_section" x ON x."id" = t."section_id" JOIN "wiki_doc" d ON d."id" = x."doc_id" WHERE d."space_id" = $1`, [s.spaceId]);
+    assert.ok(notes.every((one) => !(one.quote ?? '').includes(NUL)), JSON.stringify(notes));
+  } finally {
+    h.model.answer = asWritten;
+  }
+});

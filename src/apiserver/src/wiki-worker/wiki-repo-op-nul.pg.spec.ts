@@ -15,7 +15,10 @@
  *      with a raw NUL end the operation the same way, with 400;
  *   4. the worker's pass settles what no runner will: running operations whose job has ended (the canary's
  *      three reads) and ones whose claim has been silent for `abandonedSeconds`, and leaves the rest;
- *   5. a model call whose prompt carries the file's NUL is queued and claimed byte for byte.
+ *   5. a model call whose prompt carries the file's NUL is queued and claimed byte for byte;
+ *   6. and the model's answer to it, which may copy the NUL: the partial written back while it streams, the
+ *      partial a stopping worker leaves, and the answer itself are each kept as the model sent them and read back
+ *      byte for byte — the call settles, instead of failing its write with 22021 and running until its lease ends.
  *
  * Every case fails on the code before this change (the route answered 500 and the operation stayed running; a
  * queued call with a NUL was refused 22P05), and needs nothing that change added to compile.
@@ -62,7 +65,15 @@ import { TasksService } from '../tasks/tasks.service';
 import { wikiDocsShownOf } from './wiki-docs-build-job';
 import { WikiJobExecutor } from './wiki-job-executor';
 import { enqueueWikiJob } from './wiki-jobs';
-import { claimWikiModelRequests, enqueueWikiModelRequest, wikiModelRequestSha256 } from './wiki-model-queue';
+import {
+  claimWikiModelRequests,
+  enqueueWikiModelRequest,
+  releaseWikiModelRequestLease,
+  succeedWikiModelRequest,
+  wikiModelRequestById,
+  wikiModelRequestSha256,
+  writeWikiModelRequestPartial,
+} from './wiki-model-queue';
 import type { WikiModelRequestQueue } from './wiki-model-queue.service';
 import {
   WikiRepoOps,
@@ -573,6 +584,50 @@ test('a model call whose prompt has the file\'s NUL in it is queued and claimed 
     assert.ok(Buffer.from(mine.request.prompt, 'utf8').equals(Buffer.from(call.prompt, 'utf8')), 'the prompt the model is sent is the one the pipeline made');
     assert.equal(mine.request.system, call.system);
     assert.equal(mine.request.maxTokens, call.maxTokens);
+  } finally {
+    await h.prisma.wikiJob.deleteMany({ where: { id: jobId } });
+  }
+});
+
+// ── 6. the answer that carries it back ───────────────────────────────────────────────────────────────
+
+test('the model\'s answer with the NUL copied into it — partial, released partial, answer — is kept and read back byte for byte', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  const service = h.prisma as unknown as PrismaService;
+  const jobId = await job(h, 'docs_build');
+  try {
+    const call = { system: 'system', prompt: `[C1]\n${NUL_FILE}`, maxTokens: 4096 };
+    const queued = async (unit: string) => (await enqueueWikiModelRequest(service, {
+      id: randomUUID(), jobId, ownerId: h.ownerId, spaceId: h.spaceId, step: 'docs_write', unit, request: { ...call, prompt: `${call.prompt}${unit}` },
+    })).id;
+    const first = await queued('nul#answer');
+    const second = await queued('nul#released');
+    const claimed = await claimWikiModelRequests(service, { workerId: randomUUID(), concurrency: 4, owners: [h.ownerId] });
+    const generation = (id: string) => claimed.find((one) => one.id === id)?.leaseGeneration ?? '';
+    const answer = `### 本节\n本节依据 C1 写成一句话[C1]。\n\n引文：\n[C1] 「? check.outputTail.replace(/${NUL}/g, '')」\n`;
+    const partial = answer.slice(0, answer.indexOf(NUL) + 2);
+
+    // While it streams, the text so far is written back with its NUL ...
+    assert.equal(await writeWikiModelRequestPartial(service, { id: first, generation: generation(first), partial }), true);
+    assert.ok(Buffer.from((await wikiModelRequestById(service, first))?.partial ?? '', 'utf8').equals(Buffer.from(partial, 'utf8')));
+    // ... and the answer it ends with is written once, the call settled.
+    assert.equal(await succeedWikiModelRequest(service, { id: first, generation: generation(first), answer, inputTokens: 10, outputTokens: 20, httpStatus: 200 }), true);
+    const settled = await wikiModelRequestById(service, first);
+    assert.equal(settled?.state, 'succeeded');
+    assert.ok(Buffer.from(settled?.answer ?? '', 'utf8').equals(Buffer.from(answer, 'utf8')), 'the answer the job reads is the one the model sent');
+    const { rows: [row] } = await h.sql.query<{ answer: string; answer_encoding: string; partial_encoding: string }>(
+      'SELECT "answer", "answer_encoding", "partial_encoding" FROM "wiki_model_request" WHERE "id" = $1', [first]);
+    assert.deepEqual([row.answer_encoding, row.partial_encoding], ['base64', 'base64'], 'each kept as its bytes, and saying so');
+    assert.equal(row.answer, Buffer.from(answer, 'utf8').toString('base64'));
+
+    // A stopping worker leaves the partial it had, and the next claim is handed it back as it came.
+    assert.equal(await releaseWikiModelRequestLease(service, { id: second, generation: generation(second), partial }), true);
+    await h.sql.query(`UPDATE "wiki_model_request" SET "state" = 'queued', "lease_owner" = NULL, "lease_generation" = NULL,
+      "lease_deadline_at" = NULL WHERE "id" = $1`, [second]);
+    const again = await claimWikiModelRequests(service, { workerId: randomUUID(), concurrency: 4, owners: [h.ownerId] });
+    const resumed = again.find((one) => one.id === second);
+    assert.ok(resumed, 'the call is claimed again');
+    assert.ok(Buffer.from(resumed.partial ?? '', 'utf8').equals(Buffer.from(partial, 'utf8')), 'with the partial it had, NUL and all');
   } finally {
     await h.prisma.wikiJob.deleteMany({ where: { id: jobId } });
   }
