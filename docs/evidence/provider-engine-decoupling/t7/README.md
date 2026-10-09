@@ -19,6 +19,11 @@ once in light and once in dark.
 `capture-log.txt` is the capture run's own log: the tree it built, every shot, the texts read off the page, the
 task-pin writes it sent, and any request the fake API left unanswered.
 
+The last capture ran on the merge of T6 (bd0ce46f1). Against the capture before it (528923b14), 76 of 78 raw
+shots are pixel-identical and every text read off the page is the same. The two that differ are the builds
+workspace's editor, light and dark, where the text's anti-aliasing moved (no channel more than 16 of 255). So
+`7-workspace-engines-*.png` is made from bd0ce46f1, and the other composites still name 528923b14.
+
 ## How the screens were made
 
 - `kit/run.sh` builds this branch's web app with `vite build` (no dev server) and runs `kit/capture.mjs`. The
