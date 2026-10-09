@@ -25,6 +25,7 @@ import io.orbitd.android.OrbitApplication
 import io.orbitd.android.composer.SessionComposer
 import io.orbitd.android.cards.CardFocus
 import io.orbitd.android.cards.CardReviewSheet
+import io.orbitd.android.cards.LocalSteerDeliveries
 import io.orbitd.android.cards.NeedsYouLogic
 import io.orbitd.android.cards.SessionCardsReads
 import io.orbitd.android.cards.rememberSessionCards
@@ -168,7 +169,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
     // A08-3: while a review is open the transcript does not follow its tail, so closing it returns to the card's place.
     LaunchedEffect(cards.review) { if (cards.review != null) follow = false }
-    CompositionLocalProvider(LocalReaderResources provides resources, LocalTaskActivity provides taskActivity) {
+    // How far each steer got, by its turn: the latest `user_delivery` the window holds (A08-11's wake receipt reads it).
+    val steerDeliveries = remember(state.window.events) {
+        state.window.events.filter { it.type == "user_delivery" }
+            .mapNotNull { event -> event.fields.string("turnId")?.let { turn -> event.fields.string("delivery")?.let { turn to it } } }.toMap()
+    }
+    CompositionLocalProvider(LocalReaderResources provides resources, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries) {
         SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val otherInputHasKeyboard = WindowInsets.ime.getBottom(LocalDensity.current) > 0 && !composerFocused

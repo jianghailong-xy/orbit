@@ -25,6 +25,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.orbitd.android.core.realtime.*
 import io.orbitd.android.core.cards.transcriptCards
+import io.orbitd.android.core.cards.withoutWakeBlocks
 import io.orbitd.android.cards.TranscriptCardView
 import io.orbitd.android.cards.DetailFold
 import io.orbitd.android.text.*
@@ -154,6 +155,8 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             val attachmentOnly = shown.type == "user" && shown.body().isBlank() && atts.isNotEmpty()
             // What delivery appended is not the person's: their bubble holds their words, the card the rest.
             val note = shown.fields.string("controlPlaneNote")?.takeIf { it.isNotBlank() }
+                // A wake's blocks are its line (A08-11); only what else the note carried is an attached entry.
+                ?.let { if (cards.any { card -> card.key.endsWith(":wake") }) withoutWakeBlocks(it) else it }?.takeIf { it.isNotBlank() }
             val words = if (shown.type == "user") shown.personWords() else shown.body()
             if (cards.isEmpty() && !attachmentOnly) { if (note == null || words.isNotBlank()) MarkdownText(words.ifBlank { shown.payload.toString() }, open = open) }
             else if (shown.body().isNotBlank()) DetailFold("Orbit attached") { MarkdownText(shown.body(), open = open) }
