@@ -258,7 +258,8 @@ public struct TranscriptReducer: Sendable, Codable {
         case .assistant:      finalizeAssistant(str(ev, "text") ?? str(ev, "content") ?? "", seq: ev.seq,
                                               turnId: ev.turnId, ts: ev.ts)
         case .thinkingDelta:  appendThinkingDelta(str(ev, "delta") ?? str(ev, "text") ?? "", ts: ev.ts)
-        case .thinking:       finalizeThinking(str(ev, "text") ?? "", seq: ev.seq, ts: ev.ts)
+        case .thinking:       finalizeThinking(str(ev, "text") ?? "", seq: ev.seq, ts: ev.ts,
+                                               thinkingMs: ev.payload["thinkingMs"]?.intValue)
         case .toolUse:        openTool(ev)
         case .toolOutput:     applyToolOutput(ev)
         case .toolResult:     closeTool(ev)
@@ -803,17 +804,19 @@ public struct TranscriptReducer: Sendable, Codable {
     /// DeepSeek turn: 10 at the median, 51 at p90). A row each was a stack of identical "Thinking"
     /// lines. Only ADJACENT blocks merge — one either side of a tool call keeps its own row, where
     /// it is what explains that call. Web twin: the `thinking` case in `buildNodes`.
-    private mutating func finalizeThinking(_ full: String, seq: Int, ts: String? = nil) {
+    private mutating func finalizeThinking(_ full: String, seq: Int, ts: String? = nil, thinkingMs: Int? = nil) {
         if let i = openThinking, case .thinking(var b) = state.items[i] {
             b.text = full.isEmpty ? b.streamingText : full
             b.streamingText = ""
             b.seq = seq
             b.finishedTs = ts
+            b.thinkingMs = thinkingMs
             state.items[i] = .thinking(b)
             foldIntoPrecedingThinking(at: i)
         } else if !full.isEmpty {
             state.items.append(.thinking(ThinkingBlock(id: nextID(), text: full, streamingText: "",
-                                                       seq: seq, startedTs: ts, finishedTs: ts)))
+                                                       seq: seq, startedTs: ts, finishedTs: ts,
+                                                       thinkingMs: thinkingMs)))
             foldIntoPrecedingThinking(at: state.items.count - 1)
         }
         openThinking = nil
@@ -831,6 +834,7 @@ public struct TranscriptReducer: Sendable, Codable {
         previous.blocks += settled.blocks
         previous.seq = settled.seq
         previous.finishedTs = settled.finishedTs ?? previous.finishedTs
+        if let ms = settled.thinkingMs { previous.thinkingMs = (previous.thinkingMs ?? 0) + ms }
         state.items[i - 1] = .thinking(previous)
         state.items.remove(at: i)
         // The open-bubble cursors are item INDICES — close the gap left behind, the same hazard

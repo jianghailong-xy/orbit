@@ -4345,12 +4345,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         seen.current.add(ev.seq);
         // A block the provider closes with no text of its own would otherwise take its reasoning
         // with it: the draft is cleared just below, and an empty durable event renders nothing.
-        // Keep what was streamed — and how long it took — on this LOCAL copy of the event. It is
-        // never sent back, so a reload still reads the server's empty text and still renders
-        // nothing, which is deliberate (see lib/thinkingDraft).
+        // Keep what was streamed — and how long it took, when the runner did not say — on this
+        // LOCAL copy of the event. It is never sent back, so a reload still reads the server's
+        // empty text and still renders nothing, which is deliberate (see lib/thinkingDraft).
         if (ev.type === 'thinking') {
           const patch = settleThinking(
-            ev.payload?.text,
+            ev.payload,
             streamingThinkRef.current,
             thinkStartedAtRef.current,
             Date.now(),
