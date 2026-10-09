@@ -116,7 +116,7 @@ class WorktreeRealStackDeviceTest {
             }
             compose.waitUntil(60_000) { compose.onAllNodesWithText("Commit").fetchSemanticsNodes().isNotEmpty() }
             capture("worktree-stack-dirty")
-            compose.onNodeWithText("+", substring = true, useUnmergedTree = true).assertExists()
+            compose.onNodeWithText(" · 1 file", substring = true, useUnmergedTree = true).assertExists()
             compose.onNodeWithText("Commit").performClick()
             awaitSession(id, "after Commit") { it.text("commitStatus") in setOf("committed", "nochange", "error") && it["worktreeDirty"] != JsonPrimitive(true) }
             compose.waitUntil(60_000) { compose.onAllNodesWithText("Merge to ", substring = true).fetchSemanticsNodes().isNotEmpty() }

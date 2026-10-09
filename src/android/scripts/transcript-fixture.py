@@ -187,7 +187,7 @@ class Handler(BaseHTTPRequestHandler):
                    'changedFiles':[{'path':'reader.kt','additions':12,'deletions':3}], 'taskId':TASK, 'capabilities':{'canComplete':True}}
         if state.mode == 'A06C':
             if state.merge == 'pending' and time.monotonic() - state.merge_at > 1.0: state.merge = 'merged'
-            session.update({'status': 'AWAITING_INPUT', 'runState': 'AWAITING_INPUT', 'branch': 'orbit/a06c-reader-85cfd1', 'worktreeDirty': False,
+            session.update({'status': 'AWAITING_INPUT', 'runState': 'AWAITING_INPUT', 'isolationStatus': 'worktree', 'branch': 'orbit/a06c-reader-85cfd1', 'worktreeDirty': False,
                             'mergeTargets': ['main', 'develop'], 'mergeStatus': state.merge,
                             'changedFiles': [{'path': 'src/reader/WorktreeBar.kt', 'additions': 12, 'deletions': 3, 'status': 'M'},
                                              {'path': 'docs/shots/new.png', 'additions': -1, 'deletions': -1, 'status': 'A'},

@@ -208,6 +208,11 @@ A06_TEST=io.orbitd.android.reader.TranscriptDeviceTest#a06cReaderIncrements bash
   <app-debug.apk> <app-debug-androidTest.apk> <new evidence dir> emulator-5554
 ```
 
+Its last step (A06-5, the keyboard rising) runs at the emulator's own `wm size`/`wm density` and puts back the
+script's 720x1280 @320 after: at 360×640 dp the toolbar, link row, status and composer leave the transcript no
+height above the keyboard (iOS folds that chrome while you type; task 34cgb905954FvbeD2Wknw). The script checks
+its logs with `rg`, so ripgrep has to be on `PATH`.
+
 `WorktreeRealStackDeviceTest` commits and merges a real worktree on the A11 isolated stack (its runner and the
 stand-in engine that writes `A11_STACK_NOTES.md`), through `tasks-projects-stack-device-test.sh` with
 `A11_TEST=io.orbitd.android.reader.WorktreeRealStackDeviceTest` and the args file from `tasks-projects-stack-args.py`.
