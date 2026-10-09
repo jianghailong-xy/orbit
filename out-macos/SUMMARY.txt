@@ -1,0 +1,27 @@
+PASS: A darwin-arm64: Identifier=com.orbit.runner
+PASS: A darwin-arm64: hardened runtime flag
+PASS: A darwin-arm64: secure timestamp
+PASS: A darwin-arm64: codesign --verify --strict
+PASS: A darwin-arm64: entitlements embedded
+PASS: A darwin-x64: Identifier=com.orbit.runner
+PASS: A darwin-x64: hardened runtime flag
+PASS: A darwin-x64: secure timestamp
+PASS: A darwin-x64: codesign --verify --strict
+PASS: A darwin-x64: entitlements embedded
+PASS: B signed: v0.1.901 meets v0.1.900's designated requirement
+PASS: B ad hoc (control): v0.1.901 does not meet v0.1.900's cdhash requirement
+PASS: C arm64 runs
+PASS: C x64 runs under Rosetta
+PASS: D darwin-arm64: ~/.orbit/bin/orbit is 0.1.901 after the update
+PASS: D darwin-arm64: the agent is running (pid 8521, launchd runs=1)
+PASS: D darwin-arm64: one launchd run: the update re-executed in place, nothing was killed and relaunched
+PASS: D darwin-arm64: sha256 check passed (no digest complaint)
+PASS: D darwin-arm64: installed 0.1.901 meets 0.1.900's designated requirement
+PASS: D darwin-arm64: installed binary is com.orbit.runner
+PASS: D darwin-x64: ~/.orbit/bin/orbit is 0.1.901 after the update
+PASS: D darwin-x64: the agent is running (pid 9037, launchd runs=1)
+PASS: D darwin-x64: one launchd run: the update re-executed in place, nothing was killed and relaunched
+PASS: D darwin-x64: sha256 check passed (no digest complaint)
+PASS: D darwin-x64: installed 0.1.901 meets 0.1.900's designated requirement
+PASS: D darwin-x64: installed binary is com.orbit.runner
+PASS: F rcodesign 0.29 signs with a .p12 that macOS exported

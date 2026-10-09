@@ -1,0 +1,99 @@
+/tmp/tmp.UcmIM6eCfe/rcodesign.tar.gz: OK
+  "version": "0.1.900",
+>> source 525464752c53160b6378e759c55b3624ab400a6f
+>> orbit-linux-x64 (linux/amd64) v0.1.900
+>> orbit-linux-arm64 (linux/arm64) v0.1.900
+>> orbit-darwin-x64 (darwin/amd64) v0.1.900
+   signed as com.orbit.runner, team none (not an Apple-issued certificate)
+>> orbit-darwin-arm64 (darwin/arm64) v0.1.900
+   signed as com.orbit.runner, team none (not an Apple-issued certificate)
+>> wrote dists/signed-v900/version.json (v0.1.900)
+total 21M
+-rwxr-xr-x 1 runner runner 5.0M Oct  9 05:58 orbit-darwin-arm64.gz
+-rwxr-xr-x 1 runner runner 5.6M Oct  9 05:57 orbit-darwin-x64.gz
+-rwxr-xr-x 1 runner runner 4.9M Oct  9 05:57 orbit-linux-arm64.gz
+-rwxr-xr-x 1 runner runner 5.4M Oct  9 05:57 orbit-linux-x64.gz
+-rw-r--r-- 1 runner runner  726 Oct  9 05:58 version.json
+>> source 525464752c53160b6378e759c55b3624ab400a6f
+>> orbit-linux-x64 (linux/amd64) v0.1.900
+>> orbit-linux-arm64 (linux/arm64) v0.1.900
+>> orbit-darwin-x64 (darwin/amd64) v0.1.900
+>> orbit-darwin-arm64 (darwin/arm64) v0.1.900
+>> wrote dists/adhoc-v900/version.json (v0.1.900)
+total 21M
+-rwxr-xr-x 1 runner runner 5.0M Oct  9 05:58 orbit-darwin-arm64.gz
+-rwxr-xr-x 1 runner runner 5.5M Oct  9 05:58 orbit-darwin-x64.gz
+-rwxr-xr-x 1 runner runner 4.9M Oct  9 05:58 orbit-linux-arm64.gz
+-rwxr-xr-x 1 runner runner 5.4M Oct  9 05:58 orbit-linux-x64.gz
+-rw-r--r-- 1 runner runner  726 Oct  9 05:58 version.json
+  "version": "0.1.901",
+>> source 525464752c53160b6378e759c55b3624ab400a6f
+>> orbit-linux-x64 (linux/amd64) v0.1.901
+>> orbit-linux-arm64 (linux/arm64) v0.1.901
+>> orbit-darwin-x64 (darwin/amd64) v0.1.901
+   signed as com.orbit.runner, team none (not an Apple-issued certificate)
+>> orbit-darwin-arm64 (darwin/arm64) v0.1.901
+   signed as com.orbit.runner, team none (not an Apple-issued certificate)
+>> wrote dists/signed-v901/version.json (v0.1.901)
+total 21M
+-rwxr-xr-x 1 runner runner 5.0M Oct  9 05:58 orbit-darwin-arm64.gz
+-rwxr-xr-x 1 runner runner 5.6M Oct  9 05:58 orbit-darwin-x64.gz
+-rwxr-xr-x 1 runner runner 4.9M Oct  9 05:58 orbit-linux-arm64.gz
+-rwxr-xr-x 1 runner runner 5.4M Oct  9 05:58 orbit-linux-x64.gz
+-rw-r--r-- 1 runner runner  726 Oct  9 05:58 version.json
+>> source 525464752c53160b6378e759c55b3624ab400a6f
+>> orbit-linux-x64 (linux/amd64) v0.1.901
+>> orbit-linux-arm64 (linux/arm64) v0.1.901
+>> orbit-darwin-x64 (darwin/amd64) v0.1.901
+>> orbit-darwin-arm64 (darwin/arm64) v0.1.901
+>> wrote dists/adhoc-v901/version.json (v0.1.901)
+total 21M
+-rwxr-xr-x 1 runner runner 5.0M Oct  9 05:58 orbit-darwin-arm64.gz
+-rwxr-xr-x 1 runner runner 5.5M Oct  9 05:58 orbit-darwin-x64.gz
+-rwxr-xr-x 1 runner runner 4.9M Oct  9 05:58 orbit-linux-arm64.gz
+-rwxr-xr-x 1 runner runner 5.4M Oct  9 05:58 orbit-linux-x64.gz
+-rw-r--r-- 1 runner runner  726 Oct  9 05:58 version.json
+/home/runner/work/_temp/dists:
+total 20
+drwxr-xr-x 2 runner runner 4096 Oct  9 05:58 adhoc-v900
+drwxr-xr-x 2 runner runner 4096 Oct  9 05:58 adhoc-v901
+drwxr-xr-x 2 runner runner 4096 Oct  9 05:58 identity
+drwxr-xr-x 2 runner runner 4096 Oct  9 05:58 signed-v900
+drwxr-xr-x 2 runner runner 4096 Oct  9 05:58 signed-v901
+
+/home/runner/work/_temp/dists/adhoc-v900:
+total 21128
+-rwxr-xr-x 1 runner runner 5210354 Oct  9 05:58 orbit-darwin-arm64.gz
+-rwxr-xr-x 1 runner runner 5692822 Oct  9 05:58 orbit-darwin-x64.gz
+-rwxr-xr-x 1 runner runner 5064180 Oct  9 05:58 orbit-linux-arm64.gz
+-rwxr-xr-x 1 runner runner 5653157 Oct  9 05:58 orbit-linux-x64.gz
+-rw-r--r-- 1 runner runner     726 Oct  9 05:58 version.json
+
+/home/runner/work/_temp/dists/adhoc-v901:
+total 21128
+-rwxr-xr-x 1 runner runner 5210352 Oct  9 05:58 orbit-darwin-arm64.gz
+-rwxr-xr-x 1 runner runner 5692824 Oct  9 05:58 orbit-darwin-x64.gz
+-rwxr-xr-x 1 runner runner 5064188 Oct  9 05:58 orbit-linux-arm64.gz
+-rwxr-xr-x 1 runner runner 5653156 Oct  9 05:58 orbit-linux-x64.gz
+-rw-r--r-- 1 runner runner     726 Oct  9 05:58 version.json
+
+/home/runner/work/_temp/dists/identity:
+total 8
+-rw-r--r-- 1 runner runner   25 Oct  9 05:58 password
+-rw-r--r-- 1 runner runner 2710 Oct  9 05:58 probe.p12
+
+/home/runner/work/_temp/dists/signed-v900:
+total 21248
+-rwxr-xr-x 1 runner runner 5215123 Oct  9 05:58 orbit-darwin-arm64.gz
+-rwxr-xr-x 1 runner runner 5811615 Oct  9 05:58 orbit-darwin-x64.gz
+-rwxr-xr-x 1 runner runner 5064180 Oct  9 05:58 orbit-linux-arm64.gz
+-rwxr-xr-x 1 runner runner 5653157 Oct  9 05:58 orbit-linux-x64.gz
+-rw-r--r-- 1 runner runner     726 Oct  9 05:58 version.json
+
+/home/runner/work/_temp/dists/signed-v901:
+total 21248
+-rwxr-xr-x 1 runner runner 5215124 Oct  9 05:58 orbit-darwin-arm64.gz
+-rwxr-xr-x 1 runner runner 5811622 Oct  9 05:58 orbit-darwin-x64.gz
+-rwxr-xr-x 1 runner runner 5064188 Oct  9 05:58 orbit-linux-arm64.gz
+-rwxr-xr-x 1 runner runner 5653156 Oct  9 05:58 orbit-linux-x64.gz
+-rw-r--r-- 1 runner runner     726 Oct  9 05:58 version.json

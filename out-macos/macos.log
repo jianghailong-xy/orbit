@@ -1,0 +1,275 @@
+
+==== environment
+$ sw_vers; uname -m; id; csrutil status; echo rosetta=yes
+ProductName:		macOS
+ProductVersion:		15.7.9
+BuildVersion:		24G830
+arm64
+uid=501(runner) gid=20(staff) groups=20(staff),12(everyone),61(localaccounts),79(_appserverusr),80(admin),81(_appserveradm),264(_webdeveloper),701(com.apple.sharepoint.group.1),33(_appstore),98(_lpadmin),100(_lpoperator),204(_developer),250(_analyticsusers),395(com.apple.access_ftp),398(com.apple.access_screensharing),399(com.apple.access_ssh),400(com.apple.access_remote_ae)
+System Integrity Protection status: disabled.
+rosetta=yes
+$ for s in signed-v900 signed-v901 adhoc-v900 adhoc-v901; do cat /Users/runner/work/_temp/dists/$s/version.json; echo; done
+{"version":"0.1.900","capabilityRevision":2,"schemaRevision":2,"minimumCapabilityRevision":1,"minimumSchemaRevision":1,"contractDigest":"bbdd980c70dc56bfd09dfc311c41b3fdff8727912642ee4f529d8ddf36d3a696","assets":{"darwin-arm64":{"file":"orbit-darwin-arm64.gz","sha256":"90fb2b6ebb397a45f4c661ec6600ac5fba1f67061ea53f74620b9376403959d9"},"darwin-x64":{"file":"orbit-darwin-x64.gz","sha256":"3b2c93b9f885b471613bb601c1b9fb64c9b1e1e81aa0d6a3d4d43a2bed8c828b"},"linux-arm64":{"file":"orbit-linux-arm64.gz","sha256":"e11271f5a1efd874eb31f35643d98432a832f153140922dbcc16eacde2fba5e1"},"linux-x64":{"file":"orbit-linux-x64.gz","sha256":"59d0c089657b218b18734525a7a1cf9ad9460d2fae3500b4f3ad80fed076f3d8"}},"runsAssignedRelease":true}
+
+{"version":"0.1.901","capabilityRevision":2,"schemaRevision":2,"minimumCapabilityRevision":1,"minimumSchemaRevision":1,"contractDigest":"bbdd980c70dc56bfd09dfc311c41b3fdff8727912642ee4f529d8ddf36d3a696","assets":{"darwin-arm64":{"file":"orbit-darwin-arm64.gz","sha256":"e52c0b31a85aba4f1061e5d4deafeb677fc012451d5ecf9c89abac04e525f1de"},"darwin-x64":{"file":"orbit-darwin-x64.gz","sha256":"c87953ffb5426095857b394a3a649795ac9e8f674b644ca5c7f3228099849ae7"},"linux-arm64":{"file":"orbit-linux-arm64.gz","sha256":"68eaf9c3f1e56d7b66a8557a2ccb5b832f31213972baf49bb7404046f0bf2c27"},"linux-x64":{"file":"orbit-linux-x64.gz","sha256":"1e0290329f9eb1c8322cbbcb1ee1b5d334bac2d6e88d4f9450fc22937e51b09d"}},"runsAssignedRelease":true}
+
+{"version":"0.1.900","capabilityRevision":2,"schemaRevision":2,"minimumCapabilityRevision":1,"minimumSchemaRevision":1,"contractDigest":"bbdd980c70dc56bfd09dfc311c41b3fdff8727912642ee4f529d8ddf36d3a696","assets":{"darwin-arm64":{"file":"orbit-darwin-arm64.gz","sha256":"ebe4738bb6bf5da5865ab31a41d84619ae6df9af1249da371ab7a3ebc8bc1bc6"},"darwin-x64":{"file":"orbit-darwin-x64.gz","sha256":"f6f16de1e38cdb692f4d30877d1e3fe4e2ac6d709003cec69680a4994c6d28be"},"linux-arm64":{"file":"orbit-linux-arm64.gz","sha256":"10b473ec58c81155fd758262c40645be07a6248d794a735ea0bb53f8d4154f13"},"linux-x64":{"file":"orbit-linux-x64.gz","sha256":"82fc57ca0e813ad781c2d4eae208e12839e556e1fe274c60c30b672363dc3351"}},"runsAssignedRelease":true}
+
+{"version":"0.1.901","capabilityRevision":2,"schemaRevision":2,"minimumCapabilityRevision":1,"minimumSchemaRevision":1,"contractDigest":"bbdd980c70dc56bfd09dfc311c41b3fdff8727912642ee4f529d8ddf36d3a696","assets":{"darwin-arm64":{"file":"orbit-darwin-arm64.gz","sha256":"8a26063f9655de8ea1250fcca9825a32e47cd8b164ba631f3838e496fa4804b2"},"darwin-x64":{"file":"orbit-darwin-x64.gz","sha256":"55324b31bdca123d8e51b302d7bab0d859d0e84b2929ec6e646118dd5cc84f71"},"linux-arm64":{"file":"orbit-linux-arm64.gz","sha256":"1b6d471cf668ed6489544dbe98f246eb1865d04c4fea5736434ef65935abd9e5"},"linux-x64":{"file":"orbit-linux-x64.gz","sha256":"e2e2f5ecea4065b4fdbaeee72379c12b0588ec15623c0563e83beaec19133856"}},"runsAssignedRelease":true}
+
+
+==== A. the signature as codesign reads it
+$ codesign -dv --verbose=4 /Users/runner/work/_temp/sign-probe/signed-v900-darwin-arm64
+Executable=/Users/runner/work/_temp/sign-probe/signed-v900-darwin-arm64
+Identifier=com.orbit.runner
+Format=Mach-O thin (arm64)
+CodeDirectory v=20500 size=102673 flags=0x10000(runtime) hashes=3198+7 location=embedded
+VersionPlatform=1
+VersionMin=851968
+VersionSDK=1704448
+Hash type=sha256 size=32
+CandidateCDHash sha256=00355a535cf625dc82b62a63e6098984ad4fa75b
+CandidateCDHashFull sha256=00355a535cf625dc82b62a63e6098984ad4fa75b5704ae32d0446bac8ca84562
+Hash choices=sha256
+CMSDigest=00355a535cf625dc82b62a63e6098984ad4fa75b5704ae32d0446bac8ca84562
+CMSDigestType=2
+Executable Segment base=0
+Executable Segment limit=10813440
+Executable Segment flags=0x1
+Page size=4096
+CDHash=00355a535cf625dc82b62a63e6098984ad4fa75b
+Signature size=6331
+Authority=Developer ID Application: Orbit Sign Probe (PROBETEAM1)
+Timestamp=Oct 9, 2026 at 5:58:00 AM
+Info.plist=not bound
+TeamIdentifier=not set
+Runtime Version=26.2.0
+Sealed Resources=none
+Internal requirements count=1 size=92
+$ codesign -d --entitlements - --xml /Users/runner/work/_temp/sign-probe/signed-v900-darwin-arm64; echo
+Executable=/Users/runner/work/_temp/sign-probe/signed-v900-darwin-arm64
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>com.apple.security.automation.apple-events</key><true/><key>com.apple.security.device.audio-input</key><true/><key>com.apple.security.device.camera</key><true/><key>com.apple.security.personal-information.addressbook</key><true/><key>com.apple.security.personal-information.calendars</key><true/><key>com.apple.security.personal-information.location</key><true/><key>com.apple.security.personal-information.photos-library</key><true/></dict></plist>
+
+$ codesign -d -r- /Users/runner/work/_temp/sign-probe/signed-v900-darwin-arm64
+Executable=/Users/runner/work/_temp/sign-probe/signed-v900-darwin-arm64
+designated => identifier "com.orbit.runner" and certificate root = H"73b2ac6549a8410c148b458069f6ffd7247ee020"
+$ codesign --verify --strict --verbose=4 /Users/runner/work/_temp/sign-probe/signed-v900-darwin-arm64
+/Users/runner/work/_temp/sign-probe/signed-v900-darwin-arm64: valid on disk
+/Users/runner/work/_temp/sign-probe/signed-v900-darwin-arm64: satisfies its Designated Requirement
+$ spctl --assess --type execute -vv /Users/runner/work/_temp/sign-probe/signed-v900-darwin-arm64
+/Users/runner/work/_temp/sign-probe/signed-v900-darwin-arm64: rejected
+origin=Developer ID Application: Orbit Sign Probe (PROBETEAM1)
+PASS: A darwin-arm64: Identifier=com.orbit.runner
+PASS: A darwin-arm64: hardened runtime flag
+PASS: A darwin-arm64: secure timestamp
+PASS: A darwin-arm64: codesign --verify --strict
+PASS: A darwin-arm64: entitlements embedded
+$ codesign -dv --verbose=4 /Users/runner/work/_temp/sign-probe/signed-v900-darwin-x64
+Executable=/Users/runner/work/_temp/sign-probe/signed-v900-darwin-x64
+Identifier=com.orbit.runner
+Format=Mach-O thin (x86_64)
+CodeDirectory v=20500 size=112401 flags=0x10000(runtime) hashes=3502+7 location=embedded
+VersionPlatform=1
+VersionMin=851968
+VersionSDK=1704448
+Hash type=sha256 size=32
+CandidateCDHash sha256=633aefedfc037ad91f455e0c0a8b4c402520d573
+CandidateCDHashFull sha256=633aefedfc037ad91f455e0c0a8b4c402520d573fd01ce99dbd045bf894abc1f
+Hash choices=sha256
+CMSDigest=633aefedfc037ad91f455e0c0a8b4c402520d573fd01ce99dbd045bf894abc1f
+CMSDigestType=2
+Executable Segment base=0
+Executable Segment limit=12075008
+Executable Segment flags=0x1
+Page size=4096
+CDHash=633aefedfc037ad91f455e0c0a8b4c402520d573
+Signature size=6330
+Authority=Developer ID Application: Orbit Sign Probe (PROBETEAM1)
+Timestamp=Oct 9, 2026 at 5:57:40 AM
+Info.plist=not bound
+TeamIdentifier=not set
+Runtime Version=26.2.0
+Sealed Resources=none
+Internal requirements count=1 size=92
+$ codesign -d --entitlements - --xml /Users/runner/work/_temp/sign-probe/signed-v900-darwin-x64; echo
+Executable=/Users/runner/work/_temp/sign-probe/signed-v900-darwin-x64
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>com.apple.security.automation.apple-events</key><true/><key>com.apple.security.device.audio-input</key><true/><key>com.apple.security.device.camera</key><true/><key>com.apple.security.personal-information.addressbook</key><true/><key>com.apple.security.personal-information.calendars</key><true/><key>com.apple.security.personal-information.location</key><true/><key>com.apple.security.personal-information.photos-library</key><true/></dict></plist>
+
+$ codesign -d -r- /Users/runner/work/_temp/sign-probe/signed-v900-darwin-x64
+Executable=/Users/runner/work/_temp/sign-probe/signed-v900-darwin-x64
+designated => identifier "com.orbit.runner" and certificate root = H"73b2ac6549a8410c148b458069f6ffd7247ee020"
+$ codesign --verify --strict --verbose=4 /Users/runner/work/_temp/sign-probe/signed-v900-darwin-x64
+/Users/runner/work/_temp/sign-probe/signed-v900-darwin-x64: valid on disk
+/Users/runner/work/_temp/sign-probe/signed-v900-darwin-x64: satisfies its Designated Requirement
+$ spctl --assess --type execute -vv /Users/runner/work/_temp/sign-probe/signed-v900-darwin-x64
+/Users/runner/work/_temp/sign-probe/signed-v900-darwin-x64: rejected
+origin=Developer ID Application: Orbit Sign Probe (PROBETEAM1)
+PASS: A darwin-x64: Identifier=com.orbit.runner
+PASS: A darwin-x64: hardened runtime flag
+PASS: A darwin-x64: secure timestamp
+PASS: A darwin-x64: codesign --verify --strict
+PASS: A darwin-x64: entitlements embedded
+$ codesign -dv --verbose=4 /Users/runner/work/_temp/sign-probe/adhoc-v900-darwin-arm64
+Executable=/Users/runner/work/_temp/sign-probe/adhoc-v900-darwin-arm64
+Identifier=a.out
+Format=Mach-O thin (arm64)
+CodeDirectory v=20400 size=102430 flags=0x20002(adhoc,linker-signed) hashes=3198+0 location=embedded
+VersionPlatform=1
+VersionMin=851968
+VersionSDK=1704448
+Hash type=sha256 size=32
+CandidateCDHash sha256=f2bf0fb4592b9b1cbb34c87284b29251ce0bbf40
+CandidateCDHashFull sha256=f2bf0fb4592b9b1cbb34c87284b29251ce0bbf40367f8c7f79f7bca42fb835d1
+Hash choices=sha256
+CMSDigest=f2bf0fb4592b9b1cbb34c87284b29251ce0bbf40367f8c7f79f7bca42fb835d1
+CMSDigestType=2
+Executable Segment base=0
+Executable Segment limit=10813440
+Executable Segment flags=0x1
+Page size=4096
+CDHash=f2bf0fb4592b9b1cbb34c87284b29251ce0bbf40
+Signature=adhoc
+Info.plist=not bound
+TeamIdentifier=not set
+Sealed Resources=none
+Internal requirements=none
+
+==== B. the designated requirement v0.1.900 records, checked against v0.1.901
+signed v0.1.900 designated requirement: identifier "com.orbit.runner" and certificate root = H"73b2ac6549a8410c148b458069f6ffd7247ee020"
+signed v0.1.901 meets it: yes
+PASS: B signed: v0.1.901 meets v0.1.900's designated requirement
+adhoc v0.1.900 designated requirement: cdhash H"f2bf0fb4592b9b1cbb34c87284b29251ce0bbf40"
+test-requirement: code failed to satisfy specified code requirement(s)
+adhoc v0.1.901 meets it: no
+PASS: B ad hoc (control): v0.1.901 does not meet v0.1.900's cdhash requirement
+
+==== C. both architectures run
+$ /Users/runner/work/_temp/sign-probe/signed-v900-darwin-arm64 version
+0.1.900
+PASS: C arm64 runs
+$ /Users/runner/work/_temp/sign-probe/signed-v900-darwin-arm64 capabilities --json | head -c 400; echo
+{"schemaVersion":2,"capabilityRevision":2,"serverCapabilityRevision":2,"serverSchemaRevision":2,"contractDigest":"bbdd980c70dc56bfd09dfc311c41b3fdff8727912642ee4f529d8ddf36d3a696","capabilityCount":53,"cliVersion":"0.1.900","sourceSha":"525464752c53160b6378e759c55b3624ab400a6f","registered":false,"context":{"actor":"runner_owner"},"identity":{"kind":"none","reason":"no ORBIT_SESSION_ID, ORBIT_SERV
+$ arch -x86_64 /Users/runner/work/_temp/sign-probe/signed-v900-darwin-x64 version
+0.1.900
+PASS: C x64 runs under Rosetta
+
+==== D. a LaunchAgent on signed v0.1.900 updates itself to v0.1.901 and re-executes
+curl: (7) Failed to connect to 127.0.0.1 port 8765 after 0 ms: Couldn't connect to server
+$ head -c 4000 /Users/runner/orbit-sign-probe-darwin-arm64.log
+orbit 0.1.900 -> 0.1.901: downloading update...
+orbit updated to 0.1.901; restarting...
+[orbit-runner 2026-10-09T05:59:36.882Z] runner "sign-probe" online -> http://127.0.0.1:8765 (max 0 concurrent)
+$ launchctl print gui/501/com.orbit.signprobe.darwin-arm64 | grep -E '^\s*(state|pid|runs|last exit code|program) ='
+	state = running
+	program = /Users/runner/.orbit/bin/orbit
+	runs = 1
+	pid = 8521
+	last exit code = (never exited)
+$ ps -o pid,lstart,command -p 8521
+  PID STARTED                      COMMAND
+ 8521 Fri Oct  9 05:59:36 2026     /Users/runner/.orbit/bin/orbit run
+$ /Users/runner/.orbit/bin/orbit version; codesign -dv /Users/runner/.orbit/bin/orbit
+0.1.901
+Executable=/Users/runner/.orbit/bin/orbit
+Identifier=com.orbit.runner
+Format=Mach-O thin (arm64)
+CodeDirectory v=20500 size=102673 flags=0x10000(runtime) hashes=3198+7 location=embedded
+Signature size=6331
+Timestamp=Oct 9, 2026 at 5:58:21 AM
+Info.plist=not bound
+TeamIdentifier=not set
+Runtime Version=26.2.0
+Sealed Resources=none
+Internal requirements count=1 size=92
+PASS: D darwin-arm64: ~/.orbit/bin/orbit is 0.1.901 after the update
+PASS: D darwin-arm64: the agent is running (pid 8521, launchd runs=1)
+PASS: D darwin-arm64: one launchd run: the update re-executed in place, nothing was killed and relaunched
+PASS: D darwin-arm64: sha256 check passed (no digest complaint)
+PASS: D darwin-arm64: installed 0.1.901 meets 0.1.900's designated requirement
+PASS: D darwin-arm64: installed binary is com.orbit.runner
+$ sudo log show --start '2026-10-09 05:59:36' --predicate 'eventMessage CONTAINS[c] "code signature" OR eventMessage CONTAINS[c] "cs_invalid" OR eventMessage CONTAINS[c] "CODE SIGNING"' | grep -i orbit | head -20 || true
+$ head -c 4000 /Users/runner/orbit-sign-probe-darwin-x64.log
+orbit 0.1.900 -> 0.1.901: downloading update...
+orbit updated to 0.1.901; restarting...
+[orbit-runner 2026-10-09T05:59:56.028Z] runner "sign-probe" online -> http://127.0.0.1:8765 (max 0 concurrent)
+$ launchctl print gui/501/com.orbit.signprobe.darwin-x64 | grep -E '^\s*(state|pid|runs|last exit code|program) ='
+	state = running
+	program = /Users/runner/.orbit/bin/orbit
+	runs = 1
+	pid = 9037
+	last exit code = (never exited)
+$ ps -o pid,lstart,command -p 9037
+  PID STARTED                      COMMAND
+ 9037 Fri Oct  9 05:59:49 2026     /Users/runner/.orbit/bin/orbit run
+$ /Users/runner/.orbit/bin/orbit version; codesign -dv /Users/runner/.orbit/bin/orbit
+0.1.901
+Executable=/Users/runner/.orbit/bin/orbit
+Identifier=com.orbit.runner
+Format=Mach-O thin (x86_64)
+CodeDirectory v=20500 size=112401 flags=0x10000(runtime) hashes=3502+7 location=embedded
+Signature size=6330
+Timestamp=Oct 9, 2026 at 5:58:18 AM
+Info.plist=not bound
+TeamIdentifier=not set
+Runtime Version=26.2.0
+Sealed Resources=none
+Internal requirements count=1 size=92
+PASS: D darwin-x64: ~/.orbit/bin/orbit is 0.1.901 after the update
+PASS: D darwin-x64: the agent is running (pid 9037, launchd runs=1)
+PASS: D darwin-x64: one launchd run: the update re-executed in place, nothing was killed and relaunched
+PASS: D darwin-x64: sha256 check passed (no digest complaint)
+PASS: D darwin-x64: installed 0.1.901 meets 0.1.900's designated requirement
+PASS: D darwin-x64: installed binary is com.orbit.runner
+$ sudo log show --start '2026-10-09 05:59:49' --predicate 'eventMessage CONTAINS[c] "code signature" OR eventMessage CONTAINS[c] "cs_invalid" OR eventMessage CONTAINS[c] "CODE SIGNING"' | grep -i orbit | head -20 || true
+
+==== F. a .p12 exported by macOS's Security framework (as Keychain Access does), read by rcodesign 0.29
+...2813 bytes written to /Users/runner/work/_temp/sign-probe/exported.p12
+$ ls -l /Users/runner/work/_temp/sign-probe/exported.p12
+-rw-------  1 runner  staff  2813 Oct  9 06:00 /Users/runner/work/_temp/sign-probe/exported.p12
+$ openssl version; openssl pkcs12 -in /Users/runner/work/_temp/sign-probe/exported.p12 -info -noout -passin pass:exported-pass
+OpenSSL 1.1.1w  11 Sep 2023
+MAC: sha1, Iteration 1
+MAC length: 20, salt length: 8
+PKCS7 Encrypted data: pbeWithSHA1And40BitRC2-CBC, Iteration 2048
+Certificate bag
+PKCS7 Data
+Shrouded Keybag: pbeWithSHA1And3-KeyTripleDES-CBC, Iteration 2048
+/Users/runner/work/_temp/sign-probe/rcodesign-macos.tar.gz: OK
+PASS: F rcodesign 0.29 signs with a .p12 that macOS exported
+$ cat /Users/runner/work/_temp/sign-probe/f-sign.log
+registering signing key
+signing /Users/runner/work/_temp/sign-probe/f-bin in place
+signing /Users/runner/work/_temp/sign-probe/f-bin as a Mach-O binary
+parsing Mach-O
+creating cryptographic signature with certificate Developer ID Application: Orbit Sign Probe (PROBETEAM1)
+writing Mach-O to /Users/runner/work/_temp/sign-probe/f-bin
+
+==== summary
+PASS: A darwin-arm64: Identifier=com.orbit.runner
+PASS: A darwin-arm64: hardened runtime flag
+PASS: A darwin-arm64: secure timestamp
+PASS: A darwin-arm64: codesign --verify --strict
+PASS: A darwin-arm64: entitlements embedded
+PASS: A darwin-x64: Identifier=com.orbit.runner
+PASS: A darwin-x64: hardened runtime flag
+PASS: A darwin-x64: secure timestamp
+PASS: A darwin-x64: codesign --verify --strict
+PASS: A darwin-x64: entitlements embedded
+PASS: B signed: v0.1.901 meets v0.1.900's designated requirement
+PASS: B ad hoc (control): v0.1.901 does not meet v0.1.900's cdhash requirement
+PASS: C arm64 runs
+PASS: C x64 runs under Rosetta
+PASS: D darwin-arm64: ~/.orbit/bin/orbit is 0.1.901 after the update
+PASS: D darwin-arm64: the agent is running (pid 8521, launchd runs=1)
+PASS: D darwin-arm64: one launchd run: the update re-executed in place, nothing was killed and relaunched
+PASS: D darwin-arm64: sha256 check passed (no digest complaint)
+PASS: D darwin-arm64: installed 0.1.901 meets 0.1.900's designated requirement
+PASS: D darwin-arm64: installed binary is com.orbit.runner
+PASS: D darwin-x64: ~/.orbit/bin/orbit is 0.1.901 after the update
+PASS: D darwin-x64: the agent is running (pid 9037, launchd runs=1)
+PASS: D darwin-x64: one launchd run: the update re-executed in place, nothing was killed and relaunched
+PASS: D darwin-x64: sha256 check passed (no digest complaint)
+PASS: D darwin-x64: installed 0.1.901 meets 0.1.900's designated requirement
+PASS: D darwin-x64: installed binary is com.orbit.runner
+PASS: F rcodesign 0.29 signs with a .p12 that macOS exported
+exit: 0
