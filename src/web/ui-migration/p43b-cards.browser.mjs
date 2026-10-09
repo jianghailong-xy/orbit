@@ -187,6 +187,33 @@ test.describe('P4.3b session decision cards', () => {
     await attachTrace(testInfo, trace);
   });
 
+  // main 3ff232299: a coordinator question that has ended is drawn as a record of what it asked — its
+  // opening, the option chosen and the note, or who withdrew it and why — on every width a preview whose
+  // review replays the question and every option.
+  test('ended coordinator questions: the records, and an answered one’s review', async ({ evidence }, testInfo) => {
+    const { page, capture } = evidence;
+    const fixtures = await installCardFixtures(page);
+    const trace = [];
+    await open(page);
+    const scope = section(page, 'question-records');
+    await top(scope);
+    const records = scope.locator('.answered-question-card');
+    await expect(records).toHaveCount(2);
+    await frames(page);
+    trace.push(await observe(page, fixtures, 'records'));
+    await capture('p43b-card-question-records', { records: scope });
+    await records.first().click();
+    const review = page.locator('.review-card-dialog').filter({ visible: true }).last();
+    await expect(review.locator('[data-question-record="question-record-answered"]')).toBeVisible();
+    await frames(page);
+    trace.push(await observe(page, fixtures, 'review'));
+    await capture('p43b-card-question-review', { surface: page.locator(DIALOG_SURFACE).filter({ visible: true }).last() });
+    await page.keyboard.press('Escape');
+    await expect(review).toHaveCount(0);
+    trace.push(await observe(page, fixtures, 'review closed'));
+    await attachTrace(testInfo, trace);
+  });
+
   // main d91a0dd48 (docs/mocks/start-card-web-width): in a conversation as wide as this page the card is
   // capped at 720px; More and "Read all" are drawn only while the clamp hides words; the plan is the
   // project's task graph while the whole of it fits the card, and otherwise by level with "Task graph"

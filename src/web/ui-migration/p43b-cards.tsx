@@ -11,11 +11,12 @@ import { StrictMode, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
-import type { ConfirmationReturnCard, ConfirmationReviewRequestCard } from '@orbit/shared';
+import type { ConfirmationReturnCard, ConfirmationReviewRequestCard, ProjectClosedQuestion } from '@orbit/shared';
 import { ThemeProvider, useThemeMode } from '../src/lib/theme';
 import { darkTheme, lightTheme } from '../src/theme';
 import { ToastViewport } from '../src/components/ToastViewport';
 import { ReviewRequestedCard, SentBackByReviewerCard } from '../src/components/ConfirmationReviewTurnCards';
+import { AnsweredQuestionCard } from '../src/components/CoordinatorQuestionCard';
 import { SessionCriteriaDecisionCard } from '../src/components/CriteriaDecisionCard';
 import { SessionDecisionStrip } from '../src/components/DecisionRail';
 import { SessionEvidenceDecisionCard } from '../src/components/EvidenceDecisionCard';
@@ -48,6 +49,46 @@ const returnCard: ConfirmationReturnCard = {
 // A confirmation the review came in after, and found a problem with (the shared review fixture).
 const late = (reviewFixture.answers as unknown as Array<{ case: string; decided: RecordedOwnerDecision }>)
   .find((each) => each.case.startsWith('confirmed while it was under review'))!.decided;
+// Two coordinator questions that have ended, as the conversation draws them (main 3ff232299): one
+// answered with an option and a note and delivered, one the coordinator withdrew with a reason.
+const recordsNow = new Date('2026-09-28T12:00:00.000Z');
+const answeredQuestion: ProjectClosedQuestion = {
+  itemId: 'question-record-answered',
+  question: {
+    question: 'The notes for the overlays and the pickers both build on the shared examples page.\n\nShould the pickers notes wait for that page, or start on a page of their own?',
+    options: [
+      { label: 'Wait for the shared examples page', description: 'One page to keep up to date.' },
+      { label: 'Start on a page of their own' },
+    ],
+    recommendedOption: 0,
+    blocksTaskIds: [],
+    ifUnanswered: 'the pickers notes stay waiting',
+  },
+  askedAt: '2026-09-28T11:20:00.000Z',
+  resolution: 'ANSWERED',
+  resolvedBy: 'USER',
+  resolvedAt: '2026-09-28T11:35:00.000Z',
+  answer: { option: 0, text: 'Keep each example to one screen.' },
+  delivery: { sessionId: ids.runSession, at: '2026-09-28T11:35:00.000Z' },
+  withdrawReason: null,
+};
+const withdrawnQuestion: ProjectClosedQuestion = {
+  itemId: 'question-record-withdrawn',
+  question: {
+    question: 'Should the README link every note, or one index page?',
+    options: [],
+    recommendedOption: null,
+    blocksTaskIds: [],
+    ifUnanswered: null,
+  },
+  askedAt: '2026-09-28T11:10:00.000Z',
+  resolution: 'WITHDRAWN',
+  resolvedBy: 'COORDINATOR',
+  resolvedAt: '2026-09-28T11:30:00.000Z',
+  answer: null,
+  delivery: null,
+  withdrawReason: 'The plan now links one index page.',
+};
 
 function Section({ name, title, children }: { name: string; title: string; children: ReactNode }) {
   return (
@@ -92,6 +133,10 @@ function Cards() {
                 decided={late}
                 reopen={<OwnerConfirmationReopen taskId={ids.receiptTask} projectId={null} status="DONE" />}
               />
+            </Section>
+            <Section name="question-records" title="Ended coordinator questions">
+              <AnsweredQuestionCard record={answeredQuestion} now={recordsNow} />
+              <AnsweredQuestionCard record={withdrawnQuestion} now={recordsNow} />
             </Section>
             <Section name="live-start" title="Start card in a conversation">
               <SessionStartProjectCard projectId={ids.liveStartProject} />
