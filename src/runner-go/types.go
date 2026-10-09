@@ -571,12 +571,16 @@ type IntegrationJobResultRequest struct {
 	AheadOfUpstream *int   `json:"aheadOfUpstream,omitempty"`
 	// With NOTHING_TO_LAND: whether the source tip is an ancestor of the upstream, as this runner
 	// measured it. Absent on every other answer, which the control plane reads as "not measured".
-	SourceOnUpstream *bool                    `json:"sourceOnUpstream,omitempty"`
-	FilesChanged     *int                     `json:"filesChanged,omitempty"`
-	Checks           []IntegrationCheckResult `json:"checks,omitempty"`
-	Conflicts        []string                 `json:"conflicts,omitempty"`
-	ErrorCode        string                   `json:"errorCode,omitempty"`
-	ErrorDetail      map[string]any           `json:"errorDetail,omitempty"`
+	SourceOnUpstream *bool `json:"sourceOnUpstream,omitempty"`
+	// With NOTHING_TO_LAND: true when the branch carried commits of its own and the rebase found every
+	// one of them already in the base, false when it carried none. Absent on every other answer, and
+	// from an older runner, which the control plane reads as "not measured".
+	SourceFullyApplied *bool                    `json:"sourceFullyApplied,omitempty"`
+	FilesChanged       *int                     `json:"filesChanged,omitempty"`
+	Checks             []IntegrationCheckResult `json:"checks,omitempty"`
+	Conflicts          []string                 `json:"conflicts,omitempty"`
+	ErrorCode          string                   `json:"errorCode,omitempty"`
+	ErrorDetail        map[string]any           `json:"errorDetail,omitempty"`
 }
 
 // IntegrationJobResultResponse is the control plane's answer: whether it took the result.
