@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.composer.SessionComposer
 import io.orbitd.android.cards.CardFocus
+import io.orbitd.android.cards.CardReceiptSheet
 import io.orbitd.android.cards.CardReviewSheet
 import io.orbitd.android.cards.LocalSteerDeliveries
 import io.orbitd.android.cards.NeedsYouLogic
@@ -338,6 +339,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         }
         }
         if (!state.denied) CardReviewSheet(cards, reviewStates, openLink, discussCard)
+        if (!state.denied) CardReceiptSheet(cards)
         if (details && !state.denied) SessionDetails(state.session, api, openLink) { details = false }
         action?.let { dialog -> DirectoryActionDialog(dialog, api, data.copy(fresh = data.fresh && state.session?.fresh == true), { action = it }) {
             app.realtime.refreshDirectory(); app.realtime.refreshSession()
