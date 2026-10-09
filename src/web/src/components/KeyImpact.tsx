@@ -66,7 +66,9 @@ export function KeyImpact({ row, action }: { row: ProviderRow; action: 'turnOff'
   return (
     <div className="key-impact">
       <p>
-        It {action === 'delete' ? 'goes from' : 'stops on'} {engineCount(engines.length)} it works with:
+        {engines.length === 0
+          ? 'No engine runs it.'
+          : `It ${action === 'delete' ? 'goes from' : 'stops on'} ${engineCount(engines.length)} it works with:`}
       </p>
       <div className="key-impact-list">
         {engines.map((engine) => (
