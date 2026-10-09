@@ -45,12 +45,14 @@ internal object ProjectShell {
     @Volatile var criteria: String? = null
     /** What the three merge presses answer: 200 moves the candidate on, anything else refuses with the server's sentence. */
     @Volatile var pressStatus = 200
+    /** Whether the coordinator's row says a merge into main waits on the owner (its owner item). */
+    @Volatile var mergeWaiting = false
     /** Every write's body, by `METHOD path`. */
     val bodies = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     fun reset() {
         calls.clear(); started = true; startRequest = false; quietStatus = 200
-        promotion = null; merged = "[]"; mergeCheck = false; holder = null; criteria = null; pressStatus = 200; bodies.clear()
+        promotion = null; merged = "[]"; mergeCheck = false; holder = null; criteria = null; pressStatus = 200; mergeWaiting = false; bodies.clear()
     }
 
     private fun ago(minutes: Long) = Instant.now().minusSeconds(minutes * 60).toString()
@@ -65,8 +67,9 @@ internal object ProjectShell {
             "agentId":"$workspace","createdAt":"${ago(600)}","lastTurnAt":"$lastTurnAt","pendingApprovals":$approvals,"tags":[],
             "capabilities":{"canComplete":${lifecycle == "OPEN"},"canRestore":${lifecycle != "OPEN"}}$extra}"""
     private fun session(id: String) = when (id) {
-        COORD -> row(COORD, "Coordinate launch", ALPHA, "AWAITING_INPUT", ""","lastAssistantText":"Planning the release","projectId":"$LAUNCH",${member("COORDINATOR")}""",
-            lastTurnAt = ago(30))
+        COORD -> row(COORD, "Coordinate launch", ALPHA, "AWAITING_INPUT", ""","lastAssistantText":"Planning the release","projectId":"$LAUNCH",${member("COORDINATOR")}${
+            if (mergeWaiting) ""","projectTitle":"Launch","waitingKind":"OWNER_ITEM","ownerItems":[{"itemId":"i-merge","kind":"PROMOTION_APPROVAL",
+                "title":"Merge 4 tasks into main?","since":"${ago(130)}"}]""" else ""}""", lastTurnAt = ago(30))
         WORKER -> row(WORKER, "Wire tests", ALPHA, "RUNNING", ""","lastToolUse":"Bash",${member("TASK")}""", lastTurnAt = ago(2))
         WAITING -> row(WAITING, "Quota retry", BETA, "AWAITING_INPUT", ""","waitingKind":"OWNER_CONFIRMATION",${member("TASK")}""", lastTurnAt = ago(10), approvals = 1)
         PLAIN -> row(PLAIN, "Plain notes", ALPHA, "AWAITING_INPUT", ""","lastAssistantText":"Notes kept"""")

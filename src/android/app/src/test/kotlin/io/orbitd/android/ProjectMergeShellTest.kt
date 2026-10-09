@@ -219,6 +219,22 @@ class ProjectMergeShellTest {
         await { exists(hasText("git revert -m 1 8d5a868e90df") and hasAnyAncestor(hasTestTag("promotion-receipt"))) }
     }
 
+    /** The needs-you bar's merge waiting elsewhere opens its project's sessions page, where its card is (iOS 6b4bef713), and not the
+     * coordinator conversation. */
+    @Test fun theNeedsYouBarOpensAWaitingMergeOnItsProjectsSessionsPage() {
+        ProjectShell.promotion = candidate("READY"); ProjectShell.mergeWaiting = true
+        signIn()
+        await { exists(hasTestTag("workspace:${ProjectShell.ALPHA}")) }
+        compose.onNodeWithTag("workspace:${ProjectShell.ALPHA}").performClick()
+        await { exists(hasText("Plain notes") and hasClickAction()) }
+        compose.onNode(hasText("Plain notes") and hasClickAction()).performClick()
+        await { exists(hasTestTag("needs-you-bar")) && exists(hasText("Approve merge to main · Launch"), unmerged = true) }
+        compose.onNodeWithTag("needs-you-bar").performClick()
+        await { exists(hasTestTag("project-sessions")) && exists(hasTestTag("project-merge-card:asking")) }
+        assertFalse("the coordinator conversation is not where it opens", ProjectShell.calls.contains("GET sessions/${ProjectShell.COORD}"))
+        compose.onNodeWithContentDescription("Back").assertExists()
+    }
+
     private fun title(text: String) = await { exists(hasTestTag("project-merge-card:title") and hasText(text), unmerged = true) }
     private fun inCard(text: String) = await { exists(hasText(text) and hasAnyAncestor(hasTestTagPrefix("project-merge-card:")), unmerged = true) }
     private fun hasTestTagPrefix(prefix: String) = SemanticsMatcher("tag starts with $prefix") {
