@@ -25,6 +25,7 @@ import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 import java.time.Instant
@@ -285,13 +286,18 @@ internal fun RequestedStartSheet(api: ProjectApi, id: String, enabled: Boolean, 
     var starting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    // Read as the sheet opens; a read that did not answer is asked again every 4 s, as the page's own reads are, until the card can
+    // be drawn — this sheet holds nothing from before it opened to fall back on.
     LaunchedEffect(id) {
         suspend fun <T> read(block: suspend () -> T): T? = try { block() } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
-        coroutineScope {
-            val doc = async { read { api.document(id) } }; val items = async { read { api.openItems(id) } }
-            val plan = async { read { api.graph(id) } }; val seal = async { read { api.confirmation(id) } }
-            document = doc.await(); openItems = items.await(); graph = plan.await(); confirmation = seal.await()
-            unread = confirmation == null
+        while (document == null || openItems == null || confirmation == null) {
+            coroutineScope {
+                val doc = async { document ?: read { api.document(id) } }; val items = async { openItems ?: read { api.openItems(id) } }
+                val plan = async { graph ?: read { api.graph(id) } }; val seal = async { confirmation ?: read { api.confirmation(id) } }
+                document = doc.await(); openItems = items.await(); graph = plan.await(); confirmation = seal.await()
+                unread = confirmation == null
+            }
+            if (document == null || openItems == null || confirmation == null) delay(4_000)
         }
     }
     Dialog(onDismissRequest = { if (!starting) close() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {

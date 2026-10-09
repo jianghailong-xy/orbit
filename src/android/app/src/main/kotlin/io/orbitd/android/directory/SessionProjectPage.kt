@@ -327,13 +327,18 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     when (startSheet) {
         StartSheet.ASKED -> RequestedStartSheet(projects, projectId, enabled, viewTasks, close = { startSheet = null; scope.launch { loadStart() } }, start = startWrite)
         StartSheet.OWN -> {
-            // The owner's own card reads the document, the plan and the line it starts from, as the project page has them.
+            // The owner's own card reads the document, the plan and the line it starts from, as the project page has them; a read that
+            // did not answer is asked again every 4 s until the card can be drawn.
             val page = remember(projectId) { ProjectPageState() }
             LaunchedEffect(page) {
-                coroutineScope {
-                    launch { runCatching { projects.document(projectId) }.getOrNull()?.let { page.document = it } }
-                    launch { runCatching { projects.graph(projectId) }.getOrNull()?.let { page.graph = it } }
-                    launch { runCatching { projects.integration(projectId) }.onSuccess { page.integration = it }.onFailure { page.integrationReadFailed = true } }
+                suspend fun <T> read(block: suspend () -> T): T? = try { block() } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
+                while (page.document == null || page.integration == null) {
+                    coroutineScope {
+                        launch { if (page.document == null) read { projects.document(projectId) }?.let { page.document = it } }
+                        launch { if (page.graph == null) read { projects.graph(projectId) }?.let { page.graph = it } }
+                        launch { if (page.integration == null) read { projects.integration(projectId) }.let { page.integration = it; page.integrationReadFailed = it == null } }
+                    }
+                    if (page.document == null || page.integration == null) delay(4_000)
                 }
             }
             OwnerStartSheet(projects, projectId, page, enabled, viewTasks, close = { startSheet = null; scope.launch { loadStart() } }, start = startWrite)

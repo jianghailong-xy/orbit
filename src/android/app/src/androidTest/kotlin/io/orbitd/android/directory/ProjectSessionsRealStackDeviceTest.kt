@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.os.Process
 import android.os.SystemClock
 import android.util.Base64
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
@@ -94,7 +95,8 @@ class ProjectSessionsRealStackDeviceTest {
             val row = SemanticsMatcher("the project's row") { node ->
                 node.config.getOrNull(SemanticsProperties.TestTag)?.let { it.startsWith("project-row:") && ObjectId.same(it.removePrefix("project-row:"), id) } == true
             }
-            compose.waitUntil(30_000) { compose.onAllNodes(row).fetchSemanticsNodes().isNotEmpty() }
+            // A list of many projects and sessions: scrolled until the row is composed.
+            scrollTo("directory-list", row)
             local.forEach { member -> assertTrue("${member.text("title")} is the row, not a row of its own",
                 compose.onAllNodes(hasContentDescription("Options for ${member.text("title")}")).fetchSemanticsNodes().isEmpty()) }
             if (counts != null) compose.waitUntil(30_000) {
@@ -152,10 +154,20 @@ class ProjectSessionsRealStackDeviceTest {
         compose.waitUntil(30_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
         record("signed in", (app.session.state.value as AuthState.SignedIn).handle.account.let { "${it.userId} at ${it.server}" })
     }
+    /** The drawer's row for [entry] — the row itself, not a word on the page under the drawer. */
     private fun drawer(entry: String) {
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
-        compose.waitUntil(30_000) { compose.onAllNodesWithText(entry).fetchSemanticsNodes().isNotEmpty() }
-        compose.onAllNodesWithText(entry).onFirst().performClick()
+        val row = hasText(entry) and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
+        compose.waitUntil(30_000) { compose.onAllNodes(row).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(row).performClick()
+    }
+    /** Scrolls the lazy list [list] until a node matching [matcher] is composed, as the list loads. */
+    private fun scrollTo(list: String, matcher: SemanticsMatcher, timeout: Long = 30_000) {
+        val deadline = SystemClock.uptimeMillis() + timeout
+        while (true) {
+            try { compose.onNodeWithTag(list).performScrollToNode(matcher); return }
+            catch (missing: AssertionError) { if (SystemClock.uptimeMillis() > deadline) throw missing; SystemClock.sleep(300); compose.waitForIdle() }
+        }
     }
     private fun capture(name: String) {
         compose.waitForIdle(); SystemClock.sleep(700)
