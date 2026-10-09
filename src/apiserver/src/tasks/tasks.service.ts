@@ -12494,6 +12494,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           'mention nobody can be given',
       );
     }
+    // The run this comment came from (migration 0416). The runner sends its own session, so this is
+    // a guard, not a trust boundary, as on a task create: an id this owner does not have, or one the
+    // header middleware could not decode, is dropped rather than refused. The attempt is kept only
+    // when it is one of THIS task's — a session running another task names its session here, never
+    // that task's attempt.
+    const run = actingSessionId && UUID_RE.test(actingSessionId)
+      ? await this.prisma.session.findFirst({
+          where: { id: actingSessionId, ownerId },
+          select: { id: true, attempt: { select: { id: true, taskId: true } } },
+        })
+      : null;
     const comment = await this.prisma.taskComment.create({
       data: {
         taskId: id,
@@ -12507,6 +12518,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // predating the ledger keeps the old inline contract and is not delivered twice by a sweep
         // that knows nothing about it.
         mentionDeliveryVersion: TASK_COMMENT_MENTION_DELIVERY_VERSION,
+        sessionId: run?.id ?? null,
+        attemptId: run?.attempt && run.attempt.taskId === id ? run.attempt.id : null,
       },
     });
     // A new comment changes only this task's list-row count and detail. Owner scope also covers
