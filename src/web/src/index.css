@@ -15356,6 +15356,8 @@ button.chat-jump-start:hover {
 
 /* Identity expands the runner; its status and Manage link stay separate. */
 .re-runner-card .re-head {
+  /* What the handle stands against, in the card's left margin (below). */
+  position: relative;
   gap: 0;
   padding: 0;
 }
@@ -15442,17 +15444,33 @@ button.chat-jump-start:hover {
   outline-offset: 3px;
   border-radius: 4px;
 }
-/* The card is the machine too: it moves by the handle at its head's start, its own actions sit behind
+/* The card is the machine too: it moves by the handle in its left margin, its own actions sit behind
    the ⋯ at the end, and under its name are how busy it is and what it needs a person for. */
 .re-runner-card.dragging {
   position: relative;
   box-shadow: 0 8px 24px rgba(31, 35, 41, 0.16);
 }
+/* The handle stands in the card's own left margin, level with the chevron, and out of the head's
+   flow, where it pushed the chevron 22px right of the column the chevron leads: the one the engine
+   rows put their icon in. */
 .re-runner-card .re-drag {
-  margin: 0 -8px 0 6px;
+  position: absolute;
+  top: 8px;
+  left: 0;
+  margin: 0;
 }
-.re-runner-card .re-drag + .re-toggle {
-  border-radius: 0;
+/* Where a pointer can hover, the handle comes up with the card under it, or with its own keyboard
+   focus; a touch screen shows it always, and so does a narrow card, which gives it a column of its
+   own (below). */
+@media (hover: hover) {
+  @container re-card (width > 600px) {
+    .re-runner-card .re-drag {
+      transition: opacity 0.15s;
+    }
+    .re-runner-card:not(:hover, .dragging) .re-drag:not(:focus-visible) {
+      opacity: 0;
+    }
+  }
 }
 .re-runner-copy .runner-util {
   display: block;
@@ -15467,16 +15485,21 @@ button.chat-jump-start:hover {
 }
 @container re-card (max-width: 600px) {
   .re-runner-card .re-head {
+    position: static;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto auto;
     column-gap: 8px;
     padding: 0 14px 0 6px;
   }
   .re-runner-card .re-drag {
+    position: static;
     grid-row: 1;
     grid-column: 1;
     align-self: start;
     margin: 13px 0 0;
+  }
+  .re-runner-card .re-drag + .re-toggle {
+    border-radius: 0;
   }
   .re-runner-card .re-toggle {
     grid-row: 1;
