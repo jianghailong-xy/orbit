@@ -420,7 +420,7 @@ function FoldedAccounts({
   const kind: RowKind = account ? (runsOnEnvKey(health, account) ? 'in' : accountKindOf(account)) : 'out';
   const quota = account
     ? quotaOf(kind, accountPlanUsage(usage, engine, account.id), !!runner.online, now)
-    : { windows: [], stale: null };
+    : { windows: [], stale: null, noLimit: false };
   const binding = bindingPlanUsageRow(quota.windows);
   return (
     <>
@@ -435,7 +435,7 @@ function FoldedAccounts({
       )}
       <QuotaCell
         kind={kind}
-        quota={{ windows: binding ? [binding] : [], stale: quota.stale }}
+        quota={{ windows: binding ? [binding] : [], stale: quota.stale, noLimit: quota.noLimit }}
         next={account && accountNameOf(account)}
       />
     </>

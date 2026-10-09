@@ -410,4 +410,12 @@ describe('each Kimi account’s own quota', () => {
     });
     expect(kimiRow(page).querySelector('.re-quota')?.textContent).toBe('No quota limit');
   });
+
+  it('says it on the folded head when the next account is the limitless one', () => {
+    // Default's 5-hour window is spent, so a new session starts on Work, whose plan has no limit.
+    const page = mount(withQuota(usages(100, 34, 41, 30), { provider: 'kimi', fetchedAt: inHours(-0.05) }), {
+      folded: true,
+    });
+    expect(kimiRow(page).querySelector('.re-quota')?.textContent).toBe('Next: WorkNo quota limit');
+  });
 });
