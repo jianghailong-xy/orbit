@@ -1,4 +1,4 @@
-tree under capture: 8e3a5c0089d05ae38e5da28d97b97ccb80885164 Merge the project tip (fd36f7899: T4, main, T6) into T7
+tree under capture: 38cae80c3dbc2c3e11e4d718e9578f1f6a7bfb35 Merge the project tip (25d342c32: main, T3 follow-up) into T7
 new light: lands on "Claude Code\n▾"
 new light: engines ["Claude Code\nDeepSeek V4 Pro","Codex\ngpt-5.6-sol","Kimi Code\nNot installed","Antigravity CLI\nGemini 3.8 Flash","O\nOpenCode\nManaged by OpenCode","DeepSeek Harness\nDeepSeek V4 Pro","+\nConnect a provider…"]
 shot new-hero-light.png

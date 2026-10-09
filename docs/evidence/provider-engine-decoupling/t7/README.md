@@ -22,9 +22,9 @@ task-pin writes it sent, and any request the fake API left unanswered.
 The capture on the merge of T6 (bd0ce46f1) matched the capture before it (528923b14) in 76 of 78 raw shots, pixel
 for pixel, and in every text read off the page. The two that differ are the builds workspace's editor, light and
 dark, where the text's anti-aliasing moved (no channel more than 16 of 255). So `7-workspace-engines-*.png` is
-made from bd0ce46f1, and the other composites still name 528923b14. The last capture ran on the merge of the
-project tip (8e3a5c008: T4, main, T6). All 78 raw shots are pixel-identical to bd0ce46f1's. Its log, the one
-here, differs only in one read the fixtures now answer (`GET /api/auth/capabilities`).
+made from bd0ce46f1, and the other composites still name 528923b14. The project-tip merges since (8e3a5c008: T4,
+main, T6; then 38cae80c3: main, T3's follow-up) left all 78 raw shots pixel-identical to bd0ce46f1's. The log here
+is from 38cae80c3. It differs from bd0ce46f1's only in one read the fixtures now answer (`GET /api/auth/capabilities`).
 
 ## How the screens were made
 
