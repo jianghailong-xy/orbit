@@ -22,7 +22,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.composer.SessionComposer
+import io.orbitd.android.cards.CardFocus
+import io.orbitd.android.cards.NeedsYouLogic
+import io.orbitd.android.cards.ReaderSide
 import io.orbitd.android.cards.SessionCards
+import io.orbitd.android.cards.SessionNeedsYouBar
 import io.orbitd.android.watch.SessionWatches
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.protocol.Wire
@@ -111,6 +115,19 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
     val transcript = state.session?.transcript
     val snapshotDetail = state.session?.snapshot?.detail
+    // What the needs-you bar counts in this conversation (iOS `ConsoleModel.openBelowRows`), and which way it lies from
+    // the reader: the cards are drawn in the rail before the tail, so they are above only once the reader is past it.
+    val belowRows = remember(state.session?.snapshot) {
+        state.session?.snapshot?.let { NeedsYouLogic.belowRows(state.session!!.id, it) }.orEmpty()
+    }
+    val readerSide by remember(list) { derivedStateOf {
+        when (val top = topLineItem(list.layoutInfo.visibleItemsInfo, list.layoutInfo.viewportStartOffset)) {
+            null -> null
+            "tail" -> ReaderSide.ABOVE
+            else -> ReaderSide.BELOW
+        }
+    } }
+    val scope = rememberCoroutineScope()
     LaunchedEffect(snapshotDetail) { snapshotDetail?.let(worktree::offer) }
     LaunchedEffect(worktree, state.denied) {
         if (!state.denied) worktree.poll { (worktree.state.value.detail ?: snapshotDetail)?.let { it.string("runStatus") ?: it.string("status") } in
@@ -165,6 +182,17 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                             .then(if (reconnecting) Modifier else Modifier.clearAndSetSemantics { })) { Text("Retry") }
                 }
                 state.error?.let { StatusMessage("Couldn't load messages", it, model::retry) }
+                // The needs-you bar, under the header and over the transcript (iOS `NeedsYouBannerView` in the console's top
+                // inset). Its press here unpins the reader and shows the waiting card, which the card rail brings into view.
+                SessionNeedsYouBar(app, handle, route.id!!, list, hidden = composerFocused && compact,
+                    below = NeedsYouLogic.below(belowRows, readerSide), open = open, onBelow = { row ->
+                        follow = false
+                        scope.launch {
+                            // The rail is the item before the tail; a card in it is brought into view once it is drawn.
+                            list.scrollToItem((list.layoutInfo.totalItemsCount - 2).coerceAtLeast(0))
+                            CardFocus.request(route.id!!, row)
+                        }
+                    })
                 // Capture all lazy intervals in this composition, preserving A05's measurement fix.
                 val displayedRows = rows
                 val displayedWindow = state.window

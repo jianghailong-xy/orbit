@@ -99,7 +99,15 @@ fun SessionCards(open: (String) -> Unit, discuss: ((String) -> Unit)? = null) {
         // A11c: the project's closing card, whole, in the conversation that coordinates the project (iOS `ProjectDoneCardView`: a
         // session's `projectId` is set on coordinators alone).
         session.snapshot?.detail?.let { detail -> detail.text("projectId")?.let { coordinated ->
-            CoordinatorDoneCard(app, resources.handle, session.id, coordinated, detail, session.snapshot?.standing.orEmpty(), session.fresh)
+            // The needs-you bar points at this card while it asks; brought into view as the rail's cards are.
+            val requester = remember { BringIntoViewRequester() }
+            val key = NeedsYouLogic.doneKey(coordinated)
+            if (focus != null && CardFocus.matches(focus, key)) LaunchedEffect(focus, key) {
+                requester.bringIntoView(); CardFocus.spend(session.id)
+            }
+            Box(Modifier.bringIntoViewRequester(requester)) {
+                CoordinatorDoneCard(app, resources.handle, session.id, coordinated, detail, session.snapshot?.standing.orEmpty(), session.fresh)
+            }
         } }
         merged.filter { it.text("state") == "MERGED" }.forEach { receipt ->
             Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.medium) {
