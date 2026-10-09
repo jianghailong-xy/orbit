@@ -16,8 +16,15 @@ class ProbeCase: XCTestCase {
         continueAfterFailure = true
     }
 
+    /// What the notes file is named besides the test's own name. The default is nothing: a probe of
+    /// one pass names the test and no more. `RecapShotTests` runs the SAME test twice against one
+    /// shots directory — once per recaps mode — so it says which pass wrote the notes, or the second
+    /// pass would overwrite the first's before anyone read them (the first CI run did exactly that:
+    /// the on pass's notes were gone and only the off pass's were left).
+    var notesSuffix: String { "" }
+
     override func tearDown() {
-        let file = name.components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
+        let file = name.components(separatedBy: CharacterSet.alphanumerics.inverted).joined() + notesSuffix
         write(notes.joined(separator: "\n"), "\(file)-notes.txt")
     }
 
