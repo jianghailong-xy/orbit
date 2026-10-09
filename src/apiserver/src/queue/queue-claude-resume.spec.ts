@@ -78,8 +78,10 @@ function harness(
         return session;
       },
     },
+    // run_event max(seq), the high-water mark buildSession continues from: raw SQL, never
+    // `aggregate` (Prisma compiles that into an OFFSET subquery the planner cannot flatten).
+    $queryRaw: async () => [{ max: 0 }],
     runEvent: {
-      aggregate: async () => ({ _max: { seq: null } }),
       // Mirrors the JSON-path filter: only an event stamped with the id the runner is
       // about to be handed proves THAT conversation exists.
       findFirst: async (args: { where?: { payload?: { equals?: unknown } } }) => {

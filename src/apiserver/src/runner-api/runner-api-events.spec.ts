@@ -1122,8 +1122,9 @@ const RUNNER_OWNER = '22222222-2222-4222-8222-222222222222';
 
 /**
  * The reclaim door, taking its high-water mark out of the same table the write path filled — the
- * production line the resume rests on (`maxSeq: agg._max.seq ?? 0` in RunnerApiController, and the
- * same `runEvent.aggregate({ _max: { seq } })` in queue.service.ts for a fresh claim).
+ * production line the resume rests on (`maxSeq` in RunnerApiController, and the same raw
+ * `max("seq")` read in queue.service.ts for a fresh claim — never `aggregate`, which Prisma
+ * compiles into an OFFSET subquery the planner cannot flatten).
  */
 function makeReclaimController(runEventTable: RunEventRow[], sessionId: string) {
   const prisma = {
@@ -1159,11 +1160,9 @@ function makeReclaimController(runEventTable: RunEventRow[], sessionId: string) 
       ],
     },
     user: { findUnique: async () => null },
-    runEvent: {
-      aggregate: async () => ({
-        _max: { seq: runEventTable.reduce<number | null>((max, r) => (max === null || r.seq > max ? r.seq : max), null) },
-      }),
-    },
+    $queryRaw: async () => [{
+      max: runEventTable.reduce<number | null>((max, r) => (max === null || r.seq > max ? r.seq : max), null) ?? 0,
+    }],
     $executeRaw: async () => 1,
   };
   return new RunnerApiController(

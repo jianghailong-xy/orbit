@@ -105,8 +105,13 @@ Options:
   --agent-name NAME        Resolve an agent by name
   --title TITLE
   --model MODEL
-  --provider SLUG          Built-in engine (claude, codex, kimi, opencode) or a configured
-                           provider slug; defaults to where the agent's project last started
+  --engine ENGINE          The CLI that runs the session, and the session's for life: claude
+                           (Claude Code), codex (Codex), kimi (Kimi Code), antigravity
+                           (Antigravity CLI), opencode (OpenCode) or dsh (DeepSeek Harness)
+  --provider SLUG          Where its credential comes from: an engine's own sign-in on the
+                           runner (its name), opencode (OpenCode's own configuration), an
+                           account pool or an API key ('orbit provider list'). Named alone, it
+                           runs on the engine it always ran on — a key on its protocol's own CLI
   --permission-mode MODE   How much the session may do unattended: %s.
                            Defaults to the owner's account setting; the ask-me modes park
                            the session on an approval card until a human answers
@@ -118,6 +123,12 @@ Options:
                            instead and stderr says so in one line, and a watch the server
                            refuses ends the wait at once
   --json
+
+--engine and --provider together must be a pair that runs: a provider names the engines it
+can run, and any other is refused with PROVIDER_ENGINE_INCOMPATIBLE. --engine alone runs on
+that engine's own sign-in — OpenCode on its own configuration, DeepSeek Harness on the
+account's first enabled DeepSeek key (refused with DEEPSEEK_KEY_REQUIRED when there is none).
+With neither, the session starts where the agent's project last started.
 
 Outside a session this needs ORBIT_SERVICE_TOKEN to carry the session:create scope; the
 session starts the agent that token is pinned to, and --agent-id may only name that agent.
@@ -243,7 +254,7 @@ needs the session:create scope and may import only into its pinned workspace.
 }
 
 var sessionCLICapabilities = []cliCapabilitySpec{
-	{Tool: "session_create", Argv: []string{"orbit", "session", "create"}, Usage: "orbit session create (--prompt TEXT | --prompt-file -) [options]", Arguments: []string{"--prompt <text> | --prompt-file - (required)", "--agent-id <id> | --agent-name <name>", "--title <text>", "--model <model>", "--provider <claude|codex|kimi|opencode|configured slug>", permissionModeFlagSpec(), "--wait[=true|false]", "--json"}, Mutates: true},
+	{Tool: "session_create", Argv: []string{"orbit", "session", "create"}, Usage: "orbit session create (--prompt TEXT | --prompt-file -) [options]", Arguments: []string{"--prompt <text> | --prompt-file - (required)", "--agent-id <id> | --agent-name <name>", "--title <text>", "--model <model>", engineArgument(), "--provider <slug> (the credential: an engine's own sign-in, opencode, an account pool or an API key; orbit provider list names each with the engines it runs)", permissionModeFlagSpec(), "--wait[=true|false]", "--json"}, Mutates: true},
 	// The one session verb a session cannot run: cliSessionImport refuses inside one, and the
 	// transcript it imports is on this machine's disk. A running agent is the reader that never
 	// gets it — the headless door below is where this command is advertised.
@@ -556,7 +567,8 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchest
 	agentName := fs.String("agent-name", "", "target agent name")
 	title := fs.String("title", "", "session title")
 	model := fs.String("model", "", "session model")
-	provider := fs.String("provider", "", "session provider slug")
+	engine := fs.String("engine", "", "the CLI that runs the session")
+	provider := fs.String("provider", "", "where the session's credential comes from")
 	permissionMode := fs.String("permission-mode", "", "session permission mode")
 	wait := fs.Bool("wait", false, "wait until the first turn settles")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
@@ -609,6 +621,14 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchest
 			return fmt.Errorf("--model cannot be empty")
 		}
 		body["model"] = *model
+	}
+	// Sent only when named, like --provider: a provider alone keeps the engine it always ran on, and
+	// which engines exist is the server's to say (ENGINE_UNKNOWN), as the modes below are.
+	if flagWasSet(fs, "engine") {
+		if strings.TrimSpace(*engine) == "" {
+			return fmt.Errorf("--engine cannot be empty")
+		}
+		body["engine"] = strings.TrimSpace(*engine)
 	}
 	if flagWasSet(fs, "provider") {
 		if strings.TrimSpace(*provider) == "" {
