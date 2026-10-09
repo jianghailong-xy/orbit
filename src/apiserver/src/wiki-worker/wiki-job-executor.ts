@@ -25,7 +25,7 @@ import {
   type WikiModelRequestRead,
 } from './wiki-model-queue';
 import { WIKI_MODEL_QUEUE_OPTIONS, WikiModelRequestQueue, WikiModelWaitCancelled, type WikiModelQueueOptions } from './wiki-model-queue.service';
-import { WikiRepoOpWaitCancelled } from './wiki-repo-ops';
+import { failAbandonedWikiRepoOps, WikiRepoOpWaitCancelled } from './wiki-repo-ops';
 import { runWikiSmokeJob } from './wiki-smoke-job';
 
 /**
@@ -102,6 +102,8 @@ export const WIKI_JOB_RUNNERS_TOKEN = Symbol('WIKI_JOB_RUNNERS');
  * scheduler claims it when the model has room, and the answer wakes the job.
  *
  * ONE PASS: reclaim, claim, start.
+ *   - first, whatever the switch says: repository operations no runner will settle — their job ended without
+ *     them, or their claim went quiet long ago — are settled failed with the reason (`failAbandonedWikiRepoOps`).
  *   - reclaim: running jobs whose lease ran out go back to queued with the lost attempt counted — the
  *     worker that had them died. Their requests were let go the same way (their own sweep), so the job is
  *     re-run from the start and its pipeline re-uses the requests that already answered. A job put back
@@ -180,6 +182,13 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
 
   /** Reclaim, claim, start — returns how many jobs this pass started. */
   async runOnce(): Promise<number> {
+    // Repository operations no runner will ever settle — their job ended without them, or their claim went quiet
+    // long ago — are ended first, whatever the switch says: they are the server's own leftovers (repoOps.abandoned).
+    await failAbandonedWikiRepoOps(this.prisma)
+      .then((ended) => {
+        if (ended > 0) this.log.warn(`${ended} abandoned repository operation(s) settled failed`);
+      })
+      .catch((error: unknown) => this.log.warn(`the repository operations' sweep failed: ${this.message(error)}`));
     const owners = wikiExecutorClaimOwners(currentWikiExecutorSwitch());
     if (owners !== null && owners.length === 0) return 0;
     await reclaimExpiredWikiJobs(this.prisma, WIKI_JOB.maxConcurrentPerWorker).catch((error: unknown) =>

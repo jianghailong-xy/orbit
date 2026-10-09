@@ -9,6 +9,7 @@ import {
   type WikiArticleWriteResult,
 } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
+import { stripNul } from '../runner-api/strip-nul';
 import { sumStats, wikiArticlesJobPrincipal, type WikiArticles } from '../wiki/wiki-articles';
 import type { WikiPrincipal } from '../wiki/wiki.service';
 import {
@@ -262,12 +263,14 @@ async function writeTopic(
   }
   let answer: WikiArticleWriteResult;
   try {
-    answer = await deps.articles.write(principal, context.job.spaceId, slug, {
+    // What the model wrote goes to the shared writer without any U+0000 (contract `jobs.serverWrites`): Postgres keeps
+    // none, and a model may copy one out of the code it was shown — the runner gate drops it from a report the same way.
+    answer = await deps.articles.write(principal, context.job.spaceId, slug, stripNul({
       entrySetSha256: input.entrySetSha256,
       ...(ref !== null ? { ref } : {}),
       ...(deps.model !== '' ? { model: deps.model } : {}),
       articles: parts,
-    });
+    }));
   } catch (error) {
     if (error instanceof HttpException) return fail(refusalText(error));
     throw error;
