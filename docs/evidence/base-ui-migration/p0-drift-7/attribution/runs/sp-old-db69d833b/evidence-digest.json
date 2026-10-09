@@ -1,0 +1,338 @@
+{
+ "pages.browser.mjs-profile-chromium-dark-desktop": {
+  "project": "chromium-dark-desktop",
+  "test": "profile",
+  "captures": [
+   "profile",
+   "profile-validation"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3,
+   "PATCH /api/users/me": 1
+  }
+ },
+ "pages.browser.mjs-profile-chromium-dark-phone": {
+  "project": "chromium-dark-phone",
+  "test": "profile",
+  "captures": [
+   "profile",
+   "profile-validation"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3,
+   "PATCH /api/users/me": 1
+  }
+ },
+ "pages.browser.mjs-profile-chromium-light-desktop": {
+  "project": "chromium-light-desktop",
+  "test": "profile",
+  "captures": [
+   "profile",
+   "profile-validation"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3,
+   "PATCH /api/users/me": 1
+  }
+ },
+ "pages.browser.mjs-profile-chromium-light-phone": {
+  "project": "chromium-light-phone",
+  "test": "profile",
+  "captures": [
+   "profile",
+   "profile-validation"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3,
+   "PATCH /api/users/me": 1
+  }
+ },
+ "pages.browser.mjs-profile-webkit-dark-desktop": {
+  "project": "webkit-dark-desktop",
+  "test": "profile",
+  "captures": [
+   "profile",
+   "profile-validation"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3,
+   "PATCH /api/users/me": 1
+  }
+ },
+ "pages.browser.mjs-profile-webkit-dark-phone": {
+  "project": "webkit-dark-phone",
+  "test": "profile",
+  "captures": [
+   "profile",
+   "profile-validation"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3,
+   "PATCH /api/users/me": 1
+  }
+ },
+ "pages.browser.mjs-profile-webkit-light-desktop": {
+  "project": "webkit-light-desktop",
+  "test": "profile",
+  "captures": [
+   "profile",
+   "profile-validation"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3,
+   "PATCH /api/users/me": 1
+  }
+ },
+ "pages.browser.mjs-profile-webkit-light-phone": {
+  "project": "webkit-light-phone",
+  "test": "profile",
+  "captures": [
+   "profile",
+   "profile-validation"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3,
+   "PATCH /api/users/me": 1
+  }
+ },
+ "pages.browser.mjs-settings-chromium-dark-desktop": {
+  "project": "chromium-dark-desktop",
+  "test": "settings",
+  "captures": [
+   "settings",
+   "settings-saved"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3,
+   "PATCH /api/users/me/preferences": 1
+  }
+ },
+ "pages.browser.mjs-settings-chromium-dark-phone": {
+  "project": "chromium-dark-phone",
+  "test": "settings",
+  "captures": [
+   "settings",
+   "settings-saved"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3,
+   "PATCH /api/users/me/preferences": 1
+  }
+ },
+ "pages.browser.mjs-settings-chromium-light-desktop": {
+  "project": "chromium-light-desktop",
+  "test": "settings",
+  "captures": [
+   "settings",
+   "settings-saved"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3,
+   "PATCH /api/users/me/preferences": 1
+  }
+ },
+ "pages.browser.mjs-settings-chromium-light-phone": {
+  "project": "chromium-light-phone",
+  "test": "settings",
+  "captures": [
+   "settings",
+   "settings-saved"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3,
+   "PATCH /api/users/me/preferences": 1
+  }
+ },
+ "pages.browser.mjs-settings-webkit-dark-desktop": {
+  "project": "webkit-dark-desktop",
+  "test": "settings",
+  "captures": [
+   "settings",
+   "settings-saved"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3,
+   "PATCH /api/users/me/preferences": 1
+  }
+ },
+ "pages.browser.mjs-settings-webkit-dark-phone": {
+  "project": "webkit-dark-phone",
+  "test": "settings",
+  "captures": [
+   "settings",
+   "settings-saved"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3,
+   "PATCH /api/users/me/preferences": 1
+  }
+ },
+ "pages.browser.mjs-settings-webkit-light-desktop": {
+  "project": "webkit-light-desktop",
+  "test": "settings",
+  "captures": [
+   "settings",
+   "settings-saved"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3,
+   "PATCH /api/users/me/preferences": 1
+  }
+ },
+ "pages.browser.mjs-settings-webkit-light-phone": {
+  "project": "webkit-light-phone",
+  "test": "settings",
+  "captures": [
+   "settings",
+   "settings-saved"
+  ],
+  "unhandled": [],
+  "pageErrors": [],
+  "requests": {
+   "GET /api/projects/sidebar": 1,
+   "GET /api/providers": 2,
+   "GET /api/runners": 2,
+   "GET /api/sessions": 2,
+   "GET /api/sessions/counts": 1,
+   "GET /api/users/me": 2,
+   "GET /api/wiki/spaces": 1,
+   "GET /api/workspaces": 3,
+   "PATCH /api/users/me/preferences": 1
+  }
+ }
+}

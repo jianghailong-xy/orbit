@@ -482,6 +482,53 @@ describe('a question is counted where its card is', () => {
   });
 });
 
+/**
+ * A version waiting for this conversation's paused coordinator, and one handed to it since. Both
+ * are drawn in the conversation (`EvidenceDecisionCard.tsx`), and the owner may still decide the
+ * first — but neither is a question this reader is being asked, so the line counts neither, names
+ * neither, and points at neither, even when the page says every row has a card.
+ */
+describe('a version waiting for the coordinator is not a question the strip counts', () => {
+  const waiting = [
+    row({ taskId: 'task-queued-a', title: 'waits for the coordinator', ageSeconds: 5 * HOUR }),
+    row({ taskId: 'task-queued-b', title: 'waits behind it', ageSeconds: 4 * HOUR }),
+  ];
+  const sent = [{
+    taskId: 'task-sent',
+    title: 'handed over already',
+    projectId: '34ZZn8fmemArxvl2CsCFp',
+    evidenceRevision: '1',
+    deliveredAt: '2026-10-09T12:05:00.000Z',
+  }];
+
+  it('draws no strip at all when the queue is all there is', () => {
+    const html = folded(queue({
+      count: 0,
+      oldestAgeSeconds: null,
+      pending: [],
+      waitingOnCoordinator: waiting,
+      sentToCoordinator: sent,
+    }), EVERY_CARD);
+    expect(html).toBe('');
+  });
+
+  it('counts and names only the question beside it, older as the queue may be', () => {
+    const html = folded(queue({
+      count: 1,
+      oldestAgeSeconds: HOUR,
+      pending: [row({ taskId: 'task-asked', title: 'asked of the owner', ageSeconds: HOUR })],
+      waitingOnCoordinator: waiting,
+      sentToCoordinator: sent,
+    }), EVERY_CARD);
+    expect(html).toContain(`aria-label="${needsDecisionCount(1)}: asked of the owner"`);
+    expect(html).not.toContain(wayPosition(1, 2));
+    expect(html).not.toContain('waits for the coordinator');
+    expect(html).not.toContain('waits behind it');
+    expect(html).not.toContain('handed over already');
+    expect(buttonTags(html)).toHaveLength(1);
+  });
+});
+
 describe('there is no way to answer more than one at a time', () => {
   const three = unfolded(queue(), EVERY_CARD);
 

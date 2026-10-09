@@ -82,6 +82,28 @@
       ]
     },
     {
+      "screenshot": "chromium-dark-desktop/breakpoint-959-session.png",
+      "sha256": "d1c379a13d2cf864d563698f84cae58bdcfe9269ef5edd2a58b3daf4c033a2c9",
+      "p0Baseline": "494318ddefdbb270d5a668607c57a46b67e00fc0c3b2a336b3a8dc7125d830ba",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
+      ]
+    },
+    {
       "screenshot": "chromium-dark-desktop/breakpoint-959-wiki.png",
       "sha256": "1d3587a25559632c81f1520e585c66b1d0eacc324de3af12f5da1390ade1e96b",
       "p0Baseline": "a0dc0724d4e939ff685b2085f1e5097329018be8a9f90f755e4dc8c7278f8953",
@@ -108,47 +130,59 @@
     },
     {
       "screenshot": "chromium-dark-desktop/breakpoint-961-session.png",
-      "sha256": "00f6e167d08c1f11b7f5273322477ef6b575dcafee40b0a90b6aa9807c4a6bc7",
+      "sha256": "c188301f26ca40f218afa644a6b3fbff1e9ef6d83d4e98c7955856ff2d091213",
       "p0Baseline": "6ceb8a6abdf06521533b3c788400f7d5f6ff82199c2658cac85472321ed59857",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "chromium-dark-desktop/breakpoint-961-wiki.png",
-      "sha256": "59af482475b7f9f256f9f4fc36d5a6c8e07bacf4c6cb36372c096a001005ab15",
+      "sha256": "92b1f659d4a160ba376169c8a1bb7e777224e2039c9b8476d9347303ee104bbe",
       "p0Baseline": "e50858dbdf17697929bb5e3aabc6e59d5c707b4755c4ff9856a3b103c1c50598",
       "mainCommits": [
         "e64d0c72a85190e77b94ea114c5f3da4592e5ccf",
         "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
         "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
         "a884fda36851b6257d6777efbc038c325cd75a45",
-        "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+        "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-fix-2ba6765d9"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
         "8ef6b60d1c18976cfca0c1bd98081bd381703c6e",
         "dd1d197ef0dde7a6e2693a761401778138426bb5",
-        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6"
+        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "wiki 961px dark",
       "change": [
@@ -156,344 +190,506 @@
         "A7",
         "A8",
         "A9",
-        "A10"
+        "A10",
+        "A12"
       ]
     },
     {
       "screenshot": "chromium-dark-desktop/notification-error.png",
-      "sha256": "1e799f036ced55b19820a0fb4d6e9bc0d25b8bf694997938fdbeb6074253698a",
+      "sha256": "4d050829259093fdd073e3678b0ddba82b6ae0d9a0e20c2d1ea3992b5386519a",
       "p0Baseline": "c86f4c31de2895572490cdadf7e8f75cfee4cc5d7f815de03daf14dc88ff7bb4",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "chromium-dark-desktop/profile-validation.png",
-      "sha256": "1c4445e446ffa6d8bce5a2f28f0a2880881c992421cdedb02062d6e662c205cc",
+      "sha256": "4f9aef5bbdd513d5ef67c85b2af28762c530d457a80aa3f9d50d3e0e248c505d",
       "p0Baseline": "e52eb8f22549612a8da10d1649bf410fbed39e485d3b2f7036bb78a3aa5e2a37",
       "mainCommits": [
-        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-maint-xfix-d233a6cd0"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "dd1d197ef0dde7a6e2693a761401778138426bb5"
+        "dd1d197ef0dde7a6e2693a761401778138426bb5",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "profile page",
       "change": [
-        "A6"
-      ],
-      "migrationFix": {
-        "regression": "B1: P2.3 57f792135 (promoted to main by 90e749e72) puts will-change: transform on every .toast and pins the phone notification column with an inline width; every main tree with d233a6cd0 carries it. Fixed on the project line by 3ec9cf83d (delivered as 86db4c886).",
-        "commit": "3ec9cf83def280578481d1b9a4a02fa32359b0e1",
-        "generationTree": "dcb5fd1bdfa7dd235822e050bbc5d9f546dbf89f",
-        "decision": {
-          "taskId": "34bQk0jlytjFYyi4OgLMK",
-          "evidenceRevision": 1,
-          "evidenceDigest": "f20eee2a99a00fa2f7b3d5c827f56b25a465b4c777d81063bc50d88facdd0554",
-          "verdict": "CONFIRM",
-          "document": "p2.3-b1/README.md"
-        },
-        "isolation": "p0-drift-2/isolation/profile-validation-b1-fix.json"
-      }
+        "A6",
+        "A12"
+      ]
     },
     {
       "screenshot": "chromium-dark-desktop/profile.png",
-      "sha256": "02716fdf772ec04fe21d643e95ab2fe8d696ccb946d7c90233eae66048f5439a",
+      "sha256": "7521aef91eca4d1e95a7bf104b7b0ba705e91457859d0cbd1ca7bc552b6773ce",
       "p0Baseline": "b95f566baa63e499c5d51cf18da26c1ef82fabbb419ae64c76e6842a3fb34914",
       "mainCommits": [
-        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-maint-d233a6cd0"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "dd1d197ef0dde7a6e2693a761401778138426bb5"
+        "dd1d197ef0dde7a6e2693a761401778138426bb5",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "profile page",
       "change": [
-        "A6"
+        "A6",
+        "A12"
       ]
     },
     {
       "screenshot": "chromium-dark-desktop/project-graph-fullscreen.png",
-      "sha256": "26778b718ba9190d14ba61299bece6421e318f3ceb88ae483b32057e250b28af",
+      "sha256": "af2e8aecb2e0956c2f0bb80ed91fbe0e6d44567bedb80eabbe7e3a96c8d9c092",
       "p0Baseline": "05524ffe05f67dc8e51b133b8e56c4232f36f9654ad1c45865ecb2218a5a1724",
       "mainCommits": [
-        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-93d3ec580"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "42e7e01f44a86473562557e2bcb239e5f8876772"
+        "42e7e01f44a86473562557e2bcb239e5f8876772",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "project page",
       "change": [
-        "A3"
+        "A3",
+        "A12"
       ]
     },
     {
       "screenshot": "chromium-dark-desktop/project-graph.png",
-      "sha256": "67f37844d5dafc78b5faeec8ff307ad6a5f2f5eedf069d0ed6e06ae343ca8731",
+      "sha256": "ef6f29167f86dbd5647d05ef3d1d8cdcfce17bfff013b8c0bdb80610ab8faa36",
       "p0Baseline": "ff13d5e8ab50fdf1b29574f87b4896e0a86c446ec0ae62cb8a94f065cfabf912",
       "mainCommits": [
-        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-93d3ec580"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "42e7e01f44a86473562557e2bcb239e5f8876772"
+        "42e7e01f44a86473562557e2bcb239e5f8876772",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "project page",
       "change": [
-        "A3"
+        "A3",
+        "A12"
       ]
     },
     {
       "screenshot": "chromium-dark-desktop/project-overview.png",
-      "sha256": "8b6f1d92bc7c181d601c28c197b0f9a0498d193bfc32544b74e0924168398cb4",
+      "sha256": "4b2ce6c920055a57c4cd4c3ef48e616394460b09f4b2ad066e428095fd7fc693",
       "p0Baseline": "646d262f2d53ed9c552843f698fe037d8187e601d32740ac1d835537f55b3197",
       "mainCommits": [
-        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-93d3ec580"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "42e7e01f44a86473562557e2bcb239e5f8876772"
+        "42e7e01f44a86473562557e2bcb239e5f8876772",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "project page",
       "change": [
-        "A3"
+        "A3",
+        "A12"
+      ]
+    },
+    {
+      "screenshot": "chromium-dark-desktop/projects-error.png",
+      "sha256": "d5cca31aba9993385c5192197d08fab73d0b658ec04b1eee1f000d6d946ffaf5",
+      "p0Baseline": "4644af19367e5b8d76be576b66900ad76d0fa9086d7da215c6e064fb4c6d498e",
+      "mainCommits": [
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "generatedFrom": {
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-cbe6a6635"
+      },
+      "projectLine": [
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "group": "projects list",
+      "change": [
+        "A12"
+      ]
+    },
+    {
+      "screenshot": "chromium-dark-desktop/projects-list.png",
+      "sha256": "035ab67a19a0c3bd8ed1e7bd8297681f00eaa11cde7e49a809a96f9d14c5afc0",
+      "p0Baseline": "168a1fd37bba2ed39235d7bd483340cf4a6f67dacaf7d9b153a6b752372d1870",
+      "mainCommits": [
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "generatedFrom": {
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-cbe6a6635"
+      },
+      "projectLine": [
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "group": "projects list",
+      "change": [
+        "A12"
+      ]
+    },
+    {
+      "screenshot": "chromium-dark-desktop/projects-loading.png",
+      "sha256": "8998c10fd3543010ea773f3fc2398edad288232db80f4c1e3bd4de0be540e91e",
+      "p0Baseline": "6921c0cdf8f0f403a384c350b4b94ea5473b0f69caac60930cb16fe90ce669fc",
+      "mainCommits": [
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "generatedFrom": {
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-cbe6a6635"
+      },
+      "projectLine": [
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "group": "projects list",
+      "change": [
+        "A12"
+      ]
+    },
+    {
+      "screenshot": "chromium-dark-desktop/projects-search-empty.png",
+      "sha256": "23d5d9992dd5753221d0a94daef2c41fa611077ab3923453f419aa951323264f",
+      "p0Baseline": "934b5a10c517665ca13b9b94543d74c8e6e4ccf03521f3d4635fcb0b18a7ab24",
+      "mainCommits": [
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "generatedFrom": {
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-cbe6a6635"
+      },
+      "projectLine": [
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "group": "projects list",
+      "change": [
+        "A12"
       ]
     },
     {
       "screenshot": "chromium-dark-desktop/session-attachment-menu.png",
-      "sha256": "c433af44707c969b3277e0b1f6b22d0cdeff45dadb2782ceb58e3f72d4197515",
+      "sha256": "530e19fd74305b1937f0a938ab1034111a0acc48b5bda6d7047e51d14820782b",
       "p0Baseline": "2cc8da44401abea35c0d638a9292055f4c9ca962fafb7d2847f3a65373264498",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "chromium-dark-desktop/session-attachment-staged.png",
-      "sha256": "5fc50d996fc402c0d029e7b24a259de3d735fe64ff1350b0ce475c882695c961",
+      "sha256": "965e331b55d13b24ee5ba9cbeefa4d691d767ed06765def0c3e3e634338f2048",
       "p0Baseline": "4e82fa32893c3f44b3c2fe1b960b4bf64a578f48a31cb3538af0ae7c7f096e69",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "chromium-dark-desktop/session-composer-focus.png",
-      "sha256": "22b23cca9cdbd0fa43d646172467832545cbe6ce9a416fb4a2128ffbb4105120",
+      "sha256": "f840964ec7f258ee816774ac00d60e9f434044051c2226f009fd746ec3d82d9e",
       "p0Baseline": "f1575c5d9f871dd4a75febf3623bafd2a45fab1d5416056104e427227571bc6c",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "chromium-dark-desktop/session-idle.png",
-      "sha256": "961f80d871b078691bbcab100bdd08beb390b2bc7d9f05f8e2b40361c5bce9a2",
+      "sha256": "aa1b6e6e88ab6511bd777fab4d962d7b043f3c0604fb8bd017df779405884fd8",
       "p0Baseline": "14529f4c1cf79b4e7a91a618b360490e0029fc3f93c726cced10a1e6b4a48506",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "chromium-dark-desktop/session-streaming.png",
-      "sha256": "ac1ffc45691d6d47b5219085e34ed5d3228604dbe34af84b6414929e2e08d86e",
+      "sha256": "f3d446b92e09a6313de27a995550927fda4caed33368c44b5abb1b3feda025a0",
       "p0Baseline": "58126a183bd55186d73a8a1e830d35d86b3a45ac5ae281bc369ab479e1506fdd",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "chromium-dark-desktop/settings-saved.png",
-      "sha256": "55cd47afda856281bf5e65e5f2256c4b529019e99fc0fea9108897651a9b0411",
+      "sha256": "8f7ec8b463f419562c2e28d85d6a7e176f2fa5767e7494c5484e9980e93f862f",
       "p0Baseline": "927c9fd470e3f4d9f18a763199017a3c5bc9834c27d549ec3d0126a01f462ac1",
       "mainCommits": [
         "4088d37e6d26243196161355e658d3e303939bf3",
-        "def134095f8031d3a2498dbfc9677e684bca0e67"
+        "def134095f8031d3a2498dbfc9677e684bca0e67",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "def134095f8031d3a2498dbfc9677e684bca0e67",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-fix-def134095"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
         "8ef6b60d1c18976cfca0c1bd98081bd381703c6e",
-        "4d77d69b78a0e49ec9e7d6f61435cf3b4339f09c"
+        "4d77d69b78a0e49ec9e7d6f61435cf3b4339f09c",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "task panel and settings",
       "change": [
         "A4",
-        "A11"
+        "A11",
+        "A12"
       ]
     },
     {
       "screenshot": "chromium-dark-desktop/settings.png",
-      "sha256": "4d7d89812d1ff04abfe2d6ba269278bec1dde5794cb3dc1a8db76785152c6daf",
+      "sha256": "0bb811ccda2151e9fffa9a3c57046cb1e86874602147a2e8a9522851914d00cc",
       "p0Baseline": "6fd64cb05d25e9af6ff7a1e5863f2eb4f640ad8a3f27304b91fd4af51bb01f9e",
       "mainCommits": [
         "4088d37e6d26243196161355e658d3e303939bf3",
-        "def134095f8031d3a2498dbfc9677e684bca0e67"
+        "def134095f8031d3a2498dbfc9677e684bca0e67",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "def134095f8031d3a2498dbfc9677e684bca0e67",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-fix-def134095"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
         "8ef6b60d1c18976cfca0c1bd98081bd381703c6e",
-        "4d77d69b78a0e49ec9e7d6f61435cf3b4339f09c"
+        "4d77d69b78a0e49ec9e7d6f61435cf3b4339f09c",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "task panel and settings",
       "change": [
         "A4",
-        "A11"
+        "A11",
+        "A12"
       ]
     },
     {
       "screenshot": "chromium-dark-desktop/task-action-focus.png",
-      "sha256": "71af01e7da52f4daa68d71fc5befd7d2cc79ae28f9658586ce227f1eec74e423",
+      "sha256": "bb2c4bfaf16435afa05cacbd40c5b05d0385c34e782562064486e2900b1d2aa9",
       "p0Baseline": "6b203cdfe454d352ff800da1dbaaf2c8f35271df52bbe48e419807b9fc86c77b",
       "mainCommits": [
-        "4088d37e6d26243196161355e658d3e303939bf3"
+        "4088d37e6d26243196161355e658d3e303939bf3",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "4088d37e6d26243196161355e658d3e303939bf3",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-4088d37e6"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e"
+        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "task panel and settings",
       "change": [
-        "A4"
+        "A4",
+        "A12"
       ]
     },
     {
       "screenshot": "chromium-dark-desktop/task-action-hover.png",
-      "sha256": "c546d69ce0158ddcba07d225d9c653da5e3911caf97225bc28943818de4e9bca",
+      "sha256": "d5289d46f71f9e1c6dec13a9c7a1dda296a548fad0488ded7de21a98cc94f24d",
       "p0Baseline": "74ea0d2e5852fc8e954e0b7f6f04b88d3bea0fdf453381dc5e1ffeaaa27bd645",
       "mainCommits": [
-        "4088d37e6d26243196161355e658d3e303939bf3"
+        "4088d37e6d26243196161355e658d3e303939bf3",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "4088d37e6d26243196161355e658d3e303939bf3",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-4088d37e6"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e"
+        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "task panel and settings",
       "change": [
-        "A4"
+        "A4",
+        "A12"
       ]
     },
     {
@@ -518,22 +714,26 @@
     },
     {
       "screenshot": "chromium-dark-desktop/task-detail.png",
-      "sha256": "17ad7c0c2036f375b4665025014c3ceb08d0afd32d624e3d13d5060993fd7a4e",
+      "sha256": "285423c4359a840c4aa6ed959ce9aab93dfc98f17b774fa33d27ce67de573b72",
       "p0Baseline": "d2fb4786e1d577902d2a4a3da1681acabc01cb628d5a22c1945ef259ae2f95a8",
       "mainCommits": [
-        "4088d37e6d26243196161355e658d3e303939bf3"
+        "4088d37e6d26243196161355e658d3e303939bf3",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "4088d37e6d26243196161355e658d3e303939bf3",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-4088d37e6"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e"
+        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "task panel and settings",
       "change": [
-        "A4"
+        "A4",
+        "A12"
       ]
     },
     {
@@ -558,56 +758,86 @@
     },
     {
       "screenshot": "chromium-dark-desktop/wiki-home.png",
-      "sha256": "ffe7026cc392fe35e6ade4ed82e1cf9a135267dfb6f661786e74e3de61fe1762",
+      "sha256": "f9cead60b48f95558e5b22f601f5fc6b7dbfe7a9263efaadb2320e3e8c21900f",
       "p0Baseline": "4c6830147feb1950eb3b31fa58587a16bcc083586b08d6ddd700cb2c0ff5af0e",
       "mainCommits": [
         "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
         "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
         "a884fda36851b6257d6777efbc038c325cd75a45",
-        "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+        "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-fix-2ba6765d9"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
         "dd1d197ef0dde7a6e2693a761401778138426bb5",
-        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6"
+        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "wiki home",
       "change": [
         "A7",
         "A8",
         "A9",
-        "A10"
+        "A10",
+        "A12"
       ]
     },
     {
       "screenshot": "chromium-dark-desktop/wiki-new-entry.png",
-      "sha256": "92ec62ddf2e0eda2963ee80542da5ab892406118af724a2e64e2ca12f6420b40",
+      "sha256": "e9da2ac92546dee57853d1642f092ec90ba86b972017c26093226d8469987896",
       "p0Baseline": "83dcc7cbceca029af072ed15c75e5a0decc504d680d1df52968b6e62f97012df",
       "mainCommits": [
         "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
         "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
         "a884fda36851b6257d6777efbc038c325cd75a45",
-        "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+        "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-fix-2ba6765d9"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
         "dd1d197ef0dde7a6e2693a761401778138426bb5",
-        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6"
+        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "wiki home",
       "change": [
         "A7",
         "A8",
         "A9",
-        "A10"
+        "A10",
+        "A12"
+      ]
+    },
+    {
+      "screenshot": "chromium-dark-phone/notification-error.png",
+      "sha256": "0bb67799ae1d1a18ef0702ea11e88ede710a8af9d83bd4445ee6243cf4c30295",
+      "p0Baseline": "a12160704f9814d42b26a9e9abf1ea9c170f15d4e3118f6e8bf36976035a644e",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
       ]
     },
     {
@@ -701,6 +931,116 @@
       "group": "project page",
       "change": [
         "A3"
+      ]
+    },
+    {
+      "screenshot": "chromium-dark-phone/session-attachment-menu.png",
+      "sha256": "168e58d666bea0fff181ca97fb04d8f15d743efa4272ed0249e9f69e35b8e497",
+      "p0Baseline": "ac212e01664a76bd4317372e5985e6feceee6689c490bfcf1447b5c24782e06d",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
+      ]
+    },
+    {
+      "screenshot": "chromium-dark-phone/session-attachment-staged.png",
+      "sha256": "b78e6218a0c662f3125aae854c8bcc5e059549bbd1f1adfede9001f4ece20149",
+      "p0Baseline": "33a3ffa6183617aa5f100d407dd8fc78cc1c8a03ccc5e9404c47fd6e13243e05",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
+      ]
+    },
+    {
+      "screenshot": "chromium-dark-phone/session-composer-focus.png",
+      "sha256": "1bca9354ac731ebe9939e0b73d0392027554d92475c9b0cc8d614fd1c8c4e5a4",
+      "p0Baseline": "3183e94a16af8aa138c783efb796456ef4423a9d412e4b9e1f3df016d1e8ef2b",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
+      ]
+    },
+    {
+      "screenshot": "chromium-dark-phone/session-idle.png",
+      "sha256": "52f2e0d5f6c6dfe54426e26e6f3365b5137d5b3ccd92505cc66195c7a97cc9b9",
+      "p0Baseline": "30db161a582062433a28bdfda12c95f347264d8967278674d561ee63505f3eac",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
+      ]
+    },
+    {
+      "screenshot": "chromium-dark-phone/session-streaming.png",
+      "sha256": "da8d1128bbe1de1ea6ab62716f7cbfe24ffa9152b0e04cbf51c4841d401a5a6a",
+      "p0Baseline": "112c86141e46bb1f40ad2b63c3b359817826c66f93e1af94d55c8a49ca7ebd8e",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
       ]
     },
     {
@@ -1003,6 +1343,28 @@
       ]
     },
     {
+      "screenshot": "chromium-light-desktop/breakpoint-959-session.png",
+      "sha256": "d634a613f04a1991b4f65b9912311c7a7339670bfa938bdf3c9fd270d718a9bc",
+      "p0Baseline": "d99a35ba82e81b13ac07f26b47d2c6194705e70cdb02ab83865144fea60c4627",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
+      ]
+    },
+    {
       "screenshot": "chromium-light-desktop/breakpoint-959-wiki.png",
       "sha256": "d5bbbb804d0e7bb6f0fdae575a3ba054cdc3db303da0a4195d91b2b7629d6bcf",
       "p0Baseline": "0488633d491a70dadb52e406e46823c79c1f822dbcff8aed673fa9e4f49ae116",
@@ -1029,389 +1391,563 @@
     },
     {
       "screenshot": "chromium-light-desktop/breakpoint-961-session.png",
-      "sha256": "7df5c9d1487036086b8f59c90f76e1cf63d23f1d5e948f8397e015f754cf2174",
+      "sha256": "1776b646b7701c0f9c9127d45cddb20ccba3ba0d7e0302d54515934ed95d3a1d",
       "p0Baseline": "230673d26f4b2c379c30863f5dd2d41ab239689b2112e090db8795cc9f66b3ca",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "chromium-light-desktop/breakpoint-961-wiki.png",
-      "sha256": "a395f966339c39c4a068b240307bda104bbab526296068eb3bd482ebc04bd6a1",
+      "sha256": "8a78ac02b0c7a81c9b28da7583341ac3e5297afa5fdf4b8c14bc30c2d8619152",
       "p0Baseline": "9d45a2a0763ec836abfd6bd8e0d15d69939c6d452a7c0d1bb83ac898b6ea65e4",
       "mainCommits": [
         "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
         "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
         "a884fda36851b6257d6777efbc038c325cd75a45",
-        "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+        "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-fix-2ba6765d9"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
         "dd1d197ef0dde7a6e2693a761401778138426bb5",
-        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6"
+        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "wiki home",
       "change": [
         "A7",
         "A8",
         "A9",
-        "A10"
+        "A10",
+        "A12"
       ]
     },
     {
       "screenshot": "chromium-light-desktop/notification-error.png",
-      "sha256": "e58caff51600e2bd02b240fa548bc830f77a764b8b6f7c950a5787a6f2faf2b6",
+      "sha256": "02163be60a67b18b187b8609a66ec56ba886abeca8ebbdb6901171309d62ec05",
       "p0Baseline": "183fed1b668e7d98413e6d91aa67dee11b56e615ee66e856c15815aa1f37b7c8",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "chromium-light-desktop/profile-validation.png",
-      "sha256": "e094d0572b0b3281260503291c25ddb872c5220d354877b40b0c1a018b50efde",
+      "sha256": "15e140cacae184750b390fccd5ab0fbcfff55459e4f1f2404094eccc52a027cb",
       "p0Baseline": "c19e7b89a66ce177089708e954d3de8d6d380e049479933d9faf0f240bb3fbf7",
       "mainCommits": [
-        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-maint-xfix-d233a6cd0"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "dd1d197ef0dde7a6e2693a761401778138426bb5"
+        "dd1d197ef0dde7a6e2693a761401778138426bb5",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "profile page",
       "change": [
-        "A6"
-      ],
-      "migrationFix": {
-        "regression": "B1: P2.3 57f792135 (promoted to main by 90e749e72) puts will-change: transform on every .toast and pins the phone notification column with an inline width; every main tree with d233a6cd0 carries it. Fixed on the project line by 3ec9cf83d (delivered as 86db4c886).",
-        "commit": "3ec9cf83def280578481d1b9a4a02fa32359b0e1",
-        "generationTree": "dcb5fd1bdfa7dd235822e050bbc5d9f546dbf89f",
-        "decision": {
-          "taskId": "34bQk0jlytjFYyi4OgLMK",
-          "evidenceRevision": 1,
-          "evidenceDigest": "f20eee2a99a00fa2f7b3d5c827f56b25a465b4c777d81063bc50d88facdd0554",
-          "verdict": "CONFIRM",
-          "document": "p2.3-b1/README.md"
-        },
-        "isolation": "p0-drift-2/isolation/profile-validation-b1-fix.json"
-      }
+        "A6",
+        "A12"
+      ]
     },
     {
       "screenshot": "chromium-light-desktop/profile.png",
-      "sha256": "c212b90da375854b20dc4ac8b41e6dcd1d0d6ba292b90a4968606321e1e91e32",
+      "sha256": "0f9986c6bfc461fa8860ba98f030239219ac557c32f1ce8393ff1800724eec15",
       "p0Baseline": "bee5cfd83eb10740b16f7ecacf90e4f6c41d0deef7706bb22959d69df0af115a",
       "mainCommits": [
-        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-maint-d233a6cd0"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "dd1d197ef0dde7a6e2693a761401778138426bb5"
+        "dd1d197ef0dde7a6e2693a761401778138426bb5",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "profile page",
       "change": [
-        "A6"
+        "A6",
+        "A12"
       ]
     },
     {
       "screenshot": "chromium-light-desktop/project-graph-fullscreen.png",
-      "sha256": "0e129acaf6cb97b227cdd4af76e1a4210cba0824a2a9a404f7bfae091d87fa98",
+      "sha256": "a216d34fc7810ddba043beb1747bb01d5f2ad728400ff13a9fc8e5a1887b0b05",
       "p0Baseline": "8a403b77fb2a675de59288acf7bf5e8785f2c9c007efe1321eca7c1bd20083a6",
       "mainCommits": [
-        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-93d3ec580"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "42e7e01f44a86473562557e2bcb239e5f8876772"
+        "42e7e01f44a86473562557e2bcb239e5f8876772",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "project page",
       "change": [
-        "A3"
+        "A3",
+        "A12"
       ]
     },
     {
       "screenshot": "chromium-light-desktop/project-graph.png",
-      "sha256": "3a38332976f9a899f4f605238bda389707c3528e684d355fe8dc2f89c3fac891",
+      "sha256": "200967342d72d2a9cd5f62e8c4a0cbed9b3b7c202811f66703537bf5024b9364",
       "p0Baseline": "4dcf29b14cb42f5e06da90fce89422e9a72bbdc45b5575c66e647446ddd99798",
       "mainCommits": [
-        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-93d3ec580"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "42e7e01f44a86473562557e2bcb239e5f8876772"
+        "42e7e01f44a86473562557e2bcb239e5f8876772",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "project page",
       "change": [
-        "A3"
+        "A3",
+        "A12"
       ]
     },
     {
       "screenshot": "chromium-light-desktop/project-overview.png",
-      "sha256": "b421c6f54120aa04f9e9ecd42e88b7b15d1c6582bb1e247c9e83298fb6601144",
+      "sha256": "5b355e0cd35c3ef3a009971a60aba332cd5804e987984813596e7eb359891703",
       "p0Baseline": "4a68a08d10648e47b413a067cc342f3a1ca81439ab23c7ea59c8917f40d061f2",
       "mainCommits": [
-        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-93d3ec580"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "42e7e01f44a86473562557e2bcb239e5f8876772"
+        "42e7e01f44a86473562557e2bcb239e5f8876772",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "project page",
       "change": [
-        "A3"
+        "A3",
+        "A12"
+      ]
+    },
+    {
+      "screenshot": "chromium-light-desktop/projects-error.png",
+      "sha256": "1b56e0a8bfcdc0f816854113a7f8d5c851bda1690a23e9947ba3e07214a6e8f6",
+      "p0Baseline": "9fe1c84fd1ebd8e640e8d62732351313dea74e2869037bc1f9299ffbd77d8af1",
+      "mainCommits": [
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "generatedFrom": {
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-cbe6a6635"
+      },
+      "projectLine": [
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "group": "projects list",
+      "change": [
+        "A12"
+      ]
+    },
+    {
+      "screenshot": "chromium-light-desktop/projects-list.png",
+      "sha256": "992ff55f6473f1f0e30f0d38e4a65253bc7bd586d4556234d0488f528ec949ae",
+      "p0Baseline": "87e54e1ce447ba1a3846682eded18cc979c0f7ab01f9956192cc78d860b642e8",
+      "mainCommits": [
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "generatedFrom": {
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-cbe6a6635"
+      },
+      "projectLine": [
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "group": "projects list",
+      "change": [
+        "A12"
+      ]
+    },
+    {
+      "screenshot": "chromium-light-desktop/projects-loading.png",
+      "sha256": "1799070d992b94a61cd1c6b1b2bb12961c76e2c522e55eeb9d54b7d96a546eb5",
+      "p0Baseline": "88f155dbb7a51039bfde92f94bc0fb57eb811ead50b4242102dfd1f4dbd5f331",
+      "mainCommits": [
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "generatedFrom": {
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-cbe6a6635"
+      },
+      "projectLine": [
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "group": "projects list",
+      "change": [
+        "A12"
+      ]
+    },
+    {
+      "screenshot": "chromium-light-desktop/projects-search-empty.png",
+      "sha256": "488ca122caf1d5252c9785f4cb7bbdfe636c81e55aa45306c81e7dcc8e61801e",
+      "p0Baseline": "ac9abf6591891dca4144d6f17205a1d593945d68aceca93cedd42c9bba847038",
+      "mainCommits": [
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "generatedFrom": {
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-cbe6a6635"
+      },
+      "projectLine": [
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "group": "projects list",
+      "change": [
+        "A12"
       ]
     },
     {
       "screenshot": "chromium-light-desktop/session-attachment-menu.png",
-      "sha256": "7c3fd86d0b7e26950ac2400c5e0ba1784b9462d1640cb1e0a886260fb1d0426c",
+      "sha256": "b378568cfe0b508b6a89e59b03f3b71e7061b9b2c22fbf9b35e8ba071196f142",
       "p0Baseline": "6ca5c3bd76ecf2f5936b673743a225f63e5b24b1adcec33312000609e7c73171",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "chromium-light-desktop/session-attachment-staged.png",
-      "sha256": "bcba61ccfff49fa156ca889d3f379f5267850c0b0431dcce1f66884029807701",
+      "sha256": "2368bda2093938fcf0d1ec44da790de831d0724623a6434e3a94c89afce4fa51",
       "p0Baseline": "dccc94a0d0d91638e58918506207035818ee6a3559a1fc0494044de4da421791",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "chromium-light-desktop/session-composer-focus.png",
-      "sha256": "9b3963ee539d6cde28fe171a42d08591ed0856063e1f3010316a3cdb06c29c5a",
+      "sha256": "aa4169d0376e39726f0acef882a50203a514b88ad4ec5100d451d9f075aae3fa",
       "p0Baseline": "5df77e707a8ec1c4ef45d2f34421614b7e586bae18cec0a4a68e1e3d06558bf3",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "chromium-light-desktop/session-idle.png",
-      "sha256": "647087e35a9d233ddd08f114506bd014e1e8d270da9f63966433915d309355e3",
+      "sha256": "b163c150f293226b8a72a1a8749c66cdb5491fda0bbeda24e26c695c20236db9",
       "p0Baseline": "a07ca3641845248af740f7055eb4ee9b6d3bcf41a619eef1a5a56565c879db8b",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "chromium-light-desktop/session-streaming.png",
-      "sha256": "429a6a404cb96b33910802d8abe2bb08caa27e62b52a20afe4518f08e004395d",
+      "sha256": "31cdf7d87171305ab37b73d2b85ec38d2350f07cf021985d3ee8eaf74fcb7a8c",
       "p0Baseline": "2bcc70ecd0c9412979e5db5ab5fc74f7dc20c33e1a7e02eea99b04a78712efbe",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "chromium-light-desktop/settings-saved.png",
-      "sha256": "6ea4122e028fb354cb0a4c868ba33a5e8f73d577b187f0e6332fc998f24fa306",
+      "sha256": "a108623d260df558f209a179a44cb60ac9b3ea70b5b53e6ef986fdab1f99c13c",
       "p0Baseline": "103b7643ed1c0503fb80892e20525258e10b5f9583d99e2a4364d3279c3f4adf",
       "mainCommits": [
         "4088d37e6d26243196161355e658d3e303939bf3",
-        "def134095f8031d3a2498dbfc9677e684bca0e67"
+        "def134095f8031d3a2498dbfc9677e684bca0e67",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "def134095f8031d3a2498dbfc9677e684bca0e67",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-fix-def134095"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
         "8ef6b60d1c18976cfca0c1bd98081bd381703c6e",
-        "4d77d69b78a0e49ec9e7d6f61435cf3b4339f09c"
+        "4d77d69b78a0e49ec9e7d6f61435cf3b4339f09c",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "task panel and settings",
       "change": [
         "A4",
-        "A11"
+        "A11",
+        "A12"
       ]
     },
     {
       "screenshot": "chromium-light-desktop/settings.png",
-      "sha256": "98ba11abaa3e18ae7d046fc8b64b84b60eee9b1f879233cb26ae2c19b89fd71e",
+      "sha256": "6f6c1abcefc6f9dd164b0dc764d0259f54720c512fdd15e27aa704139f646b7a",
       "p0Baseline": "fd0fb44f2a47ab338959279da76c435e5048072bd3750437954a7de456141062",
       "mainCommits": [
         "4088d37e6d26243196161355e658d3e303939bf3",
-        "def134095f8031d3a2498dbfc9677e684bca0e67"
+        "def134095f8031d3a2498dbfc9677e684bca0e67",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "def134095f8031d3a2498dbfc9677e684bca0e67",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-fix-def134095"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
         "8ef6b60d1c18976cfca0c1bd98081bd381703c6e",
-        "4d77d69b78a0e49ec9e7d6f61435cf3b4339f09c"
+        "4d77d69b78a0e49ec9e7d6f61435cf3b4339f09c",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "task panel and settings",
       "change": [
         "A4",
-        "A11"
+        "A11",
+        "A12"
       ]
     },
     {
       "screenshot": "chromium-light-desktop/task-action-focus.png",
-      "sha256": "987815c3fe82d504f42c9c5db3a195d47c6586af6e84fd0d8db278e9bfc8c4b7",
+      "sha256": "59d812cafe17054aa3036ee13382ac7c1972780014f13e6b2e33d233ae442397",
       "p0Baseline": "66b654529dddab8204d6c853495b40e81c4bfa7793e5a3dc4951440f9184f669",
       "mainCommits": [
-        "4088d37e6d26243196161355e658d3e303939bf3"
+        "4088d37e6d26243196161355e658d3e303939bf3",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "4088d37e6d26243196161355e658d3e303939bf3",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-4088d37e6"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e"
+        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "task panel and settings",
       "change": [
-        "A4"
+        "A4",
+        "A12"
       ]
     },
     {
       "screenshot": "chromium-light-desktop/task-action-hover.png",
-      "sha256": "4a55895f1b960e2fe323e7282a6ed5493a2451ead6df2fedea5b4570f0a42857",
+      "sha256": "40e6f75f0a244a054f9052658fc4956888b9c6c25f2b69e998c8c6973d982895",
       "p0Baseline": "e88bdc63b832af3f229f34b7c418a21cd0d83cb332e0348a357809511be7db61",
       "mainCommits": [
-        "4088d37e6d26243196161355e658d3e303939bf3"
+        "4088d37e6d26243196161355e658d3e303939bf3",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "4088d37e6d26243196161355e658d3e303939bf3",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-4088d37e6"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e"
+        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "task panel and settings",
       "change": [
-        "A4"
+        "A4",
+        "A12"
       ]
     },
     {
@@ -1436,22 +1972,26 @@
     },
     {
       "screenshot": "chromium-light-desktop/task-detail.png",
-      "sha256": "114cd2911df6e1186e81765b6fffe7bf8d038c87952219394cd45bbe2a2ab951",
+      "sha256": "8887e70f502bea4d48cd92d31becfd7eb632e1a6d3a3b8103acf4dcf5227930c",
       "p0Baseline": "b95cc146aa516642d9c32fe378bb73929f74605c0ed5817be2de9d38cf596a67",
       "mainCommits": [
-        "4088d37e6d26243196161355e658d3e303939bf3"
+        "4088d37e6d26243196161355e658d3e303939bf3",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "4088d37e6d26243196161355e658d3e303939bf3",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-4088d37e6"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e"
+        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "task panel and settings",
       "change": [
-        "A4"
+        "A4",
+        "A12"
       ]
     },
     {
@@ -1476,56 +2016,86 @@
     },
     {
       "screenshot": "chromium-light-desktop/wiki-home.png",
-      "sha256": "20ea0446b74471fd6e6997ac6e8a5805a4225fdfbf8198e5bc984e8decfcee97",
+      "sha256": "1ba1bc049828ef9251cf91bc2963ed2e2abfd012df428cbd8a94fbb57a696a28",
       "p0Baseline": "2c833d090c10d36f27a87b1afa373716040fd83272f504c62b19c198c270529e",
       "mainCommits": [
         "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
         "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
         "a884fda36851b6257d6777efbc038c325cd75a45",
-        "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+        "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-fix-2ba6765d9"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
         "dd1d197ef0dde7a6e2693a761401778138426bb5",
-        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6"
+        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "wiki home",
       "change": [
         "A7",
         "A8",
         "A9",
-        "A10"
+        "A10",
+        "A12"
       ]
     },
     {
       "screenshot": "chromium-light-desktop/wiki-new-entry.png",
-      "sha256": "194463e5201f1c6eaab5be576dc06bb2215d302fd1e99dbfa837d63d12d0f812",
+      "sha256": "c6936e21529463f165cd853adb9dbedcb7ca9e6df200e77819068b6cf1747b81",
       "p0Baseline": "d77d8e964898441bb773a7c0cebb1561f5f6a3844b11739594db162b43f6c38e",
       "mainCommits": [
         "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
         "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
         "a884fda36851b6257d6777efbc038c325cd75a45",
-        "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+        "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-fix-2ba6765d9"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
         "dd1d197ef0dde7a6e2693a761401778138426bb5",
-        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6"
+        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "wiki home",
       "change": [
         "A7",
         "A8",
         "A9",
-        "A10"
+        "A10",
+        "A12"
+      ]
+    },
+    {
+      "screenshot": "chromium-light-phone/notification-error.png",
+      "sha256": "878d8cd0da0bef99c79d05b778c7d1a06a2406bafcbf916df41da2b664a3c96e",
+      "p0Baseline": "9cd245f259ddd93569ffdfee9aa2bc55ab3e1f3469cb59314afed6c27a95e194",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
       ]
     },
     {
@@ -1619,6 +2189,116 @@
       "group": "project page",
       "change": [
         "A3"
+      ]
+    },
+    {
+      "screenshot": "chromium-light-phone/session-attachment-menu.png",
+      "sha256": "a6a5ebb78abd9f4705227e4ee6a44aa7c2152a59c5c58789be177bee5369216f",
+      "p0Baseline": "73987e3c014dac469138b1564e21478e93c5d44376607f54f587c292475b1f00",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
+      ]
+    },
+    {
+      "screenshot": "chromium-light-phone/session-attachment-staged.png",
+      "sha256": "5dfd09ce9aa97558b6f997e64e0f1f740a8605d0a40fd23d48218b5fb7a67af1",
+      "p0Baseline": "5f8eea566775512397762e9d4a4df146c8f016ae89fd3426a4cdba7be906850b",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
+      ]
+    },
+    {
+      "screenshot": "chromium-light-phone/session-composer-focus.png",
+      "sha256": "b461ffa052a168826ec2726b85e4b2c3c9b6e759fc307f8f505f36be33c1539d",
+      "p0Baseline": "58aa7ab6fe17276dcc3d2fa465d735a3e34950018092e9e8c06fc50461281089",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
+      ]
+    },
+    {
+      "screenshot": "chromium-light-phone/session-idle.png",
+      "sha256": "3f3ec1501c81ec3ed0166179202077ecd8d3d68914caafc6ebe7a881dd818b02",
+      "p0Baseline": "dd804528a07f0f37f85a1860fcf7b4918ea1a17cfe0bd840ea08ab84e8ccf79b",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
+      ]
+    },
+    {
+      "screenshot": "chromium-light-phone/session-streaming.png",
+      "sha256": "3dd7f87ec080eb8f595dcf68897bd916acc3c307eca95b50fce4afa9439dbdd7",
+      "p0Baseline": "c8df62d3ac623ce195d663a087e7e54e647567050efc189541e5e0b1534c759a",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
       ]
     },
     {
@@ -1921,6 +2601,28 @@
       ]
     },
     {
+      "screenshot": "webkit-dark-desktop/breakpoint-959-session.png",
+      "sha256": "35be5e51f19df1a58a4880ae198273ef25e0b232a0d3247190cf79bd5485b578",
+      "p0Baseline": "4117d7b22fca64369c5bef0549af387b62607894907ce77e7d2c7539edffa401",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
+      ]
+    },
+    {
       "screenshot": "webkit-dark-desktop/breakpoint-959-wiki.png",
       "sha256": "a9fd597d8a3269e1897b536cac47d07598d0c6118cc3db9105c4ea1eb4dba82d",
       "p0Baseline": "73934b4918b656ce6b4c32c0ddea12add2690b14d7539af5d698b98ebe5aa626",
@@ -1947,52 +2649,65 @@
     },
     {
       "screenshot": "webkit-dark-desktop/breakpoint-961-session.png",
-      "sha256": "e4ff9f96d16afff6193d49b6b397f609307aa2d8dc7b98119322e12477274ea5",
+      "sha256": "a62142f4b0403a171f7f99a3e55b57fe0e6276a283f15f035bf4aa1c5a465429",
       "p0Baseline": "ed7d99f1b64418f1f54df524a1c9dbe316f3820fd9fbe41995db0a9384ffc873",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "webkit-dark-desktop/breakpoint-961-wiki.png",
-      "sha256": "c6d00f7fe4e838f803b2eb4b9aac735b02de1a7f33927277f5ce9ce1b9d6c6cc",
+      "sha256": "9f84cd8e542cff492e0a859e90720fb8f5507198f110c0757d2f1e2cae30a3ed",
       "p0Baseline": "33b4b57707143d3f6182d9afbc20ce449835ffb5a215d8782dba7d6bc2b6ecf1",
       "mainCommits": [
         "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
         "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
         "a884fda36851b6257d6777efbc038c325cd75a45",
-        "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+        "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-fix-2ba6765d9"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
         "dd1d197ef0dde7a6e2693a761401778138426bb5",
-        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6"
+        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "wiki home",
       "change": [
         "A7",
         "A8",
         "A9",
-        "A10"
+        "A10",
+        "A12"
       ]
     },
     {
@@ -2040,197 +2755,342 @@
     },
     {
       "screenshot": "webkit-dark-desktop/profile.png",
-      "sha256": "61b76afdf248cc30b2a1c9fca04da79a0cd2b37fac7dd4184bcc8eacaf9f10b2",
+      "sha256": "6defe597090a656474f02256dcd705e11579786e5ecb95874918ec7eaeb11b3f",
       "p0Baseline": "7e602183d7575a135496b41e7cc2845c9ec5d37db6283ccd03a3a59b0c8911fc",
       "mainCommits": [
-        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-maint-d233a6cd0"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "dd1d197ef0dde7a6e2693a761401778138426bb5"
+        "dd1d197ef0dde7a6e2693a761401778138426bb5",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "profile page",
       "change": [
-        "A6"
+        "A6",
+        "A12"
       ]
     },
     {
       "screenshot": "webkit-dark-desktop/project-graph-fullscreen.png",
-      "sha256": "f9ad8b3983f3f30379ae0c689926727eefc72e25f093fc08223c1014d93490c9",
+      "sha256": "0cb2ef59f78c848d260081a13a12d9b9fadddc49fb5eb7f57bc33ced3bc7b811",
       "p0Baseline": "d1e26d498c48b8da568c60d4675f4dfce560de23a590f309ecc1cd381a8feab7",
       "mainCommits": [
-        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-93d3ec580"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "42e7e01f44a86473562557e2bcb239e5f8876772"
+        "42e7e01f44a86473562557e2bcb239e5f8876772",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "project page",
       "change": [
-        "A3"
+        "A3",
+        "A12"
       ]
     },
     {
       "screenshot": "webkit-dark-desktop/project-graph.png",
-      "sha256": "332c6743c4b872f2e20061de76e0695c1048a9b40da7e5ac3c0f9f3bff6c09bb",
+      "sha256": "06577c22c0720c2438957b08f13813d201764dc5b6d28efcbc880fc7f0fab709",
       "p0Baseline": "6ebd1ec5a2f928df1ac3fcb953ba84b0540a6377e8a625c21eea8f6f0441c980",
       "mainCommits": [
-        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-93d3ec580"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "42e7e01f44a86473562557e2bcb239e5f8876772"
+        "42e7e01f44a86473562557e2bcb239e5f8876772",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "project page",
       "change": [
-        "A3"
+        "A3",
+        "A12"
       ]
     },
     {
       "screenshot": "webkit-dark-desktop/project-overview.png",
-      "sha256": "f9e2c7789c7825c9bcf6873f32f48b1a5ae39c39d3e144ef69ee2b23043157b0",
+      "sha256": "9f91a985250ff64c1def13cf72c1f265b23cf52013640c2f0e30f590dee6e94e",
       "p0Baseline": "78e93546208e49d996196caf05ddfb874a0e89a9e8a8297e46999db6d7df74ba",
       "mainCommits": [
-        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-93d3ec580"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "42e7e01f44a86473562557e2bcb239e5f8876772"
+        "42e7e01f44a86473562557e2bcb239e5f8876772",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "project page",
       "change": [
-        "A3"
+        "A3",
+        "A12"
+      ]
+    },
+    {
+      "screenshot": "webkit-dark-desktop/projects-error.png",
+      "sha256": "6ab5b1696fb70c385db9063e2b3d21665717c5d008b46e8c5a25084977be0cef",
+      "p0Baseline": "ae48f589a075ac9bac4940d444421bcd13bdf23f09a2b5075e3b50553ed33c65",
+      "mainCommits": [
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "generatedFrom": {
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-cbe6a6635"
+      },
+      "projectLine": [
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "group": "projects list",
+      "change": [
+        "A12"
+      ]
+    },
+    {
+      "screenshot": "webkit-dark-desktop/projects-list.png",
+      "sha256": "5f659c07a445b1c945bdc4cfc75e255fc32f478ac02ef3039f8a3d072a291657",
+      "p0Baseline": "19d175489da0d30d293bcd11ff748b8af5600d901fd9f854546a945c5386f192",
+      "mainCommits": [
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "generatedFrom": {
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-cbe6a6635"
+      },
+      "projectLine": [
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "group": "projects list",
+      "change": [
+        "A12"
+      ]
+    },
+    {
+      "screenshot": "webkit-dark-desktop/projects-loading.png",
+      "sha256": "817cdf28cd285876e0fe50bebcb0e76e8c7b5891abbf41fdb2c09f9ddcd3474d",
+      "p0Baseline": "f78e2c028839e220c1f6ba4ed2557c3a21fa46f131978bfc0e75f15a5520d29b",
+      "mainCommits": [
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "generatedFrom": {
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-cbe6a6635"
+      },
+      "projectLine": [
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "group": "projects list",
+      "change": [
+        "A12"
+      ]
+    },
+    {
+      "screenshot": "webkit-dark-desktop/projects-search-empty.png",
+      "sha256": "05d3164d954f27561f156669f5ff19cabdd28e7c4fc6374f9f12745fc181b48f",
+      "p0Baseline": "46d2d9f7798f9ba0705d319975ad69c574ee0c3ea1a92a985b237c5db4e28e15",
+      "mainCommits": [
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "generatedFrom": {
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-cbe6a6635"
+      },
+      "projectLine": [
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "group": "projects list",
+      "change": [
+        "A12"
       ]
     },
     {
       "screenshot": "webkit-dark-desktop/session-attachment-menu.png",
-      "sha256": "b2df9e190848e6c5eb244302157ca6989b29626eb5b827479be67df1f7511f22",
+      "sha256": "d1e6b1f57069efbeae6903474d4725880454821e156f3b8898b4a0e6587c0c17",
       "p0Baseline": "fb8a664620ab1b2dd1c7131920324628a114e26caa86a2fee6bdfe5f5910156f",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "webkit-dark-desktop/session-attachment-staged.png",
-      "sha256": "eb879ff3ef8332a63bd72f1b7a87bde7a406d7fab2ff04e7cf5bf78c31b0d7c9",
+      "sha256": "e5c3f985e38a722a0019d5131c37f900a2d0e78f6ac8e9fd744e6aec7e68bfa7",
       "p0Baseline": "a986954a4e648f6cc568a51d969fa23c9f55d044ab06d8a0c100c2d35e03b2d6",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "webkit-dark-desktop/session-composer-focus.png",
-      "sha256": "e8af680658a0cff3b50b75f3863238c70880ee174dc008fc9f0394dab32ded16",
+      "sha256": "fd5fe622aa53377a3eddbcc89e75b701e48431d57c6e3d932f6f7ce0cb944088",
       "p0Baseline": "ff68ac401ca8e1e3019cbd63f5a9f82d91ed57328c8ca904b3c859c29093a253",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "webkit-dark-desktop/session-idle.png",
-      "sha256": "e41f995b0710acf727e92fb2b28659940906489b56a290490ed20046359e9ae4",
+      "sha256": "ee5201ad43c0dcfd4abfa3f08dffc0c0835811ff5191e8871cd7ee92e89f93c1",
       "p0Baseline": "810d6303b7898fc37200888b628c251df7b495e2250b3cf59a29557251960b9e",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "webkit-dark-desktop/session-streaming.png",
-      "sha256": "3a19089bf8d977eff5035d8ec3fa7fb7bbd94fab81547b9d39628f9591ec3b1f",
+      "sha256": "3380786e2d908c22bc5374d71d61c7d7d60b5d0a7a1be0417d2f7df939fd2474",
       "p0Baseline": "789fbb5d4fb5669124fbd52a1542302d50d49cc6797ad24d6a5fd5a93dd642d8",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
@@ -2261,68 +3121,80 @@
     },
     {
       "screenshot": "webkit-dark-desktop/settings.png",
-      "sha256": "638cbeba6786520151a615bd8f679b4b179c7949822a84f6865ab0196d059736",
+      "sha256": "ee8599f88fded863da3da0b5579a9dce8ca79864c24d65a3b58bf7989ec65998",
       "p0Baseline": "c2a6074c5a4004424ecce19c4ffb1d9411c9cb84956c859afaece745b6b59765",
       "mainCommits": [
         "4088d37e6d26243196161355e658d3e303939bf3",
         "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
-        "def134095f8031d3a2498dbfc9677e684bca0e67"
+        "def134095f8031d3a2498dbfc9677e684bca0e67",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "def134095f8031d3a2498dbfc9677e684bca0e67",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-fix-def134095"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
         "8ef6b60d1c18976cfca0c1bd98081bd381703c6e",
         "dd1d197ef0dde7a6e2693a761401778138426bb5",
-        "4d77d69b78a0e49ec9e7d6f61435cf3b4339f09c"
+        "4d77d69b78a0e49ec9e7d6f61435cf3b4339f09c",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "task panel and settings",
       "change": [
         "A4",
         "A6",
-        "A11"
+        "A11",
+        "A12"
       ]
     },
     {
       "screenshot": "webkit-dark-desktop/task-action-focus.png",
-      "sha256": "f05eeb9b19eab04d4670b6372863ce4cfe2bd6556f0289a733f6c0b1da407009",
+      "sha256": "7faa28663bc162938edc882005f5a05705b8ba29135819b77e022ca165e88304",
       "p0Baseline": "7bc713ca48b606db79d16c20b7d76b8c8ae70dab7923e1e03c29b4d6f24d2ddd",
       "mainCommits": [
-        "4088d37e6d26243196161355e658d3e303939bf3"
+        "4088d37e6d26243196161355e658d3e303939bf3",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "4088d37e6d26243196161355e658d3e303939bf3",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-4088d37e6"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e"
+        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "task panel and settings",
       "change": [
-        "A4"
+        "A4",
+        "A12"
       ]
     },
     {
       "screenshot": "webkit-dark-desktop/task-action-hover.png",
-      "sha256": "d4d41cbb300feadfc5980c487f8e001b1467d96018f2139daae12f4839975fa0",
+      "sha256": "be683362036780de6db46769c038be14826da479299ce77c9b4231734136b916",
       "p0Baseline": "752ae3b28626680ad8ba7a008479712360506147e3de00894130c59e6742b713",
       "mainCommits": [
-        "4088d37e6d26243196161355e658d3e303939bf3"
+        "4088d37e6d26243196161355e658d3e303939bf3",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "4088d37e6d26243196161355e658d3e303939bf3",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-4088d37e6"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e"
+        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "task panel and settings",
       "change": [
-        "A4"
+        "A4",
+        "A12"
       ]
     },
     {
@@ -2347,22 +3219,26 @@
     },
     {
       "screenshot": "webkit-dark-desktop/task-detail.png",
-      "sha256": "716e5d93bb3a20b6d36255c19e0d9b9f779cb505bb004e45c9d210d9fa074542",
+      "sha256": "0c44cd621c41bef3d91b4245dc5f87e95c650e90a9076da8b59f64bd4d77b2a4",
       "p0Baseline": "1f100e4c134db07de479538bc11197553c15b124d7328ed9a6e5c0060d57c442",
       "mainCommits": [
-        "4088d37e6d26243196161355e658d3e303939bf3"
+        "4088d37e6d26243196161355e658d3e303939bf3",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "4088d37e6d26243196161355e658d3e303939bf3",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-4088d37e6"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e"
+        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "task panel and settings",
       "change": [
-        "A4"
+        "A4",
+        "A12"
       ]
     },
     {
@@ -2387,56 +3263,64 @@
     },
     {
       "screenshot": "webkit-dark-desktop/wiki-home.png",
-      "sha256": "704c03ed0403c0c3c6bf2c17549e29f391a5d16b630262c15e41ac27d5d72a86",
+      "sha256": "b0d0c8f9ffe58d3e330cb719898968f1381632457fc1d13a260adfb2703ee778",
       "p0Baseline": "d8486450e8e29bb74f0b7b175d3d19f7d1adb2ce7e75daaa690dff086329f200",
       "mainCommits": [
         "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
         "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
         "a884fda36851b6257d6777efbc038c325cd75a45",
-        "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+        "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-fix-2ba6765d9"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
         "dd1d197ef0dde7a6e2693a761401778138426bb5",
-        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6"
+        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "wiki home",
       "change": [
         "A7",
         "A8",
         "A9",
-        "A10"
+        "A10",
+        "A12"
       ]
     },
     {
       "screenshot": "webkit-dark-desktop/wiki-new-entry.png",
-      "sha256": "7f280634d62da3929ea960cb190c1b13a55aa8d1750b8a4f8d8c598795478f74",
+      "sha256": "23a571354596a6542377ac7d6c11c0f6c2aa9792e80aa004642023d122038376",
       "p0Baseline": "8264becbeefc40412c158c1f1bfa535c674605b7c17407d346436eea157c39ab",
       "mainCommits": [
         "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
         "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
         "a884fda36851b6257d6777efbc038c325cd75a45",
-        "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+        "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-fix-2ba6765d9"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
         "dd1d197ef0dde7a6e2693a761401778138426bb5",
-        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6"
+        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "wiki home",
       "change": [
         "A7",
         "A8",
         "A9",
-        "A10"
+        "A10",
+        "A12"
       ]
     },
     {
@@ -2530,6 +3414,116 @@
       "group": "project page",
       "change": [
         "A3"
+      ]
+    },
+    {
+      "screenshot": "webkit-dark-phone/session-attachment-menu.png",
+      "sha256": "68a1afbe1b4c4e0cd467651288ac0e9d934707019239071cd2b7a03a162ca0d3",
+      "p0Baseline": "53e77a01dd67f94de15e2620939eff341ab4b84177d5e23fa932d02192724b49",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
+      ]
+    },
+    {
+      "screenshot": "webkit-dark-phone/session-attachment-staged.png",
+      "sha256": "36a81d09c68ab0c71af0a6351af68e4d5a894ea8c55f456e6dbfd303fb1f349d",
+      "p0Baseline": "3a76b9156075d82c91d4ca42892fd741f25b827fc842530e74cb0cada15362a6",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
+      ]
+    },
+    {
+      "screenshot": "webkit-dark-phone/session-composer-focus.png",
+      "sha256": "a7be3cf19bcfe9461ad917790f80f11e29708d6821f8218be091c730c2a284b1",
+      "p0Baseline": "7c4726da2ea9b3550d24b23d154306fa651197c887b0cdc98e39fe575bed1e29",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
+      ]
+    },
+    {
+      "screenshot": "webkit-dark-phone/session-idle.png",
+      "sha256": "4e8339818a1b5a806cf9a7f37f32ae583274795e8f49b832503ff25570d0992c",
+      "p0Baseline": "f8d569ed67365e15ecb80d274a6862299cb01f54c889f80ebd450b60ef966b52",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
+      ]
+    },
+    {
+      "screenshot": "webkit-dark-phone/session-streaming.png",
+      "sha256": "5532bf7d9d85d756bcdd19a1beabc25c4b498d679bde87566b61b80c01e53719",
+      "p0Baseline": "d4ee34eb79f525cbe1444cd3d3167aa6b62222638499a6343b9300cf50536aad",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
       ]
     },
     {
@@ -2835,6 +3829,28 @@
       ]
     },
     {
+      "screenshot": "webkit-light-desktop/breakpoint-959-session.png",
+      "sha256": "3d2dcca109d5a7f20c373f11e64352a5989c9e05cbafb6f296b81958ddcc5d05",
+      "p0Baseline": "0bdeb7116f017a8e1b385373b7694460939f62c3201221775d3a9f77799014bb",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
+      ]
+    },
+    {
       "screenshot": "webkit-light-desktop/breakpoint-959-wiki.png",
       "sha256": "8ffae3dddf66cc572c0d0005bd013af4006839db1e60565f6e6242b72479bc4b",
       "p0Baseline": "92b682d12c2021299d9899539196d6379adebca66e09ac8a6aa8dcb39c1ce24f",
@@ -2861,52 +3877,65 @@
     },
     {
       "screenshot": "webkit-light-desktop/breakpoint-961-session.png",
-      "sha256": "93d509b88741b601635142b3e3a8c2ac9c9be716bb1ee80811c5375e4c667ade",
+      "sha256": "392c03f40fa7f1e7a09991d619369f2fd136bfc16aaeabc432551ca45d6e36e0",
       "p0Baseline": "9e5b3682e793fbe4d523c3281a020eb1a636febad45a70c04d67408a542744be",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "webkit-light-desktop/breakpoint-961-wiki.png",
-      "sha256": "3da1dc18cb8840791f2a8dcb397244cbebcb0943b7006acb916a15a251d80620",
+      "sha256": "d18c04e6fe42b9069e139425ae15cdee3e9d2f12dde3589e2e173997e22ebef3",
       "p0Baseline": "05a565ee862a78c6ed0d3c0f69a87da5e3d940e6ca905e667960a759aea4bd3a",
       "mainCommits": [
         "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
         "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
         "a884fda36851b6257d6777efbc038c325cd75a45",
-        "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+        "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-fix-2ba6765d9"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
         "dd1d197ef0dde7a6e2693a761401778138426bb5",
-        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6"
+        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "wiki home",
       "change": [
         "A7",
         "A8",
         "A9",
-        "A10"
+        "A10",
+        "A12"
       ]
     },
     {
@@ -2954,197 +3983,342 @@
     },
     {
       "screenshot": "webkit-light-desktop/profile.png",
-      "sha256": "1ba88e058bf050bef54e3645b740af860b314e4a4e83e467f0f2f1fb4596fff2",
+      "sha256": "79d972e84ded03469b5ffb3c7657bec5343c67e8e3b1e5022e7acccdc39ad0e9",
       "p0Baseline": "0f8618857d899d8ae6d3bb72099706b19663b6796c6928345e972e6b0ba59272",
       "mainCommits": [
-        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+        "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-maint-d233a6cd0"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "dd1d197ef0dde7a6e2693a761401778138426bb5"
+        "dd1d197ef0dde7a6e2693a761401778138426bb5",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "profile page",
       "change": [
-        "A6"
+        "A6",
+        "A12"
       ]
     },
     {
       "screenshot": "webkit-light-desktop/project-graph-fullscreen.png",
-      "sha256": "a214da72a31f1818295647a030be68c5802a94a6580358f2c127252852612c32",
+      "sha256": "c0be1eba38a1d396f9574e78b7bece78e74e8749959d9885635de2964383d105",
       "p0Baseline": "10bf49e7579ff7f8ae298d8986c04f86ad235049bf7a69767090ba9a5ea42ae1",
       "mainCommits": [
-        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-93d3ec580"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "42e7e01f44a86473562557e2bcb239e5f8876772"
+        "42e7e01f44a86473562557e2bcb239e5f8876772",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "project page",
       "change": [
-        "A3"
+        "A3",
+        "A12"
       ]
     },
     {
       "screenshot": "webkit-light-desktop/project-graph.png",
-      "sha256": "acba11d51994eab384520514cc74c2ac43a2fac81d45144f4a4b0a808cfc3f33",
+      "sha256": "4418d20aba11b05a761e5ff5d9421c9ff28d82b3150978768566ef12a46b962c",
       "p0Baseline": "5e820ac81616f14a4997aac1ced8a2701572c940df11c7aeefc4e476ee3b103c",
       "mainCommits": [
-        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-93d3ec580"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "42e7e01f44a86473562557e2bcb239e5f8876772"
+        "42e7e01f44a86473562557e2bcb239e5f8876772",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "project page",
       "change": [
-        "A3"
+        "A3",
+        "A12"
       ]
     },
     {
       "screenshot": "webkit-light-desktop/project-overview.png",
-      "sha256": "00368a33d1727ba6b3f03b2a64bbbd4159100b83c0de5bc69ff62cbde5b3b101",
+      "sha256": "97e1f90a776f69d667d961b033e9e145b726a29cbd35dd04a31b887170e8ecd1",
       "p0Baseline": "04f48c13cb7040a66f59b3ac73e322848fee7bb72f478a267a4b0cce006ecac0",
       "mainCommits": [
-        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+        "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-93d3ec580"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "42e7e01f44a86473562557e2bcb239e5f8876772"
+        "42e7e01f44a86473562557e2bcb239e5f8876772",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "project page",
       "change": [
-        "A3"
+        "A3",
+        "A12"
+      ]
+    },
+    {
+      "screenshot": "webkit-light-desktop/projects-error.png",
+      "sha256": "7cc413b1b1758145ff73ef947c25b8703b1513a3b41117f23481249cff32f56e",
+      "p0Baseline": "756f48f62204f225f9f2efc628e0b3926e2a8d465cf316c7a903fa7a2eb5ee21",
+      "mainCommits": [
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "generatedFrom": {
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-cbe6a6635"
+      },
+      "projectLine": [
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "group": "projects list",
+      "change": [
+        "A12"
+      ]
+    },
+    {
+      "screenshot": "webkit-light-desktop/projects-list.png",
+      "sha256": "1dfdaf476b4e0f7385ae97be36add3a0968e3960ce451bb83ed66c28f3a2a850",
+      "p0Baseline": "6be690046e60b107a28673124cf7083a32677bae615df1fcb567aa742a07de24",
+      "mainCommits": [
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "generatedFrom": {
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-cbe6a6635"
+      },
+      "projectLine": [
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "group": "projects list",
+      "change": [
+        "A12"
+      ]
+    },
+    {
+      "screenshot": "webkit-light-desktop/projects-loading.png",
+      "sha256": "6eab08b15d3dffb67ece9e7eaa05e09bd7f90234842acb5d3fe2750a5471afc4",
+      "p0Baseline": "8c98fe979ac52e373d438a863df8b47e046ee96f336390c0f0ef2c76e016303a",
+      "mainCommits": [
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "generatedFrom": {
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-cbe6a6635"
+      },
+      "projectLine": [
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "group": "projects list",
+      "change": [
+        "A12"
+      ]
+    },
+    {
+      "screenshot": "webkit-light-desktop/projects-search-empty.png",
+      "sha256": "1ae048000ee7f69e69fea77535c6cb44f0d6772c6d8d24c7fc287280e7e8da8f",
+      "p0Baseline": "e062bda1b465572786cd598c44d63eb8ea33607a0fe24ce65f47e183950e9dac",
+      "mainCommits": [
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "generatedFrom": {
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-cbe6a6635"
+      },
+      "projectLine": [
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+      ],
+      "group": "projects list",
+      "change": [
+        "A12"
       ]
     },
     {
       "screenshot": "webkit-light-desktop/session-attachment-menu.png",
-      "sha256": "b69e66a95316eeba4930f739c6a2e874c3bbf42e24e5db890b4627495443cf26",
+      "sha256": "ada0146ca40b298d2e0d292029eb032f644735d607e7040fa45c52461928688e",
       "p0Baseline": "f34b38e6dcdf9a871e3ad90b110dde40dc5fe24f6fb26112eecc7c75538bee0d",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "webkit-light-desktop/session-attachment-staged.png",
-      "sha256": "eb1e94588de58bfc0844f1796ba802656d11659ec5e8b7399c2723d7046e65d5",
+      "sha256": "fcf7368837dd65fc6152431c92ca6e24d0efcfa405967029463fbc49e91c4e0b",
       "p0Baseline": "3b520ded580f6a3710ced2db8ebd06afdd4cfd47a7bbb4a9d5637eb91a35b317",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "webkit-light-desktop/session-composer-focus.png",
-      "sha256": "288a9e1377b5ba80580559fad6d06fa12e67291aee3179545f8f86be9288b8e4",
+      "sha256": "175eff365b40469e27bfa3d18c2d85c25b4260ccb12de80f8d82b7dfff0df9b8",
       "p0Baseline": "d04b86915c663e7cf268aa63d8fb8d24e7d2eedd8e055b33e6943743d2b8d2f6",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "webkit-light-desktop/session-idle.png",
-      "sha256": "e64dc792099ffb919f88fc019e89b29ea47f6673a8952453b15b25a5ad6f3693",
+      "sha256": "8e131649be7f67ddb840ff81a276863ed0cf632a4e243154fecad3aa16efd4b2",
       "p0Baseline": "0891aef3d541717ca05c671bbb700c5524d07a4cf0028102ef2b1221e83cf5f8",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
       "screenshot": "webkit-light-desktop/session-streaming.png",
-      "sha256": "9f84b9d8091fc5e099446abde0e6a3076aa456c0990baf58fecbdfddac8dbc72",
+      "sha256": "ac2f649ac3556f1cfa5708f18baea2c4eba5b0f2e91f3d4c21f3424d35c8e8a6",
       "p0Baseline": "47b5c55504f1d1404b1d2631bf6a5dac6cdc5ed5199d13fa27139191138301d6",
       "mainCommits": [
         "918034e7290646c96cf35dc6604a4831e59505ff",
-        "f5bdd7fd395452e85fab89aeba2870740c932f80"
+        "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
       ],
       "generatedFrom": {
-        "commit": "f5bdd7fd395452e85fab89aeba2870740c932f80",
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-f5bdd7fd3"
+        "run": "full-9d3751ec2"
       },
       "projectLine": [
         "ed108d8c8564a2cf56fa9a19491307683557722d",
-        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03"
+        "e5a470fe64788d940d2f2ce53d6cdb8f2b24ab03",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
       ],
       "group": "session list row",
       "change": [
         "A1",
-        "A2"
+        "A2",
+        "A12",
+        "A13",
+        "A14"
       ]
     },
     {
@@ -3175,68 +4349,80 @@
     },
     {
       "screenshot": "webkit-light-desktop/settings.png",
-      "sha256": "a4e778a07157657380a3da79dc8fb244087fc18424d2eee5736788ceac57ebac",
+      "sha256": "1ca8d75ff9a133c0097f7eaeada5f60b68fb0027a4959fcfc1b9a051c0c6f6f9",
       "p0Baseline": "2095110c8aa0d2b83f3aafa4513c6daecde71fde6100c1c98846c79cff0de269",
       "mainCommits": [
         "4088d37e6d26243196161355e658d3e303939bf3",
         "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
-        "def134095f8031d3a2498dbfc9677e684bca0e67"
+        "def134095f8031d3a2498dbfc9677e684bca0e67",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "def134095f8031d3a2498dbfc9677e684bca0e67",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-fix-def134095"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
         "8ef6b60d1c18976cfca0c1bd98081bd381703c6e",
         "dd1d197ef0dde7a6e2693a761401778138426bb5",
-        "4d77d69b78a0e49ec9e7d6f61435cf3b4339f09c"
+        "4d77d69b78a0e49ec9e7d6f61435cf3b4339f09c",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "task panel and settings",
       "change": [
         "A4",
         "A6",
-        "A11"
+        "A11",
+        "A12"
       ]
     },
     {
       "screenshot": "webkit-light-desktop/task-action-focus.png",
-      "sha256": "064cc3e3f1dd4d4f8cc4c4752a906ae624722b4822330c2cb696cacc102b94fe",
+      "sha256": "1d94d4e73e7373beab30cb3fd01872777b8880c625c7c8b55b9fc7cae4736e0e",
       "p0Baseline": "e2fd9d25de6e208be2f49dd08e6cd80ce470540e5ffbedf67b03abd25621b2c5",
       "mainCommits": [
-        "4088d37e6d26243196161355e658d3e303939bf3"
+        "4088d37e6d26243196161355e658d3e303939bf3",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "4088d37e6d26243196161355e658d3e303939bf3",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-4088d37e6"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e"
+        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "task panel and settings",
       "change": [
-        "A4"
+        "A4",
+        "A12"
       ]
     },
     {
       "screenshot": "webkit-light-desktop/task-action-hover.png",
-      "sha256": "94df294c82e9f0c7b049184a4fe27feeffe6891dacfccafa10b35ff9fc73b4b0",
+      "sha256": "9e55133ae4566a884b98bf4876200997b3d322b7bce1521cc46c6450fa652dc9",
       "p0Baseline": "fe27f5eebcf02549dda3b9626523c9cf02627b8c2e76d74c1efb1462663403a9",
       "mainCommits": [
-        "4088d37e6d26243196161355e658d3e303939bf3"
+        "4088d37e6d26243196161355e658d3e303939bf3",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "4088d37e6d26243196161355e658d3e303939bf3",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-4088d37e6"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e"
+        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "task panel and settings",
       "change": [
-        "A4"
+        "A4",
+        "A12"
       ]
     },
     {
@@ -3261,22 +4447,26 @@
     },
     {
       "screenshot": "webkit-light-desktop/task-detail.png",
-      "sha256": "096de3fe7b8170c165464098051c9bc6793bb872bf0593715d51267bee3bf058",
+      "sha256": "f2fee0d8b8fb84406b40c5954ceb2234ffb5a89a3c70fd029995a5e71d9f189e",
       "p0Baseline": "2f7c9ddeadac5dc37ed20dadcdbe7173b5b8abb8143b280f0aab09454cb0158b",
       "mainCommits": [
-        "4088d37e6d26243196161355e658d3e303939bf3"
+        "4088d37e6d26243196161355e658d3e303939bf3",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "4088d37e6d26243196161355e658d3e303939bf3",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full2-4088d37e6"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
-        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e"
+        "8ef6b60d1c18976cfca0c1bd98081bd381703c6e",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "task panel and settings",
       "change": [
-        "A4"
+        "A4",
+        "A12"
       ]
     },
     {
@@ -3301,56 +4491,64 @@
     },
     {
       "screenshot": "webkit-light-desktop/wiki-home.png",
-      "sha256": "62aa5f4e8286f6953e8813efaebae1c29cbeba38425c183381fd9f909aec9f8b",
+      "sha256": "d3f746a766ed07b05b87e6973b80ec05de0e0527ea82fd418e135d617a3643f9",
       "p0Baseline": "f0e2a2e88b4eeaddda40c2c17aeae93c2d9bcceb97422f7474c2195a351bf4dc",
       "mainCommits": [
         "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
         "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
         "a884fda36851b6257d6777efbc038c325cd75a45",
-        "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+        "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-fix-2ba6765d9"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
         "dd1d197ef0dde7a6e2693a761401778138426bb5",
-        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6"
+        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "wiki home",
       "change": [
         "A7",
         "A8",
         "A9",
-        "A10"
+        "A10",
+        "A12"
       ]
     },
     {
       "screenshot": "webkit-light-desktop/wiki-new-entry.png",
-      "sha256": "0eb3bdfeb672fffad6dd899977dcc3d8763d3a7b6b07c953100f0506d9c1766b",
+      "sha256": "b968378236aae49e545acbd48a3a0f3c62a98f48accf561b31a7ce217214cfd3",
       "p0Baseline": "9012286f05e87ae5b0aba0e727c00ac57e14e55cdefde396c836bc5b2490e4da",
       "mainCommits": [
         "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
         "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
         "a884fda36851b6257d6777efbc038c325cd75a45",
-        "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+        "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "generatedFrom": {
-        "commit": "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+        "commit": "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
         "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
-        "run": "full-fix-2ba6765d9"
+        "run": "full-cbe6a6635"
       },
       "projectLine": [
         "dd1d197ef0dde7a6e2693a761401778138426bb5",
-        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6"
+        "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6",
+        "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
       ],
       "group": "wiki home",
       "change": [
         "A7",
         "A8",
         "A9",
-        "A10"
+        "A10",
+        "A12"
       ]
     },
     {
@@ -3444,6 +4642,116 @@
       "group": "project page",
       "change": [
         "A3"
+      ]
+    },
+    {
+      "screenshot": "webkit-light-phone/session-attachment-menu.png",
+      "sha256": "3679f8fe036fe466f814f120a438064b9db0e1980bc38e37beb876b6bec84b28",
+      "p0Baseline": "693ed52ac4b28181851cf9c7848d9a16cd929fc9b504079b869c98fcd2588068",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
+      ]
+    },
+    {
+      "screenshot": "webkit-light-phone/session-attachment-staged.png",
+      "sha256": "7a80441f270b94d3cedc9e322dd73eb83fcf3e44fd2818c4d46fc4c6f4864fe2",
+      "p0Baseline": "681d802e82fe6a2e6410ea10439779a564d2bd92e4e2134c5a38872f99425f39",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
+      ]
+    },
+    {
+      "screenshot": "webkit-light-phone/session-composer-focus.png",
+      "sha256": "9965a9ad9fb4fd41df6cadaa322839cfe673cd642fbc044185616976b3bcae24",
+      "p0Baseline": "45254e6ab720f7935fd9bebf13fbaec66de991e40f3b6ab167b30139dd8d8dd7",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
+      ]
+    },
+    {
+      "screenshot": "webkit-light-phone/session-idle.png",
+      "sha256": "aeb56f4ec5131861d28b3596bf98ad2387783038023de4f5ac4870749a45bfd8",
+      "p0Baseline": "afcf7dc6b95ca73b0bcb60b7e97f9092fb24c2cd2c571a57fe4ae8f09f0ff21b",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
+      ]
+    },
+    {
+      "screenshot": "webkit-light-phone/session-streaming.png",
+      "sha256": "1b4eb6cb1361e48ed512b5c8ee350f1fb342f16223b46bdf769ec5c5fa45d8d1",
+      "p0Baseline": "247f9251aecd81336ed491704932054d9ae7aa34fd865258cc8ce0a03795a11e",
+      "mainCommits": [
+        "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+        "9d3751ec2633eba68eb3bee149782795d0426442"
+      ],
+      "generatedFrom": {
+        "commit": "9d3751ec2633eba68eb3bee149782795d0426442",
+        "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+        "run": "full-9d3751ec2"
+      },
+      "projectLine": [
+        "17980cb7cec9db1e006f02f56df976505b6090f1"
+      ],
+      "group": "session page",
+      "change": [
+        "A13",
+        "A14"
       ]
     },
     {
