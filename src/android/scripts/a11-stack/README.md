@@ -31,6 +31,8 @@ on this host, on loopback, at the fixed server SHA `d621e29aaa0178ecf6656c56656b
 | `lib.mjs` | the HTTP client the helpers share (loopback only), plus login from `accounts.json` |
 | `seed.mjs`, `seed-blocker.mjs` | the seed (called by `setup.sh seed` and `setup.sh reset`) |
 | `seed-start.mjs` | A11b: two projects nobody has started, for the start card — one whose coordinator files a start request through the runner's door (`projects.startAsked`), one nobody coordinates (`projects.startOwn`) |
+| `seed-close.mjs` | A11c: two projects whose coordinator asks "Is this project done?" through the runner's door (`projects.closeAsked/closeDecline`), two move requests between projects waiting for the owner (`projects.crossFrom/crossTo`), and a started manual project with one task ready to run by hand (`projects.runQueue`) |
+| `seed-stuck.mjs` | A11c, run by `stuck` only: a landing whose runner stopped reporting (`projects.landingStuck`) |
 | `verify.mjs` | capability checks through the API: auth, SSE, tasks, projects, open items, member isolation, runner |
 | `snapshot.mjs` | writes the live state into `seed.json` → `finalState` (read-only toward the stack) |
 | `api.mjs` | `node <stack>/api.mjs METHOD PATH [json] [--as owner\|member]` for ad-hoc reads and writes |
@@ -50,12 +52,14 @@ stack directory. The runner cannot see `/root`, where checkouts live, and `seed.
 | `db` | (re)creates the Postgres container on tmpfs and applies the migrations |
 | `start` | starts the apiserver, and the runner too once the seed has registered it |
 | `stop` | stops the runner and the apiserver. Postgres and its data stay |
-| `seed` | runs `seed.mjs`, `seed-blocker.mjs` and `seed-start.mjs`, which need a freshly migrated database |
+| `seed` | runs `seed.mjs`, `seed-blocker.mjs`, `seed-start.mjs` and `seed-close.mjs`, which need a freshly migrated database |
 | `status` | shows the source SHA, container, pids, `/api/health` and the listening ports |
 | `reset` | stops everything, wipes the runner state and sandbox repo, then runs `db`, `start` and `seed`: a freshly seeded stack in about 4 min |
 | `clean` | stops everything and removes the container and everything the script made under the stack directory (the directory itself goes once empty) |
 | `verify` | `node verify.mjs`: one line per check and exit 1 on any failure (24 checks, a few seconds). It adds a "Resolve check (verify.mjs)" task to the main project, fails it and resolves its exception itself |
 | `snapshot` | `node snapshot.mjs`: writes `seed.json` → `finalState` |
+| `stuck` | `node seed-stuck.mjs` (about 15 min): a project on its own branch with a 90 s merge check; its task runs DONE, and while its landing is in the check the runner is sent SIGSTOP. It waits until the integration view calls that job timed out and retryable (the 10 min claim lease plus the check's timeout). **The runner stays stopped** |
+| `unstick` | SIGCONT to the runner: it reports again, and a landing retried meanwhile runs |
 
 `register <token>` is internal: `seed.mjs` uses it.
 
@@ -101,6 +105,10 @@ A11_STACK_ARGS=<args file> bash src/android/scripts/tasks-projects-stack-device-
   run them with `A11_TEST=io.orbitd.android.taskprojects.RealStackDeviceTest#s14_…,…#s15_…` on a fresh `reset`. They were
   written against main's server; `s07` still assumes the older server's start door (Automatic is now on by default, and
   a start that cannot open a coordinator is refused).
+- A11c's journeys `s16`–`s19` (the done request answered in its conversation and with Not yet… on the project page, the
+  crossings answered, the run queue's Run) read `projects.closeAsked/closeDecline/crossFrom/crossTo/runQueue` and use
+  them up; `s20` (the landing's Retry) needs `stuck` first, then `snapshot` and the args script again. Run `unstick`
+  after it.
 
 ## Keep-alive (65 s)
 
