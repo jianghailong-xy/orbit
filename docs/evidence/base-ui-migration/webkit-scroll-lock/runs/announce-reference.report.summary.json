@@ -1,0 +1,910 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/announce.config.mjs",
+   "probe-announce-duplicate.browser.mjs"
+  ],
+  "configFile": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/announce.config.mjs",
+  "rootDir": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "probe-announce-duplicate.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "probe-announce-duplicate.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "probe-announce-duplicate.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "probe-announce-duplicate.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "probe-announce-duplicate.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "probe-announce-duplicate.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "probe-announce-duplicate.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "probe-announce-duplicate.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run preview -- --host 127.0.0.1 --port 4173 --strictPort",
+   "cwd": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/trees/base/src/web/",
+   "url": "http://127.0.0.1:4173",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "probe-announce-duplicate.browser.mjs",
+   "file": "probe-announce-duplicate.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "announce duplicate: Setting saved",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1221,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:03:43.067Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "announce-duplicate",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609/probe-announce-duplicate.b-f3286-nce-duplicate-Setting-saved-chromium-light-desktop/attachments/computed-styles-and-timings-9ae01911674049c12bacb440d309c8dd6392f5b1.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2709f69fc3806436f86b-fc807f00ae3593ecf6a4",
+     "file": "probe-announce-duplicate.browser.mjs",
+     "line": 16,
+     "column": 3
+    },
+    {
+     "title": "announce duplicate: Name saved",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 782,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:03:44.365Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "announce-duplicate",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609/probe-announce-duplicate.b-82eea-nounce-duplicate-Name-saved-chromium-light-desktop/attachments/computed-styles-and-timings-7a7d0be3e2ffd4d1e7654c66557d660ea60504c1.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2709f69fc3806436f86b-d2a90ee98100d1962e21",
+     "file": "probe-announce-duplicate.browser.mjs",
+     "line": 16,
+     "column": 3
+    },
+    {
+     "title": "announce duplicate: Setting saved",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 910,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:03:45.626Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "announce-duplicate",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609/probe-announce-duplicate.b-f3286-nce-duplicate-Setting-saved-chromium-light-phone/attachments/computed-styles-and-timings-6d17ebe43826a959faef75ab4d73512c6398906c.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2709f69fc3806436f86b-db4dcad0471f4762545a",
+     "file": "probe-announce-duplicate.browser.mjs",
+     "line": 16,
+     "column": 3
+    },
+    {
+     "title": "announce duplicate: Name saved",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 965,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:03:46.626Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "announce-duplicate",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609/probe-announce-duplicate.b-82eea-nounce-duplicate-Name-saved-chromium-light-phone/attachments/computed-styles-and-timings-54d7f214ea0a09df71ed8308c48875903f6eafcc.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2709f69fc3806436f86b-ff27b4ed3326614d0090",
+     "file": "probe-announce-duplicate.browser.mjs",
+     "line": 16,
+     "column": 3
+    },
+    {
+     "title": "announce duplicate: Setting saved",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1369,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:03:49.855Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "announce-duplicate",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609/probe-announce-duplicate.b-f3286-nce-duplicate-Setting-saved-chromium-dark-desktop/attachments/computed-styles-and-timings-745b5c991e0be62252c006125a725a711bf8a622.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2709f69fc3806436f86b-73d319c18a7990e00a5b",
+     "file": "probe-announce-duplicate.browser.mjs",
+     "line": 16,
+     "column": 3
+    },
+    {
+     "title": "announce duplicate: Name saved",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 896,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:03:51.460Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "announce-duplicate",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609/probe-announce-duplicate.b-82eea-nounce-duplicate-Name-saved-chromium-dark-desktop/attachments/computed-styles-and-timings-dbe7073b086904e8181917fb390301c75c901297.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2709f69fc3806436f86b-695514772b6aaa8d1e66",
+     "file": "probe-announce-duplicate.browser.mjs",
+     "line": 16,
+     "column": 3
+    },
+    {
+     "title": "announce duplicate: Setting saved",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 803,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:03:54.420Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "announce-duplicate",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609/probe-announce-duplicate.b-f3286-nce-duplicate-Setting-saved-chromium-dark-phone/attachments/computed-styles-and-timings-e71edbcc4da142397eb41e0ee8f1394fdba6948f.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2709f69fc3806436f86b-a87368a2c8547efe6921",
+     "file": "probe-announce-duplicate.browser.mjs",
+     "line": 16,
+     "column": 3
+    },
+    {
+     "title": "announce duplicate: Name saved",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 900,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:03:55.299Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "announce-duplicate",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609/probe-announce-duplicate.b-82eea-nounce-duplicate-Name-saved-chromium-dark-phone/attachments/computed-styles-and-timings-b925cda1fc3d1a93ff67793043593ec2182c2442.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2709f69fc3806436f86b-af06589d374afa0b69b0",
+     "file": "probe-announce-duplicate.browser.mjs",
+     "line": 16,
+     "column": 3
+    },
+    {
+     "title": "announce duplicate: Setting saved",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1224,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:03:58.366Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "announce-duplicate",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609/probe-announce-duplicate.b-f3286-nce-duplicate-Setting-saved-webkit-light-desktop/attachments/computed-styles-and-timings-ce91c4adb7ef9d56cf81bae864576111c75a1990.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2709f69fc3806436f86b-45a7b1bc4087f6182e45",
+     "file": "probe-announce-duplicate.browser.mjs",
+     "line": 16,
+     "column": 3
+    },
+    {
+     "title": "announce duplicate: Name saved",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2033,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:03:59.751Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "announce-duplicate",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609/probe-announce-duplicate.b-82eea-nounce-duplicate-Name-saved-webkit-light-desktop/attachments/computed-styles-and-timings-16801aab82e7e44e8af3ed9a83541b4c02d96865.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2709f69fc3806436f86b-0756e0980526ea90434f",
+     "file": "probe-announce-duplicate.browser.mjs",
+     "line": 16,
+     "column": 3
+    },
+    {
+     "title": "announce duplicate: Setting saved",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1272,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:04:03.815Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "announce-duplicate",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609/probe-announce-duplicate.b-f3286-nce-duplicate-Setting-saved-webkit-light-phone/attachments/computed-styles-and-timings-c5d152bddfe1a3e294d00b1994ee32029a8ccfe6.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2709f69fc3806436f86b-f6afc00f75c55866c1a1",
+     "file": "probe-announce-duplicate.browser.mjs",
+     "line": 16,
+     "column": 3
+    },
+    {
+     "title": "announce duplicate: Name saved",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1550,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:04:05.179Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "announce-duplicate",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609/probe-announce-duplicate.b-82eea-nounce-duplicate-Name-saved-webkit-light-phone/attachments/computed-styles-and-timings-d35c6d10c6730870d6f01ed68c920c3469f5bfa9.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2709f69fc3806436f86b-85899cf31341e65890ac",
+     "file": "probe-announce-duplicate.browser.mjs",
+     "line": 16,
+     "column": 3
+    },
+    {
+     "title": "announce duplicate: Setting saved",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1036,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:04:08.121Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "announce-duplicate",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609/probe-announce-duplicate.b-f3286-nce-duplicate-Setting-saved-webkit-dark-desktop/attachments/computed-styles-and-timings-93087c7ac706a64fe9d77aba341159eb778d6ac3.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2709f69fc3806436f86b-592bd8f33580c031a347",
+     "file": "probe-announce-duplicate.browser.mjs",
+     "line": 16,
+     "column": 3
+    },
+    {
+     "title": "announce duplicate: Name saved",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1115,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:04:09.252Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "announce-duplicate",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609/probe-announce-duplicate.b-82eea-nounce-duplicate-Name-saved-webkit-dark-desktop/attachments/computed-styles-and-timings-07b598e5eff8a3b09a46fa82fcb13b3ab1df726f.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2709f69fc3806436f86b-071e132e912e0774c24c",
+     "file": "probe-announce-duplicate.browser.mjs",
+     "line": 16,
+     "column": 3
+    },
+    {
+     "title": "announce duplicate: Setting saved",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1484,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:04:12.415Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "announce-duplicate",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609/probe-announce-duplicate.b-f3286-nce-duplicate-Setting-saved-webkit-dark-phone/attachments/computed-styles-and-timings-1e877df5b445e27d093205e8a3d6bace7b6d2fa5.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2709f69fc3806436f86b-64b804fc72f946314da4",
+     "file": "probe-announce-duplicate.browser.mjs",
+     "line": 16,
+     "column": 3
+    },
+    {
+     "title": "announce duplicate: Name saved",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1161,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T01:04:14.123Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "announce-duplicate",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-f2-announce-15b7b5609/probe-announce-duplicate.b-82eea-nounce-duplicate-Name-saved-webkit-dark-phone/attachments/computed-styles-and-timings-3c8de4166431416a5cf7f29d72c74d47137f0e88.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2709f69fc3806436f86b-8c35bdcbb3e90b50c3f4",
+     "file": "probe-announce-duplicate.browser.mjs",
+     "line": 16,
+     "column": 3
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-09T01:03:35.849Z",
+  "duration": 39901.366,
+  "expected": 16,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

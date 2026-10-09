@@ -12,7 +12,10 @@
  *      job's report — and the wake-up that ends the job's wait comes over pg_notify, with the poll as the fallback;
  *   5. a request that waited past its step's limit fails, and the job that made it fails as infra: back to queued with
  *      the lost attempt counted, not the space's failure to carry;
- *   6. a job of a kind this build runs no pipeline for stays queued.
+ *   6. a job of a kind this build runs no pipeline for stays queued;
+ *   7. the retry limit (`jobs.retry.limit`, 2026-10-09): an error the build did not expect ends the job at its third
+ *      attempt and its plan job with it; an infra failure ends it at its tenth, and its maintenance run with it; and a
+ *      job the lease sweep puts back at the limit is ended by the next pass, never run again, its calls cancelled.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-jobs.pg.spec.ts
  *
@@ -31,7 +34,8 @@ import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
-import { WikiJobExecutor } from './wiki-job-executor';
+import { WikiJobReads } from '../wiki/wiki-job-reads';
+import { WikiJobExecutor, WikiJobInfraError, type WikiJobRunner } from './wiki-job-executor';
 import { claimWikiJobs, enqueueWikiJob } from './wiki-jobs';
 import { WikiModelRequestChannel } from './wiki-model-notify';
 import { enqueueWikiModelRequest, WIKI_MODEL_WAIT_LIMIT_ERROR as WAIT_LIMIT, wikiModelRequestSha256 } from './wiki-model-queue';
@@ -211,7 +215,7 @@ afterEach(async () => {
 });
 
 /** The executor under test, with its own queue: fast timings, so a pass is milliseconds of work. */
-function worker(h: Harness, options: { channel?: WikiModelRequestChannel; pollMs?: number; concurrency?: number } = {}): {
+function worker(h: Harness, options: { channel?: WikiModelRequestChannel; pollMs?: number; concurrency?: number; runners?: Record<string, WikiJobRunner> } = {}): {
   queue: WikiModelRequestQueue;
   executor: WikiJobExecutor;
 } {
@@ -221,7 +225,7 @@ function worker(h: Harness, options: { channel?: WikiModelRequestChannel; pollMs
     new WikiModelStatusProbe(h.prisma as unknown as PrismaService, config(h, options.concurrency ?? 2)),
     options.channel, options_,
   );
-  const executor = new WikiJobExecutor(h.prisma as unknown as PrismaService, queue, options_);
+  const executor = new WikiJobExecutor(h.prisma as unknown as PrismaService, queue, options_, options.runners);
   live.push({ queue, executor });
   return { queue, executor };
 }
@@ -477,4 +481,145 @@ test('a job of a kind this build runs no pipeline for stays queued', { skip, tim
   assert.equal((await jobRow(h, id)).state, 'queued', 'the phase that implements it will take it');
   await queue.onModuleDestroy();
   await executor.onModuleDestroy();
+});
+
+// ── 7. the retry limit (`jobs.retry.limit`) ─────────────────────────────────────────────────────
+
+// The limits as the contract states them (`jobs.retry`, pinned to WIKI_JOB by src/shared/src/wikiContract.spec.ts):
+// ten attempts in all, three for an error the build did not expect.
+const MAX_ATTEMPTS = 10;
+const UNEXPECTED_MAX_ATTEMPTS = 3;
+
+/** One attempt of every due job: a pass, its runs to their end, and the backoff skipped so the next one is due now. */
+async function attempt(h: Harness, executor: WikiJobExecutor, id: string): Promise<JobRow> {
+  await executor.runOnce();
+  await executor.whenIdle();
+  await h.sql.query(`UPDATE "wiki_job" SET "next_attempt_at" = now() WHERE "id" = $1 AND "state" = 'queued'`, [id]);
+  return jobRow(h, id);
+}
+
+/** A build of the space's plan made by a docs_build job, as the owner's confirmation makes one (plan.jobs.server). */
+async function buildJob(h: Harness, spaceId: string, over: { attempts?: number } = {}): Promise<{ jobId: string; planJobId: string }> {
+  const planJobId = randomUUID();
+  const jobId = await job(h, { kind: 'docs_build', spaceId, priority: 1, input: { planJobId } });
+  if (over.attempts) await h.sql.query('UPDATE "wiki_job" SET "attempts" = $2 WHERE "id" = $1', [jobId, over.attempts]);
+  await h.sql.query(
+    `INSERT INTO "wiki_plan_job"("id","space_id","owner_id","kind","trigger","state","version","job_id","made_at")
+     VALUES ($1,$2,$3,'build','owner','made',27,$4::uuid,now())`,
+    [planJobId, spaceId, h.owner.id, jobId],
+  );
+  return { jobId, planJobId };
+}
+
+async function planJobRow(h: Harness, id: string): Promise<{ state: string; outcome: string | null; error: string | null; job_id: string | null }> {
+  return (await h.sql.query<{ state: string; outcome: string | null; error: string | null; job_id: string | null }>(
+    'SELECT "state","outcome","error","job_id" FROM "wiki_plan_job" WHERE "id" = $1', [id])).rows[0];
+}
+
+test('an error the build did not expect ends the job at its third attempt, with its plan job, and Activity reads why', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  await reset(h);
+  await modelUp(h);
+  // docs_build 79620f23 (2026-10-09): the writer's assertion failed at every attempt, and the job was put back
+  // every time its space was free.
+  const SHOWN = "docs/article-durable-agent-work.md was shown before it was read: the build reads a section's files first";
+  let runs = 0;
+  const { queue, executor } = worker(h, {
+    runners: {
+      docs_build: async () => {
+        runs += 1;
+        throw new Error(SHOWN);
+      },
+    },
+  });
+  const { jobId, planJobId } = await buildJob(h, h.owner.spaceId);
+  for (let i = 1; i < UNEXPECTED_MAX_ATTEMPTS; i += 1) {
+    const row = await attempt(h, executor, jobId);
+    assert.deepEqual([row.state, row.attempts, row.failure_kind, row.error], ['queued', i, 'infra', SHOWN], `attempt ${i} is retried in case it was passing`);
+  }
+  const ended = await attempt(h, executor, jobId);
+  assert.deepEqual([ended.state, ended.attempts, ended.failure_kind], ['failed', UNEXPECTED_MAX_ATTEMPTS, 'infra'], `attempt ${UNEXPECTED_MAX_ATTEMPTS} ends it`);
+  assert.equal(ended.error, `Ended after ${UNEXPECTED_MAX_ATTEMPTS} attempts (an error this build did not expect): ${SHOWN}`);
+  const { rows } = await h.sql.query<{ ended_at: Date | null; lease_owner: string | null }>('SELECT "ended_at","lease_owner" FROM "wiki_job" WHERE "id" = $1', [jobId]);
+  assert.ok(rows[0].ended_at, 'the job ended');
+  assert.equal(rows[0].lease_owner, null);
+  // Its plan job ends with it, still naming its maker: the plan page reads the build as failed, and why.
+  assert.deepEqual(await planJobRow(h, planJobId), { state: 'ended', outcome: 'failed', error: ended.error, job_id: jobId });
+  // Activity's Runs card reads the job's end and its error (jobs.read).
+  const read = await new WikiJobReads(h.prisma as unknown as PrismaService).read(h.owner.id, h.owner.spaceId);
+  const shown = read.jobs.find((one) => one.id === jobId);
+  assert.deepEqual([shown?.state, shown?.failureKind, shown?.attempts, shown?.error], ['failed', 'infra', UNEXPECTED_MAX_ATTEMPTS, ended.error]);
+  // It is not tried again.
+  await pass(executor, queue, 3);
+  await executor.whenIdle();
+  assert.equal(runs, UNEXPECTED_MAX_ATTEMPTS, 'tried three times, and no more');
+  assert.equal((await jobRow(h, jobId)).state, 'failed');
+});
+
+test('an infra failure ends the job at its tenth attempt, and its maintenance run ends failed / infra with it', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  await reset(h);
+  await modelUp(h);
+  const REPO = "REPO_NOT_READY: the space's repository cannot be read now (runner_offline)";
+  let runs = 0;
+  const { queue, executor } = worker(h, {
+    runners: {
+      maintain: async () => {
+        runs += 1;
+        throw new WikiJobInfraError(REPO);
+      },
+    },
+  });
+  const runId = randomUUID();
+  const jobId = await job(h, { kind: 'maintain', spaceId: h.owner.otherSpaceId, input: { runId } });
+  await h.prisma.wikiMaintenanceRun.create({
+    data: { id: runId, spaceId: h.owner.otherSpaceId, ownerId: h.owner.id, jobId, due: 'backlog', backlog: 1, pendingSessions: 1, startedAt: new Date() },
+  });
+  for (let i = 1; i < MAX_ATTEMPTS; i += 1) {
+    const row = await attempt(h, executor, jobId);
+    assert.deepEqual([row.state, row.attempts, row.failure_kind], ['queued', i, 'infra'], `attempt ${i} of the platform's failure is retried`);
+  }
+  // The run stays open while its job is retried: the next attempt starts it again.
+  assert.equal((await h.prisma.wikiMaintenanceRun.findUniqueOrThrow({ where: { id: runId } })).outcome, null);
+  const ended = await attempt(h, executor, jobId);
+  assert.deepEqual([ended.state, ended.attempts, ended.failure_kind, ended.error], ['failed', MAX_ATTEMPTS, 'infra', `Ended after ${MAX_ATTEMPTS} attempts: ${REPO}`]);
+  const run = await h.prisma.wikiMaintenanceRun.findUniqueOrThrow({ where: { id: runId } });
+  assert.deepEqual([run.outcome, run.failureKind, run.error, run.endedAt !== null], ['failed', 'infra', ended.error, true],
+    'the run ends as the platform\'s failure: the space\'s streak is not the pipeline\'s to carry');
+  await pass(executor, queue, 3);
+  await executor.whenIdle();
+  assert.equal(runs, MAX_ATTEMPTS, 'tried ten times, and no more');
+});
+
+test('a job the lease sweep puts back at the limit is ended by the next pass and never run again; its calls are cancelled', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  await reset(h);
+  await modelUp(h);
+  let runs = 0;
+  const { executor } = worker(h, {
+    runners: {
+      docs_build: async () => {
+        runs += 1;
+        return {};
+      },
+    },
+  });
+  // A worker that died while it ran the job's last attempt: running under a lease that ran out, one call still queued.
+  const { jobId, planJobId } = await buildJob(h, h.owner.spaceId, { attempts: MAX_ATTEMPTS - 1 });
+  await h.sql.query(
+    `UPDATE "wiki_job" SET "state" = 'running', "lease_owner" = $2, "lease_generation" = $3, "lease_deadline_at" = now() - interval '1 second', "started_at" = now()
+      WHERE "id" = $1`, [jobId, randomUUID(), randomUUID()]);
+  const call = await enqueueWikiModelRequest(h.prisma as unknown as PrismaService, {
+    id: randomUUID(), jobId, ownerId: h.owner.id, spaceId: h.owner.spaceId, step: 'docs_write', unit: 'doc#s1#abc', attempt: 1, priority: 1,
+    request: { system: 's', prompt: 'p', maxTokens: 10 },
+  });
+  await executor.runOnce();
+  await executor.whenIdle();
+  const ended = await jobRow(h, jobId);
+  assert.deepEqual([ended.state, ended.attempts, ended.failure_kind], ['failed', MAX_ATTEMPTS, 'infra'], 'the sweep counted the lost attempt, and the pass ended the job');
+  assert.equal(ended.error, `Ended after ${MAX_ATTEMPTS} attempts: LEASE_EXPIRED: the worker holding this job stopped before settling it`);
+  assert.equal(runs, 0, 'a job at the limit is never claimed again');
+  assert.deepEqual(await planJobRow(h, planJobId), { state: 'ended', outcome: 'failed', error: ended.error, job_id: jobId });
+  const request = await h.prisma.wikiModelRequest.findUniqueOrThrow({ where: { id: call.id } });
+  assert.equal(request.state, 'cancelled', 'no model time is spent on a call nobody will read');
 });

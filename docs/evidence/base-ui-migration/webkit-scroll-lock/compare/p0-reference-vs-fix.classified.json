@@ -1,0 +1,342 @@
+[
+ {
+  "file": "chromium-dark-desktop/breakpoint-639-graph.png",
+  "differentPixels": 28,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-desktop/breakpoint-639-projects.png",
+  "differentPixels": 7,
+  "maxChannelDelta": 4,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-desktop/notification-error.png",
+  "differentPixels": 3,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-desktop/profile-validation.png",
+  "differentPixels": 12,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-phone/settings-saved.png",
+  "differentPixels": 16,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-phone/wiki-contents.png",
+  "differentPixels": 14,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-phone/wiki-home.png",
+  "differentPixels": 27,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-phone/wiki-new-entry.png",
+  "differentPixels": 10,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/breakpoint-639-graph.png",
+  "differentPixels": 12,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/breakpoint-959-wiki.png",
+  "differentPixels": 14,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/breakpoint-961-session.png",
+  "differentPixels": 3,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/notification-error.png",
+  "differentPixels": 3,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/project-graph.png",
+  "differentPixels": 4,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/session-attachment-menu.png",
+  "differentPixels": 3,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/session-attachment-staged.png",
+  "differentPixels": 3,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/session-composer-focus.png",
+  "differentPixels": 3,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/session-idle.png",
+  "differentPixels": 3,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/session-streaming.png",
+  "differentPixels": 3,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/settings-saved.png",
+  "differentPixels": 42,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-phone/profile-validation.png",
+  "differentPixels": 35,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-phone/wiki-contents.png",
+  "differentPixels": 18,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-phone/wiki-home.png",
+  "differentPixels": 50,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "webkit-dark-desktop/notification-error.png",
+  "differentPixels": 27115,
+  "maxChannelDelta": 255,
+  "p0Comparator": "10149 pixels (ratio 0.01 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 5023,
+   "shift8": 14565,
+   "other": 326
+  },
+  "otherBox": [
+   873,
+   23,
+   1243,
+   871
+  ]
+ },
+ {
+  "file": "webkit-dark-desktop/profile-validation.png",
+  "differentPixels": 51674,
+  "maxChannelDelta": 255,
+  "p0Comparator": "15662 pixels (ratio 0.02 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 37657,
+   "shift8": 6813,
+   "other": 3
+  },
+  "otherBox": [
+   584,
+   159,
+   584,
+   172
+  ]
+ },
+ {
+  "file": "webkit-dark-desktop/settings-saved.png",
+  "differentPixels": 66395,
+  "maxChannelDelta": 255,
+  "p0Comparator": "20709 pixels (ratio 0.02 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 53609,
+   "shift8": 5583,
+   "other": 2
+  },
+  "otherBox": [
+   831,
+   195,
+   833,
+   198
+  ]
+ },
+ {
+  "file": "webkit-dark-phone/notification-error.png",
+  "differentPixels": 6753,
+  "maxChannelDelta": 255,
+  "p0Comparator": "6599 pixels (ratio 0.03 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 6753,
+   "shift4": 0,
+   "shift8": 0,
+   "other": 0
+  },
+  "otherBox": null
+ },
+ {
+  "file": "webkit-dark-phone/profile-validation.png",
+  "differentPixels": 6753,
+  "maxChannelDelta": 255,
+  "p0Comparator": "6728 pixels (ratio 0.03 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 6753,
+   "shift4": 0,
+   "shift8": 0,
+   "other": 0
+  },
+  "otherBox": null
+ },
+ {
+  "file": "webkit-dark-phone/settings-saved.png",
+  "differentPixels": 6753,
+  "maxChannelDelta": 255,
+  "p0Comparator": "6726 pixels (ratio 0.03 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 6753,
+   "shift4": 0,
+   "shift8": 0,
+   "other": 0
+  },
+  "otherBox": null
+ },
+ {
+  "file": "webkit-light-desktop/notification-error.png",
+  "differentPixels": 29906,
+  "maxChannelDelta": 255,
+  "p0Comparator": "3131 pixels (ratio 0.01 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 5193,
+   "shift8": 17259,
+   "other": 253
+  },
+  "otherBox": [
+   876,
+   23,
+   1243,
+   871
+  ]
+ },
+ {
+  "file": "webkit-light-desktop/profile-validation.png",
+  "differentPixels": 47775,
+  "maxChannelDelta": 255,
+  "p0Comparator": "9314 pixels (ratio 0.01 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 32906,
+   "shift8": 7665,
+   "other": 3
+  },
+  "otherBox": [
+   584,
+   159,
+   584,
+   172
+  ]
+ },
+ {
+  "file": "webkit-light-desktop/settings-saved.png",
+  "differentPixels": 63266,
+  "maxChannelDelta": 255,
+  "p0Comparator": "14799 pixels (ratio 0.02 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 49622,
+   "shift8": 6439,
+   "other": 4
+  },
+  "otherBox": [
+   831,
+   195,
+   833,
+   198
+  ]
+ },
+ {
+  "file": "webkit-light-phone/notification-error.png",
+  "differentPixels": 6753,
+  "maxChannelDelta": 255,
+  "p0Comparator": "match",
+  "class": {
+   "scrollbar": 6753,
+   "shift4": 0,
+   "shift8": 0,
+   "other": 0
+  },
+  "otherBox": null
+ },
+ {
+  "file": "webkit-light-phone/profile-validation.png",
+  "differentPixels": 6753,
+  "maxChannelDelta": 255,
+  "p0Comparator": "match",
+  "class": {
+   "scrollbar": 6753,
+   "shift4": 0,
+   "shift8": 0,
+   "other": 0
+  },
+  "otherBox": null
+ },
+ {
+  "file": "webkit-light-phone/settings-saved.png",
+  "differentPixels": 6753,
+  "maxChannelDelta": 255,
+  "p0Comparator": "match",
+  "class": {
+   "scrollbar": 6753,
+   "shift4": 0,
+   "shift8": 0,
+   "other": 0
+  },
+  "otherBox": null
+ }
+]

@@ -11942,6 +11942,202 @@ button.chat-jump-start:hover {
   color: var(--text-2);
   font-size: 12px;
 }
+/* What a question becomes once it has ended (`AnsweredQuestionCard`,
+   docs/mocks/coordinator-question-answered/): the question card's own blue, dimmed, with the
+   question's opening and how it ended; its review replays the question and every option. */
+.review-card-preview.answered-question-card {
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--brand-border);
+  border-radius: 10px;
+  background: var(--brand-tint);
+  opacity: 0.85;
+}
+.answered-question-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.answered-question-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--brand-tint-hover);
+  color: var(--brand);
+  font-size: 13px;
+}
+.answered-question-card.is-withdrawn .answered-question-icon {
+  background: var(--bg-raised);
+  color: var(--text-3);
+}
+.answered-question-heading {
+  min-width: 0;
+  font-weight: 600;
+  font-size: 15px;
+}
+.answered-question-time {
+  margin-left: auto;
+  flex: none;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.answered-question-lead {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+.answered-question-answer {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--text-1);
+}
+.answered-question-tick {
+  flex: none;
+  color: var(--brand);
+}
+.answered-question-note {
+  overflow: hidden;
+  padding-left: 20px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.answered-question-waiting {
+  font-size: 12.5px;
+  color: var(--warning);
+}
+.answered-question-withdrew {
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.answered-question-reason {
+  font-size: 14px;
+  color: var(--text-1);
+}
+.answered-question-open {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid var(--brand-border);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand);
+}
+.answered-question-provenance {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 4px 0 2px;
+}
+/* The mark leads here: it carries its own `margin-left: auto` for the cards whose head it ends. */
+.answered-question-provenance .criteria-provenance {
+  margin-left: 0;
+}
+.answered-question-asked {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-3);
+}
+/* An option as it was offered: the chosen one ticked on a light blue, the rest grey but readable. */
+.answered-question-option {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  margin: 6px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+.answered-question-option.is-chosen {
+  background: var(--brand-tint-hover);
+  color: var(--text-1);
+}
+.answered-question-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  border: 1.5px solid var(--text-3);
+  border-radius: 50%;
+}
+.answered-question-option.is-chosen .answered-question-mark {
+  border: 0;
+  color: var(--brand);
+  font-size: 16px;
+}
+.answered-question-option-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.answered-question-recommended {
+  font-size: 12px;
+  color: var(--brand);
+}
+.answered-question-words {
+  display: flex;
+  flex-direction: column;
+  margin-top: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  white-space: pre-wrap;
+}
+.answered-question-words.is-free {
+  margin: 8px 0 4px;
+  background: var(--brand-tint-hover);
+}
+.answered-question-words-label {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.card-actions.answered-question-footer {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  background: var(--bg-raised);
+}
+.answered-question-footer-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.answered-question-footer-line > .anticon-check-circle {
+  color: var(--success);
+}
+.answered-question-footer-line > .anticon-rollback {
+  color: var(--text-3);
+}
+.answered-question-footer-detail {
+  padding-left: 20px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.answered-question-footer-detail.is-waiting {
+  color: var(--warning);
+}
 /* The binding, said and never shown: the press carries the proposal's one-time key. */
 .criteria-decision-bound {
   margin-left: auto;

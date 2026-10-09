@@ -16,7 +16,11 @@
  *      `orbit wiki docs build` asks its session's model nothing;
  *   5. a space whose maintenance names no workspace holds the build, on the server path too; and a build the server
  *      never started is cancelled when the switch goes back to runner, by the next confirmation's request;
- *   6. a worker that stops mid-build: the next one finishes it, asking no call twice and writing each section once.
+ *   6. a worker that stops mid-build: the next one finishes it, asking no call twice and writing each section once;
+ *   7. a plan of version 27's shape (2026-10-09): sections of one document that name the same article are built side
+ *      by side, and each is shown the article only once its read landed;
+ *   8. a session condition whose projects are { id, title } — the read's spelling — is read as ids by every reader on
+ *      the way: the plan's reads, the runner door's material and the build's own.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-docs-build-job.pg.spec.ts
  *
@@ -857,4 +861,115 @@ test('a made plan job names one maker — its task, or its wiki job — and made
   assert.match(untimed?.message ?? '', /wiki_plan_job_made_chk/u);
   const both = await insert(`'made',1,$4::uuid,$5::uuid,now()`, [randomUUID(), wikiJob]);
   assert.match(both?.message ?? '', /wiki_plan_job_maker_chk/u);
+});
+
+// ── 7 and 8. version 27 (2026-10-09) ──────────────────────────────────────────────────────────────────
+
+const ARTICLE = 'docs/article-durable-agent-work.md';
+const ARTICLE_TEXT = '# Durable agent work\n\n## 1. Turns outlive runners\n\nA turn is stored before it is delivered, so it outlives the runner that ran it.\n\n'
+  + '## 2. Where the suite runs\n\nThe full suite runs on the runner host, never in the engine\'s Bash.\n';
+
+function treeWithArticle(sha: string): Tree {
+  return { sha, files: { ...tree(sha).files, [ARTICLE]: ARTICLE_TEXT } };
+}
+
+/** Version 27's shape: the mechanism and the conventions of one document both name the same article. */
+function articlePlanFor(s: Scene): Record<string, unknown> {
+  const plan = planFor(s) as { docs: Array<{ sections: Array<{ sources: { docs?: unknown[] } }> }> };
+  const [, flow, conventions] = plan.docs[0].sections;
+  flow.sources.docs = [...(flow.sources.docs ?? []), { path: ARTICLE, section: '1. Turns outlive runners' }];
+  conventions.sources.docs = [{ path: ARTICLE, section: '2. Where the suite runs' }];
+  return plan;
+}
+
+/** Passes until the build ends — or until an attempt of it failed and went back to the queue, which is as far as it gets. */
+async function buildEnd(h: Harness, w: { queue: WikiModelRequestQueue; executor: WikiJobExecutor }, jobId: string): Promise<JobRow> {
+  await passes(w, async () => {
+    const row = await job(h, jobId);
+    return ['succeeded', 'failed', 'cancelled'].includes(row.state) || row.error !== null;
+  }, `the build ${jobId} to end`);
+  await w.executor.whenIdle();
+  return job(h, jobId);
+}
+
+test('a plan of version 27\'s shape builds: sections that name one article each wait for its read (2026-10-09, «was shown before it was read»)', { skip, timeout: 180_000 }, async () => {
+  const h = await boot();
+  await modelUp(h);
+  const s = await scene(h, 'v27');
+  const version = await draft(h, s, articlePlanFor(s));
+  executor('canary', [s.owner.id]);
+  await confirm(h, s, version);
+  const [row] = await builds(h, s.spaceId);
+  const HEAD = createHash('sha1').update(`head-${randomUUID()}`).digest('hex');
+  const runner = playRunner(h, s.runner.id, () => treeWithArticle(HEAD));
+  const ended = await buildEnd(h, worker(h), row.job_id!);
+  assert.equal(ended.state, 'succeeded', JSON.stringify(ended));
+  assert.deepEqual([ended.report?.written, ended.report?.failed], [3, 0]);
+  // The article was read once, for both sections that name it.
+  const read = runner.ops.filter((op) => op.kind === 'read').flatMap((op) => (op.input.items as Array<{ path: string }>).map((item) => item.path));
+  assert.equal(read.filter((path) => path === ARTICLE).length, 1, JSON.stringify(read));
+  // Both sections cite it, found in the file at the commit read.
+  const written = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/docs/${SLUG}`);
+  expectStatus(written, 200, 'the owner reads the document');
+  const cited = written.body.footnotes.filter((note: { path: string | null }) => note.path === ARTICLE);
+  assert.ok(cited.length >= 2 && cited.every((note: { sha: string; verdict: string }) => note.sha === HEAD && note.verdict === 'verified'),
+    JSON.stringify(cited.map((note: { section: string; verdict: string }) => [note.section, note.verdict])));
+  const [built] = await builds(h, s.spaceId);
+  assert.deepEqual([built.state, built.outcome, built.version], ['ended', 'succeeded', version]);
+});
+
+/**
+ * A version's session conditions with their projects spelled as a read of the plan spells them, { id, title }. The plan's
+ * writer stores the id each project resolved to, but that is the spelling the production plan was reported in, and the
+ * one the maintenance run's documents step was handed: stored that way, every reader must still take the id.
+ */
+async function nameProjects(h: Harness, s: Scene, version: number): Promise<void> {
+  const updated = await h.sql.query(
+    `UPDATE "wiki_plan_section" x SET "sources" = jsonb_set(x."sources", '{sessions,projects}', $2::jsonb)
+       FROM "wiki_plan_doc" d, "wiki_plan" p
+      WHERE x."doc_id" = d."id" AND d."plan_id" = p."id" AND p."space_id" = $1 AND p."version" = $3
+        AND jsonb_typeof(x."sources"->'sessions') = 'object'`,
+    [s.spaceId, JSON.stringify([{ id: s.projectId, title: 'Runner 托管后台作业' }]), version],
+  );
+  assert.equal(updated.rowCount, 1, 'the conventions section is the one with a session condition');
+}
+
+test('a session condition whose projects are { id, title } is read as ids: the plan\'s reads, the runner door\'s material and the build', { skip, timeout: 180_000 }, async () => {
+  const h = await boot();
+  await modelUp(h);
+  const s = await scene(h, 'projects');
+  const version = await draft(h, s, planFor(s));
+  await nameProjects(h, s, version);
+  // The plan's reads: the owner's page, as ever { id, title } with the title as it stands now.
+  await confirm(h, s, version);
+  const page = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`);
+  expectStatus(page, 200, 'the owner reads the plan');
+  const conventions = page.body.confirmed.docs[0].sections[2];
+  assert.deepEqual(conventions.sources.sessions.projects.map((project: { id: string; title: string }) => [toUuid(project.id), project.title]),
+    [[s.projectId, 'Runner 托管后台作业']]);
+  // The runner door's material — what the runner path's build reads: the condition's projects found the owner's words.
+  const material = await call(h, s.maintainer, 'GET', `/runner/wiki/spaces/${s.spaceId}/docs/${SLUG}/material?section=${conventions.key}`);
+  expectStatus(material, 200, 'the runner path reads the conventions\' material');
+  assert.deepEqual(material.body.condition.projects.map((project: { id: string }) => toUuid(project.id)), [s.projectId]);
+  assert.ok(material.body.records.some((record: { text: string }) => record.text.includes(KEYWORD)), JSON.stringify(material.body.records));
+  // The server's build reads the same condition the same way. (The owner's edit carried it as ids — the plan's gate read
+  // the stored objects as their ids — so the new version is spelled the read's way again.)
+  executor('canary', [s.owner.id]);
+  const second = await editOverview(h, s, version, '这篇讲一个会话怎么运转。');
+  const carried = await h.sql.query<{ projects: unknown }>(
+    `SELECT x."sources"->'sessions'->'projects' AS "projects" FROM "wiki_plan_section" x JOIN "wiki_plan_doc" d ON d."id" = x."doc_id"
+       JOIN "wiki_plan" p ON p."id" = d."plan_id" WHERE p."space_id" = $1 AND p."version" = $2 AND jsonb_typeof(x."sources"->'sessions') = 'object'`,
+    [s.spaceId, second]);
+  assert.deepEqual(carried.rows.map((one) => one.projects), [[s.projectId]]);
+  await nameProjects(h, s, second);
+  await confirm(h, s, second);
+  const row = (await builds(h, s.spaceId)).find((one) => one.version === second && one.state === 'made');
+  assert.ok(row?.job_id, 'the confirmation made a build job');
+  const HEAD = createHash('sha1').update(`head-${randomUUID()}`).digest('hex');
+  playRunner(h, s.runner.id, () => tree(HEAD));
+  const ended = await buildEnd(h, worker(h), row!.job_id!);
+  assert.equal(ended.state, 'succeeded', JSON.stringify(ended));
+  const written = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/docs/${SLUG}`);
+  expectStatus(written, 200, 'the owner reads the document');
+  assert.ok(written.body.footnotes.some((note: { kind: string }) => note.kind === 'turn'), 'the conventions cite the owner\'s words, found by the project');
 });

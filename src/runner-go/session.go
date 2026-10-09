@@ -615,6 +615,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 
 	var bufMu sync.Mutex
 	var buf []RunEvent
+	// How long each stretch of reasoning took, written onto the block that closes it (guarded by
+	// bufMu, so it sees events in the order they are buffered). See thinking_clock.go.
+	thinkClock := &thinkingClock{}
 	// A coordinator context can be acknowledged only after its compaction boundary is durable on
 	// the control plane. The provider emits and completes on different goroutines, so count under
 	// the same lock that appends the event and drain every generation before /turn-complete.
@@ -718,6 +721,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			seq++
 			seqMu.Unlock()
 			bufMu.Lock()
+			payload = thinkClock.observe(eventType, payload, time.Now())
 			buf = append(buf, RunEvent{Seq: s, Type: eventType, TS: nowISO(), TurnID: turnID, Payload: payload})
 			if coordinatorContextBoundaryEvent(eventType, payload) {
 				coordinatorContextBarrier.mark()
@@ -1564,6 +1568,10 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 	}
 	if msg := engineAuthPreflight(provider, preflightEnv); msg != "" {
 		emit(evError, map[string]interface{}{"message": msg})
+		// The engine probe the Providers page reads can be minutes old and still say Signed in. Re-probe
+		// and beat now (noteEngineSignedOut), as for an Antigravity sign-in agy refuses, rather than leave
+		// the page contradicting this refusal until the next refresh.
+		noteEngineSignedOut()
 		return stFailed, true, false
 	}
 	return providerRuntimeFor(provider).run(sessionProcessArgs{

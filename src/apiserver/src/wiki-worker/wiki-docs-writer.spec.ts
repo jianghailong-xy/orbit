@@ -242,6 +242,34 @@ test('a directory shows as `git show <sha>:<dir>` shows a tree — the runner\'s
   assert.equal(wikiDocContract(repo, 'contracts/sub')?.text, `tree ${sha}:contracts/sub\n\nb.json`);
 });
 
+test('a file another section is already reading is shown only once that read landed (v27, 2026-10-09: «was shown before it was read»)', async () => {
+  const article = 'docs/article-durable-agent-work.md';
+  const sizes = new Map([[article, 40], ['docs/design.md', 10]]);
+  const reads: string[][] = [];
+  let land = (): void => undefined;
+  const landed = new Promise<void>((resolve) => {
+    land = resolve;
+  });
+  const repo = new WikiDocsSnapshotRepo('e'.repeat(40), sizes, [...sizes.keys()].sort(), async (paths) => {
+    reads.push([...paths]);
+    // The article's read goes through the space's runner and lands later; the design document's is at hand.
+    if (paths.includes(article)) await landed;
+    return new Map(paths.map((path) => [path, file(path, 'found', `${path}\n`, sizes.get(path) ?? 0)]));
+  });
+  // Two sections of one document, built side by side, both name the article: the first starts its read, and the
+  // second — reading its own design document as well — prepares and shows while that read is still in flight.
+  const first = repo.prepare([article]);
+  const second = (async () => {
+    await repo.prepare([article, 'docs/design.md']);
+    return repo.show(article);
+  })().then((shown) => ({ shown }), (error: Error) => ({ error: error.message }));
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  land();
+  await first;
+  assert.deepEqual(await second, { shown: { text: `${article}\n`, cut: false } }, 'the second section waited for the read the first one started');
+  assert.deepEqual(reads, [[article], ['docs/design.md']], 'the article is read once');
+});
+
 test('a file already read is not read again, and one the cache has no answer for is missing', async () => {
   const sizes = new Map([['a', 12_000], ['b', 9_000], ['gone', 5]]);
   const reads: string[][] = [];
