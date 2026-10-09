@@ -273,9 +273,15 @@ suite('T8 replays create → auto-dispatch → failed attempt → judgment work 
       where: { id: firstAttempt.id },
       data: { status: TaskStatus.IN_PROGRESS },
     });
-    await db.session.update({
-      where: { id: firstRun.id },
-      data: { status: RunStatus.RUNNING, startedAt: new Date() },
+    // The runner's claim. Migration 0414 hands PENDING -> RUNNING through only inside a transaction
+    // that declares it reads the session's recorded engine (`common/session-scheduling.ts`); without
+    // the declaration the transition is dropped in silence and this fixture would claim nothing.
+    await db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+      await tx.session.update({
+        where: { id: firstRun.id },
+        data: { status: RunStatus.RUNNING, startedAt: new Date() },
+      });
     });
     await db.conversationTurn.create({
       data: {
