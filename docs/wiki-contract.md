@@ -1023,6 +1023,12 @@ JSON 里是 `anchorRules.verify`；实现在 `src/apiserver/src/wiki/wiki-anchor
   对基线判 verified / changed，runner 的判断不作数；changed / missing 的检查不会移动基线，只有 owner 的 Re-confirm 会。
 - 每个锚点最近一次检查存在 `wiki_entry.anchors[i].check`：`{ state, ref, at }`，找到的 symbol 另有 `regionSha256`（这次找到的）和
   `baselineSha256`（检查采纳的基线）。**修订里存的是写下时的锚点，不带检查**；amend 冲突回答里给的当前锚点也不带。
+- **同一个提交上查过的不再重做**（2026-10-10，`anchorRules.verify.skip`）：运行检查某个提交时，某条目每条 git 锚点的最近一次检查的
+  `ref` 逐字等于这个提交（快照的 sha）就整条跳过——不送 runner、不写回：一条锚点的结论只取决于锚点本身和被检查的提交，再查一遍
+  只会写下同一份结果。有一条锚点的检查不在这个提交上（或还没有检查），整条照旧复核。symbol 例外，它的结论还取决于基线，而基线会被
+  owner 的 Re-confirm 改动：只有那次检查记下了它比对的基线（`baselineSha256`，锚点自己没有 `regionSha256` 时检查才写）且它仍是该锚点
+  现在的基线，才算数；自己带 `regionSha256` 的 symbol 一律重新复核——Re-confirm 留下的形状和普通检查一样，从锚点上看不出是谁动的基线，
+  宁可多查一遍。只有服务端自己的运行跳过：runner 门那份列表照旧每次都把每条锚点交出去。
 - `anchor_state` 由各锚点的最近检查汇总：有 missing 就是 missing，否则有 changed 就是 changed，否则有未检查的（或根本没有锚点）就是
   unchecked，否则 verified；`anchor_checked_ref` / `anchor_checked_at` 是最近一次检查的 ref 和时间。只由 `applyOp` 写：一次检查，
   以及重新给出锚点的 amend（新锚点是 unchecked，Re-confirm 带着保留的检查除外）。
@@ -2550,6 +2556,12 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
    7,600–7,700 条从约 88 次操作降到约 22 次）。把这一页的锚点作为一次 `anchors` 仓库操作交给空间所在的 runner，结果按现有写入口
    `recordAnchorChecks` 写回（锚点状态、挑战 op），一页按 `anchorRules.verify.rules.reportEntriesMax` 分成若干次报告写回，每条锚点的
    结果不变。
+   **同一个提交上查过的不再重做**（2026-10-10，`anchorRules.verify.skip`，§17.3）：每条 git 锚点的最近检查都在这次快照的提交上
+   （`ref` 逐字相等）的条目这一轮整条不进操作——不送 runner、不写回；有一条不在（或没查过）就整条照旧。symbol 只在上次检查记下了它
+   比对的基线（`baselineSha256`）且该基线仍是这条锚点现在的基线时才跳过，自己带 `regionSha256` 的一律重新复核。报告里的 `anchors`
+   计的是这一轮写下检查的条目：`entries` 是写下的条数，`changed` / `missing` 是其中写完后判成 changed / missing 的条数；跳过的条目
+   不计入这三项，只计 `skipped`（条目数），所以一次重放可以报 `entries` 0、space 的全部条目都在 `skipped` 里。一次 REPO_OP_WAIT 之后的
+   重放、或两轮之间 main 没动时，约 22 次 `anchors` 仓库操作因此减到 0。
 9. **文档**（追赶期整步跳过）：`wikiDocsAffected` 拿服务端那一半；仓库那一半用 `diff` 仓库操作按节自己的 `repoSha`
    比到 head（消失的路径先撤回，`withdrawPaths`），只重写受影响的节（P7 的 `runWikiDocsBuild`，`only` 传入本次要写的节）；
    新增的设计文档（`--diff-filter=AR -- docs/`，去掉 `docs/mocks/` 与 `docs/evidence/`、已被引用或已被建议的）算出标题、
