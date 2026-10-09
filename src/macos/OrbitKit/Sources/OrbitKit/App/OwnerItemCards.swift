@@ -533,7 +533,17 @@ public enum PromotionCards {
     }
 
     /// D's first row: why it cannot merge, in the files that say so.
+    ///
+    /// The reason the job gave comes first (`blockedReason`, migration 0409): a candidate whose
+    /// branch is already on main, and one whose job errored, are blocked with no checks and no
+    /// conflicts, and reading those two arrays said a check had failed when none had run. A block
+    /// recorded before the reason was is read off the arrays as it always was. Web's
+    /// `promotionBlockedLine`.
     public static func blockedLine(_ view: ProjectPromotionView) -> String {
+        if view.blockedReason == "ALREADY_LANDED" {
+            return "nothing to merge — \(shortRef(view.sourceRef)) is already on \(shortRef(view.upstreamRef))"
+        }
+        if view.blockedReason == "ERROR" { return "the merge stopped on an error — no check failed" }
         guard !view.conflicts.isEmpty else { return "the checks on the combined tree did not pass" }
         let n = view.conflicts.count
         let files = view.conflicts.prefix(3).joined(separator: ", ")
@@ -551,10 +561,31 @@ public enum PromotionCards {
     /// `IT_IS_YOURS`.
     public static let itIsYours = "It is yours"
 
+    /// Who holds a blocked candidate, off the project's open items (both groups): `.unread` until
+    /// the read has come back, the item that names this candidate, or `.gone` when the read came
+    /// back without one.
+    ///
+    /// Gone is nobody. The coordinator closed the exception and nothing else holds the branch — on
+    /// 2026-10-09 because the work was already on main (project 34b78EQPNkVF8kM3ki7Ch) — and a
+    /// press that said "Coordinator is resolving it" then, with its mark turning, named somebody who
+    /// was not there.
+    public static func holder(of promotionID: String, in items: ProjectOpenItemsView?) -> OwnerItemStanding {
+        guard let items else { return .unread }
+        let row = (items.needsYou + items.withCoordinator).first { $0.promotionId == promotionID }
+        return row.map(OwnerItemStanding.open) ?? .gone
+    }
+
     /// D's press, as one line: `Coordinator is resolving it · 2h` — or, once the item is the
-    /// reader's own, `It is yours · waiting 2h`. A row that has not been read, or whose instant
-    /// cannot be read, says who state D means and stops, exactly as the row did without one.
-    public static func resolvingLine(_ row: ProjectOpenItemRow?, now: Date = Date()) -> String {
+    /// reader's own, `It is yours · waiting 2h`. An item that has not been read, or whose instant
+    /// cannot be read, says who state D means and stops, exactly as the row did without one. Nil
+    /// when nobody holds it (`.gone`): the press is not drawn, rather than naming somebody.
+    public static func resolvingLine(_ holder: OwnerItemStanding, now: Date = Date()) -> String? {
+        let row: ProjectOpenItemRow?
+        switch holder {
+        case .gone: return nil
+        case .unread: row = nil
+        case .open(let held): row = held
+        }
         let waited = row.flatMap { RelativeTime.parse($0.waitingSince) }
             .map { RelativeTime.span(now.timeIntervalSince($0)) }
         guard row?.assignee == .owner else { return resolving + (waited.map { " · \($0)" } ?? "") }
@@ -563,9 +594,19 @@ public enum PromotionCards {
 
     /// Whether the mark over that press turns. It is the card's one moving part, and it says
     /// somebody else is working on the branch — so it has no business turning over work that is
-    /// waiting on the reader.
-    public static func resolvingSpins(_ row: ProjectOpenItemRow?) -> Bool {
-        row?.assignee != .owner
+    /// waiting on the reader, nor over a press nobody holds.
+    public static func resolvingSpins(_ holder: OwnerItemStanding) -> Bool {
+        switch holder {
+        case .gone: return false
+        case .unread: return true
+        case .open(let row): return row.assignee != .owner
+        }
+    }
+
+    /// Whether that press is the reader's own: the item the clock handed them.
+    public static func resolvingIsYours(_ holder: OwnerItemStanding) -> Bool {
+        if case .open(let row) = holder { return row.assignee == .owner }
+        return false
     }
 
     /// `asked 2h 10m ago`, A's footnote.
@@ -708,8 +749,11 @@ public enum PromotionCards {
     }
 
     /// D's reason in a few words, for a line too short for the files: `2 files conflict`, or
-    /// `checks failed`.
+    /// `checks failed` — the job's own reason first, as in `blockedLine`. Web's
+    /// `promotionBlockedReason`.
     public static func blockedReason(_ view: ProjectPromotionView) -> String {
+        if view.blockedReason == "ALREADY_LANDED" { return "nothing to merge" }
+        if view.blockedReason == "ERROR" { return "check errored" }
         guard !view.conflicts.isEmpty else { return "checks failed" }
         let n = view.conflicts.count
         return "\(n) file\(n == 1 ? "" : "s") conflict"
