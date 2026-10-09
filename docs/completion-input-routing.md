@@ -381,8 +381,9 @@ fact any more" note at the `route(...)` call (lines 389-391):
 >   can decide it: the task declared EVIDENCE_JUDGMENT and has not settled, the revision is its
 >   latest and unanswered, the evidence quotes a live standard (`criterionStandingRefusal`), and the
 >   conversation took no part in the work (`decidingSessionDisqualification`). The authorizer is the
->   switch, then the fuse (`refusingWhileFusePaused`), then `convergence.authorizeWake`. Any other
->   revision is recorded against `JUDGMENT_REQUEST_DERIVER` exactly as before.
+>   switch, then the fuse (`refusingWhileFusePaused`), then whether the conversation is paused
+>   (below), then `convergence.authorizeWake`. Any other revision is recorded against
+>   `JUDGMENT_REQUEST_DERIVER` exactly as before.
 > - The turn asks the coordinator to decide, not to relay: read the revision with
 >   `task_evidence_list`, then `task_evidence_decide` it — CONFIRM, or SEND_BACK with a note saying
 >   what the next revision has to show, which is then delivered to the run that submitted the
@@ -391,18 +392,52 @@ fact any more" note at the `route(...)` call (lines 389-391):
 >   that really is the owner's goes through `ask_owner` — wanting the owner to take a look is not
 >   one.
 > - `readPendingEvidenceJudgments` and `countPendingEvidenceJudgments` (the "Needs you" count) share
->   one predicate: a revision whose wake was DELIVERED, in a project that is still Automatic, to a
->   conversation that has not ended, less than `exceptionEscalationSeconds` ago, is not placed in
->   `pending` and not counted. A refused delivery (switch, fuse, no conversation, an ended one), a
->   revision that was only recorded, and one whose time is up are the owner's card at once, as on
->   2026-09-10. The decision door is unchanged: the owner may decide any revision at any moment.
+>   one predicate, `coordinatorHolds` in `projects/coordinator-evidence-queue.ts`. It puts each
+>   unanswered revision of an Automatic project in one of three places (rule of 2026-10-09,
+>   `docs/evidence-waits-for-coordinator-design.md`):
+>   - **Held by the coordinator.** Its wake was DELIVERED, the project is still Automatic, the
+>     conversation it was delivered to has not ended (`conversationIsOver` — a conversation whose run
+>     FAILED with no end recorded is only down, not over), and the turn that carried it was not taken
+>     off the queue unread. While that conversation is **paused** — down (`conversationIsDown`), or
+>     parked on a retry (`retryAt`) — the hold has no clock. While it is live, the hold lasts
+>     `exceptionEscalationSeconds` from the delivery, as before; a delivery re-sent after waiting
+>     starts that window again.
+>   - **Waiting for the coordinator.** The project is Automatic, no fuse holds it, the conversation
+>     the project is coordinated from has not ended, took no part in the work and could decide the
+>     evidence — and that conversation is paused, or nothing has reached it yet (no delivery to it, or
+>     the last attempt was refused because it was paused), or the turn that carried it left the queue
+>     unread (answered with nothing delivered — the drain a failed run does — or deleted by an
+>     interrupt or a withdrawal). Such a revision is not in `pending`, not counted, and is listed for
+>     that conversation alone in `waitingOnCoordinator`.
+>   - **The owner's card**, at once, as on 2026-09-10: a project that is not Automatic, a fuse, a
+>     conversation that ended or is in Trash, one that took part in the work, a delivery refused for
+>     any reason but a pause, a revision that was only recorded, and a hold whose window ran out.
+>
+>   The decision door is unchanged: the owner may decide any revision at any moment, waiting or held.
 >   `TaskCompletionEvidenceService.submit` nudges open pages only after the routing, so the re-read
 >   it prompts already sees the hold instead of drawing, for one poll, a card the coordinator holds.
+> - A paused conversation is not written to: the evidence delivery is refused with
+>   `DELIVERY_COORDINATOR_PAUSED` before the turn exists — a turn written to a conversation parked on
+>   a retry would disarm that retry (`createTurn` writes `retryAt: null`). That refusal releases the
+>   key like any other, and is the one refusal that leaves the revision waiting.
+> - What waited is handed over by `CoordinatorEvidenceQueueService`, oldest submission first, through
+>   the same producer: when a turn of the coordinator's conversation ends (beside the exception items'
+>   `deliverOwedTo`), when the project's coordinator conversation is replaced (beside
+>   `openItems.deliverOwed`), and on the task service's reconcile tick for a coordinator that is live
+>   and idle. A revision nothing reached is claimed and queued as usual; one whose delivery did not
+>   reach the conversation is re-sent under a turn key derived from the turn it replaces, on its
+>   DELIVERED wake. Either way the message adds `This revision was submitted at <ISO> while you were
+>   unavailable. It waited for you; nobody has decided it yet.`, and the wake's `delivery` record
+>   carries `waited: true`, which is what `sentToCoordinator` lists while the coordinator holds it.
 >
 > **Why this is not the relay 2026-09-10 removed.** That turn could only pass the question on, and
 > the card died with it. This one asks its reader for the answer, and the owner's card does not
 > depend on it: the card is still drawn from the derived read, which lists the revision again by
-> itself when the hold ends — nothing is re-sent and nothing has to be. No migration: the event was
-> already in the ledger's CHECK. `src/apiserver/src/projects/automatic-evidence-to-coordinator.pg.spec.ts`
-> holds both halves, and `decision-facts-no-coordinator-turn.pg.spec.ts` now holds that a project
-> that is not Automatic still gets no turn for its evidence, beside the Automatic one that does.
+> itself when the hold ends. The only thing ever re-sent is a revision the coordinator never read,
+> to the coordinator, once it can read it. No migration: the event was already in the ledger's
+> CHECK, and what a delivery waited for is a field of its own `delivery` record.
+> `src/apiserver/src/projects/automatic-evidence-to-coordinator.pg.spec.ts` holds both halves,
+> `src/apiserver/src/projects/evidence-waits-for-coordinator.pg.spec.ts` holds a paused coordinator's
+> queue from the submission to the delivery when it is back, and
+> `decision-facts-no-coordinator-turn.pg.spec.ts` holds that a project that is not Automatic still
+> gets no turn for its evidence, beside the Automatic one that does.

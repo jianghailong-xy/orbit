@@ -21,6 +21,7 @@ const row = (over: Partial<ProviderRow> = {}): ProviderRow => ({
   slug: 'deepseek',
   label: 'DeepSeek',
   runtime: 'claude',
+  engines: ['claude', 'opencode', 'dsh'] as ProviderRow['engines'],
   baseUrl: 'https://api.deepseek.com/anthropic',
   models: [{ value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' }],
   defaultModel: 'deepseek-v4-pro',
@@ -30,7 +31,7 @@ const row = (over: Partial<ProviderRow> = {}): ProviderRow => ({
   hasApiKey: true,
   ...over,
 });
-const harness = row({ id: 'dsh', slug: 'deepseek-harness', label: 'DeepSeek Harness', runtime: 'dsh', presetSlug: 'deepseek-harness', models: [], defaultModel: '' });
+const harness = row({ id: 'dsh', slug: 'deepseek-harness', label: 'DeepSeek Harness', runtime: 'dsh', engines: ['dsh', 'claude', 'opencode'] as ProviderRow['engines'], presetSlug: 'deepseek-harness', models: [], defaultModel: '' });
 
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000 - 5_000).toISOString();
 const CNY = { currency: 'CNY', totalBalance: '110.00', grantedBalance: '10.00', toppedUpBalance: '100.00' };
@@ -86,6 +87,8 @@ describe('the DeepSeek account balance', () => {
     apiMock.mockImplementation(((path: string) => {
       const balance = /^\/providers\/mine\/([^/]+)\/balance/.exec(path);
       if (balance) return (answers[balance[1]] ?? (() => new Promise(() => {})))();
+      // What uses the key, on its page's Works with: nothing here.
+      if (path.endsWith('/usage')) return Promise.resolve({ providerId: '', engines: [], sessions: 0, tasks: 0 });
       return Promise.resolve([]);
     }) as typeof api);
     container = document.createElement('div');
@@ -352,7 +355,8 @@ describe('the DeepSeek account balance', () => {
       answers.dsh = async () => ok({ sharedWith: [{ id: 'ds', label: 'DeepSeek' }] });
       await edit('dsh', [row(), harness]);
       const titles = [...container.querySelectorAll('.provider-step .ps-title')].map((t) => t.textContent);
-      expect(titles).toEqual(['Name', 'Paste your DeepSeek Harness API key', 'DeepSeek account balance']);
+      // A key made from the retired Harness preset is a DeepSeek key, and its page says so.
+      expect(titles).toEqual(['Name', 'Paste your DeepSeek API key', 'DeepSeek account balance']);
       expect(text()).toContain('Same DeepSeek account as DeepSeek — both show this balance.');
     });
 

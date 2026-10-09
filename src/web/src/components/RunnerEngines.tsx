@@ -21,6 +21,8 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   accountToStartOn,
+  AgentProvider,
+  ENGINE_CLI_NAMES,
   withEnginePlanUsage,
   type AccountEngine,
   type InstallEngine,
@@ -60,16 +62,16 @@ import {
   planUsageSnapshotForProvider,
   type PlanUsageDisplayRow,
 } from '../lib/planUsage';
-import { DSH_STATE_LABEL, dshRunnerState } from '../lib/dshRuntime';
 import { formatResetTime } from '../lib/providerPools';
 import { runnersQuery } from '../lib/queries';
 import { listAttentionLine, type AttentionItem } from '../lib/runnerAttention';
 import { RUNNER_ENGINE_NO_QUOTA_LIMIT, RUNNER_ENGINE_RENEW, runnerEngineNext } from '../lib/runnerCopy';
 import { loginExpiresLine, signedOutNote } from '../lib/accountLogin';
 import { foldFromAnywhere } from '../lib/foldHead';
-import { ENGINE_CLI_NAME, ago, engineVersionNumber, updateNoteOf } from '../lib/runnerEngines';
+import { ago, engineVersionNumber, updateNoteOf } from '../lib/runnerEngines';
 import { ENGINE_PRESET, ENGINE_SLUGS } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
+import { DshRunnerStatus } from './DshRunnerStatus';
 import { ProviderTile } from './ProviderGallery';
 import { ENGINE_NAME, GoogleSignInTerms, KIMI_SITE, RunnerSignIn } from './RunnerSignIn';
 import { useRunnerTokenRotation } from './RunnerTokenRotation';
@@ -92,11 +94,10 @@ function rowEnginesOf(engines: RunnerEngineHealth[]): RowEngine[] {
   return ROW_ENGINES.filter((engine) => engine !== 'opencode' || reported.has('opencode'));
 }
 
-/** What a row calls its engine. The sign-in CLIs' names are this page's own; OpenCode's comes from
- *  the wider map a page showing every engine on a machine reads, so one binary never gets two
- *  names. */
+/** What a row calls its engine: the CLI's own name (ENGINE_CLI_NAMES), the one every list of
+ *  engines uses, so one binary never gets two names. */
 function engineNameOf(engine: RowEngine): string {
-  return engine === 'opencode' ? ENGINE_CLI_NAME.opencode : ENGINE_NAME[engine];
+  return ENGINE_CLI_NAMES[engine as AgentProvider];
 }
 
 // Which runner cards the user opened. Cards start folded — three engines per machine adds up
@@ -1171,7 +1172,7 @@ function AccountRow({
       {/* What its being signed out costs, under its Sign in. */}
       {kind === 'out' && !removing && (
         <div className="re-dup">
-          <span>{signedOutNote(ENGINE_NAME[engine], false)}</span>
+          <span>{signedOutNote(engineNameOf(engine), false)}</span>
         </div>
       )}
       {/* The machine would not do it, and its reason is the only thing that can explain why: a
@@ -1496,48 +1497,12 @@ export function ownSignInPanel(runner: Runner, engine: LoginEngine): string {
     : engine;
 }
 
-/** A CLI on the machine that has no row above — DeepSeek Harness, which runs every session on an API
- *  key — as the machine's own page lists it: what is installed, whether it is being kept current, and
- *  whether the machine can run Harness at all (dshRunnerState). It has no quota and nothing to press,
- *  so it is one line. */
-function CliRow({ runner, health }: { runner: Runner; health: RunnerEngineHealth }) {
-  const name = ENGINE_CLI_NAME[health.engine] ?? health.engine;
-  const note = health.installed ? updateNoteOf(health.update) : null;
-  const harness = health.engine === 'dsh' ? dshRunnerState(runner) : null;
-  const status = harness
-    ? harness === 'ready' ? 'Uses API keys' : DSH_STATE_LABEL[harness]
-    : health.installed ? null : 'Not installed';
-  return (
-    <div className="re-row" data-engine={health.engine}>
-      <div className="re-id">
-        <ProviderTile slug={health.engine === 'dsh' ? 'deepseek-harness' : health.engine} label={name} size={28} />
-        <div style={{ minWidth: 0 }}>
-          <div className="re-name">{name}</div>
-          {/* A CLI that isn't there has no version to show; its status says it is missing. */}
-          {health.installed && (
-            <div className="re-meta">
-              {health.version ? engineVersionNumber(health.version) : 'version not reported'}
-              {note && (
-                <span className={`re-upd${note.tone === 'warn' && runner.online ? ' warn' : ''}`} title={health.update?.message}>
-                  {' '}
-                  · {note.text}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="re-status">{status && <Badge>{status}</Badge>}</div>
-    </div>
-  );
-}
-
 /**
  * One machine's engines: a row each, with its accounts under it, and on every row what can be done
- * there — Sign in, Install, Add account, and each account's own menu. A machine's card here holds
- * them under its head, and the machine's own page (RunnerDetailPage) under its Engines, as
- * `machinePage`: there every other CLI the machine reports is listed too (CliRow), because that
- * page's Update engines updates all of them.
+ * there — Sign in, Install, Add account, and each account's own menu — then DeepSeek Harness, which
+ * signs nothing in and runs on the account's DeepSeek keys (DshRunnerStatus). A machine's card here
+ * holds them under its head, and the machine's own page (RunnerDetailPage) under its Engines, as
+ * `machinePage`.
  *
  * The sign-in panel open among the rows is the holder's to keep, so that something beside them can
  * open one: the machine page's Needs Attention does (ownSignInPanel). So are the groups of accounts
@@ -1576,12 +1541,11 @@ export function MachineEngines({
           This runner hasn&apos;t reported its engines yet. Update it to the latest version — an
           older runner can&apos;t be signed in or installed from here.
         </div>
-        <div className="re-row" data-engine="antigravity"><div className="re-id"><ProviderTile slug="antigravity" label="Antigravity" size={28} /><div className="re-name">Antigravity</div></div><Badge>Update runner</Badge><div className="re-login-note">Update this runner to sign in with Google.</div></div>
+        <div className="re-row" data-engine="antigravity"><div className="re-id"><ProviderTile slug="antigravity" label={engineNameOf('antigravity')} size={28} /><div className="re-name">{engineNameOf('antigravity')}</div></div><Badge>Update runner</Badge><div className="re-login-note">Update this runner to sign in with Google.</div></div>
       </>
     );
   }
   const rows = rowEnginesOf(engines);
-  const rowed = new Set<string>(rows);
   return (
     <>
       {rows.map((engine) => {
@@ -1631,10 +1595,7 @@ export function MachineEngines({
           </Fragment>
         );
       })}
-      {machinePage &&
-        engines
-          .filter((health) => !rowed.has(health.engine))
-          .map((health) => <CliRow key={health.engine} runner={runner} health={health} />)}
+      <DshRunnerStatus runner={runner} />
     </>
   );
 }

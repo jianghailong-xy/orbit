@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { HttpException, NotFoundException } from '@nestjs/common';
 import {
+  WIKI_ANCHOR_RULES,
   WIKI_MAINTAIN_JOB,
   WIKI_MAINTENANCE_JOB,
   WIKI_REPO_OPS,
@@ -46,17 +47,17 @@ import {
   assembleWikiMaintainProposal,
   parseWikiMaintainProposal,
   wikiMaintainPlanOf,
+  wikiMaintainProposalPaths,
   wikiMaintainProposalPrompt,
   wikiMaintainProposalRedo,
   WIKI_MAINTAIN_PROPOSAL,
   type WikiMaintainPlanRead,
   type WikiMaintainProposalItem,
-  type WikiMaintainProposalRepo,
   type WikiNewDesignDoc,
   type WikiUnplacedEntry,
 } from './wiki-maintain-plan';
 import { cutRunes, parseWikiImportAnswer, WikiImportRepo, wikiImportIsObject } from './wiki-import-extract';
-import { WikiPlanRepo, type WikiPlanSnapshotIndex } from './wiki-plan-repo';
+import { type WikiPlanSnapshotIndex } from './wiki-plan-repo';
 import { type WikiAnchorCheckInput, type WikiRepoFileRead } from '@orbit/shared';
 import {
   readWikiRepoFiles,
@@ -227,7 +228,6 @@ interface WikiMaintainSnapshot {
   files: string[];
   sizes: Map<string, number>;
   about: string;
-  gate: WikiPlanRepo;
   anchors: WikiImportRepo;
 }
 
@@ -371,8 +371,9 @@ class WikiMaintainRun {
    * The pipeline in order (`wikiMaintainRun.steps`), answering where it stopped, or null.
    *
    * The repository step is this pipeline's `checkout` and more: a snapshot of origin/main through the
-   * space's runner names the commit, lists every file with its size, and carries the headings, symbols,
-   * contracts and reachable commits the checks below read — where the runner fetched a checkout and read it.
+   * space's runner names the commit, lists every file with its size, and carries the reachable commits the
+   * checks below read, and a file a check reads is read whole at that commit — where the runner fetched a
+   * checkout and read it.
    */
   private async steps(): Promise<WikiMaintainStop | null> {
     let step = 'repo';
@@ -482,7 +483,6 @@ class WikiMaintainRun {
       files,
       sizes,
       about: typeof raw.readme === 'string' ? cutRunes(raw.readme, WIKI_MAINTAIN_JOB.aboutMaxChars) : '',
-      gate: new WikiPlanRepo(raw),
       anchors: new WikiImportRepo({ files, commits: raw.commits ?? [] }, '', repositoryName(this.context.repo.urlNorm)),
     };
     this.jobContext.log(`the repository at ${snapshot.sha.slice(0, 12)} (${files.length} files)`);
@@ -878,9 +878,24 @@ class WikiMaintainRun {
   }
 
   /**
-   * Re-check the space's anchors (`anchorRules.verify`): one page of the entries that carry one, the checks
-   * as one `wiki_repo_op` the space's runner executes, and each entry's result written back through the
-   * server's own writer.
+   * Re-check the space's anchors (`anchorRules.verify`): a page of the entries that carry one — the most the
+   * anchors list names, `listEntriesMax` — the page's checks as one `wiki_repo_op` the space's runner
+   * executes, and each entry's result written back through the server's own writer in reports of at most
+   * `reportEntriesMax` entries.
+   *
+   * WHY A PAGE IS THE FULL `listEntriesMax` (2026-10-10, the canary's 30-minute rounds). An operation costs
+   * about what its wait costs however few anchors it carries: the runner claims it at its next heartbeat (30 s,
+   * so ~15 s on average), fetches origin/main (~4 s), and answers. The checks themselves are cheap — measured
+   * on this repository, a path anchor's `cat-file -e` is ~1.4 ms, a commit anchor's `merge-base --is-ancestor`
+   * ~1.7 ms, a symbol anchor's `grep` ~35 ms, and a production space carries path and commit anchors and no
+   * symbols. At the list's default page of 50 entries, the canary's 7,600-7,700 anchors (some 4,400 entries,
+   * ~1.7 anchors an entry) went out as ~88 operations, one at a time, and took about 30 minutes. A page of
+   * `listEntriesMax` (200) entries puts the same anchors in ~22 operations: ~250-350 anchors and 20-40 KB of
+   * JSON each, a few hundred milliseconds of git, and ~20 s an operation end to end — ~8 minutes a round. Even
+   * a page whose every entry carries `limits.listMaxItems` (20) anchors — 4,000 anchors, ~500-800 KB, still far
+   * inside `repoOps.operationBytes` — is a few seconds of git, well inside the 300 s the run waits for one
+   * operation (`maintenance.job.server.rules.repoWaitSeconds`). Operations are sent one at a time, and stay
+   * that way while the runner's own fetch lock is one release away (97b8de07f, runner 0.1.228).
    *
    * The page's anchors reach the runner as ONE flat list, so the index the runner echoes is the
    * anchor's place in THAT list — renumbered here as the list is built — and the checks come back
@@ -899,7 +914,7 @@ class WikiMaintainRun {
     let refused = 0;
     let failed = 0;
     for (;;) {
-      const page = await listWikiAnchorsForJob(this.deps.prisma, { ownerId: job.ownerId, spaceId: job.spaceId, after, limit: null });
+      const page = await listWikiAnchorsForJob(this.deps.prisma, { ownerId: job.ownerId, spaceId: job.spaceId, after, limit: WIKI_ANCHOR_RULES.listEntriesMax });
       if (page.entries.length === 0) break;
       after = page.next;
       const wanted = page.entries.filter((entry) => entry.anchors.length > 0);
@@ -949,31 +964,35 @@ class WikiMaintainRun {
         if (unanswered > 0) {
           throw new WikiJobContentError(`the anchor checks answered ${unanswered} of the ${flat.length} anchor(s) asked for: the run refuses to guess whose the rest were`);
         }
-        const report = {
-          ref: String(answer.sha ?? this.snapshot?.sha ?? ''),
-          entries: wanted.map((entry, entryAt) => ({
-            entryId: entry.entryId,
-            revision: entry.revision,
-            checks: entry.anchors.flatMap((anchor) => {
-              const check = byEntry[entryAt]!.get(anchor.index);
-              return check ? [check] : [];
-            }),
-          })),
-        };
-        const written = await this.deps.wiki.recordAnchorChecks(
-          { ownerId: job.ownerId, sessionId: null, jobId: job.id },
-          job.spaceId,
-          report,
-        );
-        for (const outcome of written.outcomes) {
-          if (outcome.status !== 'recorded') {
-            if (outcome.status === 'refused') refused += 1;
-            else failed += 1;
-            continue;
+        // The page is written back in reports of at most `reportEntriesMax` entries, the most
+        // `recordAnchorChecks` takes (`anchorReportShape`) — what one page of the list's default size
+        // used to be. Each entry is recorded on its own, so what is written and what is counted below
+        // do not depend on where the page's reports fall.
+        const ref = String(answer.sha ?? this.snapshot?.sha ?? '');
+        const reported = wanted.map((entry, entryAt) => ({
+          entryId: entry.entryId,
+          revision: entry.revision,
+          checks: entry.anchors.flatMap((anchor) => {
+            const check = byEntry[entryAt]!.get(anchor.index);
+            return check ? [check] : [];
+          }),
+        }));
+        for (let from = 0; from < reported.length; from += WIKI_ANCHOR_RULES.reportEntriesMax) {
+          const written = await this.deps.wiki.recordAnchorChecks(
+            { ownerId: job.ownerId, sessionId: null, jobId: job.id },
+            job.spaceId,
+            { ref, entries: reported.slice(from, from + WIKI_ANCHOR_RULES.reportEntriesMax) },
+          );
+          for (const outcome of written.outcomes) {
+            if (outcome.status !== 'recorded') {
+              if (outcome.status === 'refused') refused += 1;
+              else failed += 1;
+              continue;
+            }
+            entries += 1;
+            if (outcome.anchorState === 'changed') changed += 1;
+            if (outcome.anchorState === 'missing') missing += 1;
           }
-          entries += 1;
-          if (outcome.anchorState === 'changed') changed += 1;
-          if (outcome.anchorState === 'missing') missing += 1;
         }
       }
       if (after === null) break;
@@ -1392,7 +1411,9 @@ class WikiMaintainRun {
       if (items.length === WIKI_MAINTAIN_PROPOSAL.itemsMax) break;
       items.push({ id: `K${items.length + 1}`, entry });
     }
-    const repo = this.proposalRepo();
+    // The answer's references are checked in the files at the snapshot's commit, as the runner checks them in its
+    // checkout (`wikiDocRepo`), not against the snapshot's index.
+    const repo = this.snapshotRepo(head, this.snapshot!.files, this.snapshot!.sizes);
     const prompt = wikiMaintainProposalPrompt(this.plan, items);
     let problems: string[] = [];
     for (let round = 1; round <= WIKI_MAINTAIN_PROPOSAL.roundsMax; round += 1) {
@@ -1407,6 +1428,13 @@ class WikiMaintainRun {
         return out;
       }
       const answer = parseWikiMaintainProposal(text);
+      try {
+        await repo.prepare(wikiMaintainProposalPaths(answer));
+      } catch (error) {
+        if (isWikiJobCancellation(error, this.jobContext.signal)) throw error;
+        out.error = cutRunes((error as Error).message, 400);
+        return out;
+      }
       const { request, problems: check } = assembleWikiMaintainProposal(this.plan, answer, items, repo);
       if (check.length > 0) {
         problems = check;
@@ -1440,17 +1468,6 @@ class WikiMaintainRun {
     out.error = cutRunes(`the proposal did not pass in ${WIKI_MAINTAIN_PROPOSAL.roundsMax} rounds: ${problems.join('; ')}`, 600);
     this.jobContext.log(`no proposal: ${out.error}`);
     return out;
-  }
-
-  /** The snapshot as the proposal's gate reads it. */
-  private proposalRepo(): WikiMaintainProposalRepo {
-    const gate = this.snapshot!.gate;
-    return {
-      hasDocSection: (path, section) => gate.hasDocSection(path, section),
-      hasPath: (path) => gate.hasPath(path),
-      hasSymbol: (path, symbol) => gate.hasSymbol(path, symbol),
-      hasContract: (path) => gate.hasContract(path),
-    };
   }
 
   private jobPrincipal(): WikiPrincipal {

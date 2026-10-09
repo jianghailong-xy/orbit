@@ -970,3 +970,71 @@ func TestSessionSendCarriesResumeIfEndedOnlyWhenAsked(t *testing.T) {
 		t.Fatalf("requests =\n%#v\nwant\n%#v", calls, want)
 	}
 }
+
+// T5 of the provider/engine split (docs/provider-engine-contract.md §6.1): `orbit session create
+// --engine` names the CLI the session runs on beside the credential it spends, and a create naming
+// only a provider sends no engine at all — the server then runs it on the engine that provider always
+// ran on, so every older call keeps the engine it had.
+func TestSessionCLICreateSendsTheEngineOnlyWhenNamed(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		wantBody map[string]interface{}
+	}{
+		{
+			name:     "engine and provider",
+			args:     []string{"create", "--prompt", "do work", "--engine", "dsh", "--provider", "deepseek-2", "--json"},
+			wantBody: map[string]interface{}{"prompt": "do work", "agentId": "current-agent", "engine": "dsh", "provider": "deepseek-2"},
+		},
+		{
+			name:     "engine alone",
+			args:     []string{"create", "--prompt", "do work", "--engine", " opencode ", "--json"},
+			wantBody: map[string]interface{}{"prompt": "do work", "agentId": "current-agent", "engine": "opencode"},
+		},
+		{
+			name:     "provider alone keeps the engine it ran on",
+			args:     []string{"create", "--prompt", "do work", "--provider", "deepseek-2", "--json"},
+			wantBody: map[string]interface{}{"prompt": "do work", "agentId": "current-agent", "provider": "deepseek-2"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotPath string
+			var gotBody map[string]interface{}
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotPath = r.Method + " " + r.URL.Path
+				_ = json.NewDecoder(r.Body).Decode(&gotBody)
+				_, _ = w.Write([]byte(`{"id":"child","engine":"dsh"}`))
+			}))
+			defer srv.Close()
+			configureCLITestRunner(t, srv.URL)
+			t.Setenv(envMCPOrchestration, "1")
+			t.Setenv("ORBIT_SESSION_ID", "current-session")
+			t.Setenv(envOrchestrationToken, "session-token")
+			t.Setenv("ORBIT_AGENT_ID", "current-agent")
+
+			var out bytes.Buffer
+			if err := cmdSessionCLI(tc.args, strings.NewReader(""), &out); err != nil {
+				t.Fatal(err)
+			}
+			if gotPath != "POST /api/runner/sessions" {
+				t.Fatalf("request = %s", gotPath)
+			}
+			if !reflect.DeepEqual(gotBody, tc.wantBody) {
+				t.Fatalf("body = %#v, want %#v", gotBody, tc.wantBody)
+			}
+		})
+	}
+
+	t.Run("an empty engine is refused before anything is sent", func(t *testing.T) {
+		configureCLITestRunner(t, "http://127.0.0.1:1")
+		t.Setenv(envMCPOrchestration, "1")
+		t.Setenv("ORBIT_SESSION_ID", "current-session")
+		t.Setenv(envOrchestrationToken, "session-token")
+		var out bytes.Buffer
+		err := cmdSessionCLI([]string{"create", "--prompt", "do work", "--engine", " "}, strings.NewReader(""), &out)
+		if err == nil || !strings.Contains(err.Error(), "--engine cannot be empty") {
+			t.Fatalf("err = %v", err)
+		}
+	})
+}

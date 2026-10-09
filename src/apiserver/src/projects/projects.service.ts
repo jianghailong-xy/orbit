@@ -124,6 +124,7 @@ import {
 } from '../sessions/task-work-carrier';
 import { SessionsService, type SessionReceiveBlockedReason } from '../sessions/sessions.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
+import { CoordinatorEvidenceQueueService } from './coordinator-evidence-queue.service';
 import { coordinatorFuseUsage, readCoordinatorWakeups } from './coordinator-progress';
 import { openFuseEpisodeId } from './project-fuse';
 import { ProjectPanorama, readProjectPanorama } from './project-panorama';
@@ -1011,6 +1012,10 @@ export class ProjectsService {
     // reading they never reach. Its absence costs that one read the fuse row and nothing else.
     private readonly convergence: CoordinatorConvergenceService =
       undefined as unknown as CoordinatorConvergenceService,
+    // Only `coordinator` needs it, beside `openItems` and for the same reason: the evidence that
+    // waited for the conversation being replaced is the new one's to decide. Defaulted like the rest.
+    private readonly evidenceQueue: CoordinatorEvidenceQueueService =
+      undefined as unknown as CoordinatorEvidenceQueueService,
   ) {}
 
   /**
@@ -4458,6 +4463,9 @@ export class ProjectsService {
     // The conversation being REPLACED goes with it (§5.2 R11): an owner's answer to a question that
     // one asked was addressed to it, and this rotation is the moment it stops being able to read it.
     await this.openItems?.deliverOwed(id, project.coordinatorSessionId ?? undefined);
+    // And the evidence revisions waiting for a coordinator: handed to this one, oldest first
+    // (projects/coordinator-evidence-queue.service.ts).
+    await this.evidenceQueue?.deliverOwed(id);
     return { sessionId: session.id, created: true, workspaceId: runIn };
   }
 

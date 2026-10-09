@@ -14,12 +14,18 @@ public enum ProvidersOverview {
     public static let poolGone = "That pool no longer exists."
     /// A key's page when the key has gone, as the web's edit page says it.
     public static let keyGone = "That provider no longer exists."
+    /// What a Claude subscription token's line says after its one engine.
+    public static let subscriptionToken = "subscription token"
 
-    /// The line under a key's name: its default model — or, for a DeepSeek Harness key, whose models
-    /// come from the runtime itself and which has no default, where it runs.
-    public static func keyLine(_ key: ConfiguredProvider) -> String? {
-        if let model = key.defaultModel, !model.isEmpty { return model }
-        return key.runtime == "dsh" ? "Runs on DeepSeek Harness" : nil
+    /// The line under a key's model (docs/mocks/provider-engine-decoupling/ios-1-infrastructure.html):
+    /// every engine it runs on, by its CLI's name, in the server's order — a DeepSeek key's "Claude Code ·
+    /// OpenCode · DeepSeek Harness" — and for a Claude subscription token, which Claude Code alone runs,
+    /// that it is one (web's `KeyEngines`).
+    public static func keyLine(_ key: ConfiguredProvider) -> String {
+        // Anthropic's protocol on Claude Code alone: what the server, holding the key, answers for a token.
+        let token = ["claude", "dsh"].contains(key.runtime ?? "claude") && key.engines == ["claude"]
+        let names = ProviderEngines.of(key).map(ProviderEngines.cliName)
+        return (names + (token ? [subscriptionToken] : [])).joined(separator: " · ")
     }
 
     /// A pool of Claude keys' value: why nothing in it can run, when that is so; otherwise how many of its

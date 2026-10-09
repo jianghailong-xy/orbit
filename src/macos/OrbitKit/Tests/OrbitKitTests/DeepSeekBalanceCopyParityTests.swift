@@ -8,12 +8,13 @@ import XCTest
 ///
 /// Deliberately not compared: the footnote under the balance, which the phone shortens for its width,
 /// and the words only a phone has to say — that its key is changed on the web, that the top-up opens
-/// in Safari, the rows a phone lays the balance out in (Updated, Last tried, Balance: Unknown), and the
-/// row's "Unavailable", where the web's list has room for the reason.
+/// in Safari, the rows a phone lays the balance out in (Updated, Last tried, Balance: Unknown), the
+/// row's "Unavailable", where the web's list has room for the reason, and the key page's "Runs on",
+/// one row holding the engines the web lists under Works with.
 final class DeepSeekBalanceCopyParityTests: XCTestCase {
     private static let component = "src/web/src/components/DeepSeekBalance.tsx"
     private static let lib = "src/web/src/lib/deepseekBalance.ts"
-    private static let runtimes = "src/web/src/lib/sessionProviderChoices.ts"
+    private static let keys = "src/web/src/pages/InfrastructurePage.tsx"
     private static let editPage = "src/web/src/pages/ProviderConnectPage.tsx"
 
     private struct Missing: Error, CustomStringConvertible {
@@ -69,11 +70,32 @@ final class DeepSeekBalanceCopyParityTests: XCTestCase {
         assertSays(try web(Self.lib), "'\(DeepSeekBalance.topUpURL.absoluteString)'", in: Self.lib)
     }
 
+    /// A key's line is every engine it runs on, as the server lists them (`engines`, default first): a
+    /// Harness key folded into DeepSeek's runs on Claude Code and OpenCode too.
     func testAHarnessKeysLineIsWhereItRunsAsTheWebSaysIt() throws {
-        assertSays(try web(Self.runtimes), "'\(ProvidersOverview.keyLine(ConfiguredProvider(slug: "h", label: "H", runtime: "dsh"))!)'",
-                   in: Self.runtimes)
+        // Infrastructure's API keys: each engine by its CLI's name, a dot between (web's `KeyEngines`).
+        let keys = try web(Self.keys)
+        assertSays(keys, "{row.engines.map((engine, index) => (", in: Self.keys)
+        assertSays(keys, "{index > 0 && <> <span className=\"prov-engine-sep\">·</span> </>}", in: Self.keys)
+        assertSays(keys, "<EngineTile engine={engine} size={12} /> {ENGINE_CLI_NAMES[engine]}", in: Self.keys)
+        XCTAssertEqual(ProvidersOverview.keyLine(ConfiguredProvider(slug: "h", label: "H", runtime: "dsh",
+                                                                    engines: ["dsh", "claude", "opencode"])),
+                       "DeepSeek Harness · Claude Code · OpenCode")
+        // A Claude subscription token: Anthropic's protocol on Claude Code alone, and said to be one.
+        assertSays(keys, "keyDialect(row.runtime) === 'anthropic' && row.engines.length === 1 && row.engines[0] === AgentProvider.CLAUDE",
+                   in: Self.keys)
+        assertSays(keys, "<span>\(ProvidersOverview.subscriptionToken), Claude Code only</span>", in: Self.keys)
+        XCTAssertEqual(ProvidersOverview.keyLine(ConfiguredProvider(slug: "max", label: "Claude Max", runtime: "claude",
+                                                                    engines: ["claude"])),
+                       "Claude Code · subscription token")
+        // From a server that doesn't list them yet, the engine its runtime names.
         XCTAssertEqual(DeepSeekBalance.engine(of: ConfiguredProvider(slug: "h", label: "H", runtime: "dsh")), "DeepSeek Harness")
-        assertSays(try web(Self.runtimes), "'\(DeepSeekBalance.runsOn) \(DeepSeekBalance.engine(of: ConfiguredProvider(slug: "d", label: "D", runtime: "claude")))'",
-                   in: Self.runtimes)
+        // The key's page lists the same engines under Works with, a row each (web's `WorksWith`).
+        let page = try web(Self.editPage)
+        assertSays(page, "<div className=\"provider-works-head\"> \(DeepSeekBalance.worksWith) <small>", in: Self.editPage)
+        assertSays(page, "<EngineTile engine={engine} size={18} /> {ENGINE_CLI_NAMES[engine]}", in: Self.editPage)
+        XCTAssertEqual(DeepSeekBalance.engines(of: ConfiguredProvider(slug: "d", label: "D", runtime: "claude",
+                                                                      engines: ["claude", "opencode", "dsh"])),
+                       ["Claude Code", "OpenCode", "DeepSeek Harness"])
     }
 }

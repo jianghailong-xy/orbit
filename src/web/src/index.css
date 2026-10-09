@@ -5234,6 +5234,11 @@ html[data-theme='dark'] .session-tag-chip {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* What kind of line this is, before its text — the recap's "Recap · 5:38 PM". Muted like the
+   row's time so it reads as the line's header and not as part of the sentence it introduces. */
+.session-preview-label {
+  color: var(--text-3);
+}
 /* Live status line (in place of a reply, while the agent works). Colour matches the
    status glyph: blue = running, amber = waiting on you, grey = queued, a background
    process the agent left up (which outlives the turn but isn't the agent working), or a
@@ -9880,6 +9885,123 @@ button.chat-jump-start:hover {
 .evidence-decision-receipt-mark {
   color: var(--success-solid);
 }
+/* A version waiting for its paused coordinator (`QueuedEvidenceCard`): folded, in the neutral
+   frame the exception card wears while the coordinator is handling it, because nobody is being
+   asked anything yet. Two classes, for the reason the receipt's rule gives. */
+.approval-card.evidence-queued {
+  border-color: var(--border);
+  background: var(--bg-raised);
+}
+.evidence-queued .approval-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-subtle);
+  border-bottom-color: var(--border-subtle);
+}
+.evidence-queued-mark {
+  color: var(--text-3);
+}
+.evidence-queued-time {
+  flex: none;
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+.evidence-queued-body {
+  padding-top: 8px;
+  padding-bottom: 10px;
+}
+.evidence-queued-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+  line-height: 1.45;
+}
+/* Why it waits: amber while the coordinator is paused, the note's grey once it is back. The same
+   line heads the card a reader opens from here, in the warning box below. */
+.evidence-queued-pause {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.evidence-queued-pause.is-paused {
+  color: var(--warning);
+}
+.evidence-queued-pause .anticon {
+  flex: none;
+}
+.evidence-queued-note {
+  margin-top: 2px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+/* The card's one way in, on a row of its own: text in the brand colour, as the open-item card's
+   own presses are, under a hairline. */
+.evidence-queued-decide {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 0 0;
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand);
+  text-align: start;
+  cursor: pointer;
+}
+.evidence-queued-decide:hover {
+  text-decoration: underline;
+}
+.evidence-queued-decide:focus-visible {
+  outline: 2px solid var(--orbit-focus-color);
+  outline-offset: 2px;
+}
+.evidence-queued-caret {
+  font-size: 11px;
+}
+/* The card that version opens into says why it waits before anything else. */
+.evidence-queued-notice {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--warning-border);
+  border-radius: 8px;
+  background: var(--warning-bg);
+}
+.evidence-queued-notice .evidence-queued-pause {
+  margin-top: 0;
+}
+/* Handed to the coordinator: the conversation's one-line pill, as a merge's line is drawn. */
+.evidence-sent {
+  display: flex;
+  justify-content: center;
+}
+.evidence-sent-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin: 6px auto;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-2);
+  font-size: 13px;
+}
 /* ── The owner-confirmation card ──────────────────────────────────────────────────────────
    `OwnerConfirmationCard.tsx`: an OWNER_CONFIRMED task's run has ended its turn, and its owner is
    asked to confirm it done or send it back. The evidence card's frame, with the two facts a person
@@ -10333,12 +10455,6 @@ button.chat-jump-start:hover {
 }
 .start-card-dialog .orbit-overlay-title:empty {
   display: none;
-}
-/* In a conversation as wide as the window, the card keeps the width it was drawn for: a form whose
-   settings sit beside their names, and criteria a reader can follow from line to line. Narrower
-   conversations, the project page's dialog and the phone's sheet are under the cap already. */
-.start-card {
-  max-width: 720px;
 }
 /* The plan as the project page's task graph (`StartPlanGraph`), drawn only while it fits. */
 .start-card-graph {
@@ -15091,13 +15207,12 @@ button.chat-jump-start:hover {
   font-size: 14px;
   color: var(--text-1);
 }
+/* Wraps rather than clips: a vendor not yet connected names the engines its key runs on, and
+   DeepSeek's three take two lines. */
 .provider-card .pc-sub {
   margin-top: 1px;
   font-size: 12px;
   color: var(--text-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 /* A vendor the user has already connected. The card still connects another key, so it keeps the
    normal surface and marks itself at the edges: a tinted border and a check. */
@@ -15117,6 +15232,57 @@ button.chat-jump-start:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 600;
+}
+/* The engines a key runs on, under its name in the keys table, each beside its mark. */
+.prov-engines {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 4px;
+}
+.prov-engine {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.prov-engine-sep {
+  color: var(--text-4);
+}
+/* A vendor's head over its keys, and the keys indented under it past the head's mark. The head keeps
+   its tint under the pointer: it is a heading, not a row to pick. */
+.provider-keys .orbit-table tbody tr.prov-group > td,
+.provider-keys .orbit-table tbody tr.prov-group:hover > td {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  background: var(--bg-sunken);
+}
+.prov-group-in {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+}
+.prov-group-in b {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.prov-group-in span {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.prov-group-in .prov-group-add {
+  margin-left: auto;
+  color: var(--brand);
+  font-size: 13px;
+}
+.provider-keys .orbit-table tr.prov-key > td:first-child {
+  padding-left: 46px;
+}
+@media (max-width: 640px) {
+  .provider-keys .orbit-table tr.prov-key > td:first-child {
+    padding-left: 20px;
+  }
 }
 /* A long custom base URL is the one cell that can't ellipsize (a truncated URL reads as a
    different one), so it wraps at any character instead of setting the column's width. */
@@ -17137,6 +17303,134 @@ button.chat-jump-start:hover {
   margin-top: 24px;
   padding-top: 16px;
   border-top: 1px solid var(--border-subtle);
+}
+/* Delete key, and the connection test's verdict beside it. */
+.provider-actions-start {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+/* A save the server refused, in its own words, above the buttons. */
+.provider-save-error {
+  margin-top: 16px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--error-border);
+  background: var(--error-bg);
+  color: var(--text-1);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+.provider-save-error b {
+  color: var(--error);
+}
+
+/* The engines a DeepSeek key works with on its connect and edit pages, and on the edit page what uses
+   it on each right now. */
+.provider-works {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+}
+.provider-works-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 8px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.provider-works-head small {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+.provider-works-row {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+.provider-works.with-use .provider-works-row {
+  grid-template-columns: 190px minmax(0, 1fr) auto;
+}
+.provider-works-row + .provider-works-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.provider-works-engine {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  color: var(--text-1);
+}
+.provider-works-how,
+.provider-works-use {
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.provider-works-how b {
+  font-weight: 500;
+  color: var(--text-2);
+}
+.provider-works-use {
+  white-space: nowrap;
+}
+.provider-works-use b {
+  font-weight: 600;
+  color: var(--text-1);
+}
+@media (max-width: 640px) {
+  .provider-works-row,
+  .provider-works.with-use .provider-works-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+}
+/* Which processes a key reaches, under Works with while connecting it. */
+.provider-who {
+  margin-top: 10px;
+  padding: 11px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-subtle);
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text-2);
+}
+.provider-who b {
+  color: var(--text-1);
+}
+.provider-who ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+/* The question asked before a key is turned off or deleted: what uses it, engine by engine. */
+.key-impact p {
+  margin: 0 0 8px;
+  line-height: 1.65;
+}
+.key-impact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0 0 10px;
+}
+.key-impact-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.key-impact-use b {
+  font-weight: 600;
+  color: var(--text-1);
 }
 
 /* Model rows are a small table, and their placeholders vanish once filled — so the columns are

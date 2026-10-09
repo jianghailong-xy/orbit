@@ -178,6 +178,7 @@ import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
 import { type CreateTaskBatchItemDto } from '../tasks/dto';
+import { enqueueRecap, recapDue } from '../sessions/recap';
 import { normalizeStoredRememberRules } from '../sessions/remember-rules';
 import {
   APPROVAL_ABANDONED_STATUS,
@@ -207,6 +208,7 @@ import { enqueueForDoneTask } from '../projects/project-integration-job';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
+import { CoordinatorEvidenceQueueService } from '../projects/coordinator-evidence-queue.service';
 import {
   TASK_ACCEPTANCE_CLIENT_TURN_PREFIX,
   executableAcceptanceFailureReason,
@@ -875,6 +877,13 @@ export class RunnerApiController {
      * binding the runner guards enforce does not depend on it.
      */
     @Optional() @Inject(MANAGED_RUNNER_GATE) private readonly managedGate?: ManagedRunnerGate,
+    /**
+     * Hands a project's coordinator the evidence revisions that waited for it while it was paused
+     * (projects/coordinator-evidence-queue.service.ts), when one of its turns ends. `@Optional()` for
+     * the same reason as the rest of this list: what is not handed over here is still waiting on the
+     * next turn end, and on the task service's tick.
+     */
+    @Optional() private readonly evidenceQueue?: CoordinatorEvidenceQueueService,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -2760,10 +2769,14 @@ export class RunnerApiController {
         runtimeSessionId: s.runtimeSessionId,
       });
       if (!runtime) continue;
-      const agg = await this.prisma.runEvent.aggregate({
-        where: { sessionId: s.id },
-        _max: { seq: true },
-      });
+      // Raw SQL, never `runEvent.aggregate`: Prisma compiles an aggregate to a MAX over an
+      // OFFSET subquery the planner cannot flatten, so it scans every event this session has
+      // instead of reading the one index tuple `max(seq)` does (cf. QueueService.buildSession).
+      // This runs once per open session on every reclaim, so the difference is the whole
+      // reclaim storm's disk traffic.
+      const [maxSeqRow] = await this.prisma.$queryRaw<Array<{ max: number }>>`
+        SELECT coalesce(max("seq"), 0) AS "max" FROM "run_event" WHERE "session_id" = ${s.id}::uuid
+      `;
       // The stored session model wins over Runtime/ModelProvider defaults, so a resumed process
       // keeps the model it was created with; cross-provider ids are still coerced safely.
       const workspaceCfg: AgentExecConfig = {
@@ -2840,7 +2853,7 @@ export class RunnerApiController {
         leaseOwner: s.inboxLeaseOwner ?? undefined,
         title: s.title,
         sessionUuid: runtime.sessionUuid,
-        maxSeq: agg._max.seq ?? 0,
+        maxSeq: Number(maxSeqRow?.max ?? 0),
         // cf. the claim path: non-null = import PENDING, and the runner performs the import step
         // inside this claim before the spawn (a runner restarted mid-import resumes it here).
         importSourceCwd: s.importSourceCwd ?? undefined,
@@ -5609,6 +5622,9 @@ export class RunnerApiController {
       // handed over — including what was recorded while it was busy, and what the door that recorded
       // it never got to deliver (contract §4.4 X-D4 3).
       await this.openItems?.deliverOwedTo(sessionId);
+      // And the evidence revisions that waited for it while it was paused: a coordinator whose turn
+      // ended is back, and a paused one is left alone (projects/coordinator-evidence-queue.service.ts).
+      await this.evidenceQueue?.deliverOwedTo(sessionId);
       // And the confirmation reviews it was to be handed whose delivery a crash cut off between their
       // commit and the hand-off (docs/owner-confirmation-review-contract.md §2 D5).
       await this.confirmationReviews?.deliverPendingFor(sessionId).catch((error) => this.logger.warn(
@@ -5619,6 +5635,12 @@ export class RunnerApiController {
       // T5: this turn's numbers, events and tool calls are committed now, so its spend is a fact.
       // A steer settles only its own row and books no turn, cost or tool call.
       await this.attemptBudgets?.meterQuietly(sessionId, new Date());
+      // And the rolling recap (sessions/recap.ts) may fold the turn that just committed into the
+      // session's one-line summary. Off the response path in both halves — the due check is two
+      // reads and the pass may wait on a model — because a list line is cosmetic and the runner
+      // is blocked on this reply. A settle the two-minute window skips is what `recapDue` is for;
+      // a session's LAST settle does not come through here at all (RealtimeService.publish).
+      void this.recapAfterTurn(sessionId);
     }
     if (
       'taskReclaimed' in finalized
@@ -5679,6 +5701,22 @@ export class RunnerApiController {
       this.queue.notifySessionQueued();
     }
     return { ok: true, status: finalized.status };
+  }
+
+  /**
+   * Ask for a rolling recap after a completed turn, without waiting for one. The due check is read
+   * here rather than left to the pass so a throttled settle never takes a queue slot, and the pass
+   * re-reads both it and the cursor on its own — a race costs one skipped run, never a wrong recap.
+   * NEVER rejects and is never awaited: a recap is cosmetic, and the settle that asked for it has
+   * already answered the runner by the time this runs.
+   */
+  private async recapAfterTurn(sessionId: string): Promise<void> {
+    try {
+      if (!(await recapDue({ db: this.prisma, sessionId }))) return;
+      await enqueueRecap({ db: this.prisma, sessionId });
+    } catch {
+      // The generator already swallows every failure of its own; this covers the reads around it.
+    }
   }
 
   @UseGuards(RunnerAuthGuard)

@@ -367,7 +367,7 @@ export function wikiDocCleanPath(path: string): string {
 }
 
 /** What a piece past the read's end is missing for: the window a runner without the whole-file capability gives. */
-const PAST_THE_READ = `(past the first ${WIKI_REPO_OPS.boundedChars} characters a read of the file gives)`;
+export const PAST_THE_READ = `(past the first ${WIKI_REPO_OPS.boundedChars} characters a read of the file gives)`;
 
 /**
  * The repository's half of a section's material at the commit `repo` reads (`wikiDocRepoPieces`): its design

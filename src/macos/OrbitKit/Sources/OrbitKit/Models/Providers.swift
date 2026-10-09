@@ -52,6 +52,11 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
     /// Whether an OpenCode session may spend this key too (`OpenCodeKeys`), as GET /providers decides
     /// it. Nil from an older server, which reads as no.
     public var runsOnOpenCode: Bool? = nil
+    /// Every engine this key runs on, its default first, as GET /providers and /providers/mine answer for
+    /// it (docs/provider-engine-contract.md §6.3): a DeepSeek key on Claude Code, OpenCode and DeepSeek
+    /// Harness, a Claude subscription token on Claude Code alone. Nil from an older server, which
+    /// `ProviderEngines.of` reads as the key's runtime.
+    public var engines: [String]? = nil
     /// The endpoint, and whether a key is stored — only on the account's own list (GET
     /// /providers/mine); the pickers' catalogue carries neither. What tells a DeepSeek key
     /// (`DeepSeekBalance.applies`) and names its endpoint on the key's page.
@@ -66,6 +71,7 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
     private enum CodingKeys: String, CodingKey {
         case providerID = "id"
         case slug, label, runtime, models, defaultModel, presetSlug, modelsFromRuntime, planUsage, runsOnOpenCode
+        case engines
         case baseUrl, hasApiKey
         case enabled
     }
@@ -74,7 +80,8 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
                 models: [ConfiguredProviderModel] = [], defaultModel: String? = nil,
                 presetSlug: String? = nil, modelsFromRuntime: Bool? = nil,
                 planUsage: PlanUsageSnapshot? = nil, runsOnOpenCode: Bool? = nil,
-                baseUrl: String? = nil, hasApiKey: Bool? = nil, enabled: Bool? = nil) {
+                baseUrl: String? = nil, hasApiKey: Bool? = nil, enabled: Bool? = nil,
+                engines: [String]? = nil) {
         self.slug = slug
         self.label = label
         self.runtime = runtime
@@ -87,5 +94,6 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
         self.baseUrl = baseUrl
         self.hasApiKey = hasApiKey
         self.enabled = enabled
+        self.engines = engines
     }
 }

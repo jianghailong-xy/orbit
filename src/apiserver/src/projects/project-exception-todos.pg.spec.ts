@@ -1865,10 +1865,16 @@ async function retryCoordinator(stack: Stack, w: World): Promise<void> {
   });
   // The runner's claim of a revived conversation, which `claimed` stands in for on a live one: it is
   // RUNNING, and owned by the process this fixture reports as — no lease owner — rather than by the
-  // hand-off the revive leaves on it for whichever process takes it next.
-  await stack.db.session.updateMany({
-    where: { id: coordinator, status: RunStatus.PENDING },
-    data: { status: RunStatus.RUNNING, inboxLeaseOwner: null },
+  // hand-off the revive leaves on it for whichever process takes it next. The transaction declares
+  // it reads the session's recorded engine, which migration 0414 requires of every PENDING -> RUNNING
+  // write (`common/session-scheduling.ts`): without it the claim is dropped in silence, `updateMany`
+  // answers 0 and nothing at all is claimed.
+  await stack.db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+    await tx.session.updateMany({
+      where: { id: coordinator, status: RunStatus.PENDING },
+      data: { status: RunStatus.RUNNING, inboxLeaseOwner: null },
+    });
   });
   const delivered = await dequeue(stack, coordinator, w.runnerId);
   assert.equal(delivered?.turnId, retried.turnId, 'the retried turn was handed to the runner');
@@ -2062,8 +2068,13 @@ test('delivering an item spends nothing of the coordinator\'s fuse budget', { sk
     const [queued] = await itemTurns(stack.db, coordinator);
     assert.ok(queued, `nothing was queued — ${await factsAbout(stack.db, w, t.taskId)}`);
 
-    // The runner claims the conversation, the engine reads the item and ends that turn.
-    await stack.db.session.update({ where: { id: coordinator }, data: { status: RunStatus.RUNNING } });
+    // The runner claims the conversation, the engine reads the item and ends that turn. The
+    // transaction declares it reads the session's recorded engine, as migration 0414 requires of
+    // every PENDING -> RUNNING write (`common/session-scheduling.ts`).
+    await stack.db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+      await tx.session.update({ where: { id: coordinator }, data: { status: RunStatus.RUNNING } });
+    });
     const handed = await dequeue(stack, coordinator, w.runnerId);
     assert.equal(handed?.turnId, queued.id);
     await stack.db.runEvent.create({
