@@ -42,8 +42,12 @@ data class OrbitNavigation(
     fun push(route: OrbitRoute): OrbitNavigation = if (current == route) this
         else copy(stacks = stacks + (section to (frames + route)))
     fun back(): OrbitNavigation = if (!canGoBack) this else copy(stacks = stacks + (section to frames.dropLast(1)))
-    fun select(key: String, root: OrbitRoute): OrbitNavigation = copy(section = key,
-        stacks = stacks + (key to (stacks[key] ?: listOf(root))))
+    /** A drawer row's tap (iOS `openDrawerDestination`, 3d50935b4): the row of the destination already showing leaves
+     * its page as it is — the tap only closes the drawer — and any other lands on its destination's root page, the
+     * stack being left going with it. */
+    fun select(key: String, root: OrbitRoute): OrbitNavigation = if (key == section) this else land(key, root)
+    /** [key]'s root page whatever was showing: where a page that sends the reader to a destination lands. */
+    fun land(key: String, root: OrbitRoute): OrbitNavigation = copy(section = key, stacks = mapOf(key to listOf(root)))
     fun receive(route: OrbitRoute): OrbitNavigation {
         val arrived = route.arrived()
         return if (account == null) copy(pending = arrived) else push(arrived)
@@ -56,6 +60,10 @@ data class OrbitNavigation(
         return if (key != null && next.pending != null) next.copy(pending = null).push(next.pending) else next
     }
 }
+
+/** The destination of a drawer project row: the project's own page (iOS `DrawerDestination.project`). The two
+ * spellings of its id are one destination. */
+fun projectDestination(id: String) = "project:${ObjectId.canonical(id) ?: id}"
 
 /** The Wiki and Watch pages, whose state is the frame's own (MainActivity drops it once the frame left every stack). */
 val OrbitRoute.isWikiOrWatch get() = destination == Destination.WATCH || destination.name.startsWith("WIKI")

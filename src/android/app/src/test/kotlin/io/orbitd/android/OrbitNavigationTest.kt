@@ -24,22 +24,56 @@ class OrbitNavigationTest {
         assertEquals(Destination.WORKSPACES, signedIn.back().current.destination)
     }
 
-    @Test fun folderSearchAndCrossObjectReturnPathsAreRetainedPerSection() {
+    /** A05-8 (iOS 3d50935b4, the coordinator's call to follow it): within a destination Back walks its return path —
+     * a folder, a search, a session the search opened and the objects it links to — and a drawer row for another
+     * destination lands on that destination's root, the stack it leaves going with it. This replaces
+     * `folderSearchAndCrossObjectReturnPathsAreRetainedPerSection`, which pinned every section keeping its stack
+     * across a switch: switching to Tasks and back used to bring the whole path back. */
+    @Test fun returnPathsHoldWithinADestinationAndEachDrawerRowLandsOnItsRoot() {
+        val root = OrbitRoute(Destination.WORKSPACE, "w1")
         val folder = OrbitRoute(Destination.FOLDER, "f1", "w1")
         val search = OrbitRoute(Destination.SEARCH)
-        var nav = OrbitNavigation().bindAccount("server|user").select("w1", OrbitRoute(Destination.WORKSPACE, "w1"))
+        val path = OrbitNavigation().bindAccount("server|user").select("w1", root)
             .push(folder).push(search).push(OrbitRoute(Destination.SESSION, uuid, origin = Origin.SEARCH))
             .push(OrbitRoute(Destination.TASK, uuid, origin = Origin.LINK))
             .push(OrbitRoute(Destination.PROJECT, uuid, origin = Origin.LINK))
             .push(OrbitRoute(Destination.WIKI_ENTRY, uuid, origin = Origin.LINK))
             .push(OrbitRoute(Destination.WATCH, uuid, origin = Origin.LINK))
-        val original = nav
-        nav = nav.select("Tasks", OrbitRoute(Destination.TASKS)).select("w1", OrbitRoute(Destination.WORKSPACE, "w1"))
-        assertEquals(original.frames, nav.frames)
-        assertEquals(original.section, nav.section)
+        var nav = path
         repeat(5) { nav = nav.back() }
         assertEquals(search, nav.current)
         assertEquals(folder, nav.back().current)
+        val tasks = path.select("Tasks", OrbitRoute(Destination.TASKS))
+        assertEquals(listOf(OrbitRoute(Destination.TASKS)), tasks.frames)
+        assertEquals("the stack it left goes", setOf("Tasks"), tasks.stacks.keys)
+        val again = tasks.select("w1", root)
+        assertEquals("the workspace again, at its root", listOf(root), again.frames)
+        assertFalse(again.canGoBack)
+    }
+
+    /** The row of the destination already showing only closes the drawer: the page on top of it stays. */
+    @Test fun theDestinationAlreadyShowingStaysWhereItIs() {
+        val task = OrbitNavigation().bindAccount("server|user").select("Tasks", OrbitRoute(Destination.TASKS))
+            .push(OrbitRoute(Destination.TASK, uuid))
+        assertEquals(task, task.select("Tasks", OrbitRoute(Destination.TASKS)))
+    }
+
+    /** A page that sends the reader to a workspace (a runner's, a deleted workspace's settings) lands on that
+     * workspace's root even when it is the destination already showing — unlike a drawer row. */
+    @Test fun aPageSendingTheReaderToADestinationLandsOnItsRoot() {
+        val root = OrbitRoute(Destination.WORKSPACE, "w1", "w1")
+        val runner = OrbitNavigation().bindAccount("server|user").select("w1", root).push(OrbitRoute(Destination.RUNNER, "r1"))
+        assertEquals(listOf(root), runner.land("w1", root).frames)
+        assertEquals(listOf(OrbitRoute(Destination.WORKSPACES)), runner.land("workspaces", OrbitRoute(Destination.WORKSPACES)).frames)
+    }
+
+    /** A drawer project row is a destination of its own; the two spellings of a project's id are one destination. */
+    @Test fun aProjectIsADestinationOfItsOwn() {
+        assertEquals(projectDestination(publicId), projectDestination(uuid))
+        val project = OrbitNavigation().bindAccount("server|user").select("Tasks", OrbitRoute(Destination.TASKS))
+            .select(projectDestination(publicId), OrbitRoute(Destination.PROJECT, publicId, origin = Origin.DRAWER))
+        assertEquals(listOf(OrbitRoute(Destination.PROJECT, publicId, origin = Origin.DRAWER)), project.frames)
+        assertFalse(project.canGoBack)
     }
 
     @Test fun accountAndInstanceChangesDiscardEveryOldPathAndPendingObject() {

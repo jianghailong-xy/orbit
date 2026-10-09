@@ -166,9 +166,12 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         }
         val route = navigation.current
         fun open(next: OrbitRoute) { keyboard?.hide(); focus.clearFocus(); navigation = navigation.push(next) }
+        // A drawer row: the destination already showing only closes the drawer, any other opens at its root (A05-8).
         fun select(key: String, root: OrbitRoute) {
             keyboard?.hide(); focus.clearFocus(); navigation = navigation.select(key, root); scope.launch { drawer.close() }
         }
+        // A page sending the reader to a destination: its root, whatever was showing.
+        fun land(key: String, root: OrbitRoute) { keyboard?.hide(); focus.clearFocus(); navigation = navigation.land(key, root) }
         LaunchedEffect(route, signedIn.handle, live.first) {
             if (live.first === signedIn.handle) app.realtime.selectSession(if (route.destination == Destination.SESSION) route.id else null)
         }
@@ -211,7 +214,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 icon = { Icon(painterResource(R.drawable.ic_workspace), null) },
                                 onClick = { select(workspace.id, OrbitRoute(Destination.WORKSPACE, workspace.id, workspace.id, origin = Origin.DRAWER)) })
                         }
-                        DrawerProjects(api, revision) { next -> scope.launch { drawer.close() }; open(next) }
+                        DrawerProjects(api, revision, navigation.section) { key, root -> select(key, root) }
                         Spacer(Modifier.height(24.dp))
                         val workspace = route.workspaceId ?: workspaces.firstOrNull()?.id
                         Button(onClick = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.DRAFT, workspaceId = workspace, origin = Origin.DRAWER)) },
@@ -245,7 +248,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         CompositionLocalProvider(LocalReaderResources provides remember(signedIn.handle) { ReaderResources(app.session, signedIn.handle) }) {
                         holder.SaveableStateProvider(Wire.json.encodeToString(route)) {
                             when (route.destination) {
-                                Destination.WORKSPACES -> WorkspaceHome(data, { w -> select(w.id, OrbitRoute(Destination.WORKSPACE, w.id, w.id)) }) { app.realtime.refreshDirectory() }
+                                Destination.WORKSPACES -> WorkspaceHome(data, { w -> land(w.id, OrbitRoute(Destination.WORKSPACE, w.id, w.id)) }) { app.realtime.refreshDirectory() }
                                 Destination.WORKSPACE, Destination.FOLDER -> DirectoryScreen(route, data, api, ::open) { app.realtime.refreshDirectory() }
                                 Destination.SEARCH -> SearchScreen(api, ::open)
                                 Destination.SESSION -> SessionReader(app, signedIn.handle, route, api, data, ::open)
@@ -261,11 +264,11 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                     navigate = { change -> navigation = change(navigation) }, open = ::open)
                                 Destination.SETTINGS -> SettingsScreen(management, route, revision, ::open, { navigation = navigation.back() }, auth::logout,
                                     changed = { app.realtime.refreshDirectory() },
-                                    workspaceDeleted = { select("workspaces", OrbitRoute(Destination.WORKSPACES)) },
+                                    workspaceDeleted = { land("workspaces", OrbitRoute(Destination.WORKSPACES)) },
                                     deviceAlerts = { if (app.push.configured) app.push.notifications.allowed() else null },
                                     notifications = { NotificationSettings(app.push) }, about = { AboutSection(app.updates) })
                                 Destination.RUNNER -> RunnerScreen(management, route.id, route.recordId, revision, ::open, { navigation = navigation.back() }) {
-                                    select(it, OrbitRoute(Destination.WORKSPACE, it, it))
+                                    land(it, OrbitRoute(Destination.WORKSPACE, it, it))
                                 }
                                 Destination.BUILD -> BuildInformation { navigation = navigation.back() }
                                 else -> ObjectDestination(route, api, data, revision, ::open) { app.realtime.refreshDirectory() }
