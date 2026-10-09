@@ -21,10 +21,10 @@ const CONVERSED_RUN_SOURCES: ReadonlySet<string> = new Set(['MANUAL', 'PROJECT_C
 
 /**
  * Whether a claim (or reclaim) spawns Claude Code with `--prompt-suggestions` (design §3.1): the
- * owner wants them, the engine is Claude talking to Anthropic, a person converses in the session,
- * and it is not a Wiki maintenance run. The suggestion is one more request on the session's own
- * account, measured only against Anthropic, so a configured provider's endpoint (the
- * ANTHROPIC_BASE_URL its env injects) leaves it off.
+ * owner wants them, the engine is Claude talking to an endpoint the suggestion was measured on, a
+ * person converses in the session, and it is not a Wiki maintenance run. The suggestion is one
+ * more request on the session's own account or key, so any other configured provider's endpoint
+ * (the ANTHROPIC_BASE_URL its env injects) leaves it off.
  */
 export function claimPromptSuggestions(claim: {
   /** Optional like resolvePermissionMode's: the claim reads it beside that, from the same row. */
@@ -42,12 +42,20 @@ export function claimPromptSuggestions(claim: {
     CONVERSED_RUN_SOURCES.has(claim.runSource) &&
     !(claim.spawnDepth > 0) &&
     claim.maintenance == null &&
-    talksToAnthropic(claim.env) &&
+    talksToMeasuredEndpoint(claim.env) &&
     promptSuggestionsEnabled({ preferences: claim.owner?.preferences })
   );
 }
 
-function talksToAnthropic(env: Record<string, string> | null | undefined): boolean {
+/** The endpoints the suggestion request has been measured on (design §1.3): Anthropic's own, which
+ *  an unset ANTHROPIC_BASE_URL means, and DeepSeek's Anthropic-compatible one. */
+const MEASURED_ENDPOINTS: ReadonlySet<string> = new Set([
+  '',
+  'https://api.anthropic.com',
+  'https://api.deepseek.com/anthropic',
+]);
+
+function talksToMeasuredEndpoint(env: Record<string, string> | null | undefined): boolean {
   const base = (env?.ANTHROPIC_BASE_URL ?? '').trim().replace(/\/+$/, '');
-  return base === '' || base === 'https://api.anthropic.com';
+  return MEASURED_ENDPOINTS.has(base);
 }

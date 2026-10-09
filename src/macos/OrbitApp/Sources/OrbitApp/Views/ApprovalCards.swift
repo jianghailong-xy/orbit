@@ -893,7 +893,7 @@ private struct EvidenceDecisionFacts: View {
             }
             if !gaps.rest.isEmpty {
                 DisclosureToggle(open: gapsOpen,
-                                 label: gapsOpen ? "收起"
+                                 label: gapsOpen ? "Show less"
                                                  : EvidenceDecisions.gapsMore(gaps.rest.count)) {
                     gapsOpen.toggle()
                 }

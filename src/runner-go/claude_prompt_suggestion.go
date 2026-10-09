@@ -37,26 +37,34 @@ var claudeSpawnVersion = claudeCLIVersion
 
 // claudePromptSuggestionsOn reports whether this spawn asks for suggestions: the control plane
 // turned them on for the session, the CLI is new enough to know the flag, and the engine talks
-// to Anthropic. The last check is the runner's own: the control plane already leaves out a
-// configured provider, but a provider switched in by a `reload` brings its endpoint with it, and
-// the runner's own environment may point the CLI somewhere the control plane cannot see. The
-// suggestion request is billed wherever the engine talks to, and it has only been measured
-// against Anthropic.
+// to an endpoint the suggestion was measured on. The last check is the runner's own: the control
+// plane already leaves out any other configured provider, but a provider switched in by a
+// `reload` brings its endpoint with it, and the runner's own environment may point the CLI
+// somewhere the control plane cannot see. The suggestion request is billed wherever the engine
+// talks to.
 func claudePromptSuggestionsOn(job *ClaimedSession) bool {
 	return job.Agent.PromptSuggestions &&
-		claudeTalksToAnthropic(job.Agent.Env) &&
+		claudeTalksToMeasuredEndpoint(job.Agent.Env) &&
 		claudeVersionAtLeast(claudeSpawnVersion(), claudePromptSuggestionsFloor)
 }
 
-// claudeTalksToAnthropic reports whether a claude spawned with agentEnv layered over this
-// process's environment (envWithAgent) keeps the CLI's own endpoint.
-func claudeTalksToAnthropic(agentEnv map[string]string) bool {
+// claudeSuggestionEndpoints are the endpoints the suggestion request was measured on
+// (docs/prompt-suggestions-design.md §1.3): Anthropic's own, which an unset base URL means, and
+// DeepSeek's Anthropic-compatible one.
+var claudeSuggestionEndpoints = map[string]bool{
+	"":                                   true,
+	"https://api.anthropic.com":          true,
+	"https://api.deepseek.com/anthropic": true,
+}
+
+// claudeTalksToMeasuredEndpoint reports whether a claude spawned with agentEnv layered over this
+// process's environment (envWithAgent) talks to one of claudeSuggestionEndpoints.
+func claudeTalksToMeasuredEndpoint(agentEnv map[string]string) bool {
 	base, set := agentEnv["ANTHROPIC_BASE_URL"]
 	if !set {
 		base = os.Getenv("ANTHROPIC_BASE_URL")
 	}
-	base = strings.TrimRight(strings.TrimSpace(base), "/")
-	return base == "" || base == "https://api.anthropic.com"
+	return claudeSuggestionEndpoints[strings.TrimRight(strings.TrimSpace(base), "/")]
 }
 
 // promptSuggestionPayload is the event a prompt_suggestion frame becomes, or nil when it carries

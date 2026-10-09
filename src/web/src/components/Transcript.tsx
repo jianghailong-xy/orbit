@@ -502,7 +502,10 @@ type TextNode = {
   reviewReturn?: ConfirmationReturnCard;
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
-type MarkerNode = { kind: 'divider' | 'interrupt'; seq: number };
+type MarkerNode = { kind: 'interrupt'; seq: number };
+// The end of a finished turn (TurnFoot): when it ended, and the reply its copy button hands back —
+// the turn's last top-level assistant text, absent when it wrote none inside the loaded window.
+type DividerNode = { kind: 'divider'; seq: number; ts?: string; reply?: string };
 // `repeats` counts the identical lines folded into this one (see `engineStderr`); absent or 1
 // means the line was seen once.
 type ErrorNode = { kind: 'error'; seq: number; message: string; repeats?: number };
@@ -545,6 +548,7 @@ type Node =
   | TextNode
   | ResultNode
   | MarkerNode
+  | DividerNode
   | ErrorNode
   | DiagnosticNode
   | AuthErrorNode
@@ -958,6 +962,10 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
   // else, so letting stderr stand as the turn's account would leave this fix doing nothing for the
   // very case that asked for it.
   let turnAccountedFor = false;
+  // The turn's last top-level assistant text so far: what its foot copies once `turn_end` arrives.
+  // Narration between tool calls is overwritten by whatever follows it, so what is left when the
+  // turn ends is the answer the turn ended on.
+  let turnReply: string | undefined;
   for (const ev of events) {
     const p = ev.payload ?? {};
     const parent: string | undefined = p.parentToolUseId;
@@ -1082,7 +1090,11 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
           else if (isUsageLimitErrorText(text)) autoRetry(parent, ev.seq, text, 'quota');
           else if (isRetryableApiErrorText(text)) autoRetry(parent, ev.seq, text, 'apiError');
           else if (isApiErrorText(text)) into(parent).push({ kind: 'error', seq: ev.seq, message: text });
-          else into(parent).push({ kind: 'assistant', seq: ev.seq, text });
+          else {
+            const siblings = into(parent);
+            siblings.push({ kind: 'assistant', seq: ev.seq, text });
+            if (siblings === roots) turnReply = text;
+          }
         }
         break;
       case 'thinking': {
@@ -1158,9 +1170,10 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         roots.push(
           failed
             ? { kind: 'error', seq: ev.seq, message: TURN_ENDED_WITHOUT_REPLY }
-            : { kind: 'divider', seq: ev.seq },
+            : { kind: 'divider', seq: ev.seq, ts: ev.ts, reply: turnReply },
         );
         turnAccountedFor = false;
+        turnReply = undefined;
         break;
       }
       case 'interrupt':
@@ -1757,7 +1770,7 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
     case 'result':
       return <StandaloneResult node={node} />;
     case 'divider':
-      return <div className="chat-turn-divider" data-seq={node.seq} />;
+      return <TurnFoot node={node} />;
     case 'interrupt':
       return (
         <div className="chat-note" data-seq={node.seq}>
@@ -2098,7 +2111,7 @@ function quotaWindow(message: string): { title: string; what: string } {
 }
 
 /** "6:20 PM" today, "Wed, Aug 6, 1:00 PM" beyond it — a bare time on another day misleads. */
-function formatResetAt(at: Date): string {
+function formatClock(at: Date): string {
   const time = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const sameDay = at.toDateString() === new Date().toDateString();
   return sameDay ? time : `${at.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}, ${time}`;
@@ -2226,7 +2239,7 @@ function AutoRetryCard({
         <div className="chat-quota-when">
           {quota ? (
             <>
-              {continues ? 'Continues' : 'Resets'} <b>{formatResetAt(retryAt!)}</b>{' '}
+              {continues ? 'Continues' : 'Resets'} <b>{formatClock(retryAt!)}</b>{' '}
               <span className="chat-quota-in">· {formatCountdown(msLeft)}</span>
             </>
           ) : (
@@ -2474,6 +2487,41 @@ function TurnAttachments({ node }: { node: TextNode }) {
         </div>
       )}
     </>
+  );
+}
+
+// The foot of a finished turn, in the reply's own column (where Codex puts its row): a copy button
+// that hands back the turn's reply as written — its Markdown source, like the user bubble's copy —
+// and the time the turn ended. It stands where the blank divider between turns stood and is drawn
+// at rest, since it is also what marks where one turn ends; the user bubble's meta row waits for
+// hover. A turn with nothing to copy keeps its time; one with neither is the old blank divider.
+function TurnFoot({ node }: { node: DividerNode }) {
+  const [copied, setCopied] = useState(false);
+  const { seq, ts, reply } = node;
+  if (!reply && !ts) return <div className="chat-turn-divider" data-seq={seq} />;
+  const copy = () => {
+    if (!reply) return;
+    void copyText(reply).then((ok) => {
+      if (!ok) return;
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    });
+  };
+  return (
+    <div className="chat-turn-divider chat-turn-foot" data-seq={seq}>
+      {reply && (
+        <button
+          type="button"
+          className="chat-copy"
+          onClick={copy}
+          title={copied ? 'Copied' : 'Copy reply'}
+          aria-label={copied ? 'Copied' : 'Copy reply'}
+        >
+          {copied ? <CheckOutlined /> : <CopyOutlined />}
+        </button>
+      )}
+      {ts && <span className="chat-time">{formatClock(new Date(ts))}</span>}
+    </div>
   );
 }
 

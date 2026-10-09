@@ -60,6 +60,15 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
+## 5. Copy Is English
+
+**Every word a person or an agent reads is English.**
+
+That is every label a client draws (web, macOS/iOS, Android) and every sentence the server or a runner writes: errors, notifications, session titles, task comments, prompts.
+
+- Design boards and task descriptions are often written in Chinese. That is the owner's working language, not the copy to ship: translate what you take from them.
+- `src/web/src/copyLanguage.test.ts` counts the Chinese string literals in every product source file and fails on new ones.
+
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.

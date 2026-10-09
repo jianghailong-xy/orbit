@@ -150,7 +150,7 @@ export function WatchWakeCard({
           {closing && <span className="bgwake-status">{closing}</span>}
           {ts && <span className="bgwake-time">{relTime(ts)}</span>}
           <span className="bgwake-details-label">
-            详情
+            Details
             <RightOutlined className="bgwake-caret" />
           </span>
         </summary>
