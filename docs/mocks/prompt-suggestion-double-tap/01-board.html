@@ -506,7 +506,7 @@
         加 <code>Use suggestion</code> 读屏动作；「用过」记在 UserDefaults</li>
       <li><b>手机网页</b><span class="cost">小</span>：<code>hover: none</code> 时不画 <code>.composer-suggestion-use</code>，改画提示；textarea 上认两下（两次点按 ≤ 300 ms、相距 ≤ 24 px），没聚焦时先扣住第一下、超时再交还；
         <code>touch-action: manipulation</code>；读屏用的 Use 按钮视觉隐藏；「用过」记在 localStorage</li>
-      <li><b>Android</b><span class="cost">中</span>：<code>SessionComposer.kt</code> 去掉 trailingIcon 的 Use；<code>pointerInput</code> 在 Initial 阶段认两下，没聚焦时先扣住第一下、超时再交还；
+      <li><b>Android</b><span class="cost">中</span>：<code>SessionComposer.kt</code> 去掉 trailingIcon 的 Use；没聚焦时输入框上盖一层只收点按的透明层（单点等双击超时再交还），已聚焦时 <code>pointerInput</code> 在 Initial 阶段认两下；
         <code>semantics</code> 加 customActions；「用过」记在 SharedPreferences</li>
       <li><b>测试与文档</b>：三端把「点 Use」的用例换成拍两下，加上单点不填、有字不认、提示只出一次、读屏动作；
         <code>docs/prompt-suggestions-design.md</code> 改 §4.1、§4.3，§9 补一条</li>

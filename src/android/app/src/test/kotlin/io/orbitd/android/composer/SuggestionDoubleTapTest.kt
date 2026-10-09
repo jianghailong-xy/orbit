@@ -1,6 +1,10 @@
 package io.orbitd.android.composer
 
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -10,6 +14,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.unit.dp
 import io.orbitd.android.MainActivity
 import io.orbitd.android.TestOrbitApplication
 import io.orbitd.android.ui.OrbitTheme
@@ -46,13 +51,21 @@ class SuggestionDoubleTapTest {
     private var focusesHandedOn = 0
     private val focus = FocusRequester()
 
-    private fun field(enabled: Boolean = true) {
+    /** The composer's arrangement: the field inside [SuggestionTaps], whose own focus handler only counts here. A focusable ahead of
+     * it takes the focus Robolectric hands a window's first focusable by itself, so the field starts unfocused, as on a phone in
+     * touch mode. */
+    private fun field(offered: Boolean = true) {
         compose.runOnUiThread { compose.activity.setContent { OrbitTheme(darkTheme = false) {
-            OutlinedTextField(value, { value = it }, Modifier.testTag("field").focusRequester(focus)
-                .onFocusChanged { focused = it.isFocused }
-                .doubleTapToUse(enabled, focused, { focusesHandedOn++ }, { uses++; value = "run the tests" }))
+            Column {
+                Box(Modifier.size(1.dp).focusable())
+                SuggestionTaps(offered, focused, { focusesHandedOn++ }, { uses++; value = "run the tests" }) { taps ->
+                    OutlinedTextField(value, { value = it }, Modifier.testTag("field").focusRequester(focus)
+                        .onFocusChanged { focused = it.isFocused }.then(taps))
+                }
+            }
         } } }
         compose.waitForIdle()
+        compose.onNodeWithTag("field").assertIsNotFocused()
     }
 
     @Test fun aDoubleTapOnTheIdleFieldTakesItWithoutTheFieldEverTakingTheFirstTap() {
@@ -63,6 +76,7 @@ class SuggestionDoubleTapTest {
         assertEquals("run the tests", value)
         assertEquals("the first tap was held, so nothing was handed on", 0, focusesHandedOn)
         compose.onNodeWithTag("field").assertIsNotFocused()
+        compose.onNodeWithTag("composer-suggestion-taps").assertExists()
     }
 
     @Test fun aSingleTapOnTheIdleFieldIsHandedOnOnceTheDoubleTapTimeoutPasses() {
@@ -85,6 +99,7 @@ class SuggestionDoubleTapTest {
         compose.runOnUiThread { focus.requestFocus() }
         compose.waitForIdle()
         compose.onNodeWithTag("field").assertIsFocused()
+        compose.onAllNodesWithTag("composer-suggestion-taps").assertCountEquals(0)
         compose.onNodeWithTag("field").performTouchInput { doubleClick() }
         compose.waitForIdle()
         assertEquals(1, uses)
@@ -93,7 +108,7 @@ class SuggestionDoubleTapTest {
     }
 
     @Test fun withNoGuessTheFieldsTapsAreItsOwn() {
-        field(enabled = false)
+        field(offered = false)
         compose.onNodeWithTag("field").performTouchInput { doubleClick() }
         compose.waitForIdle()
         assertEquals(0, uses)
