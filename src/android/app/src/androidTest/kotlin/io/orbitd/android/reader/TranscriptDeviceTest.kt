@@ -145,6 +145,92 @@ class TranscriptDeviceTest {
         } finally { instrument.removeMonitor(monitor) }
     }
 
+    /**
+     * A06c over fixture mode A06C, through the real login, directory and reader: the sticky question header and
+     * its jump, the Orbit context card, engine stderr/notice/transient rows, a workflow's agents, an image file
+     * link, the worktree bar's merge and changed files (a binary file's preview), and the tail kept in view when
+     * the keyboard rises.
+     */
+    @Test fun a06cReaderIncrements() = journey("a06c") {
+        login(); control("{\"reset\":true,\"mode\":\"A06C\"}")
+        openSession(); awaitText("Latest answer A06C", substring = true)
+        val list = compose.onNodeWithTag("transcript-list")
+        val bar = hasAnyAncestor(hasContentDescription("Jump to your last question"))
+        compose.waitUntil(15_000) { compose.onAllNodes(hasText("Second question: ship the reader") and bar, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText("↑ Your question") and bar, useUnmergedTree = true).assertIsDisplayed()
+        capture("a06c-sticky-question")
+        compose.onNodeWithContentDescription("Jump to your last question").performClick()
+        compose.waitUntil(15_000) { compose.onAllNodes(hasText("First question: plan the reader increments") and bar, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Second question: ship the reader").assertIsDisplayed()
+        capture("a06c-sticky-jumped")
+        // A06-9: what delivery appended is a card under the person's words, not part of them.
+        compose.onNodeWithText("Attached · referenced task", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("Attached to this message").assertIsDisplayed()
+        capture("a06c-context-card")
+        compose.onNodeWithText("View full context").performClick()
+        awaitText("<referenced-task", substring = true)
+        capture("a06c-context-opened")
+        // Engine stderr, a recoverable diagnostic and a notice, and Codex's exhausted 429 as a transient row (A06-1, A06-2).
+        list.performScrollToNode(hasText("--dangerously-skip-permissions cannot be used with root/sudo privileges"))
+        compose.onNodeWithText("Startup · model_catalog · codex_model_catalog_auth:", substring = true).assertExists()
+        list.performScrollToNode(hasText("exceeded retry limit, last status: 429 Too Many Requests", substring = true))
+        compose.onNodeWithText("Provider unavailable").assertIsDisplayed()
+        compose.onNodeWithText("Switched to Wikova · Pro", substring = true).assertExists()
+        capture("a06c-engine-rows")
+        // A workflow's progress and an agent row that opens to what it did (baseline, A06-6).
+        list.performScrollToNode(hasText("Review the reader increments"))
+        compose.onNode(hasText("Show input and output") and hasAnyAncestor(hasTestTag("event:15"))).performClick()
+        list.performScrollToNode(hasText("design:sticky-header"))
+        compose.onNodeWithText("12 tool calls · 17m").assertExists()
+        compose.onNode(hasText("design:sticky-header") and hasClickAction()).performClick()
+        awaitText("claude-opus-5-5")
+        list.performScrollToNode(hasText("claude-opus-5-5"))
+        capture("a06c-workflow-agent")
+        // A06-3: a linked screenshot is the image file row and opens the image viewer.
+        list.performScrollToNode(hasContentDescription("runner.png"))
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("PNG image · Tap to preview").fetchSemanticsNodes().isNotEmpty() }
+        capture("a06c-image-file-row")
+        compose.onNodeWithContentDescription("runner.png").performClick()
+        compose.onNodeWithText("Close image").assertIsDisplayed()
+        capture("a06c-image-file-viewer")
+        compose.onNodeWithText("Close image").performClick()
+        // The worktree bar and its merge (baseline): the fixture's runner answers a second later.
+        compose.onNodeWithText("Jump to latest").performClick()
+        awaitText("Merge to main")
+        capture("a06c-worktree-bar")
+        compose.onNodeWithText("Merge to main").performClick()
+        compose.waitUntil(20_000) { compose.onAllNodesWithText("✓ Merged").fetchSemanticsNodes().isNotEmpty() }
+        awaitText("Merged into main")
+        capture("a06c-worktree-merged")
+        val posts = URL("$server/__stats").readText()
+        File(evidence, "a06c-posts.json").writeText(posts)
+        assertTrue(posts, posts.contains("\"path\":\"merge\",\"body\":{\"targetBranch\":\"main\"}"))
+        // The changed files: a text diff, a binary image's current bytes and an unpreviewable archive (A06-7).
+        compose.onNodeWithText("+12 −3 · 3 files", substring = true, useUnmergedTree = true).performClick()
+        awaitText("Worktree changes")
+        capture("a06c-worktree-files")
+        compose.onNodeWithText("new.png", substring = true, useUnmergedTree = true).performClick()
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("Scroll to explore").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("1440 × 2560").assertIsDisplayed()
+        capture("a06c-binary-image")
+        compose.onNodeWithText("‹ Worktree changes").performClick()
+        compose.onNodeWithText("app.zip", substring = true, useUnmergedTree = true).performClick()
+        awaitText("No preview available")
+        capture("a06c-binary-zip")
+        compose.onNodeWithText("Done").performClick()
+        // A06-5: at the bottom, focusing the composer raises the keyboard and the last line stays in view.
+        compose.waitForIdle()
+        compose.onNodeWithTag("composer-input").performClick()
+        compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Jump to your last question").fetchSemanticsNodes().isEmpty() }
+        SystemClock.sleep(1_500)
+        compose.waitForIdle()
+        val latest = compose.onNodeWithText("Latest answer A06C", substring = true).fetchSemanticsNode().boundsInWindow
+        val visible = list.fetchSemanticsNode().boundsInWindow
+        File(evidence, "a06c-tail.txt").writeText("latest=$latest list=$visible\n")
+        assertTrue("the last line stays above the keyboard: $latest in $visible", latest.bottom <= visible.bottom + 2f && latest.top >= visible.top)
+        capture("a06c-tail-pinned-keyboard")
+    }
+
     private fun reviewSession() {
         login(); control("{\"reset\":true,\"mode\":\"REVIEW\"}")
         openSession(); awaitText("Protected latest 420")

@@ -171,3 +171,43 @@ package and task comment. This code repair does not resubmit a completion envelo
 external gaps, pass A05 as a whole, or authorize A07/A08 to start.
 
 Parser reference: [commonmark-java 0.25.1](https://github.com/commonmark/commonmark-java/tree/commonmark-parent-0.25.1).
+
+## A06c: increments since c6792d4bf and the baseline gaps
+
+A01b's list (part 2/6, A06) and the four gaps its part 1/6 named, ported from the iOS sources at 4f695a286.
+Each is a projection in `reader/` beside the A06 rows, not a second renderer.
+
+- **Engine stderr and transient errors** (`EngineErrors.kt`, `TranscriptRows.kt` `EngineReading`): a `system`
+  event's `notice`, or stderr whose `diagnostic` is recoverable/degraded (A06-1; a persisted codex 401
+  `token_invalidated` line is matched by the legacy rule), is a notice row. Other stderr is an error row: ANSI
+  stripped, the two known provider-noise lines dropped, repeats folded `×N`, verification continuations joined,
+  and an apply_patch/parser failure settles the unresolved call it names. A reply or `error` event that is the
+  provider failing becomes an `auto_retry` row (`variant` quota/apiError, `stale`, `afterUserMsg`) or an error
+  row, classified by the copy of @orbit/shared `events.ts` that `EngineErrorsParityTest` reads back — Codex's
+  exhausted 429 budget is transient (A06-2). The countdown/Retry card itself is A07c's.
+- **Sticky "↑ Your question" header** (`StickyQuestions.kt`): the newest question above the item that owns the
+  list's top line; card turns are named by their card's words and a background job's news is not a question.
+  Both answers go through `StickyQuestionHold` (A06-4). It folds away while a phone's composer is focused.
+- **Tail pinning on resize** (`TailPinning.kt`, A06-5): the list's own measure asks `followsResize`.
+- **Workflow progress** (`TaskProgress.kt`, `TaskProgressViews.kt`): `task_progress` frames, or the end's
+  `progress` (background_task / REST background list), drawn as phases, agent rows and totals on Agent/Workflow
+  calls and in Session details' background list; `TaskProgressCopyParityTest` reads the shared golden table.
+  Agent rows open to model, error and the Agent call's nested activity (A06-6).
+- **Orbit context card** (`AttachedNote.kt`, A06-9) and the bubble split at `controlPlaneNote`.
+- **Image file rows** (`text/MarkdownFileRef.kt`, A06-3) for links the session can serve as an image.
+- **Worktree bar** (`Worktree*.kt`, `MergeRecovery*.kt`) above the composer: Commit/Merge/Resolve/Retry/Adopt,
+  the target caret, merge recovery's row and review, the changed files with diffs, a binary file's current bytes
+  (A06-7, `GET sessions/:id/worktree-file`), and a coordinator's integration line (A06-8). Outcomes are said in
+  the bar until the app has a toast host (A05-4).
+
+`transcript-fixture.py` mode `A06C` (28 events, worktree detail, merge/commit/resume POSTs, diff, worktree-file,
+artifacts and background reads) backs `TranscriptDeviceTest#a06cReaderIncrements`:
+
+```sh
+A06_TEST=io.orbitd.android.reader.TranscriptDeviceTest#a06cReaderIncrements bash src/android/scripts/reader-device-test.sh 36 \
+  <app-debug.apk> <app-debug-androidTest.apk> <new evidence dir> emulator-5554
+```
+
+`WorktreeRealStackDeviceTest` commits and merges a real worktree on the A11 isolated stack (its runner and the
+stand-in engine that writes `A11_STACK_NOTES.md`), through `tasks-projects-stack-device-test.sh` with
+`A11_TEST=io.orbitd.android.reader.WorktreeRealStackDeviceTest` and the args file from `tasks-projects-stack-args.py`.
