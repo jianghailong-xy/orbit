@@ -102,6 +102,8 @@ function makeServiceBackedController() {
         ) ?? null,
     },
     providerPool: { findFirst: async () => null },
+    // No retired provider names (migration 0415).
+    providerSlugAlias: { findUnique: async () => null },
     session: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
         creates.push(data);

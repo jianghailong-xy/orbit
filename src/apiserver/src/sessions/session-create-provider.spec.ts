@@ -50,6 +50,8 @@ function makeService(
         return pools.find((p) => p.slug === where.slug && p.ownerId === where.ownerId) ?? null;
       },
     },
+    // No retired provider names (migration 0415): a slug nothing else holds is nothing.
+    providerSlugAlias: { findUnique: async () => null },
     session: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
         creates.push(data);

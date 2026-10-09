@@ -532,10 +532,15 @@ test('T2 provider-engine foundation on PostgreSQL', { timeout: 600_000 }, async 
     // missing key used to read as.
 
     // A session an older replica wrote carries no engine: editing its key through the door records
-    // the one it runs on first, so the edit does not become its engine either.
+    // the one it runs on first, so the edit does not become its engine either. The door refuses a
+    // protocol its open session's engine would lose (T3, PROVIDER_DIALECT_IN_USE); an edit it takes —
+    // here the endpoint — records the engine, and a protocol changed behind the door then holds it.
     const edited = await key(owner, { runtime: 'kimi', presetSlug: 'moonshot', baseUrl: 'https://api.moonshot.ai/v1' });
     const unrecorded = await session(at, edited.slug, { model: 'kimi-k3' });
-    await providers.update(owner, edited.id, { runtime: 'codex' } as never);
+    await assert.rejects(providers.update(owner, edited.id, { runtime: 'codex' } as never),
+      (error: { response?: { code?: string } }) => error.response?.code === 'PROVIDER_DIALECT_IN_USE');
+    await providers.update(owner, edited.id, { baseUrl: 'https://api.moonshot.cn/v1' } as never);
+    await db.modelProvider.update({ where: { slug: edited.slug }, data: { runtime: 'codex' } });
     assert.equal(await engineOf(unrecorded), AgentProvider.KIMI, 'the protocol it ran on, not the one it was edited to');
     assert.equal(await queue.claimSessionForRunner({ id: at.id, supportedProviders: ALL }), null);
     assert.equal((await row(unrecorded)).error,
@@ -622,7 +627,8 @@ test('T2 provider-engine foundation on PostgreSQL', { timeout: 600_000 }, async 
     const other = await session(at, disabled.slug, { status: RunStatus.FAILED, model: 'gpt-6', runtimeSessionId: 'codex-2', numTurns: 1 });
     await assert.rejects(
       () => sessions.resume(owner, other, { content: 'again', clientTurnId: randomUUID(), provider: claudeKey.slug } as never),
-      /a codex session cannot switch to a provider that runs on claude/,
+      // PROVIDER_ENGINE_INCOMPATIBLE (T3), which retired the "a codex session cannot switch…" wording.
+      /provider "key-[^"]+" cannot run on Codex; it runs on Claude Code, OpenCode/,
     );
     assert.equal((await row(other)).provider, disabled.slug);
   });

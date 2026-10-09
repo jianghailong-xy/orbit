@@ -2179,7 +2179,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0080's, 0372/0377's and 0377's runtime claim guards replaced by bodies that read the column first. No
       // `project` or `project_acceptance_*` object, none of the six preserved triggers/functions and neither
       // half of the 0177 pair is named, and no row is inserted or deleted.
-      '0414_session_engine'],
+      '0414_session_engine',
+      // Retired provider names (0415, docs/provider-engine-contract.md §1.5): one new table,
+      // `provider_slug_alias` (slug, provider_id → model_provider ON DELETE CASCADE, engine, reason,
+      // created_at), with an index and two CHECKs; 0265's `provider_dispatch_slug_guard` replaced by a body
+      // that reads that table beside `model_provider` and `provider_pool`, and fired by one new trigger on
+      // it; and 0414's `guard_dsh_runner_acquisition` replaced by the same body plus one clause that
+      // follows an alias to its key. No row is written; `task`, `project`, every `project_acceptance_*`
+      // object and the six preserved triggers/functions are named nowhere, and no type is altered.
+      '0415_provider_slug_alias'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

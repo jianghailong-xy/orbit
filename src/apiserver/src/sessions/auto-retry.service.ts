@@ -53,6 +53,7 @@ import { accountAfterUsageLimitAt, runAccount } from '../providers/plan-usage-ac
 import { ACCOUNT_CHOICE, ACCOUNT_PINNED } from '../providers/account';
 import { ACCOUNT_MOVE_CAPABILITY } from '../providers/account-move-capability';
 import { isBuiltinProvider } from '../providers/custom-provider';
+import { recordedEngine } from '../providers/session-engine';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
 import {
   classifyTransactionError,
@@ -313,6 +314,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       select: {
         id: true,
         ownerId: true,
+        engine: true,
         provider: true,
         prompt: true,
         numTurns: true,
@@ -497,9 +499,15 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           session.provider,
           now,
         );
+        // The runner's own report holds only a session on the runner's sign-in to its engine — the
+        // engine's slug, on the engine it names. A key brings its own quota, which no runner reports
+        // (docs/provider-engine-contract.md §4.5).
+        const onRunnerLogin = isAccountEngine(session.provider)
+          && isBuiltinProvider(session.provider, session.providerBuiltin)
+          && (recordedEngine(session.engine) ?? session.provider) === session.provider;
         const ownBlockedUntil = poolResumesAt
           ? (poolResumesAt > now ? poolResumesAt : null)
-          : planUsageBlockedUntil(
+          : !onRunnerLogin ? null : planUsageBlockedUntil(
               withEnginePlanUsage(
                 session.assignedRunner?.planUsage as PlanUsage | null,
                 sanitizeRunnerEngines(session.assignedRunner?.engines),
@@ -936,7 +944,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     ownerId: string,
     id: string,
     // The composer's pending pick, when Retry was pressed after choosing one — see RetryIdentityDto.
-    identity: { provider?: string; account?: string } = {},
+    identity: { provider?: string; engine?: string; account?: string } = {},
   ): Promise<SessionResumeAnswer> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
@@ -969,6 +977,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         // What the composer had picked when Retry was pressed. The session moves onto it here, as it
         // would have had the person sent a message instead — which is the whole point of the button.
         ...(identity.provider ? { provider: identity.provider, account: identity.account } : {}),
+        // Only the session's own engine is accepted (ENGINE_IMMUTABLE otherwise), as on resume.
+        ...(identity.engine !== undefined ? { engine: identity.engine } : {}),
       },
       {
         ...this.resendCarrying(session.id, message, false),

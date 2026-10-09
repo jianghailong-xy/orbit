@@ -52,8 +52,12 @@ export type TaskRunPlan =
  * The model-routing decision a fresh run was planned with (docs/model-routing-design.md §7.4) —
  * the same values its `task_route_decision` row records, frozen here so a takeover records the
  * decision the holder made instead of routing again against a world that has since moved.
+ *
+ * As v2 bound it: `provider` was an engine's name when the route moved the run to another engine, and
+ * the baseline's slug otherwise. Read into a v3 route (readExecuteTarget) with no engine, for that
+ * slug to be resolved the way a caller naming only a provider is.
  */
-export interface TaskRunRoute {
+export interface TaskRunRouteV2 {
   policyVersion: number;
   /** Whether the run is dispatched with this result; false is the shadow, where the baseline runs. */
   applied: boolean;
@@ -64,6 +68,18 @@ export interface TaskRunRoute {
   baseline: Record<string, unknown>;
   features: Record<string, unknown>;
   reasons: string[];
+}
+
+/**
+ * The routing decision as v3 binds it (docs/provider-engine-contract.md §6.4): the engine the route
+ * chose and, apart from it, the credential it runs on — the baseline's own when that engine can run
+ * it, else null, the engine's own sign-in on the runner (§4.4). Read back from a v2 receipt, `engine`
+ * is null: its `provider` is then resolved as a provider named alone, which gives exactly the engine
+ * that receipt meant.
+ */
+export interface TaskRunRoute extends Omit<TaskRunRouteV2, 'provider'> {
+  engine: string | null;
+  provider: string | null;
 }
 
 /**
@@ -80,7 +96,7 @@ export interface TaskRunRoute {
  * may never do is choose a different plan because the world moved.
  */
 export interface TaskRunExecuteTarget {
-  v: 2;
+  v: 3;
   kind: 'RUN';
   plan: TaskRunPlan;
   taskId: string;
@@ -89,6 +105,9 @@ export interface TaskRunExecuteTarget {
   prompt: string;
   workspaceId: string;
   runnerId: string;
+  /** The engine the Session is created on: the task's engine pin, or the routed engine. Null leaves it
+   *  to the session's own resolution — the provider's default engine, else the workspace's seed. */
+  engine: string | null;
   provider: string | null;
   model: string | null;
   /** The effort the Session is created with; null names none, leaving the workspace's or account's. */
@@ -107,6 +126,10 @@ export interface TaskRunExecuteTarget {
   clearFailed: boolean;
   /** Automatic doors record no USER trigger, exactly as they did before the receipt existed. */
   auto: boolean;
+  /** Set only on a target read back from a receipt bound before targets carried an engine
+   *  (readExecuteTarget), whose engine is then read beside the task's pins (taskRunEngine). Never
+   *  written: every target this binary binds is v3. */
+  fromVersion?: 1 | 2;
 }
 
 /**
@@ -121,6 +144,8 @@ export type TaskRunBatchItemPlan = TaskRunPlan & {
   prompt: string;
   workspaceId: string;
   runnerId: string;
+  /** As on the single run: the engine pin, or the routed engine; null is resolved at session create. */
+  engine: string | null;
   provider: string | null;
   model: string | null;
   /** As on the single run: the effort the Session is created with, and the route on a CREATE. */
@@ -134,22 +159,38 @@ export type TaskRunBatchItemPlan = TaskRunPlan & {
 
 /** A bulk Run's plan: the batch it admits its Sessions under, and where each task goes. */
 export interface TaskRunBatchPlan {
-  v: 2;
+  v: 3;
   kind: 'BATCH';
   batchId: string | null;
   maxConcurrent: number | null;
   items: TaskRunBatchItemPlan[];
   skipped: Array<{ id: string; title: string; reason: string }>;
   runnerIds: string[];
+  /** As on the single run: set only on a plan read back from an older receipt, never written. */
+  fromVersion?: 1 | 2;
 }
 
+/** The single run's target as receipts bound it before targets carried an engine (§6.4). */
+type TaskRunExecuteTargetV2 = Omit<TaskRunExecuteTarget, 'v' | 'engine' | 'route'> & {
+  v: 2;
+  route: TaskRunRouteV2 | null;
+};
+
 /** The single run's target as receipts bound before targets carried an effort and a route. */
-type TaskRunExecuteTargetV1 = Omit<TaskRunExecuteTarget, 'v' | 'effort' | 'route'> & { v: 1 };
+type TaskRunExecuteTargetV1 = Omit<TaskRunExecuteTargetV2, 'v' | 'effort' | 'route'> & { v: 1 };
+
+/** The bulk plan as receipts bound it before its items carried an engine. */
+interface TaskRunBatchPlanV2 extends Omit<TaskRunBatchPlan, 'v' | 'items'> {
+  v: 2;
+  items: Array<TaskRunPlan & Omit<TaskRunBatchItemPlan, 'engine' | 'route' | keyof TaskRunPlan> & {
+    route: TaskRunRouteV2 | null;
+  }>;
+}
 
 /** The bulk plan as receipts bound before its items carried an effort and a route. */
 interface TaskRunBatchPlanV1 extends Omit<TaskRunBatchPlan, 'v' | 'items'> {
   v: 1;
-  items: Array<TaskRunPlan & Omit<TaskRunBatchItemPlan, 'effort' | 'route' | keyof TaskRunPlan>>;
+  items: Array<TaskRunPlan & Omit<TaskRunBatchItemPlan, 'engine' | 'effort' | 'route' | keyof TaskRunPlan>>;
 }
 
 /**
@@ -194,21 +235,33 @@ export interface TaskRunStandDownTarget {
  */
 export type TaskRunTargetRecord =
   | TaskRunExecuteTarget
+  | TaskRunExecuteTargetV2
   | TaskRunExecuteTargetV1
   | TaskRunBatchPlan
+  | TaskRunBatchPlanV2
   | TaskRunBatchPlanV1
   | TaskRunStandDownTarget;
 
+/** A v2 route read as v3: no engine — its provider, an engine's name or the baseline's slug, is
+ *  resolved as a provider named alone, which gives the engine it was written for. */
+function routeFromV2(route: TaskRunRouteV2 | null): TaskRunRoute | null {
+  return route ? { ...route, engine: null } : null;
+}
+
 /**
  * A bound single-run plan as this binary carries it out, or null when it is not one this binary
- * can read. v1 — bound by a binary that predates routing, and still finished by a takeover after
- * an upgrade — is read as a plan that routed nothing and named no effort, which is what it was.
+ * can read (docs/provider-engine-contract.md §6.4). v3 is read as it is. v2 and v1 — bound before
+ * targets carried an engine, and still finished by a takeover after an upgrade — are read with no
+ * engine, so their provider resolves as a provider named alone: the engine that receipt was bound
+ * for (taskRunEngine reads an engine pin back beside it). v1 also routed nothing and named no effort,
+ * which is what it was.
  */
 export function readExecuteTarget(bound: unknown): TaskRunExecuteTarget | null {
   const target = bound as TaskRunTargetRecord | null;
   if (target?.kind !== 'RUN') return null;
-  if (target.v === 2) return target;
-  if (target.v === 1) return { ...target, v: 2, effort: null, route: null };
+  if (target.v === 3) return target;
+  if (target.v === 2) return { ...target, v: 3, engine: null, route: routeFromV2(target.route), fromVersion: 2 };
+  if (target.v === 1) return { ...target, v: 3, engine: null, effort: null, route: null, fromVersion: 1 };
   return null;
 }
 
@@ -216,14 +269,38 @@ export function readExecuteTarget(bound: unknown): TaskRunExecuteTarget | null {
 export function readBatchPlan(bound: unknown): TaskRunBatchPlan | null {
   const plan = bound as TaskRunTargetRecord | null;
   if (plan?.kind !== 'BATCH') return null;
-  if (plan.v === 2) return plan;
+  if (plan.v === 3) return plan;
+  if (plan.v === 2) {
+    return {
+      ...plan,
+      v: 3,
+      items: plan.items.map((item) => ({ ...item, engine: null, route: routeFromV2(item.route) })),
+      fromVersion: 2,
+    };
+  }
   if (plan.v === 1) {
     return {
       ...plan,
-      v: 2,
-      items: plan.items.map((item) => ({ ...item, effort: null, route: null })),
+      v: 3,
+      items: plan.items.map((item) => ({ ...item, engine: null, effort: null, route: null })),
+      fromVersion: 1,
     };
   }
+  return null;
+}
+
+/**
+ * The engine a run read off a receipt is created on (§6.4): the one it names, else — for a receipt
+ * bound before targets carried one — the task's engine pin, when the receipt's credential is the
+ * task's own provider pin: an older replica bound that receipt in the mixed window for a task already
+ * pinned in the new form. Otherwise null, and the provider resolves as one named alone.
+ */
+export function taskRunEngine(
+  target: { engine: string | null; provider: string | null },
+  task: { engine: string | null; provider: string | null } | null,
+): string | null {
+  if (target.engine) return target.engine;
+  if (task?.engine && target.provider && target.provider === task.provider) return task.engine;
   return null;
 }
 

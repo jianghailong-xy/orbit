@@ -157,12 +157,17 @@ async function receiptRow(
 const TERMINAL = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
 
 async function moveTo(db: PrismaClient, sessionId: string, status: RunStatus) {
-  await db.session.update({
-    where: { id: sessionId },
-    data: {
-      status,
-      finishedAt: (TERMINAL as RunStatus[]).includes(status) ? new Date() : null,
-    },
+  // As a current replica's claim moves a run: one that reads the session's engine, which every run is
+  // created with (migration 0414's acquisition guard drops the claim of any replica that does not).
+  await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+    await tx.session.update({
+      where: { id: sessionId },
+      data: {
+        status,
+        finishedAt: (TERMINAL as RunStatus[]).includes(status) ? new Date() : null,
+      },
+    });
   });
 }
 
@@ -442,7 +447,8 @@ test('a plan this binary cannot read is refused, not guessed at', { skip, timeou
   const services = connect();
   try {
     const target = await fixture(services.db, 'unreadable');
-    for (const bogus of ['{"v":3,"kind":"RUN"}', '{"v":1,"kind":"SOMETHING_ELSE"}', '{}']) {
+    // v4: the first version past the v3 the provider/engine split writes (docs/provider-engine-contract.md §6.4).
+    for (const bogus of ['{"v":4,"kind":"RUN"}', '{"v":1,"kind":"SOMETHING_ELSE"}', '{}']) {
       const press = randomUUID();
       await services.db.$executeRaw`
         INSERT INTO "task_run_request" ("owner_id", "action_kind", "request_token", "fingerprint",

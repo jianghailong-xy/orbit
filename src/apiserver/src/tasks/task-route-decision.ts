@@ -1,6 +1,7 @@
 import { Prisma, RunStatus, TaskEvidenceDecisionValue, TaskVerdict } from '@prisma/client';
 import {
   AgentProvider,
+  isEngine,
   USAGE_LIMIT_ERROR_MARKERS,
   runnerCatalogRow,
   spentPlanUsage,
@@ -12,9 +13,15 @@ import {
 import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { resolvePermissionMode } from '../common/permission-mode';
 import { firstRuntimeCatalogModel, sanitizeRuntimeDefaultModels } from '../common/runtime-model';
-import { normalizeEffortForProvider, normalizeRuntimeProvider } from '../common/runtime-provider';
+import { normalizeEffortForProvider } from '../common/runtime-provider';
 import type { PrismaService } from '../prisma/prisma.service';
-import { accountPoolRuntime, isBuiltinProvider, usableProviderScope } from '../providers/custom-provider';
+import {
+  defaultDeepSeekKey,
+  resolvedCredentialEngines,
+  taskPinCredential,
+  type ResolvedCredential,
+} from '../providers/engine-provider';
+import { sessionEngine, sessionEnginesOf } from '../providers/session-engine';
 import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
 import { followsRuntimeCatalog } from '../providers/preset-overlay';
 import { signedOutEngineRefusal } from '../sessions/engine-signin-preflight';
@@ -68,82 +75,138 @@ export function taskRouteReads(prisma: PrismaService, ownerId: string, now: Date
         name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, accountNames: true,
       },
     })),
-    engine: (provider: string, providerBuiltin: boolean) => once(
+    engine: (provider: string, providerBuiltin: boolean | null) => once(
       `engine:${provider}:${providerBuiltin}`,
       () => routeEngine(prisma, ownerId, provider, providerBuiltin),
     ),
+    deepSeekKey: () => once('deepseek-key', () => defaultDeepSeekKey(prisma, ownerId)),
   };
 }
 
 export type TaskRouteReads = ReturnType<typeof taskRouteReads>;
 
 /**
- * Which runtime a provider runs on, and whether its models are that runtime's own (§4.3). A
- * configured provider is resolved the way `sessions.create` resolves it; one that resolves to
- * nothing has no model space anybody can describe, so it has no tier table either.
+ * What a slug names (engine-provider.ts), read without refusing anything: a pin or a seed may name a key
+ * disabled since, which still says which engines it runs on. `providerBuiltin` is a seed's — a configured
+ * `kimi` or `dsh` stays configured, and is nothing once it is gone — and null for a task pin, which has
+ * none.
+ */
+async function routeCredential(
+  prisma: PrismaService,
+  ownerId: string,
+  provider: string,
+  providerBuiltin: boolean | null,
+): Promise<ResolvedCredential | null> {
+  const keyword = provider === AgentProvider.KIMI || provider === AgentProvider.DSH;
+  if (keyword && providerBuiltin === true) {
+    return provider === AgentProvider.KIMI ? { kind: 'login', engine: AgentProvider.KIMI } : { kind: 'legacy-dsh' };
+  }
+  const credential = await taskPinCredential(prisma, ownerId, provider);
+  // A configured identity under a keyword that is gone names nothing: never the built-in engine.
+  if (keyword && providerBuiltin === false && (credential?.kind === 'login' || credential?.kind === 'legacy-dsh')) return null;
+  return credential;
+}
+
+/**
+ * Whether a run on `engine` with `credential` has a model space of its own rather than the engine's
+ * runner-reported one, which is the only space a tier table describes (§4.3, docs/provider-engine-
+ * contract.md §2.2): a key on Claude Code or OpenCode — unless its vendor IS that engine's own endpoint
+ * (followsRuntimeCatalog), on that engine — and a credential nobody can resolve, which is not routed at
+ * all. DeepSeek Harness reads its runtime catalogue on whatever DeepSeek key it spends.
+ */
+function ownModelSpace(credential: ResolvedCredential | null, engine: string): boolean {
+  if (!credential) return true;
+  if (engine === AgentProvider.DSH || credential.kind !== 'key') return false;
+  const native = resolvedCredentialEngines(credential)[0];
+  return native !== engine || credential.row.runtime === AgentProvider.DSH || !followsRuntimeCatalog(credential.row);
+}
+
+/**
+ * Which engine a credential runs on when nothing else is named, and whether its models there are that
+ * engine's own (§4.3). A slug nobody can resolve has no model space anybody can describe, so it has no
+ * tier table either, and names no engine of its own: it is never read as the slug itself.
  */
 async function routeEngine(
   prisma: PrismaService,
   ownerId: string,
   provider: string,
-  providerBuiltin: boolean,
-): Promise<{ runtime: string; hasOwnModelSpace: boolean }> {
-  if (providerBuiltin && provider !== AgentProvider.DSH) {
-    return { runtime: normalizeRuntimeProvider(provider, true), hasOwnModelSpace: false };
-  }
-  const configured = await prisma.modelProvider.findFirst({
-    where: {
-      slug: provider,
-      ...(provider === AgentProvider.DSH ? {} : { enabled: true }),
-      ...(await usableProviderScope(prisma, ownerId)),
-    },
-    select: { runtime: true, enabled: true, presetSlug: true, followsPreset: true, models: true, defaultModel: true },
-  });
-  // A disabled pre-existing dsh row is still a configured identity, never the new runtime.
-  if (configured && provider === AgentProvider.DSH && configured.enabled === false) {
-    return { runtime: AgentProvider.CLAUDE, hasOwnModelSpace: true };
-  }
-  if (configured) {
-    return {
-      runtime: normalizeRuntimeProvider(configured.runtime),
-      hasOwnModelSpace: configured.runtime !== AgentProvider.DSH && !followsRuntimeCatalog(configured),
-    };
-  }
-  // An account pool runs on the accounts of one runtime, in that runtime's model space.
-  const pooled = await accountPoolRuntime(prisma, ownerId, provider);
-  return pooled
-    ? { runtime: pooled, hasOwnModelSpace: false }
-    : provider === AgentProvider.DSH
-      ? { runtime: normalizeRuntimeProvider(provider, providerBuiltin), hasOwnModelSpace: false }
-    : { runtime: provider, hasOwnModelSpace: true };
+  providerBuiltin: boolean | null,
+): Promise<{ credential: ResolvedCredential | null; engines: AgentProvider[]; runtime: string; hasOwnModelSpace: boolean }> {
+  const credential = await routeCredential(prisma, ownerId, provider, providerBuiltin);
+  const engines = credential ? resolvedCredentialEngines(credential) : [];
+  const runtime = (credential?.kind === 'key' && credential.alias ? credential.alias.engine : engines[0])
+    ?? AgentProvider.CLAUDE;
+  return { credential, engines, runtime, hasOwnModelSpace: ownModelSpace(credential, runtime) };
 }
 
 /**
- * The engine a run of this task starts on (the task's pin, else the Agent's seed) and its runner.
+ * The engine and credential a run of this task starts on (docs/provider-engine-contract.md §1.2, §4.4):
+ * its pins — both, an engine alone on that engine's own credential, a provider alone on the engine it
+ * runs on by default — else the Agent's seed, re-checked as a new session re-checks it.
+ */
+async function routeBaseline(
+  reads: TaskRouteReads,
+  task: { engine?: string | null; provider?: string | null },
+  workspaceId: string,
+) {
+  const pinnedEngine = isEngine(task.engine) ? task.engine : null;
+  const pinnedProvider = task.provider ?? null;
+  let provider: string;
+  let providerBuiltin: boolean | null = null;
+  let providerSource: 'task-pin' | 'engine-pin' | 'agent-seed';
+  let seedEngine: AgentProvider | null = null;
+  if (pinnedProvider) {
+    provider = pinnedProvider;
+    providerSource = 'task-pin';
+  } else if (pinnedEngine) {
+    // An engine pinned alone runs on that engine's own credential: its sign-in, OpenCode's own config,
+    // or DeepSeek Harness's default DeepSeek key.
+    provider = pinnedEngine === AgentProvider.DSH
+      ? (await reads.deepSeekKey())?.slug ?? pinnedEngine
+      : pinnedEngine;
+    providerSource = 'engine-pin';
+  } else {
+    const seed = await reads.seed(workspaceId);
+    provider = seed.provider;
+    providerBuiltin = seed.providerBuiltin;
+    seedEngine = seed.engine;
+    providerSource = 'agent-seed';
+  }
+  const { credential, engines, runtime } = await reads.engine(provider, providerBuiltin);
+  const engine: string = pinnedEngine
+    ?? (seedEngine && engines.includes(seedEngine) ? seedEngine : null)
+    ?? (credential ? runtime : seedEngine)
+    ?? AgentProvider.CLAUDE;
+  return {
+    engine,
+    engineSource: pinnedEngine ? 'task-pin' : providerSource === 'task-pin' ? 'provider-pin' : 'agent-seed',
+    provider,
+    providerSource,
+    /** Every engine the baseline credential runs on: where a route may take it along (§4.4). */
+    engines,
+    credential,
+  };
+}
+
+/**
+ * The baseline a run of this task starts on (routeBaseline), and its runner.
  *
  * The reads here and in `planTaskRunRoute` are awaited one at a time on purpose: one that failed
  * while the others were still in flight would leave their rejections unhandled.
  */
 async function routeEnvironment(
   reads: TaskRouteReads,
-  task: { provider?: string | null },
+  task: { engine?: string | null; provider?: string | null },
   workspaceId: string,
   runnerId: string | null,
 ) {
-  const pinned = task.provider ?? null;
-  const seed = pinned ? null : await reads.seed(workspaceId);
-  const provider = pinned ?? seed!.provider;
-  const providerBuiltin = pinned
-    ? Object.values(AgentProvider).includes(pinned as AgentProvider)
-    : seed!.providerBuiltin;
-  const engine = await reads.engine(provider, providerBuiltin);
+  const { credential, ...baseline } = await routeBaseline(reads, task, workspaceId);
   const runner = runnerId ? await reads.runner(runnerId) : null;
   const owner = await reads.owner();
   return {
-    provider,
-    providerSource: pinned ? 'task-pin' : 'agent-seed',
-    runtime: engine.runtime,
-    hasOwnModelSpace: engine.hasOwnModelSpace,
+    ...baseline,
+    runtime: baseline.engine,
+    hasOwnModelSpace: ownModelSpace(credential, baseline.engine),
     runner,
     modelCatalog: (runner?.modelCatalog ?? null) as RunnerModelCatalog | null,
     runtimeDefaultModels: sanitizeRuntimeDefaultModels(runner?.runtimeDefaultModels),
@@ -211,14 +274,14 @@ function engineState(
   return { signedOut, quota };
 }
 
-/** The engine a task's newest work run was created on, by runtime: what a verification looks past (§6). */
+/** The engine a task's newest work run was created on: what a verification looks past (§6). */
 async function lastRunEngine(reads: TaskRouteReads, taskId: string): Promise<string | null> {
   const run = await reads.prisma.session.findFirst({
     where: { ownerId: reads.ownerId, taskId, startsTaskWork: true },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    select: { provider: true, providerBuiltin: true },
+    select: { engine: true, provider: true, providerBuiltin: true, ownerId: true },
   });
-  return run ? (await reads.engine(run.provider, run.providerBuiltin)).runtime : null;
+  return run ? sessionEngine(reads.prisma, run) : null;
 }
 
 /**
@@ -234,9 +297,9 @@ async function routeEngines(
   env: Awaited<ReturnType<typeof routeEnvironment>>,
 ): Promise<NonNullable<ModelRoutingInput['engines']>> {
   const allowed = (agent?.modelRoutingProviders ?? []).filter((engine) => MODEL_ROUTING_ENGINES.includes(engine));
-  if (task.provider || allowed.length === 0 || !agent) return { allowed };
+  if (task.engine || task.provider || allowed.length === 0 || !agent) return { allowed };
   const states: Record<string, ModelRoutingEngineState> = {};
-  for (const engine of new Set([env.provider, ...allowed])) {
+  for (const engine of new Set([env.engine, ...allowed])) {
     if (env.runner && (engine === AgentProvider.CLAUDE || engine === AgentProvider.CODEX)) {
       states[engine] = engineState(engine, agent, env.runner, reads.now);
     }
@@ -271,9 +334,11 @@ async function readRunHistory(
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     select: {
       id: true, createdAt: true, status: true, error: true,
-      provider: true, providerBuiltin: true, model: true, effort: true,
+      engine: true, provider: true, providerBuiltin: true, ownerId: true, model: true, effort: true,
     },
   });
+  // The engine each ran on: its recorded one, else what the old rules derive (§5.4).
+  const engines = await sessionEnginesOf(prisma, runs);
   if (runs.length === 0) return [];
   const decisions = await prisma.taskRouteDecision.findMany({
     where: { ownerId, taskId, sessionId: { in: runs.map((run) => run.id) } },
@@ -298,9 +363,7 @@ async function readRunHistory(
       level: MODEL_ROUTING_LEVELS.find((level) => level === levels.get(run.id)) ?? null,
       model: run.model,
       effort: run.effort,
-      runtime: isBuiltinProvider(run.provider, run.providerBuiltin)
-        ? normalizeRuntimeProvider(run.provider, run.providerBuiltin)
-        : run.provider,
+      runtime: engines.get(run.id) ?? undefined,
       // The run's own end first, then what was said about its work afterwards.
       outcome: run.status === RunStatus.FAILED
         ? (readExecutableAcceptanceOutcome(run.error) ? 'ACCEPTANCE_FAILED' : 'FAILED')
@@ -314,6 +377,7 @@ async function readRunHistory(
 /** What a dispatch already holds of the task it routes. */
 export interface TaskRouteSubject {
   id: string;
+  engine?: string | null;
   provider?: string | null;
   model?: string | null;
   modelHint?: string | null;
@@ -353,17 +417,18 @@ export async function planTaskRunRoute(
   const named = agent && agent.effort !== null
     ? agent.effort
     : ((env.owner?.preferences ?? {}) as { defaultEffort?: string }).defaultEffort || undefined;
-  const effort = normalizeEffortForProvider(normalizeRuntimeProvider(env.runtime), named) || null;
+  const effort = normalizeEffortForProvider(env.engine as AgentProvider, named) || null;
   const modelHint = MODEL_ROUTING_LEVELS.find((level) => level === task.modelHint) ?? null;
   const engines = await routeEngines(reads, task, agent, env);
   const decision = routeTaskRun({
     task: {
+      engine: task.engine ?? null,
       provider: task.provider ?? null,
       model: task.model ?? null,
       modelHint,
       modelHintReason: task.modelHintReason ?? null,
     },
-    baseline: { provider: env.provider, model: task.model ?? null, effort },
+    baseline: { engine: env.engine, engines: env.engines, provider: env.provider, model: task.model ?? null, effort },
     history,
     environment: {
       runtime: env.runtime,
@@ -389,10 +454,13 @@ export async function planTaskRunRoute(
     // suggestion, no catalogue) changes nothing whether the switch is on or not.
     applied: agent?.modelRouting === true && decision.level !== null,
     level: decision.level,
+    engine: decision.engine,
     provider: decision.provider,
     model: decision.model,
     effort: decision.effort,
     baseline: {
+      engine: env.engine,
+      engineSource: env.engineSource,
       provider: env.provider,
       providerSource: env.providerSource,
       // Null is the runtime default, which the first claim resolves.
@@ -453,7 +521,8 @@ export async function recordTaskRouteDecision(
       applied: route.applied,
       policyVersion: route.policyVersion,
       level: route.level,
-      provider: route.provider,
+      // The credential the run spends — an engine's own sign-in is named by the engine (§4.4).
+      provider: route.provider ?? route.engine ?? '',
       model: route.model,
       effort: route.effort,
       baseline: route.baseline as Prisma.InputJsonValue,
@@ -531,14 +600,14 @@ export interface ModelHintOption {
  */
 export async function readModelHintOptions(
   reads: TaskRouteReads,
-  task: { provider?: string | null; assigneeId?: string | null },
+  task: { engine?: string | null; provider?: string | null; assigneeId?: string | null },
 ): Promise<ModelHintOption[]> {
   const agent = task.assigneeId ? await reads.workspace(task.assigneeId) : null;
   const env = agent ? await routeEnvironment(reads, task, task.assigneeId!, agent.runnerId) : null;
   return MODEL_ROUTING_LEVELS.map((level) => {
     const decision = env && routeTaskRun({
-      task: { provider: task.provider ?? null, modelHint: level },
-      baseline: { provider: env.provider, model: null, effort: null },
+      task: { engine: task.engine ?? null, provider: task.provider ?? null, modelHint: level },
+      baseline: { engine: env.engine, engines: env.engines, provider: env.provider, model: null, effort: null },
       history: [],
       environment: {
         runtime: env.runtime,

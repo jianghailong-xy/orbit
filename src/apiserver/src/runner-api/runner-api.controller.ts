@@ -369,6 +369,7 @@ import {
   sessionSourceSnapshot,
 } from '../projects/session-source';
 import { providerDispatchWhereOn } from '../providers/custom-provider';
+import { dispatchKeyRow } from '../providers/engine-provider';
 import {
   recordedEngine,
   SESSION_ENGINE_UNKNOWN_MESSAGE,
@@ -2620,14 +2621,14 @@ export class RunnerApiController {
       // shared pool, or a Codex pool of the owner's own login, on the gateway with a token of its own, as
       // the claim builds it. A maintenance run, as on the claim, never through a pool.
       const declaredIsBuiltin = isBuiltinProvider(declared, s.providerBuiltin);
+      // As on the claim (QueueService.buildSession): the key the slug names or a retired name of one,
+      // and a legacy built-in dsh session's default DeepSeek key when its workspace holds no key itself.
+      const keyRow = await dispatchKeyRow(
+        this.prisma, { ownerId: s.ownerId, provider: declared, providerBuiltin: s.providerBuiltin }, workspace?.env,
+      );
       const customRow = declaredIsBuiltin
-        ? null
-        : ((await this.prisma.modelProvider.findFirst({
-            where: {
-              slug: declared!,
-              ...(await usableProviderScope(this.prisma, s.ownerId)),
-            },
-          })) ??
+        ? keyRow
+        : (keyRow ??
           (maintenance
             ? null
             : ((await this.queue.resolveLoginPool(this.prisma, s, declared!)) ??
@@ -4079,14 +4080,12 @@ export class RunnerApiController {
     // credential, never the engine.
     const engine = await sessionEngine(tx, session);
     if (!engine) throw new BadRequestException(`provider not available: "${session.provider}"`);
+    // As on the claim: the key the slug names or a retired name of one, and a legacy built-in dsh
+    // session's default DeepSeek key when its workspace holds no key itself.
+    const keyRow = await dispatchKeyRow(tx, session, session.workspace?.env);
     const customRow = isBuiltinProvider(session.provider, session.providerBuiltin)
-      ? null
-      : ((await tx.modelProvider.findFirst({
-          where: {
-            slug: session.provider!,
-            ...(await usableProviderScope(tx, session.ownerId)),
-          },
-        })) ??
+      ? keyRow
+      : (keyRow ??
         (await this.queue.resolveLoginPool(tx, session, session.provider!)) ??
         (await this.queue.resolvePoolMember(tx, session, session.provider!)) ??
         (await this.queue.resolveSharedPool(tx, session, session.provider!)));
@@ -7545,15 +7544,19 @@ export class RunnerApiController {
       select: { planUsage: true, engines: true },
     });
     // Only a configured provider's slug can name a pool.
-    const pool = isBuiltinProvider(
+    const builtin = isBuiltinProvider(
       session.provider, session.providerBuiltin ?? (session.provider !== AgentProvider.DSH),
-    )
+    );
+    const pool = builtin
       ? null
       : await this.queue.accountPoolResumesAt(session.ownerId, session.provider, now);
+    // The runner's report is about its own sign-ins: it says when a session on one of them can run
+    // again, and nothing about a key, whose quota is the key's (docs/provider-engine-contract.md §4.5).
+    const onRunnerLogin = builtin && isAccountEngine(session.provider);
     const own =
       pool ??
       parseQuotaResetAt(text, now) ??
-      planUsageBlockedUntil(
+      (!onRunnerLogin ? null : planUsageBlockedUntil(
         withEnginePlanUsage(runner?.planUsage as PlanUsage | null, sanitizeRunnerEngines(runner?.engines)),
         session.provider,
         now,
@@ -7568,7 +7571,7 @@ export class RunnerApiController {
           },
           runner?.engines,
         ),
-      );
+      ));
     const at = elsewhere && (!own || elsewhere < own) ? elsewhere : own;
     return at ? new Date(at.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS)) : null;
   }

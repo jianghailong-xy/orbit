@@ -30,8 +30,9 @@ import {
   savedRuntimeDefaultModel,
 } from '../common/runtime-model';
 
-// Built-in, first-class providers ship their own runtime CLI. Any other `provider` value is
-// a control-plane-configured ModelProvider that borrows one of these runtimes.
+// A built-in provider is an engine's own sign-in on the runner (or OpenCode's own configuration), named
+// by the engine. Any other `provider` value is a credential configured on the control plane — a key
+// (ModelProvider) or an account pool — that an engine runs on (docs/provider-engine-contract.md §1.3).
 /** True for a built-in provider (or an unset one) — i.e. NOT a configured ModelProvider slug.
  * `providerBuiltin` fences configured `kimi` / `dsh` slugs during rolling
  * deployment; Claude/Codex predate the discriminator, and migrations 0080 and 0367 move any
@@ -171,37 +172,6 @@ function runtimeOf(row: ModelProviderRow): AgentProvider {
   if (row.runtime === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
   if (row.runtime === AgentProvider.DSH) return AgentProvider.DSH;
   throw new BadRequestException(`provider runtime not available: "${row.runtime}"`);
-}
-
-/**
- * The engine a credential runs on when nothing else is named: a live configured row's runtime, else
- * the built-in ladder (with a Claude fallback for a slug nothing live holds). Asked of a credential a
- * caller is moving TO — a provider switch's target, a wiki maintenance key — and never of a session:
- * a session's engine is its own (Session.engine, providers/session-engine.ts), which no disabling or
- * deletion of its key changes. That fallback is why.
- */
-export function execRuntime(args: {
-  declaredProvider?: string | null;
-  declaredProviderBuiltin?: boolean;
-  customRow: ModelProviderRow | null;
-}): AgentProvider {
-  if (args.customRow && !args.customRow.enabled && (
-    args.customRow.runtime === AgentProvider.DSH ||
-    (args.declaredProvider === AgentProvider.DSH && args.customRow.runtime !== AgentProvider.CLAUDE)
-  )) {
-    throw new BadRequestException('DeepSeek Harness provider is disabled');
-  }
-  if (args.customRow && args.customRow.enabled) return runtimeOf(args.customRow);
-  if (args.declaredProvider === AgentProvider.CODEX) return AgentProvider.CODEX;
-  if (args.declaredProvider === AgentProvider.OPENCODE) return AgentProvider.OPENCODE;
-  if (args.declaredProvider === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
-  if (args.declaredProvider === AgentProvider.KIMI && args.declaredProviderBuiltin !== false) {
-    return AgentProvider.KIMI;
-  }
-  if (args.declaredProvider === AgentProvider.DSH && args.declaredProviderBuiltin !== false) {
-    return AgentProvider.DSH;
-  }
-  return AgentProvider.CLAUDE;
 }
 
 /**
