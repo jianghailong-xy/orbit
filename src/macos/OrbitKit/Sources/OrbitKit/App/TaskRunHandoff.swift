@@ -268,12 +268,13 @@ public enum TaskRunHandoff {
     /// whole question here, because a run keeps its provider for its whole life. With something
     /// going, the pick cannot touch it and lands on the next turn; with nothing going, the next
     /// message is the next turn. Nil when there is nothing to say, which includes picking what is
-    /// already running: that is not a switch.
+    /// already running: that is not a switch. Said by the credentials' names, with "uses": the
+    /// session's engine stays, only the credential moves (web `providerSwitchNote`).
     public static func providerSwitchNote(from: String?, to: String, liveRun: Bool) -> String? {
         guard let from, !from.isEmpty, !to.isEmpty, from != to else { return nil }
         return liveRun
-            ? "The turn in flight finishes on \(from). Your next one runs on \(to)."
-            : "Your next message runs on \(to)."
+            ? "The turn in flight finishes on \(from). Your next one uses \(to)."
+            : "Your next message uses \(to)."
     }
 
     // MARK: the entry a task offers

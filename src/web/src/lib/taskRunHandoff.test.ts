@@ -177,6 +177,14 @@ describe('switching provider on a task that is already going', () => {
     expect(providerSwitchNote({ from: null, to: 'claude', liveRun: false })).toBeNull();
   });
 
+  it('names the credentials, and says the next turn uses the new one — the engine stays', () => {
+    // Board 5 ②: by the keys' own names, never raw slugs, and "uses" rather than "runs on".
+    expect(providerSwitchNote({ from: 'DeepSeek', to: 'DeepSeek 2', liveRun: true })).toBe(
+      'The turn in flight finishes on DeepSeek. Your next one uses DeepSeek 2.',
+    );
+    expect(providerSwitchNote({ from: 'DeepSeek', to: 'DeepSeek 2', liveRun: false })).toBe('Your next message uses DeepSeek 2.');
+  });
+
   it('asks before stopping the run, and stops nothing until it is answered', () => {
     const ask = readTaskRunConflict(switchConfirmation());
     expect(ask!.kind).toBe('CONFIRM_SWITCH');
