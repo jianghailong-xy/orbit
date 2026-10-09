@@ -8,9 +8,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
 import type { PendingDecisionQueue, PendingDecisionRow } from './DecisionRail';
 import {
+  DECISION_ASK_HEADING,
   DECISION_CONFIRM_ACTION,
+  DECISION_DECIDE_MYSELF_ACTION,
   DECISION_SEND_BACK_LABEL,
   DECISION_SENDING_BACK_PREFIX,
+  EVIDENCE_DECISION_QUEUED_HEADING,
+  EVIDENCE_DECISION_QUEUED_NOTE,
+  EVIDENCE_DECISION_QUEUED_OPEN_NOTE,
+  decisionReceiptTime,
 } from './EvidenceDecisionCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 
@@ -255,7 +261,11 @@ afterEach(async () => {
   }
 });
 
-async function mount(): Promise<void> {
+async function mount(
+  ready: () => void = () => {
+    expect(count('.evidence-decision:not(.evidence-decision-receipt)')).toBe(1);
+  },
+): Promise<void> {
   const nextClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
   });
@@ -276,9 +286,7 @@ async function mount(): Promise<void> {
       </QueryClientProvider>,
     );
   });
-  await waitForUi(() => {
-    expect(count('.evidence-decision:not(.evidence-decision-receipt)')).toBe(1);
-  });
+  await waitForUi(ready);
 }
 
 const card = (): HTMLElement =>
@@ -423,5 +431,179 @@ describe('Chat about this on a dispatched task’s card drawn in its run', { tim
         note: '贴出改前先红的输出',
       },
     });
+  });
+});
+
+/**
+ * The coordinator is paused — its run FAILED on Claude's weekly limit, with a retry armed for the
+ * reset — and the version waits for it (`waitingOnCoordinator`). What only the real view can show:
+ * the folded card is drawn where the evidence card is, saying why from this conversation's own row;
+ * nothing pinned counts it and the header asks nothing; Decide it myself opens today's card in
+ * place, and both of its answers reach the decision door from this conversation, as today.
+ */
+describe('a version waiting for the paused coordinator', { timeout: 60_000 }, () => {
+  const RESETS_AT = '2026-10-12T11:00:00.000Z';
+  const PAUSED = {
+    ...COORDINATOR,
+    status: 'FAILED',
+    runStatus: 'FAILED',
+    runState: 'FAILED',
+    error: "You've hit your weekly limit · resets Oct 12, 7pm (Asia/Shanghai)",
+    retryAt: RESETS_AT,
+    pendingApprovals: 0,
+  };
+  const QUEUED: PendingDecisionRow = { ...ROW, submittedAt: '2026-10-09T11:59:30.000Z' };
+  const WAITING: PendingDecisionQueue = {
+    ...QUEUE,
+    count: 0,
+    oldestAgeSeconds: null,
+    pending: [],
+    waitingOnCoordinator: [QUEUED],
+    sentToCoordinator: [],
+  };
+  const PAUSE_LINE = `Coordinator paused · weekly limit · resets ${decisionReceiptTime(RESETS_AT)}`;
+
+  const folded = (): HTMLElement | null => mounted().querySelector<HTMLElement>('[data-queued-row]');
+
+  async function mountWaiting(): Promise<void> {
+    sessionReply = PAUSED;
+    queueReply = WAITING;
+    await mount(() => {
+      expect(count('[data-queued-row]')).toBe(1);
+    });
+  }
+
+  async function decideMyself(): Promise<void> {
+    const open = [...folded()!.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent === DECISION_DECIDE_MYSELF_ACTION);
+    if (!open) throw new Error('no Decide it myself on the folded card');
+    await act(async () => {
+      open.click();
+    });
+    await waitForUi(() => {
+      expect(count('[data-queued-row]')).toBe(0);
+      expect(count('.evidence-decision:not(.evidence-decision-receipt)')).toBe(1);
+    });
+  }
+
+  it('draws the folded card in the conversation, says why from its own row, and counts it nowhere', async () => {
+    await mountWaiting();
+
+    const card = folded()!;
+    expect(card.closest('.workspace-scroll-wrap'), 'drawn outside the conversation').not.toBeNull();
+    expect(card.querySelector('.evidence-decision-heading')?.textContent).toBe(EVIDENCE_DECISION_QUEUED_HEADING);
+    expect(card.querySelector('.evidence-queued-time')?.textContent).toBe(decisionReceiptTime(QUEUED.submittedAt!));
+    expect(card.querySelector('.evidence-queued-title')?.textContent).toBe(ROW.title);
+    expect(card.querySelector('.evidence-queued-pause')?.textContent).toBe(PAUSE_LINE);
+    expect(card.querySelector('.evidence-queued-note')?.textContent).toBe(EVIDENCE_DECISION_QUEUED_NOTE);
+    expect([...card.querySelectorAll('button')].map((button) => button.textContent))
+      .toEqual([DECISION_DECIDE_MYSELF_ACTION]);
+
+    // Not a question: no card asks it, the pinned strip is not drawn, and the header asks nothing.
+    expect(count('.evidence-decision:not(.evidence-decision-receipt)')).toBe(0);
+    expect(count('.decision-strip')).toBe(0);
+    expect(mounted().textContent).not.toContain('Waiting for approval');
+    expect(writes).toEqual([]);
+  });
+
+  it('opens in place into today’s card, and Confirm done is decided from this conversation', async () => {
+    await mountWaiting();
+    await decideMyself();
+
+    expect(card().querySelector('.evidence-decision-heading')?.textContent).toBe(DECISION_ASK_HEADING);
+    expect(card().querySelector('.evidence-queued-pause')?.textContent).toBe(PAUSE_LINE);
+    expect(card().querySelector('.evidence-queued-notice .evidence-queued-note')?.textContent)
+      .toBe(EVIDENCE_DECISION_QUEUED_OPEN_NOTE);
+    expect(cardActions().map((action) => action.label)).toEqual([
+      DECISION_CONFIRM_ACTION,
+      OWNER_SEND_BACK_ACTION,
+    ]);
+    // Opened or not, it is still nobody's question: the strip stays away.
+    expect(count('.decision-strip')).toBe(0);
+
+    await act(async () => {
+      cardActions()[0]!.button.click();
+    });
+    await waitForUi(() => {
+      expect(writes).toHaveLength(1);
+    });
+    expect(writes[0]).toEqual({
+      path: `/tasks/${ROW.taskId}/evidence/decision`,
+      body: {
+        decidingSessionId: COORDINATOR_PUBLIC,
+        evidenceRevision: ROW.evidenceRevision,
+        decision: 'CONFIRM',
+      },
+    });
+  });
+
+  it('keeps Chat about this armed while the version waits, and sends the reason as this conversation’s SEND_BACK', async () => {
+    await mountWaiting();
+    await decideMyself();
+    await act(async () => {
+      cardActions()[1]!.button.click();
+    });
+    await waitForUi(() => {
+      expect(count('.composer-replyto')).toBe(1);
+    });
+    // The read that follows still lists it as waiting, which is not "answered elsewhere".
+    await act(async () => {
+      await client!.invalidateQueries({ queryKey: ['session', COORDINATOR_PUBLIC, 'pending-decisions'] });
+    });
+    await waitForUi(() => {
+      expect(count('.composer-replyto')).toBe(1);
+    });
+    expect(mounted().querySelector('.composer-replyto-text')?.textContent)
+      .toBe(`${DECISION_SENDING_BACK_PREFIX}${ROW.title}`);
+
+    await type('Run the queue spec again and paste the red-before output');
+    await send();
+    await waitForUi(() => {
+      expect(writes).toHaveLength(1);
+    });
+    expect(writes[0]).toEqual({
+      path: `/tasks/${ROW.taskId}/evidence/decision`,
+      body: {
+        decidingSessionId: COORDINATOR_PUBLIC,
+        evidenceRevision: ROW.evidenceRevision,
+        decision: 'SEND_BACK',
+        note: 'Run the queue spec again and paste the red-before output',
+      },
+    });
+    expect(writes.filter((write) => write.path.includes('/turns'))).toEqual([]);
+  });
+
+  it('says the coordinator is back once its run is, until the version is handed over', async () => {
+    sessionReply = { ...COORDINATOR, runState: 'AWAITING_INPUT', runStatus: 'AWAITING_INPUT', status: 'AWAITING_INPUT' };
+    queueReply = WAITING;
+    await mount(() => {
+      expect(count('[data-queued-row]')).toBe(1);
+    });
+    expect(folded()!.querySelector('.evidence-queued-pause')?.textContent)
+      .toBe('Coordinator is back · it gets this when its current turn ends');
+  });
+
+  it('is one line once it is handed to the coordinator, saying when', async () => {
+    const deliveredAt = '2026-10-09T12:05:00.000Z';
+    sessionReply = COORDINATOR;
+    queueReply = {
+      ...WAITING,
+      waitingOnCoordinator: [],
+      sentToCoordinator: [{
+        taskId: ROW.taskId,
+        title: ROW.title,
+        projectId: PROJECT_PUBLIC,
+        evidenceRevision: ROW.evidenceRevision,
+        deliveredAt,
+      }],
+    };
+    await mount(() => {
+      expect(count('[data-sent-row]')).toBe(1);
+    });
+    const line = mounted().querySelector<HTMLElement>('[data-sent-row]')!;
+    expect(line.textContent).toBe(`Sent to the coordinator · ${decisionReceiptTime(deliveredAt)}`);
+    expect(line.querySelectorAll('button')).toHaveLength(0);
+    expect(count('.evidence-decision:not(.evidence-decision-receipt)')).toBe(0);
+    expect(count('.decision-strip')).toBe(0);
   });
 });
