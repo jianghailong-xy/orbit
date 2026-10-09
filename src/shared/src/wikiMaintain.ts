@@ -236,7 +236,13 @@ export interface WikiMaintenanceReport {
     /** What the run adopted of what ended sessions left waiting, counted apart from its own ops. */
     adopted?: { ops: number; verified: number; failed: number };
   };
-  anchors?: { entries: number; changed: number; missing: number };
+  /**
+   * The anchors step's counts (contract `maintenance.job.server.anchors`): the entries whose checks the run
+   * wrote, and of them the ones left changed or missing; `skipped` the entries whose anchors were all already
+   * checked at the run's commit and were left alone. A run before 2026-10-10 re-checked every entry and
+   * reported no `skipped`.
+   */
+  anchors?: { entries: number; changed: number; missing: number; skipped?: number };
   /** The topic articles a run before criterion 3's revision 3 rewrote; a run now writes the plan's sections (docs). */
   articles?: { written: number; unchanged: number; failed: number };
   docs?: WikiMaintenanceDocsReport;

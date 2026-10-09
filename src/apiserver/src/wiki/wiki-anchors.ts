@@ -73,6 +73,39 @@ export function dueAnchors(anchors: readonly WikiAnchor[]): WikiDueAnchor[] {
 }
 
 /**
+ * Whether an anchor's last check still holds for `ref` (`anchorRules.verify.skip`): the check was made on
+ * exactly that commit — `check.ref` character for character — and, for a symbol, the baseline it was
+ * compared against is still the anchor's own. A check's answer depends on the anchor and the commit
+ * alone, so a second one at the same commit could only write what the first wrote.
+ *
+ * A symbol is the one anchor whose answer depends on more than the commit: its baseline may have been
+ * moved by the owner's Re-confirm without the commit moving. What a check knows is the baseline it
+ * USED, and it records one only when it adopted it (`check.baselineSha256`, written by `anchorsChecked`
+ * for an anchor that names no `regionSha256` of its own). An anchor that names its own baseline — a
+ * proposer's, or the region a Re-confirm wrote into it — records no such thing, and nothing on the
+ * anchor tells a Re-confirm's write from a plain check's: `rebaselinedAnchors` leaves exactly the shape
+ * the check leaves. So that anchor is re-checked rather than trusted, as the contract says.
+ */
+export function anchorCheckedAt(anchor: WikiAnchor, ref: string): boolean {
+  const check = anchor.check;
+  if (!check || check.ref !== ref) return false;
+  if (anchor.type !== 'symbol') return true;
+  return anchor.regionSha256 === undefined
+    && typeof check.baselineSha256 === 'string' && check.baselineSha256 === symbolBaseline(anchor);
+}
+
+/**
+ * The git anchors of one entry that a check at `ref` still owes: all of them when any was last checked
+ * somewhere else or never — one anchor out of date is the whole entry's re-check, as it always was — and
+ * none when every one of them is already checked at exactly this commit.
+ */
+export function anchorsDueAt(anchors: readonly WikiAnchor[], ref: string): WikiDueAnchor[] {
+  const held = anchors.filter((anchor) => GIT_TYPES.has(anchor.type));
+  if (held.length > 0 && held.every((anchor) => anchorCheckedAt(anchor, ref))) return [];
+  return dueAnchors(anchors);
+}
+
+/**
  * An entry's anchor state from its anchors' last checks (contract `anchorRules.verify.aggregate`):
  * `missing` when any is missing, else `changed` when any changed, else `unchecked` when any anchor has
  * no check yet — or the entry has none at all — else `verified`.
@@ -351,7 +384,7 @@ export async function listWikiAnchors(
   input: { ownerId: string; runnerId: string; spaceId: string; sessionId: string; after: string | null; limit: number | null },
 ): Promise<WikiAnchorList> {
   const limit = Math.min(Math.max(input.limit ?? WIKI_ANCHOR_RULES.listEntriesDefault, 1), WIKI_ANCHOR_RULES.listEntriesMax);
-  const page = await anchorPage(reader, input, limit);
+  const page = await anchorPage(reader, input, limit, null);
   return { spaceId: input.spaceId, repo: await anchorRepoOf(reader, input), entries: page.entries, next: page.next };
 }
 
@@ -360,21 +393,30 @@ export async function listWikiAnchors(
  * session and no runner on this side — the checks travel as a `wiki_repo_op` the space's workspace routes,
  * and this returns the entries alone, with no checkout for the caller to name. The entries are exactly the
  * runner's list's: active, git-anchored, in id order, one page at a time.
+ *
+ * Each entry carries only the anchors a check at `checkedAt` still owes (`anchorsDueAt`), because this side
+ * is the one that re-runs: an entry every anchor of which was already checked at exactly this commit comes
+ * back with none, and the run leaves it alone rather than re-check what only the same answer can come of.
+ * The runner's own list is not this list: it is handed every anchor, always.
  */
 export async function listWikiAnchorsForJob(
   reader: AnchorReader,
-  input: { ownerId: string; spaceId: string; after: string | null; limit: number | null },
+  input: { ownerId: string; spaceId: string; after: string | null; limit: number | null; checkedAt: string },
 ): Promise<{ spaceId: string; entries: WikiAnchorList['entries']; next: string | null }> {
   const limit = Math.min(Math.max(input.limit ?? WIKI_ANCHOR_RULES.listEntriesDefault, 1), WIKI_ANCHOR_RULES.listEntriesMax);
-  const page = await anchorPage(reader, input, limit);
+  const page = await anchorPage(reader, input, limit, input.checkedAt);
   return { spaceId: input.spaceId, entries: page.entries, next: page.next };
 }
 
-/** The page's rows as entries: the one read both lists above make. */
+/**
+ * The page's rows as entries: the one read both lists above make. `checkedAt` is the commit whose checks
+ * an entry's anchors may leave out (the server's own run), or null to hand every git anchor (the runner's).
+ */
 async function anchorPage(
   reader: AnchorReader,
   input: { ownerId: string; spaceId: string; after: string | null },
   limit: number,
+  checkedAt: string | null,
 ): Promise<Pick<WikiAnchorList, 'entries' | 'next'>> {
   const rows = await reader.$queryRaw<Array<{ id: string; currentRevision: number; anchors: unknown }>>`
     SELECT e."id" AS "id", e."current_revision" AS "currentRevision", e."anchors" AS "anchors"
@@ -389,11 +431,14 @@ async function anchorPage(
      LIMIT ${limit + 1}::int`;
   const page = rows.slice(0, limit);
   return {
-    entries: page.map((row) => ({
-      entryId: row.id,
-      revision: Number(row.currentRevision),
-      anchors: dueAnchors(storedAnchors(row.anchors)),
-    })),
+    entries: page.map((row) => {
+      const anchors = storedAnchors(row.anchors);
+      return {
+        entryId: row.id,
+        revision: Number(row.currentRevision),
+        anchors: checkedAt === null ? dueAnchors(anchors) : anchorsDueAt(anchors, checkedAt),
+      };
+    }),
     next: rows.length > limit ? page[page.length - 1].id : null,
   };
 }
