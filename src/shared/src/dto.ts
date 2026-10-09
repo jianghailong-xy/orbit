@@ -2522,6 +2522,10 @@ export interface IntegrationJobResultRequest {
    *  measured it (0346). The only fact §1.4 lets that answer out of a criterion's roll-up on;
    *  absent is "not measured", which an older runner sends, and withholds. */
   sourceOnUpstream?: boolean | null;
+  /** With NOTHING_TO_LAND: true when the branch carried commits of its own and the target already had
+   *  every one of them, false when it carried none, as the runner measured it (0410). The first is
+   *  the task's work on the target; absent is "not measured", which an older runner sends. */
+  sourceFullyApplied?: boolean | null;
   /** How many files the merge would change, for the card the owner reads (§3.2). */
   filesChanged?: number | null;
   checks?: IntegrationCheckResult[];

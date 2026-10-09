@@ -803,6 +803,13 @@ export type PromotionState =
 /** What is being merged: the project's own branch, or one task's branch on a `MAIN` line (§3.2). */
 export type PromotionSourceKind = 'PROJECT_BRANCH' | 'TASK_BRANCH';
 
+/**
+ * Why a candidate is `BLOCKED`, as the job that blocked it answered (migration 0409): the source was
+ * already on the upstream, so there is nothing to merge; a check on the combined tree failed; the
+ * merge conflicted; or the job stopped before any check could answer.
+ */
+export type PromotionBlockedReason = 'ALREADY_LANDED' | 'CHECK_FAILED' | 'CONFLICT' | 'ERROR';
+
 /** One task a candidate would carry onto the upstream, as the card's Tasks row lists it (§3.6). */
 export interface PromotionTask {
   taskId: string;
@@ -844,6 +851,13 @@ export interface ProjectPromotionView<Instant = string> {
   checks: IntegrationCheckResult[];
   /** The paths the merge could not reconcile, empty unless the candidate is BLOCKED. */
   conflicts: string[];
+  /**
+   * Why a BLOCKED candidate is blocked, stored with the block rather than read off `checks` and
+   * `conflicts`: both are empty when there was nothing to merge, and when the job errored before a
+   * check ran. Null on a candidate blocked before the reason was recorded, and on one that is not
+   * blocked.
+   */
+  blockedReason: PromotionBlockedReason | null;
   /** Null until a check has passed; after that, the upstream tip that check ran against. */
   upstreamShaChecked: string | null;
   /** The tree the checks passed on, which is the tree that lands (M6). Null before they have. */

@@ -174,8 +174,19 @@ export function promotionBlockedBy(
   return parts.join(' · ');
 }
 
-/** D's reason with its files: `2 files conflict with main: a.go, b.go`, three named at most. */
+/**
+ * D's reason with its files: `2 files conflict with main: a.go, b.go`, three named at most.
+ *
+ * The reason the job gave comes first (`blockedReason`, migration 0409): a candidate whose branch
+ * is already on main, and one whose job errored, are blocked with no checks and no conflicts, and
+ * reading those two arrays said a check had failed when none had run. A candidate blocked before the
+ * reason was recorded has none, and is read off the two arrays as it always was.
+ */
 export function promotionBlockedLine(promotion: ProjectPromotionView): string {
+  if (promotion.blockedReason === 'ALREADY_LANDED') {
+    return `nothing to merge — ${shortRef(promotion.sourceRef)} is already on ${shortRef(promotion.upstreamRef)}`;
+  }
+  if (promotion.blockedReason === 'ERROR') return 'the merge stopped on an error — no check failed';
   if (promotion.conflicts.length === 0) return 'the checks on the combined tree did not pass';
   const n = promotion.conflicts.length;
   const files = promotion.conflicts.slice(0, 3).join(', ');
@@ -210,8 +221,11 @@ export function moreTasks(more: number): string | null {
 
 export type PromotionEventTone = 'needsYou' | 'working' | 'blocked' | 'quiet';
 
-/** D's reason in a few words, for a line too short for the files. */
+/** D's reason in a few words, for a line too short for the files — the job's own reason first, as
+ *  in `promotionBlockedLine`. */
 export function promotionBlockedReason(promotion: ProjectPromotionView): string {
+  if (promotion.blockedReason === 'ALREADY_LANDED') return 'nothing to merge';
+  if (promotion.blockedReason === 'ERROR') return 'check errored';
   return promotion.conflicts.length > 0 ? `${plural(promotion.conflicts.length, 'file')} conflict` : 'checks failed';
 }
 
