@@ -127,17 +127,7 @@ struct RunnersListView: View {
                                           open: opensPools ? push : nil)
             }
             .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
-            #if os(macOS)
-            // A Mac list row is a table row that does not follow the banner's height as its buttons
-            // come in, so there the managed runner stands above the list instead of in it.
-            .safeAreaInset(edge: .top, spacing: 0) {
-                if let managed {
-                    ManagedRunnerBanner(display: managed, runnerID: model.managedRunner?.status?.runnerId)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                }
-            }
-            #endif
+            .modifier(ManagedRunnerAboveList(display: managed, runnerID: model.managedRunner?.status?.runnerId))
             .modifier(RunnersLoadOverlay(runners: runners, isEmpty: runners.runners.isEmpty,
                                          failedTitle: "Machines couldn't be loaded",
                                          emptyTitle: nil, systemImage: "desktopcomputer"))
@@ -281,6 +271,30 @@ private struct RunnersLoadOverlay: ViewModifier {
 }
 
 /// The list's last card: Add Runner, and what it will ask of the new machine.
+/// The managed runner above Infrastructure's list on the Mac, for an account with no runner
+/// (`ManagedRunnerLogic.onboarding`). A Mac list is a table that keeps its rows where they were when
+/// a row or a top inset that arrives after it has drawn changes its height, so there the banner takes
+/// room of its own above the list; on iOS it is the list's first section.
+private struct ManagedRunnerAboveList: ViewModifier {
+    let display: ManagedRunnerDisplay?
+    let runnerID: String?
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        VStack(spacing: 0) {
+            if let display {
+                ManagedRunnerBanner(display: display, runnerID: runnerID)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+            }
+            content
+        }
+        #else
+        content
+        #endif
+    }
+}
+
 private struct RunnerAddSection: View {
     let add: () -> Void
 

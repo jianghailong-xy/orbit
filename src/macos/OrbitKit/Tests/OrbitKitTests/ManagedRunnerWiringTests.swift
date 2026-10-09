@@ -143,12 +143,16 @@ final class ManagedRunnerWiringTests: XCTestCase {
         let list = code(try source("Views/SkillsRunnersView.swift"))
         let page = try slice(list, from: "struct RunnersListView: View {", to: ".modifier(RunnersLoadOverlay(")
         XCTAssertTrue(flat(page).contains("let managed = runners.loadState.hasLoaded ? ManagedRunnerLogic.onboarding(model.managedRunner?.display, runnerCount: runners.runners.count) : nil"))
-        // In the list on iOS; above it on the Mac, whose table rows do not follow the banner's height.
+        // In the list on iOS; in room of its own above the list on the Mac, whose table does not
+        // follow a row or a top inset that arrives after it has drawn.
         let ios = try slice(page, from: "#if os(iOS)", to: "#endif")
         XCTAssertTrue(ios.contains("ManagedRunnerBanner(display: managed"))
-        let mac = try slice(page, from: "#if os(macOS)", to: "#endif")
-        XCTAssertTrue(mac.contains(".safeAreaInset(edge: .top, spacing: 0) {"))
-        XCTAssertTrue(mac.contains("ManagedRunnerBanner(display: managed"))
+        XCTAssertTrue(page.contains(".modifier(ManagedRunnerAboveList(display: managed, runnerID: model.managedRunner?.status?.runnerId))"))
+        let above = try slice(list, from: "private struct ManagedRunnerAboveList: ViewModifier {", to: "\n}\n")
+        let mac = try slice(above, from: "#if os(macOS)", to: "#else")
+        XCTAssertTrue(mac.contains("VStack(spacing: 0) {"))
+        XCTAssertTrue(mac.contains("ManagedRunnerBanner(display: display, runnerID: runnerID)"))
+        XCTAssertTrue(try slice(above, from: "#else", to: "#endif").contains("content"))
     }
 
     func testABlockedDraftShowsNoModelInTheComposer() throws {
