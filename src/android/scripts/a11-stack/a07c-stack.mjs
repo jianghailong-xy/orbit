@@ -105,10 +105,11 @@ const seed = readSeed();
 const state = (d) => d.runStatus ?? d.status;
 const detail = (id) => call('GET', `/sessions/${id}`, owner);
 const session = (body) => call('POST', '/sessions', owner, { workspaceId: seed.workspace.id, ...body });
-/** On the stack's own runner: a session the weekly-limit sentence stopped, its retry armed, and one whose turn failed. */
+/** On the stack's own runner, on Claude Code (whatever provider the workspace's last session left it on): a session the
+ * weekly-limit sentence stopped, its retry armed, and one whose turn failed. */
 async function stoppedSessions() {
-  const quota = await session({ title: 'A07c weekly limit', prompt: 'A07C-QUOTA: summarize the release notes' });
-  const fail = await session({ title: 'A07c failed turn', prompt: 'A07C-FAIL: draft the changelog' });
+  const quota = await session({ title: 'A07c weekly limit', prompt: 'A07C-QUOTA: summarize the release notes', provider: 'claude' });
+  const fail = await session({ title: 'A07c failed turn', prompt: 'A07C-FAIL: draft the changelog', provider: 'claude' });
   const armed = await until('the weekly limit to arm the retry', async () => { const d = await detail(quota.id); return d.retryAt && state(d) === 'AWAITING_INPUT' ? d : null; });
   const failed = await until('the failed turn to settle', async () => { const d = await detail(fail.id); return ['FAILED', 'AWAITING_INPUT'].includes(state(d)) && d.numTurns > 0 ? d : null; });
   return { quota: { id: quota.id, title: 'A07c weekly limit', retryAt: armed.retryAt }, fail: { id: fail.id, title: 'A07c failed turn', status: state(failed) } };
