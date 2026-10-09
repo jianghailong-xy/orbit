@@ -161,7 +161,7 @@ var engineSpecs = []engineSpec{
 		updateCmd:     dshInstallDescription,
 		installAlt:    "install DeepSeek Harness from Orbit or run orbit doctor",
 		apiKeyEnv:     "ORBIT_DSH_API_KEY",
-		loginHeadless: "configure a DeepSeek Harness API key in Orbit; only a real model request validates it",
+		loginHeadless: "connect a DeepSeek API key in Orbit; only a real model request validates it",
 	},
 }
 
