@@ -371,7 +371,8 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
                 Text(if (detail.flag("fastMode") == true) "Speed: Fast" else "Speed: Standard")
             }
             Text("Provider")
-            catalog?.options(provider, model.target != null)?.forEach { option ->
+            // A draft starts on any engine, in iOS's order; a session moves only between the providers of its own CLI.
+            catalog?.let { if (model.target != null) it.choices() else it.sameRuntime(provider) }?.forEach { option ->
                 TextButton(enabled = enabled && option.unavailable == null, onClick = {
                     model.config(buildJsonObject {
                         put("provider", option.id); put("model", option.models.firstOrNull()?.text("value") ?: ""); put("effort", "")

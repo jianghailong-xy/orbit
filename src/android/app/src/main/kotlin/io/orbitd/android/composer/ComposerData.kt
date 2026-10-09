@@ -116,6 +116,33 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
                 ?: row?.text("unavailable") ?: if (row == null && engine?.text("auth") == "no" && engine.objects("accounts").none { it.text("auth") == "yes" }) "Not signed in" else null)
         }
     }
+    private fun health(engine: String) = runner.objects("engines").firstOrNull { it.text("engine") == engine }
+    private fun option(slug: String, unavailable: String?) =
+        ProviderOption(slug, ProviderChoices.providerName(slug, providers), runtime(slug) ?: slug, models(slug), unavailable)
+    /** SessionProviderChoices.choices: the runner's engines in iOS's order — claude, codex, antigravity, kimi — then the account
+     * pools, then the configured keys, then OpenCode once the runner has it. A row this runner can't run stays listed with why. */
+    fun choices(): List<ProviderOption> {
+        val engines = ProviderChoices.engineSlugs.map { slug -> option(slug, ProviderChoices.engineBlocker(health(slug))) }
+        // A pool, like a configured key, needs the CLI it runs on and nothing signed in; what the server says it lacks follows.
+        val pools = providers.filter { it.flag("pool") == true }.map { row ->
+            val slug = row.text("slug").orEmpty()
+            option(slug, ProviderChoices.byokBlocker(health(runtime(slug) ?: "claude")) ?: row.text("unavailable"))
+        }
+        // A configured row shadowing a built-in slug would dispatch the same identity as the engine above.
+        val keys = providers.filter { it.flag("pool") != true && it.text("slug") !in ProviderChoices.engineSlugs + "opencode" }.map { row ->
+            val slug = row.text("slug").orEmpty()
+            option(slug, ProviderChoices.byokBlocker(health(ProviderChoices.executingRuntime(slug, providers))))
+        }
+        val openCode = if (health("opencode")?.flag("installed") == true) listOf(option("opencode", null)) else emptyList()
+        return engines + pools + keys + openCode
+    }
+    /** SessionProviderChoices.sameRuntime: what an existing session may move to — the choices on the CLI it was started on, in
+     * the list's own order. A provider absent from them (removed, or OpenCode before the runner reports it) leads. */
+    fun sameRuntime(current: String, choices: List<ProviderOption> = choices()): List<ProviderOption> {
+        val runtime = ProviderChoices.executingRuntime(current, providers)
+        val same = choices.filter { ProviderChoices.executingRuntime(it.id, providers) == runtime }
+        return if (same.any { it.id == current }) same else listOf(option(current, null)) + same
+    }
     fun accounts(provider: String) = if (RunnerPage.keepsAccounts(provider))
         runner.objects("engines").firstOrNull { it.text("engine") == provider }?.objects("accounts").orEmpty() else emptyList()
     /** Whether a session here moves to another of the runner's [provider] accounts (EngineAccounts.moveCapability). */
